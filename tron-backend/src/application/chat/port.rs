@@ -1,6 +1,4 @@
-use crate::domain::chat::{
-    ChatError, ChatMessage, ChatSession, ChatUserInputAnswer, ChatUserInputRequest,
-};
+use crate::domain::chat::{ChatError, ChatMessage, ChatSession, ChatUserInputRequest};
 
 pub trait ChatRepository: Send {
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError>;
@@ -76,11 +74,4 @@ pub trait ChatRepository: Send {
         &mut self,
         request: &ChatUserInputRequest,
     ) -> Result<(), ChatError>;
-    fn answer_user_input_request(
-        &mut self,
-        session_code: &str,
-        request_code: &str,
-        answers: &[ChatUserInputAnswer],
-        answered_at: &str,
-    ) -> Result<ChatUserInputRequest, ChatError>;
 }

@@ -103,7 +103,7 @@ impl fw::Tool for Leased {
 }
 fn context(mode: u8) -> AgentRunContext {
     let mut context:AgentRunContext=serde_json::from_value(json!({
-        "conversationCode":"managed-session","runCode":"managed-run","workspaceCode":"authorized-workspace","userCode":"user","locale":"en-US","agentKind":"REACT",
+        "conversationCode":null,"runCode":"c3b6f2d9-421a-4ab9-8721-69271cc18a41","workspaceCode":"authorized-workspace","userCode":"user","locale":"en-US","agentKind":"REACT",
         "model":{"modelCode":"MODEL-1","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"fixture","modelName":"test","maxTokens":128,"contextWindowTokens":131072},
         "variables":[],"skills":[],"tools":[],"executionScope":{},"limits":{"maxSteps":4,"maxToolCalls":4,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":"review"}]}],"observations":[],"startedAt":"fixture"
     })).unwrap();
@@ -166,7 +166,7 @@ async fn run_with_profile(
         let shutdown = selected.clone();
         let cleanup = selected.clone();
         registry.register_framework_lease(
-            "managed-run",
+            "c3b6f2d9-421a-4ab9-8721-69271cc18a41",
             fw::ToolLease::new(vec![fw::ToolBinding::new(
                 fw::ToolDescriptor::new(
                     "tron.skill_load",

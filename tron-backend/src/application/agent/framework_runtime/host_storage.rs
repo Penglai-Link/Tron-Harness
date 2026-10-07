@@ -1,28 +1,21 @@
 use super::FrameworkHost;
-use eliteforge_agent_core as fw;
-use eliteforge_agent_official_plugin_storage_local::{
-    DeleteSession, DeleteSessions, SessionDeletionReport,
-};
-
 impl FrameworkHost {
-    pub async fn delete_persisted_session(&self, session_id: &str) -> Result<bool, fw::AgentError> {
-        self.ensure_open()
-            .map_err(fw::AgentError::InvalidConfiguration)?;
-        self.framework()
-            .await?
-            .execute(DeleteSession(session_id.to_owned()))
-            .await
+    /// The host owns one connection; Tron link writes join Framework transactions.
+    pub async fn shared_database(
+        &self,
+    ) -> Result<
+        eliteforge_agent_official_plugin_storage_local::SqliteDatabase,
+        eliteforge_agent_core::StateError,
+    > {
+        self.0.database.get_or_try_init(|| async {
+            if let Some(parent) = self.0.path.parent() { std::fs::create_dir_all(parent).map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?; }
+            crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(&self.0.path.to_string_lossy()).map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))
+        }).await.map(|database| database.runtime())
     }
 
-    pub async fn delete_persisted_sessions(
+    pub async fn storage_framework(
         &self,
-        session_ids: Vec<String>,
-    ) -> Result<SessionDeletionReport, fw::AgentError> {
-        self.ensure_open()
-            .map_err(fw::AgentError::InvalidConfiguration)?;
-        self.framework()
-            .await?
-            .execute(DeleteSessions(session_ids))
-            .await
+    ) -> Result<eliteforge_agent_framework::Framework, eliteforge_agent_core::AgentError> {
+        self.framework().await.cloned()
     }
 }

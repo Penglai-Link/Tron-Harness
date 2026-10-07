@@ -5,76 +5,81 @@ impl ModelProviderService {
         &self,
         workspace_code: &str,
     ) -> Result<Vec<ProviderModelSelectOption>, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let default_selection =
-            effective_default_selection(&connection, workspace_code, ModelType::Text)?;
-        let Some(provider) = read_connection(&connection, ModelProviderCode::PersonAi)? else {
-            return Ok(Vec::new());
-        };
-        let active = matches!(
-            provider.status,
-            ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
-        );
-        let mut options = Vec::new();
-        if active {
-            let selection = ModelSelection::person_ai_route(ProviderRouteCode::ChatAuto);
-            options.push(ProviderModelSelectOption {
-                is_default: default_selection.as_ref() == Some(&selection),
-                selection,
-                option_code: "provider:PersonAi:route:ChatAuto".into(),
-                display_name: "Auto".into(),
-                provider_code: ModelProviderCode::PersonAi,
-                access_platform: ModelProviderCode::PersonAi.display_name().into(),
-                upstream_vendor_name: None,
-                model_type: ModelType::Text,
-                protocols: vec![AgentModelProtocol::ChatCompletions],
-                enabled: true,
-                remote_status: ProviderCatalogModelStatus::Available,
-                context_window_tokens: None,
-                quality_type: Some(ProviderModelQuality::High),
-                input_coefficient: None,
-                cache_hit_coefficient: None,
-                output_coefficient: None,
-            });
-        }
-        for model in read_chat_catalog_models(&connection, ModelProviderCode::PersonAi)? {
-            let enabled = active && model.status == ProviderCatalogModelStatus::Available;
-            let selection = ModelSelection::person_ai_fixed(
-                model.model_code.clone(),
-                model
-                    .quality_type
-                    .expect("chat catalog models always have a quality"),
-            );
-            options.push(ProviderModelSelectOption {
-                is_default: default_selection.as_ref() == Some(&selection),
-                selection,
-                option_code: format!(
-                    "provider:PersonAi:model:{}:{}",
-                    model
-                        .quality_type
-                        .expect("chat catalog models always have a quality")
-                        .storage_value(),
-                    model.model_code,
-                ),
-                display_name: model.model_name.clone(),
-                provider_code: ModelProviderCode::PersonAi,
-                access_platform: ModelProviderCode::PersonAi.display_name().into(),
-                upstream_vendor_name: model.upstream_vendor_name.clone(),
-                model_type: ModelType::Text,
-                protocols: model.protocols.clone(),
-                enabled,
-                remote_status: model.status,
-                context_window_tokens: model.context_window_tokens,
-                quality_type: model.quality_type,
-                input_coefficient: model.input_coefficient,
-                cache_hit_coefficient: model.cache_hit_coefficient,
-                output_coefficient: model.output_coefficient,
-            });
-        }
-        Ok(options)
+        let this = self.clone();
+        let worker_workspace_code = workspace_code.to_owned();
+        this.connection.clone().call(
+            move |connection| {
+                let workspace_code = &worker_workspace_code;
+                let default_selection =
+                    effective_default_selection(&connection, workspace_code, ModelType::Text)?;
+                let Some(provider) = read_connection(&connection, ModelProviderCode::PersonAi)?
+                else {
+                    return Ok(Vec::new());
+                };
+                let active = matches!(
+                    provider.status,
+                    ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
+                );
+                let mut options = Vec::new();
+                if active {
+                    let selection = ModelSelection::person_ai_route(ProviderRouteCode::ChatAuto);
+                    options.push(ProviderModelSelectOption {
+                        is_default: default_selection.as_ref() == Some(&selection),
+                        selection,
+                        option_code: "provider:PersonAi:route:ChatAuto".into(),
+                        display_name: "Auto".into(),
+                        provider_code: ModelProviderCode::PersonAi,
+                        access_platform: ModelProviderCode::PersonAi.display_name().into(),
+                        upstream_vendor_name: None,
+                        model_type: ModelType::Text,
+                        protocols: vec![AgentModelProtocol::ChatCompletions],
+                        enabled: true,
+                        remote_status: ProviderCatalogModelStatus::Available,
+                        context_window_tokens: None,
+                        quality_type: Some(ProviderModelQuality::High),
+                        input_coefficient: None,
+                        cache_hit_coefficient: None,
+                        output_coefficient: None,
+                    });
+                }
+                for model in read_chat_catalog_models(&connection, ModelProviderCode::PersonAi)? {
+                    let enabled = active && model.status == ProviderCatalogModelStatus::Available;
+                    let selection = ModelSelection::person_ai_fixed(
+                        model.model_code.clone(),
+                        model
+                            .quality_type
+                            .expect("chat catalog models always have a quality"),
+                    );
+                    options.push(ProviderModelSelectOption {
+                        is_default: default_selection.as_ref() == Some(&selection),
+                        selection,
+                        option_code: format!(
+                            "provider:PersonAi:model:{}:{}",
+                            model
+                                .quality_type
+                                .expect("chat catalog models always have a quality")
+                                .storage_value(),
+                            model.model_code,
+                        ),
+                        display_name: model.model_name.clone(),
+                        provider_code: ModelProviderCode::PersonAi,
+                        access_platform: ModelProviderCode::PersonAi.display_name().into(),
+                        upstream_vendor_name: model.upstream_vendor_name.clone(),
+                        model_type: ModelType::Text,
+                        protocols: model.protocols.clone(),
+                        enabled,
+                        remote_status: model.status,
+                        context_window_tokens: model.context_window_tokens,
+                        quality_type: model.quality_type,
+                        input_coefficient: model.input_coefficient,
+                        cache_hit_coefficient: model.cache_hit_coefficient,
+                        output_coefficient: model.output_coefficient,
+                    });
+                }
+                Ok(options)
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub fn resolve_chat_selection(
@@ -84,112 +89,133 @@ impl ModelProviderService {
         legacy_model_code: Option<&str>,
         reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
     ) -> Result<Option<AgentModelConfig>, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let selection = match selection {
-            Some(selection) => Some(selection.clone()),
-            None => legacy_model_code
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .and_then(|model_code| {
-                    read_catalog_model(&connection, ModelProviderCode::PersonAi, model_code, None)
-                        .ok()
-                        .flatten()
-                        .map(|model| {
-                            ModelSelection::person_ai_fixed(
+        let this = self.clone();
+        let worker_workspace_code = workspace_code.to_owned();
+        let worker_selection = selection.map(ToOwned::to_owned);
+        let worker_legacy_model_code = legacy_model_code.map(ToOwned::to_owned);
+        let worker_reasoning_effort = reasoning_effort.clone();
+        this.connection.clone().call(
+            move |connection| {
+                let workspace_code = &worker_workspace_code;
+                let selection = worker_selection.as_ref();
+                let legacy_model_code = worker_legacy_model_code.as_deref();
+                let reasoning_effort = worker_reasoning_effort;
+                let selection = match selection {
+                    Some(selection) => Some(selection.clone()),
+                    None => legacy_model_code
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .and_then(|model_code| {
+                            read_catalog_model(
+                                &connection,
+                                ModelProviderCode::PersonAi,
                                 model_code,
+                                None,
+                            )
+                            .ok()
+                            .flatten()
+                            .map(|model| {
+                                ModelSelection::person_ai_fixed(
+                                    model_code,
+                                    model
+                                        .quality_type
+                                        .expect("chat catalog models always have a quality"),
+                                )
+                            })
+                        })
+                        .or_else(|| {
+                            effective_default_selection(
+                                &connection,
+                                workspace_code,
+                                ModelType::Text,
+                            )
+                            .ok()
+                            .flatten()
+                        }),
+                };
+                let Some(selection) = selection else {
+                    return Ok(None);
+                };
+                if selection.provider_code != Some(ModelProviderCode::PersonAi) {
+                    return Ok(None);
+                }
+                let provider = read_connection(&connection, ModelProviderCode::PersonAi)?
+                    .ok_or(ModelProviderError::ConnectionNotReady)?;
+                if !matches!(
+                    provider.status,
+                    ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
+                ) {
+                    return Err(
+                        if provider.status == ProviderConnectionStatus::AuthRequired {
+                            ModelProviderError::AuthenticationRequired
+                        } else {
+                            ModelProviderError::ConnectionNotReady
+                        },
+                    );
+                }
+                match selection.kind {
+                    ModelSelectionKind::Auto => Err(ModelProviderError::InvalidSelection(
+                        "Tron Auto must be resolved by the chat session router".into(),
+                    )),
+                    ModelSelectionKind::ProviderRoute => {
+                        if selection.route_code != Some(ProviderRouteCode::ChatAuto)
+                            || selection.model_code.is_some()
+                            || selection.quality_type.is_some()
+                        {
+                            return Err(ModelProviderError::InvalidSelection(
+                                "Person-AI chat route must be ChatAuto without modelCode".into(),
+                            ));
+                        }
+                        Ok(Some(person_ai_agent_config(
+                            "PERSON_AI:ROUTE:ChatAuto",
+                            "",
+                            None,
+                            reasoning_effort,
+                            AgentModelProtocol::ChatCompletions,
+                        )))
+                    }
+                    ModelSelectionKind::Fixed => {
+                        let model_code = selection
+                            .model_code
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                            .ok_or_else(|| {
+                                ModelProviderError::InvalidSelection(
+                                    "Person-AI Fixed selection requires modelCode".into(),
+                                )
+                            })?;
+                        let model = read_catalog_model(
+                            &connection,
+                            ModelProviderCode::PersonAi,
+                            model_code,
+                            selection.quality_type,
+                        )?
+                        .ok_or_else(|| {
+                            ModelProviderError::CatalogModelUnavailable(model_code.into())
+                        })?;
+                        if model.status != ProviderCatalogModelStatus::Available {
+                            return Err(ModelProviderError::CatalogModelUnavailable(
+                                model_code.into(),
+                            ));
+                        }
+                        Ok(Some(person_ai_agent_config(
+                            person_ai_fixed_runtime_code(
                                 model
                                     .quality_type
                                     .expect("chat catalog models always have a quality"),
-                            )
-                        })
-                })
-                .or_else(|| {
-                    effective_default_selection(&connection, workspace_code, ModelType::Text)
-                        .ok()
-                        .flatten()
-                }),
-        };
-        let Some(selection) = selection else {
-            return Ok(None);
-        };
-        if selection.provider_code != Some(ModelProviderCode::PersonAi) {
-            return Ok(None);
-        }
-        let provider = read_connection(&connection, ModelProviderCode::PersonAi)?
-            .ok_or(ModelProviderError::ConnectionNotReady)?;
-        if !matches!(
-            provider.status,
-            ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
-        ) {
-            return Err(
-                if provider.status == ProviderConnectionStatus::AuthRequired {
-                    ModelProviderError::AuthenticationRequired
-                } else {
-                    ModelProviderError::ConnectionNotReady
-                },
-            );
-        }
-        match selection.kind {
-            ModelSelectionKind::Auto => Err(ModelProviderError::InvalidSelection(
-                "Tron Auto must be resolved by the chat session router".into(),
-            )),
-            ModelSelectionKind::ProviderRoute => {
-                if selection.route_code != Some(ProviderRouteCode::ChatAuto)
-                    || selection.model_code.is_some()
-                    || selection.quality_type.is_some()
-                {
-                    return Err(ModelProviderError::InvalidSelection(
-                        "Person-AI chat route must be ChatAuto without modelCode".into(),
-                    ));
+                                model_code,
+                            ),
+                            model_code,
+                            model.context_window_tokens,
+                            reasoning_effort,
+                            preferred_protocol(&model.protocols),
+                        )))
+                    }
                 }
-                Ok(Some(person_ai_agent_config(
-                    "PERSON_AI:ROUTE:ChatAuto",
-                    "",
-                    None,
-                    reasoning_effort,
-                    AgentModelProtocol::ChatCompletions,
-                )))
-            }
-            ModelSelectionKind::Fixed => {
-                let model_code = selection
-                    .model_code
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        ModelProviderError::InvalidSelection(
-                            "Person-AI Fixed selection requires modelCode".into(),
-                        )
-                    })?;
-                let model = read_catalog_model(
-                    &connection,
-                    ModelProviderCode::PersonAi,
-                    model_code,
-                    selection.quality_type,
-                )?
-                .ok_or_else(|| ModelProviderError::CatalogModelUnavailable(model_code.into()))?;
-                if model.status != ProviderCatalogModelStatus::Available {
-                    return Err(ModelProviderError::CatalogModelUnavailable(
-                        model_code.into(),
-                    ));
-                }
-                Ok(Some(person_ai_agent_config(
-                    person_ai_fixed_runtime_code(
-                        model
-                            .quality_type
-                            .expect("chat catalog models always have a quality"),
-                        model_code,
-                    ),
-                    model_code,
-                    model.context_window_tokens,
-                    reasoning_effort,
-                    preferred_protocol(&model.protocols),
-                )))
-            }
-        }
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub fn text_runtime_model_config(

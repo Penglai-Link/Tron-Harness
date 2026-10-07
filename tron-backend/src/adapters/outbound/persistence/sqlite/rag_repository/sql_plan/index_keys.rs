@@ -1,5 +1,5 @@
 fn text_unit_unique_key(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     table_name: &str,
 ) -> Result<Vec<String>, RagError> {
     preferred_unique_key(
@@ -23,7 +23,7 @@ fn text_unit_unique_key(
 }
 
 fn vector_unique_key(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     table_name: &str,
     columns: &BTreeSet<String>,
 ) -> Result<Vec<String>, RagError> {
@@ -50,7 +50,7 @@ fn vector_unique_key(
 }
 
 fn tree_unique_key(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     table_name: &str,
     columns: &BTreeSet<String>,
 ) -> Result<Vec<String>, RagError> {
@@ -79,7 +79,7 @@ fn tree_unique_key(
 }
 
 fn preferred_unique_key(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     table_name: &str,
     candidates: &[Vec<String>],
 ) -> Result<Vec<String>, RagError> {
@@ -93,7 +93,7 @@ fn preferred_unique_key(
 }
 
 fn unique_indexes(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     table_name: &str,
 ) -> Result<Vec<Vec<String>>, RagError> {
     let pragma = format!("PRAGMA index_list({})", quote_identifier(table_name)?);

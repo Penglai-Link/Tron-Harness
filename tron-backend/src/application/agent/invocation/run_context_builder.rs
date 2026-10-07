@@ -218,6 +218,8 @@ impl AgentRunContextBuilder {
         let agent_kind = agent_kind_for_runtime(resolved_agent.runtime_type);
         let locale = invocation_locale(locale.as_deref());
         let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
+        eliteforge_agent_core::RunId::parse_str(&run_code)
+            .map_err(|_| AgentInvocationError::RuntimeFailed("runCode must be a UUID".into()))?;
         let leases = self.tool_registry.framework_lease_guard(&run_code);
         let mut tool_access = self.resolve_tool_access(
             &workspace.workspace_code,

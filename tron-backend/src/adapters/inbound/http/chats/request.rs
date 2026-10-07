@@ -8,6 +8,7 @@ use crate::{
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GetActiveChatRunQuery {
+    pub workspace_code: Option<String>,
     pub session_code: Option<String>,
 }
 

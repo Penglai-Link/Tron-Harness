@@ -26,8 +26,11 @@ fn column_exists(
 }
 
 fn migrate_prompt_variable_metadata(connection: &mut Connection) -> Result<(), PromptError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
+    let transaction =
+        crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+            &connection,
+            TransactionBehavior::Immediate,
+        )
         .map_err(storage_error)?;
     if column_exists(&transaction, "prompt_variables", "description")? {
         return transaction.commit().map_err(storage_error);
@@ -39,8 +42,11 @@ fn migrate_prompt_variable_metadata(connection: &mut Connection) -> Result<(), P
 }
 
 fn migrate_prompt_catalog(connection: &mut Connection) -> Result<(), PromptError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
+    let transaction =
+        crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+            &connection,
+            TransactionBehavior::Immediate,
+        )
         .map_err(storage_error)?;
     if !column_exists(&transaction, "prompts", "built_in")? {
         transaction
@@ -105,8 +111,11 @@ fn migrate_prompt_category(connection: &mut Connection) -> Result<(), PromptErro
 }
 
 fn migrate_prompt_variable_bindings(connection: &mut Connection) -> Result<(), PromptError> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
+    let transaction =
+        crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+            &connection,
+            TransactionBehavior::Immediate,
+        )
         .map_err(storage_error)?;
     if !column_exists(&transaction, "prompt_variables", "source_kind")? {
         transaction
@@ -117,7 +126,9 @@ fn migrate_prompt_variable_bindings(connection: &mut Connection) -> Result<(), P
     transaction.commit().map_err(storage_error)
 }
 
-fn repair_prompt_variable_bindings(transaction: &Transaction<'_>) -> Result<(), PromptError> {
+fn repair_prompt_variable_bindings(
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+) -> Result<(), PromptError> {
     for definition in crate::domain::prompt::builtin_prompts() {
         for parameter in &definition.parameters {
             transaction

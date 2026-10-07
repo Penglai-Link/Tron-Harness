@@ -36,7 +36,7 @@ impl ChatService {
         };
         let session = ChatSession {
             id,
-            session_code: format!("SESSION-{id}"),
+            session_code: eliteforge_agent_core::SessionRecord::new("").id,
             workspace_code,
             project_code,
             user_code,
@@ -159,7 +159,7 @@ impl ChatService {
             .transpose()
             .map_err(|_| ChatError::StorageFailure)?
             .flatten()
-            .is_some()
+            .is_some_and(|goal| goal.goal.status == "ACTIVE")
         {
             return Err(ChatError::SessionRunActive);
         }
@@ -231,12 +231,17 @@ impl ChatService {
     pub fn delete_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
         let session = self.repository().get_session(session_code)?;
         self.ensure_archived_session_inactive(session_code, &session)?;
-        if let Some(resources) = self.resources.as_ref() {
-            resources
-                .delete_chat_session_attachments(session_code)
-                .map_err(chat_error_from_resource)?;
-        }
+        let attachments = self
+            .resources
+            .as_ref()
+            .map(|resources| resources.chat_session_attachment_records(session_code))
+            .transpose()
+            .map_err(chat_error_from_resource)?
+            .unwrap_or_default();
         self.repository().delete_session(session_code)?;
+        if let Some(resources) = self.resources.as_ref() {
+            resources.cleanup_chat_session_attachment_files(&attachments);
+        }
         Ok(session)
     }
 
@@ -255,7 +260,7 @@ impl ChatService {
             .transpose()
             .map_err(|_| ChatError::StorageFailure)?
             .flatten()
-            .is_some()
+            .is_some_and(|goal| goal.goal.status == "ACTIVE")
         {
             return Err(ChatError::SessionRunActive);
         }
@@ -278,7 +283,7 @@ impl ChatService {
         &self,
         session_code: &str,
         command: ChatSessionAttachmentUploadCommand,
-        source: &mut dyn std::io::Read,
+        source: &mut (dyn std::io::Read + Send),
     ) -> Result<ChatMessageAttachment, ChatError> {
         let session = self.repository().get_session(session_code)?;
         if session.status != ChatSessionStatus::Active {
@@ -308,18 +313,36 @@ impl ChatService {
         let mut attachment = normalize_chat_attachments(vec![attachment])?
             .pop()
             .expect("a single normalized attachment is retained");
-        let record = resources
-            .store_chat_session_attachment(
-                ChatSessionAttachmentCreateCommand {
-                    workspace_code: session.workspace_code,
-                    session_code: session.session_code,
-                    attachment_code,
-                    file_name: command.file_name,
-                    content_type: command.content_type,
-                },
-                source,
-            )
-            .map_err(chat_error_from_resource)?;
+        let memory = self
+            .execution_memory
+            .as_ref()
+            .ok_or(ChatError::StorageFailure)?;
+        let mut stored = None;
+        let result = memory.with_active_session_write(session_code, || {
+            let record = resources
+                .store_chat_session_attachment(
+                    ChatSessionAttachmentCreateCommand {
+                        workspace_code: session.workspace_code,
+                        session_code: session.session_code,
+                        attachment_code,
+                        file_name: command.file_name,
+                        content_type: command.content_type,
+                    },
+                    source,
+                )
+                .map_err(chat_error_from_resource)?;
+            stored = Some(record.clone());
+            Ok(record)
+        });
+        let record = match result {
+            Ok(record) => record,
+            Err(error) => {
+                if let Some(record) = stored {
+                    resources.cleanup_chat_session_attachment_files(&[record]);
+                }
+                return Err(error);
+            }
+        };
         apply_attachment_record(&mut attachment, &record);
         Ok(attachment)
     }
@@ -367,86 +390,6 @@ impl ChatService {
     ) -> Result<Vec<ChatUserInputRequest>, ChatError> {
         self.repository().get_session(session_code)?;
         self.repository().list_user_input_requests(session_code)
-    }
-
-    pub fn answer_user_input(
-        &self,
-        session_code: &str,
-        request_code: &str,
-        answers: Vec<ChatUserInputAnswer>,
-    ) -> Result<SendChatMessageCommand, ChatError> {
-        let session = self.repository().get_session(session_code)?;
-        if session.status != ChatSessionStatus::Active {
-            return Err(ChatError::SessionArchived);
-        }
-        let request = self
-            .repository()
-            .list_user_input_requests(session_code)?
-            .into_iter()
-            .find(|item| item.request_code == request_code)
-            .ok_or(ChatError::UserInputRequestNotFound)?;
-        if request.status != ChatUserInputRequestStatus::Pending {
-            return Err(ChatError::UserInputAlreadyAnswered);
-        }
-        validate_user_input_answers(&request.questions, &answers)?;
-        let responses = request
-            .questions
-            .iter()
-            .filter_map(|question| {
-                let answer = answers
-                    .iter()
-                    .find(|answer| answer.question_code == question.question_code)?;
-                let answer_text = match answer.answer_kind {
-                    ChatUserInputAnswerKind::Option => answer
-                        .option_code
-                        .as_deref()
-                        .and_then(|code| {
-                            question
-                                .options
-                                .iter()
-                                .find(|option| option.option_code == code)
-                        })
-                        .map(|option| option.label.clone())
-                        .or_else(|| answer.option_code.clone())
-                        .unwrap_or_default(),
-                    ChatUserInputAnswerKind::Other => answer.other_text.clone().unwrap_or_default(),
-                    ChatUserInputAnswerKind::Skipped => "Skipped".into(),
-                };
-                Some(json!({ "question": question.question, "answer": answer_text }))
-            })
-            .collect::<Vec<_>>();
-        let answered_at = current_timestamp();
-        let answered = self.repository().answer_user_input_request(
-            session_code,
-            request_code,
-            &answers,
-            &answered_at,
-        )?;
-        let model_selection = Self::continuation_model_selection(answered.model_code.as_deref());
-        Ok(SendChatMessageCommand {
-            run_code: None,
-            content: None,
-            workspace_code: Some(session.workspace_code),
-            app_code: session.app_code,
-            task_code: session.task_code,
-            agent_code: session.agent_code,
-            model_selection,
-            model_code: answered.model_code,
-            system_model_id: None,
-            reasoning_effort: answered.reasoning_effort,
-            page_context: None,
-            limits: None,
-            tools: Vec::new(),
-            attachments: Vec::new(),
-            client_capabilities: Some(crate::domain::chat::ChatClientCapabilities {
-                user_input_requests: true,
-            }),
-            resume: vec![crate::application::chat::ChatResumeEntry {
-                interrupt_id: request_code.to_string(),
-                status: "resolved".into(),
-                payload: json!({ "answers": answers, "responses": responses }),
-            }],
-        })
     }
 
     /// Product session/model mapping only; native schema and answer CAS live in the SDK.

@@ -235,63 +235,9 @@ pub(super) fn decode(message: &Message) -> Result<AgentMessage, String> {
     Ok(AgentMessage::new(role, parts))
 }
 
-/// Legacy runs predate mandatory provider call IDs. Preserve their content while
-/// pairing missing IDs deterministically; unmatched records remain labeled data.
+/// Provider protocol identities are required; native stores validate the full chain.
 pub(super) fn encode_history(history: &[AgentMessage]) -> Result<Vec<Message>, String> {
-    use std::collections::VecDeque;
-    let mut output = Vec::new();
-    let mut pending = VecDeque::<(String, String)>::new();
-    let close_pending = |pending: &mut VecDeque<(String, String)>, output: &mut Vec<Message>| {
-        for (name, id) in pending.drain(..) {
-            output.push(Message::tool(id, format!("Legacy history has no recorded result for {name}; execution outcome is unknown.")));
-        }
-    };
-    for (sequence, original) in history.iter().enumerate() {
-        let mut message = original.clone();
-        if message.role != "tool" {
-            close_pending(&mut pending, &mut output);
-        }
-        for (part_index, part) in message.parts.iter_mut().enumerate() {
-            if let AgentMessagePart::ToolCall {
-                call_id, tool_name, ..
-            } = part
-            {
-                let id =
-                    call_id.get_or_insert_with(|| format!("tron-legacy-{sequence}-{part_index}"));
-                if id.is_empty() {
-                    *id = format!("tron-legacy-{sequence}-{part_index}");
-                }
-                pending.push_back((tool_name.clone(), id.clone()));
-            }
-            if let AgentMessagePart::ToolResult {
-                call_id, tool_name, ..
-            } = part
-            {
-                let found = pending.iter().position(|(name, id)| {
-                    if let Some(call_id) = call_id.as_ref().filter(|id| !id.is_empty()) {
-                        id == call_id
-                    } else {
-                        name == tool_name
-                    }
-                });
-                if let Some(index) = found {
-                    *call_id = Some(pending.remove(index).unwrap().1);
-                } else {
-                    close_pending(&mut pending, &mut output);
-                    output.push(Message::user(Content(vec![ContentBlock::Json {
-                        value: serde_json::json!({"legacyUnpairedToolRecord":original}),
-                    }])));
-                    message.parts.clear();
-                    break;
-                }
-            }
-        }
-        if !message.parts.is_empty() {
-            output.push(encode(&message)?);
-        }
-    }
-    close_pending(&mut pending, &mut output);
-    Ok(output)
+    history.iter().map(encode).collect()
 }
 
 #[cfg(test)]

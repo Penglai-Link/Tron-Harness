@@ -100,7 +100,7 @@ fn inspector_tracks_actual_branch_worktree_and_detached_head() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn session_applications_resolve_live_project_scope_before_first_message() {
     let temporary = tempfile::tempdir().unwrap();
     let root = temporary.path().join("app");
@@ -205,27 +205,8 @@ async fn session_applications_resolve_live_project_scope_before_first_message() 
         .clone();
     context.execution_scope.branch_name =
         context.execution_scope.applications[0].branch_name.clone();
-    let input_code = state
-        .short_term_memory
-        .record_user_input(&context, "continue in selected worktree")
-        .unwrap();
-    context.short_term_memory = Some(
-        tron_backend::domain::agent::AgentShortTermMemoryRunContext {
-            session_code: session_code.into(),
-            input_code,
-            input_kind: "USER_PROMPT".into(),
-            input_metadata: None,
-            prompt_prefix: vec![execution_context_message(&context.execution_scope).unwrap()],
-            prompt_prefix_sources: vec![None],
-            current_input_message: None,
-            agent_code: Some("main-agent".into()),
-            todo_enabled: false,
-        },
-    );
-    state
-        .short_term_memory
-        .prepare_model_context(&context)
-        .unwrap();
+    let framework = state.agent_framework.storage_framework().await.unwrap();
+    framework.sessions().unwrap().store.append_event(eliteforge_agent_core::SessionEvent::new(session_code,"tron.context-view",json!({"executionScope":context.execution_scope,"messages":context.messages,"contextReport":{"blocks":[]}}))).await.unwrap();
     let payload =
         response_json(authenticated_request(&router, Method::GET, &url, None).await).await;
     assert_eq!(
@@ -277,146 +258,12 @@ fn execution_prefix_preserves_all_directories_and_does_not_invent_a_branch() {
     assert!(execution_context_message(&AgentExecutionScope::default()).is_none());
 }
 
-#[test]
-fn application_context_survives_compaction_and_is_a_separate_inspectable_block() {
-    use std::sync::Arc;
-    use tron_backend::{
-        adapters::outbound::persistence::{SqliteChatRepository, SqliteShortTermMemoryRepository},
-        application::{
-            chat::{ChatService, CreateChatSessionCommand},
-            short_term_memory::{
-                CreateCompactionCommand, ModelCompactionOutput, ShortTermMemoryConfig,
-                ShortTermMemoryService,
-            },
-        },
-        domain::agent::{AgentMessage, AgentShortTermMemoryRunContext},
-        shared::id::FixedSnowflakeIdProvider,
-    };
-    let temporary = tempfile::tempdir().unwrap();
-    let database = temporary
-        .path()
-        .join("memory.sqlite")
-        .to_string_lossy()
-        .into_owned();
-    let chats = ChatService::new(SqliteChatRepository::connect(&database).unwrap());
-    let session = chats
-        .create_session(
-            CreateChatSessionCommand {
-                workspace_code: Some("TRON_CORE".into()),
-                project_code: None,
-                title: Some("Context retention".into()),
-                app_code: None,
-                task_code: None,
-                source_type: None,
-                source_code: None,
-                agent_code: Some("main-agent".into()),
-            },
-            None,
-        )
-        .unwrap();
-    let service = ShortTermMemoryService::with_id_provider(
-        SqliteShortTermMemoryRepository::connect(&database).unwrap(),
-        ShortTermMemoryConfig::default(),
-        Arc::new(FixedSnowflakeIdProvider::new(801_200_000_000_000_000)),
-    );
-    let mut context = memory_context("RUN-CONTEXT");
-    context.conversation_code = Some(session.session_code.clone());
-    context.tools.clear();
-    context.execution_scope.local_directory = Some("/workspace/actual-worktree".into());
-    context.execution_scope.branch_name = Some("feature/actual".into());
-    for index in 0..6 {
-        context.run_code = format!("RUN-SEED-{index}");
-        service
-            .record_user_input(&context, &format!("older history {}", "s".repeat(2200)))
-            .unwrap();
-    }
-    let model = service.compaction_model_config(&context.model);
-    let input = service
-        .prepare_manual_model_compaction_input(
-            CreateCompactionCommand {
-                session_code: session.session_code.clone(),
-                reason: Some("manual".into()),
-                note: None,
-                todo_enabled: None,
-            },
-            Some(8192),
-            Some(0),
-        )
-        .unwrap();
-    service
-        .commit_model_compaction(
-            input,
-            ModelCompactionOutput {
-                summary: "Older history has been summarized.".into(),
-                token_usage: None,
-                provider_metadata: None,
-            },
-            &model,
-        )
-        .unwrap();
-    for run in ["RUN-AFTER-COMPACTION", "RUN-NEXT-TURN"] {
-        context.run_code = run.into();
-        let input_code = service
-            .record_user_input(&context, "continue working")
-            .unwrap();
-        let execution_message = execution_context_message(&context.execution_scope).unwrap();
-        context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-            session_code: session.session_code.clone(),
-            input_code,
-            input_kind: "USER_PROMPT".into(),
-            input_metadata: None,
-            prompt_prefix: vec![AgentMessage::system("system seed"), execution_message],
-            prompt_prefix_sources: vec![None, None],
-            current_input_message: None,
-            agent_code: Some("main-agent".into()),
-            todo_enabled: false,
-        });
-        let prepared = service.prepare_model_context(&context).unwrap();
-        assert!(prepared.rebased);
-        assert_eq!(
-            prepared
-                .messages
-                .iter()
-                .filter(|message| message
-                    .text_content()
-                    .contains("application-execution-context"))
-                .count(),
-            1
-        );
-        assert!(prepared.messages.iter().any(|message| {
-            message
-                .text_content()
-                .contains("/workspace/actual-worktree")
-        }));
-        let breakdown = prepared.budget_breakdown.unwrap();
-        assert!(breakdown.application_context_tokens > 0);
-        assert!(breakdown.prompt_prefix_tokens >= breakdown.application_context_tokens);
-        assert_eq!(breakdown.application_context_message_count, 1);
-        let detail = service
-            .context_detail(&session.session_code, "applicationContext")
-            .unwrap()
-            .unwrap();
-        assert_eq!(detail["executionScope"]["branchName"], "feature/actual");
-        assert!(
-            detail["messages"][0]["content"]
-                .as_str()
-                .unwrap()
-                .contains("/workspace/actual-worktree")
-        );
-        let prompts = service
-            .context_detail(&session.session_code, "systemPrompt")
-            .unwrap()
-            .unwrap();
-        assert_eq!(prompts["messages"].as_array().unwrap().len(), 1);
-    }
-}
-
-fn memory_context(run_code: &str) -> tron_backend::domain::agent::AgentRunContext {
+fn memory_context(_run_code: &str) -> tron_backend::domain::agent::AgentRunContext {
     use tron_backend::domain::agent::*;
     AgentRunContext {
         agent_code: None,
         conversation_code: Some("CONV-1".into()),
-        run_code: run_code.into(),
+        run_code: eliteforge_agent_core::RunId::new_v4().to_string(),
         workspace_code: "TRON_CORE".into(),
         user_code: Some("USR-1".into()),
         locale: "en-US".into(),
@@ -485,7 +332,7 @@ fn memory_context(run_code: &str) -> tron_backend::domain::agent::AgentRunContex
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn missing_working_directory_never_runs_in_the_backend_directory() {
     use std::sync::Arc;
     use tron_backend::{
@@ -533,6 +380,7 @@ async fn missing_working_directory_never_runs_in_the_backend_directory() {
         &context,
     );
     assert!(result.unwrap_err().to_string().contains("filesystem root"));
+    context.conversation_code = None;
     for selection in [
         RuntimeAdapterSelection::CodexExec {
             command_name: "must-not-be-started".into(),
@@ -646,9 +494,10 @@ fn execute_tool(
 ) -> Result<tron_backend::domain::agent::ToolExecutionResult, tron_backend::domain::agent::ToolError>
 {
     use tron_backend::{
-        application::agent::{FrameworkHost, ModelClient, ReactAgentBuilder},
+        application::agent::{ModelClient, ReactAgentBuilder},
         domain::agent::*,
     };
+    ensure_native_fixture_session(state);
     // Terminal contract cases deliberately supply stable invocation IDs and
     // share the same public executor/service as the production tool provider.
     // Framework dispatch and schema validation have a separate public integration test.
@@ -755,6 +604,11 @@ fn execute_tool(
         }
     }
     let mut context = context.clone();
+    context.run_code = eliteforge_agent_core::RunId::new_v4().to_string();
+    if request.input["fileRef"]["kind"] != "session_attachment" {
+        context.conversation_code = None;
+    }
+    context.model.context_window_tokens = Some(128_000);
     context.limits.max_steps = 2;
     context.limits.max_tool_calls = 1;
     context.observations.clear();
@@ -770,7 +624,7 @@ fn execute_tool(
         scope
             .spawn(|| {
                 tokio::runtime::Runtime::new().unwrap().block_on(async {
-                    let host = FrameworkHost::temporary(Some(state.resources.clone())).unwrap();
+                    let host = state.agent_framework.clone();
                     let agent = ReactAgentBuilder::new(
                         std::sync::Arc::new(CallModel(std::sync::Mutex::new(Some(request)))),
                         state.agent_tool_registry.clone(),
@@ -780,7 +634,6 @@ fn execute_tool(
                     .build()
                     .unwrap();
                     let result = agent.run(context).await;
-                    host.close().await;
                     result
                 })
             })
@@ -1159,7 +1012,7 @@ fn productivity_domains_are_localized_and_discoverable() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inventory() {
     use std::sync::{Arc, Mutex};
     use tron_backend::{
@@ -1260,6 +1113,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
         ],
     );
     let state = productivity_state(temporary.path());
+    ensure_native_fixture_session(&state);
     let mut context = productivity_context(&root);
     // Keep request budget small enough to verify the execution prefix, without unrelated catalog schemas.
     context.tools.retain(|tool| {
@@ -1276,6 +1130,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
         state.agent_tool_registry.clone(),
         state.event_bus.clone(),
     )
+    .with_framework_host(Some(state.agent_framework.clone()))
     .with_directory_inspector(Some(Arc::new(GitApplicationDirectoryInspector)))
     .build()
     .unwrap();
@@ -1329,7 +1184,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
     assert_eq!(scopes[3]["localDirectory"], root.to_str().unwrap());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deleting_selected_worktree_never_reverts_to_old_tool_observations() {
     use tron_backend::domain::agent::{ToolObservation, ToolRequest};
     let temporary = tempfile::tempdir().unwrap();
@@ -1351,6 +1206,7 @@ async fn deleting_selected_worktree_never_reverts_to_old_tool_observations() {
         ],
     );
     let state = productivity_state(temporary.path());
+    ensure_native_fixture_session(&state);
     let mut context = productivity_context(&root);
     context.observations.push(ToolObservation {
         tool_name: "bash_exec".into(),
@@ -1947,7 +1803,7 @@ fn agent_terminal_bounds_output_and_stops_running_process() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn terminal_http_and_agent_share_process_with_conversation_isolation() {
     use axum::{Extension, body::Body, http::Request};
     use tower::ServiceExt;
@@ -2180,7 +2036,7 @@ fn project_instructions_reject_external_links_and_ignore_unrelated_files() {
     assert!(reader.instruction_files(root.to_str().unwrap()).is_err());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn project_instructions_refresh_without_duplicating_and_primary_tools_use_cwd() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
@@ -2271,4 +2127,17 @@ async fn project_instructions_refresh_without_duplicating_and_primary_tools_use_
             .iter()
             .any(|m| m.text_content().contains("second version"))
     );
+}
+
+fn ensure_native_fixture_session(state: &tron_backend::app::AppState) {
+    use tron_backend::application::chat::ChatRepository;
+    let mut repository =
+        tron_backend::adapters::outbound::persistence::SqliteChatRepository::with_host(
+            state.agent_framework.clone(),
+        )
+        .unwrap();
+    if repository.get_session("CONV-1").is_err() {
+        let session = serde_json::from_value(json!({"id":1,"sessionCode":"CONV-1","workspaceCode":"TRON_CORE","title":"tool fixture","status":"ACTIVE","sourceType":"MANUAL","createdAt":"","updatedAt":""})).unwrap();
+        repository.create_session(&session).unwrap();
+    }
 }

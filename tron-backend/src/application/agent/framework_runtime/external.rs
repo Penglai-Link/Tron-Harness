@@ -21,28 +21,19 @@ pub(super) struct ExternalExecution {
     pub result: Mutex<Option<Result<AgentRunResult, AgentInvocationError>>>,
 }
 impl ExternalExecution {
-    pub fn legacy_session_scope(&self) -> Option<String> {
+    pub fn session_scope(&self) -> Option<String> {
         use sha2::{Digest, Sha256};
-        let transport = self.transport.session_scope()?;
         let context = &self.context;
         let identity = serde_json::to_vec(&(
-            transport,
+            self.transport.session_scope()?,
             &context.user_code,
             &context.workspace_code,
             &context.execution_scope,
             &context.model.base_url,
             &context.model.api_key,
             &context.model.model_name,
-        ))
-        .ok()?;
-        Some(format!("{:x}", Sha256::digest(identity)))
-    }
-    pub fn session_scope(&self) -> Option<String> {
-        use sha2::{Digest, Sha256};
-        let identity = serde_json::to_vec(&(
-            self.legacy_session_scope()?,
-            &self.context.model.api_path,
-            self.context.model.protocol,
+            &context.model.api_path,
+            context.model.protocol,
         ))
         .ok()?;
         Some(format!("{:x}", Sha256::digest(identity)))

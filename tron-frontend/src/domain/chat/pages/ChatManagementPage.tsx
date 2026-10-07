@@ -2441,6 +2441,7 @@ function goalVerdictLabel(value: string | null | undefined, translate: (key: str
   if (normalized === "CONTINUE") return translate("chat.shortTermMemory.goalVerdicts.CONTINUE");
   if (normalized === "COMPLETE" || normalized === "COMPLETED") return translate("chat.shortTermMemory.goalVerdicts.COMPLETED");
   if (normalized === "BLOCKED") return translate("chat.shortTermMemory.goalVerdicts.BLOCKED");
+  if (normalized === "NEEDS_USER_INPUT") return translate("chat.shortTermMemory.goalVerdicts.NEEDS_USER_INPUT");
   if (normalized === "FAILED" || normalized === "ERROR") return translate("chat.shortTermMemory.goalVerdicts.FAILED");
   return value?.trim() ?? normalized;
 }

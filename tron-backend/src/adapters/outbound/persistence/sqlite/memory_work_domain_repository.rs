@@ -9,24 +9,19 @@ use crate::{
 
 use super::migrations::MEMORY_WORK_DOMAINS_MIGRATION;
 
+struct SqliteMemoryWorkDomainRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteMemoryWorkDomainRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteMemoryWorkDomainRepository {
-    pub fn connect(database_url: &str) -> Result<Self, MemoryError> {
+impl<'a> SqliteMemoryWorkDomainRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, MemoryError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
 
         let repository = Self { connection };
         repository.apply_migrations()?;
@@ -40,7 +35,7 @@ impl SqliteMemoryWorkDomainRepository {
     }
 }
 
-impl MemoryWorkDomainRepository for SqliteMemoryWorkDomainRepository {
+impl MemoryWorkDomainRepository for SqliteMemoryWorkDomainRepositorySql<'_> {
     fn list_domains(&mut self) -> Result<Vec<MemoryWorkDomain>, MemoryError> {
         let mut statement = self
             .connection
@@ -142,4 +137,45 @@ fn ensure_database_parent(database_url: &str) -> Result<(), MemoryError> {
 
 fn storage_error(error: rusqlite::Error) -> MemoryError {
     MemoryError::Storage(error.to_string())
+}
+
+impl SqliteMemoryWorkDomainRepository {
+    pub fn connect(database_url: &str) -> Result<Self, MemoryError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteMemoryWorkDomainRepositorySql::initialize(&database_url, connection)
+                    .map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl MemoryWorkDomainRepository for SqliteMemoryWorkDomainRepository {
+    fn list_domains(&mut self) -> Result<Vec<MemoryWorkDomain>, MemoryError> {
+        self.connection.call(
+            move |connection| SqliteMemoryWorkDomainRepositorySql { connection }.list_domains(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_domain(&mut self, domain: &MemoryWorkDomain) -> Result<(), MemoryError> {
+        let domain = domain.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteMemoryWorkDomainRepositorySql { connection }.create_domain(&domain)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_domain(&mut self, domain: &MemoryWorkDomain) -> Result<(), MemoryError> {
+        let domain = domain.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteMemoryWorkDomainRepositorySql { connection }.update_domain(&domain)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

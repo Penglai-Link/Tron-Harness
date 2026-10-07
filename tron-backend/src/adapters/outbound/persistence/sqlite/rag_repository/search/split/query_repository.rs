@@ -1,3 +1,4 @@
+use super::SqliteRagRepositorySql;
 use rusqlite::{
     Row, params, params_from_iter,
     types::{Value as SqlValue, ValueRef},
@@ -26,7 +27,7 @@ use super::{
 use filters::append_filter_clauses;
 use terms::{fts_query, search_terms};
 
-impl RagSearchRepository for SqliteRagRepository {
+impl RagSearchRepository for SqliteRagRepositorySql<'_> {
     fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError> {
         let corpus = self
             .get_corpus(&query.corpus_id)?
@@ -65,7 +66,7 @@ impl RagSearchRepository for SqliteRagRepository {
     }
 }
 
-impl SqliteRagRepository {
+impl<'a> SqliteRagRepositorySql<'a> {
     pub(crate) fn hydrate_graph_rows_from_text_units(
         &self,
         corpus: &crate::domain::rag::RagCorpusRecord,
@@ -76,11 +77,10 @@ impl SqliteRagRepository {
             .map(|row| hydrate_graph_row_from_text_units(self, &plan, row))
             .collect()
     }
-
 }
 
 fn search_route(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
     query: &RagRouteSearchQuery,
 ) -> Result<Vec<RagSearchRow>, RagError> {
@@ -115,7 +115,7 @@ fn search_route(
 }
 
 fn hydrate_graph_row_from_text_units(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
     mut row: RagSearchRow,
 ) -> Result<RagSearchRow, RagError> {
@@ -337,7 +337,7 @@ fn order_params(
 }
 
 fn validate_retriever_available(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
     query: &RagRouteSearchQuery,
     retriever: SqliteRetrieverStrategy,
@@ -544,5 +544,36 @@ fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrateg
             kind: SqliteRetrieverKind::TreeVector,
         }),
         _ => Err(RagError::SearchRouteUnavailable),
+    }
+}
+
+impl RagSearchRepository for SqliteRagRepository {
+    fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError> {
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.search_route(query),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError> {
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.persist_search_trace(trace),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+}
+impl SqliteRagRepository {
+    pub(crate) fn hydrate_graph_rows_from_text_units(
+        &self,
+        corpus: &crate::domain::rag::RagCorpusRecord,
+        rows: Vec<RagSearchRow>,
+    ) -> Result<Vec<RagSearchRow>, RagError> {
+        let corpus = corpus.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteRagRepositorySql { connection }
+                    .hydrate_graph_rows_from_text_units(&corpus, rows)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
     }
 }

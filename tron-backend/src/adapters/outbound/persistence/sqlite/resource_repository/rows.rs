@@ -1,4 +1,4 @@
-use rusqlite::{Error as SqliteError, Transaction, params};
+use rusqlite::{Error as SqliteError, params};
 use serde_json::Value;
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
 use super::storage_error;
 
 pub(super) fn insert_server_record(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     record: &ServerRecord,
 ) -> Result<(), ResourceError> {
     transaction
@@ -39,7 +39,7 @@ pub(super) fn insert_server_record(
 }
 
 pub(super) fn insert_server_account_record(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     record: &ServerAccountRecord,
 ) -> Result<(), ResourceError> {
     transaction
@@ -73,7 +73,7 @@ pub(super) fn insert_server_account_record(
 }
 
 pub(super) fn insert_file_record(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     record: &ResourceFileRecord,
 ) -> Result<(), ResourceError> {
     transaction
@@ -104,7 +104,7 @@ pub(super) fn insert_file_record(
 }
 
 pub(super) fn insert_data_source_record(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     record: &DataSourceConnectionRecord,
 ) -> Result<(), ResourceError> {
     transaction

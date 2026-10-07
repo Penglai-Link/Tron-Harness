@@ -166,9 +166,11 @@ async fn fixture() -> (
     };
     let encrypted = service.encrypt_credentials(&previous).unwrap();
     {
-        let connection = service.connection.lock().unwrap();
+        service.connection.call(move |connection| {
         connection.execute("INSERT INTO provider_connections(provider_code,server_base_url,status,credentials_encrypted,person_ai_user_id,person_ai_username,last_error,created_at,updated_at) VALUES ('PersonAi',?1,'AuthRequired',?2,'previous-user','previous-name','previous authorization failure',1,1)",params![base_url,encrypted]).unwrap();
         connection.execute("INSERT INTO provider_authorization_sessions(session_id,provider_code,server_base_url,client_name,login_url,status,created_at,updated_at) VALUES ('fixture-session','PersonAi',?1,'Tron','https://unused.invalid','pending',1,1)",[base_url]).unwrap();
+        Ok::<_,ModelProviderError>(())
+        },||ModelProviderError::Storage).unwrap();
     }
     (service, state, server)
 }
@@ -192,8 +194,12 @@ async fn completed_personai_authorization_verifies_distinct_model_routes_before_
     state.lock().unwrap().steps = completed_steps(StatusCode::OK);
     let result = poll(&service).await.unwrap();
     assert!(result.text_verified && result.embedding_verified);
-    let connection = service.connection.lock().unwrap();
-    let row = read_connection(&connection, ModelProviderCode::PersonAi)
+    let row = service
+        .connection
+        .call(
+            move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )
         .unwrap()
         .unwrap();
     assert_eq!(row.status, ProviderConnectionStatus::Connected);
@@ -204,21 +210,36 @@ async fn completed_personai_authorization_verifies_distinct_model_routes_before_
         .unwrap();
     assert!(committed.token == "new-fixture-token");
     assert!(
-        read_person_ai_profile_credentials(&connection, "fixture-user")
+        service
+            .connection
+            .call(
+                move |connection| read_person_ai_profile_credentials(connection, "fixture-user"),
+                || ModelProviderError::Storage
+            )
             .unwrap()
             .is_some()
     );
     assert_eq!(
-        catalog_model_count(&connection, ModelProviderCode::PersonAi).unwrap(),
+        service
+            .connection
+            .call(
+                move |connection| catalog_model_count(connection, ModelProviderCode::PersonAi),
+                || ModelProviderError::Storage
+            )
+            .unwrap(),
         1
     );
     assert_eq!(
-        read_authorization_session(&connection, "fixture-session")
+        service
+            .connection
+            .call(
+                move |connection| read_authorization_session(connection, "fixture-session"),
+                || ModelProviderError::Storage
+            )
             .unwrap()
             .status,
         "Completed"
     );
-    drop(connection);
     let state = state.lock().unwrap();
     assert!(state.errors.is_empty(), "{:?}", state.errors);
     assert!(state.steps.is_empty());
@@ -245,20 +266,26 @@ async fn completed_personai_authorization_verifies_distinct_model_routes_before_
 async fn completed_personai_authorization_404_preserves_old_credentials_and_can_resume_same_session()
  {
     let (service, state, server) = fixture().await;
-    let previous = read_connection(
-        &service.connection.lock().unwrap(),
-        ModelProviderCode::PersonAi,
-    )
-    .unwrap()
-    .unwrap();
+    let previous = service
+        .connection
+        .call(
+            |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )
+        .unwrap()
+        .unwrap();
     state.lock().unwrap().steps = completed_steps(StatusCode::NOT_FOUND);
     let error = poll(&service).await.unwrap_err();
     assert!(
         matches!(error,ModelProviderError::Remote(ref message) if message.contains("personai model error: Not found"))
     );
     {
-        let connection = service.connection.lock().unwrap();
-        let row = read_connection(&connection, ModelProviderCode::PersonAi)
+        let row = service
+            .connection
+            .call(
+                move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                || ModelProviderError::Storage,
+            )
             .unwrap()
             .unwrap();
         assert_eq!(row.status, ProviderConnectionStatus::AuthRequired);
@@ -266,13 +293,24 @@ async fn completed_personai_authorization_404_preserves_old_credentials_and_can_
         assert_eq!(row.person_ai_user_id, previous.person_ai_user_id);
         assert_eq!(row.last_error, previous.last_error);
         assert_eq!(
-            read_authorization_session(&connection, "fixture-session")
+            service
+                .connection
+                .call(
+                    move |connection| read_authorization_session(connection, "fixture-session"),
+                    || ModelProviderError::Storage
+                )
                 .unwrap()
                 .status,
             "pending"
         );
         assert_eq!(
-            catalog_model_count(&connection, ModelProviderCode::PersonAi).unwrap(),
+            service
+                .connection
+                .call(
+                    move |connection| catalog_model_count(connection, ModelProviderCode::PersonAi),
+                    || ModelProviderError::Storage
+                )
+                .unwrap(),
             0
         );
     }
@@ -314,8 +352,12 @@ async fn completed_personai_authorization_401_device_unbound_still_clears_creden
         poll(&service).await.unwrap_err(),
         ModelProviderError::DeviceUnbound
     );
-    let connection = service.connection.lock().unwrap();
-    let row = read_connection(&connection, ModelProviderCode::PersonAi)
+    let row = service
+        .connection
+        .call(
+            move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )
         .unwrap()
         .unwrap();
     assert_eq!(row.status, ProviderConnectionStatus::AuthRequired);
@@ -325,7 +367,10 @@ async fn completed_personai_authorization_401_device_unbound_still_clears_creden
         Some("PersonAI device was unbound; login again")
     );
     assert!(matches!(
-        read_authorization_session(&connection, "fixture-session"),
+        service.connection.call(
+            move |connection| read_authorization_session(connection, "fixture-session"),
+            || ModelProviderError::Storage
+        ),
         Err(ModelProviderError::AuthorizationSessionNotFound)
     ));
     assert!(service.device_unbound());

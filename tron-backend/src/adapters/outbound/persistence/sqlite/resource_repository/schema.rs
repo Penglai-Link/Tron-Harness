@@ -1,10 +1,12 @@
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{OptionalExtension, params};
 
 use crate::domain::resource::{ResourceError, ResourceKind};
 
 use super::storage_error;
 
-pub(super) fn ensure_revision_columns(transaction: &Transaction<'_>) -> Result<(), ResourceError> {
+pub(super) fn ensure_revision_columns(
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+) -> Result<(), ResourceError> {
     for table in [
         "resource_files",
         "resource_data_source_connections",
@@ -30,7 +32,7 @@ pub(super) fn ensure_revision_columns(transaction: &Transaction<'_>) -> Result<(
 }
 
 pub(super) fn ensure_server_account_origin_column(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
 ) -> Result<(), ResourceError> {
     let mut query = transaction
         .prepare("PRAGMA table_info(resource_server_accounts)")
@@ -58,7 +60,7 @@ pub(super) fn ensure_server_account_origin_column(
 }
 
 pub(super) fn ensure_server_account_parent_guards(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
 ) -> Result<(), ResourceError> {
     transaction
         .execute_batch(
@@ -104,7 +106,7 @@ pub(super) fn ensure_server_account_parent_guards(
 }
 
 pub(super) fn claim_resource_code(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     workspace_code: &str,
     resource_code: &str,
     kind: &str,
@@ -135,7 +137,7 @@ pub(super) fn claim_resource_code(
 }
 
 pub(super) fn release_resource_code(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     workspace_code: &str,
     resource_code: &str,
 ) -> Result<(), ResourceError> {
@@ -150,7 +152,7 @@ pub(super) fn release_resource_code(
 }
 
 pub(super) fn backfill_resource_code_registry(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
 ) -> Result<(), ResourceError> {
     for (query, fallback_kind) in [
         (
@@ -200,7 +202,7 @@ pub(super) fn backfill_resource_code_registry(
 }
 
 fn record_simplified_code_collision_issue(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     workspace_code: &str,
     resource_code: &str,
     kind: &str,

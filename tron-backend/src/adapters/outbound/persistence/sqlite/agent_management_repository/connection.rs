@@ -1,19 +1,11 @@
 use super::*;
 
-impl SqliteAgentManagementRepository {
-    pub fn connect(database_url: &str) -> Result<Self, AgentManagementError> {
+impl<'a> SqliteAgentManagementRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, AgentManagementError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
 
         let repository = Self { connection };
         repository
@@ -65,5 +57,20 @@ impl SqliteAgentManagementRepository {
                 .map_err(storage_error)?;
         }
         Ok(repository)
+    }
+}
+
+impl SqliteAgentManagementRepository {
+    pub fn connect(database_url: &str) -> Result<Self, AgentManagementError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql::initialize(&database_url, connection)
+                    .map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
     }
 }

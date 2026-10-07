@@ -370,15 +370,16 @@ mod tests {
         let repository = SqliteRagRepository::connect(&database_url).unwrap();
         repository
             .connection
-            .execute_batch(
-                "ALTER TABLE rag_corpora ADD COLUMN storage_topology_json TEXT;
+            .runtime()
+            .call_blocking(|connection| {
+                connection.execute_batch(
+                    "ALTER TABLE rag_corpora ADD COLUMN storage_topology_json TEXT;
                  DELETE FROM rag_corpora WHERE corpus_id = 'legacy-local';",
-            )
+                )
+            })
             .unwrap();
         let topology = r#"{"mode":"TARGETED","bindings":{"source":"source-store","textUnit":"text-store","vector":"vector-store","diagnostics":"diagnostics-store"},"targets":[{"id":"source-store","backend":"SQLITE","layout":"TABLE","table":"rag_legacy_sources"},{"id":"text-store","backend":"SQLITE","layout":"TABLE","table":"rag_legacy_text_units"},{"id":"vector-store","backend":"SQLITE","layout":"TABLE","table":"rag_legacy_vectors"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}"#;
-        repository
-            .connection
-            .execute(
+        repository.connection.runtime().call_blocking(move |connection| connection.execute(
                 "INSERT INTO rag_corpora (
                     corpus_id,
                     display_name,
@@ -403,8 +404,7 @@ mod tests {
                     r#"{"backend":"SQLITE","layout":"SPLIT","sourceTable":"rag_legacy_sources","textUnitTable":"rag_legacy_text_units","vectorTable":"rag_legacy_vectors"}"#,
                     topology,
                 ],
-            )
-            .unwrap();
+            )).unwrap();
         drop(repository);
 
         let repository = SqliteRagRepository::connect(&database_url).unwrap();

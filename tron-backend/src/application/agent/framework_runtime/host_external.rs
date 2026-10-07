@@ -5,7 +5,7 @@ use crate::{
     domain::agent::{AgentRunContext, AgentRunResult},
 };
 use eliteforge_agent_core as fw;
-use eliteforge_agent_official_plugin_storage_local::SqliteConversationStore;
+
 use std::{fs, sync::Arc, time::Duration};
 impl FrameworkHost {
     pub(crate) async fn run_external(
@@ -67,6 +67,11 @@ impl FrameworkHost {
             .map_err(|_| AgentInvocationError::RunStopped)?;
         self.ensure_open()
             .map_err(AgentInvocationError::RuntimeFailed)?;
+        crate::adapters::outbound::persistence::sqlite::SqliteChatRepository::ensure_run_session(
+            self, &context,
+        )
+        .await
+        .map_err(|e| AgentInvocationError::RuntimeFailed(e.to_string()))?;
         let (packs, extensions) = self.capability_state();
         if !packs
             .get("framework.external-agent")
@@ -95,13 +100,19 @@ impl FrameworkHost {
                 .map_err(|e| AgentInvocationError::RuntimeFailed(e.to_string()))?;
         }
         let store = self
-            .0
-            .native_sessions
-            .get_or_try_init(|| async {
-                SqliteConversationStore::open(&self.0.path, Default::default()).await
-            })
+            .framework()
             .await
-            .map_err(|e| AgentInvocationError::RuntimeFailed(e.to_string()))?;
+            .map_err(map)?
+            .services()
+            .map_err(map)?
+            .get::<fw::ConversationStoreService>()
+            .ok_or_else(|| {
+                AgentInvocationError::RuntimeFailed(
+                    "Framework conversation storage is missing".into(),
+                )
+            })?
+            .0
+            .clone();
         let session = context
             .conversation_code
             .clone()
@@ -117,9 +128,27 @@ impl FrameworkHost {
             .map_err(AgentInvocationError::RuntimeFailed)?
             .content;
         let mut request = fw::RunRequest::new(&session, input);
-        super::host_interactions::apply_answers(agent, &session, &answers, &mut request)
+        request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(|e| {
+            AgentInvocationError::RuntimeFailed(format!("invalid native run identity: {e}"))
+        })?);
+        let framework = self.framework().await.map_err(map)?;
+        request.goal_id = framework
+            .goals()
+            .map_err(map)?
+            .active(&session)
             .await
-            .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
+            .map_err(|e| map(e.into()))?
+            .map(|g| g.id);
+        self.shared_database()
+            .await
+            .map_err(|e| map(e.into()))?
+            .transaction(async {
+                super::host_interactions::apply_answers(agent, &session, &answers, &mut request)
+                    .await
+                    .map_err(|e| fw::StateError::Backend(e.to_string()))
+            })
+            .await
+            .map_err(|e| map(e.into()))?;
         request.limits.max_steps = context.limits.max_steps.max(1) as usize;
         request.limits.max_model_calls_per_step = Some(1);
         request.limits.max_model_retries = 0;
@@ -159,7 +188,7 @@ impl FrameworkHost {
             .get::<super::super::external::ExternalExecution>()
             .expect("registered external execution");
         let binding = super::super::native_sessions::Binding::open(
-            store,
+            store.as_ref(),
             &session,
             &execution,
             resume,

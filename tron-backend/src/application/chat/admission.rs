@@ -25,6 +25,11 @@ impl ChatService {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
             .unwrap_or_else(generate_agent_run_code);
+        eliteforge_agent_core::RunId::parse_str(&run_code).map_err(|_| {
+            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                "runCode must be a UUID".into(),
+            ))
+        })?;
         let runtime_adapter_key = runtime_adapter_key_for_agent(agent_code);
         let supports_steer = runtime_adapter_key == MAIN_RUNTIME_ADAPTER_KEY;
         let guard = match self.active_runs.reserve(

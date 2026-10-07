@@ -74,6 +74,13 @@ pub fn prepared_config(mut config: AppConfig) -> AppConfig {
     if config.variable_crypto.key_base64.trim().is_empty() {
         config.variable_crypto = VariableCryptoConfig::test_default();
     }
+    let defaults = AppConfig::default().system_agents;
+    if config.system_agents.codex_command == defaults.codex_command {
+        config.system_agents.codex_command.clear();
+    }
+    if config.system_agents.opencode_command == defaults.opencode_command {
+        config.system_agents.opencode_command.clear();
+    }
     seed_default_fixture_data(&config.database_url);
     config
 }
@@ -218,6 +225,17 @@ pub async fn request_with_headers(
     authorization_header: Option<&str>,
 ) -> axum::response::Response {
     let mut builder = Request::builder().method(method).uri(uri);
+    if (uri.starts_with("/api/v1/chats/")
+        || uri.starts_with("/api/v1/agents/runs")
+        || uri.starts_with("/api/v1/agents/agui/streams/"))
+        && !uri.contains("workspaceCode=")
+    {
+        let workspace = body
+            .as_ref()
+            .and_then(|body| body["workspaceCode"].as_str())
+            .unwrap_or("TRON_CORE");
+        builder = builder.header("x-workspace-code", workspace);
+    }
     if let Some(cookies) = cookie_header {
         builder = builder.header(header::COOKIE, cookies);
     }
@@ -360,4 +378,86 @@ pub fn app_without_profile() -> Router {
         .expect("test state"),
     )
     .expect("test router")
+}
+
+/// Persist a product presentation through the Framework event abstraction.
+pub async fn append_native_chat_message(database: &str, session: &str, message: Value) {
+    let host = tron_backend::application::agent::FrameworkHost::persistent(database, None);
+    let framework = host.storage_framework().await.unwrap();
+    framework
+        .sessions()
+        .unwrap()
+        .store
+        .append_event(eliteforge_agent_core::SessionEvent::new(
+            session,
+            "tron.message",
+            message,
+        ))
+        .await
+        .unwrap();
+}
+
+pub async fn native_session_events(
+    database: &str,
+    session: &str,
+) -> Vec<eliteforge_agent_core::SessionEvent> {
+    let host = tron_backend::application::agent::FrameworkHost::persistent(database, None);
+    let framework = host.storage_framework().await.unwrap();
+    let store = framework.sessions().unwrap().store;
+    let mut all = Vec::new();
+    let mut after = 0;
+    loop {
+        let page = store.list_events(session, after, 500).await.unwrap();
+        if page.is_empty() {
+            return all;
+        }
+        after = page.last().unwrap().sequence;
+        all.extend(page);
+    }
+}
+
+pub async fn native_runs(database: &str, session: &str) -> Vec<eliteforge_agent_core::ManagedRun> {
+    let host = tron_backend::application::agent::FrameworkHost::persistent(database, None);
+    host.storage_framework()
+        .await
+        .unwrap()
+        .runs()
+        .unwrap()
+        .list(session)
+        .await
+        .unwrap()
+}
+pub async fn native_context(database: &str, session: &str, key: &str) -> Option<Value> {
+    let host = tron_backend::application::agent::FrameworkHost::persistent(database, None);
+    host.storage_framework()
+        .await
+        .unwrap()
+        .sessions()
+        .unwrap()
+        .store
+        .read_context(session, key)
+        .await
+        .unwrap()
+        .map(|(_, value)| value)
+}
+pub async fn native_goal(database: &str, id: &str) -> eliteforge_agent_core::GoalRecord {
+    let host = tron_backend::application::agent::FrameworkHost::persistent(database, None);
+    host.storage_framework()
+        .await
+        .unwrap()
+        .goals()
+        .unwrap()
+        .get(id)
+        .await
+        .unwrap()
+}
+pub async fn wait_native_summary(database: &str, session: &str) -> Value {
+    for _ in 0..250 {
+        if let Some(summary) = native_context(database, session, "tron.session-summary-view").await
+        {
+            return summary;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("native session summary did not finish");
 }

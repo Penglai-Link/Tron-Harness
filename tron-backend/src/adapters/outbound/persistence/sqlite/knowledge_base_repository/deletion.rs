@@ -1,15 +1,15 @@
 use super::*;
 use crate::application::knowledge_base::{deletion::DeletionCleanupPlan, ingestion::IngestionTask};
-use rusqlite::{Transaction, TransactionBehavior};
+use rusqlite::TransactionBehavior;
 
-impl SqliteKnowledgeBaseRepository {
+impl SqliteKnowledgeBaseRepositorySql<'_> {
     pub fn register_derived_resource(
         &self,
         document: &KnowledgeBaseDocument,
         workspace: &str,
         code: &str,
     ) -> Result<(), KnowledgeBaseError> {
-        let conn = self.connection.lock().map_err(storage)?;
+        let conn = &*self.connection;
         let changed = conn.execute("INSERT INTO knowledge_base_derived_resources(document_id,workspace_code,resource_code) SELECT id,?2,?3 FROM knowledge_base_documents WHERE id=?1 AND json_extract(payload_json,'$.resourceCode')=?4 AND json_extract(payload_json,'$.resourceRevision')=?5 AND revision=?6", params![document.id,workspace,code,document.resource_code,document.resource_revision,document.revision]).map_err(storage)?;
         if changed != 1 {
             return Err(KnowledgeBaseError::Conflict);
@@ -18,7 +18,7 @@ impl SqliteKnowledgeBaseRepository {
     }
 
     pub fn derived_resources(&self, doc: &str) -> Result<Vec<String>, KnowledgeBaseError> {
-        let conn = self.connection.lock().map_err(storage)?;
+        let conn = &*self.connection;
         let mut stmt = conn
             .prepare(
                 "SELECT resource_code FROM knowledge_base_derived_resources WHERE document_id=?1",
@@ -36,9 +36,8 @@ impl SqliteKnowledgeBaseRepository {
         &self,
         mut job: DeletionCleanupPlan,
     ) -> Result<DeletionCleanupPlan, KnowledgeBaseError> {
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let (raw, revision): (String,u64) = tx.query_row("SELECT payload_json,revision FROM knowledge_base_documents WHERE id=?1 AND knowledge_base_id=?2", params![job.document_id,job.knowledge_base_id], |r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(storage)?.ok_or(KnowledgeBaseError::NotFound)?;
         let doc: KnowledgeBaseDocument = decode(&raw)?;
@@ -128,7 +127,10 @@ impl SqliteKnowledgeBaseRepository {
     }
 }
 
-fn table_exists(tx: &Transaction<'_>, name: &str) -> Result<bool, KnowledgeBaseError> {
+fn table_exists(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    name: &str,
+) -> Result<bool, KnowledgeBaseError> {
     tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?1)",
         [name],
@@ -141,7 +143,7 @@ fn table_exists(tx: &Transaction<'_>, name: &str) -> Result<bool, KnowledgeBaseE
 /// This runs in the same transaction as the document fence and all index removal.
 /// No storage I/O or external HTTP occurs here.
 fn plan_derived_cleanup(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     job: &DeletionCleanupPlan,
     code: &str,
 ) -> Result<Option<String>, KnowledgeBaseError> {
@@ -218,4 +220,44 @@ fn plan_derived_cleanup(
     }
     tx.execute("DELETE FROM knowledge_base_derived_resources WHERE document_id=?1 AND workspace_code=?2 AND resource_code=?3", params![job.document_id,job.workspace_code,code]).map_err(storage)?;
     Ok(object)
+}
+
+impl SqliteKnowledgeBaseRepository {
+    pub fn register_derived_resource(
+        &self,
+        document: &KnowledgeBaseDocument,
+        workspace: &str,
+        code: &str,
+    ) -> Result<(), KnowledgeBaseError> {
+        let document = document.to_owned();
+        let workspace = workspace.to_owned();
+        let code = code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeBaseRepositorySql { connection }
+                    .register_derived_resource(&document, &workspace, &code)
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    pub fn derived_resources(&self, doc: &str) -> Result<Vec<String>, KnowledgeBaseError> {
+        let doc = doc.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeBaseRepositorySql { connection }.derived_resources(&doc)
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    pub fn delete_document_transaction(
+        &self,
+        job: DeletionCleanupPlan,
+    ) -> Result<DeletionCleanupPlan, KnowledgeBaseError> {
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeBaseRepositorySql { connection }.delete_document_transaction(job)
+            },
+            || storage("database worker stopped"),
+        )
+    }
 }

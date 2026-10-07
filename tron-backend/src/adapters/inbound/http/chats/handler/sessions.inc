@@ -26,12 +26,17 @@ pub async fn list_archived_sessions(
         .chats
         .list_archived_sessions(query.workspace_code.as_deref(), current, size)
     {
-        Ok((records, total)) => Json(ApiResponse::success(ArchivedChatSessionPage {
-            records,
-            total,
-            current,
-            size,
-        }))
+        Ok((records, total)) => Json(ApiResponse::protocol_success(
+            super::response::ArchivedSessionPageResponse {
+                records: records
+                    .into_iter()
+                    .map(super::response::ArchivedSessionResponse::from)
+                    .collect(),
+                total,
+                current,
+                size,
+            },
+        ))
         .into_response(),
         Err(error) => chat_error_response(error),
     }
@@ -43,7 +48,10 @@ pub async fn restore_session(
     Path(session_code): Path<String>,
 ) -> Response {
     match state.chats.restore_session(&session_code) {
-        Ok(session) => Json(ApiResponse::success(session)).into_response(),
+        Ok(session) => Json(ApiResponse::protocol_success(
+            super::response::ArchivedSessionResponse::from(session),
+        ))
+        .into_response(),
         Err(error) => chat_error_response(error),
     }
 }
@@ -99,83 +107,20 @@ pub async fn batch_delete_archived_sessions(
     let mut workers = JoinSet::new();
     for chunk in codes.chunks(chunk_size) {
         let chats = state.chats.clone();
-        let preflight_chats = chats.clone();
-        let framework = state.agent_framework.clone();
         let chunk = chunk.to_vec();
-        workers.spawn(async move {
-            let codes_to_check = chunk.clone();
-            let checked = tokio::task::spawn_blocking(move || {
-                let mut eligible = Vec::new();
-                let mut items = Vec::new();
-                for session_code in codes_to_check {
-                    match preflight_chats.prepare_session_deletion(&session_code) {
-                        Ok(()) => eligible.push(session_code),
-                        Err(error) => items.push(chat_delete_failure(session_code, error)),
-                    }
-                }
-                (eligible, items)
-            })
-            .await;
-            let Ok((eligible, mut items)) = checked else {
-                return chunk
-                    .into_iter()
-                    .map(framework_delete_failure)
-                    .collect::<Vec<_>>();
-            };
-            if eligible.is_empty() {
-                return items;
-            }
-
-            let framework_result = framework.delete_persisted_sessions(eligible.clone()).await;
-            let report = match framework_result {
-                Ok(report) => report,
-                Err(_) => {
-                    items.extend(eligible.into_iter().map(framework_delete_failure));
-                    return items;
-                }
-            };
-            let framework_failures = report
-                .failures
+        workers.spawn_blocking(move || {
+            chunk
                 .into_iter()
-                .map(|failure| {
-                    let item = if matches!(&failure.error, eliteforge_agent_core::StateError::Busy)
-                    {
-                        active_session_delete_failure(failure.session_id.clone())
-                    } else {
-                        framework_delete_failure(failure.session_id.clone())
-                    };
-                    (failure.session_id, item)
+                .map(|session_code| match chats.delete_session(&session_code) {
+                    Ok(_) => BatchDeleteArchivedSessionItem {
+                        session_code,
+                        success: true,
+                        error_code: None,
+                        message: None,
+                    },
+                    Err(error) => chat_delete_failure(session_code, error),
                 })
-                .collect::<BTreeMap<_, _>>();
-            items.extend(framework_failures.values().cloned());
-            let ready = eligible
-                .into_iter()
-                .filter(|session_code| !framework_failures.contains_key(session_code))
-                .collect::<Vec<_>>();
-            if ready.is_empty() {
-                return items;
-            }
-
-            match tokio::task::spawn_blocking(move || {
-                ready
-                    .into_iter()
-                    .map(|session_code| match chats.delete_session(&session_code) {
-                        Ok(_) => BatchDeleteArchivedSessionItem {
-                            session_code,
-                            success: true,
-                            error_code: None,
-                            message: None,
-                        },
-                        Err(error) => chat_delete_failure(session_code, error),
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .await
-            {
-                Ok(mut local_items) => items.append(&mut local_items),
-                Err(_) => {}
-            }
-            items
+                .collect::<Vec<_>>()
         });
     }
     let mut items = Vec::with_capacity(codes.len());
@@ -202,11 +147,13 @@ pub async fn batch_delete_archived_sessions(
     let succeeded = items.iter().filter(|item| item.success).count() as u32;
     let failed = items.len() as u32 - succeeded;
     items.sort_by_key(|item| codes.iter().position(|code| code == &item.session_code));
-    Json(ApiResponse::success(BatchDeleteArchivedSessionsResult {
-        succeeded,
-        failed,
-        items,
-    }))
+    Json(ApiResponse::protocol_success(
+        BatchDeleteArchivedSessionsResult {
+            succeeded,
+            failed,
+            items,
+        },
+    ))
     .into_response()
 }
 
@@ -244,40 +191,16 @@ pub async fn delete_session(
     _auth: RequestAuthContext,
     Path(session_code): Path<String>,
 ) -> Response {
-    let chats = state.chats.clone();
-    let session_code_for_preflight = session_code.clone();
-    match tokio::task::spawn_blocking(move || {
-        chats.prepare_session_deletion(&session_code_for_preflight)
-    })
-    .await
-    {
-        Ok(Ok(())) => {}
-        Ok(Err(error)) => return chat_error_response(error),
-        Err(_) => return chat_error_response(ChatError::StorageFailure),
-    }
-    match state
-        .agent_framework
-        .delete_persisted_session(&session_code)
-        .await
-    {
-        Ok(_) => {}
-        Err(error) => {
-            if matches!(
-                error.primary(),
-                eliteforge_agent_core::AgentError::State(eliteforge_agent_core::StateError::Busy)
-            ) {
-                return chat_error_response(ChatError::SessionRunActive);
-            }
-            return chat_error_response(ChatError::StorageFailure);
-        }
-    }
     match tokio::task::spawn_blocking({
         let chats = state.chats.clone();
         move || chats.delete_session(&session_code)
     })
     .await
     {
-        Ok(Ok(session)) => Json(ApiResponse::success(session)).into_response(),
+        Ok(Ok(session)) => Json(ApiResponse::protocol_success(
+            super::response::ArchivedSessionResponse::from(session),
+        ))
+        .into_response(),
         Ok(Err(error)) => chat_error_response(error),
         Err(_) => chat_error_response(ChatError::StorageFailure),
     }
@@ -300,22 +223,6 @@ fn chat_delete_failure(session_code: String, error: ChatError) -> BatchDeleteArc
         ),
     };
     failed_delete_item(session_code, code, message)
-}
-
-fn active_session_delete_failure(session_code: String) -> BatchDeleteArchivedSessionItem {
-    failed_delete_item(
-        session_code,
-        "CHAT_SESSION_RUN_ACTIVE",
-        "chat session has an active Framework run",
-    )
-}
-
-fn framework_delete_failure(session_code: String) -> BatchDeleteArchivedSessionItem {
-    failed_delete_item(
-        session_code,
-        "CHAT_SESSION_DELETE_FAILED",
-        "Framework session cleanup failed; retry this item",
-    )
 }
 
 fn failed_delete_item(
@@ -371,6 +278,19 @@ pub async fn upload_session_attachment(
         Ok(Err(error)) => chat_error_response(error),
         Err(_) => chat_error_response(ChatError::StorageFailure),
     }
+}
+
+pub async fn download_archived_session_attachment(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Path((session, attachment)): Path<(String, String)>,
+) -> Response {
+    match state.chats.get_session(&session) {
+        Ok(record) if record.status == crate::domain::chat::ChatSessionStatus::Archived => {}
+        Ok(_) => return chat_error_response(ChatError::SessionMustBeArchived),
+        Err(error) => return chat_error_response(error),
+    }
+    download_session_attachment(State(state), auth, Path((session, attachment))).await
 }
 
 pub async fn download_session_attachment(
@@ -458,104 +378,55 @@ pub async fn answer_user_input(
             .and_then(|entry| entry.payload.get("answers"))
             .and_then(|value| serde_json::from_value(value.clone()).ok())
     });
-    let native_id = request_code
-        .strip_prefix("INPUT-FW-")
-        .unwrap_or(&request_code);
-    let is_native = eliteforge_agent_core::RunId::parse_str(native_id).is_ok()
-        || request_code.starts_with("INPUT-FW-");
-    if is_native {
-        if request.resume.len() > 1
-            || request.resume.first().is_some_and(|entry| {
-                entry
-                    .interrupt_id
-                    .strip_prefix("INPUT-FW-")
-                    .unwrap_or(&entry.interrupt_id)
-                    != native_id
-            })
-        {
-            return chat_error_response(ChatError::UserInputAnswerInvalid(
-                "response identity must match the requested native interaction".into(),
-            ));
-        }
-        let payload = match request.resume.first() {
-            Some(entry) => entry.payload.clone(),
-            None => match &answers {
-                Some(answers) => json!({"answers":answers}),
-                None => {
-                    return chat_error_response(ChatError::UserInputAnswerInvalid(
-                        "native response payload is required".into(),
-                    ));
-                }
-            },
-        };
-        let entry = crate::application::chat::ChatResumeEntry {
-            interrupt_id: request_code.clone(),
-            status: "resolved".into(),
-            payload,
-        };
-        if let Err(error) = state
-            .agent_framework
-            .validate_native_resume(&session_code, std::slice::from_ref(&entry))
-            .await
-        {
-            return chat_error_response(ChatError::UserInputAnswerInvalid(error.to_string()));
-        }
-        // Existing ask-user rows keep their status and human-readable answer history.
-        if let Some(answers) = answers {
-            match state
-                .chats
-                .answer_user_input(&session_code, &request_code, answers.clone())
-            {
-                Ok(command) => {
-                    return stream_message_command(state, auth, session_code, command).await;
-                }
-                Err(ChatError::UserInputRequestNotFound) => {}
-                Err(ChatError::UserInputAlreadyAnswered) => {
-                    let previous = match state.chats.list_user_input_requests(&session_code) {
-                        Ok(requests) => requests
-                            .into_iter()
-                            .find(|request| request.request_code == request_code)
-                            .and_then(|request| request.answers),
-                        Err(error) => return chat_error_response(error),
-                    };
-                    if !previous.as_ref().is_some_and(|saved| {
-                        saved.len() == answers.len()
-                            && answers.iter().all(|answer| saved.contains(answer))
-                    }) {
-                        return chat_error_response(ChatError::UserInputAlreadyAnswered);
-                    }
-                    // Only an identical product audit can retry the native answer CAS.
-                }
-                Err(error) => return chat_error_response(error),
-            }
-        }
-        let history = match session.last_run_code.as_deref() {
-            Some(run) => match state.agent_runs.get_run(run) {
-                Ok(record) => Some(record),
-                Err(_) => return chat_error_response(ChatError::StorageFailure),
-            },
-            None => None,
-        };
-        let command = match state.chats.native_resume_command(
-            &session_code,
-            entry,
-            history.as_ref().map(|record| record.model_code.clone()),
-            history.and_then(|record| record.reasoning_effort),
-        ) {
-            Ok(command) => command,
-            Err(error) => return chat_error_response(error),
-        };
-        return stream_message_command(state, auth, session_code, command).await;
+    if eliteforge_agent_core::RunId::parse_str(&request_code).is_err() {
+        return chat_error_response(ChatError::UserInputRequestNotFound);
     }
-    let Some(answers) = answers else {
-        return chat_error_response(ChatError::UserInputAnswerInvalid(
-            "legacy response payload must contain answers".into(),
-        ));
-    };
-    let command = match state
-        .chats
-        .answer_user_input(&session_code, &request_code, answers)
+    if request.resume.len() > 1
+        || request
+            .resume
+            .first()
+            .is_some_and(|entry| entry.interrupt_id != request_code)
     {
+        return chat_error_response(ChatError::UserInputAnswerInvalid(
+            "response identity does not match the interaction".into(),
+        ));
+    }
+    let payload = match request.resume.first() {
+        Some(entry) => entry.payload.clone(),
+        None => match answers {
+            Some(answers) => json!({"answers":answers}),
+            None => {
+                return chat_error_response(ChatError::UserInputAnswerInvalid(
+                    "interaction response is required".into(),
+                ));
+            }
+        },
+    };
+    let entry = crate::application::chat::ChatResumeEntry {
+        interrupt_id: request_code,
+        status: "resolved".into(),
+        payload,
+    };
+    if let Err(error) = state
+        .agent_framework
+        .validate_native_resume(&session_code, std::slice::from_ref(&entry))
+        .await
+    {
+        return chat_error_response(ChatError::UserInputAnswerInvalid(error.to_string()));
+    }
+    let history = match session.last_run_code.as_deref() {
+        Some(run) => match state.agent_runs.get_run(run) {
+            Ok(record) => Some(record),
+            Err(_) => return chat_error_response(ChatError::StorageFailure),
+        },
+        None => None,
+    };
+    let command = match state.chats.native_resume_command(
+        &session_code,
+        entry,
+        history.as_ref().map(|record| record.model_code.clone()),
+        history.and_then(|record| record.reasoning_effort),
+    ) {
         Ok(command) => command,
         Err(error) => return chat_error_response(error),
     };
@@ -570,6 +441,78 @@ pub async fn patch_session(
 ) -> Response {
     match state.chats.update_session(&session_code, request) {
         Ok(session) => Json(ApiResponse::success(session)).into_response(),
+        Err(error) => chat_error_response(error),
+    }
+}
+
+pub async fn archived_session_detail(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    Path(code): Path<String>,
+) -> Response {
+    let session = match state.chats.get_session(&code) {
+        Ok(s) => s,
+        Err(e) => return chat_error_response(e),
+    };
+    if session.status != crate::domain::chat::ChatSessionStatus::Archived {
+        return chat_error_response(ChatError::SessionMustBeArchived);
+    }
+    let result = async {
+        let framework = state.agent_framework.storage_framework().await.map_err(|_| ChatError::StorageFailure)?;
+        let database = state.agent_framework.shared_database().await.map_err(|_| ChatError::StorageFailure)?;
+        database.transaction(async {
+        let native = framework.sessions().map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?.get(&code).await?;
+        if native.status != eliteforge_agent_core::SessionStatus::Archived {
+            return Err(eliteforge_agent_core::StateError::Invalid("session must be archived".into()));
+        }
+        let mut events = Vec::new();
+        let mut after = 0;
+        loop {
+            let page = framework.sessions().map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?.store.list_events(&code, after, 500).await?;
+            if page.is_empty() { break; }
+            after = page.last().unwrap().sequence;
+            events.extend(page);
+        }
+        let messages = events.iter().filter(|e| e.kind == "tron.message")
+            .map(|e| serde_json::from_value::<crate::domain::chat::ChatMessage>(e.payload.clone()).map_err(|_| eliteforge_agent_core::StateError::Backend("invalid message event".into())))
+            .collect::<Result<Vec<_>, _>>()?;
+        let goal_events = events.into_iter().filter(|e| e.goal_id.is_some()).map(Into::into).collect();
+        let goals = framework
+            .goals()
+            .map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?
+            .list(&code)
+            .await
+            ?;
+        let runs = framework
+            .runs()
+            .map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?
+            .list(&code)
+            .await
+            ?;
+        let conversations = framework
+            .services()
+            .map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?
+            .get::<eliteforge_agent_core::ConversationStoreService>()
+            .ok_or(eliteforge_agent_core::StateError::Backend("conversation store unavailable".into()))?
+            .0
+            .clone();
+        let history = conversations
+            .history(&code)
+            .await
+            .map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?;
+        Ok::<_, eliteforge_agent_core::StateError>(super::response::ArchivedSessionDetailResponse {
+            session: session.into(),
+            messages: messages.into_iter().map(Into::into).collect(),
+            goals: goals.into_iter().map(Into::into).collect(),
+            goal_events,
+            runs: runs.into_iter().map(Into::into).collect(),
+            history: history.into_iter().map(Into::into).collect(),
+        })
+        }).await.map_err(crate::adapters::outbound::persistence::sqlite::framework_storage::chat_error)
+    }
+    .await;
+    match result {
+        Ok(detail) => Json(ApiResponse::protocol_success(detail)).into_response(),
         Err(error) => chat_error_response(error),
     }
 }

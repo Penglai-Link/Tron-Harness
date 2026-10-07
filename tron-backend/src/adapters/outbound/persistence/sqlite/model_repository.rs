@@ -35,24 +35,19 @@ use storage::storage_error;
 
 const MODEL_ID_SEED: i64 = 734_600_000_000_000_000;
 
+struct SqliteModelRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteModelRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteModelRepository {
-    pub fn connect(database_url: &str) -> Result<Self, ModelError> {
+impl<'a> SqliteModelRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, ModelError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
@@ -95,5 +90,19 @@ impl SqliteModelRepository {
             .execute_batch(MODEL_REMOVE_SEEDED_DATA_MIGRATION)
             .map_err(storage_error)?;
         Ok(())
+    }
+}
+
+impl SqliteModelRepository {
+    pub fn connect(database_url: &str) -> Result<Self, ModelError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteModelRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
     }
 }

@@ -1,10 +1,11 @@
+use super::SqliteRagRepositorySql;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
 use crate::domain::rag::{RagCorpusRecord, RagError};
 
-use super::{SqliteRagRepository, storage_error};
+use super::storage_error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SqliteRagCorpusPlan {
@@ -149,7 +150,7 @@ pub(crate) struct SqliteRagProjectionColumn {
 }
 
 pub(crate) fn compile_sql_corpus_plan(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     corpus: &RagCorpusRecord,
 ) -> Result<SqliteRagCorpusPlan, RagError> {
     let binding = &corpus.storage_binding;

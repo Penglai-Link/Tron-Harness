@@ -291,28 +291,17 @@ impl ChatService {
         assistant_message: &ChatMessage,
         raw: RawUserInputRequest,
     ) -> Result<ChatUserInputRequest, ChatSendError> {
-        let id = self
-            .id_provider
-            .next_id()
-            .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?
-            .value();
         let questions = raw
             .questions
             .into_iter()
-            .enumerate()
-            .map(|(index, question)| ChatUserInputQuestion {
-                question_code: question
-                    .id
-                    .unwrap_or_else(|| format!("QUESTION-{id}-{index}")),
+            .map(|question| ChatUserInputQuestion {
+                question_code: question.id,
                 question: question.question,
                 options: question
                     .options
                     .into_iter()
-                    .enumerate()
-                    .map(|(option_index, option)| ChatUserInputOption {
-                        option_code: option
-                            .id
-                            .unwrap_or_else(|| format!("OPTION-{id}-{index}-{option_index}")),
+                    .map(|option| ChatUserInputOption {
+                        option_code: option.id,
                         label: option.label,
                         description: option.description,
                     })
@@ -327,8 +316,12 @@ impl ChatService {
         let request = ChatUserInputRequest {
             request_code: raw
                 .framework_interaction_id
-                .map(|id| format!("INPUT-FW-{id}"))
-                .unwrap_or_else(|| format!("INPUT-{id}")),
+                .ok_or_else(|| {
+                    ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                        "user question is missing its Framework interaction identity".into(),
+                    ))
+                })?
+                .to_string(),
             session_code: session_code.to_string(),
             run_code: run.run_code.clone(),
             assistant_message_code: Some(assistant_message.message_code.clone()),

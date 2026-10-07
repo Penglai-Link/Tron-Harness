@@ -1,26 +1,5 @@
 use super::*;
 
-pub(super) fn open_connection(database_url: &str) -> Result<Connection, ModelProviderError> {
-    if database_url != ":memory:"
-        && !database_url.starts_with("file:")
-        && let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| ModelProviderError::Storage)?;
-    }
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        Connection::open_with_flags(
-            database_url,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-        )
-    } else {
-        Connection::open(database_url)
-    }
-    .map_err(|_| ModelProviderError::Storage)
-}
-
 // `models` remains the source of truth for manual-model runtime configuration.
 // This one-time copy gives existing default pointers the unified selection shape
 // without moving models or duplicating their credentials.

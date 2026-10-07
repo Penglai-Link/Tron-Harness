@@ -6,10 +6,11 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    answer_user_input, archive_session, batch_delete_archived_sessions, create_session,
-    delete_session, download_session_attachment, list_archived_sessions, list_messages,
-    list_session_groups, list_user_input_requests, patch_session, restore_session, send_message,
-    steer_message, stream_message, upload_session_attachment,
+    answer_user_input, archive_session, archived_session_detail, batch_delete_archived_sessions,
+    create_session, delete_session, download_archived_session_attachment,
+    download_session_attachment, list_archived_sessions, list_messages, list_session_groups,
+    list_user_input_requests, patch_session, restore_session, send_message, steer_message,
+    stream_message, upload_session_attachment,
 };
 use super::run_control::{get_active_run, stop_run};
 use super::short_term_memory::{
@@ -25,9 +26,11 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}/stop", post(super::terminals::stop))
         .route("/api/v1/chats/sessions/applications", get(super::application_context::get_session_applications))
         .route("/api/v1/chats/session-groups", get(list_session_groups))
-        .route("/api/v1/chats/archived-sessions", get(list_archived_sessions))
-        .route("/api/v1/chats/archived-sessions/batch-delete", post(batch_delete_archived_sessions))
-        .route("/api/v1/chats/sessions/{session_code}/restore", post(restore_session))
+        .route("/api/v1/admin/archived-sessions", get(list_archived_sessions))
+        .route("/api/v1/admin/archived-sessions/batch-delete", post(batch_delete_archived_sessions))
+        .route("/api/v1/admin/archived-sessions/{session_code}/restore", post(restore_session))
+        .route("/api/v1/admin/archived-sessions/{session_code}", get(archived_session_detail).delete(delete_session))
+        .route("/api/v1/admin/archived-sessions/{session_code}/attachments/{attachment_code}", get(download_archived_session_attachment))
         .route("/api/v1/chats/sessions", post(create_session))
         .route("/api/v1/chats/sessions/get-active-run", get(get_active_run))
         .route("/api/v1/chats/sessions/steer-message", post(steer_message))
@@ -55,7 +58,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/chats/sessions/update-goal", post(update_goal))
         .route(
             "/api/v1/chats/sessions/{session_code}",
-            patch(patch_session).delete(delete_session),
+            patch(patch_session),
         )
         .route(
             "/api/v1/chats/sessions/{session_code}/archive",

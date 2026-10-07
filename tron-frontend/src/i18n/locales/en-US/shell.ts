@@ -143,6 +143,7 @@ export const shell = {
       registry: "Registry Center",
     },
     items: {
+      archivedChats: "Archived chats",
       agents: "Agents",
       appearance: "Appearance",
       auditLogs: "Audit Logs",

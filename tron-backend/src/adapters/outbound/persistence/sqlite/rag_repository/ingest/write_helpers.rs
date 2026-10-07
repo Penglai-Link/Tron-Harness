@@ -1,5 +1,5 @@
 fn persist_fulltext_units(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
@@ -61,7 +61,7 @@ fn push_carrier_text_unit_values(
 }
 
 fn persist_warnings(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
@@ -86,7 +86,7 @@ fn persist_warnings(
 }
 
 fn persist_modern_warning(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     diagnostics_table: &str,
     command: &RagPersistIngestCommand,
     warning: &RagIngestWarning,
@@ -137,7 +137,7 @@ fn persist_modern_warning(
 }
 
 fn persist_legacy_warning(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     diagnostics_table: &str,
     command: &RagPersistIngestCommand,
     warning: &RagIngestWarning,
@@ -186,7 +186,7 @@ fn persist_legacy_warning(
 }
 
 fn diagnostics_columns(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     diagnostics_table: &str,
 ) -> Result<BTreeSet<String>, RagError> {
     let table = quote_identifier(diagnostics_table)?;

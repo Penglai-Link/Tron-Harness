@@ -96,7 +96,7 @@ async fn sdk_authentication_recovery_reassembles_tron_context_and_dispatches_aga
     .build()
     .unwrap();
     let mut context: AgentRunContext = serde_json::from_value(serde_json::json!({
-        "conversationCode":"auth-session", "runCode":"auth-run", "workspaceCode":"test", "userCode":"user", "locale":"en-US", "agentKind":"REACT",
+        "conversationCode":null, "runCode":fw::RunId::new_v4().to_string(), "workspaceCode":"test", "userCode":"user", "locale":"en-US", "agentKind":"REACT",
         "model":{"modelCode":"MODEL-1", "protocol":"CHAT_COMPLETIONS", "baseUrl":"http://127.0.0.1:1/v1", "apiKey":"fixture", "modelName":"test", "maxTokens":128, "contextWindowTokens":131072},
         "variables":[], "skills":[], "tools":[], "executionScope":{}, "limits":{"maxSteps":2, "maxToolCalls":2, "maxParallelToolCalls":1}, "messages":[], "observations":[], "startedAt":"fixture"
     })).unwrap();
@@ -181,7 +181,7 @@ async fn newest_oversized_tool_turn_rejects_before_second_provider_without_repea
     .build()
     .unwrap();
     let mut context: AgentRunContext = serde_json::from_value(serde_json::json!({
-        "conversationCode":"protected-session", "runCode":"protected-run", "workspaceCode":"test", "userCode":"user", "locale":"en-US", "agentKind":"REACT",
+        "conversationCode":null, "runCode":fw::RunId::new_v4().to_string(), "workspaceCode":"test", "userCode":"user", "locale":"en-US", "agentKind":"REACT",
         "model":{"modelCode":"MODEL-1", "protocol":"CHAT_COMPLETIONS", "baseUrl":"http://127.0.0.1:1/v1", "apiKey":"fixture", "modelName":"test", "maxTokens":4096, "contextWindowTokens":32000},
         "variables":[], "skills":[], "tools":[{"toolName":"echo","description":"fixture", "inputSchema":{"type":"object"}, "skillName":null, "requiredVariableKeys":[]}],
         "executionScope":{}, "limits":{"maxSteps":3, "maxToolCalls":2, "maxParallelToolCalls":1}, "messages":[], "observations":[], "startedAt":"fixture"
@@ -189,9 +189,7 @@ async fn newest_oversized_tool_turn_rejects_before_second_provider_without_repea
     context.messages.push(AgentMessage::user("question"));
     let error = harness.run(context).await.unwrap_err();
     assert!(
-        error
-            .to_string()
-            .contains("context block exceeds its quota"),
+        error.to_string().contains("leave no summary capacity"),
         "{error}"
     );
     assert_eq!(

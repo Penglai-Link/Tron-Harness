@@ -15,24 +15,19 @@ use super::migrations::{
     PLATFORM_VARIABLES_MIGRATION, VARIABLE_SENSITIVE_METADATA_MIGRATION, VARIABLES_MIGRATION,
 };
 
+struct SqliteVariableRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteVariableRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteVariableRepository {
-    pub fn connect(database_url: &str) -> Result<Self, VariableError> {
+impl<'a> SqliteVariableRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, VariableError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
@@ -55,7 +50,7 @@ impl SqliteVariableRepository {
     }
 }
 
-impl VariableRepository for SqliteVariableRepository {
+impl VariableRepository for SqliteVariableRepositorySql<'_> {
     fn list_variables(&mut self) -> Result<Vec<Variable>, VariableError> {
         let mut statement = self
             .connection
@@ -322,4 +317,95 @@ fn column_exists(
         .collect::<Result<Vec<_>, _>>()
         .map_err(storage_error)?;
     Ok(columns.iter().any(|column| column == column_name))
+}
+
+impl SqliteVariableRepository {
+    pub fn connect(database_url: &str) -> Result<Self, VariableError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteVariableRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl VariableRepository for SqliteVariableRepository {
+    fn list_variables(&mut self) -> Result<Vec<Variable>, VariableError> {
+        self.connection.call(
+            move |connection| SqliteVariableRepositorySql { connection }.list_variables(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_platform_variables(&mut self) -> Result<Vec<PlatformVariable>, VariableError> {
+        self.connection.call(
+            move |connection| SqliteVariableRepositorySql { connection }.list_platform_variables(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn next_id(&mut self) -> Result<i64, VariableError> {
+        self.connection.call(
+            move |connection| SqliteVariableRepositorySql { connection }.next_id(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_variable(&mut self, variable: &Variable) -> Result<(), VariableError> {
+        let variable = variable.to_owned();
+        self.connection.call(
+            move |connection| SqliteVariableRepositorySql { connection }.create_variable(&variable),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_platform_variable(
+        &mut self,
+        variable: &PlatformVariable,
+    ) -> Result<(), VariableError> {
+        let variable = variable.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteVariableRepositorySql { connection }.create_platform_variable(&variable)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_variable(&mut self, variable: &Variable) -> Result<(), VariableError> {
+        let variable = variable.to_owned();
+        self.connection.call(
+            move |connection| SqliteVariableRepositorySql { connection }.update_variable(&variable),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_platform_variable(
+        &mut self,
+        variable: &PlatformVariable,
+    ) -> Result<(), VariableError> {
+        let variable = variable.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteVariableRepositorySql { connection }.update_platform_variable(&variable)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_variable(&mut self, workspace_code: &str, key: &str) -> Result<bool, VariableError> {
+        let workspace_code = workspace_code.to_owned();
+        let key = key.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteVariableRepositorySql { connection }.delete_variable(&workspace_code, &key)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_platform_variable(&mut self, key: &str) -> Result<bool, VariableError> {
+        let key = key.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteVariableRepositorySql { connection }.delete_platform_variable(&key)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

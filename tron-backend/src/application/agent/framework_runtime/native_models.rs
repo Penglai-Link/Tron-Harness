@@ -127,26 +127,6 @@ impl NativeModelScope {
             },
         })
     }
-    pub(crate) fn summary_reference(
-        &self,
-        config: &AgentModelConfig,
-    ) -> Result<fw::ModelRef, AgentError> {
-        self.bindings
-            .summaries
-            .iter()
-            .find(|(main, _)| {
-                self.bindings.models.get(*main).is_some_and(|binding| {
-                    binding.config.model_code == config.model_code
-                        && binding.config.protocol == config.protocol
-                        && binding.config.base_url == config.base_url
-                        && binding.config.model_name == config.model_name
-                })
-            })
-            .map(|(_, summary)| summary.clone())
-            .ok_or_else(|| {
-                AgentError::InvalidConfiguration("summary model is not authorized".into())
-            })
-    }
     pub(crate) fn attach(self, request: &mut fw::RunRequest) {
         request.model = self.primary;
         self.execution.attach(request);

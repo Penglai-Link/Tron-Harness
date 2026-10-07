@@ -1,3 +1,4 @@
+use super::SqliteRagRepositorySql;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, params};
@@ -21,7 +22,7 @@ use super::{
     storage_error,
 };
 
-impl RagRetryIndexRepository for SqliteRagRepository {
+impl RagRetryIndexRepository for SqliteRagRepositorySql<'_> {
     fn retry_text_units(
         &self,
         request: &RagRetryIndexRequest,
@@ -223,7 +224,7 @@ impl RagRetryIndexRepository for SqliteRagRepository {
 }
 
 fn retry_plan(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     corpus_id: &str,
 ) -> Result<super::sql_plan::SqliteRagCorpusPlan, RagError> {
     let corpus = repository
@@ -302,4 +303,60 @@ fn now_millis() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as i64)
         .unwrap_or(0)
+}
+
+impl RagRetryIndexRepository for SqliteRagRepository {
+    fn retry_text_units(
+        &self,
+        request: &RagRetryIndexRequest,
+    ) -> Result<Vec<RagRetryTextUnit>, RagError> {
+        let request = request.to_owned();
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.retry_text_units(&request),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn rebuild_fulltext_index(&self, request: &RagRetryIndexRequest) -> Result<usize, RagError> {
+        let request = request.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteRagRepositorySql { connection }.rebuild_fulltext_index(&request)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_vector_index(&self, update: RagRetryVectorUpdate) -> Result<(), RagError> {
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.update_vector_index(update),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn mark_vector_retry_failed(&self, request: &RagRetryIndexRequest) -> Result<(), RagError> {
+        let request = request.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteRagRepositorySql { connection }.mark_vector_retry_failed(&request)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn persist_retry_warning(
+        &self,
+        request: &RagRetryIndexRequest,
+        stage_id: &str,
+        code: &str,
+        message: &str,
+    ) -> Result<(), RagError> {
+        let request = request.to_owned();
+        let stage_id = stage_id.to_owned();
+        let code = code.to_owned();
+        let message = message.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteRagRepositorySql { connection }
+                    .persist_retry_warning(&request, &stage_id, &code, &message)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

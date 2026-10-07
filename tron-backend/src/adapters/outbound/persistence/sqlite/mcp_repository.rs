@@ -22,24 +22,19 @@ use super::migrations::{
 
 const MCP_GATEWAY_SINGLETON_KEY: &str = "platform";
 
+struct SqliteMcpRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteMcpRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteMcpRepository {
-    pub fn connect(database_url: &str) -> Result<Self, McpError> {
+impl<'a> SqliteMcpRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, McpError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
@@ -80,7 +75,7 @@ impl SqliteMcpRepository {
     }
 }
 
-impl McpRepository for SqliteMcpRepository {
+impl McpRepository for SqliteMcpRepositorySql<'_> {
     fn get_gateway_config(&mut self) -> Result<Option<PlatformMcpGatewayConfig>, McpError> {
         self.connection
             .query_row(
@@ -491,5 +486,108 @@ fn json_vec_from_storage(value: Option<String>) -> Result<Vec<String>, rusqlite:
                 Box::new(error),
             )
         }),
+    }
+}
+
+impl SqliteMcpRepository {
+    pub fn connect(database_url: &str) -> Result<Self, McpError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteMcpRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl McpRepository for SqliteMcpRepository {
+    fn get_gateway_config(&mut self) -> Result<Option<PlatformMcpGatewayConfig>, McpError> {
+        self.connection.call(
+            move |connection| SqliteMcpRepositorySql { connection }.get_gateway_config(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_gateway_config(&mut self, config: &PlatformMcpGatewayConfig) -> Result<(), McpError> {
+        let config = config.to_owned();
+        self.connection.call(
+            move |connection| SqliteMcpRepositorySql { connection }.upsert_gateway_config(&config),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_platform_servers(&mut self) -> Result<Vec<PlatformMcpServerRecord>, McpError> {
+        self.connection.call(
+            move |connection| SqliteMcpRepositorySql { connection }.list_platform_servers(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn get_platform_server(
+        &mut self,
+        server_code: &str,
+    ) -> Result<Option<PlatformMcpServerRecord>, McpError> {
+        let server_code = server_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteMcpRepositorySql { connection }.get_platform_server(&server_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_platform_server(&mut self, server: &PlatformMcpServerRecord) -> Result<(), McpError> {
+        let server = server.to_owned();
+        self.connection.call(
+            move |connection| SqliteMcpRepositorySql { connection }.upsert_platform_server(&server),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_platform_server(&mut self, server_code: &str) -> Result<bool, McpError> {
+        let server_code = server_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteMcpRepositorySql { connection }.delete_platform_server(&server_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_workspace_server_policies(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<WorkspaceMcpServerPolicy>, McpError> {
+        let workspace_code = workspace_code.map(ToOwned::to_owned);
+        self.connection.call(
+            move |connection| {
+                SqliteMcpRepositorySql { connection }
+                    .list_workspace_server_policies(workspace_code.as_deref())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_workspace_server_policy(
+        &mut self,
+        policy: &WorkspaceMcpServerPolicy,
+    ) -> Result<(), McpError> {
+        let policy = policy.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteMcpRepositorySql { connection }.upsert_workspace_server_policy(&policy)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_server_policy(
+        &mut self,
+        workspace_code: &str,
+        server_code: &str,
+    ) -> Result<bool, McpError> {
+        let workspace_code = workspace_code.to_owned();
+        let server_code = server_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteMcpRepositorySql { connection }
+                    .delete_workspace_server_policy(&workspace_code, &server_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
     }
 }

@@ -93,6 +93,18 @@ impl NativeRegistration {
     }
 }
 impl FrameworkHost {
+    pub(crate) fn native_run_observer(&self) -> Arc<dyn Fn(&str) -> bool + Send + Sync> {
+        let host = Arc::downgrade(&self.0);
+        Arc::new(move |key| {
+            host.upgrade().is_some_and(|host| {
+                host.control
+                    .entries
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .contains_key(key)
+            })
+        })
+    }
     pub fn bind_presentation(
         &self,
         service: crate::application::agent::AgentAguiStreamService,

@@ -1,33 +1,4 @@
-use crate::{
-    application::short_term_memory::{ModelRequestTranscriptFacts, PreparedModelContext},
-    domain::agent::{AgentModelProtocol, AgentRunContext, ModelRequest},
-};
-
-use super::runtime_helpers::hash_text;
-
-pub(super) fn model_request_facts(
-    request: &ModelRequest,
-    context: &AgentRunContext,
-    prepared_context: &PreparedModelContext,
-    usage_estimate: crate::domain::agent::TokenEstimateSnapshot,
-) -> ModelRequestTranscriptFacts {
-    ModelRequestTranscriptFacts {
-        estimated_tokens: prepared_context.estimated_tokens,
-        message_hashes: request
-            .messages
-            .iter()
-            .map(|message| hash_text(&message.text_content()))
-            .collect(),
-        tool_schema_token_estimate: prepared_context.tool_schema_token_estimate,
-        protocol: protocol_code(context.model.protocol).into(),
-        previous_response_id_present: request.previous_response_id.is_some(),
-        context_window_estimate: context.model.context_window_tokens,
-        checkpoint_code: prepared_context.checkpoint_code.clone(),
-        budget_breakdown: prepared_context.budget_breakdown.clone(),
-        over_budget_reason: prepared_context.over_budget_reason.clone(),
-        usage_estimate: Some(usage_estimate),
-    }
-}
+use crate::{application::short_term_memory::PreparedModelContext, domain::agent::AgentRunContext};
 
 pub(super) fn prepared_context_event_payload(
     prepared_context: &PreparedModelContext,
@@ -66,13 +37,5 @@ impl super::ReactAgent {
             .block_budgets
             .tool_schema
             .effective_limit_tokens
-    }
-}
-
-fn protocol_code(protocol: AgentModelProtocol) -> &'static str {
-    match protocol {
-        AgentModelProtocol::ChatCompletions => "chatCompletions",
-        AgentModelProtocol::Responses => "responses",
-        AgentModelProtocol::Embeddings => "embeddings",
     }
 }

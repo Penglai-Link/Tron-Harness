@@ -245,13 +245,11 @@ const todosBySession: Record<string, ChatSessionTodo[]> = {
 const compactionsBySession: Record<string, ChatSessionCompaction | null> = {
   "SESSION-8842": {
     sessionCode: "SESSION-8842",
-    checkpointMessageCode: "ATM-MOCK-1",
-    status: "completed",
-    sourceStartSeq: 1,
-    sourceEndSeq: 8,
-    tailStartSeq: 5,
-    summaryTokenEstimate: 96,
-    createdAt: "2026-05-27T10:45:00Z",
+    summaryCode: "summary-mock-1",
+    sourceRevision: 8,
+    coveredMessages: 8,
+    summary: "Reviewed the implementation and its current progress.",
+    createdAt: Date.parse("2026-05-27T10:45:00Z"),
   },
   "SESSION-REFACTOR": null,
   "SESSION-UNASSIGNED": null,
@@ -326,16 +324,14 @@ export function getMockChatLatestCompaction(sessionCode: string): ChatSessionCom
 }
 
 export function createMockChatCompaction(input: CreateChatCompactionInput): ChatSessionCompaction {
-  const now = new Date().toISOString();
+  const now = Date.now();
   const messages = messagesBySession[input.sessionCode] ?? [];
   const compaction: ChatSessionCompaction = {
     sessionCode: input.sessionCode,
-    checkpointMessageCode: `ATM-MOCK-${Date.now()}`,
-    status: "completed",
-    sourceStartSeq: messages.length ? 1 : 0,
-    sourceEndSeq: messages.length,
-    tailStartSeq: Math.max(messages.length - 3, 0),
-    summaryTokenEstimate: Math.max(messages.length * 24, 1),
+    summaryCode: `summary-mock-${now}`,
+    sourceRevision: messages.length,
+    coveredMessages: messages.length,
+    summary: "Conversation progress summary.",
     createdAt: now,
   };
   compactionsBySession[input.sessionCode] = compaction;

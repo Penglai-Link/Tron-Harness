@@ -3,7 +3,7 @@ use self::{
     sql_plan::quote_identifier,
 };
 
-impl SqliteRagRepository {
+impl<'a> SqliteRagRepositorySql<'a> {
     fn unshared_sqlite_runtime_tables(
         &self,
         corpus_id: &str,

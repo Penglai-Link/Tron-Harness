@@ -62,32 +62,6 @@ pub(super) const MODEL_DEFAULT_REASONING_EFFORT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260817_0002_add_model_default_reasoning_effort.sql");
 pub(super) const SKILL_REGISTRY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");
-pub(super) const AGENT_RUN_HISTORY_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260527_0017_create_agent_run_history.sql");
-pub(super) const AGENT_RUN_TOKEN_USAGE_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260528_0020_add_agent_run_token_usage.sql");
-pub(super) const AGENT_RUN_REASONING_EFFORT_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260817_0003_add_agent_run_reasoning_effort.sql");
-pub(super) const CHAT_MANAGEMENT_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260527_0018_create_chat_management.sql");
-pub(super) const CHAT_ARCHIVE_CLEANUP_INDEXES_MIGRATION: &str =
-    include_str!("../../../../../migrations/20261007_0001_add_chat_archive_cleanup_indexes.sql");
-pub(super) const CHAT_SESSION_AGENT_CODE_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260530_0023_add_chat_session_agent_code.sql");
-pub(super) const CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260530_0024_add_chat_session_system_agent_session_id.sql"
-);
-pub(super) const CONVERSATION_RUNTIME_SESSIONS_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260530_0025_create_conversation_runtime_sessions.sql"
-);
-pub(super) const CHAT_SESSION_SOURCE_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260623_0030_add_chat_session_source.sql");
-pub(super) const AGENT_RUNTIME_EVENT_REPLAY_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260530_0026_create_agent_runtime_event_replay.sql");
-pub(super) const CHAT_MESSAGE_TOKEN_USAGE_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260528_0021_add_chat_message_token_usage.sql");
-pub(super) const CHAT_MESSAGE_ATTACHMENTS_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260625_0001_add_chat_message_attachments.sql");
 pub(super) const AGENT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260529_0022_create_agent_management.sql");
 pub(super) const RAG_FOUNDATION_MIGRATION: &str =
@@ -147,20 +121,7 @@ pub(super) const MCP_WORKSPACE_POLICIES_MIGRATION: &str = include_str!(
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260605_1001_add_internal_agent_mcp_access_to_workspace_internal_agent_policies.sql"
 );
-pub(super) const SHORT_TERM_MEMORY_TRANSCRIPT_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260615_0001_create_short_term_memory_transcript.sql");
-pub(super) const CHAT_SESSION_LEGACY_SOURCE_MIGRATION: &str =
-    "ALTER TABLE chat_sessions ADD COLUMN source TEXT NOT NULL DEFAULT 'USER_CHAT';";
-pub(super) const CHAT_SESSION_VISIBILITY_MIGRATION: &str =
-    "ALTER TABLE chat_sessions ADD COLUMN visibility TEXT NOT NULL DEFAULT 'VISIBLE';
-CREATE INDEX IF NOT EXISTS idx_chat_sessions_visibility_updated
-    ON chat_sessions (visibility, updated_at DESC, id DESC);";
-pub(super) const CHAT_USER_INPUT_REQUESTS_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260821_0001_create_chat_user_input_requests.sql");
 pub(super) const PROJECT_CHAT_CONTEXT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260911_0001_create_project_chat_context.sql");
-pub(super) const CHAT_SESSION_PROJECT_CODE_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260911_0002_add_chat_session_project_code.sql");
-
 pub(super) const REMOVE_OBSERVABILITY_NAVIGATION_MIGRATION: &str =
     include_str!("../../../../../migrations/20260926_0001_remove_observability_navigation.sql");

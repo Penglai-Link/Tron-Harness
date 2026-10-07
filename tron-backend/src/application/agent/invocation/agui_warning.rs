@@ -204,6 +204,13 @@ use sk-API_SENTINEL now",
         }
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("warning.sqlite3");
+        let host = crate::application::agent::FrameworkHost::persistent(&path, None);
+        crate::adapters::outbound::persistence::sqlite::framework_storage::blocking(async {
+            let framework = host.storage_framework().await.unwrap();
+            let mut session = eliteforge_agent_core::SessionRecord::new("warning");
+            session.id = "CONV-1".into();
+            framework.sessions().unwrap().create(session).await.unwrap();
+        });
         {
             let replay = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
             replay.handle(Arc::new(events[0].clone()));

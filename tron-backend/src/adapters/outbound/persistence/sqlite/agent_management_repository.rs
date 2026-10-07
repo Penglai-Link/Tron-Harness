@@ -36,11 +36,14 @@ use super::migrations::{AGENT_MANAGEMENT_MIGRATION, AGENT_MANAGEMENT_RUNTIME_TYP
 
 const MAIN_AGENT_SINGLETON_KEY: &str = "platform";
 
+struct SqliteAgentManagementRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteAgentManagementRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl AgentManagementRepository for SqliteAgentManagementRepository {
+impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     fn get_main_agent_config(
         &mut self,
     ) -> Result<Option<PlatformMainAgentConfig>, AgentManagementError> {
@@ -186,7 +189,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
     }
 
     fn delete_system_agent(&mut self, agent_code: &str) -> Result<bool, AgentManagementError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         transaction
             .execute(
                 "DELETE FROM workspace_system_agent_policies WHERE agent_code = ?1",
@@ -577,5 +580,238 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
             )
             .map_err(storage_error)?;
         Ok(())
+    }
+}
+
+impl AgentManagementRepository for SqliteAgentManagementRepository {
+    fn get_main_agent_config(
+        &mut self,
+    ) -> Result<Option<PlatformMainAgentConfig>, AgentManagementError> {
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.get_main_agent_config()
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_main_agent_config(
+        &mut self,
+        config: &PlatformMainAgentConfig,
+    ) -> Result<(), AgentManagementError> {
+        let config = config.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.upsert_main_agent_config(&config)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_system_agents(
+        &mut self,
+    ) -> Result<Vec<SystemAgentRegistryEntry>, AgentManagementError> {
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.list_system_agents()
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_system_agent(
+        &mut self,
+        agent: &SystemAgentRegistryEntry,
+    ) -> Result<(), AgentManagementError> {
+        let agent = agent.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.upsert_system_agent(&agent)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_system_agent(&mut self, agent_code: &str) -> Result<bool, AgentManagementError> {
+        let agent_code = agent_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.delete_system_agent(&agent_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_workspace_system_policies(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<WorkspaceSystemAgentPolicy>, AgentManagementError> {
+        let workspace_code = workspace_code.map(ToOwned::to_owned);
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .list_workspace_system_policies(workspace_code.as_deref())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_workspace_system_policy(
+        &mut self,
+        policy: &WorkspaceSystemAgentPolicy,
+    ) -> Result<(), AgentManagementError> {
+        let policy = policy.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .upsert_workspace_system_policy(&policy)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_system_policy(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError> {
+        let workspace_code = workspace_code.to_owned();
+        let agent_code = agent_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .delete_workspace_system_policy(&workspace_code, &agent_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_workspace_internal_agent_policies(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<WorkspaceInternalAgentPolicy>, AgentManagementError> {
+        let workspace_code = workspace_code.map(ToOwned::to_owned);
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .list_workspace_internal_agent_policies(workspace_code.as_deref())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_workspace_internal_agent_policy(
+        &mut self,
+        policy: &WorkspaceInternalAgentPolicy,
+    ) -> Result<(), AgentManagementError> {
+        let policy = policy.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .upsert_workspace_internal_agent_policy(&policy)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_internal_agent_policy(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError> {
+        let workspace_code = workspace_code.to_owned();
+        let agent_code = agent_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .delete_workspace_internal_agent_policy(&workspace_code, &agent_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_workspace_internal_agent_tool_assignments(
+        &mut self,
+        workspace_code: Option<&str>,
+        agent_code: Option<&str>,
+    ) -> Result<Vec<WorkspaceInternalAgentToolAssignment>, AgentManagementError> {
+        let workspace_code = workspace_code.map(ToOwned::to_owned);
+        let agent_code = agent_code.map(ToOwned::to_owned);
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .list_workspace_internal_agent_tool_assignments(
+                        workspace_code.as_deref(),
+                        agent_code.as_deref(),
+                    )
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_workspace_internal_agent_tool_assignment(
+        &mut self,
+        assignment: &WorkspaceInternalAgentToolAssignment,
+    ) -> Result<(), AgentManagementError> {
+        let assignment = assignment.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .upsert_workspace_internal_agent_tool_assignment(&assignment)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_internal_agent_tool_assignments(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<(), AgentManagementError> {
+        let workspace_code = workspace_code.to_owned();
+        let agent_code = agent_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .delete_workspace_internal_agent_tool_assignments(&workspace_code, &agent_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_workspace_internal_agent_mcp_server_assignments(
+        &mut self,
+        workspace_code: Option<&str>,
+        agent_code: Option<&str>,
+    ) -> Result<Vec<WorkspaceInternalAgentMcpServerAssignment>, AgentManagementError> {
+        let workspace_code = workspace_code.map(ToOwned::to_owned);
+        let agent_code = agent_code.map(ToOwned::to_owned);
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .list_workspace_internal_agent_mcp_server_assignments(
+                        workspace_code.as_deref(),
+                        agent_code.as_deref(),
+                    )
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_workspace_internal_agent_mcp_server_assignment(
+        &mut self,
+        assignment: &WorkspaceInternalAgentMcpServerAssignment,
+    ) -> Result<(), AgentManagementError> {
+        let assignment = assignment.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .upsert_workspace_internal_agent_mcp_server_assignment(&assignment)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_internal_agent_mcp_server_assignments(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<(), AgentManagementError> {
+        let workspace_code = workspace_code.to_owned();
+        let agent_code = agent_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .delete_workspace_internal_agent_mcp_server_assignments(
+                        &workspace_code,
+                        &agent_code,
+                    )
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
     }
 }

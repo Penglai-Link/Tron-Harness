@@ -50,14 +50,12 @@ pub(super) fn activate_short_term_memory(
     {
         return Ok(());
     }
-    let Some(short_term_memory) = short_term_memory else {
+    let Some(_) = short_term_memory else {
         return Ok(());
     };
 
     let input_kind = input_kind.unwrap_or("USER_PROMPT");
-    let input_code = short_term_memory
-        .record_invocation_input(context, prompt, input_kind, input_metadata.clone())
-        .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
+    let input_code = context.run_code.clone();
     context.messages = prompt_prefix_messages;
     let current_input_message =
         runtime_input_context_message(input_kind, prompt, &input_metadata).or(user_prompt_message);
@@ -188,7 +186,7 @@ mod tests {
     fn context_with_tools(tools: Vec<EffectiveTool>) -> AgentRunContext {
         AgentRunContext {
             agent_code: None,
-        auto_model_route: None,
+            auto_model_route: None,
             conversation_code: Some("SESSION-1".into()),
             run_code: "RUN-1".into(),
             workspace_code: "TRON_CORE".into(),

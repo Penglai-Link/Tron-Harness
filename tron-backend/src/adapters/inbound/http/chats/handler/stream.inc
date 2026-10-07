@@ -13,9 +13,6 @@ pub async fn send_message(
     if let Err(response) = ensure_no_active_run(&state, &session_code) {
         return response;
     }
-    if let Err(response) = ensure_no_pending_user_input(&state, &session_code) {
-        return response;
-    }
     if let Err(response) = ensure_native_resume(&state, &session_code, &request.resume).await {
         return response;
     }
@@ -143,9 +140,6 @@ pub(crate) async fn stream_message_command(
         return chat_error_response(error);
     }
     if let Err(response) = ensure_no_active_run(&state, &session_code) {
-        return response;
-    }
-    if let Err(response) = ensure_no_pending_user_input(&state, &session_code) {
         return response;
     }
     if let Err(response) = ensure_native_resume(&state, &session_code, &request.resume).await {
@@ -341,23 +335,6 @@ pub(crate) async fn stream_message_command(
     Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response()
-}
-
-pub(crate) fn ensure_no_pending_user_input(
-    state: &AppState,
-    session_code: &str,
-) -> Result<(), Response> {
-    match state.chats.list_user_input_requests(session_code) {
-        Ok(requests)
-            if requests.iter().any(|request| {
-                request.status == crate::domain::chat::ChatUserInputRequestStatus::Pending
-            }) =>
-        {
-            Err(chat_error_response(ChatError::UserInputPending))
-        }
-        Ok(_) => Ok(()),
-        Err(error) => Err(chat_error_response(error)),
-    }
 }
 
 pub(crate) fn run_started_with_supports_steer(

@@ -177,22 +177,7 @@ impl ReactAgent {
                 payload
             },
         )?;
-        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
-            record_failure_on_short_term_memory_error(
-                short_term_memory,
-                context,
-                "model_request_persist_failed",
-                short_term_memory.record_model_requested(
-                    context,
-                    model_request_facts(
-                        &request,
-                        context,
-                        &prepared_context,
-                        request_estimate.clone(),
-                    ),
-                ),
-            )?;
-        }
+
         let output_started = Arc::new(Mutex::new(false));
         let stream_sink = sink.map(|sink| {
             self.model_stream_event_sink(
@@ -260,20 +245,7 @@ impl ReactAgent {
             Some("model_responded"),
             usage_event_payload("usage_audit_json", &usage_audit),
         )?;
-        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
-            record_failure_on_short_term_memory_error(
-                short_term_memory,
-                context,
-                "assistant_message_persist_failed",
-                short_term_memory.record_model_response_with_facts(
-                    context,
-                    &response,
-                    ModelResponseTranscriptFacts {
-                        usage_audit: Some(usage_audit.clone()),
-                    },
-                ),
-            )?;
-        }
+
         if let Some(usage) = response.token_usage() {
             token_usage = Some(match token_usage {
                 Some(current) => current.add(usage),
@@ -294,11 +266,6 @@ impl ReactAgent {
 impl ReactAgent {
     pub(crate) fn framework_started(&self, context: &AgentRunContext) -> Result<(), AgentError> {
         validate_context(context)?;
-        if let Some(memory) = &self.short_term_memory {
-            memory
-                .record_run_started(context)
-                .map_err(short_term_memory_error)?;
-        }
         Ok(())
     }
     pub(crate) fn framework_finished(
@@ -306,44 +273,8 @@ impl ReactAgent {
         context: &AgentRunContext,
         result: &Result<eliteforge_agent_core::RunResult, eliteforge_agent_core::AgentError>,
     ) -> Result<(), AgentError> {
-        use eliteforge_agent_core::RunStatus;
-        match result {
-            Ok(result) => match result.status {
-                RunStatus::Completed => {
-                    if let Some(memory) = &self.short_term_memory {
-                        memory
-                            .record_run_completed(context)
-                            .map_err(short_term_memory_error)?;
-                    }
-                }
-                RunStatus::AwaitingInput => {
-                    if let Some(memory) = &self.short_term_memory {
-                        memory
-                            .record_run_awaiting_input(context)
-                            .map_err(short_term_memory_error)?;
-                    }
-                }
-                RunStatus::StepLimit => self.record_short_term_memory_failure(
-                    context,
-                    "native execution reached its step limit",
-                )?,
-                RunStatus::ToolCallLimit => self.record_short_term_memory_failure(
-                    context,
-                    "native execution reached its tool call limit",
-                )?,
-            },
-            Err(error) => {
-                let reason = match error {
-                    eliteforge_agent_core::AgentError::Cancelled => {
-                        "native execution was cancelled"
-                    }
-                    eliteforge_agent_core::AgentError::SessionBusy(_) => {
-                        "native session already has an active execution"
-                    }
-                    _ => "native execution failed",
-                };
-                self.record_short_term_memory_failure(context, reason)?;
-            }
+        if let Err(error) = result {
+            self.record_short_term_memory_failure(context, &error.to_string())?;
         }
         Ok(())
     }

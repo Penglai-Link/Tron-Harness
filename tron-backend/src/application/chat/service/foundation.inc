@@ -1,13 +1,13 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use serde_json::{json, Value};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use serde_json::{Value, json};
 
 use crate::{
     application::{
@@ -30,8 +30,8 @@ use crate::{
     domain::chat::{
         ChatError, ChatMessage, ChatMessageAttachment, ChatMessageChannel, ChatMessageRole,
         ChatSession, ChatSessionGroup, ChatSessionSourceType, ChatSessionStatus,
-        ChatUserInputAnswer, ChatUserInputAnswerKind, ChatUserInputOption, ChatUserInputQuestion,
-        ChatUserInputRequest, ChatUserInputRequestStatus,
+        ChatUserInputOption, ChatUserInputQuestion, ChatUserInputRequest,
+        ChatUserInputRequestStatus,
     },
     domain::model_provider::{ModelSelection, ProviderModelQuality},
     domain::resource::{ChatSessionAttachmentRecord, ResourceError},
@@ -44,7 +44,7 @@ use crate::{
 
 use super::{
     attachments::normalize_chat_attachments,
-    title::{should_generate_manual_session_title, DEFAULT_MANUAL_SESSION_TITLE},
+    title::{DEFAULT_MANUAL_SESSION_TITLE, should_generate_manual_session_title},
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
@@ -75,10 +75,17 @@ pub(super) struct GoalContinuationResult {
     pub(super) final_run: Option<AgentInvocationResult>,
 }
 impl GoalContinuationResult {
-    pub(super) fn merge_into(self, run: &mut AgentInvocationResult, messages: &mut Vec<ChatMessage>, user_input_request: &mut Option<ChatUserInputRequest>) {
+    pub(super) fn merge_into(
+        self,
+        run: &mut AgentInvocationResult,
+        messages: &mut Vec<ChatMessage>,
+        user_input_request: &mut Option<ChatUserInputRequest>,
+    ) {
         messages.extend(self.messages);
         *user_input_request = user_input_request.take().or(self.user_input_request);
-        if let Some(final_run) = self.final_run { *run = final_run; }
+        if let Some(final_run) = self.final_run {
+            *run = final_run;
+        }
     }
 }
 

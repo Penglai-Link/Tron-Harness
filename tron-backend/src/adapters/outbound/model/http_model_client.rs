@@ -258,61 +258,6 @@ impl ModelClient for HttpModelClient {
             .await
         })
     }
-    fn generate_goal_judge_child<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        request: &'a ModelRequest,
-        repair: Arc<dyn eliteforge_agent_core::ModelResponseValidator>,
-        max_calls: usize,
-        parent: &'a fw::RunContext,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = eliteforge_agent_framework::ObservedModelResult<ModelResponse>>
-                + Send
-                + 'a,
-        >,
-    > {
-        Box::pin(async move {
-            self.invoke_observed(config, request, Some(repair), max_calls, Some(parent))
-                .await
-        })
-    }
-
-    fn compact_memory<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        history: &'a [String],
-        previous_summary: Option<&'a str>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<eliteforge_agent_memory::MemoryCompactionResult, String>>
-                + Send
-                + 'a,
-        >,
-    > {
-        Box::pin(async move {
-            let (client, reference) = self.chat_binding(config).map_err(error)?;
-            let effective = fw::RunLimits {
-                max_model_calls_per_step: Some(16),
-                ..limits(config)
-            };
-            let response = client
-                .workflow_observed(
-                    &reference,
-                    Arc::new(MemoryWorkflow {
-                        history: history.to_vec(),
-                        previous: previous_summary.map(str::to_owned),
-                    }),
-                    &effective,
-                    "memory.compaction",
-                )
-                .await
-                .into_result()
-                .map_err(error)?;
-            eliteforge_agent_memory::MemoryCompactionResult::from_chat_response(response)
-                .map_err(error)
-        })
-    }
     fn on_model_failure(&self, config: &AgentModelConfig, error: &fw::ModelError) {
         if let Ok(config) = convert(config) {
             self.factory.on_failure(&config, error);
@@ -425,43 +370,6 @@ impl sdk::ModelTransportFactory for HttpModelProviderClient {
             &config.base_url,
             &config.api_key,
         )))
-    }
-}
-
-struct MemoryWorkflow {
-    history: Vec<String>,
-    previous: Option<String>,
-}
-#[async_trait]
-impl fw::ModelWorkflow for MemoryWorkflow {
-    async fn run(
-        &self,
-        run: &fw::RunContext,
-        models: &dyn fw::ChatExecutor,
-        limits: &fw::RunLimits,
-        model: &fw::ModelRef,
-    ) -> Result<fw::ChatResponse, fw::AgentError> {
-        let compactor = eliteforge_agent_memory::MemoryCompactor::new(
-            model.clone(),
-            eliteforge_agent_memory::CompressionOptions {
-                max_input_tokens: limits
-                    .max_context_tokens
-                    .saturating_sub(limits.max_model_output_tokens as usize)
-                    .max(1),
-                max_summary_bytes: limits.max_model_output_tokens as usize,
-                max_model_calls: 16,
-            },
-        )?;
-        let result = compactor
-            .compact_history_with_usage(
-                &self.history,
-                self.previous.as_deref(),
-                run,
-                models,
-                limits,
-            )
-            .await?;
-        Ok(result.into_chat_response())
     }
 }
 

@@ -6,14 +6,16 @@ use eliteforge_agent_official_plugin_model_http as sdk;
 
 impl ModelProviderService {
     pub fn sdk_model_authorization_scope(&self) -> Result<String, fw::ModelError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| fw::ModelError::Fatal("credential storage unavailable".into()))?;
-        let row = read_connection(&connection, ModelProviderCode::PersonAi)
-            .map_err(|e| fw::ModelError::Fatal(e.to_string()))?
-            .ok_or_else(|| fw::ModelError::Fatal("provider connection missing".into()))?;
-        Ok(self.sdk_identity_scope(&row))
+        let this = self.clone();
+        this.connection.clone().call(
+            move |connection| {
+                let row = read_connection(&connection, ModelProviderCode::PersonAi)
+                    .map_err(|e| fw::ModelError::Fatal(e.to_string()))?
+                    .ok_or_else(|| fw::ModelError::Fatal("provider connection missing".into()))?;
+                Ok(this.sdk_identity_scope(&row))
+            },
+            || fw::ModelError::Fatal("provider database worker stopped".into()),
+        )
     }
     pub fn model_executor(&self) -> Arc<eliteforge_agent_framework::ModelClient> {
         self.model_executor.clone()
@@ -23,42 +25,52 @@ impl ModelProviderService {
         config: &AgentModelConfig,
     ) -> Result<Arc<dyn sdk::ModelTransport>, fw::ModelError> {
         let expected_scope = {
-            let connection = self
-                .connection
-                .lock()
-                .map_err(|_| fw::ModelError::Fatal("credential storage unavailable".into()))?;
-            let row = read_connection(&connection, ModelProviderCode::PersonAi)
-                .map_err(|e| fw::ModelError::Fatal(e.to_string()))?
-                .ok_or_else(|| fw::ModelError::Fatal("provider connection missing".into()))?;
-            self.sdk_identity_scope(&row)
+            let this = self.clone();
+            this.connection.clone().call(
+                move |connection| {
+                    let row = read_connection(&connection, ModelProviderCode::PersonAi)
+                        .map_err(|e| fw::ModelError::Fatal(e.to_string()))?
+                        .ok_or_else(|| {
+                            fw::ModelError::Fatal("provider connection missing".into())
+                        })?;
+                    Ok(this.sdk_identity_scope(&row))
+                },
+                || fw::ModelError::Fatal("provider database worker stopped".into()),
+            )?
         };
         let credentials = self
             .active_credentials(ModelProviderCode::PersonAi)
             .await
             .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
         let attempt = {
-            let connection = self
-                .connection
-                .lock()
-                .map_err(|_| fw::ModelError::Fatal("credential storage unavailable".into()))?;
-            let row = read_connection(&connection, ModelProviderCode::PersonAi)
-                .map_err(|e| fw::ModelError::Fatal(e.to_string()))?
-                .ok_or_else(|| fw::ModelError::Fatal("provider connection missing".into()))?;
-            let current = row
-                .credentials_encrypted
-                .as_deref()
-                .and_then(|value| self.decrypt_credentials(value).ok());
-            if self.sdk_identity_scope(&row) != expected_scope
-                || !current.is_some_and(|value| {
-                    value.token == credentials.token
-                        && value.server_base_url == credentials.server_base_url
-                })
-            {
-                return Err(fw::ModelError::Fatal(
-                    "PersonAI profile changed before model dispatch".into(),
-                ));
-            }
-            self.sdk_attempt_for_row(&row, &credentials.token)
+            let this = self.clone();
+            let worker_credentials = credentials.clone();
+            this.connection.clone().call(
+                move |connection| {
+                    let credentials = worker_credentials;
+                    let row = read_connection(&connection, ModelProviderCode::PersonAi)
+                        .map_err(|e| fw::ModelError::Fatal(e.to_string()))?
+                        .ok_or_else(|| {
+                            fw::ModelError::Fatal("provider connection missing".into())
+                        })?;
+                    let current = row
+                        .credentials_encrypted
+                        .as_deref()
+                        .and_then(|value| this.decrypt_credentials(value).ok());
+                    if this.sdk_identity_scope(&row) != expected_scope
+                        || !current.is_some_and(|value| {
+                            value.token == credentials.token
+                                && value.server_base_url == credentials.server_base_url
+                        })
+                    {
+                        return Err(fw::ModelError::Fatal(
+                            "PersonAI profile changed before model dispatch".into(),
+                        ));
+                    }
+                    Ok(this.sdk_attempt_for_row(&row, &credentials.token))
+                },
+                || fw::ModelError::Fatal("provider database worker stopped".into()),
+            )?
         };
         let (conversation,run) = crate::adapters::outbound::model::person_ai_model_provider_client::person_ai_runtime_metadata(config);
         let quality = person_ai_runtime_quality(config)
@@ -119,13 +131,11 @@ impl ModelProviderService {
         if !rejected {
             return;
         }
+        let identity = identity.to_owned();
         let result = (|| -> Result<(), ModelProviderError> {
-            let mut connection = self
-                .connection
-                .lock()
-                .map_err(|_| ModelProviderError::Storage)?;
-            let transaction = connection
-                .transaction()
+            let this = self.clone();
+            this.connection.clone().call(move |connection| {
+            let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate)
                 .map_err(|_| ModelProviderError::Storage)?;
             let Some(active) = read_connection(&transaction, ModelProviderCode::PersonAi)? else {
                 return Ok(());
@@ -133,8 +143,8 @@ impl ModelProviderService {
             let Some(encrypted) = active.credentials_encrypted.as_deref() else {
                 return Ok(());
             };
-            let credentials = self.decrypt_credentials(encrypted)?;
-            if self.sdk_attempt_for_row(&active, &credentials.token) != identity {
+            let credentials = this.decrypt_credentials(encrypted)?;
+            if this.sdk_attempt_for_row(&active, &credentials.token) != identity {
                 return Ok(());
             }
             let now = now_millis();
@@ -148,16 +158,17 @@ impl ModelProviderService {
                 transaction.execute("UPDATE person_ai_profile_credentials SET status=?2,last_error=?3,updated_at=?4,credentials_encrypted=CASE WHEN ?5 THEN '' ELSE credentials_encrypted END,authorization_expires_at=CASE WHEN ?5 THEN NULL ELSE authorization_expires_at END WHERE person_ai_user_id=?1",params![user,ProviderConnectionStatus::AuthRequired.storage_value(),reason,now,unbound]).map_err(|_|ModelProviderError::Storage)?;
             }
             if unbound {
-                self.invalidate_unbound_catalog(&transaction, now)?;
+                this.invalidate_unbound_catalog(&transaction, now)?;
             }
             transaction
                 .commit()
                 .map_err(|_| ModelProviderError::Storage)?;
             if unbound {
-                self.device_unbound.store(true, Ordering::SeqCst);
-                let _ = self.server_auth_events.send(());
+                this.device_unbound.store(true, Ordering::SeqCst);
+                let _ = this.server_auth_events.send(());
             }
             Ok(())
+         },||ModelProviderError::Storage)
         })();
         if let Err(error) = result {
             eprintln!("[person-ai] scoped credential failure persistence failed: {error}");
@@ -363,8 +374,12 @@ impl ModelProviderService {
     }
     #[cfg(test)]
     pub(super) fn sdk_credential_attempt(&self, token: &str) -> String {
-        let connection = self.connection.lock().unwrap();
-        let row = read_connection(&connection, ModelProviderCode::PersonAi)
+        let row = self
+            .connection
+            .call(
+                |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                || ModelProviderError::Storage,
+            )
             .unwrap()
             .unwrap();
         self.sdk_attempt_for_row(&row, token)

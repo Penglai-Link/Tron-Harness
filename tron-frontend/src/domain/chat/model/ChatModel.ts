@@ -254,13 +254,13 @@ export interface ChatSessionTodo {
 
 export interface ChatSessionCompaction {
   sessionCode: string;
-  checkpointMessageCode: string;
-  status: string;
-  sourceStartSeq: number;
-  sourceEndSeq: number;
-  tailStartSeq: number;
-  summaryTokenEstimate: number;
-  createdAt: string;
+  summaryCode: string;
+  sourceRevision: number;
+  coveredMessages: number;
+  summary: string;
+  createdAt: number;
+  reason?: string | null;
+  note?: string | null;
 }
 
 export interface CreateChatCompactionInput {

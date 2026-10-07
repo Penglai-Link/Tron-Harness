@@ -1,6 +1,7 @@
+use super::SqliteRagRepositorySql;
 use std::collections::{BTreeMap, BTreeSet};
 
-use rusqlite::{Transaction, params};
+use rusqlite::params;
 
 use crate::{
     application::rag::{
@@ -82,7 +83,7 @@ impl SqliteSourceOnlyPlan {
     }
 }
 
-impl SqliteRagRepository {
+impl<'a> SqliteRagRepositorySql<'a> {
     pub(crate) fn persist_source_only(
         &self,
         corpus: &RagCorpusRecord,
@@ -97,25 +98,23 @@ impl SqliteRagRepository {
             source_table.to_string(),
             self.table_columns(source_table)?,
         )?;
-        let tx = self
-            .connection
-            .unchecked_transaction()
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
+            .connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(storage_error)?;
         persist_source_only_row(&tx, &plan, command)?;
         tx.commit().map_err(storage_error)
     }
 }
 
-impl RagIngestRepository for SqliteRagRepository {
+impl RagIngestRepository for SqliteRagRepositorySql<'_> {
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
         let corpus = self
             .get_corpus(&command.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
         let plan = compile_sql_corpus_plan(self, &corpus)?;
         validate_domain_field_targets(&plan, &command)?;
-        let tx = self
-            .connection
-            .unchecked_transaction()
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
+            .connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(storage_error)?;
         delete_text_unit_indexes_for_source(
             &tx,
@@ -137,7 +136,7 @@ impl RagIngestRepository for SqliteRagRepository {
 }
 
 fn persist_source(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
@@ -227,7 +226,7 @@ fn persist_source(
 }
 
 fn persist_source_only_row(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteSourceOnlyPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
@@ -314,7 +313,7 @@ fn persist_source_only_row(
 }
 
 fn persist_text_units(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
@@ -356,7 +355,7 @@ fn first_existing_source_column(columns: &BTreeSet<String>, candidates: &[&str])
 }
 
 fn persist_text_unit(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
     unit: &RagTextUnitWrite,
@@ -473,7 +472,7 @@ fn persist_text_unit(
 }
 
 fn persist_vector_units(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
@@ -497,4 +496,29 @@ fn persist_vector_units(
         )?;
     }
     Ok(())
+}
+
+impl SqliteRagRepository {
+    pub(crate) fn persist_source_only(
+        &self,
+        corpus: &RagCorpusRecord,
+        command: &RagPersistIngestCommand,
+    ) -> Result<(), RagError> {
+        let corpus = corpus.to_owned();
+        let command = command.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteRagRepositorySql { connection }.persist_source_only(&corpus, &command)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+}
+impl RagIngestRepository for SqliteRagRepository {
+    fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.persist_ingest(command),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

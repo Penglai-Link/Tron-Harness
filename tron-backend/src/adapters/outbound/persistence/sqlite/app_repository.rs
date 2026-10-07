@@ -19,24 +19,19 @@ use crate::{
 
 use super::migrations::APPS_MIGRATION;
 
+struct SqliteAppRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteAppRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteAppRepository {
-    pub fn connect(database_url: &str) -> Result<Self, AppError> {
+impl<'a> SqliteAppRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, AppError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
@@ -82,7 +77,7 @@ impl SqliteAppRepository {
     }
 }
 
-impl AppRepository for SqliteAppRepository {
+impl AppRepository for SqliteAppRepositorySql<'_> {
     fn list_apps(&mut self) -> Result<Vec<App>, AppError> {
         let mut statement = self
             .connection
@@ -254,7 +249,7 @@ impl AppRepository for SqliteAppRepository {
         tags: &[AppTag],
     ) -> Result<Vec<AppTag>, AppError> {
         let mut next_id = self.next_id()?;
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         transaction
             .execute(
                 "DELETE FROM app_tags WHERE app_code = ?1",
@@ -405,4 +400,66 @@ fn table_columns(connection: &Connection, table_name: &str) -> Result<Vec<String
         .map_err(storage_error)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(storage_error)
+}
+
+impl SqliteAppRepository {
+    pub fn connect(database_url: &str) -> Result<Self, AppError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteAppRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl AppRepository for SqliteAppRepository {
+    fn list_apps(&mut self) -> Result<Vec<App>, AppError> {
+        self.connection.call(
+            move |connection| SqliteAppRepositorySql { connection }.list_apps(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_app_tags(&mut self) -> Result<Vec<AppTag>, AppError> {
+        self.connection.call(
+            move |connection| SqliteAppRepositorySql { connection }.list_app_tags(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn next_id(&mut self) -> Result<i64, AppError> {
+        self.connection.call(
+            move |connection| SqliteAppRepositorySql { connection }.next_id(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_app(&mut self, app: &App) -> Result<(), AppError> {
+        let app = app.to_owned();
+        self.connection.call(
+            move |connection| SqliteAppRepositorySql { connection }.create_app(&app),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_app(&mut self, app: &App) -> Result<(), AppError> {
+        let app = app.to_owned();
+        self.connection.call(
+            move |connection| SqliteAppRepositorySql { connection }.update_app(&app),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn replace_app_tags(
+        &mut self,
+        app_code: &str,
+        tags: &[AppTag],
+    ) -> Result<Vec<AppTag>, AppError> {
+        let app_code = app_code.to_owned();
+        let tags = tags.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAppRepositorySql { connection }.replace_app_tags(&app_code, &tags)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

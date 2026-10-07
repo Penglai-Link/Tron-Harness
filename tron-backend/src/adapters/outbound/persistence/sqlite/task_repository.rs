@@ -21,24 +21,20 @@ use crate::{
 
 use super::migrations::{TASK_FLOWS_MIGRATION, TASKS_MIGRATION, TASKS_SUPERPOWER_RESET_MIGRATION};
 
+struct SqliteTaskRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteTaskRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteTaskRepository {
-    pub fn connect(database_url: &str) -> Result<Self, TaskError> {
+impl<'a> SqliteTaskRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, TaskError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
+
         let mut repository = Self { connection };
         repository
             .connection
@@ -120,7 +116,7 @@ impl SqliteTaskRepository {
         let insert_sql = format!(
             "INSERT INTO {table} (id, task_code, {code_column}, linked_at) VALUES (?1, ?2, ?3, ?4)"
         );
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         tx.execute(&delete_sql, [task_code])
             .map_err(storage_error)?;
         for entry in entries {
@@ -178,7 +174,7 @@ impl SqliteTaskRepository {
     }
 
     fn replace_task_flow_statuses(&mut self, flow: &TaskFlow) -> Result<(), TaskError> {
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         tx.execute(
             "DELETE FROM task_flow_statuses WHERE flow_code = ?1",
             [&flow.flow_code],
@@ -201,7 +197,7 @@ impl SqliteTaskRepository {
     }
 }
 
-impl TaskRepository for SqliteTaskRepository {
+impl TaskRepository for SqliteTaskRepositorySql<'_> {
     fn list_task_flows(&mut self) -> Result<Vec<TaskFlow>, TaskError> {
         let mut statement = self
             .connection
@@ -493,4 +489,191 @@ mod tests {
 
 fn task_mapping_error(error: TaskError) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
+}
+
+impl SqliteTaskRepository {
+    pub fn connect(database_url: &str) -> Result<Self, TaskError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl TaskRepository for SqliteTaskRepository {
+    fn list_task_flows(&mut self) -> Result<Vec<TaskFlow>, TaskError> {
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.list_task_flows(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn get_task_flow(&mut self, flow_code: &str) -> Result<Option<TaskFlow>, TaskError> {
+        let flow_code = flow_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.get_task_flow(&flow_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_task_flow(&mut self, flow: &TaskFlow) -> Result<(), TaskError> {
+        let flow = flow.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.create_task_flow(&flow),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_task_flow(&mut self, flow: &TaskFlow) -> Result<(), TaskError> {
+        let flow = flow.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.update_task_flow(&flow),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_task_flow(&mut self, flow_code: &str) -> Result<(), TaskError> {
+        let flow_code = flow_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.delete_task_flow(&flow_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn workspace_task_flow_code(
+        &mut self,
+        workspace_code: &str,
+    ) -> Result<Option<String>, TaskError> {
+        let workspace_code = workspace_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }.workspace_task_flow_code(&workspace_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn assign_workspace_task_flow(
+        &mut self,
+        workspace_code: &str,
+        flow_code: &str,
+    ) -> Result<(), TaskError> {
+        let workspace_code = workspace_code.to_owned();
+        let flow_code = flow_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }
+                    .assign_workspace_task_flow(&workspace_code, &flow_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_workspace_task_flow(
+        &mut self,
+        workspace_code: &str,
+        flow_code: &str,
+    ) -> Result<(), TaskError> {
+        let workspace_code = workspace_code.to_owned();
+        let flow_code = flow_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }
+                    .update_workspace_task_flow(&workspace_code, &flow_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_tasks(&mut self) -> Result<Vec<Task>, TaskError> {
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.list_tasks(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn next_id(&mut self) -> Result<i64, TaskError> {
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.next_id(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_task(&mut self, task: &Task) -> Result<(), TaskError> {
+        let task = task.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.create_task(&task),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_task(&mut self, task: &Task) -> Result<(), TaskError> {
+        let task = task.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.update_task(&task),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_user_assignments(
+        &mut self,
+        _task_code: &str,
+    ) -> Result<Vec<TaskUserAssignment>, TaskError> {
+        let _task_code = _task_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }.list_user_assignments(&_task_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn replace_user_assignments(
+        &mut self,
+        _task_code: &str,
+        _entries: &[TaskUserAssignment],
+    ) -> Result<Vec<TaskUserAssignment>, TaskError> {
+        let _task_code = _task_code.to_owned();
+        let _entries = _entries.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }
+                    .replace_user_assignments(&_task_code, &_entries)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_agent_links(&mut self, task_code: &str) -> Result<Vec<TaskCodeLink>, TaskError> {
+        let task_code = task_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.list_agent_links(&task_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn replace_agent_links(
+        &mut self,
+        task_code: &str,
+        entries: &[TaskCodeLink],
+    ) -> Result<Vec<TaskCodeLink>, TaskError> {
+        let task_code = task_code.to_owned();
+        let entries = entries.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }.replace_agent_links(&task_code, &entries)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_app_links(&mut self, task_code: &str) -> Result<Vec<TaskCodeLink>, TaskError> {
+        let task_code = task_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteTaskRepositorySql { connection }.list_app_links(&task_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn replace_app_links(
+        &mut self,
+        task_code: &str,
+        entries: &[TaskCodeLink],
+    ) -> Result<Vec<TaskCodeLink>, TaskError> {
+        let task_code = task_code.to_owned();
+        let entries = entries.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }.replace_app_links(&task_code, &entries)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
 use crate::{
@@ -21,7 +21,7 @@ use super::{
 };
 
 pub(super) fn migrate_legacy_active_resources(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
 ) -> Result<(), ResourceError> {
     if !table_exists(transaction, "resources")? || simplified_resources_exist(transaction)? {
         return Ok(());
@@ -286,7 +286,10 @@ struct LegacyResourceRecord {
     updated_at: i64,
 }
 
-fn table_exists(transaction: &Transaction<'_>, table: &str) -> Result<bool, ResourceError> {
+fn table_exists(
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    table: &str,
+) -> Result<bool, ResourceError> {
     transaction
         .query_row(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
@@ -298,7 +301,9 @@ fn table_exists(transaction: &Transaction<'_>, table: &str) -> Result<bool, Reso
         .map_err(storage_error)
 }
 
-fn simplified_resources_exist(transaction: &Transaction<'_>) -> Result<bool, ResourceError> {
+fn simplified_resources_exist(
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+) -> Result<bool, ResourceError> {
     for table in [
         "resource_files",
         "resource_data_source_connections",
@@ -317,7 +322,7 @@ fn simplified_resources_exist(transaction: &Transaction<'_>) -> Result<bool, Res
 }
 
 fn legacy_binary_mappings(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     legacy: &LegacyResourceRecord,
 ) -> Result<Vec<(String, u64)>, ResourceError> {
     if !table_exists(transaction, "resource_binary_mappings")? {
@@ -399,7 +404,7 @@ fn legacy_optional_attribute(attributes: &Value, key: &str) -> Option<String> {
 }
 
 fn record_legacy_migration_issue(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     legacy: &LegacyResourceRecord,
     reason: &str,
 ) -> Result<(), ResourceError> {

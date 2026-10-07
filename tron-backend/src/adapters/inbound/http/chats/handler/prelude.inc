@@ -1,10 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    convert::Infallible,
-    io::Seek,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeSet, convert::Infallible, io::Seek, sync::Arc, time::Duration};
 
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
@@ -12,7 +6,7 @@ use crate::{
     application::{
         agent::{AgentInvocationService, generate_agent_run_code},
         chat::{
-            ArchivedChatSessionPage, ArchivedChatSessionQuery, BatchDeleteArchivedSessionItem,
+            ArchivedChatSessionQuery, BatchDeleteArchivedSessionItem,
             BatchDeleteArchivedSessionsCommand, BatchDeleteArchivedSessionsResult, ChatSendError,
             ChatSessionAttachmentUploadCommand, ChatSessionQuery, CreateChatSessionCommand,
             SendChatMessageCommand, SteerChatMessageCommand, UpdateChatSessionCommand,

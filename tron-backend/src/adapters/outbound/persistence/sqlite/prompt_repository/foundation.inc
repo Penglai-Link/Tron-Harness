@@ -1,15 +1,13 @@
 use std::{fs, path::Path, time::Duration};
 
-use rusqlite::{
-    Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior, params,
-};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use crate::{
     application::prompt::PromptRepository,
     domain::prompt::{
-        Prompt, PromptCategory, PromptError, PromptScopeKind, PromptSourceKind, PromptTranslation,
-        PromptRuntimeProvider, PromptTranslationStatus, PromptVariable, PromptVariableSourceKind,
-        PromptVariableType,
+        Prompt, PromptCategory, PromptError, PromptRuntimeProvider, PromptScopeKind,
+        PromptSourceKind, PromptTranslation, PromptTranslationStatus, PromptVariable,
+        PromptVariableSourceKind, PromptVariableType,
     },
     shared::{
         id::SnowflakeId,
@@ -22,24 +20,20 @@ use super::migrations::{
     PROMPT_VARIABLE_METADATA_MIGRATION, PROMPTS_MIGRATION,
 };
 
+struct SqlitePromptRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqlitePromptRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqlitePromptRepository {
-    pub fn connect(database_url: &str) -> Result<Self, PromptError> {
+impl<'a> SqlitePromptRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        mut connection: &'a mut Connection,
+    ) -> Result<Self, PromptError> {
         ensure_database_parent(database_url)?;
-        let mut connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | OpenFlags::SQLITE_OPEN_CREATE
-                    | OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
+
         connection
             .busy_timeout(Duration::from_secs(5))
             .map_err(storage_error)?;
@@ -54,7 +48,7 @@ impl SqlitePromptRepository {
     }
 }
 
-impl PromptRepository for SqlitePromptRepository {
+impl PromptRepository for SqlitePromptRepositorySql<'_> {
     fn list_prompts(&mut self) -> Result<Vec<Prompt>, PromptError> {
         let mut prompts =
             {
@@ -80,7 +74,7 @@ impl PromptRepository for SqlitePromptRepository {
     }
 
     fn create_prompt(&mut self, prompt: &Prompt) -> Result<(), PromptError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         insert_prompt(&transaction, prompt)?;
         replace_variables(&transaction, prompt)?;
         replace_translations(&transaction, prompt)?;
@@ -88,7 +82,7 @@ impl PromptRepository for SqlitePromptRepository {
     }
 
     fn update_prompt(&mut self, prompt: &Prompt, expected_version: u64) -> Result<(), PromptError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         let updated = transaction
             .execute(
                 "UPDATE prompts
@@ -127,5 +121,50 @@ impl PromptRepository for SqlitePromptRepository {
             )
             .map(|count| count > 0)
             .map_err(storage_error)
+    }
+}
+
+impl SqlitePromptRepository {
+    pub fn connect(database_url: &str) -> Result<Self, PromptError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqlitePromptRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl PromptRepository for SqlitePromptRepository {
+    fn list_prompts(&mut self) -> Result<Vec<Prompt>, PromptError> {
+        self.connection.call(
+            move |connection| SqlitePromptRepositorySql { connection }.list_prompts(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_prompt(&mut self, prompt: &Prompt) -> Result<(), PromptError> {
+        let prompt = prompt.to_owned();
+        self.connection.call(
+            move |connection| SqlitePromptRepositorySql { connection }.create_prompt(&prompt),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_prompt(&mut self, prompt: &Prompt, expected_version: u64) -> Result<(), PromptError> {
+        let prompt = prompt.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqlitePromptRepositorySql { connection }.update_prompt(&prompt, expected_version)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_prompt(&mut self, prompt_code: &str) -> Result<bool, PromptError> {
+        let prompt_code = prompt_code.to_owned();
+        self.connection.call(
+            move |connection| SqlitePromptRepositorySql { connection }.delete_prompt(&prompt_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
     }
 }

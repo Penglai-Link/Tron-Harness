@@ -198,8 +198,10 @@ async fn native_output_overflow_reports_incomplete_without_changing_execution() 
         fw::RunStatus::Completed
     );
     let store = Arc::new(
-        crate::adapters::outbound::persistence::SqliteAgentEventReplayStore::connect(":memory:")
-            .unwrap(),
+        crate::adapters::outbound::persistence::SqliteAgentEventReplayStore::connect(
+            storage.path().join("native.sqlite").to_str().unwrap(),
+        )
+        .unwrap(),
     );
     let service = AgentAguiStreamService::with_replay_store(
         Arc::new(AguiEventSink::new(&EventBusConfig::default())),
@@ -354,7 +356,12 @@ impl fw::AgentLoop for NativeChildrenLoop {
 async fn real_native_multi_child_stream_preserves_distinct_source_ids_and_paused_child_terminal() {
     let storage = tempfile::tempdir().unwrap();
     use crate::adapters::outbound::persistence::SqliteAgentEventReplayStore;
-    let store = Arc::new(SqliteAgentEventReplayStore::connect(":memory:").unwrap());
+    let store = Arc::new(
+        SqliteAgentEventReplayStore::connect(
+            storage.path().join("native.sqlite").to_str().unwrap(),
+        )
+        .unwrap(),
+    );
     let presentation = AgentAguiStreamService::with_replay_store(
         Arc::new(AguiEventSink::new(
             &crate::shared::event_bus::EventBusConfig::default(),
@@ -386,7 +393,7 @@ async fn real_native_multi_child_stream_preserves_distinct_source_ids_and_paused
         .await
         .unwrap();
     let (handle, output) = parent
-        .start_with_output::<AgUiStream>(fw::RunRequest::new("GOAL-NATIVE", "test"))
+        .start_with_output::<AgUiStream>(fw::RunRequest::new("SESSION", "test"))
         .unwrap();
     let (result, ()) = tokio::join!(
         parent.wait(handle),
@@ -499,7 +506,7 @@ async fn native_public_replay_hides_only_private_product_reasoning_and_preserves
     let (handle, stream) = agent
         .start_with_output::<AgUiStream>(fw::RunRequest::new("SESSION", "test"))
         .unwrap();
-    let path = storage.path().join("public-replay.sqlite");
+    let path = storage.path().join("native.sqlite");
     let replay = Arc::new(SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap());
     let service = AgentAguiStreamService::with_replay_store(
         Arc::new(AguiEventSink::new(&EventBusConfig::default())),

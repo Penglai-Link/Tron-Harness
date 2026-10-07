@@ -487,3 +487,121 @@ fn prepare_fixture_artifacts(path: &std::path::Path) {
 }
 #[path = "host_status_tests.rs"]
 mod status_tests;
+
+struct StorageAcceptanceModel;
+impl ModelClient for StorageAcceptanceModel {
+    fn generate<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        self.generate_once(config, request)
+    }
+    fn generate_once<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let summary = request.messages.iter().any(|message| {
+                message
+                    .text_content()
+                    .contains("Summarize historical conversation")
+            });
+            Ok(ModelResponse::final_output(if summary {
+                r#"{"summary":"Preserved native history and decisions."}"#
+            } else {
+                "native reply"
+            }))
+        })
+    }
+    fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
+    fn close_observed<'a>(
+        &'a self,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
+#[tokio::test]
+async fn real_host_persists_native_history_and_summary_on_the_shared_database() {
+    use crate::adapters::outbound::persistence::sqlite::SqliteChatRepository;
+    use crate::application::{
+        agent::ReactAgentBuilder,
+        chat::ChatRepository,
+        short_term_memory::{ShortTermMemoryConfig, ShortTermMemoryService},
+    };
+    let host = FrameworkHost::temporary(None).unwrap();
+    let model = Arc::new(StorageAcceptanceModel);
+    host.bind_model_client(model.clone()).unwrap();
+    crate::adapters::outbound::persistence::sqlite::SqliteResourceRepository::connect(
+        host.0.path.to_str().unwrap(),
+    )
+    .unwrap();
+    let mut chat = SqliteChatRepository::with_host(host.clone()).unwrap();
+    let memory = ShortTermMemoryService::with_host(host.clone(), ShortTermMemoryConfig::default());
+    let mut context = test_context(0);
+    context.run_code = fw::RunId::new_v4().to_string();
+    context.conversation_code = None;
+    context.stream_key = Some(context.run_code.clone());
+    let session = context.run_code.clone();
+    let harness = ReactAgentBuilder::new(
+        model.clone(),
+        Arc::new(ToolRegistry::default()),
+        crate::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let outcome = within(host.run(harness, context.clone(), None, None))
+        .await
+        .unwrap();
+    assert_eq!(outcome.final_output, "native reply");
+    assert_eq!(
+        chat.get_session(&session).unwrap().workspace_code,
+        "TRON_CORE"
+    );
+    let framework = host.storage_framework().await.unwrap();
+    let conversations = framework
+        .services()
+        .unwrap()
+        .get::<fw::ConversationStoreService>()
+        .unwrap()
+        .0
+        .clone();
+    let history = conversations.history(&session).await.unwrap();
+    assert_eq!(history[0].messages.len(), 2);
+    let summary = within(memory.summarize(&session, &context.model, model, None, None))
+        .await
+        .unwrap();
+    assert!(
+        summary["summary"]
+            .as_str()
+            .unwrap()
+            .contains("native history")
+    );
+    assert_eq!(summary["coveredMessages"], 2);
+    assert!(memory.latest_compaction(&session).unwrap().is_some());
+    chat.update_session_status(
+        &session,
+        crate::domain::chat::ChatSessionStatus::Archived,
+        "",
+    )
+    .unwrap();
+    assert_eq!(
+        conversations.history(&session).await.unwrap()[0]
+            .messages
+            .len(),
+        2
+    );
+    chat.delete_session(&session).unwrap();
+    assert!(conversations.history(&session).await.unwrap().is_empty());
+    host.close().await;
+}

@@ -89,20 +89,9 @@ mineru:
   returnContentList: false
 
 shortTermMemory:
-  toolOutput:
-    root: ~/.tron/artifacts/short-term-memory/tool-results
-    externalizeAboveBytes: 32768
-  eventLog:
-    mode: full
-    retentionDays: 5
-    maxPayloadBytes: 8192
-    cleanupOnStartup: true
-    cleanupBatchSize: 5000
-    cleanupMaxRowsPerStartup: 50000
   context:
     defaultContextWindowTokens: 32000
     familyContextMaxChars: 6000
-    reasoningSummaryReplayEnabled: false
     blocks:
       seedPromptPrefix:
         maxRatio: "50%"
@@ -127,6 +116,7 @@ shortTermMemory:
         - current_session_checkpoint
         - session_family_context
         - current_session_working_state
+        - knowledge_base
         - current_session_history
       checkpoint:
         strategy: bound
@@ -151,22 +141,11 @@ shortTermMemory:
       maxAuxiliaryCallsPerStep: 16
   familyLoad:
     defaultMaxSessions: 3
-    defaultSnapshotMaxChars: 2000
-    defaultTtlHours: 72
-    taskWeight: "65%"
-    requirementWeight: "25%"
-    workspaceChatWeight: "10%"
-    workspaceHeartbeatWeight: "10%"
-    otherWeight: "5%"
   compaction:
     autoEnabled: true
     triggerRatio: "80%"
-    retainedHistoryRatio: "20%"
   goalLoop:
     maxRuns: 20
-    maxConsecutiveJudgeFailures: 3
-    judgeInputMaxChars: 12000
-    judgeOutputMaxTokens: 1024
 
 variableCrypto:
   keyBase64: sbxNdQm4XiwQyfXNEtjZCQ==

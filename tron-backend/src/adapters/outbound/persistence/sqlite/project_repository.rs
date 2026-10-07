@@ -12,11 +12,17 @@ use crate::{
     shared::time::{option_timestamp_to_millis, timestamp_from_millis, timestamp_to_millis},
 };
 
-pub struct SqliteProjectRepository {
-    connection: Connection,
+struct SqliteProjectRepositorySql<'a> {
+    connection: &'a mut Connection,
 }
-impl SqliteProjectRepository {
-    pub fn connect(database_url: &str) -> Result<Self, ProjectError> {
+pub struct SqliteProjectRepository {
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
+}
+impl<'a> SqliteProjectRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, ProjectError> {
         if database_url != ":memory:" && !database_url.starts_with("file:") {
             if let Some(parent) = Path::new(database_url)
                 .parent()
@@ -25,24 +31,14 @@ impl SqliteProjectRepository {
                 fs::create_dir_all(parent).map_err(|_| ProjectError::StorageFailure)?;
             }
         }
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(|_| ProjectError::StorageFailure)?;
+
         connection
             .execute_batch(PROJECT_CHAT_CONTEXT_MIGRATION)
             .map_err(|_| ProjectError::StorageFailure)?;
         Ok(Self { connection })
     }
 }
-impl ProjectRepository for SqliteProjectRepository {
+impl ProjectRepository for SqliteProjectRepositorySql<'_> {
     fn next_id(&mut self) -> Result<i64, ProjectError> {
         self.connection.query_row("SELECT max(id) FROM (SELECT id FROM projects UNION ALL SELECT id FROM project_app_links)", [], |row| row.get::<_, Option<i64>>(0)).map_err(|_| ProjectError::StorageFailure).map(|value| value.unwrap_or(736_000_000_000_000_000) + 1)
     }
@@ -78,9 +74,8 @@ impl ProjectRepository for SqliteProjectRepository {
         project: &Project,
         links: &[ProjectAppLink],
     ) -> Result<(), ProjectError> {
-        let tx = self
-            .connection
-            .transaction()
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
+            .connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| ProjectError::StorageFailure)?;
         tx.execute("INSERT INTO projects (id, project_code, workspace_code, name, status, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(project_code) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at", params![project.id, project.project_code, project.workspace_code, project.name, project_status_to_storage(project.status), timestamp_to_millis(&project.created_at), timestamp_to_millis(&project.updated_at), option_timestamp_to_millis(project.archived_at.as_deref())]).map_err(|_| ProjectError::StorageFailure)?;
         tx.execute(
@@ -117,4 +112,82 @@ fn project_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
         updated_at: timestamp_from_millis(row.get(6)?),
         archived_at: row.get::<_, Option<i64>>(7)?.map(timestamp_from_millis),
     })
+}
+
+fn storage_error(_: rusqlite::Error) -> ProjectError {
+    ProjectError::StorageFailure
+}
+
+impl SqliteProjectRepository {
+    pub fn connect(database_url: &str) -> Result<Self, ProjectError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteProjectRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl ProjectRepository for SqliteProjectRepository {
+    fn next_id(&mut self) -> Result<i64, ProjectError> {
+        self.connection.call(
+            move |connection| SqliteProjectRepositorySql { connection }.next_id(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_projects(&mut self, workspace_code: &str) -> Result<Vec<Project>, ProjectError> {
+        let workspace_code = workspace_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteProjectRepositorySql { connection }.list_projects(&workspace_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn get_project(&mut self, project_code: &str) -> Result<Project, ProjectError> {
+        let project_code = project_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteProjectRepositorySql { connection }.get_project(&project_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_links(&mut self, project_code: &str) -> Result<Vec<ProjectAppLink>, ProjectError> {
+        let project_code = project_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteProjectRepositorySql { connection }.list_links(&project_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn save_project(
+        &mut self,
+        project: &Project,
+        links: &[ProjectAppLink],
+    ) -> Result<(), ProjectError> {
+        let project = project.to_owned();
+        let links = links.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteProjectRepositorySql { connection }.save_project(&project, &links)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn archive_project(
+        &mut self,
+        project_code: &str,
+        archived_at: &str,
+    ) -> Result<(), ProjectError> {
+        let project_code = project_code.to_owned();
+        let archived_at = archived_at.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteProjectRepositorySql { connection }
+                    .archive_project(&project_code, &archived_at)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

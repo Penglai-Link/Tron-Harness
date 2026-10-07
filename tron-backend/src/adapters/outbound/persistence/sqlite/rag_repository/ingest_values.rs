@@ -3,7 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{Transaction, params_from_iter, types::Value as SqlValue};
+use rusqlite::{params_from_iter, types::Value as SqlValue};
 use serde_json::Value;
 
 use crate::{application::rag::RagPersistIngestCommand, domain::rag::RagError};
@@ -115,7 +115,7 @@ pub(crate) fn push_embedded_source_values(
 }
 
 pub(crate) fn execute_upsert(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     table_name: &str,
     values: Vec<(String, SqlValue)>,
     conflict_columns: &[&str],

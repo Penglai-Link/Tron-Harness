@@ -1,64 +1,41 @@
-import { requestApi } from "@/shared/api/httpClient";
-import type { ChatMessage, ChatSession } from "@/domain/chat/model";
+import { requestApi, requestApiBlob } from "@/shared/api/httpClient";
+import type { ChatMessageAttachment } from "@/domain/chat/model";
 
-export interface ArchivedChatSessionPage {
-  records: ChatSession[];
-  total: number;
-  current: number;
-  size: number;
+export interface ArchivedSession {
+  sessionCode: string; workspaceCode: string; projectCode: string | null;
+  title: string; status: "ACTIVE" | "ARCHIVED"; createdAt: number; updatedAt: number;
 }
-
-export interface ArchivedChatSessionDeleteItem {
-  sessionCode: string;
-  success: boolean;
-  errorCode?: string | null;
-  message?: string | null;
+export interface ArchivedMessage {
+  messageCode: string; runCode: string | null; role: string; actor: string;
+  content: string; attachments: ChatMessageAttachment[]; createdAt: number;
 }
-
-export interface ArchivedChatSessionBatchDeleteResult {
-  succeeded: number;
-  failed: number;
-  items: ArchivedChatSessionDeleteItem[];
+export interface ArchivedSessionDetail {
+  session: ArchivedSession; messages: ArchivedMessage[];
+  goals: { goalCode: string; objective: string; status: string; progress: unknown; criteria: { id: string; text: string; completed: boolean }[]; lastDecision: { verdict: string; reason: string; next_input: string | null; required_input: string | null } | null; runsUsed: number; maxRuns: number; reason: string | null; updatedAt: number }[];
+  goalEvents: { eventCode: string; goalCode: string; runCode: string | null; kind: string; payload: unknown; createdAt: number }[];
+  runs: { runCode: string; parentRunCode: string | null; branch: string; kind: string; status: string; startedAt: number; finishedAt: number | null; error: string | null }[];
+  history: { branch: string; generation: string; messages: { messageCode: string; role: string; content: string }[] }[];
 }
+export interface ArchivedChatSessionPage { records: ArchivedSession[]; total: number; current: number; size: number }
+export interface ArchivedChatSessionDeleteItem { sessionCode: string; success: boolean; errorCode: string | null; message: string | null }
+export interface ArchivedChatSessionBatchDeleteResult { succeeded: number; failed: number; items: ArchivedChatSessionDeleteItem[] }
 
-const archivedChatEndpoints = {
-  list: "GET /api/v1/chats/archived-sessions",
-  restore: "POST /api/v1/chats/sessions/{sessionCode}/restore",
-  delete: "DELETE /api/v1/chats/sessions/{sessionCode}",
-  deleteBatch: "POST /api/v1/chats/archived-sessions/batch-delete",
-  messages: "GET /api/v1/chats/sessions/{sessionCode}/messages",
-} as const;
-
-export function fetchArchivedChatSessions(query: {
-  workspaceCode?: string;
-  current: number;
-  size: number;
-}) {
-  return requestApi<ArchivedChatSessionPage>(archivedChatEndpoints.list, {
-    queryParams: query,
-  });
+const root = "/api/v1/admin/archived-sessions";
+export function fetchArchivedChatSessions(query: { workspaceCode?: string; current: number; size: number }, signal?: AbortSignal) {
+  return requestApi<ArchivedChatSessionPage>(`GET ${root}`, { queryParams: query, signal });
 }
-
-export function fetchArchivedChatMessages(sessionCode: string) {
-  return requestApi<ChatMessage[]>(archivedChatEndpoints.messages, {
-    pathParams: { sessionCode },
-  });
+export function fetchArchivedChatDetail(sessionCode: string, signal?: AbortSignal) {
+  return requestApi<ArchivedSessionDetail>(`GET ${root}/{sessionCode}`, { pathParams: { sessionCode }, signal });
 }
-
 export function restoreArchivedChatSession(sessionCode: string) {
-  return requestApi<ChatSession>(archivedChatEndpoints.restore, {
-    pathParams: { sessionCode },
-  });
+  return requestApi<ArchivedSession>(`POST ${root}/{sessionCode}/restore`, { pathParams: { sessionCode } });
 }
-
 export function deleteArchivedChatSession(sessionCode: string) {
-  return requestApi<ChatSession>(archivedChatEndpoints.delete, {
-    pathParams: { sessionCode },
-  });
+  return requestApi<ArchivedSession>(`DELETE ${root}/{sessionCode}`, { pathParams: { sessionCode } });
 }
-
 export function deleteArchivedChatSessions(sessionCodes: string[]) {
-  return requestApi<ArchivedChatSessionBatchDeleteResult>(archivedChatEndpoints.deleteBatch, {
-    body: { sessionCodes },
-  });
+  return requestApi<ArchivedChatSessionBatchDeleteResult>(`POST ${root}/batch-delete`, { body: { sessionCodes } });
+}
+export function downloadArchivedChatAttachment(sessionCode: string, attachmentCode: string) {
+  return requestApiBlob(`GET ${root}/{sessionCode}/attachments/{attachmentCode}`, { pathParams: { sessionCode, attachmentCode } });
 }

@@ -1,4 +1,7 @@
-fn insert_prompt(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(), PromptError> {
+fn insert_prompt(
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    prompt: &Prompt,
+) -> Result<(), PromptError> {
     transaction
         .execute(
             "INSERT INTO prompts (
@@ -32,7 +35,10 @@ fn insert_prompt(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(), P
     Ok(())
 }
 
-fn replace_variables(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(), PromptError> {
+fn replace_variables(
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    prompt: &Prompt,
+) -> Result<(), PromptError> {
     transaction
         .execute(
             "DELETE FROM prompt_variables WHERE prompt_code = ?1",
@@ -82,7 +88,10 @@ fn replace_variables(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(
     Ok(())
 }
 
-fn replace_translations(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(), PromptError> {
+fn replace_translations(
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    prompt: &Prompt,
+) -> Result<(), PromptError> {
     transaction
         .execute(
             "DELETE FROM prompt_translations WHERE prompt_code = ?1",

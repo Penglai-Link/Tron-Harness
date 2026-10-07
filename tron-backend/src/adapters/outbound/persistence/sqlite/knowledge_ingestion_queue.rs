@@ -1,51 +1,20 @@
 use crate::application::knowledge_base::ingestion::*;
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::sync::{Arc, Mutex};
+mod availability;
 mod publication;
 mod publication_indexes;
-mod availability;
 
+struct SqliteKnowledgeIngestionQueueSql<'a> {
+    connection: &'a mut Connection,
+}
 #[derive(Clone)]
 pub struct SqliteKnowledgeIngestionQueue {
-    connection: Arc<Mutex<Connection>>,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteKnowledgeIngestionQueue {
-    pub(crate) fn from_connection(
-        connection: Arc<Mutex<Connection>>,
-    ) -> Result<Self, IngestionQueueError> {
-        {
-            let conn = connection.lock().map_err(storage)?;
-            crate::shared::sqlite_extensions::default_sqlite_extension_context()
-                .prepare_connection(&conn)
-                .map_err(storage)?;
-            conn.execute_batch(include_str!(
-                "../../../../../migrations/20261005_0001_knowledge_ingestion.sql"
-            ))
-            .map_err(storage)?;
-        }
-        Ok(Self { connection })
-    }
-    pub fn connect(path: &str) -> Result<Self, IngestionQueueError> {
-        let connection = Connection::open(path).map_err(storage)?;
-        crate::shared::sqlite_extensions::default_sqlite_extension_context()
-            .prepare_connection(&connection)
-            .map_err(storage)?;
-        connection
-            .busy_timeout(std::time::Duration::from_secs(5))
-            .map_err(storage)?;
-        connection
-            .execute_batch(include_str!(
-                "../../../../../migrations/20261005_0001_knowledge_ingestion.sql"
-            ))
-            .map_err(storage)?;
-        Ok(Self {
-            connection: Arc::new(Mutex::new(connection)),
-        })
-    }
-}
+impl SqliteKnowledgeIngestionQueueSql<'_> {}
 
 fn storage(e: impl std::fmt::Display) -> IngestionQueueError {
     IngestionQueueError::Storage(e.to_string())
@@ -64,13 +33,16 @@ fn read(conn: &Connection, id: &str) -> Result<IngestionTask, IngestionQueueErro
         .map_err(storage)?;
     serde_json::from_str(&raw.ok_or(IngestionQueueError::NotFound)?).map_err(storage)
 }
-fn write(tx: &Transaction<'_>, task: &IngestionTask) -> Result<(), IngestionQueueError> {
+fn write(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    task: &IngestionTask,
+) -> Result<(), IngestionQueueError> {
     tx.execute("UPDATE knowledge_base_ingestion_tasks SET state=?1,stage=?2,attempt=?3,lease_owner=?4,lease_until_ms=?5,retry_after_ms=?6,endpoint_id=?7,payload_json=?8 WHERE id=?9",
         params![task.state,format!("{:?}",task.stage),task.attempt,task.lease_owner,task.lease_until_ms,task.retry_after_ms,task.endpoint_id,encode(task)?,task.id]).map_err(storage)?;
     Ok(())
 }
 fn leased(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     lease: &IngestionLease,
     now: i64,
 ) -> Result<IngestionTask, IngestionQueueError> {
@@ -84,7 +56,10 @@ fn leased(
     }
     Ok(task)
 }
-fn document(tx: &Transaction<'_>, task: &IngestionTask) -> Result<Value, IngestionQueueError> {
+fn document(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    task: &IngestionTask,
+) -> Result<Value, IngestionQueueError> {
     let value: Option<(String,u64)> = tx.query_row("SELECT payload_json,revision FROM knowledge_base_documents WHERE id=?1 AND knowledge_base_id=?2",
         params![task.document_id,task.knowledge_base_id], |r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(storage)?;
     let (raw, revision) = value.ok_or(IngestionQueueError::NotFound)?;
@@ -94,15 +69,28 @@ fn document(tx: &Transaction<'_>, task: &IngestionTask) -> Result<Value, Ingesti
     let value: Value = serde_json::from_str(&raw).map_err(storage)?;
     // Use the immutable identity already captured at enqueue, including original
     // resource code. Document id and revision alone can repeat after deletion.
-    let resource_code = value["resourceCode"].as_str().ok_or(IngestionQueueError::Conflict)?;
-    let identity = format!("{:x}", Sha256::digest(format!("{}:{}:{}", resource_code, task.resource_revision, task.configuration).as_bytes()));
-    if value["resourceRevision"].as_u64() != Some(task.resource_revision) || identity != task.input_config_hash {
+    let resource_code = value["resourceCode"]
+        .as_str()
+        .ok_or(IngestionQueueError::Conflict)?;
+    let identity = format!(
+        "{:x}",
+        Sha256::digest(
+            format!(
+                "{}:{}:{}",
+                resource_code, task.resource_revision, task.configuration
+            )
+            .as_bytes()
+        )
+    );
+    if value["resourceRevision"].as_u64() != Some(task.resource_revision)
+        || identity != task.input_config_hash
+    {
         return Err(IngestionQueueError::Conflict);
     }
     Ok(value)
 }
 fn document_state(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     task: &IngestionTask,
     state: &str,
     error: Option<&str>,
@@ -120,9 +108,9 @@ fn clear_lease(task: &mut IngestionTask) {
     task.lease_until_ms = 0;
 }
 
-impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
+impl SqliteKnowledgeIngestionQueueSql<'_> {
     fn for_document(&self, document: &str) -> Result<Vec<IngestionTask>, IngestionQueueError> {
-        let conn = self.connection.lock().map_err(storage)?;
+        let conn = &*self.connection;
         let mut stmt = conn.prepare("SELECT payload_json FROM knowledge_base_ingestion_tasks WHERE document_id=?1 ORDER BY rowid DESC").map_err(storage)?;
         stmt.query_map([document], |r| r.get::<_, String>(0))
             .map_err(storage)?
@@ -135,10 +123,10 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         } else {
             "('Embedding','Publishing')"
         };
-        self.connection.lock().map_err(storage)?.query_row(&format!("SELECT EXISTS(SELECT 1 FROM knowledge_base_ingestion_tasks WHERE stage IN {stages} AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0 AND ((state='QUEUED' AND retry_after_ms<=?1) OR (state='RUNNING' AND lease_until_ms<=?1)))"), [now], |r| r.get(0)).map_err(storage)
+        self.connection.query_row(&format!("SELECT EXISTS(SELECT 1 FROM knowledge_base_ingestion_tasks WHERE stage IN {stages} AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0 AND ((state='QUEUED' AND retry_after_ms<=?1) OR (state='RUNNING' AND lease_until_ms<=?1)))"), [now], |r| r.get(0)).map_err(storage)
     }
     fn pending_cancellations(&self) -> Result<Vec<IngestionTask>, IngestionQueueError> {
-        let conn = self.connection.lock().map_err(storage)?;
+        let conn = &*self.connection;
         let mut stmt = conn.prepare("SELECT payload_json FROM knowledge_base_ingestion_tasks WHERE state IN ('CANCELLED','QUEUED') AND json_extract(payload_json,'$.cancellationPending')=1 ORDER BY rowid LIMIT 32").map_err(storage)?;
         stmt.query_map([], |r| r.get::<_, String>(0))
             .map_err(storage)?
@@ -150,9 +138,8 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         expected: &IngestionTask,
         job_id: Option<String>,
     ) -> Result<(), IngestionQueueError> {
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let mut task = read(&tx, &expected.id)?;
         if task.attempt != expected.attempt
@@ -167,7 +154,9 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         task.cancellation_pending = false;
         task.reconciling = false;
         task.wait_reason = None;
-        if task.state == "QUEUED" { document_state(&tx, &task, "QUEUED", task.error.as_deref())?; }
+        if task.state == "QUEUED" {
+            document_state(&tx, &task, "QUEUED", task.error.as_deref())?;
+        }
         write(&tx, &task)?;
         tx.commit().map_err(storage)
     }
@@ -177,9 +166,8 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
                 "Missing task/config identity".into(),
             ));
         }
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         // Task ID is an application-scoped request identity. Replaying the same
         // request returns its result; a new explicit rebuild receives a fresh ID.
@@ -240,10 +228,15 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         Ok(task)
     }
     fn get(&self, id: &str) -> Result<IngestionTask, IngestionQueueError> {
-        let conn = self.connection.lock().map_err(storage)?;
+        let conn = &*self.connection;
         read(&conn, id)
     }
-    fn report_parser_availability(&self, now: i64, endpoints: &[ParseEndpointCapacity], unavailable: &[(Option<String>, IngestionWaitReason)]) -> Result<(), IngestionQueueError> {
+    fn report_parser_availability(
+        &self,
+        now: i64,
+        endpoints: &[ParseEndpointCapacity],
+        unavailable: &[(Option<String>, IngestionWaitReason)],
+    ) -> Result<(), IngestionQueueError> {
         availability::report(self, now, endpoints, unavailable)
     }
     fn claim(&self, claim: IngestionClaim) -> Result<Option<IngestionTask>, IngestionQueueError> {
@@ -252,9 +245,8 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
                 "Invalid worker capacity/lease".into(),
             ));
         }
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let parse = claim.stage == IngestionStage::Parsing;
         if !parse && claim.stage != IngestionStage::Embedding {
@@ -269,10 +261,13 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         };
         let active: usize = tx.query_row(&format!("SELECT count(*) FROM knowledge_base_ingestion_tasks WHERE state='RUNNING' AND lease_until_ms>?1 AND stage IN {stages}"),[claim.now_ms],|r|r.get(0)).map_err(storage)?;
         let global_busy = active >= claim.global_capacity;
-        let group_busy = if !parse && let Some((group, capacity)) = &claim.embedding_resource_group {
+        let group_busy = if !parse && let Some((group, capacity)) = &claim.embedding_resource_group
+        {
             let count: usize = tx.query_row("SELECT count(*) FROM knowledge_base_ingestion_tasks WHERE state='RUNNING' AND lease_until_ms>?1 AND resource_group=?2",params![claim.now_ms,group],|r|r.get(0)).map_err(storage)?;
             count >= *capacity
-        } else { false };
+        } else {
+            false
+        };
         let ids = {
             let mut stmt = tx.prepare(&format!("SELECT id FROM knowledge_base_ingestion_tasks WHERE stage IN {stages} AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0 AND ((state='QUEUED' AND retry_after_ms<=?1) OR (state='RUNNING' AND lease_until_ms<=?1)) ORDER BY rowid")).map_err(storage)?;
             stmt.query_map([claim.now_ms], |r| r.get::<_, String>(0))
@@ -306,15 +301,32 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
                 Err(error) => return Err(error),
             }
             if global_busy || group_busy {
-                if !parse || claim.parse_endpoints.iter().any(|e| availability::eligible(&task, e)) {
-                    availability::waiting(&tx, &mut task, IngestionWaitReason::new(if group_busy { WaitReasonCode::EmbeddingGroupCapacity } else if parse { WaitReasonCode::ParseGlobalCapacity } else { WaitReasonCode::EmbeddingGlobalCapacity }))?;
+                if !parse
+                    || claim
+                        .parse_endpoints
+                        .iter()
+                        .any(|e| availability::eligible(&task, e))
+                {
+                    availability::waiting(
+                        &tx,
+                        &mut task,
+                        IngestionWaitReason::new(if group_busy {
+                            WaitReasonCode::EmbeddingGroupCapacity
+                        } else if parse {
+                            WaitReasonCode::ParseGlobalCapacity
+                        } else {
+                            WaitReasonCode::EmbeddingGlobalCapacity
+                        }),
+                    )?;
                 }
                 continue;
             }
             if parse {
                 let mut available = Vec::new();
                 for endpoint in &claim.parse_endpoints {
-                    if !availability::eligible(&task, endpoint) { continue; }
+                    if !availability::eligible(&task, endpoint) {
+                        continue;
+                    }
                     let node_count: usize = tx.query_row("SELECT count(*) FROM knowledge_base_ingestion_tasks WHERE state='RUNNING' AND lease_until_ms>?1 AND endpoint_id=?2 AND stage IN ('Parsing','Chunking')",params![claim.now_ms,endpoint.endpoint_id],|r|r.get(0)).map_err(storage)?;
                     let group_count: usize = tx.query_row("SELECT count(*) FROM knowledge_base_ingestion_tasks WHERE state='RUNNING' AND lease_until_ms>?1 AND resource_group=?2",params![claim.now_ms,endpoint.resource_group],|r|r.get(0)).map_err(storage)?;
                     if node_count < endpoint.capacity
@@ -325,8 +337,16 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
                 }
                 available.sort_by(|a, b| a.0.total_cmp(&b.0));
                 let Some((_, endpoint)) = available.first() else {
-                    if claim.parse_endpoints.iter().any(|e| availability::eligible(&task, e)) {
-                        availability::waiting(&tx, &mut task, IngestionWaitReason::new(WaitReasonCode::NodeCapacity))?;
+                    if claim
+                        .parse_endpoints
+                        .iter()
+                        .any(|e| availability::eligible(&task, e))
+                    {
+                        availability::waiting(
+                            &tx,
+                            &mut task,
+                            IngestionWaitReason::new(WaitReasonCode::NodeCapacity),
+                        )?;
                     }
                     continue;
                 };
@@ -382,9 +402,8 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         lease: &IngestionLease,
         now: i64,
     ) -> Result<(), IngestionQueueError> {
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let mut task = leased(&tx, lease, now)?;
         if update.id != task.id || update.endpoint_id != task.endpoint_id {
@@ -429,9 +448,8 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         if lease_ms <= 0 {
             return Err(IngestionQueueError::Invalid("Invalid lease".into()));
         }
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let mut task = leased(&tx, lease, now)?;
         task.lease_until_ms = now.saturating_add(lease_ms);
@@ -444,9 +462,8 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         lease: &IngestionLease,
         now: i64,
     ) -> Result<(), IngestionQueueError> {
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let mut task = leased(&tx, lease, now)?;
         if update.id != task.id
@@ -468,9 +485,8 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         tx.commit().map_err(storage)
     }
     fn cancel(&self, id: &str) -> Result<IngestionTask, IngestionQueueError> {
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let mut task = read(&tx, id)?;
         if task.state == "READY" {
@@ -507,9 +523,8 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         error: &str,
         retry_after: Option<i64>,
     ) -> Result<(), IngestionQueueError> {
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let mut task = leased(&tx, lease, now)?;
         task.failures = task.failures.saturating_add(1);
@@ -521,16 +536,16 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         .into();
         task.retry_after_ms = retry_after.unwrap_or(0).max(now);
         task.error = Some(error.into());
-        task.wait_reason = retry_after.map(|_| IngestionWaitReason::new(WaitReasonCode::RetryBackoff));
+        task.wait_reason =
+            retry_after.map(|_| IngestionWaitReason::new(WaitReasonCode::RetryBackoff));
         clear_lease(&mut task);
         document_state(&tx, &task, &task.state, Some(error))?;
         write(&tx, &task)?;
         tx.commit().map_err(storage)
     }
     fn retry(&self, id: &str, now: i64) -> Result<IngestionTask, IngestionQueueError> {
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let mut task = read(&tx, id)?;
         if !matches!(task.state.as_str(), "FAILED" | "CANCELLED") {
@@ -541,7 +556,9 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         // creating another job; an unavailable DELETE must not cause duplicates.
         task.state = "QUEUED".into();
         task.error = None;
-        task.wait_reason = task.cancellation_pending.then(|| IngestionWaitReason::new(WaitReasonCode::CancellationPending));
+        task.wait_reason = task
+            .cancellation_pending
+            .then(|| IngestionWaitReason::new(WaitReasonCode::CancellationPending));
         task.failures = 0;
         task.retry_after_ms = now;
         clear_lease(&mut task);
@@ -557,5 +574,201 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         ready: &Value,
     ) -> Result<(), IngestionQueueError> {
         self.publish_generation(lease, now, ready)
+    }
+}
+
+impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
+    fn for_document(&self, document: &str) -> Result<Vec<IngestionTask>, IngestionQueueError> {
+        let document = document.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.for_document(&document)
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    fn pending(&self, stage: IngestionStage, now: i64) -> Result<bool, IngestionQueueError> {
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.pending(stage, now),
+            || storage("database worker stopped"),
+        )
+    }
+    fn pending_cancellations(&self) -> Result<Vec<IngestionTask>, IngestionQueueError> {
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.pending_cancellations()
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    fn complete_cancellation(
+        &self,
+        expected: &IngestionTask,
+        job_id: Option<String>,
+    ) -> Result<(), IngestionQueueError> {
+        let expected = expected.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }
+                    .complete_cancellation(&expected, job_id)
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    fn enqueue(&self, task: IngestionTask) -> Result<IngestionTask, IngestionQueueError> {
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.enqueue(task),
+            || storage("database worker stopped"),
+        )
+    }
+    fn get(&self, id: &str) -> Result<IngestionTask, IngestionQueueError> {
+        let id = id.to_owned();
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.get(&id),
+            || storage("database worker stopped"),
+        )
+    }
+    fn report_parser_availability(
+        &self,
+        now: i64,
+        endpoints: &[ParseEndpointCapacity],
+        unavailable: &[(Option<String>, IngestionWaitReason)],
+    ) -> Result<(), IngestionQueueError> {
+        let endpoints = endpoints.to_owned();
+        let unavailable = unavailable.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.report_parser_availability(
+                    now,
+                    &endpoints,
+                    &unavailable,
+                )
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    fn claim(&self, claim: IngestionClaim) -> Result<Option<IngestionTask>, IngestionQueueError> {
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.claim(claim),
+            || storage("database worker stopped"),
+        )
+    }
+    fn checkpoint(
+        &self,
+        update: &IngestionTask,
+        lease: &IngestionLease,
+        now: i64,
+    ) -> Result<(), IngestionQueueError> {
+        let update = update.to_owned();
+        let lease = lease.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.checkpoint(&update, &lease, now)
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    fn heartbeat(
+        &self,
+        lease: &IngestionLease,
+        now: i64,
+        lease_ms: i64,
+    ) -> Result<(), IngestionQueueError> {
+        let lease = lease.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.heartbeat(&lease, now, lease_ms)
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    fn wait_for_embedding(
+        &self,
+        update: &IngestionTask,
+        lease: &IngestionLease,
+        now: i64,
+    ) -> Result<(), IngestionQueueError> {
+        let update = update.to_owned();
+        let lease = lease.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }
+                    .wait_for_embedding(&update, &lease, now)
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    fn cancel(&self, id: &str) -> Result<IngestionTask, IngestionQueueError> {
+        let id = id.to_owned();
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.cancel(&id),
+            || storage("database worker stopped"),
+        )
+    }
+    fn fail(
+        &self,
+        lease: &IngestionLease,
+        now: i64,
+        error: &str,
+        retry_after: Option<i64>,
+    ) -> Result<(), IngestionQueueError> {
+        let lease = lease.to_owned();
+        let error = error.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.fail(
+                    &lease,
+                    now,
+                    &error,
+                    retry_after,
+                )
+            },
+            || storage("database worker stopped"),
+        )
+    }
+    fn retry(&self, id: &str, now: i64) -> Result<IngestionTask, IngestionQueueError> {
+        let id = id.to_owned();
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.retry(&id, now),
+            || storage("database worker stopped"),
+        )
+    }
+    fn publish(
+        &self,
+        lease: &IngestionLease,
+        now: i64,
+        ready: &Value,
+    ) -> Result<(), IngestionQueueError> {
+        let lease = lease.to_owned();
+        let ready = ready.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }.publish(&lease, now, &ready)
+            },
+            || storage("database worker stopped"),
+        )
+    }
+}
+
+impl SqliteKnowledgeIngestionQueue {
+    pub(crate) fn from_connection(
+        connection:crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
+    ) -> Result<Self, IngestionQueueError> {
+        connection.call(
+            |c| {
+                crate::shared::sqlite_extensions::default_sqlite_extension_context()
+                    .prepare_connection(c)
+                    .map_err(storage)?;
+                c.execute_batch(include_str!(
+                    "../../../../../migrations/20261005_0001_knowledge_ingestion.sql"
+                ))
+                .map_err(storage)
+            },
+            || storage("database worker stopped"),
+        )?;
+        Ok(Self { connection })
+    }
+    pub fn connect(path: &str) -> Result<Self, IngestionQueueError> {
+        Self::from_connection(crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(path).map_err(storage)?)
     }
 }

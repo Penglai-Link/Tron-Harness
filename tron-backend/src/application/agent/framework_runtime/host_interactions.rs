@@ -1,4 +1,4 @@
-//! Native interaction validation remains authoritative; the host only maps legacy answers.
+//! Native interaction validation remains authoritative; the host only maps product answers.
 use super::{FrameworkHost, map_error};
 use crate::{
     application::chat::ChatResumeEntry,
@@ -34,20 +34,7 @@ impl FrameworkHost {
             }
             return Err(AgentError::AwaitingUserInput);
         }
-        // Non-SDK legacy interrupts retain their existing product validation.
-        let native = resume
-            .iter()
-            .filter(|entry| {
-                native_id(&entry.interrupt_id).is_ok()
-                    || entry.interrupt_id.starts_with("INPUT-FW-")
-            })
-            .collect::<Vec<_>>();
-        if native.is_empty() {
-            return Ok(());
-        }
-        if native.len() != resume.len() {
-            return Err(invalid("cannot mix native and legacy interactions"));
-        }
+        let native = resume.iter().collect::<Vec<_>>();
         let _admission = self.0.config_lock.lock().await;
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
@@ -76,8 +63,7 @@ impl FrameworkHost {
     }
 }
 pub(super) fn native_id(value: &str) -> Result<fw::RunId, AgentError> {
-    fw::RunId::parse_str(value.strip_prefix("INPUT-FW-").unwrap_or(value))
-        .map_err(|_| invalid("invalid native interaction identity"))
+    fw::RunId::parse_str(value).map_err(|_| invalid("invalid native interaction identity"))
 }
 pub(super) fn answer_value(
     request: &fw::InteractionRequest,

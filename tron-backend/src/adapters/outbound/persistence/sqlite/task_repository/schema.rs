@@ -1,6 +1,6 @@
 use super::*;
 
-impl SqliteTaskRepository {
+impl<'a> SqliteTaskRepositorySql<'a> {
     pub(super) fn migrate_legacy_completed_task_descriptions(&mut self) -> Result<(), TaskError> {
         self.connection
             .execute(
@@ -87,7 +87,7 @@ impl SqliteTaskRepository {
     }
 
     pub(super) fn rebuild_tasks_table_for_flows(&mut self) -> Result<(), TaskError> {
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         tx.execute_batch(
             "
             CREATE TABLE tasks_rebuild (
@@ -192,7 +192,7 @@ impl SqliteTaskRepository {
     pub(super) fn rebuild_tasks_table_with_foreign_keys_disabled(
         &mut self,
     ) -> Result<(), TaskError> {
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         tx.execute_batch(
             "
             CREATE TABLE tasks_rebuild (

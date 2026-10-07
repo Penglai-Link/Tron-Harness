@@ -12,31 +12,25 @@ use crate::{
 };
 
 use super::automation_repository_helpers::{
-    backfill_execution_session_codes, column_exists, ensure_database_parent,
-    hydrate_execution_summary, latest_assistant_reply_for_session, next_id_in_transaction,
-    row_to_automation, row_to_execution_record, storage_error, timestamp_to_millis,
-    update_automation_in_transaction,
+    column_exists, ensure_database_parent, next_id_in_transaction, row_to_automation,
+    row_to_execution_record, storage_error, timestamp_to_millis, update_automation_in_transaction,
 };
 use super::migrations::AUTOMATIONS_MIGRATION;
 
+struct SqliteAutomationRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteAutomationRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteAutomationRepository {
-    pub fn connect(database_url: &str) -> Result<Self, AutomationError> {
+impl<'a> SqliteAutomationRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, AutomationError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
+
         let repository = Self { connection };
         repository
             .connection
@@ -70,12 +64,11 @@ impl SqliteAutomationRepository {
                 )
                 .map_err(storage_error)?;
         }
-        backfill_execution_session_codes(&repository.connection)?;
         Ok(repository)
     }
 }
 
-impl AutomationRepository for SqliteAutomationRepository {
+impl AutomationRepository for SqliteAutomationRepositorySql<'_> {
     fn list_automations(&mut self) -> Result<Vec<Automation>, AutomationError> {
         let mut statement = self
             .connection
@@ -215,10 +208,7 @@ impl AutomationRepository for SqliteAutomationRepository {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(storage_error)?
         };
-        records
-            .into_iter()
-            .map(|record| hydrate_execution_summary(&self.connection, record))
-            .collect()
+        Ok(records)
     }
 
     fn record_execution(
@@ -226,9 +216,8 @@ impl AutomationRepository for SqliteAutomationRepository {
         automation: &Automation,
         draft: &AutomationExecutionDraft,
     ) -> Result<Option<AutomationExecutionRecord>, AutomationError> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
+            .connection, TransactionBehavior::Immediate)
             .map_err(storage_error)?;
         let next_id = next_id_in_transaction(&tx)?;
         let record = AutomationExecutionRecord {
@@ -288,15 +277,9 @@ impl AutomationRepository for SqliteAutomationRepository {
         session_code: Option<String>,
         finished_at: &str,
     ) -> Result<(), AutomationError> {
-        let effective_summary = match session_code.as_deref() {
-            Some(session_code) => {
-                latest_assistant_reply_for_session(&self.connection, session_code)?.or(summary)
-            }
-            None => summary,
-        };
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let effective_summary = summary;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
+            .connection, TransactionBehavior::Immediate)
             .map_err(storage_error)?;
         let changed = tx
             .execute(
@@ -343,9 +326,8 @@ impl AutomationRepository for SqliteAutomationRepository {
         execution_code: &str,
         deleted_at: &str,
     ) -> Result<AutomationExecutionRecord, AutomationError> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
+            .connection, TransactionBehavior::Immediate)
             .map_err(storage_error)?;
         let deleted = tx
             .query_row(
@@ -419,5 +401,136 @@ impl AutomationRepository for SqliteAutomationRepository {
 
         tx.commit().map_err(storage_error)?;
         Ok(deleted)
+    }
+}
+
+impl SqliteAutomationRepository {
+    pub fn connect(database_url: &str) -> Result<Self, AutomationError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteAutomationRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl AutomationRepository for SqliteAutomationRepository {
+    fn list_automations(&mut self) -> Result<Vec<Automation>, AutomationError> {
+        self.connection.call(
+            move |connection| SqliteAutomationRepositorySql { connection }.list_automations(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn execution_stats(
+        &mut self,
+        automation_codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, AutomationExecutionStats>, AutomationError> {
+        let automation_codes = automation_codes.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAutomationRepositorySql { connection }.execution_stats(&automation_codes)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn next_id(&mut self) -> Result<i64, AutomationError> {
+        self.connection.call(
+            move |connection| SqliteAutomationRepositorySql { connection }.next_id(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_automation(&mut self, automation: &Automation) -> Result<(), AutomationError> {
+        let automation = automation.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAutomationRepositorySql { connection }.create_automation(&automation)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_automation(&mut self, automation: &Automation) -> Result<(), AutomationError> {
+        let automation = automation.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAutomationRepositorySql { connection }.update_automation(&automation)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_execution_records(
+        &mut self,
+        automation_code: &str,
+    ) -> Result<Vec<AutomationExecutionRecord>, AutomationError> {
+        let automation_code = automation_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAutomationRepositorySql { connection }
+                    .list_execution_records(&automation_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn record_execution(
+        &mut self,
+        automation: &Automation,
+        draft: &AutomationExecutionDraft,
+    ) -> Result<Option<AutomationExecutionRecord>, AutomationError> {
+        let automation = automation.to_owned();
+        let draft = draft.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAutomationRepositorySql { connection }.record_execution(&automation, &draft)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn complete_execution_record(
+        &mut self,
+        automation_code: &str,
+        execution_code: &str,
+        status: AutomationExecutionStatus,
+        summary: Option<String>,
+        session_code: Option<String>,
+        finished_at: &str,
+    ) -> Result<(), AutomationError> {
+        let automation_code = automation_code.to_owned();
+        let execution_code = execution_code.to_owned();
+        let finished_at = finished_at.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAutomationRepositorySql { connection }.complete_execution_record(
+                    &automation_code,
+                    &execution_code,
+                    status,
+                    summary,
+                    session_code,
+                    &finished_at,
+                )
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_execution_record(
+        &mut self,
+        automation_code: &str,
+        execution_code: &str,
+        deleted_at: &str,
+    ) -> Result<AutomationExecutionRecord, AutomationError> {
+        let automation_code = automation_code.to_owned();
+        let execution_code = execution_code.to_owned();
+        let deleted_at = deleted_at.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAutomationRepositorySql { connection }.delete_execution_record(
+                    &automation_code,
+                    &execution_code,
+                    &deleted_at,
+                )
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
     }
 }

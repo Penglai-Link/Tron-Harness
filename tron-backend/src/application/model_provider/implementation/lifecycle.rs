@@ -5,7 +5,8 @@ impl ModelProviderService {
         database_url: &str,
         cipher: Arc<dyn VariableCipher>,
     ) -> Result<Self, ModelProviderError> {
-        let connection = open_connection(database_url)?;
+        let connection=crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(|_|ModelProviderError::Storage)?;
+        let (device_id,device_unbound)=connection.call(move |connection| {
         connection
             .execute_batch(MODEL_PROVIDER_MIGRATION)
             .map_err(|_| ModelProviderError::Storage)?;
@@ -73,13 +74,15 @@ impl ModelProviderService {
                 )
                 .map_err(|_| ModelProviderError::Storage)?;
         }
+            Ok((device_id,device_unbound))
+        },||ModelProviderError::Storage)?;
         let adapter: Arc<dyn ModelProviderAdapter> = Arc::new(PersonAiAdapter);
         let mut adapters = HashMap::new();
         adapters.insert(adapter.code(), adapter);
         Ok(Self {
             model_executor: Default::default(),
             model_attempt_salt: Arc::new(eliteforge_agent_core::RunId::new_v4().to_string()),
-            connection: Arc::new(Mutex::new(connection)),
+            connection,
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
             server_auth_events: broadcast::channel(16).0,
             device_unbound: Arc::new(AtomicBool::new(device_unbound)),
@@ -107,15 +110,17 @@ impl ModelProviderService {
     }
 
     pub fn list_connections(&self) -> Result<Vec<ProviderConnectionView>, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let existing = read_connection(&connection, ModelProviderCode::PersonAi)?;
-        Ok(vec![connection_view(
-            existing,
-            catalog_model_count(&connection, ModelProviderCode::PersonAi)?,
-        )])
+        let this = self.clone();
+        this.connection.clone().call(
+            move |connection| {
+                let existing = read_connection(&connection, ModelProviderCode::PersonAi)?;
+                Ok(vec![connection_view(
+                    existing,
+                    catalog_model_count(&connection, ModelProviderCode::PersonAi)?,
+                )])
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     /// Fetch the current Person-AI account information, including the latest
@@ -222,12 +227,12 @@ impl ModelProviderService {
         }
 
         let now = now_millis();
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let transaction = connection
-            .transaction()
+
+        let this = self.clone();
+        let worker_person_ai_user_id = person_ai_user_id.to_owned();
+        let worker_person_ai_username = person_ai_username.to_owned();
+        this.connection.clone().call(move |connection| { let person_ai_user_id=&worker_person_ai_user_id; let person_ai_username=&worker_person_ai_username;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| ModelProviderError::Storage)?;
 
         if let Some(credentials) =
@@ -296,6 +301,7 @@ impl ModelProviderService {
         transaction
             .commit()
             .map_err(|_| ModelProviderError::Storage)
+     },||ModelProviderError::Storage)
     }
 
     pub fn set_person_ai_identity(
@@ -303,38 +309,48 @@ impl ModelProviderService {
         person_ai_user_id: &str,
         person_ai_username: &str,
     ) -> Result<(), ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        connection
-            .execute(
-                "UPDATE provider_connections
+        let this = self.clone();
+        let worker_person_ai_user_id = person_ai_user_id.to_owned();
+        let worker_person_ai_username = person_ai_username.to_owned();
+        this.connection.clone().call(
+            move |connection| {
+                let person_ai_user_id = &worker_person_ai_user_id;
+                let person_ai_username = &worker_person_ai_username;
+                connection
+                    .execute(
+                        "UPDATE provider_connections
                  SET person_ai_user_id = ?1, person_ai_username = ?2, updated_at = ?3
                  WHERE provider_code = 'PersonAi'",
-                params![
-                    person_ai_user_id.trim(),
-                    person_ai_username.trim(),
-                    now_millis()
-                ],
-            )
-            .map_err(|_| ModelProviderError::Storage)?;
-        Ok(())
+                        params![
+                            person_ai_user_id.trim(),
+                            person_ai_username.trim(),
+                            now_millis()
+                        ],
+                    )
+                    .map_err(|_| ModelProviderError::Storage)?;
+                Ok(())
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub fn get_connection(
         &self,
         provider_code: ModelProviderCode,
     ) -> Result<ProviderConnectionView, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let row = read_connection(&connection, provider_code)?;
-        Ok(connection_view(
-            row,
-            catalog_model_count(&connection, provider_code)?,
-        ))
+        let this = self.clone();
+        let worker_provider_code = provider_code.clone();
+        this.connection.clone().call(
+            move |connection| {
+                let provider_code = worker_provider_code;
+                let row = read_connection(&connection, provider_code)?;
+                Ok(connection_view(
+                    row,
+                    catalog_model_count(&connection, provider_code)?,
+                ))
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub async fn get_account_balance(
@@ -371,43 +387,59 @@ impl ModelProviderService {
         &self,
         provider_code: ModelProviderCode,
     ) -> Result<Vec<ProviderCatalogModelView>, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        read_catalog_models(&connection, provider_code)
+        let this = self.clone();
+        let worker_provider_code = provider_code.clone();
+        this.connection.clone().call(
+            move |connection| {
+                let provider_code = worker_provider_code;
+                read_catalog_models(&connection, provider_code)
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub fn list_sync_runs(
         &self,
         provider_code: ModelProviderCode,
     ) -> Result<Vec<ProviderSyncRunView>, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        read_sync_runs(&connection, provider_code)
+        let this = self.clone();
+        let worker_provider_code = provider_code.clone();
+        this.connection.clone().call(
+            move |connection| {
+                let provider_code = worker_provider_code;
+                read_sync_runs(&connection, provider_code)
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub fn get_run_snapshot(
         &self,
         run_code: &str,
     ) -> Result<Option<ProviderModelRunSnapshotView>, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        read_run_snapshot(&connection, run_code)
+        let this = self.clone();
+        let worker_run_code = run_code.to_owned();
+        this.connection.clone().call(
+            move |connection| {
+                let run_code = &worker_run_code;
+                read_run_snapshot(&connection, run_code)
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub fn get_authorization_session(
         &self,
         session_id: &str,
     ) -> Result<ProviderAuthorizationSessionView, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        Ok(read_authorization_session(&connection, session_id)?.to_view())
+        let this = self.clone();
+        let worker_session_id = session_id.to_owned();
+        this.connection.clone().call(
+            move |connection| {
+                let session_id = &worker_session_id;
+                Ok(read_authorization_session(&connection, session_id)?.to_view())
+            },
+            || ModelProviderError::Storage,
+        )
     }
 }

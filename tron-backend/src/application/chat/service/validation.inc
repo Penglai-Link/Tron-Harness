@@ -172,13 +172,27 @@ fn resume_prompt(resume: &[ChatResumeEntry]) -> String {
 }
 
 fn resume_answer_summary(resume: &[ChatResumeEntry]) -> Option<String> {
-    let responses = resume.iter().flat_map(|entry| {
-        entry.payload.get("responses").and_then(Value::as_array).into_iter().flatten()
-    }).filter_map(|response| {
-        let question = response.get("question")?.as_str()?.trim();
-        let answer = response.get("answer")?.as_str()?.trim();
-        (!question.is_empty()).then(|| format!("- {question}\n  Answer: {}", if answer.is_empty() { "Skipped" } else { answer }))
-    }).collect::<Vec<_>>();
+    let responses = resume
+        .iter()
+        .flat_map(|entry| {
+            entry
+                .payload
+                .get("responses")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+        })
+        .filter_map(|response| {
+            let question = response.get("question")?.as_str()?.trim();
+            let answer = response.get("answer")?.as_str()?.trim();
+            (!question.is_empty()).then(|| {
+                format!(
+                    "- {question}\n  Answer: {}",
+                    if answer.is_empty() { "Skipped" } else { answer }
+                )
+            })
+        })
+        .collect::<Vec<_>>();
     (!responses.is_empty()).then(|| responses.join("\n"))
 }
 
@@ -231,8 +245,7 @@ pub(super) struct RawUserInputRequest {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RawUserInputQuestion {
-    #[serde(default)]
-    id: Option<String>,
+    id: String,
     question: String,
     options: Vec<RawUserInputOption>,
 }
@@ -240,122 +253,47 @@ struct RawUserInputQuestion {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RawUserInputOption {
-    #[serde(default)]
-    id: Option<String>,
+    id: String,
     label: String,
     description: Option<String>,
 }
 
-pub(super) fn raw_user_input_request(
-    run: &AgentInvocationResult,
-) -> Result<RawUserInputRequest, ChatSendError> {
-    run.observations
-        .iter()
-        .rev()
-        .find(|observation| observation.tool_name == crate::application::agent::CHAT_ASK_USER_TOOL)
-        .and_then(|observation| {
-            serde_json::from_str::<RawUserInputRequest>(&observation.output).ok()
-        })
-        .ok_or_else(|| {
-            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
-                "chat_ask_user returned an invalid request".into(),
-            ))
-        })
-}
-
-fn validate_user_input_answers(
-    questions: &[ChatUserInputQuestion],
-    answers: &[ChatUserInputAnswer],
-) -> Result<(), ChatError> {
-    if answers.len() != questions.len() {
-        return Err(ChatError::UserInputAnswerInvalid(
-            "one answer is required for every question".into(),
-        ));
-    }
-    for question in questions {
-        let Some(answer) = answers
-            .iter()
-            .find(|answer| answer.question_code == question.question_code)
-        else {
-            return Err(ChatError::UserInputAnswerInvalid(format!(
-                "missing answer for question `{}`",
-                question.question_code
-            )));
-        };
-        match answer.answer_kind {
-            ChatUserInputAnswerKind::Option => {
-                let Some(option_code) = answer.option_code.as_deref() else {
-                    return Err(ChatError::UserInputAnswerInvalid(
-                        "option answer requires optionCode".into(),
-                    ));
-                };
-                if !question
-                    .options
-                    .iter()
-                    .any(|option| option.option_code == option_code)
-                {
-                    return Err(ChatError::UserInputAnswerInvalid(format!(
-                        "option `{option_code}` does not belong to the question"
-                    )));
-                }
-                if answer
-                    .other_text
-                    .as_deref()
-                    .is_some_and(|value| !value.trim().is_empty())
-                {
-                    return Err(ChatError::UserInputAnswerInvalid(
-                        "option answer cannot include otherText".into(),
-                    ));
-                }
-            }
-            ChatUserInputAnswerKind::Other => {
-                let Some(other_text) = answer.other_text.as_deref() else {
-                    return Err(ChatError::UserInputAnswerInvalid(
-                        "other answer requires otherText".into(),
-                    ));
-                };
-                if other_text.trim().is_empty() || other_text.chars().count() > 2_000 {
-                    return Err(ChatError::UserInputAnswerInvalid(
-                        "otherText must contain 1 to 2000 characters".into(),
-                    ));
-                }
-                if answer.option_code.is_some() {
-                    return Err(ChatError::UserInputAnswerInvalid(
-                        "other answer cannot include optionCode".into(),
-                    ));
-                }
-            }
-            ChatUserInputAnswerKind::Skipped => {
-                if answer.option_code.is_some() || answer.other_text.is_some() {
-                    return Err(ChatError::UserInputAnswerInvalid(
-                        "skipped answer cannot include optionCode or otherText".into(),
-                    ));
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-
-/// Legacy question cards are optional projections of a native paused run.
+/// Question cards are projections of a native paused run.
 /// Generic Input and Approval retain their full schema and content on `run.native`.
-pub(super) fn paused_run_presentation(run:&AgentInvocationResult)->Result<(String,Option<RawUserInputRequest>),ChatSendError> {
-    if let Some(native)=run.native.as_ref().filter(|native|native.status==crate::domain::agent::AgentNativeRunStatus::AwaitingInput) {
+pub(super) fn paused_run_presentation(
+    run: &AgentInvocationResult,
+) -> Result<(String, Option<RawUserInputRequest>), ChatSendError> {
+    if let Some(native) = run
+        .native
+        .as_ref()
+        .filter(|native| native.status == crate::domain::agent::AgentNativeRunStatus::AwaitingInput)
+    {
         if native.interactions.is_empty() {
-            return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed("native paused run has no pending interaction".into())));
+            return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                "native paused run has no pending interaction".into(),
+            )));
         }
-        if let Ok(raw)=raw_user_input_request(run) {return Ok((raw.intro.clone(),Some(raw)));}
         for interaction in &native.interactions {
-            if let Some(presentation)=interaction.presentation.as_ref().filter(|value|value.get("kind").and_then(serde_json::Value::as_str)==Some("ask_user")) {
-                let mut raw:RawUserInputRequest=serde_json::from_value(presentation.clone()).map_err(|_|ChatSendError::Agent(AgentInvocationError::RuntimeFailed("native question presentation is invalid".into())))?;
-                raw.framework_interaction_id=Some(interaction.id.clone());
-                return Ok((raw.intro.clone(),Some(raw)));
+            if let Some(presentation) = interaction.presentation.as_ref().filter(|value| {
+                value.get("kind").and_then(serde_json::Value::as_str) == Some("ask_user")
+            }) {
+                let mut raw: RawUserInputRequest = serde_json::from_value(presentation.clone())
+                    .map_err(|_| {
+                        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                            "native question presentation is invalid".into(),
+                        ))
+                    })?;
+                raw.framework_interaction_id = Some(interaction.id.clone());
+                return Ok((raw.intro.clone(), Some(raw)));
             }
         }
-        return Ok((run.final_output.clone(),None));
+        return Ok((run.final_output.clone(), None));
     }
-    let raw=raw_user_input_request(run)?;Ok((raw.intro.clone(),Some(raw)))
+    Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+        "paused result must contain a native Framework interaction".into(),
+    )))
 }
 #[cfg(test)]
-mod native_pause_tests { include!("native_pause_tests.inc"); }
+mod native_pause_tests {
+    include!("native_pause_tests.inc");
+}

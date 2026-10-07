@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use chrono::{DateTime, TimeZone, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
+use rusqlite::{Connection, Row, params};
 
 use crate::{
     domain::automation::{
@@ -45,22 +45,9 @@ pub(super) fn column_exists(
     Ok(columns.iter().any(|value| value == column_name))
 }
 
-pub(super) fn table_exists(
-    connection: &Connection,
-    table_name: &str,
-) -> Result<bool, AutomationError> {
-    connection
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
-            [table_name],
-            |_| Ok(true),
-        )
-        .optional()
-        .map(|value| value.unwrap_or(false))
-        .map_err(storage_error)
-}
-
-pub(super) fn next_id_in_transaction(tx: &Transaction<'_>) -> Result<i64, AutomationError> {
+pub(super) fn next_id_in_transaction(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+) -> Result<i64, AutomationError> {
     let max_id = tx
         .query_row(
             "SELECT max(id) FROM (SELECT id FROM automations UNION ALL SELECT id FROM automation_execution_records)",
@@ -73,7 +60,7 @@ pub(super) fn next_id_in_transaction(tx: &Transaction<'_>) -> Result<i64, Automa
 }
 
 pub(super) fn update_automation_in_transaction(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     automation: &Automation,
 ) -> Result<(), AutomationError> {
     tx.execute(
@@ -161,99 +148,6 @@ pub(super) fn row_to_execution_record(
         finished_at: row.get::<_, Option<i64>>(10)?.map(timestamp_from_millis),
         created_at: timestamp_from_millis(row.get(11)?),
     })
-}
-
-pub(super) fn hydrate_execution_summary(
-    connection: &Connection,
-    mut record: AutomationExecutionRecord,
-) -> Result<AutomationExecutionRecord, AutomationError> {
-    if let Some(session_code) = record.session_code.as_deref()
-        && let Some(reply) = latest_assistant_reply_for_session(connection, session_code)?
-    {
-        record.summary = Some(reply);
-    }
-    Ok(record)
-}
-
-pub(super) fn latest_assistant_reply_for_session(
-    connection: &Connection,
-    session_code: &str,
-) -> Result<Option<String>, AutomationError> {
-    if session_code.trim().is_empty() || !chat_message_schema_available(connection)? {
-        return Ok(None);
-    }
-    let reply = connection
-        .query_row(
-            "SELECT content
-             FROM chat_messages
-             WHERE session_code = ?1
-               AND lower(role) = 'assistant'
-               AND trim(content) <> ''
-             ORDER BY created_at DESC, id DESC
-             LIMIT 1",
-            [session_code],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(storage_error)?;
-    Ok(reply
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty()))
-}
-
-pub(super) fn backfill_execution_session_codes(
-    connection: &Connection,
-) -> Result<(), AutomationError> {
-    let mut statement = connection
-        .prepare(
-            "SELECT execution_code, summary FROM automation_execution_records WHERE session_code IS NULL AND summary IS NOT NULL",
-        )
-        .map_err(storage_error)?;
-    let candidates = statement
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-        })
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    for (execution_code, summary) in candidates {
-        let Some(session_code) = summary
-            .as_deref()
-            .and_then(extract_session_code_from_summary)
-        else {
-            continue;
-        };
-        connection
-            .execute(
-                "UPDATE automation_execution_records SET session_code = ?2 WHERE execution_code = ?1 AND session_code IS NULL",
-                params![execution_code, session_code],
-            )
-            .map_err(storage_error)?;
-    }
-    Ok(())
-}
-
-fn chat_message_schema_available(connection: &Connection) -> Result<bool, AutomationError> {
-    Ok(table_exists(connection, "chat_messages")?
-        && column_exists(connection, "chat_messages", "session_code")?
-        && column_exists(connection, "chat_messages", "role")?
-        && column_exists(connection, "chat_messages", "content")?
-        && column_exists(connection, "chat_messages", "created_at")?
-        && column_exists(connection, "chat_messages", "id")?)
-}
-
-fn extract_session_code_from_summary(summary: &str) -> Option<String> {
-    let marker = " in session ";
-    let start = summary.find(marker)? + marker.len();
-    let value = summary[start..]
-        .split_whitespace()
-        .next()?
-        .trim_matches(|item: char| matches!(item, '.' | ',' | ';'));
-    if value.starts_with("SESSION-") {
-        Some(value.to_string())
-    } else {
-        None
-    }
 }
 
 fn automation_mapping_error(error: AutomationError) -> rusqlite::Error {

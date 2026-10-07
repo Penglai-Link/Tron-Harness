@@ -5,7 +5,7 @@ use crate::{
             AgentInvocationCommand, AgentInvocationError, AgentInvocationResult,
             AgentInvocationService,
         },
-        short_term_memory::{GoalJudgeFailure, GoalSessionCommand, ShortTermMemoryService},
+        short_term_memory::{GoalSessionCommand, ShortTermMemoryService},
     },
     domain::{
         agent::{AgentModelConfig, EffectiveTool},
@@ -50,7 +50,10 @@ impl ChatService {
             return Ok(empty_result());
         }
         let active = memory.get_active_goal(session_code).map_err(memory_error)?;
-        if !active.is_some_and(|view| view.goal.status == "ACTIVE") {
+        if !active
+            .as_ref()
+            .is_some_and(|view| view.goal.status == "ACTIVE")
+        {
             return Ok(empty_result());
         }
         // An execution without native conservative observations cannot safely
@@ -92,19 +95,36 @@ impl ChatService {
             }),
             failure: Mutex::new(None),
         });
-        let mut request = fw::RunRequest::new(format!("goal/{session_code}/{previous_run}"), "");
+        let max_rounds = active
+            .as_ref()
+            .map(|view| {
+                view.goal
+                    .max_runs
+                    .saturating_sub(view.goal.runs_used)
+                    .max(1) as usize
+            })
+            .unwrap_or(1);
+        let mut request = fw::RunRequest::new(session_code, "");
+        request.goal_id = active.map(|view| view.goal.goal_code);
+        request.execution_scope = Some("goal-driver".into());
         let continuation = fw::ContinuationRequest {
             policy: policy.clone(),
             initial_state: json!({"runCode":previous_run}),
             initial_execution,
-            max_rounds: 20,
+            max_rounds,
         };
         if continuation.attach(&mut request).is_err() {
             pause_goal(&policy.memory, session_code)?;
             return Ok(empty_result());
         }
         let outcome = agent
-            .run_goal_driver(request, session_code, &previous_run, &adapter)
+            .run_goal_driver(
+                request,
+                session_code,
+                &previous_run,
+                &adapter,
+                &policy.resolved_model,
+            )
             .await;
         if let Err(error) = outcome {
             if let Some(business) = policy
@@ -219,118 +239,73 @@ impl GoalHarness {
             .ensure_continuation_active(&self.session_code, parent)
             .map_err(ChatSendError::Agent)?;
         let last_run = self.state.lock().await.last_run.clone();
-        let judge_input = self
-            .memory
-            .prepare_goal_judge_input(
-                &self.session_code,
-                &last_run.run_code,
-                &last_run.final_output,
-                last_run.step_count,
-            )
-            .map_err(|error| {
-                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(error.to_string()))
-            })?;
-        let Some(judge_input) = judge_input else {
-            return Ok(eliteforge_agent_framework::ContinuationDecision::Complete);
-        };
-        let judge_model = self.memory.goal_judge_model_config(&self.resolved_model);
-        self.memory
-            .record_goal_judge_started(&judge_input, &judge_model)
-            .map_err(|error| {
-                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(error.to_string()))
-            })?;
-        let max_attempts = self.memory.goal_judge_max_attempts_per_run();
-        let repair = std::sync::Arc::new(GoalJudgeRepair {
-            memory: self.memory.clone(),
-            input: judge_input.clone(),
-            model: judge_model.clone(),
-            max_attempts,
-            last_failure: std::sync::Mutex::new(None),
-        });
-        let request = self.memory.goal_judge_model_request(&judge_input);
-        let response = self
-            .agent
-            .generate_goal_judge_child(
-                &judge_model,
-                &request,
-                repair.clone(),
-                max_attempts as usize,
-                parent,
-            )
-            .await;
-        let decision = match response {
-            Ok(response) => {
-                let output = self
-                    .memory
-                    .model_goal_judge_output(&response)
-                    .map_err(|e| {
-                        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(e.message))
-                    })?;
-                self.memory
-                    .commit_goal_judge_decision(
-                        judge_input.clone(),
-                        output,
-                        &judge_model,
-                        &response,
-                    )
-                    .map_err(|e| {
-                        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(e.to_string()))
-                    })?
+        let framework = self.memory.framework().await.map_err(memory_error)?;
+        let goals = framework.goals().map_err(memory_error)?;
+        for _ in 0..3 {
+            let Some(goal) = goals
+                .active(&self.session_code)
+                .await
+                .map_err(memory_error)?
+            else {
+                return Ok(fw::ContinuationDecision::Complete);
+            };
+            if goal.status != fw::GoalStatus::Active {
+                return Ok(fw::ContinuationDecision::Complete);
             }
-            Err(AgentInvocationError::RunStopped) => {
-                return Err(ChatSendError::Agent(AgentInvocationError::RunStopped));
-            }
-            Err(error) => {
-                if parent
-                    .extensions
-                    .get::<fw::ContinuationBudget>()
-                    .is_some_and(|budget| budget.exhausted())
-                    || parent
-                        .usage()
-                        .input_tokens
-                        .saturating_add(parent.usage().output_tokens)
-                        >= parent.token_ceiling
-                {
-                    return Err(ChatSendError::Agent(error));
+            let run = fw::RunId::parse_str(&last_run.run_code).map_err(memory_error)?;
+            let evidence = fw::GoalEvidence {
+                goal: goal.clone(),
+                run_id: run,
+                output: last_run.final_output.clone().into(),
+                steps: last_run.step_count as usize,
+            };
+            let judgement =
+                fw::GoalPolicy::evaluate(&fw::ModelGoalPolicy::default(), &evidence, parent).await;
+            let decision = match judgement {
+                Ok(decision) => decision,
+                Err(error) if matches!(error.primary(), fw::AgentError::Cancelled) => {
+                    return Err(ChatSendError::Agent(AgentInvocationError::RunStopped));
                 }
-                let failure = repair
-                    .last_failure
-                    .lock()
-                    .unwrap()
-                    .clone()
-                    .unwrap_or_else(|| GoalJudgeFailure {
-                        error_code: "GOAL_JUDGE_MODEL_REQUEST_FAILED".into(),
-                        message: error.message(),
-                    });
-                self.memory
-                    .record_goal_judge_failure(judge_input, failure, &judge_model)
-                    .map_err(|e| {
-                        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(e.to_string()))
-                    })?
+                Err(error) => {
+                    goals
+                        .judgement_failed(&goal.id, goal.revision, error.to_string())
+                        .await
+                        .map_err(memory_error)?;
+                    continue;
+                }
+            };
+            let applied = match goals.decide(&goal.id, goal.revision, run, decision).await {
+                Ok(goal) => goal,
+                Err(fw::StateError::Invalid(reason)) => {
+                    goals
+                        .judgement_failed(&goal.id, goal.revision, reason)
+                        .await
+                        .map_err(memory_error)?;
+                    continue;
+                }
+                Err(fw::StateError::Conflict) => return Ok(fw::ContinuationDecision::Complete),
+                Err(error) => return Err(memory_error(error)),
+            };
+            if applied.status != fw::GoalStatus::Active {
+                return Ok(fw::ContinuationDecision::Complete);
             }
-        };
-        let Some(prompt) = decision.continuation_prompt else {
-            return Ok(eliteforge_agent_framework::ContinuationDecision::Complete);
-        };
-        if !self
-            .memory
-            .should_admit_goal_continuation(&self.session_code, &decision.goal_code)
-            .map_err(|error| {
-                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(error.to_string()))
-            })?
-        {
-            return Ok(eliteforge_agent_framework::ContinuationDecision::Complete);
+            let decision = applied
+                .last_decision
+                .ok_or_else(|| memory_error("Framework goal decision missing"))?;
+            return Ok(fw::ContinuationDecision::Continue(
+                serde_json::to_value(GoalContinuationPlan {
+                    prompt: decision
+                        .next_input
+                        .ok_or_else(|| memory_error("Framework continuation input missing"))?,
+                    goal_code: applied.id,
+                    verdict: format!("{:?}", decision.verdict),
+                })
+                .map_err(memory_error)?,
+            ));
         }
-
-        Ok(fw::ContinuationDecision::Continue(
-            serde_json::to_value(GoalContinuationPlan {
-                prompt,
-                goal_code: decision.goal_code,
-                verdict: decision.verdict,
-            })
-            .map_err(memory_error)?,
-        ))
+        Ok(fw::ContinuationDecision::Complete)
     }
+
     async fn execute_goal(
         &self,
         next: Value,
@@ -477,54 +452,5 @@ impl ContinuationPolicy for GoalHarness {
     }
     async fn budget_exhausted(&self, _: &Value, _: &fw::RunContext) -> Result<(), fw::AgentError> {
         self.native(pause_goal(&self.memory, &self.session_code))
-    }
-}
-struct GoalJudgeRepair {
-    memory: ShortTermMemoryService,
-    input: crate::application::short_term_memory::PreparedGoalJudgeInput,
-    model: AgentModelConfig,
-    max_attempts: u32,
-    last_failure: std::sync::Mutex<Option<GoalJudgeFailure>>,
-}
-#[async_trait::async_trait]
-impl eliteforge_agent_core::ModelResponseValidator for GoalJudgeRepair {
-    async fn validate(
-        &self,
-        response: &eliteforge_agent_core::ChatResponse,
-        attempt: usize,
-    ) -> Result<Option<eliteforge_agent_core::ChatRequest>, eliteforge_agent_core::AgentError> {
-        let wire =
-            eliteforge_agent_official_plugin_model_http::response_from_framework(response.clone())?;
-        let response = crate::adapters::outbound::model::http_model_client::convert(&wire)
-            .map_err(eliteforge_agent_core::AgentError::Run)?;
-        match self.memory.model_goal_judge_output(&response) {
-            Ok(_) => Ok(None),
-            Err(failure) => {
-                self.memory
-                    .record_goal_judge_attempt_failed(
-                        &self.input,
-                        attempt as u32,
-                        self.max_attempts,
-                        &failure,
-                        &self.model,
-                    )
-                    .map_err(|e| eliteforge_agent_core::AgentError::Run(e.to_string()))?;
-                *self.last_failure.lock().unwrap() = Some(failure.clone());
-                if attempt >= self.max_attempts as usize {
-                    return Err(eliteforge_agent_core::AgentError::Run(failure.message));
-                }
-                let request = self
-                    .memory
-                    .goal_judge_model_retry_request(&self.input, &failure);
-                let wire = crate::adapters::outbound::model::http_model_client::convert(&request)
-                    .map_err(eliteforge_agent_core::AgentError::Run)?;
-                let mut request =
-                    eliteforge_agent_official_plugin_model_http::request_to_framework(wire)?;
-                request.options.temperature = self.model.temperature;
-                request.options.top_p = self.model.top_p;
-                request.options.max_output_tokens = self.model.max_tokens;
-                Ok(Some(request))
-            }
-        }
     }
 }

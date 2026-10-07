@@ -31,6 +31,7 @@ impl AgentInvocationService {
         session: &str,
         previous_run: &str,
         adapter: &str,
+        model: &AgentModelConfig,
     ) -> Result<fw::RunResult, AgentInvocationError> {
         let host = self.framework_host.as_ref().ok_or_else(|| {
             AgentInvocationError::RuntimeFailed("native continuation host is unavailable".into())
@@ -43,6 +44,12 @@ impl AgentInvocationService {
             .continuation_agent()
             .await
             .map_err(AgentInvocationError::RuntimeFailed)?;
+        super::super::framework_runtime::attach_auxiliary_model(
+            &mut request,
+            model,
+            self.model_client.clone(),
+        )
+        .map_err(map_continuation_error)?;
         group.attach(&mut request.extensions);
         let presentation = host
             .presentation_service()
@@ -94,20 +101,6 @@ impl AgentInvocationService {
             self.invoke(command, user, locale),
         )
         .await
-    }
-    pub(crate) async fn generate_goal_judge_child(
-        &self,
-        model: &AgentModelConfig,
-        request: &ModelRequest,
-        repair: Arc<dyn eliteforge_agent_core::ModelResponseValidator>,
-        max_calls: usize,
-        parent: &fw::RunContext,
-    ) -> Result<ModelResponse, AgentInvocationError> {
-        self.model_client
-            .generate_goal_judge_child(model, request, repair, max_calls, parent)
-            .await
-            .into_result()
-            .map_err(map_continuation_error)
     }
 }
 fn map_continuation_error(error: fw::AgentError) -> AgentInvocationError {

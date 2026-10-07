@@ -3,7 +3,6 @@ export const chatApiEndpoints = {
   listChatSessionGroups: "GET /api/v1/chats/session-groups?workspaceCode={workspaceCode}",
   archiveChatSession: "POST /api/v1/chats/sessions/{sessionCode}/archive",
   createChatSession: "POST /api/v1/chats/sessions",
-  deleteChatSession: "DELETE /api/v1/chats/sessions/{sessionCode}",
   downloadChatSessionAttachment: "GET /api/v1/chats/sessions/{sessionCode}/attachments/{attachmentCode}",
   updateChatSession: "PATCH /api/v1/chats/sessions/{sessionCode}",
   listChatMessages: "GET /api/v1/chats/sessions/{sessionCode}/messages",

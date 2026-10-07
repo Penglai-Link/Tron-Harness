@@ -3,7 +3,7 @@ use super::*;
 use eliteforge_agent_framework::FrameworkBuilder;
 use eliteforge_agent_official_plugin_storage_local::LocalStoragePlugin;
 impl FrameworkHost {
-    pub(super) fn framework_builder(
+    pub(super) async fn framework_builder(
         &self,
         packs: &BTreeMap<String, bool>,
         _extensions: &BTreeMap<String, bool>,
@@ -12,11 +12,27 @@ impl FrameworkHost {
             .default_models(false)
             .capability_skills_root(self.0.path.with_extension("skills"))
             .plugin(eliteforge_agent_official_plugin_agui::AgUiPlugin::default())
-            .plugin(LocalStoragePlugin::new(
-                &self.0.path,
-                self.0.path.with_extension("artifacts"),
-            ))
+            .plugin(
+                LocalStoragePlugin::new(&self.0.path, self.0.path.with_extension("artifacts"))
+                    .with_database(self.shared_database().await.map_err(|e| e.to_string())?),
+            )
             .plugin(eliteforge_agent_framework::ReactPlugin)
+            .plugin(fw::AgentLoopPlugin::named(
+                "tron.external-loop",
+                eliteforge_agent_framework::ExternalAgentLoop,
+            ))
+            .plugin(fw::AgentLoopPlugin::named(
+                "tron.continuation-loop",
+                eliteforge_agent_framework::ContinuationLoop,
+            ))
+            .plugin(fw::ExternalAgentPlugin::new(
+                super::super::external::HostExternalAgent,
+            ))
+            .plugin(eliteforge_agent_framework::GoalPlugin)
+            .plugin(fw::AgentLoopPlugin::named(
+                "tron.summary-loop",
+                super::super::summary_loop::SummaryLoop,
+            ))
             .plugin(fw::ContextAssemblerPlugin::named(
                 "tron.driver.context",
                 fw::DefaultContextAssembler::default(),
@@ -113,6 +129,7 @@ impl FrameworkHost {
         };
         Ok(AgentSelection {
             agent_loop: Some("builtin.react-loop".into()),
+            external_agent: Some("framework.external-agent".into()),
             model_strategy: one(registry.providers::<fw::ModelStrategyService>())?,
             context_assembler: Some(
                 if pack_enabled("tron.harness") && enabled("context") && enabled("tool") {
@@ -230,6 +247,7 @@ impl FrameworkHost {
         }
         let framework = self
             .framework_builder(&packs, &extensions)
+            .await
             .map_err(fw::AgentError::InvalidConfiguration)?
             .build()
             .await?;

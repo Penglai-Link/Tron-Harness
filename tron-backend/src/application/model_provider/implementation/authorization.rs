@@ -6,33 +6,37 @@ impl ModelProviderService {
         command: CreateProviderAuthorizationCommand,
     ) -> Result<ProviderAuthorizationSessionView, ModelProviderError> {
         let (adapter, existing_client_id, server_base_url) = {
-            let connection = self
-                .connection
-                .lock()
-                .map_err(|_| ModelProviderError::Storage)?;
-            let row = read_connection(&connection, command.provider_code)?;
-            let server_base_url = match command
-                .server_base_url
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                Some(value) => normalize_server_base_url(Some(value))?,
-                None => row
-                    .as_ref()
-                    .map(|row| row.server_base_url.clone())
-                    .unwrap_or_else(|| PERSON_AI_DEFAULT_SERVER_BASE_URL.into()),
-            };
-            let existing_client_id = row
-                .as_ref()
-                .and_then(|row| row.credentials_encrypted.as_deref())
-                .and_then(|encrypted| self.decrypt_credentials(encrypted).ok())
-                .map(|credentials| credentials.client_id);
-            (
-                self.adapter(command.provider_code)?,
-                existing_client_id,
-                server_base_url,
-            )
+            let this = self.clone();
+            let worker_command = command.clone();
+            this.connection.clone().call(
+                move |connection| {
+                    let command = worker_command;
+                    let row = read_connection(&connection, command.provider_code)?;
+                    let server_base_url = match command
+                        .server_base_url
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                    {
+                        Some(value) => normalize_server_base_url(Some(value))?,
+                        None => row
+                            .as_ref()
+                            .map(|row| row.server_base_url.clone())
+                            .unwrap_or_else(|| PERSON_AI_DEFAULT_SERVER_BASE_URL.into()),
+                    };
+                    let existing_client_id = row
+                        .as_ref()
+                        .and_then(|row| row.credentials_encrypted.as_deref())
+                        .and_then(|encrypted| this.decrypt_credentials(encrypted).ok())
+                        .map(|credentials| credentials.client_id);
+                    Ok((
+                        this.adapter(command.provider_code)?,
+                        existing_client_id,
+                        server_base_url,
+                    ))
+                },
+                || ModelProviderError::Storage,
+            )?
         };
         let remote = match adapter
             .create_authorization(
@@ -60,10 +64,12 @@ impl ModelProviderService {
             created_at: now,
             updated_at: now,
         };
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
+
+        let this = self.clone();
+        let worker_command = command.clone();
+        let worker_server_base_url = server_base_url.clone();
+        let worker_now = now.clone();
+        this.connection.clone().call(move |connection| { let command=worker_command;  let server_base_url=worker_server_base_url; let now=worker_now;
         connection
             .execute(
                 "INSERT INTO provider_connections (
@@ -108,6 +114,7 @@ impl ModelProviderService {
             )
             .map_err(|_| ModelProviderError::Storage)?;
         Ok(view)
+     },||ModelProviderError::Storage)
     }
 
     pub async fn poll_authorization_session(
@@ -115,11 +122,18 @@ impl ModelProviderService {
         command: CompleteProviderAuthorizationCommand,
     ) -> Result<CompleteProviderAuthorizationResult, ModelProviderError> {
         let stored = {
-            let connection = self
-                .connection
-                .lock()
-                .map_err(|_| ModelProviderError::Storage)?;
-            read_authorization_session(&connection, &command.session_id)?
+            let this = self.clone();
+            let worker_command = command.clone();
+            this.connection.clone().call(
+                move |connection| {
+                    let command = worker_command;
+                    Ok(read_authorization_session(
+                        &connection,
+                        &command.session_id,
+                    )?)
+                },
+                || ModelProviderError::Storage,
+            )?
         };
         let adapter = self.adapter(stored.provider_code)?;
         let authorization_poll = adapter
@@ -136,10 +150,11 @@ impl ModelProviderService {
         match authorization_poll {
             ExternalAuthorizationPoll::Pending { status, expires_at } => {
                 let now = now_millis();
-                let connection = self
-                    .connection
-                    .lock()
-                    .map_err(|_| ModelProviderError::Storage)?;
+
+                let this = self.clone();
+                let worker_stored = stored.clone();
+                let worker_now = now.clone();
+                this.connection.clone().call(move |connection| { let stored=worker_stored;  let now=worker_now;
                 connection
                     .execute(
                         "UPDATE provider_authorization_sessions SET status = ?2, expires_at = ?3, updated_at = ?4 WHERE session_id = ?1",
@@ -147,13 +162,15 @@ impl ModelProviderService {
                     )
                     .map_err(|_| ModelProviderError::Storage)?;
                 Err(ModelProviderError::AuthorizationPending)
+             },||ModelProviderError::Storage)
             }
             ExternalAuthorizationPoll::Ended { status } => {
                 let now = now_millis();
-                let connection = self
-                    .connection
-                    .lock()
-                    .map_err(|_| ModelProviderError::Storage)?;
+
+                let this = self.clone();
+                let worker_stored = stored.clone();
+                let worker_now = now.clone();
+                this.connection.clone().call(move |connection| { let stored=worker_stored;  let now=worker_now;
                 connection
                     .execute(
                         "UPDATE provider_authorization_sessions SET status = ?2, updated_at = ?3 WHERE session_id = ?1",
@@ -161,6 +178,7 @@ impl ModelProviderService {
                     )
                     .map_err(|_| ModelProviderError::Storage)?;
                 Err(ModelProviderError::AuthorizationEnded(status))
+             },||ModelProviderError::Storage)
             }
             ExternalAuthorizationPoll::Completed(credentials) => {
                 let validated_identity = async {
@@ -189,12 +207,10 @@ impl ModelProviderService {
                 let encrypted = self.encrypt_credentials(&credentials)?;
                 let now = now_millis();
                 let run_code = sync_run_code(now);
-                let mut connection = self
-                    .connection
-                    .lock()
-                    .map_err(|_| ModelProviderError::Storage)?;
-                let transaction = connection
-                    .transaction()
+
+                let this = self.clone();
+                this.connection.clone().call(move |connection| {
+                let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate)
                     .map_err(|_| ModelProviderError::Storage)?;
                 replace_authorized_connection(
                     &transaction,
@@ -213,7 +229,7 @@ impl ModelProviderService {
                     .commit()
                     .map_err(|_| ModelProviderError::Storage)?;
                 if stored.provider_code == ModelProviderCode::PersonAi {
-                    self.clear_device_unbound_flag();
+                    this.clear_device_unbound_flag();
                 }
                 let session =
                     read_authorization_session(&connection, &stored.session_id)?.to_view();
@@ -225,6 +241,7 @@ impl ModelProviderService {
                     text_verified: true,
                     embedding_verified: true,
                 })
+             },||ModelProviderError::Storage)
             }
         }
     }

@@ -107,30 +107,6 @@ impl ContextPriceInputs {
 }
 
 impl ContextProvidersConfig {
-    /// Normalize legacy six-block files in memory, preserving their relative order.
-    pub fn normalize_legacy_order(&mut self) {
-        if !self.order.iter().any(|id| id == "knowledge_base") {
-            let legacy = ContextProvidersConfig::default()
-                .order
-                .into_iter()
-                .filter(|id| id != "knowledge_base")
-                .collect::<std::collections::BTreeSet<_>>();
-            let actual = self
-                .order
-                .iter()
-                .cloned()
-                .collect::<std::collections::BTreeSet<_>>();
-            if self.order.len() == legacy.len() && actual == legacy {
-                let position = self
-                    .order
-                    .iter()
-                    .position(|id| id == "current_session_history")
-                    .unwrap();
-                self.order.insert(position, "knowledge_base".into());
-            }
-        }
-    }
-
     pub fn validate(&self) -> Result<(), String> {
         let expected = ContextProvidersConfig::default().order;
         let actual = self.order.iter().collect::<std::collections::BTreeSet<_>>();
@@ -159,31 +135,5 @@ impl ContextProvidersConfig {
             }
         }
         self.prices.validate()
-    }
-}
-
-#[cfg(test)]
-mod knowledge_base_order_tests {
-    use super::*;
-    #[test]
-    fn legacy_order_is_normalized_without_reordering_or_accepting_invalid_entries() {
-        let mut config = ContextProvidersConfig::default();
-        config.order.retain(|id| id != "knowledge_base");
-        config.order.swap(0, 1);
-        let original = config.order.clone();
-        config.normalize_legacy_order();
-        assert!(config.validate().is_ok());
-        assert_eq!(
-            config
-                .order
-                .iter()
-                .filter(|id| id.as_str() != "knowledge_base")
-                .cloned()
-                .collect::<Vec<_>>(),
-            original
-        );
-        config.order.push("knowledge_base".into());
-        config.normalize_legacy_order();
-        assert!(config.validate().is_err());
     }
 }

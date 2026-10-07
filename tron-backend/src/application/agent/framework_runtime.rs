@@ -29,3 +29,8 @@ mod question;
 
 #[cfg(test)]
 mod context_auth_recovery_tests;
+
+mod auxiliary_models;
+pub(crate) use auxiliary_models::attach_auxiliary_model;
+
+pub(crate) mod summary_loop;

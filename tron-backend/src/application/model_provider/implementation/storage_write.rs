@@ -59,7 +59,7 @@ pub(super) fn read_run_snapshot(
 }
 
 pub(super) fn apply_catalog_snapshot(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     provider_code: ModelProviderCode,
     catalog: &[ExternalCatalogModel],
     now: i64,
@@ -117,7 +117,7 @@ pub(super) fn apply_catalog_snapshot(
 }
 
 pub(super) fn apply_multimedia_catalog_snapshot(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     provider_code: ModelProviderCode,
     catalog: &[ExternalMultimediaCatalogModel],
     now: i64,
@@ -168,7 +168,7 @@ pub(super) fn apply_multimedia_catalog_snapshot(
 }
 
 pub(super) fn replace_authorized_connection(
-    transaction: &Transaction<'_>,
+    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     provider_code: ModelProviderCode,
     credentials: &ProviderCredentials,
     person_ai_user_id: &str,

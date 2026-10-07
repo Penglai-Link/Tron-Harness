@@ -1,3 +1,4 @@
+import { setApiWorkspaceCode } from "@/shared/api/httpClient";
 import { defaultMainAgentWindowState, MAIN_AGENT_WINDOW_STORAGE_KEY } from "@/domain/agent/model/mainAgentWindowState";
 import { LocaleMenu } from "./LocaleMenu";
 import { ThemeMenu } from "./ThemeMenu";
@@ -412,6 +413,7 @@ export function TronShell({
     ? compactWorkspacePath(selectedWorkspaceNode.label)
     : selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace");
   const activeWorkspaceCode = effectiveSecondarySpaceId || effectivePrimarySpaceId;
+  useLayoutEffect(() => { setApiWorkspaceCode(activeWorkspaceCode || null); return () => setApiWorkspaceCode(null); }, [activeWorkspaceCode]);
   const { create: createChatTab } = useCreateChatTab(activeWorkspaceCode);
   const workspaceTree = useMemo(
     () => buildWorkspaceTree(workspaceSwitcher.secondarySpaces),

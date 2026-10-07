@@ -32,9 +32,8 @@ use crate::{
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository,
                 SqliteNavigationRepository, SqliteProjectRepository, SqlitePromptRepository,
-                SqliteResourceRepository, SqliteShortTermMemoryRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteVariableRepository,
-                SqliteWorkspaceRepository,
+                SqliteResourceRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
+                SqliteVariableRepository, SqliteWorkspaceRepository,
             },
             resource_connectivity::ProtocolResourceConnectionVerifier,
             resource_storage::LocalObjectStorage,
@@ -86,18 +85,6 @@ use self::{
     startup::{build_graph_core, build_graph_services, build_rag_service},
 };
 
-static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
-static GLOBAL_APP_SERVICE: OnceLock<AppService> = OnceLock::new();
-static GLOBAL_PROJECT_SERVICE: OnceLock<ProjectService> = OnceLock::new();
-static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
-static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
-static GLOBAL_RESOURCE_SERVICE: OnceLock<ResourceService> = OnceLock::new();
-static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
-static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
-static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
-static GLOBAL_SHORT_TERM_MEMORY_SERVICE: OnceLock<ShortTermMemoryService> = OnceLock::new();
-static GLOBAL_MEMORY_WORK_DOMAIN_SERVICE: OnceLock<MemoryWorkDomainService> = OnceLock::new();
-static GLOBAL_NAVIGATION_SERVICE: OnceLock<NavigationService> = OnceLock::new();
 static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService, GraphExplorerService)> =
     OnceLock::new();
@@ -114,6 +101,7 @@ pub type AppMemoryService = MemoryService<
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
+    _temporary_database: Option<Arc<tempfile::TempDir>>,
     pub readiness: AppReadiness,
     pub agui_events: Arc<AguiEventSink>,
     pub agui_replay_store: Arc<dyn AgentAguiReplayStore>,
@@ -180,17 +168,30 @@ impl AppState {
 
     /// Explicit identity registry for embedded hosts and isolated integration tests.
     pub fn new_with_profiles<I>(
-        config: AppConfig,
+        mut config: AppConfig,
         id_provider: Arc<I>,
         profiles: ProfileRegistryService,
     ) -> Result<Self, AppBootstrapError>
     where
         I: SnowflakeIdProvider + IdGenerator + 'static,
     {
+        let temporary_database = if config.database_url == ":memory:" {
+            let directory = Arc::new(
+                tempfile::tempdir()
+                    .map_err(|source| AppBootstrapError::DatabaseInitFailed { source })?,
+            );
+            config.database_url = directory
+                .path()
+                .join("tron.sqlite3")
+                .to_string_lossy()
+                .into_owned();
+            Some(directory)
+        } else {
+            None
+        };
         let agui_events = Arc::new(AguiEventSink::new(&config.event_bus));
         let agui_replay_store = Arc::new(
-            SqliteAgentEventReplayStore::connect(&config.database_url)
-                .expect("agent event replay store should initialize"),
+            SqliteAgentEventReplayStore::new().expect("agent event replay store should initialize"),
         );
         let agent_presentation = AgentAguiStreamService::with_replay_store(
             agui_events.clone(),
@@ -205,88 +206,39 @@ impl AppState {
         let model_inference_client = http_client_pool.model_inference_client();
         let runtime_http_client = http_client_pool.runtime_control_client();
         let document_parsing_client = http_client_pool.document_parsing_client();
-        let workspaces = if config.database_url == ":memory:" {
-            GLOBAL_WORKSPACE_SERVICE
-                .get_or_init(|| build_workspace_service(":memory:", event_bus.clone()))
-                .clone()
-        } else {
-            build_workspace_service(&config.database_url, event_bus.clone())
-        };
-        let navigation = if config.database_url == ":memory:" {
-            GLOBAL_NAVIGATION_SERVICE
-                .get_or_init(|| build_navigation_service(":memory:", config.navigation.max_depth))
-                .clone()
-        } else {
-            build_navigation_service(&config.database_url, config.navigation.max_depth)
-        };
-        let apps = if config.database_url == ":memory:" {
-            GLOBAL_APP_SERVICE
-                .get_or_init(|| build_app_service(":memory:", workspaces.clone()))
-                .clone()
-        } else {
-            build_app_service(&config.database_url, workspaces.clone())
-        };
-        let projects = if config.database_url == ":memory:" {
-            GLOBAL_PROJECT_SERVICE
-                .get_or_init(|| build_project_service(":memory:", workspaces.clone(), apps.clone()))
-                .clone()
-        } else {
-            build_project_service(&config.database_url, workspaces.clone(), apps.clone())
-        };
-        let tasks = if config.database_url == ":memory:" {
-            GLOBAL_TASK_SERVICE
-                .get_or_init(|| {
-                    build_task_service(
-                        ":memory:",
-                        workspaces.clone(),
-                        apps.clone(),
-                        event_bus.clone(),
-                    )
-                })
-                .clone()
-        } else {
-            build_task_service(
-                &config.database_url,
-                workspaces.clone(),
-                apps.clone(),
-                event_bus.clone(),
-            )
-        };
+        let workspaces = build_workspace_service(&config.database_url, event_bus.clone());
+        let navigation =
+            build_navigation_service(&config.database_url, config.navigation.max_depth);
+        let apps = build_app_service(&config.database_url, workspaces.clone());
+        let projects =
+            build_project_service(&config.database_url, workspaces.clone(), apps.clone());
+        let tasks = build_task_service(
+            &config.database_url,
+            workspaces.clone(),
+            apps.clone(),
+            event_bus.clone(),
+        );
         let terminal = TerminalService::new(
             apps.clone(),
             workspaces.clone(),
             config.terminal_working_directory.clone(),
         );
-        let variables = if config.database_url == ":memory:" {
-            GLOBAL_VARIABLE_SERVICE
-                .get_or_init(|| build_variable_service(":memory:", workspaces.clone(), &config))
-                .clone()
-        } else {
-            build_variable_service(&config.database_url, workspaces.clone(), &config)
-        };
-        let resources = if config.database_url == ":memory:" {
-            GLOBAL_RESOURCE_SERVICE
-                .get_or_init(|| {
-                    build_resource_service(
-                        ":memory:",
-                        workspaces.clone(),
-                        variables.clone(),
-                        &config,
-                        event_bus.clone(),
-                    )
-                })
-                .clone()
-        } else {
-            build_resource_service(
+        let variables = build_variable_service(&config.database_url, workspaces.clone(), &config);
+        let resources = build_resource_service(
+            &config.database_url,
+            workspaces.clone(),
+            variables.clone(),
+            &config,
+            event_bus.clone(),
+        );
+        let knowledge_base_repository =
+            crate::adapters::outbound::persistence::sqlite::SqliteKnowledgeBaseRepository::connect(
                 &config.database_url,
-                workspaces.clone(),
-                variables.clone(),
-                &config,
-                event_bus.clone(),
             )
-        };
-        let knowledge_base_repository = crate::adapters::outbound::persistence::sqlite::SqliteKnowledgeBaseRepository::connect(&config.database_url)
-            .map_err(|_| AppBootstrapError::RagInitFailed{database_url:config.database_url.clone(),source:crate::domain::rag::RagError::StorageFailure})?;
+            .map_err(|_| AppBootstrapError::RagInitFailed {
+                database_url: config.database_url.clone(),
+                source: crate::domain::rag::RagError::StorageFailure,
+            })?;
         let resources = resources.with_privacy_policy(Arc::new(knowledge_base_repository.clone()));
         let mcp = build_mcp_service(
             &config.database_url,
@@ -294,23 +246,11 @@ impl AppState {
             variables.clone(),
             runtime_http_client.clone(),
         );
-        let skills = if config.database_url == ":memory:" {
-            GLOBAL_SKILL_SERVICE
-                .get_or_init(|| {
-                    build_skill_registry_service(
-                        ":memory:",
-                        workspaces.clone(),
-                        &config.skills_registry_root,
-                    )
-                })
-                .clone()
-        } else {
-            build_skill_registry_service(
-                &config.database_url,
-                workspaces.clone(),
-                &config.skills_registry_root,
-            )
-        };
+        let skills = build_skill_registry_service(
+            &config.database_url,
+            workspaces.clone(),
+            &config.skills_registry_root,
+        );
         let agent_management = build_agent_management_service(
             &config.database_url,
             workspaces.clone(),
@@ -321,15 +261,8 @@ impl AppState {
         }
         let automations =
             build_automation_service(&config.database_url, workspaces.clone(), event_bus.clone());
-        let models = if config.database_url == ":memory:" {
-            GLOBAL_MODEL_SERVICE
-                .get_or_init(|| {
-                    build_model_service(":memory:", workspaces.clone(), variables.clone())
-                })
-                .clone()
-        } else {
-            build_model_service(&config.database_url, workspaces.clone(), variables.clone())
-        };
+        let models =
+            build_model_service(&config.database_url, workspaces.clone(), variables.clone());
         let model_providers = build_model_provider_service(&config.database_url, variables.clone());
         let models = models
             .with_model_executor(model_providers.model_executor())
@@ -383,50 +316,56 @@ impl AppState {
             event_bus.clone(),
         )?;
         let rag = rag.with_product_guard(Arc::new(knowledge_base_repository.clone()));
-        let knowledge_bases = crate::application::knowledge_base::KnowledgeBaseService::new(knowledge_base_repository,rag.clone(),resources.clone(),workspaces.clone(),agent_management.clone(),llm_runtime.clone()).with_document_parser(Arc::new(crate::adapters::outbound::mineru_documents::MineruKnowledgeDocumentParser::new(config.mineru.clone()))).with_image_descriptions(config.mineru.image_description.clone()).with_visual_context(config.mineru.visual_context_enabled).with_office_renderer(Arc::new(crate::adapters::outbound::office_visuals::LocalOfficeChartRenderer)).with_ingestion_config(config.mineru.ingestion.clone());
+        let knowledge_bases = crate::application::knowledge_base::KnowledgeBaseService::new(
+            knowledge_base_repository,
+            rag.clone(),
+            resources.clone(),
+            workspaces.clone(),
+            agent_management.clone(),
+            llm_runtime.clone(),
+        )
+        .with_document_parser(Arc::new(
+            crate::adapters::outbound::mineru_documents::MineruKnowledgeDocumentParser::new(
+                config.mineru.clone(),
+            ),
+        ))
+        .with_image_descriptions(config.mineru.image_description.clone())
+        .with_visual_context(config.mineru.visual_context_enabled)
+        .with_office_renderer(Arc::new(
+            crate::adapters::outbound::office_visuals::LocalOfficeChartRenderer,
+        ))
+        .with_ingestion_config(config.mineru.ingestion.clone());
         if tokio::runtime::Handle::try_current().is_ok() {
-            knowledge_bases.start_ingestion_workers().map_err(|_| AppBootstrapError::RagInitFailed { database_url: config.database_url.clone(), source: crate::domain::rag::RagError::StorageFailure })?;
+            knowledge_bases.start_ingestion_workers().map_err(|_| {
+                AppBootstrapError::RagInitFailed {
+                    database_url: config.database_url.clone(),
+                    source: crate::domain::rag::RagError::StorageFailure,
+                }
+            })?;
         }
         let memory = MemoryService::new(rag.clone());
-        let memory_work_domains = if config.database_url == ":memory:" {
-            GLOBAL_MEMORY_WORK_DOMAIN_SERVICE
-                .get_or_init(|| build_memory_work_domain_service(":memory:"))
-                .clone()
-        } else {
-            build_memory_work_domain_service(&config.database_url)
-        };
-        let short_term_memory = if config.database_url == ":memory:" {
-            GLOBAL_SHORT_TERM_MEMORY_SERVICE
-                .get_or_init(|| {
-                    build_short_term_memory_service_with_id_provider(
-                        ":memory:",
-                        &config,
-                        id_provider.clone(),
-                        variables.cipher(),
-                    )
-                })
-                .clone_with_id_provider(id_provider.clone())
-        } else {
-            build_short_term_memory_service_with_id_provider(
-                &config.database_url,
-                &config,
-                id_provider.clone(),
-                variables.cipher(),
-            )
-        };
-        let short_term_memory = short_term_memory.with_event_bus(event_bus.clone());
+        let memory_work_domains = build_memory_work_domain_service(&config.database_url);
         let agent_framework = crate::application::agent::FrameworkHost::for_database(
             &config.database_url,
             resources.clone(),
         )
         .expect("initialize Framework storage configuration");
-        agent_framework.bind_knowledge_bases(knowledge_bases.clone()).expect("initial knowledge-base binding");
+        agui_replay_store
+            .bind_framework(&agent_framework)
+            .expect("Framework replay storage");
+        agent_framework
+            .bind_knowledge_bases(knowledge_bases.clone())
+            .expect("initial knowledge-base binding");
         agent_framework
             .bind_presentation(agent_presentation.clone())
             .expect("initial presentation binding");
         agent_framework
             .bind_model_client(agent_model_client.clone())
             .expect("initial model client binding");
+        let short_term_memory = ShortTermMemoryService::with_host(
+            agent_framework.clone(),
+            config.short_term_memory.clone(),
+        );
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         let agent_terminal: Arc<dyn crate::application::agent::AgentTerminal> = Arc::new(
             crate::adapters::outbound::agent_terminal::LocalAgentTerminal::new(
@@ -465,17 +404,16 @@ impl AppState {
             build_graph_services(graph_core, workspaces.clone(), llm_runtime.clone())
         };
 
-        let agent_runs = build_agent_run_history_service(&config.database_url);
+        let agent_runs = AgentRunHistoryService::new(
+            SqliteAgentRunRepository::with_host(agent_framework.clone())
+                .expect("Framework run history"),
+        );
         let active_runs = ActiveRunRegistry::new();
-        let chats = if config.database_url == ":memory:" {
-            GLOBAL_CHAT_SERVICE
-                .get_or_init(|| {
-                    build_chat_service_with_id_provider(":memory:", id_provider.clone())
-                })
-                .clone_with_id_provider(id_provider.clone())
-        } else {
-            build_chat_service_with_id_provider(&config.database_url, id_provider)
-        }
+        let chats = ChatService::with_id_provider(
+            SqliteChatRepository::with_host(agent_framework.clone())
+                .expect("Framework chat storage"),
+            id_provider,
+        )
         .with_active_runs(active_runs.clone())
         .with_projects(projects.clone())
         .with_execution_memory(short_term_memory.clone())
@@ -524,6 +462,7 @@ impl AppState {
         ));
         Ok(Self {
             config,
+            _temporary_database: temporary_database,
             readiness,
             agui_events,
             agui_replay_store,

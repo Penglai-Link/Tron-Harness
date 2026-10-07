@@ -1550,6 +1550,7 @@ dependencies = [
  "eliteforge-agent-core",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
 ]
 
@@ -1617,6 +1618,7 @@ dependencies = [
  "cap-std",
  "eliteforge-agent-context-contracts",
  "eliteforge-agent-core",
+ "futures",
  "rusqlite",
  "serde",
  "serde_json",
@@ -1626,6 +1628,7 @@ dependencies = [
  "tokio",
  "tokio-rusqlite",
  "tokio-util",
+ "tracing",
  "uuid",
 ]
 
@@ -6551,6 +6554,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-cron",
+ "tokio-rusqlite",
  "tokio-util",
  "tower",
  "tower-http",

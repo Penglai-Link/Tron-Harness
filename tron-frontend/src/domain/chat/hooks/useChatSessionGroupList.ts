@@ -1,7 +1,6 @@
 import {
   archiveMockChatSession,
   createMockChatSession,
-  deleteMockChatSession,
   getChatSessionGroups,
   updateMockChatSession,
 } from "@/domain/chat/mock/data";
@@ -99,16 +98,6 @@ export function archiveChatSession(sessionCode: string): Promise<ChatSession> {
   }
 
   return requestApi<ChatSession>(chatApiEndpoints.archiveChatSession, {
-    pathParams: { sessionCode },
-  });
-}
-
-export function deleteChatSession(sessionCode: string): Promise<ChatSession> {
-  if (getServiceDataSource("chat") === "mock") {
-    return Promise.resolve(deleteMockChatSession(sessionCode));
-  }
-
-  return requestApi<ChatSession>(chatApiEndpoints.deleteChatSession, {
     pathParams: { sessionCode },
   });
 }

@@ -2,8 +2,7 @@
 use super::external::ExternalExecution;
 use crate::{application::agent::AgentInvocationError, domain::agent::AgentRunResult};
 use eliteforge_agent_core as fw;
-use eliteforge_agent_official_plugin_storage_local::SqliteConversationStore;
-use fw::ConversationStore;
+
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
@@ -80,7 +79,7 @@ fn error(value: impl std::fmt::Display) -> AgentInvocationError {
 }
 impl Binding {
     pub async fn open(
-        store: &SqliteConversationStore,
+        store: &dyn fw::ConversationStore,
         conversation: &str,
         execution: &ExternalExecution,
         required: bool,
@@ -119,11 +118,11 @@ impl Binding {
     }
     async fn initialize(
         &mut self,
-        store: &SqliteConversationStore,
-        conversation: &str,
+        _store: &dyn fw::ConversationStore,
+        _conversation: &str,
         execution: &ExternalExecution,
         required: bool,
-        bindings: &Bindings,
+        _bindings: &Bindings,
     ) -> Result<(), AgentInvocationError> {
         let snapshot = self.lease.snapshot().await.map_err(error)?;
         let requested = execution.context.system_agent_session_id.as_deref();
@@ -150,59 +149,11 @@ impl Binding {
         let mut session = matching
             .and_then(|m| m.data["sessionId"].as_str())
             .map(str::to_owned);
-        let mut known = requested.is_some_and(|id| {
+        let known = requested.is_some_and(|id| {
             records
                 .iter()
                 .any(|m| m.data["sessionId"].as_str() == Some(id))
         });
-        // Read the old main transcript only. Never execute old framework checkpoints.
-        if snapshot.revision == 0 || requested.is_some() {
-            let legacy = bindings.track(Self {
-                lease: store.open(conversation).await.map_err(error)?,
-                scope: self.scope.clone(),
-                runtime: self.runtime.clone(),
-                saved_session: None,
-                finished: false,
-                session: None,
-            });
-            let old = legacy
-                .binding
-                .lock()
-                .await
-                .lease
-                .snapshot()
-                .await
-                .map_err(error)?;
-            let legacy_scope = execution.legacy_session_scope();
-            for record in old
-                .messages
-                .iter()
-                .rev()
-                .filter_map(|m| m.model_context.as_ref())
-                .filter(|m| {
-                    m.format == "framework.external-session.v1"
-                        && m.protocol == "external-agent"
-                        && m.model == fw::ModelRef::new("framework.external", "agent")
-                })
-            {
-                if requested.is_some_and(|id| record.data["sessionId"].as_str() == Some(id)) {
-                    known = true;
-                }
-                if snapshot.revision == 0
-                    && session.is_none()
-                    && record.data["scope"].as_str() == legacy_scope.as_deref()
-                    && requested.is_none_or(|id| record.data["sessionId"].as_str() == Some(id))
-                {
-                    session = record.data["sessionId"].as_str().map(str::to_owned);
-                }
-            }
-            legacy
-                .binding
-                .lock()
-                .await
-                .finish(fw::ConversationOutcome::Completed)
-                .await?;
-        }
         if session.is_none() {
             if known && required {
                 return Err(error("native session belongs to a different runtime scope"));

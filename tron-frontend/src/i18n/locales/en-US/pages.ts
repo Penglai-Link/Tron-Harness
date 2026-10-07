@@ -1,5 +1,15 @@
 export const pages = {
   archivedChats: {
+    errors: {"CHAT_SESSION_NOT_FOUND": "Chat not found.", "CHAT_SESSION_MUST_BE_ARCHIVED": "Archive the chat first.", "CHAT_SESSION_RUN_ACTIVE": "The chat is running. Try again later.", "CHAT_SESSION_ARCHIVED": "The chat is archived.", "CHAT_SESSION_DELETE_FAILED": "Deletion failed. Retry this item."},
+    cancel: "Cancel",
+    deleteTitle: "Delete archived chats?",
+    itemLabel: "archived chats",
+    statuses: {"ACTIVE": "Active", "PAUSED": "Paused", "BLOCKED": "Blocked", "COMPLETED": "Completed", "CANCELLED": "Cancelled", "CLEARED": "Cleared", "RUNNING": "Running", "AWAITING_INPUT": "Awaiting input", "EXHAUSTED": "Run limit reached", "FAILED": "Failed", "RECOVERY_REQUIRED": "Recovery required"},
+    verdicts: {"CONTINUE": "Continue", "COMPLETED": "Completed", "BLOCKED": "Blocked", "NEEDS_USER_INPUT": "Needs user input"},
+    eventKinds: {"GOAL_SET": "Goal set", "GOAL_CREATED": "Goal created", "GOAL_UPDATED": "Goal updated", "GOAL_STATE_CHANGED": "Goal status changed", "GOAL_JUDGED": "Goal decision", "GOAL_JUDGE_FAILED": "Goal decision failed", tron: { goal: { operator: "Operator record" } }},
+    runKinds: {"REACT": "ReAct", "EXTERNAL": "External agent", "CONTINUATION": "Continuation", "SUMMARY": "Summary"},
+    roles: {"User": "User", "Assistant": "Assistant", "USER": "User", "ASSISTANT": "Assistant", "SYSTEM": "System", "TOOL": "Tool", "DEVELOPER": "Developer", "AGENT": "Agent", "user": "User", "assistant": "Assistant", "system": "System", "tool": "Tool", "developer": "Developer"},
+    goalRecords: "Goal decision records",
     title: "Archived chats",
     refresh: "Refresh",
     workspace: "Workspace",
@@ -1126,6 +1136,7 @@ export const pages = {
         CLEARED: "Cleared",
       },
       goalVerdicts: {
+        NEEDS_USER_INPUT: "Waiting for input",
         CONTINUE: "Continue",
         COMPLETED: "Completed",
         BLOCKED: "Blocked",

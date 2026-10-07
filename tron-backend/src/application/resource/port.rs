@@ -76,7 +76,6 @@ pub trait ResourceRepository: Send {
         &mut self,
         session_code: &str,
     ) -> Result<Vec<ChatSessionAttachmentRecord>, ResourceError>;
-    fn delete_chat_session_attachments(&mut self, session_code: &str) -> Result<(), ResourceError>;
 }
 
 pub trait ObjectStorage: Send + Sync {

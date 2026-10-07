@@ -23,7 +23,7 @@ fn event(sequence: u64) -> AgentAguiProtocolEvent {
 }
 #[test]
 fn sqlite_replay_preserves_repeated_chunks_and_deduplicates_only_same_identity() {
-    let store = Arc::new(SqliteAgentEventReplayStore::connect(":memory:").unwrap());
+    let store = Arc::new(replay_store(&database_path("memory")));
     let service = AgentAguiStreamService::with_replay_store(
         Arc::new(AguiEventSink::new(&EventBusConfig::default())),
         store.clone(),
@@ -78,7 +78,7 @@ fn replay_errors_are_not_successful_empty_history_or_successful_writes() {
 }
 #[test]
 fn rejected_oversize_delivery_exposes_incomplete_replay() {
-    let store = Arc::new(SqliteAgentEventReplayStore::connect(":memory:").unwrap());
+    let store = Arc::new(replay_store(&database_path("memory")));
     let service = AgentAguiStreamService::with_replay_store(
         Arc::new(AguiEventSink::new(&EventBusConfig::default())),
         store.clone(),
@@ -108,7 +108,7 @@ fn rejected_oversize_delivery_exposes_incomplete_replay() {
 
 #[test]
 fn canonical_subtotal_remains_available_with_explicit_incomplete_flag() {
-    let store = Arc::new(SqliteAgentEventReplayStore::connect(":memory:").unwrap());
+    let store = Arc::new(replay_store(&database_path("memory")));
     let service = AgentAguiStreamService::with_replay_store(
         Arc::new(AguiEventSink::new(&EventBusConfig::default())),
         store,
@@ -139,11 +139,11 @@ fn database_path(label: &str) -> std::path::PathBuf {
 fn successful_write_persists_prior_delivery_failure_across_restart() {
     let path = database_path("health");
     {
-        let store = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
+        let store = replay_store(&path);
         store.record_delivery_failure("SESSION", "delivery lost");
         store.append_protocol_event("SESSION", event(1)).unwrap();
     }
-    let reopened = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
+    let reopened = replay_store(&path);
     assert!(reopened.replay_failure("SESSION").is_some());
     drop(reopened);
     let _ = std::fs::remove_file(path);
@@ -155,7 +155,7 @@ fn restart_detects_unfinished_native_execution_but_accepts_awaiting_input_termin
     {
         let path = database_path(label);
         {
-            let store = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
+            let store = replay_store(&path);
             store
                 .append_protocol_event(
                     "SESSION",
@@ -166,7 +166,7 @@ fn restart_detects_unfinished_native_execution_but_accepts_awaiting_input_termin
                 store.append_protocol_event("SESSION",terminal(2,"RUN_FINISHED",json!({"type":"interrupt","interrupts":[{"id":"INPUT","reason":"input_required"}]}))).unwrap();
             }
         }
-        let reopened = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
+        let reopened = replay_store(&path);
         assert_eq!(
             reopened.replay_failure("SESSION").is_some(),
             expected_incomplete,
@@ -180,7 +180,7 @@ fn restart_detects_unfinished_native_execution_but_accepts_awaiting_input_termin
 #[tokio::test]
 async fn last_delivery_failure_is_persisted_without_a_later_model_or_event_write() {
     let path = database_path("last-failure");
-    let store = Arc::new(SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap());
+    let store = Arc::new(replay_store(&path));
     store
         .append_protocol_event(
             "SESSION",
@@ -195,16 +195,28 @@ async fn last_delivery_failure_is_persisted_without_a_later_model_or_event_write
         .unwrap();
     store.record_delivery_failure("SESSION", "last canonical event was rejected");
     // Read only the durable acknowledgment, independent of the live registry.
-    tokio::time::timeout(std::time::Duration::from_secs(2),async {
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
         loop {
-            let connection=rusqlite::Connection::open(&path).unwrap();
-            let count:i64=connection.query_row("SELECT COUNT(*) FROM agent_runtime_event_replay_failure WHERE stream_key='SESSION'",[],|row|row.get(0)).unwrap();
-            if count>0 {break;}
+            let host = tron_backend::application::agent::FrameworkHost::persistent(
+                path.to_str().unwrap(),
+                None,
+            );
+            let sessions = host.storage_framework().await.unwrap().sessions().unwrap();
+            if sessions
+                .read_context("tron/presentation-health", "tron.replay-failure/SESSION")
+                .await
+                .unwrap()
+                .is_some()
+            {
+                break;
+            }
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
-    }).await.expect("the final rejection must not wait for another model call to persist health");
+    })
+    .await
+    .expect("the final rejection must not wait for another model call to persist health");
     drop(store);
-    let reopened = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
+    let reopened = replay_store(&path);
     assert!(reopened.replay_failure("SESSION").is_some());
     drop(reopened);
     let _ = std::fs::remove_file(path);
@@ -216,7 +228,7 @@ fn native_audit_preserves_source_identity_idempotently_across_restart() {
     let start = terminal(1, "RUN_STARTED", serde_json::Value::Null);
     let finish = terminal(2, "RUN_FINISHED", json!({"type":"success"}));
     let before = {
-        let store = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
+        let store = replay_store(&path);
         for item in [start.clone(), finish.clone(), start, finish] {
             store.append_protocol_event("SESSION", item).unwrap();
         }
@@ -241,7 +253,7 @@ fn native_audit_preserves_source_identity_idempotently_across_restart() {
         assert_eq!(audit[1].event_name, "agent.run.completed");
         serde_json::to_value(audit).unwrap()
     };
-    let reopened = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
+    let reopened = replay_store(&path);
     assert_eq!(
         serde_json::to_value(reopened.replay_agui_events("SESSION").unwrap()).unwrap(),
         before
@@ -252,7 +264,7 @@ fn native_audit_preserves_source_identity_idempotently_across_restart() {
 
 #[test]
 fn native_audit_keeps_pauses_errors_and_presentation_faults_distinct_and_redacts_content() {
-    let store = SqliteAgentEventReplayStore::connect(":memory:").unwrap();
+    let store = replay_store(&database_path("memory"));
     store.append_protocol_event("SESSION", terminal(1,"RUN_FINISHED",json!({"type":"interrupt","interrupts":[{"id":"APPROVAL","reason":"approval_required","payload":{"secret":"private approval content"}}]}))).unwrap();
     let mut failure = terminal(2, "RUN_ERROR", serde_json::Value::Null);
     failure.data["code"] = json!("AGENT_LIMIT_REACHED");
@@ -285,8 +297,8 @@ fn native_audit_keeps_pauses_errors_and_presentation_faults_distinct_and_redacts
 }
 
 #[test]
-fn legacy_private_replay_rows_are_filtered_on_public_read_without_rewriting_storage() {
-    let path = database_path("legacy-private-visibility");
+fn native_private_events_are_filtered_on_public_read_without_rewriting_storage() {
+    let path = database_path("private-visibility");
     let content = json!([
         {"type":"text","text":"public answer"},
         {"type":"json","value":{"tronMessagePart":{"type":"reasoning","text":"OLD_RAW_SENTINEL"}}},
@@ -312,18 +324,31 @@ fn legacy_private_replay_rows_are_filtered_on_public_read_without_rewriting_stor
         })
         .collect();
     {
-        let store = SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap();
-        let connection = rusqlite::Connection::open(&path).unwrap();
-        for (id, kind, payload) in &original {
-            connection.execute("INSERT INTO agent_runtime_event_replay (bus_event_id,stream_key,run_code,occurred_at,canonical_event_code,category,ordinal,sse_event,payload_json,created_at) VALUES (?1,'SESSION','RUN',1,?2,'PROTOCOL',0,?2,?3,1)",rusqlite::params![id,kind,payload]).unwrap();
-        }
+        let store = replay_store(&path);
+        native_blocking(async {
+            let host = tron_backend::application::agent::FrameworkHost::persistent(
+                path.to_str().unwrap(),
+                None,
+            );
+            let sessions = host.storage_framework().await.unwrap().sessions().unwrap();
+            for (id, _, payload) in &original {
+                let frame: AgentAguiProtocolEvent = serde_json::from_str(payload).unwrap();
+                let mut event = eliteforge_agent_core::SessionEvent::new(
+                    "SESSION",
+                    "tron.agui.protocol",
+                    json!({"streamKey":"SESSION","frame":frame}),
+                );
+                event.id = id.clone();
+                sessions.store.append_event(event).await.unwrap();
+            }
+        });
         assert!(
             serde_json::to_string(&store.replay_protocol_events("SESSION").unwrap())
                 .unwrap()
                 .contains("OLD_RAW_SENTINEL")
         );
     }
-    let store = Arc::new(SqliteAgentEventReplayStore::connect(path.to_str().unwrap()).unwrap());
+    let store = Arc::new(replay_store(&path));
     let service = AgentAguiStreamService::with_replay_store(
         Arc::new(AguiEventSink::new(&EventBusConfig::default())),
         store.clone(),
@@ -353,16 +378,58 @@ fn legacy_private_replay_rows_are_filtered_on_public_read_without_rewriting_stor
     for (event, (id, _, _)) in public.iter().zip(&original) {
         assert_eq!(protocol_event_identity(event).as_deref(), Some(id.as_str()));
     }
-    let connection = rusqlite::Connection::open(&path).unwrap();
-    for (id, _, bytes) in &original {
-        let persisted:String=connection.query_row("SELECT payload_json FROM agent_runtime_event_replay WHERE bus_event_id=?1 AND category='PROTOCOL'",[id],|row|row.get(0)).unwrap();
-        assert_eq!(
-            &persisted, bytes,
-            "public read must not alter original stored history"
+    native_blocking(async {
+        let host = tron_backend::application::agent::FrameworkHost::persistent(
+            path.to_str().unwrap(),
+            None,
         );
-    }
-    drop(connection);
+        let events = host
+            .storage_framework()
+            .await
+            .unwrap()
+            .sessions()
+            .unwrap()
+            .store
+            .list_events("SESSION", 0, 100)
+            .await
+            .unwrap();
+        for (id, _, bytes) in &original {
+            let persisted = events.iter().find(|event| &event.id == id).unwrap();
+            assert_eq!(
+                &serde_json::to_string(&persisted.payload["frame"]).unwrap(),
+                bytes,
+                "public read must not alter original stored history"
+            );
+        }
+    });
     drop(service);
     drop(store);
     let _ = std::fs::remove_file(path);
+}
+
+fn native_blocking<T: Send>(future: impl std::future::Future<Output = T> + Send) -> T {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| tokio::runtime::Runtime::new().unwrap().block_on(future))
+            .join()
+            .unwrap()
+    })
+}
+fn replay_store(path: &std::path::Path) -> SqliteAgentEventReplayStore {
+    let host =
+        tron_backend::application::agent::FrameworkHost::persistent(path.to_str().unwrap(), None);
+    native_blocking(async {
+        let sessions = host.storage_framework().await.unwrap().sessions().unwrap();
+        if matches!(
+            sessions.get("SESSION").await,
+            Err(eliteforge_agent_core::StateError::NotFound)
+        ) {
+            let mut record = eliteforge_agent_core::SessionRecord::new("Native replay");
+            record.id = "SESSION".into();
+            sessions.create(record).await.unwrap();
+        }
+    });
+    let store = SqliteAgentEventReplayStore::new().unwrap();
+    store.bind_framework(&host).unwrap();
+    store
 }

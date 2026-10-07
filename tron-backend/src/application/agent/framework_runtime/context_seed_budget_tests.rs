@@ -109,7 +109,7 @@ impl ModelClient for Capture {
 }
 fn context(window: u32) -> AgentRunContext {
     let mut context: AgentRunContext = serde_json::from_value(serde_json::json!({
-        "conversationCode":"seed-session", "runCode":"seed-run", "workspaceCode":"test", "userCode":"user", "locale":"en-US", "agentKind":"REACT",
+        "conversationCode":null, "runCode":fw::RunId::new_v4().to_string(), "workspaceCode":"test", "userCode":"user", "locale":"en-US", "agentKind":"REACT",
         "model":{"modelCode":"MODEL-1", "protocol":"CHAT_COMPLETIONS", "baseUrl":"http://127.0.0.1:1/v1", "apiKey":"fixture", "modelName":"test", "maxTokens":128, "contextWindowTokens":window},
         "variables":[], "skills":[], "tools":[], "executionScope":{}, "limits":{"maxSteps":2, "maxToolCalls":2, "maxParallelToolCalls":1}, "messages":[], "observations":[], "startedAt":"fixture"
     })).unwrap();
@@ -148,6 +148,7 @@ async fn fixture(
     packs.insert("tron.harness".into(), false);
     let framework = host
         .framework_builder(&packs, &extensions)
+        .await
         .unwrap()
         .plugin(SkillsPlugin::new(Catalog {
             reads: reads.clone(),

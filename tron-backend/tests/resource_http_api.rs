@@ -19,7 +19,7 @@ use tron_backend::config::{AppConfig, ResourceConfig};
 
 const WORKSPACE: &str = "TRON_CORE";
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn file_resource_lifecycle_uses_the_management_contract() {
     let (app, _) = resource_app("lifecycle");
     let token = authenticated_bearer_token(&app).await;
@@ -121,7 +121,7 @@ async fn file_resource_lifecycle_uses_the_management_contract() {
     assert_eq!(page["data"]["total"], 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn definition_management_endpoints_are_gone() {
     let (app, _) = resource_app("definitions-removed");
     let token = authenticated_bearer_token(&app).await;
@@ -135,7 +135,7 @@ async fn definition_management_endpoints_are_gone() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn file_binary_can_be_replaced_and_downloaded() {
     let (app, _) = resource_app("binary-replace");
     let token = authenticated_bearer_token(&app).await;
@@ -185,7 +185,7 @@ async fn file_binary_can_be_replaced_and_downloaded() {
     assert_eq!(bytes.as_ref(), b"second content");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deleting_a_file_resource_removes_its_stored_object() {
     let (app, storage_root) = resource_app("delete-cleanup");
     let token = authenticated_bearer_token(&app).await;
@@ -206,7 +206,7 @@ async fn deleting_a_file_resource_removes_its_stored_object() {
     assert_storage_root_is_empty(&storage_root);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn workspace_page_uses_the_active_profile_instead_of_legacy_bearer_roles() {
     let (app, _) = resource_app("workspace-authorization");
     let token = authenticated_bearer_token(&app).await;
@@ -227,7 +227,7 @@ async fn workspace_page_uses_the_active_profile_instead_of_legacy_bearer_roles()
     assert_eq!(body["data"]["total"], 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn platform_admin_can_manage_resources_in_any_active_workspace() {
     let (app, _) = resource_app("admin-cross-workspace-authorization");
     let token = authenticated_bearer_token(&app).await;
@@ -303,7 +303,7 @@ async fn platform_admin_can_manage_resources_in_any_active_workspace() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn platform_admin_can_manage_platform_resources_without_workspace_membership() {
     let (app, _) = resource_app_without_platform_workspace("platform-admin-resource-authorization");
     let token = authenticated_bearer_token(&app).await;
@@ -382,7 +382,7 @@ async fn platform_admin_can_manage_platform_resources_without_workspace_membersh
     assert_eq!(body["data"]["total"], 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn child_workspace_page_projects_inherited_parent_resources() {
     let (app, _) = resource_app("inheritance-projection");
     let token = authenticated_bearer_token(&app).await;
@@ -433,7 +433,7 @@ async fn child_workspace_page_projects_inherited_parent_resources() {
     assert_eq!(bytes.as_ref(), b"shared");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn creating_a_duplicate_resource_code_conflicts() {
     let (app, _) = resource_app("duplicate-code");
     let token = authenticated_bearer_token(&app).await;
@@ -443,7 +443,7 @@ async fn creating_a_duplicate_resource_code_conflicts() {
     assert_eq!(second.status(), StatusCode::CONFLICT);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn connection_endpoints_cannot_page_or_delete_file_resources() {
     let (app, _) = resource_app("connection-boundaries");
     let token = authenticated_bearer_token(&app).await;
@@ -492,7 +492,7 @@ async fn connection_endpoints_cannot_page_or_delete_file_resources() {
     assert_eq!(detail["data"]["resourceCode"], "file-only");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn connection_create_routes_validate_their_own_http_contracts() {
     let (app, _) = resource_app("connection-create-contracts");
     let token = authenticated_bearer_token(&app).await;
@@ -520,7 +520,7 @@ async fn connection_create_routes_validate_their_own_http_contracts() {
     assert_eq!(response_json(update).await["code"], "100100002");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resource_create_requires_an_explicit_inheritance_choice() {
     let (app, storage_root) = resource_app("inheritance-required");
     let token = authenticated_bearer_token(&app).await;
@@ -557,7 +557,7 @@ async fn resource_create_requires_an_explicit_inheritance_choice() {
     assert_storage_root_is_empty(&storage_root);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn oversized_multipart_binary_is_rejected_before_storage_persistence() {
     let (app, storage_root) = resource_app_with_binary_limit("oversized-binary", 4);
     let token = authenticated_bearer_token(&app).await;
@@ -568,7 +568,7 @@ async fn oversized_multipart_binary_is_rejected_before_storage_persistence() {
     assert_storage_root_is_empty(&storage_root);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn oversized_upload_control_fields_are_rejected_before_resource_lookup() {
     let (app, storage_root) = resource_app("oversized-upload-control");
     let token = authenticated_bearer_token(&app).await;
@@ -595,7 +595,7 @@ async fn oversized_upload_control_fields_are_rejected_before_resource_lookup() {
     assert_storage_root_is_empty(&storage_root);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn server_create_can_defer_account_creation_to_the_account_endpoint() {
     let (app, _) = resource_app("server-create-without-account");
     let token = authenticated_bearer_token(&app).await;
@@ -859,8 +859,8 @@ fn resource_app_with_database(
     (app_with_config(config), storage_root, database_path)
 }
 
-#[tokio::test]
-async fn preexisting_chat_history_and_product_attachment_survive_framework_host_restart() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_chat_history_and_product_attachment_survive_framework_host_restart() {
     use axum::http::Method;
     let directory = tempfile::tempdir().unwrap();
     let database = directory.path().join("product.sqlite3");
@@ -888,10 +888,12 @@ async fn preexisting_chat_history_and_product_attachment_survive_framework_host_
         .unwrap()
         .to_owned();
     let attachment = json!([{"id":"old-product-file","kind":"resource","summary":"Existing file","resourceCode":"old-attachment","fileName":"notes.txt","contentType":"text/plain","byteSize":25,"metadata":{}}]);
-    {
-        let db = rusqlite::Connection::open(&database).unwrap();
-        db.execute("INSERT INTO chat_messages(id,message_code,session_code,run_code,role,channel,actor,content,attachments_json,created_at) VALUES(1,'OLD-MESSAGE',?1,NULL,'USER','MAIN_AGENT','USR-AUTH-0001','existing user history',?2,1)", rusqlite::params![&session, attachment.to_string()]).unwrap();
-    }
+    common::append_native_chat_message(database.to_str().unwrap(), &session, json!({
+        "id":1,"messageCode":"NATIVE-MESSAGE","sessionCode":session,"runCode":null,
+        "role":"USER","channel":"MAIN_AGENT","actor":"USR-AUTH-0001",
+        "content":"existing user history","attachments":attachment,
+        "inputTokens":null,"outputTokens":null,"totalTokens":null,"createdAt":"2026-10-07T00:00:00Z"
+    })).await;
     drop(app);
     // Reopen the product DB with the new host present. Product files are distinct
     // from the Framework artifact BLOB format excluded by the Framework design.

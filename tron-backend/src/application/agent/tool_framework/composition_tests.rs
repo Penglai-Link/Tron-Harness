@@ -129,7 +129,7 @@ async fn run(
     let close = closed.clone();
     let fallbacks = closed.clone();
     registry.register_framework_lease(
-        "mcp-run",
+        "c3b6f2d9-421a-4ab9-8721-69271cc18a41",
         fw::ToolLease::new(vec![fw::ToolBinding::new(
             fw::ToolDescriptor::new(
                 "tron.mcp_demo",
@@ -156,7 +156,7 @@ async fn run(
         step: AtomicUsize::new(0),
         actual: actual.clone(),
     });
-    let context:AgentRunContext=serde_json::from_value(json!({"conversationCode":"mcp-session","runCode":"mcp-run","workspaceCode":"test","locale":"en-US","agentKind":"REACT",
+    let context:AgentRunContext=serde_json::from_value(json!({"conversationCode":null,"runCode":"c3b6f2d9-421a-4ab9-8721-69271cc18a41","workspaceCode":"test","locale":"en-US","agentKind":"REACT",
         "model":{"modelCode":"MODEL-1","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"unused","modelName":"test","maxTokens":128,"contextWindowTokens":131072},
         "variables":[],"skills":[],"tools":[{"toolName":"mcp_demo","description":"native MCP-shaped binding","inputSchema":{"type":"object","additionalProperties":false},"requiredVariableKeys":[]}],"executionScope":{},"limits":{"maxSteps":4,"maxToolCalls":2,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":"Read the native MCP-shaped result."}]}],"observations":[],"startedAt":"test"})).unwrap();
     let bus = EventBusRuntimeBuilder::new(

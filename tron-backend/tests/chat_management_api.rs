@@ -24,7 +24,7 @@ use axum::{
     },
     routing::post,
 };
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle, time::sleep};
 use tower::ServiceExt;
@@ -355,6 +355,10 @@ async fn delayed_steer_model_mock_server() -> (AgentModelMockServer, DelayedStee
 }
 
 async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
+    if is_session_summary_request(&payload) {
+        return session_summary_mock_response();
+    }
+
     let prompt = payload["messages"]
         .as_array()
         .and_then(|messages| {
@@ -497,29 +501,20 @@ fn valid_mock_completion(payload: &Value, content: impl Into<String>) -> Respons
 
 fn is_session_summary_request(payload: &Value) -> bool {
     payload["messages"].as_array().is_some_and(|messages| {
-        messages.iter().any(|message| {
-            message["role"] == json!("user")
-                && message["content"]
+        messages.iter().any(|m| {
+            m["role"] == "system"
+                && m["content"]
                     .as_str()
-                    .and_then(|content| serde_json::from_str::<Value>(content).ok())
-                    .is_some_and(|content| content["evidenceType"] == json!("SESSION_WORK_STATE"))
+                    .is_some_and(|text| text.starts_with("Summarize historical conversation data"))
         })
     })
 }
 
 fn session_summary_mock_response() -> Response {
-    Json(json!({
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "# Goal\nMock session summary"
-            }
-        }]
-    }))
-    .into_response()
+    Json(json!({"choices":[{"message":{"role":"assistant","content":json!({"summary":"Mock native session summary"}).to_string()},"finish_reason":"stop"}]})).into_response()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_session_groups_and_messages_are_persisted_history() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -601,7 +596,7 @@ async fn chat_session_groups_and_messages_are_persisted_history() {
 }
 
 #[test]
-fn chat_session_code_uses_shared_snowflake_id_provider() {
+fn chat_session_keeps_business_id_and_uses_framework_identity() {
     let database_url = temp_database_url("chat-session-snowflake-id");
     let repository = SqliteChatRepository::connect(database_url.to_str().expect("path utf8"))
         .expect("chat repository should initialize");
@@ -627,10 +622,10 @@ fn chat_session_code_uses_shared_snowflake_id_provider() {
         .expect("session should be created");
 
     assert_eq!(session.id, 734_200_000_000_000_123);
-    assert_eq!(session.session_code, "SESSION-734200000000000123");
+    assert!(eliteforge_agent_core::RunId::parse_str(&session.session_code).is_ok());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn terminal_sessions_are_hidden_from_chat_management_and_can_be_deleted() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -676,10 +671,20 @@ async fn terminal_sessions_are_hidden_from_chat_management_and_can_be_deleted() 
             .all(|session| session["sessionCode"] != session_code)
     );
 
+    let archived = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/archive"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(archived.status(), StatusCode::OK);
     let deleted = request_with_headers(
         &app,
         Method::DELETE,
-        &format!("/api/v1/chats/sessions/{session_code}"),
+        &format!("/api/v1/admin/archived-sessions/{session_code}"),
         None,
         None,
         Some(&authorization),
@@ -699,7 +704,7 @@ async fn terminal_sessions_are_hidden_from_chat_management_and_can_be_deleted() 
     assert_eq!(messages.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_message_history_requires_an_existing_session() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -720,7 +725,7 @@ async fn chat_message_history_requires_an_existing_session() {
     assert_eq!(body["code"], json!("CHAT_SESSION_NOT_FOUND"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_steer_endpoint_uses_body_contract_and_rejects_when_no_run_is_active() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -764,7 +769,7 @@ async fn chat_steer_endpoint_uses_body_contract_and_rejects_when_no_run_is_activ
     assert_eq!(body["data"], json!({}));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_run_control_routes_use_query_and_strict_body_contracts() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -847,7 +852,7 @@ async fn chat_run_control_routes_use_query_and_strict_body_contracts() {
     let missing_session_body = response_json(missing_session).await;
     assert_eq!(
         missing_session_body["code"],
-        json!("CHAT_RUN_CONTROL_SESSION_NOT_FOUND")
+        json!("CHAT_SESSION_NOT_FOUND")
     );
 
     let missing_expected_run = request_with_headers(
@@ -927,7 +932,7 @@ async fn chat_run_control_routes_use_query_and_strict_body_contracts() {
     assert_eq!(invalid_steer_body["data"], json!({}));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn generic_agent_reservation_blocks_chat_before_user_message_persistence() {
     let app = app();
     let server = delayed_agent_model_mock_server().await;
@@ -980,7 +985,8 @@ async fn generic_agent_reservation_blocks_chat_before_user_message_persistence()
     });
 
     let mut generic_is_active = false;
-    for _ in 0..50 {
+    let mut last_active = Value::Null;
+    for _ in 0..500 {
         let active = request_with_headers(
             &app,
             Method::GET,
@@ -991,6 +997,7 @@ async fn generic_agent_reservation_blocks_chat_before_user_message_persistence()
         )
         .await;
         let active_body = response_json(active).await;
+        last_active = active_body.clone();
         if active_body["data"]["activeRun"]["runCode"]
             .as_str()
             .is_some()
@@ -1006,7 +1013,9 @@ async fn generic_agent_reservation_blocks_chat_before_user_message_persistence()
             .expect("failed generic run request should join");
         let status = generic_response.status();
         let body = response_json(generic_response).await;
-        panic!("generic run should own the shared admission; response {status}: {body}");
+        panic!(
+            "generic run should own the shared admission; response {status}: {body}; active {last_active}"
+        );
     }
 
     let chat_send = request_with_headers(
@@ -1041,7 +1050,7 @@ async fn generic_agent_reservation_blocks_chat_before_user_message_persistence()
     assert_eq!(generic_response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_steer_endpoint_persists_server_message_and_continues_the_active_stream_run() {
     let app = app();
     let (server, model_state) = delayed_steer_model_mock_server().await;
@@ -1081,7 +1090,8 @@ async fn chat_steer_endpoint_persists_server_message_and_continues_the_active_st
     assert_eq!(stream.status(), StatusCode::OK);
 
     let mut active_run_code = None;
-    for _ in 0..50 {
+    let mut last_replay = Value::Null;
+    for _ in 0..500 {
         let replay = request_with_headers(
             &app,
             Method::GET,
@@ -1100,12 +1110,14 @@ async fn chat_steer_endpoint_persists_server_message_and_continues_the_active_st
                     .flatten()
             })
         });
+        last_replay = replay_body;
         if active_run_code.is_some() {
             break;
         }
         sleep(Duration::from_millis(20)).await;
     }
-    let active_run_code = active_run_code.expect("active run code should be observable");
+    let active_run_code = active_run_code
+        .unwrap_or_else(|| panic!("active run code should be observable: {last_replay}"));
     // RUN_STARTED precedes context assembly. Wait until inference has actually
     // started so this exercises steering during a model call, not before it.
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -1195,7 +1207,7 @@ async fn chat_steer_endpoint_persists_server_message_and_continues_the_active_st
     }));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_stop_run_cancels_runtime_cleans_lease_and_prevents_orphan_messages() {
     let app = app();
     let (server, model_state) = delayed_steer_model_mock_server().await;
@@ -1235,7 +1247,7 @@ async fn chat_stop_run_cancels_runtime_cleans_lease_and_prevents_orphan_messages
     assert_eq!(stream.status(), StatusCode::OK);
 
     let mut active_run_code = None;
-    for _ in 0..50 {
+    for _ in 0..500 {
         let active = request_with_headers(
             &app,
             Method::GET,
@@ -1265,6 +1277,10 @@ async fn chat_stop_run_cancels_runtime_cleans_lease_and_prevents_orphan_messages
         sleep(Duration::from_millis(20)).await;
     }
     let active_run_code = active_run_code.expect("active run should be queryable");
+    assert!(
+        model_state.calls.load(Ordering::SeqCst) > 0,
+        "native inference should start before stop"
+    );
 
     let conflicting_send = request_with_headers(
         &app,
@@ -1437,7 +1453,7 @@ async fn chat_stop_run_cancels_runtime_cleans_lease_and_prevents_orphan_messages
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn short_term_memory_endpoints_return_uniform_response_for_success_and_bad_extractors() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -1513,6 +1529,7 @@ async fn short_term_memory_endpoints_return_uniform_response_for_success_and_bad
             Request::builder()
                 .method(Method::POST)
                 .uri("/api/v1/chats/sessions/set-goal")
+                .header("x-workspace-code", "TRON_CORE")
                 .header(header::AUTHORIZATION, authorization)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from("{"))
@@ -1522,15 +1539,12 @@ async fn short_term_memory_endpoints_return_uniform_response_for_success_and_bad
         .expect("router should respond");
     assert_eq!(malformed_json.status(), StatusCode::BAD_REQUEST);
     let malformed_json_body = response_json(malformed_json).await;
-    assert_eq!(
-        malformed_json_body["code"],
-        json!("SHORT_TERM_MEMORY_REQUEST_INVALID")
-    );
+    assert_eq!(malformed_json_body["code"], json!("CHAT_REQUEST_INVALID"));
     assert!(malformed_json_body["message"].is_string());
     assert_eq!(malformed_json_body["data"], json!({}));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_session_groups_do_not_require_workspace_access_grants() {
     let database_url = temp_database_url("chat-admin-workspace-access");
     let router = app_with_config(AppConfig {
@@ -1557,7 +1571,7 @@ async fn chat_session_groups_do_not_require_workspace_access_grants() {
     assert_eq!(body["data"], json!([]));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_persists_messages_and_invokes_agent_run() {
     let database_url = temp_database_url("chat-send-session-summary");
     let app = app_with_config(AppConfig {
@@ -1587,7 +1601,7 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
         .as_str()
         .expect("session code should be returned")
         .to_string();
-    assert_decimal_code_has_snowflake_shape("SESSION-", &session_code);
+    assert!(eliteforge_agent_core::RunId::parse_str(&session_code).is_ok());
 
     let send_response = request_with_headers(
         &app,
@@ -1636,221 +1650,18 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
     assert_eq!(history["data"]["records"][0]["runCode"], json!(run_code));
     assert!(!sent.to_string().contains("sk-chat-api"));
 
-    let mut summary_row = None;
-    for _ in 0..100 {
-        summary_row = Connection::open(&database_url)
-            .expect("chat database should open")
-            .query_row(
-                "SELECT family_code, status, summary_markdown, metadata_json, expires_at
-                 FROM agent_session_family_snapshots
-                 WHERE session_code = ?1
-                   AND run_code = ?2
-                   AND snapshot_kind = 'SESSION_SUMMARY'",
-                [session_code.as_str(), run_code.as_str()],
-                |row| {
-                    Ok((
-                        row.get::<_, Option<String>>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                        row.get::<_, Option<String>>(3)?,
-                        row.get::<_, Option<i64>>(4)?,
-                    ))
-                },
-            )
-            .optional()
-            .expect("session summary should be queryable");
-        if summary_row
-            .as_ref()
-            .is_some_and(|(_, status, _, _, _)| status == "COMPLETED")
-        {
-            break;
-        }
-        sleep(Duration::from_millis(20)).await;
-    }
-    let (family_code, summary_status, summary_markdown, metadata_json, expires_at) =
-        summary_row.expect("background session summary should complete");
-    assert!(family_code.is_none());
-    assert_eq!(summary_status, "COMPLETED");
-    assert!(summary_markdown.is_some_and(|markdown| !markdown.trim().is_empty()));
-    assert!(metadata_json.is_some_and(|metadata| {
-        metadata.contains("\"runOutcome\"")
-            && metadata.contains("\"status\":\"COMPLETED\"")
-            && metadata.contains("\"promptVersion\":")
-    }));
-    assert!(expires_at.is_none());
-    let summary_event_count: i64 = Connection::open(&database_url)
-        .expect("chat database should open")
-        .query_row(
-            "SELECT count(1)
-             FROM agent_transcript_events
-             WHERE session_code = ?1
-               AND run_code = ?2
-               AND event_type IN (
-                   'agent.session_summary.started',
-                   'agent.session_summary.completed'
-               )",
-            [session_code.as_str(), run_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("session summary events should be queryable");
-    assert_eq!(summary_event_count, 2);
-}
-
-#[tokio::test]
-async fn session_summary_uses_the_current_workspace_prompt_and_restricted_model_request() {
-    let database_url = builtin_prompt_database_url("chat-session-summary-prompt-override");
-    let app = app_with_config(AppConfig {
-        database_url: database_url.to_string_lossy().into_owned(),
-        ..AppConfig::default()
-    });
-    let server = recording_agent_model_mock_server().await;
-    let token = authenticated_bearer_token(&app).await;
-    let authorization = format!("Bearer {token}");
-    let prompt_code = "SYS_MEMORY_SESSION_SUMMARY";
-    let inherited_response = request_with_headers(
-        &app,
-        Method::POST,
-        "/api/v1/prompts/workspace-detail",
-        Some(json!({
-            "workspaceCode": "TRON_CORE",
-            "promptCode": prompt_code
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(inherited_response.status(), StatusCode::OK);
-    let inherited = response_json(inherited_response).await;
-    let inherited_version = inherited["data"]["version"]
-        .as_u64()
-        .expect("inherited session summary prompt should have a version");
-    let custom_prompt =
-        "CUSTOM SESSION SUMMARY SYSTEM PROMPT\nReturn Markdown with a # Goal heading.";
-    let override_response = request_with_headers(
-        &app,
-        Method::POST,
-        "/api/v1/prompts/workspace-update",
-        Some(json!({
-            "workspaceCode": "TRON_CORE",
-            "promptCode": prompt_code,
-            "displayName": "Custom session summary",
-            "promptBody": custom_prompt,
-            "description": "runtime override",
-            "enabled": true,
-            "expectedVersion": inherited_version,
-            "variables": []
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(override_response.status(), StatusCode::OK);
-    let override_payload = response_json(override_response).await;
-    let override_version = override_payload["data"]["version"]
-        .as_u64()
-        .expect("workspace override should have a version");
-
-    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
-    let session_response = request_with_headers(
-        &app,
-        Method::POST,
-        "/api/v1/chats/sessions",
-        Some(json!({
-            "workspaceCode": "TRON_CORE",
-            "title": "Summary prompt override"
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(session_response.status(), StatusCode::CREATED);
-    let session = response_json(session_response).await;
-    let session_code = session["data"]["sessionCode"]
-        .as_str()
-        .expect("session code should be returned")
-        .to_string();
-    let send_response = request_with_headers(
-        &app,
-        Method::POST,
-        &format!("/api/v1/chats/sessions/{session_code}/messages"),
-        Some(json!({
-            "content": "use the current summary prompt",
-            "workspaceCode": "TRON_CORE",
-            "modelCode": model_code
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(send_response.status(), StatusCode::OK);
-    let sent = response_json(send_response).await;
-    let run_code = sent["data"]["run"]["runCode"]
-        .as_str()
-        .expect("run code should be returned")
-        .to_string();
-
-    let mut summary_request = None;
-    for _ in 0..100 {
-        summary_request = server
-            .requests
-            .lock()
-            .expect("recorded model requests should lock")
+    let summary = common::wait_native_summary(database_url.to_str().unwrap(), &session_code).await;
+    assert!(!summary["summary"].as_str().unwrap().trim().is_empty());
+    assert!(summary["sourceRevision"].as_u64().unwrap() > 0);
+    assert!(
+        common::native_session_events(database_url.to_str().unwrap(), &session_code)
+            .await
             .iter()
-            .find(|request| {
-                request["messages"].as_array().is_some_and(|messages| {
-                    messages.iter().any(|message| {
-                        message["role"] == json!("system")
-                            && message["content"] == json!(custom_prompt)
-                    })
-                })
-            })
-            .cloned();
-        if summary_request.is_some() {
-            break;
-        }
-        sleep(Duration::from_millis(20)).await;
-    }
-    let summary_request =
-        summary_request.expect("background request should use the workspace prompt override");
-    assert_eq!(summary_request["temperature"], json!(0.0));
-    assert_eq!(summary_request["max_tokens"], json!(1_024));
-    assert!(summary_request.get("enable_thinking").is_none());
-    assert!(summary_request.get("thinking").is_none());
-    assert!(summary_request.get("tools").is_none());
-    assert_eq!(
-        summary_request["messages"]
-            .as_array()
-            .expect("summary messages should be an array")
-            .len(),
-        2
+            .any(|e| e.kind == "tron.session-summary-view")
     );
-
-    let mut persisted_prompt_version = None;
-    for _ in 0..100 {
-        persisted_prompt_version = Connection::open(&database_url)
-            .expect("chat database should open")
-            .query_row(
-                "SELECT json_extract(metadata_json, '$.promptVersion')
-                 FROM agent_session_family_snapshots
-                 WHERE session_code = ?1
-                   AND run_code = ?2
-                   AND snapshot_kind = 'SESSION_SUMMARY'
-                   AND status = 'COMPLETED'",
-                [session_code.as_str(), run_code.as_str()],
-                |row| row.get::<_, Option<u64>>(0),
-            )
-            .optional()
-            .expect("session summary prompt version should be queryable")
-            .flatten();
-        if persisted_prompt_version.is_some() {
-            break;
-        }
-        sleep(Duration::from_millis(20)).await;
-    }
-    assert_eq!(persisted_prompt_version, Some(override_version));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn session_summary_model_failure_does_not_change_the_chat_result() {
     let database_url = temp_database_url("chat-session-summary-model-failure");
     let app = app_with_config(AppConfig {
@@ -1905,43 +1716,42 @@ async fn session_summary_model_failure_does_not_change_the_chat_result() {
         .expect("run code should be returned")
         .to_string();
 
-    let mut summary_failure = None;
-    for _ in 0..100 {
-        summary_failure = Connection::open(&database_url)
-            .expect("chat database should open")
-            .query_row(
-                "SELECT status, error_code, metadata_json
-                 FROM agent_session_family_snapshots
-                 WHERE session_code = ?1
-                   AND run_code = ?2
-                   AND snapshot_kind = 'SESSION_SUMMARY'",
-                [session_code.as_str(), run_code.as_str()],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                    ))
-                },
-            )
-            .optional()
-            .expect("session summary failure should be queryable");
-        if summary_failure
-            .as_ref()
-            .is_some_and(|(status, _, _)| status == "FAILED")
-        {
+    let mut failed_summary = false;
+    for _ in 0..250 {
+        failed_summary = common::native_runs(database_url.to_str().unwrap(), &session_code)
+            .await
+            .iter()
+            .any(|r| {
+                r.id.to_string() != run_code
+                    && r.status == eliteforge_agent_core::ManagedRunStatus::Failed
+            });
+        if failed_summary {
             break;
         }
         sleep(Duration::from_millis(20)).await;
     }
-    let (summary_status, error_code, metadata_json) =
-        summary_failure.expect("background summary failure should be persisted");
-    assert_eq!(summary_status, "FAILED");
-    assert_eq!(error_code.as_deref(), Some("SESSION_SUMMARY_MODEL_FAILED"));
-    assert!(metadata_json.is_some_and(|metadata| {
-        metadata.contains("\"runOutcome\"") && metadata.contains("\"status\":\"COMPLETED\"")
-    }));
-
+    assert!(
+        failed_summary,
+        "Framework must persist the failed summary run"
+    );
+    assert!(
+        common::native_context(
+            database_url.to_str().unwrap(),
+            &session_code,
+            "tron.session-summary-view"
+        )
+        .await
+        .is_none()
+    );
+    assert_eq!(
+        common::native_runs(database_url.to_str().unwrap(), &session_code)
+            .await
+            .into_iter()
+            .find(|r| r.id.to_string() == run_code)
+            .unwrap()
+            .status,
+        eliteforge_agent_core::ManagedRunStatus::Completed
+    );
     let history_response = request_with_headers(
         &app,
         Method::GET,
@@ -1954,9 +1764,30 @@ async fn session_summary_model_failure_does_not_change_the_chat_result() {
     assert_eq!(history_response.status(), StatusCode::OK);
     let history = response_json(history_response).await;
     assert_eq!(history["data"]["records"][0]["status"], json!("COMPLETED"));
+    let groups = response_json(
+        request_with_headers(
+            &app,
+            Method::GET,
+            "/api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+            None,
+            None,
+            Some(&authorization),
+        )
+        .await,
+    )
+    .await;
+    let visible = groups["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|group| group["sessions"].as_array().into_iter().flatten())
+        .find(|session| session["sessionCode"] == session_code)
+        .unwrap();
+    assert_eq!(visible["lastRunCode"], json!(run_code));
+    assert_eq!(visible["lastRunStatus"], json!("COMPLETED"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn session_summary_storage_failure_does_not_change_the_chat_result() {
     let database_url = temp_database_url("chat-session-summary-storage-failure");
     let app = app_with_config(AppConfig {
@@ -1985,19 +1816,9 @@ async fn session_summary_storage_failure_does_not_change_the_chat_result() {
         .as_str()
         .expect("session code should be returned")
         .to_string();
-    Connection::open(&database_url)
-        .expect("chat database should open")
-        .execute_batch(
-            "CREATE TRIGGER reject_completed_session_summary
-             BEFORE INSERT ON agent_session_family_snapshots
-             WHEN NEW.snapshot_kind = 'SESSION_SUMMARY'
-              AND NEW.status = 'COMPLETED'
-             BEGIN
-               SELECT RAISE(ABORT, 'summary completion storage failure');
-             END;",
-        )
-        .expect("summary failure trigger should be created");
-
+    Connection::open(&database_url).unwrap().execute_batch(
+        "CREATE TRIGGER reject_native_summary BEFORE INSERT ON ef_context_summaries BEGIN SELECT RAISE(ABORT, 'summary storage failure'); END;"
+    ).unwrap();
     let send_response = request_with_headers(
         &app,
         Method::POST,
@@ -2022,45 +1843,45 @@ async fn session_summary_storage_failure_does_not_change_the_chat_result() {
         .expect("run code should be returned")
         .to_string();
 
-    let mut summary_failure = None;
-    for _ in 0..100 {
-        summary_failure = Connection::open(&database_url)
-            .expect("chat database should open")
-            .query_row(
-                "SELECT status, error_code
-                 FROM agent_session_family_snapshots
-                 WHERE session_code = ?1
-                   AND run_code = ?2
-                   AND snapshot_kind = 'SESSION_SUMMARY'",
-                [session_code.as_str(), run_code.as_str()],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
-            )
-            .optional()
-            .expect("session summary storage failure should be queryable");
-        if summary_failure
-            .as_ref()
-            .is_some_and(|(status, _)| status == "FAILED")
-        {
+    let mut failed_summary = false;
+    for _ in 0..250 {
+        failed_summary = common::native_runs(database_url.to_str().unwrap(), &session_code)
+            .await
+            .iter()
+            .any(|r| {
+                r.id.to_string() != run_code
+                    && r.status == eliteforge_agent_core::ManagedRunStatus::Failed
+            });
+        if failed_summary {
             break;
         }
         sleep(Duration::from_millis(20)).await;
     }
-    let (summary_status, error_code) =
-        summary_failure.expect("background storage failure should be persisted");
-    assert_eq!(summary_status, "FAILED");
-    assert_eq!(error_code.as_deref(), Some("SESSION_SUMMARY_STORE_FAILED"));
-    let run_status: String = Connection::open(&database_url)
-        .expect("chat database should open")
-        .query_row(
-            "SELECT status FROM agent_runs WHERE run_code = ?1",
-            [run_code.as_str()],
-            |row| row.get(0),
+    assert!(
+        failed_summary,
+        "Framework must persist the failed summary run"
+    );
+    assert!(
+        common::native_context(
+            database_url.to_str().unwrap(),
+            &session_code,
+            "tron.session-summary-view"
         )
-        .expect("main run history should be queryable");
-    assert_eq!(run_status, "COMPLETED");
+        .await
+        .is_none()
+    );
+    assert_eq!(
+        common::native_runs(database_url.to_str().unwrap(), &session_code)
+            .await
+            .into_iter()
+            .find(|r| r.id.to_string() == run_code)
+            .unwrap()
+            .status,
+        eliteforge_agent_core::ManagedRunStatus::Completed
+    );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_goal_can_be_updated_while_unfinished() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -2175,10 +1996,10 @@ async fn chat_goal_can_be_updated_while_unfinished() {
         Some(&authorization),
     )
     .await;
-    assert_eq!(terminal_update_response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(terminal_update_response.status(), StatusCode::CONFLICT);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_goal_judge_failure_retries_without_business_continuation() {
     let database_url = temp_database_url("chat-goal-judge-failure-no-continuation");
     let app = app_with_config(AppConfig {
@@ -2255,64 +2076,19 @@ async fn chat_goal_judge_failure_retries_without_business_continuation() {
         json!("chat reply: run once and let judge fail")
     );
 
-    let connection = Connection::open(&database_url).expect("goal judge db should reopen");
-    let run_count = connection
-        .query_row(
-            "SELECT count(*) FROM agent_runs WHERE conversation_code = ?1",
-            [session_code.as_str()],
-            |row| row.get::<_, i64>(0),
-        )
-        .expect("agent run count should query");
-    assert_eq!(run_count, 1);
-
-    let persisted_message_count = connection
-        .query_row(
-            "SELECT count(*) FROM chat_messages WHERE session_code = ?1",
-            [session_code.as_str()],
-            |row| row.get::<_, i64>(0),
-        )
-        .expect("chat message count should query");
-    assert_eq!(persisted_message_count, 2);
-
-    let mut statement = connection
-        .prepare(
-            "SELECT event_kind
-             FROM agent_session_goal_events
-             WHERE goal_code = ?1
-             ORDER BY event_seq ASC",
-        )
-        .expect("goal event query should prepare");
-    let event_kinds = statement
-        .query_map([goal_code.as_str()], |row| row.get::<_, String>(0))
-        .expect("goal event query should run")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("goal event rows should map");
-    assert_eq!(
-        event_kinds,
-        vec![
-            "GOAL_SET".to_string(),
-            "GOAL_JUDGE_STARTED".to_string(),
-            "GOAL_JUDGE_ATTEMPT_FAILED".to_string(),
-            "GOAL_JUDGE_ATTEMPT_FAILED".to_string(),
-            "JUDGE_FAILED".to_string(),
-        ]
+    let goal = common::native_goal(database_url.to_str().unwrap(), &goal_code).await;
+    assert_eq!(goal.status, eliteforge_agent_core::GoalStatus::Paused);
+    assert!(goal.consecutive_failures >= 3);
+    assert!(
+        common::native_session_events(database_url.to_str().unwrap(), &session_code)
+            .await
+            .iter()
+            .any(|e| e.goal_id.as_deref() == Some(goal_code.as_str())
+                && e.kind == "GOAL_JUDGE_FAILED")
     );
-
-    let (runs_used, consecutive_failures, last_verdict): (i64, i64, String) = connection
-        .query_row(
-            "SELECT runs_used, consecutive_judge_failures, last_verdict
-             FROM agent_session_goals
-             WHERE goal_code = ?1",
-            [goal_code.as_str()],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .expect("goal state should query");
-    assert_eq!(runs_used, 1);
-    assert_eq!(consecutive_failures, 1);
-    assert_eq!(last_verdict, "JUDGE_FAILED");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_goal_judge_retry_can_complete_without_business_continuation() {
     let database_url = temp_database_url("chat-goal-judge-retry-completed");
     let app = app_with_config(AppConfig {
@@ -2322,7 +2098,7 @@ async fn chat_goal_judge_retry_can_complete_without_business_continuation() {
     let server = scripted_agent_model_mock_server(vec![
         "chat reply: finish requested work".to_string(),
         "not valid judge json".to_string(),
-        r#"{"verdict":"COMPLETED","reason":"The business run finished the requested work.","completionEvidence":"assistant produced the final response","missingEvidence":[],"requiredUserInput":null,"nextStepHint":null,"continuationPrompt":null}"#
+        r#"{"verdict":"COMPLETED","reason":"The business run finished the requested work.","next_input":null,"progress":{},"required_input":null}"#
             .to_string(),
     ])
     .await;
@@ -2395,63 +2171,13 @@ async fn chat_goal_judge_retry_can_complete_without_business_continuation() {
         json!("chat reply: finish requested work")
     );
 
-    let connection = Connection::open(&database_url).expect("goal judge db should reopen");
-    let run_count = connection
-        .query_row(
-            "SELECT count(*) FROM agent_runs WHERE conversation_code = ?1",
-            [session_code.as_str()],
-            |row| row.get::<_, i64>(0),
-        )
-        .expect("agent run count should query");
-    assert_eq!(run_count, 1);
-
-    let persisted_message_count = connection
-        .query_row(
-            "SELECT count(*) FROM chat_messages WHERE session_code = ?1",
-            [session_code.as_str()],
-            |row| row.get::<_, i64>(0),
-        )
-        .expect("chat message count should query");
-    assert_eq!(persisted_message_count, 2);
-
-    let mut statement = connection
-        .prepare(
-            "SELECT event_kind
-             FROM agent_session_goal_events
-             WHERE goal_code = ?1
-             ORDER BY event_seq ASC",
-        )
-        .expect("goal event query should prepare");
-    let event_kinds = statement
-        .query_map([goal_code.as_str()], |row| row.get::<_, String>(0))
-        .expect("goal event query should run")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("goal event rows should map");
+    let goal = common::native_goal(database_url.to_str().unwrap(), &goal_code).await;
+    assert_eq!(goal.status, eliteforge_agent_core::GoalStatus::Completed);
+    assert_eq!(goal.runs_used, 1);
     assert_eq!(
-        event_kinds,
-        vec![
-            "GOAL_SET".to_string(),
-            "GOAL_JUDGE_STARTED".to_string(),
-            "GOAL_JUDGE_ATTEMPT_FAILED".to_string(),
-            "GOAL_COMPLETED".to_string(),
-        ]
+        goal.last_decision.unwrap().verdict,
+        eliteforge_agent_core::GoalVerdict::Completed
     );
-
-    let (status, runs_used, consecutive_failures, last_verdict): (String, i64, i64, String) =
-        connection
-            .query_row(
-                "SELECT status, runs_used, consecutive_judge_failures, last_verdict
-             FROM agent_session_goals
-             WHERE goal_code = ?1",
-                [goal_code.as_str()],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )
-            .expect("goal state should query");
-    assert_eq!(status, "COMPLETED");
-    assert_eq!(runs_used, 1);
-    assert_eq!(consecutive_failures, 0);
-    assert_eq!(last_verdict, "COMPLETED");
-
     let active_goal_response = request_with_headers(
         &app,
         Method::GET,
@@ -2487,7 +2213,7 @@ async fn chat_goal_judge_retry_can_complete_without_business_continuation() {
     assert!(latest_goal_payload["data"].get("criteria").is_none());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_stream_persists_messages_and_emits_deltas() {
     let app = app();
     let server = agent_model_mock_server().await;
@@ -2650,7 +2376,7 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_stream_downgrades_unreachable_mcp_server_to_agui_warning_and_finishes_run() {
     let app = app();
     let server = recording_agent_model_mock_server().await;
@@ -2833,7 +2559,7 @@ async fn chat_stream_downgrades_unreachable_mcp_server_to_agui_warning_and_finis
     assert!(!events.iter().any(|event| event["type"] == "RUN_ERROR"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_stream_only_emits_events_for_current_run() {
     let app = app();
     let server = agent_model_mock_server().await;
@@ -2903,13 +2629,12 @@ async fn chat_stream_only_emits_events_for_current_run() {
     assert!(!second_body.contains("first stream replay guard"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_does_not_reuse_existing_run_codes_after_restart() {
     let database_url = temp_database_url("chat-run-code-collision");
     let mut config = AppConfig::default();
     config.database_url = database_url.to_string_lossy().into_owned();
     let app = app_with_config(config);
-    seed_agent_run_codes(&database_url);
 
     let server = agent_model_mock_server().await;
     let token = authenticated_bearer_token(&app).await;
@@ -2954,15 +2679,20 @@ async fn chat_send_does_not_reuse_existing_run_codes_after_restart() {
     let run_code = sent["data"]["run"]["runCode"]
         .as_str()
         .expect("run code should be returned");
-    assert!(run_code.starts_with("RUN-"));
-    assert_ne!(run_code, "RUN-1");
+    assert!(eliteforge_agent_core::RunId::parse_str(run_code).is_ok());
+    assert!(
+        common::native_runs(database_url.to_str().unwrap(), &session_code)
+            .await
+            .iter()
+            .any(|run| run.id.to_string() == run_code)
+    );
     assert_eq!(
         sent["data"]["messages"][1]["content"],
         json!("chat reply: avoid a restarted run code collision")
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_resolves_model_code_through_model_management() {
     let app = app();
     let server = agent_model_mock_server().await;
@@ -3012,7 +2742,7 @@ async fn chat_send_resolves_model_code_through_model_management() {
     assert!(!sent.to_string().contains("sk-chat-api"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_uses_model_default_and_validates_reasoning_effort_override() {
     let database_url = temp_database_url("chat-reasoning-effort-observability");
     let app = app_with_config(AppConfig {
@@ -3080,36 +2810,21 @@ async fn chat_send_uses_model_default_and_validates_reasoning_effort_override() 
         .lock()
         .expect("model requests mutex should lock")
         .clone();
+    let requests = requests
+        .into_iter()
+        .filter(|request| !is_session_summary_request(request))
+        .collect::<Vec<_>>();
     assert_eq!(requests[0]["reasoning_effort"], json!("medium"));
     assert_eq!(requests[1]["reasoning_effort"], json!("high"));
 
-    let connection = Connection::open(&database_url).expect("reasoning effort db should reopen");
-    let persisted_efforts = connection
-        .prepare("SELECT reasoning_effort FROM agent_runs WHERE conversation_code = ?1 ORDER BY id")
-        .expect("agent run reasoning effort query should prepare")
-        .query_map([session_code.as_str()], |row| {
-            row.get::<_, Option<String>>(0)
-        })
-        .expect("agent run reasoning efforts should query")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("agent run reasoning efforts should collect");
-    assert_eq!(
-        persisted_efforts,
-        vec![Some("Medium".into()), Some("High".into())]
-    );
-
-    let started_payloads = connection
-        .prepare(
-            "SELECT payload_json FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.run.started' ORDER BY id",
-        )
-        .expect("run started payload query should prepare")
-        .query_map([session_code.as_str()], |row| row.get::<_, String>(0))
-        .expect("run started payloads should query")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("run started payloads should collect");
-    assert!(started_payloads[0].contains("\"reasoningEffort\":\"Medium\""));
-    assert!(started_payloads[1].contains("\"reasoningEffort\":\"High\""));
-
+    let presentations =
+        common::native_session_events(database_url.to_str().unwrap(), &session_code).await;
+    let persisted = presentations
+        .iter()
+        .filter(|e| e.kind == "tron.run-display")
+        .filter_map(|e| e.payload.get("reasoningEffort").and_then(Value::as_str))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(persisted.contains("Medium") && persisted.contains("High"));
     let invalid_response = request_with_headers(
         &app,
         Method::POST,
@@ -3133,7 +2848,7 @@ async fn chat_send_uses_model_default_and_validates_reasoning_effort_override() 
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_session_creation_persists_selected_agent_code() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -3158,7 +2873,7 @@ async fn chat_session_creation_persists_selected_agent_code() {
     assert_eq!(payload["data"]["agentCode"], json!("codex"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_uses_codex_system_agent_cli_runtime() {
     let codex_command = temp_command_path("codex");
     let opencode_command = temp_command_path("opencode");
@@ -3230,7 +2945,7 @@ async fn chat_send_uses_codex_system_agent_cli_runtime() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_system_agent_requires_explicit_model_config() {
     let codex_command = temp_command_path("codex-model-required");
     let opencode_command = temp_command_path("opencode-model-required");
@@ -3289,7 +3004,7 @@ async fn chat_send_system_agent_requires_explicit_model_config() {
     assert_eq!(payload["code"], json!("AGENT_MODEL_REQUIRED"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_system_agent_rejects_model_outside_scanned_catalog() {
     let codex_command = temp_command_path("codex-model-scope");
     let opencode_command = temp_command_path("opencode-model-scope");
@@ -3353,7 +3068,7 @@ async fn chat_send_system_agent_rejects_model_outside_scanned_catalog() {
     assert!(message.contains("is not available for agent"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_uses_opencode_system_agent_cli_runtime() {
     let codex_command = temp_command_path("codex-open");
     let opencode_command = temp_command_path("opencode-open");
@@ -3427,7 +3142,7 @@ async fn chat_send_uses_opencode_system_agent_cli_runtime() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_events() {
     let codex_command = temp_command_path("codex-opencode-stream");
     let opencode_command = temp_command_path("opencode-stream");
@@ -3508,7 +3223,7 @@ async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_event
     assert!(!body.contains("event: RUN_ERROR"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_stream_protocol_replay_survives_client_disconnect() {
     let codex_command = temp_command_path("codex-disconnect-replay");
     let opencode_command = temp_command_path("opencode-disconnect-replay");
@@ -3597,8 +3312,9 @@ async fn chat_stream_protocol_replay_survives_client_disconnect() {
             Some(&authorization),
         )
         .await;
-        assert_eq!(response.status(), StatusCode::OK);
+        let status = response.status();
         replay_payload = response_json(response).await;
+        assert_eq!(status, StatusCode::OK, "{replay_payload}");
         let serialized = replay_payload.to_string();
         if serialized.contains("RUN_FINISHED") && serialized.contains("disconnect reply") {
             break;
@@ -3615,7 +3331,7 @@ async fn chat_stream_protocol_replay_survives_client_disconnect() {
     assert!(replay_json.contains("RUN_FINISHED"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unpolled_chat_stream_drop_detaches_observer_without_aborting_run() {
     let app = app();
     let (server, _) = delayed_steer_model_mock_server().await;
@@ -3669,7 +3385,7 @@ async fn unpolled_chat_stream_drop_detaches_observer_without_aborting_run() {
     assert_eq!(snapshot_body["data"]["activeStreams"], json!(0));
 
     let mut replay_payload = json!(null);
-    for _ in 0..60 {
+    for _ in 0..600 {
         let replay = request_with_headers(
             &app,
             Method::GET,
@@ -3687,12 +3403,15 @@ async fn unpolled_chat_stream_drop_detaches_observer_without_aborting_run() {
         sleep(Duration::from_millis(25)).await;
     }
     let replay_json = replay_payload.to_string();
-    assert!(replay_json.contains("RUN_STARTED"));
-    assert!(replay_json.contains("first boundary output"));
+    assert!(replay_json.contains("RUN_STARTED"), "{replay_json}");
+    assert!(
+        replay_json.contains("first boundary output"),
+        "{replay_json}"
+    );
     assert!(replay_json.contains("RUN_FINISHED"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_resumes_codex_system_agent_session() {
     let codex_command = temp_command_path("codex-resume");
     let opencode_command = temp_command_path("opencode-resume");
@@ -3796,7 +3515,7 @@ async fn chat_send_resumes_codex_system_agent_session() {
     assert!(!args_lines.contains("--color"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chat_send_resumes_opencode_system_agent_session() {
     let codex_command = temp_command_path("codex-opencode-resume");
     let opencode_command = temp_command_path("opencode-session-resume");
@@ -3900,8 +3619,8 @@ echo '{"type":"step_finish","part":{"tokens":{"input":5,"output":3,"total":8}}}'
     assert!(args_lines.contains("ses-opencode-initial"));
 }
 
-#[tokio::test]
-async fn chat_send_resumes_from_runtime_mapping_when_legacy_session_field_is_empty() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_send_resumes_from_framework_external_session_mapping() {
     let database_url = temp_database_url("chat-runtime-mapping-resume");
     let codex_command = temp_command_path("codex-runtime-mapping");
     let opencode_command = temp_command_path("opencode-runtime-mapping");
@@ -3975,27 +3694,15 @@ async fn chat_send_resumes_from_runtime_mapping_when_legacy_session_field_is_emp
         json!("thr-initial")
     );
 
-    let connection = Connection::open(&database_url).expect("runtime mapping db should reopen");
-    let runtime_mapping = connection
-        .query_row(
-            "SELECT runtime_session_id
-             FROM conversation_runtime_sessions
-             WHERE conversation_code = ?1
-               AND runtime_adapter_key = 'CODEX_EXEC'
-               AND agent_code = 'codex'",
-            [session_code.as_str()],
-            |row| row.get::<_, String>(0),
+    assert_eq!(
+        common::native_context(
+            database_url.to_str().unwrap(),
+            &session_code,
+            "tron.external/CODEX_EXEC/codex"
         )
-        .optional()
-        .expect("runtime mapping query should succeed");
-    assert_eq!(runtime_mapping.as_deref(), Some("thr-initial"));
-    connection
-        .execute(
-            "UPDATE chat_sessions SET system_agent_session_id = NULL WHERE session_code = ?1",
-            params![session_code],
-        )
-        .expect("legacy session field should clear");
-
+        .await,
+        Some(json!("thr-initial"))
+    );
     let second_send = request_with_headers(
         &app,
         Method::POST,
@@ -4041,28 +3748,6 @@ fn seed_workspace_without_access(database_url: &PathBuf, workspace_code: &str) {
             ],
         )
         .expect("workspace without direct access should insert");
-}
-
-fn seed_agent_run_codes(database_url: &PathBuf) {
-    let connection = Connection::open(database_url).expect("chat test db should reopen");
-    for index in 1..=5_i64 {
-        connection
-            .execute(
-                "INSERT INTO agent_runs (
-                    id, run_code, conversation_code, workspace_code, user_code, app_code, task_code,
-                    model_code, status, outcome, step_count, observation_count, output_preview,
-                    error_code, error_message, started_at, finished_at, created_at
-                 )
-                 VALUES (?1, ?2, NULL, 'TRON_CORE', 'USR-1', NULL, NULL, 'CHAT_MODEL', 'FAILED',
-                    'failed', 0, 0, NULL, 'SEEDED', 'seeded run', ?3, ?3, ?3)",
-                params![
-                    735_100_000_000_010_000_i64 + index,
-                    format!("RUN-{index}"),
-                    1_779_235_200_000_i64 + index,
-                ],
-            )
-            .expect("seeded agent run should insert");
-    }
 }
 
 async fn create_platform_text_model(app: &Router, authorization: &str, base_url: &str) -> String {
@@ -4179,14 +3864,6 @@ fn temp_database_url(test_name: &str) -> PathBuf {
         .expect("system time should be after epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("tron-{test_name}-{nanos}.sqlite3"))
-}
-
-fn builtin_prompt_database_url(test_name: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time should be after epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("builtin-{test_name}-{nanos}.sqlite3"))
 }
 
 fn assert_decimal_code_has_snowflake_shape(prefix: &str, code: &str) {

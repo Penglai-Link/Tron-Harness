@@ -11,30 +11,13 @@ use serde_json::json;
 use tokio::sync::Notify;
 use tron_backend::{
     adapters::outbound::model::{chat_completions_request, embeddings_request, responses_request},
-    adapters::outbound::persistence::{SqliteChatRepository, SqliteShortTermMemoryRepository},
-    application::{
-        agent::{ActiveRunRegistry, AgentSteerInput, ModelClient, ReactAgentBuilder},
-        chat::{ChatService, CreateChatSessionCommand},
-        short_term_memory::{
-            ShortTermMemoryConfig, ShortTermMemoryRepository, ShortTermMemoryService,
-            ToolOutputConfig,
-        },
-    },
-    domain::{
-        agent::{
-            AgentError, AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig,
-            AgentModelProtocol, AgentRunContext, AgentRunLimits, AgentShortTermMemoryRunContext,
-            EffectiveSkill, EffectiveTool, EffectiveVariable, InProcessTool, ModelRequest,
-            ModelResponse, Tool, ToolCall, ToolError, ToolExecutionResult, ToolObservation,
-            ToolRegistry, ToolRequest,
-        },
-        short_term_memory::{
-            ShortTermMemoryCompaction, ShortTermMemoryContextEpoch, ShortTermMemoryError,
-            ShortTermMemoryEvent, ShortTermMemoryFamily, ShortTermMemoryFamilyMember,
-            ShortTermMemoryFamilySnapshot, ShortTermMemoryGoal, ShortTermMemoryGoalCriterion,
-            ShortTermMemoryGoalEvent, ShortTermMemoryGoalView, ShortTermMemoryInput,
-            ShortTermMemoryMessage, ShortTermMemoryPart, ShortTermMemoryTodo,
-        },
+    adapters::outbound::persistence::SqliteChatRepository,
+    application::agent::{ActiveRunRegistry, AgentSteerInput, ModelClient, ReactAgentBuilder},
+    domain::agent::{
+        AgentError, AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig,
+        AgentModelProtocol, AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool,
+        EffectiveVariable, InProcessTool, ModelRequest, ModelResponse, Tool, ToolCall, ToolError,
+        ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
     },
     shared::{
         event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
@@ -258,393 +241,6 @@ impl ModelClient for ScriptedResultModelClient {
     }
 }
 
-#[derive(Clone, Default)]
-struct ContextEpochFailingRepository {
-    events: Arc<std::sync::Mutex<Vec<String>>>,
-}
-
-impl ContextEpochFailingRepository {
-    fn events(&self) -> Vec<String> {
-        self.events
-            .lock()
-            .expect("events mutex should not be poisoned")
-            .clone()
-    }
-}
-
-impl ShortTermMemoryRepository for ContextEpochFailingRepository {
-    fn session_workspace(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<Option<String>, ShortTermMemoryError> {
-        Ok(Some("TRON_CORE".into()))
-    }
-
-    fn next_id(&mut self, _table: &str) -> Result<i64, ShortTermMemoryError> {
-        Ok(735_900_000_000_000_001)
-    }
-
-    fn next_seq(&mut self, _session_code: &str) -> Result<i64, ShortTermMemoryError> {
-        Ok(1)
-    }
-
-    fn input_code_by_idempotency_key(
-        &mut self,
-        _session_code: &str,
-        _idempotency_key: &str,
-    ) -> Result<Option<String>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn create_input(&mut self, _input: &ShortTermMemoryInput) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn create_input_with_message_and_events(
-        &mut self,
-        _input: &ShortTermMemoryInput,
-        _message: Option<&ShortTermMemoryMessage>,
-        _parts: &[ShortTermMemoryPart],
-        _events: &[ShortTermMemoryEvent],
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn list_inputs_for_run(
-        &mut self,
-        _session_code: &str,
-        _run_code: &str,
-    ) -> Result<Vec<ShortTermMemoryInput>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn create_event(&mut self, event: &ShortTermMemoryEvent) -> Result<(), ShortTermMemoryError> {
-        self.events
-            .lock()
-            .expect("events mutex should not be poisoned")
-            .push(event.event_type.clone());
-        Ok(())
-    }
-
-    fn create_event_and_update_run_lease(
-        &mut self,
-        event: &ShortTermMemoryEvent,
-    ) -> Result<(), ShortTermMemoryError> {
-        self.create_event(event)
-    }
-
-    fn create_message(
-        &mut self,
-        _message: &ShortTermMemoryMessage,
-        _parts: &[ShortTermMemoryPart],
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn create_message_with_event(
-        &mut self,
-        _message: &ShortTermMemoryMessage,
-        _parts: &[ShortTermMemoryPart],
-        _event: &ShortTermMemoryEvent,
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn create_message_with_events(
-        &mut self,
-        _message: &ShortTermMemoryMessage,
-        _parts: &[ShortTermMemoryPart],
-        _events: &[ShortTermMemoryEvent],
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn create_context_epoch(
-        &mut self,
-        _epoch: &ShortTermMemoryContextEpoch,
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn create_context_epoch_with_event(
-        &mut self,
-        _epoch: &ShortTermMemoryContextEpoch,
-        _event: &ShortTermMemoryEvent,
-    ) -> Result<ShortTermMemoryContextEpoch, ShortTermMemoryError> {
-        Err(ShortTermMemoryError::StorageFailure)
-    }
-
-    fn latest_context_epoch_revision(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<i64, ShortTermMemoryError> {
-        Ok(0)
-    }
-
-    fn latest_context_epoch_snapshot(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<Option<serde_json::Value>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn list_messages_after_seq(
-        &mut self,
-        _session_code: &str,
-        _min_seq: i64,
-    ) -> Result<Vec<(ShortTermMemoryMessage, Vec<ShortTermMemoryPart>)>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn list_messages_for_run(
-        &mut self,
-        _session_code: &str,
-        _run_code: &str,
-    ) -> Result<Vec<(ShortTermMemoryMessage, Vec<ShortTermMemoryPart>)>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn list_recent_messages(
-        &mut self,
-        _session_code: &str,
-        _min_seq: i64,
-        _limit: usize,
-    ) -> Result<Vec<(ShortTermMemoryMessage, Vec<ShortTermMemoryPart>)>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn message_parts(
-        &mut self,
-        _message_code: &str,
-    ) -> Result<Vec<ShortTermMemoryPart>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn list_todos(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<Vec<ShortTermMemoryTodo>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn replace_todos(
-        &mut self,
-        _session_code: &str,
-        _workspace_code: &str,
-        _todos: &[ShortTermMemoryTodo],
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn replace_todos_with_event(
-        &mut self,
-        _session_code: &str,
-        _workspace_code: &str,
-        _todos: &[ShortTermMemoryTodo],
-        _event: &ShortTermMemoryEvent,
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn latest_compaction(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<Option<ShortTermMemoryCompaction>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn create_compaction(
-        &mut self,
-        _compaction: &ShortTermMemoryCompaction,
-        _message: &ShortTermMemoryMessage,
-        _parts: &[ShortTermMemoryPart],
-        _event: Option<&ShortTermMemoryEvent>,
-        _enforce_idle: bool,
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn create_compaction_at_revision(
-        &mut self,
-        compaction: &ShortTermMemoryCompaction,
-        message: &ShortTermMemoryMessage,
-        parts: &[ShortTermMemoryPart],
-        event: Option<&ShortTermMemoryEvent>,
-        enforce_idle: bool,
-        _: &eliteforge_agent_memory::MemoryRevision,
-    ) -> Result<(), ShortTermMemoryError> {
-        self.create_compaction(compaction, message, parts, event, enforce_idle)
-    }
-    fn active_run_exists(&mut self, _session_code: &str) -> Result<bool, ShortTermMemoryError> {
-        Ok(false)
-    }
-
-    fn upsert_family_memberships(
-        &mut self,
-        _families: &[ShortTermMemoryFamily],
-        _members: &[ShortTermMemoryFamilyMember],
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn list_enabled_family_members(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<Vec<(ShortTermMemoryFamily, ShortTermMemoryFamilyMember)>, ShortTermMemoryError>
-    {
-        Ok(Vec::new())
-    }
-
-    fn list_completed_family_snapshots(
-        &mut self,
-        _family_code: &str,
-        _exclude_session_code: &str,
-        _limit: usize,
-    ) -> Result<Vec<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn session_summary_for_run(
-        &mut self,
-        _session_code: &str,
-        _run_code: &str,
-    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn latest_completed_session_summary(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn latest_completed_family_handoff(
-        &mut self,
-        _family_code: &str,
-        _session_code: &str,
-    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn list_family_session_codes(
-        &mut self,
-        _family_code: &str,
-        _exclude_session_code: &str,
-        _limit: usize,
-    ) -> Result<Vec<String>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn create_family_snapshots(
-        &mut self,
-        _snapshots: &[ShortTermMemoryFamilySnapshot],
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn recover_stale_session_summaries(
-        &mut self,
-        _completed_at: &str,
-    ) -> Result<usize, ShortTermMemoryError> {
-        Ok(0)
-    }
-
-    fn ensure_hidden_heartbeat_session(
-        &mut self,
-        _workspace_code: &str,
-        _agent_code: &str,
-        session_code: &str,
-        _id: i64,
-        _now: &str,
-    ) -> Result<String, ShortTermMemoryError> {
-        Ok(session_code.to_string())
-    }
-
-    fn get_active_goal(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn get_latest_goal(
-        &mut self,
-        _session_code: &str,
-    ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn list_open_goals_batch(
-        &mut self,
-        _after_id: i64,
-        _limit: usize,
-    ) -> Result<Vec<ShortTermMemoryGoalView>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn get_goal(
-        &mut self,
-        _goal_code: &str,
-    ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
-        Ok(None)
-    }
-
-    fn list_goal_events(
-        &mut self,
-        _goal_code: &str,
-        _limit: usize,
-    ) -> Result<Vec<ShortTermMemoryGoalEvent>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-
-    fn append_goal_event(
-        &mut self,
-        _event: &ShortTermMemoryGoalEvent,
-    ) -> Result<(), ShortTermMemoryError> {
-        Ok(())
-    }
-
-    fn create_goal(
-        &mut self,
-        _goal: &ShortTermMemoryGoal,
-        _criteria: &[ShortTermMemoryGoalCriterion],
-        _event: &ShortTermMemoryGoalEvent,
-    ) -> Result<ShortTermMemoryGoalView, ShortTermMemoryError> {
-        Err(ShortTermMemoryError::GoalInvalid)
-    }
-
-    fn update_goal(
-        &mut self,
-        _goal: &ShortTermMemoryGoal,
-        _criteria: &[ShortTermMemoryGoalCriterion],
-        _event: &ShortTermMemoryGoalEvent,
-        _expected_revision: i64,
-    ) -> Result<ShortTermMemoryGoalView, ShortTermMemoryError> {
-        Err(ShortTermMemoryError::GoalInvalid)
-    }
-
-    fn recover_stale_runs(&mut self, _limit: usize) -> Result<usize, ShortTermMemoryError> {
-        Ok(0)
-    }
-
-    fn cleanup_event_log_before(
-        &mut self,
-        _cutoff_created_at_ms: i64,
-        _batch_size: usize,
-        _max_rows: usize,
-    ) -> Result<usize, ShortTermMemoryError> {
-        Ok(0)
-    }
-
-    fn list_externalized_tool_output_paths(
-        &mut self,
-        _root_path: &str,
-    ) -> Result<Vec<String>, ShortTermMemoryError> {
-        Ok(Vec::new())
-    }
-}
-
 struct ProgressTool;
 
 impl Tool for ProgressTool {
@@ -768,97 +364,6 @@ fn temp_artifact_root(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("{label}-{}-{millis}", std::process::id()))
 }
 
-fn auto_compaction_fixture(
-    label: &str,
-    id_seed: i64,
-) -> (
-    String,
-    String,
-    ShortTermMemoryService,
-    AgentRunContext,
-    String,
-) {
-    let database_url = temp_database_url(label);
-    let chat_repository =
-        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
-    let chats = ChatService::new(chat_repository);
-    let session = chats
-        .create_session(
-            CreateChatSessionCommand {
-                workspace_code: Some("TRON_CORE".into()),
-                project_code: None,
-                title: Some(label.into()),
-                app_code: None,
-                task_code: None,
-                source_type: None,
-                source_code: None,
-                agent_code: Some("main-agent".into()),
-            },
-            Some("USR-1".into()),
-        )
-        .expect("session should be created");
-    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
-        .expect("short-term memory repository should connect");
-    let mut config = ShortTermMemoryConfig::default();
-    config
-        .context
-        .blocks
-        .current_session_checkpoint
-        .max_ratio_bps = None;
-    config.context.blocks.current_session_checkpoint.max_tokens = Some(300);
-    config.compaction.trigger_ratio_bps = 4_000;
-    config.compaction.retained_history_ratio_bps = 2_000;
-
-    let short_term_memory = ShortTermMemoryService::with_id_provider(
-        repository,
-        config,
-        Arc::new(FixedSnowflakeIdProvider::new(id_seed)),
-    );
-    let mut old_context = base_context(&format!("RUN-{label}-OLD"));
-    old_context.conversation_code = Some(session.session_code.clone());
-    old_context.workspace_code = session.workspace_code.clone();
-    for index in 0..5 {
-        old_context.run_code = format!("RUN-AUTO-OLD-{index}");
-        short_term_memory
-            .record_user_input(
-                &old_context,
-                &format!("old auto context {index} {}", "A".repeat(2_500)),
-            )
-            .expect("old input should be recorded");
-    }
-
-    let mut context = base_context(&format!("RUN-{label}-CURRENT"));
-    context.conversation_code = Some(session.session_code.clone());
-    context.workspace_code = session.workspace_code.clone();
-    context.model.context_window_tokens = Some(8_000);
-    context.model.max_tokens = Some(0);
-    context.tools.clear();
-    let current_prompt = format!("current auto input stays raw {}", "B".repeat(200));
-    context.messages = vec![AgentMessage::user(current_prompt.clone())];
-    let input_code = short_term_memory
-        .record_user_input(&context, &current_prompt)
-        .expect("current input should be recorded");
-    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-        session_code: session.session_code.clone(),
-        input_code,
-        input_kind: "USER_PROMPT".into(),
-        input_metadata: None,
-        prompt_prefix: vec![AgentMessage::system("system seed")],
-        prompt_prefix_sources: Vec::new(),
-        current_input_message: None,
-        agent_code: Some("main-agent".into()),
-        todo_enabled: false,
-    });
-
-    (
-        database_url,
-        session.session_code,
-        short_term_memory,
-        context,
-        current_prompt,
-    )
-}
-
 // Observe official SDK output through the production owned consumer and real SQLite.
 fn native_presentation_fixture() -> (
     tron_backend::application::agent::FrameworkHost,
@@ -868,11 +373,14 @@ fn native_presentation_fixture() -> (
         adapters::outbound::persistence::SqliteAgentEventReplayStore,
         application::agent::AgentAguiStreamService, shared::event_bus::AguiEventSink,
     };
+    let host =
+        fixture_host(tron_backend::application::agent::FrameworkHost::temporary(None).unwrap());
+    let replay = SqliteAgentEventReplayStore::new().unwrap();
+    replay.bind_framework(&host).unwrap();
     let service = AgentAguiStreamService::with_replay_store(
         Arc::new(AguiEventSink::new(&EventBusConfig::default())),
-        Arc::new(SqliteAgentEventReplayStore::connect(":memory:").unwrap()),
+        Arc::new(replay),
     );
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
     host.bind_presentation(service.clone()).unwrap();
     (host, service)
 }
@@ -940,7 +448,7 @@ async fn wait_for_business_event(
     .expect("existing business audit must still be delivered")
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_completes_final_answer_and_publishes_metadata_only_events() {
     let sink = Arc::new(RecordingEventSink::with_route_class(
         "agent-runtime",
@@ -953,7 +461,7 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
     .register_sink(sink.clone())
     .build();
     let (native_host, presentation) = native_presentation_fixture();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
             "done",
         )])),
@@ -965,14 +473,14 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
     .expect("agent builder should succeed");
 
     let result = agent
-        .run(base_context("RUN-FINAL"))
+        .run(base_context("dddf4313-5ee6-5bdd-b5a5-a5befdf49783"))
         .await
         .expect("final answer run should pass");
 
     assert_eq!(result.final_output, "done");
     assert_eq!(result.step_count, 1);
     let protocol = presentation.protocol_events("CONV-1").unwrap();
-    assert_native_source_identity(&protocol, "RUN-FINAL");
+    assert_native_source_identity(&protocol, "dddf4313-5ee6-5bdd-b5a5-a5befdf49783");
     assert_eq!(
         protocol[0].data["metadata"]["framework"]["runId"],
         result.native.as_ref().unwrap().run_id
@@ -1021,7 +529,7 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_supports_auto_model_without_model_name() {
     let sink = Arc::new(RecordingEventSink::with_route_class(
         "agent-runtime-auto",
@@ -1034,7 +542,7 @@ async fn react_agent_supports_auto_model_without_model_name() {
     .register_sink(sink.clone())
     .build();
     let (native_host, presentation) = native_presentation_fixture();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
             "done",
         )])),
@@ -1044,7 +552,7 @@ async fn react_agent_supports_auto_model_without_model_name() {
     .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
-    let mut context = base_context("RUN-AUTO");
+    let mut context = base_context("5e9b27eb-966a-57a0-bc1d-da06e1b79954");
     context.model.model_code = "PERSON_AI:ROUTE:ChatAuto".into();
     context.model.model_name.clear();
 
@@ -1055,7 +563,7 @@ async fn react_agent_supports_auto_model_without_model_name() {
 
     assert_eq!(result.final_output, "done");
     let protocol = presentation.protocol_events("CONV-1").unwrap();
-    assert_native_source_identity(&protocol, "RUN-AUTO");
+    assert_native_source_identity(&protocol, "5e9b27eb-966a-57a0-bc1d-da06e1b79954");
     assert_eq!(native_text(&protocol), "done");
     assert!(
         protocol
@@ -1089,353 +597,7 @@ async fn react_agent_supports_auto_model_without_model_name() {
     }));
 }
 
-#[tokio::test]
-async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
-    let database_url = temp_database_url("agent-runtime-overflow-retry");
-    let chat_repository =
-        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
-    let chats = ChatService::new(chat_repository);
-    let session = chats
-        .create_session(
-            CreateChatSessionCommand {
-                workspace_code: Some("TRON_CORE".into()),
-                project_code: None,
-                title: Some("Overflow recovery".into()),
-                app_code: None,
-                task_code: None,
-                source_type: None,
-                source_code: None,
-                agent_code: Some("main-agent".into()),
-            },
-            Some("USR-1".into()),
-        )
-        .expect("session should be created");
-    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
-        .expect("short-term memory repository should connect");
-    let config = ShortTermMemoryConfig::default();
-
-    let short_term_memory = ShortTermMemoryService::new(repository, config);
-    let mut old_context = base_context("RUN-OVERFLOW-OLD");
-    old_context.conversation_code = Some(session.session_code.clone());
-    old_context.workspace_code = session.workspace_code.clone();
-    for index in 0..5 {
-        old_context.run_code = format!("RUN-OVERFLOW-OLD-{index}");
-        short_term_memory
-            .record_user_input(
-                &old_context,
-                &format!("old overflow context {index} {}", "x".repeat(1_500)),
-            )
-            .expect("old input should be recorded");
-    }
-    let mut context = base_context("RUN-OVERFLOW-RECOVERY");
-    context.conversation_code = Some(session.session_code.clone());
-    context.workspace_code = session.workspace_code.clone();
-    context.model.context_window_tokens = Some(40_000);
-    context.model.max_tokens = Some(0);
-    context.messages = vec![AgentMessage::user("trigger overflow recovery")];
-    let input_code = short_term_memory
-        .record_user_input(&context, "trigger overflow recovery")
-        .expect("input should be recorded");
-    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-        session_code: session.session_code.clone(),
-        input_code,
-        input_kind: "USER_PROMPT".into(),
-        input_metadata: None,
-        prompt_prefix: vec![AgentMessage::system("system seed")],
-        prompt_prefix_sources: Vec::new(),
-        current_input_message: None,
-        agent_code: Some("main-agent".into()),
-        todo_enabled: false,
-    });
-    let model_client = Arc::new(ScriptedResultModelClient::new(vec![
-        Err(
-            eliteforge_agent_official_plugin_model_http::encode_model_error(
-                &eliteforge_agent_core::ModelError::ContextOverflow(
-                    "context_length_exceeded: too many tokens".into(),
-                ),
-            ),
-        ),
-        Ok(ModelResponse::final_output(
-            r#"{"summary":"Recover from overflow. Model-generated overflow checkpoint."}"#,
-        )),
-        Ok(ModelResponse::final_output("recovered after checkpoint")),
-    ]));
-    let agent = ReactAgentBuilder::new(
-        model_client.clone(),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_short_term_memory(Some(short_term_memory.clone()))
-    .build()
-    .expect("agent builder should succeed");
-
-    let result = agent
-        .run(context)
-        .await
-        .expect("overflow checkpoint retry should recover");
-    assert_eq!(result.final_output, "recovered after checkpoint");
-    let requests = model_client.requests();
-    assert_eq!(requests.len(), 3);
-    assert!(requests[1].1.tools.is_empty());
-    assert!(requests[1].1.previous_response_id.is_none());
-    assert_eq!(requests[1].0.temperature, Some(0.0));
-    assert!(
-        requests[1]
-            .0
-            .max_tokens
-            .is_some_and(|limit| limit > 0 && limit <= 4_096)
-    );
-
-    let connection = rusqlite::Connection::open(&database_url)
-        .expect("short-term memory database should reopen");
-    let compaction_metadata: String = connection
-        .query_row(
-            "SELECT metadata_json
-             FROM agent_transcript_messages
-             WHERE session_code = ?1
-               AND message_type = 'compaction'
-             ORDER BY seq DESC
-             LIMIT 1",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("overflow checkpoint should be persisted");
-    assert!(compaction_metadata.contains("OVERFLOW_CHECKPOINT"));
-    assert!(compaction_metadata.contains("provider_context_overflow"));
-    assert!(compaction_metadata.contains("\"compactionMode\":\"model\""));
-    assert!(compaction_metadata.contains("\"coverage\":\"head_only_tail_replayed\""));
-    assert!(compaction_metadata.contains("\"retainedHistoryRatioBps\":2000"));
-    assert!(compaction_metadata.contains("\"effectiveRetainedHistoryTokens\""));
-}
-
-#[tokio::test]
-async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
-    let database_url = temp_database_url("agent-runtime-auto-model-compaction");
-    let chat_repository =
-        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
-    let chats = ChatService::new(chat_repository);
-    let session = chats
-        .create_session(
-            CreateChatSessionCommand {
-                workspace_code: Some("TRON_CORE".into()),
-                project_code: None,
-                title: Some("Auto model compaction".into()),
-                app_code: None,
-                task_code: None,
-                source_type: None,
-                source_code: None,
-                agent_code: Some("main-agent".into()),
-            },
-            Some("USR-1".into()),
-        )
-        .expect("session should be created");
-    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
-        .expect("short-term memory repository should connect");
-    let mut config = ShortTermMemoryConfig::default();
-    config
-        .context
-        .blocks
-        .current_session_checkpoint
-        .max_ratio_bps = None;
-    config.context.blocks.current_session_checkpoint.max_tokens = Some(300);
-    config.compaction.trigger_ratio_bps = 2_000;
-    config.compaction.retained_history_ratio_bps = 2_000;
-
-    let short_term_memory = ShortTermMemoryService::with_id_provider(
-        repository,
-        config,
-        Arc::new(FixedSnowflakeIdProvider::new(801_000_000_000_000_000)),
-    );
-
-    let mut old_context = base_context("RUN-AUTO-OLD");
-    old_context.conversation_code = Some(session.session_code.clone());
-    old_context.workspace_code = session.workspace_code.clone();
-    for index in 0..5 {
-        old_context.run_code = format!("RUN-AUTO-OLD-{index}");
-        short_term_memory
-            .record_user_input(
-                &old_context,
-                &format!("old auto context {index} {}", "A".repeat(2_500)),
-            )
-            .expect("old input should be recorded");
-    }
-
-    let mut context = base_context("RUN-AUTO-CURRENT");
-    context.conversation_code = Some(session.session_code.clone());
-    context.workspace_code = session.workspace_code.clone();
-    context.model.context_window_tokens = Some(40_000);
-    context.model.max_tokens = Some(0);
-    context.tools.clear();
-    let current_prompt = format!("current auto input stays raw {}", "B".repeat(500));
-    context.messages = vec![AgentMessage::user(current_prompt.clone())];
-    let input_code = short_term_memory
-        .record_user_input(&context, &current_prompt)
-        .expect("current input should be recorded");
-    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-        session_code: session.session_code.clone(),
-        input_code,
-        input_kind: "USER_PROMPT".into(),
-        input_metadata: None,
-        prompt_prefix: vec![AgentMessage::system("system seed")],
-        prompt_prefix_sources: Vec::new(),
-        current_input_message: None,
-        agent_code: Some("main-agent".into()),
-        todo_enabled: false,
-    });
-
-    let model_client = Arc::new(ScriptedResultModelClient::new(vec![
-        Ok(ModelResponse::final_output(
-            r#"{"summary":"MODEL AUTO SUMMARY. Auto compaction used semantic model output."}"#,
-        )),
-        Ok(ModelResponse::final_output("done after auto compaction")),
-    ]));
-    let agent = ReactAgentBuilder::new(
-        model_client.clone(),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_short_term_memory(Some(short_term_memory.clone()))
-    .build()
-    .expect("agent builder should succeed");
-
-    let result = agent
-        .run(context)
-        .await
-        .expect("auto model compaction should recover budget");
-    assert_eq!(result.final_output, "done after auto compaction");
-    let requests = model_client.requests();
-    assert_eq!(requests.len(), 2);
-    assert!(requests[0].1.tools.is_empty());
-    assert_eq!(requests[0].0.temperature, Some(0.0));
-    assert!(
-        requests[0]
-            .0
-            .max_tokens
-            .is_some_and(|limit| limit > 0 && limit <= 4_096)
-    );
-    let final_request_text = requests[1]
-        .1
-        .messages
-        .iter()
-        .map(AgentMessage::text_content)
-        .collect::<Vec<_>>()
-        .join("\n---\n");
-    assert!(final_request_text.contains("MODEL AUTO SUMMARY"));
-    assert!(final_request_text.contains(&current_prompt));
-
-    let connection = rusqlite::Connection::open(&database_url)
-        .expect("short-term memory database should reopen");
-    let (summary, metadata): (String, String) = connection
-        .query_row(
-            "SELECT p.content_text, m.metadata_json
-             FROM agent_transcript_messages m
-             JOIN agent_transcript_parts p ON p.message_code = m.message_code
-             WHERE m.session_code = ?1
-               AND m.message_type = 'compaction'
-               AND p.part_type = 'compaction_summary'
-             ORDER BY m.seq DESC
-             LIMIT 1",
-            [session.session_code.as_str()],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .expect("model checkpoint should be persisted");
-    assert!(summary.contains("MODEL AUTO SUMMARY"));
-    let audit: serde_json::Value = serde_json::from_str(&metadata).unwrap();
-    assert!(
-        audit["tokenUsage"].is_null(),
-        "unreported summary usage must remain unavailable"
-    );
-    assert_eq!(audit["usageAudit"]["usageSource"], "unavailable");
-    assert_eq!(audit["usageAudit"]["usageConfidence"], "unavailable");
-    assert!(audit["usageAudit"]["providerUsage"].is_null());
-    assert!(metadata.contains("\"compactionMode\":\"model\""));
-    assert!(metadata.contains("\"coverage\":\"head_only_tail_replayed\""));
-    assert!(metadata.contains("\"selectorVersion\":4"));
-    assert!(metadata.contains("\"retainedHistoryRatioBps\":2000"));
-    assert!(metadata.contains("\"effectiveRetainedHistoryTokens\""));
-    assert!(metadata.contains("\"pinnedStartSeq\""));
-}
-
-#[tokio::test]
-async fn react_agent_auto_compaction_model_failures_do_not_write_checkpoint() {
-    let cases = vec![
-        (
-            "auto-model-request-failed",
-            Err("compaction upstream unavailable".to_string()),
-            "COMPACTION_MODEL_REQUEST_FAILED",
-        ),
-        (
-            "auto-model-empty-output",
-            Ok(ModelResponse::final_output("")),
-            "COMPACTION_MODEL_REQUEST_FAILED",
-        ),
-        (
-            "auto-model-tool-call",
-            Ok(ModelResponse::tool_call("unexpected.tool", json!({}))),
-            "COMPACTION_MODEL_REQUEST_FAILED",
-        ),
-    ];
-
-    for (index, (label, response, expected_code)) in cases.into_iter().enumerate() {
-        let (database_url, session_code, short_term_memory, context, _) =
-            auto_compaction_fixture(label, 802_000_000_000_000_000 + index as i64 * 1_000);
-        let model_client = Arc::new(ScriptedResultModelClient::new(vec![response]));
-        let agent = ReactAgentBuilder::new(
-            model_client,
-            Arc::new(ToolRegistry::default()),
-            tron_backend::shared::event_bus::EventBusHandle::disabled(),
-        )
-        .with_short_term_memory(Some(short_term_memory))
-        .build()
-        .expect("agent builder should succeed");
-
-        agent
-            .run(context)
-            .await
-            .expect_err("compaction model failure should fail the run");
-
-        let connection = rusqlite::Connection::open(&database_url)
-            .expect("short-term memory database should reopen");
-        let completed_checkpoints: i64 = connection
-            .query_row(
-                "SELECT count(1)
-                 FROM agent_transcript_messages
-                 WHERE session_code = ?1
-                   AND message_type = 'compaction'
-                   AND status = 'completed'",
-                [session_code.as_str()],
-                |row| row.get(0),
-            )
-            .expect("checkpoint count should be queryable");
-        assert_eq!(completed_checkpoints, 0, "{label}");
-        let completed_events: i64 = connection
-            .query_row(
-                "SELECT count(1)
-                 FROM agent_transcript_events
-                 WHERE session_code = ?1
-                   AND event_type = 'agent.compaction.completed'",
-                [session_code.as_str()],
-                |row| row.get(0),
-            )
-            .expect("completed event count should be queryable");
-        assert_eq!(completed_events, 0, "{label}");
-        let failed_payload: String = connection
-            .query_row(
-                "SELECT payload_json
-                 FROM agent_transcript_events
-                 WHERE session_code = ?1
-                   AND event_type = 'agent.compaction.failed'
-                 ORDER BY seq DESC
-                 LIMIT 1",
-                [session_code.as_str()],
-                |row| row.get(0),
-            )
-            .expect("failed event should be persisted");
-        assert!(failed_payload.contains(expected_code), "{label}");
-    }
-}
-
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_executes_allowed_tool_and_keeps_runs_isolated() {
     let registry = ToolRegistry::default();
     registry
@@ -1449,7 +611,7 @@ async fn react_agent_executes_allowed_tool_and_keeps_runs_isolated() {
             },
         )))
         .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("echo", json!({"value": "a"})),
             ModelResponse::final_output("after-tool"),
@@ -1462,11 +624,11 @@ async fn react_agent_executes_allowed_tool_and_keeps_runs_isolated() {
     .expect("agent builder should succeed");
 
     let first = agent
-        .run(base_context("RUN-TOOL"))
+        .run(base_context("a5385a4f-12ce-5135-9cc5-2656c0887ba8"))
         .await
         .expect("tool run should pass");
     let second = agent
-        .run(base_context("RUN-SECOND"))
+        .run(base_context("215720fb-93ff-50a6-8fa7-1538db6db213"))
         .await
         .expect("second run should pass");
 
@@ -1476,7 +638,7 @@ async fn react_agent_executes_allowed_tool_and_keeps_runs_isolated() {
     assert!(second.observations.is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_continues_after_tool_execution_failure() {
     let sink = Arc::new(RecordingEventSink::with_route_class(
         "agent-runtime-failure",
@@ -1496,7 +658,7 @@ async fn react_agent_continues_after_tool_execution_failure() {
         )))
         .expect("tool should register");
     let (native_host, presentation) = native_presentation_fixture();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("flaky", json!({"value": "x"})),
             ModelResponse::final_output("after-failure"),
@@ -1510,7 +672,7 @@ async fn react_agent_continues_after_tool_execution_failure() {
 
     let result = agent
         .run({
-            let mut context = base_context("RUN-TOOL-FAILURE");
+            let mut context = base_context("be4aff72-5bd2-50bc-a030-810b44e29bb5");
             context.tools.push(EffectiveTool {
                 tool_name: "flaky".into(),
                 domain_code: None,
@@ -1529,7 +691,7 @@ async fn react_agent_continues_after_tool_execution_failure() {
     assert_eq!(result.observations[0].tool_name, "flaky");
     assert_eq!(result.observations[0].output, "boom");
     let protocol = presentation.protocol_events("CONV-1").unwrap();
-    assert_native_source_identity(&protocol, "RUN-TOOL-FAILURE");
+    assert_native_source_identity(&protocol, "be4aff72-5bd2-50bc-a030-810b44e29bb5");
     let result = protocol
         .iter()
         .find(|event| event.sse_event == "TOOL_CALL_RESULT")
@@ -1556,7 +718,7 @@ async fn react_agent_continues_after_tool_execution_failure() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response() {
     let sink = Arc::new(RecordingEventSink::with_route_class(
         "agent-runtime-empty-final-output",
@@ -1569,7 +731,7 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
     .register_sink(sink.clone())
     .build();
     let (native_host, presentation) = native_presentation_fixture();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![ToolCall {
                 call_id: Some("call-write".into()),
@@ -1587,7 +749,7 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
     .expect("agent builder should succeed");
 
     let error = agent
-        .run(base_context("RUN-EMPTY-FINAL-OUTPUT"))
+        .run(base_context("2d8d5f7c-920d-5588-87fa-ddaf84b6c7e7"))
         .await
         .expect_err("an empty final response must fail the run");
 
@@ -1600,7 +762,7 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
         "{error:?}"
     );
     let protocol = presentation.protocol_events("CONV-1").unwrap();
-    assert_native_source_identity(&protocol, "RUN-EMPTY-FINAL-OUTPUT");
+    assert_native_source_identity(&protocol, "2d8d5f7c-920d-5588-87fa-ddaf84b6c7e7");
     assert!(
         protocol
             .iter()
@@ -1631,7 +793,7 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_allows_empty_successful_tool_observations() {
     let registry = ToolRegistry::default();
     registry
@@ -1645,7 +807,7 @@ async fn react_agent_allows_empty_successful_tool_observations() {
             },
         )))
         .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("query", json!({"keyword": "missing"})),
             ModelResponse::final_output("No records were found."),
@@ -1658,7 +820,7 @@ async fn react_agent_allows_empty_successful_tool_observations() {
 
     let result = agent
         .run({
-            let mut context = base_context("RUN-EMPTY-QUERY-RESULT");
+            let mut context = base_context("5ee7e2fe-4ba1-5825-a8bb-bcc75405cadf");
             context.tools.push(EffectiveTool {
                 tool_name: "query".into(),
                 domain_code: None,
@@ -1677,120 +839,7 @@ async fn react_agent_allows_empty_successful_tool_observations() {
     assert!(result.observations[0].output.is_empty());
 }
 
-#[tokio::test]
-async fn react_agent_persists_failed_tool_observation_in_short_term_memory() {
-    let database_url = temp_database_url("agent-runtime-failed-stm");
-    let chat_repository =
-        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
-    let chats = ChatService::new(chat_repository);
-    let session = chats
-        .create_session(
-            CreateChatSessionCommand {
-                workspace_code: Some("TRON_CORE".into()),
-                project_code: None,
-                title: Some("Failed STM tool".into()),
-                app_code: None,
-                task_code: None,
-                source_type: None,
-                source_code: None,
-                agent_code: Some("main-agent".into()),
-            },
-            Some("USR-1".into()),
-        )
-        .expect("session should be created");
-    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
-        .expect("short-term memory repository should connect");
-    let short_term_memory =
-        ShortTermMemoryService::new(repository, ShortTermMemoryConfig::default());
-    let mut context = base_context("RUN-FAILED-STMEM");
-    context.conversation_code = Some(session.session_code.clone());
-    context.workspace_code = session.workspace_code.clone();
-    context.messages = vec![AgentMessage::user("run failing short-term memory tool")];
-    context.tools.push(EffectiveTool {
-        tool_name: "flaky".into(),
-        domain_code: None,
-        description: "Flaky".into(),
-        input_schema: json!({"type": "object"}),
-        skill_name: Some("planner".into()),
-        required_variable_keys: vec![],
-    });
-    let input_code = short_term_memory
-        .record_user_input(&context, "run failing short-term memory tool")
-        .expect("input should be recorded");
-    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-        session_code: session.session_code.clone(),
-        input_code,
-        input_kind: "USER_PROMPT".into(),
-        input_metadata: None,
-        prompt_prefix: vec![AgentMessage::system("system seed")],
-        prompt_prefix_sources: Vec::new(),
-        current_input_message: None,
-        agent_code: Some("main-agent".into()),
-        todo_enabled: false,
-    });
-
-    let registry = ToolRegistry::default();
-    registry
-        .register(Arc::new(InProcessTool::new(
-            "flaky",
-            |_request: ToolRequest| Err(ToolError::ExecutionFailed("boom".into())),
-        )))
-        .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
-        Arc::new(ScriptedModelClient::new(vec![
-            ModelResponse::tool_call_with_id("call-flaky", "flaky", json!({"value": "x"})),
-            ModelResponse::final_output("after-failure"),
-        ])),
-        Arc::new(registry),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_short_term_memory(Some(short_term_memory))
-    .build()
-    .expect("agent builder should succeed");
-
-    let result = agent
-        .run(context)
-        .await
-        .expect("tool execution failure should be converted to an observation");
-    assert_eq!(result.final_output, "after-failure");
-
-    let connection = rusqlite::Connection::open(&database_url)
-        .expect("short-term memory database should reopen");
-    let tool_started_count: i64 = connection
-        .query_row(
-            "SELECT count(1) FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.tool.started'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("tool started event should be queryable");
-    let tool_completed_count: i64 = connection
-        .query_row(
-            "SELECT count(1) FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.tool.completed'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("tool completed event should be queryable");
-    let tool_failed_count: i64 = connection
-        .query_row(
-            "SELECT count(1) FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.tool.failed'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("tool failed event should be queryable");
-    let failed_part_count: i64 = connection
-        .query_row(
-            "SELECT count(1) FROM agent_transcript_parts WHERE session_code = ?1 AND part_type = 'tool_result' AND status = 'failed'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("failed tool result part should be queryable");
-    assert_eq!(tool_started_count, 1);
-    assert_eq!(tool_completed_count, 0);
-    assert_eq!(tool_failed_count, 1);
-    assert_eq!(failed_part_count, 1);
-}
-
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
     let registry = ToolRegistry::default();
     registry
@@ -1804,7 +853,7 @@ async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
             },
         )))
         .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![
                 ToolCall {
@@ -1829,7 +878,7 @@ async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
     .expect("agent builder should succeed");
 
     let result = agent
-        .run(base_context("RUN-MULTI-TOOL"))
+        .run(base_context("5b5cfe24-85e7-5b9c-a4f0-ee8dbe9319ca"))
         .await
         .expect("multi tool run should pass");
 
@@ -1839,7 +888,7 @@ async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
     assert_eq!(result.observations[1].output, "observed:\"b\"");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
     let registry = ToolRegistry::default();
     let barrier = Arc::new(Barrier::new(2));
@@ -1874,7 +923,7 @@ async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
             }
         })))
         .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![
                 ToolCall {
@@ -1900,7 +949,7 @@ async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
 
     let result = tokio::time::timeout(
         Duration::from_secs(2),
-        agent.run(base_context("RUN-PARALLEL")),
+        agent.run(base_context("18a5d0db-8ec5-56a3-bada-398ff899f3cc")),
     )
     .await
     .expect("parallel tool calls should complete within timeout")
@@ -1913,7 +962,7 @@ async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
     assert_eq!(max_running.load(Ordering::SeqCst), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
     let registry = ToolRegistry::default();
     registry
@@ -1940,7 +989,7 @@ async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
             }
         })))
         .expect("hidden tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![
                 ToolCall {
@@ -1965,7 +1014,7 @@ async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
     .expect("agent builder should succeed");
 
     let result = agent
-        .run(base_context("RUN-PARALLEL-UNAUTHORIZED"))
+        .run(base_context("7dadf35b-5c3d-50e8-af16-d42a6ba05753"))
         .await
         .expect("an unauthorized parallel tool should not abort the run");
 
@@ -1977,7 +1026,7 @@ async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
     assert_eq!(hidden_executions.load(Ordering::SeqCst), 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_executes_single_tool_call_without_parallel_batching() {
     let registry = ToolRegistry::default();
     let running = Arc::new(AtomicUsize::new(0));
@@ -2009,7 +1058,7 @@ async fn react_agent_executes_single_tool_call_without_parallel_batching() {
             }
         })))
         .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![ToolCall {
                 call_id: Some("call-1".into()),
@@ -2026,7 +1075,7 @@ async fn react_agent_executes_single_tool_call_without_parallel_batching() {
     .expect("agent builder should succeed");
 
     let result = agent
-        .run(base_context("RUN-SINGLE-TOOL"))
+        .run(base_context("22a4551c-2169-5c0c-8496-f6e8428fc69d"))
         .await
         .expect("single tool run should pass");
 
@@ -2036,7 +1085,7 @@ async fn react_agent_executes_single_tool_call_without_parallel_batching() {
     assert_eq!(max_running.load(Ordering::SeqCst), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_batches_parallel_tool_calls_by_parallel_limit() {
     let registry = ToolRegistry::default();
     let barrier = Arc::new(Barrier::new(2));
@@ -2071,7 +1120,7 @@ async fn react_agent_batches_parallel_tool_calls_by_parallel_limit() {
             }
         })))
         .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![
                 ToolCall {
@@ -2107,7 +1156,7 @@ async fn react_agent_batches_parallel_tool_calls_by_parallel_limit() {
     .build()
     .expect("agent builder should succeed");
 
-    let mut context = base_context("RUN-BATCHED-PARALLEL");
+    let mut context = base_context("a42314dc-fa1f-5334-bcdd-ed154442792b");
     context.limits.max_tool_calls = 6;
     context.limits.max_parallel_tool_calls = 2;
     let result = tokio::time::timeout(Duration::from_secs(2), agent.run(context))
@@ -2120,169 +1169,7 @@ async fn react_agent_batches_parallel_tool_calls_by_parallel_limit() {
     assert_eq!(max_running.load(Ordering::SeqCst), 2);
 }
 
-#[tokio::test]
-async fn react_agent_externalizes_parallel_tool_outputs_with_unique_sequences() {
-    let database_url = temp_database_url("agent-runtime-parallel-stm");
-    let chat_repository =
-        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
-    let chats = ChatService::new(chat_repository);
-    let session = chats
-        .create_session(
-            CreateChatSessionCommand {
-                workspace_code: Some("TRON_CORE".into()),
-                project_code: None,
-                title: Some("Parallel STM".into()),
-                app_code: None,
-                task_code: None,
-                source_type: None,
-                source_code: None,
-                agent_code: Some("main-agent".into()),
-            },
-            Some("USR-1".into()),
-        )
-        .expect("session should be created");
-    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
-        .expect("short-term memory repository should connect");
-    let artifact_root = temp_artifact_root("agent-runtime-parallel-stm");
-    let mut memory_config = ShortTermMemoryConfig::default();
-    memory_config.tool_output = ToolOutputConfig {
-        root: artifact_root.display().to_string(),
-        externalize_above_bytes: 8,
-    };
-    let short_term_memory = ShortTermMemoryService::new(repository, memory_config);
-    let mut context = base_context("RUN-PARALLEL-STMEM");
-    context.conversation_code = Some(session.session_code.clone());
-    context.workspace_code = session.workspace_code.clone();
-    context.messages = vec![AgentMessage::user("parallel short-term memory tools")];
-    let input_code = short_term_memory
-        .record_user_input(&context, "parallel short-term memory tools")
-        .expect("input should be recorded");
-    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-        session_code: session.session_code.clone(),
-        input_code,
-        input_kind: "USER_PROMPT".into(),
-        input_metadata: None,
-        prompt_prefix: vec![AgentMessage::system("system seed")],
-        prompt_prefix_sources: Vec::new(),
-        current_input_message: None,
-        agent_code: Some("main-agent".into()),
-        todo_enabled: false,
-    });
-
-    let registry = ToolRegistry::default();
-    registry
-        .register(Arc::new(InProcessTool::new(
-            "echo",
-            move |request: ToolRequest| {
-                Ok(ToolObservation {
-                    tool_name: request.tool_name,
-                    output: format!(
-                        "large output for {}\nsecond line\nthird line",
-                        request.input["value"]
-                    ),
-                })
-            },
-        )))
-        .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
-        Arc::new(ScriptedModelClient::new(vec![
-            ModelResponse::from_tool_calls(vec![
-                ToolCall {
-                    call_id: Some("call-1".into()),
-                    tool_name: "echo".into(),
-                    input: json!({"value": "a"}),
-                    input_error: None,
-                },
-                ToolCall {
-                    call_id: Some("call-2".into()),
-                    tool_name: "echo".into(),
-                    input: json!({"value": "b"}),
-                    input_error: None,
-                },
-            ]),
-            ModelResponse::final_output("after-tool"),
-        ])),
-        Arc::new(registry),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_short_term_memory(Some(short_term_memory))
-    .build()
-    .expect("agent builder should succeed");
-
-    let result = agent
-        .run(context)
-        .await
-        .expect("parallel short-term memory run should pass");
-    assert_eq!(result.final_output, "after-tool");
-
-    let connection = rusqlite::Connection::open(&database_url)
-        .expect("short-term memory database should reopen");
-    let mut statement = connection
-        .prepare(
-            "SELECT content_json
-             FROM agent_transcript_parts
-             WHERE session_code = ?1
-               AND part_type = 'tool_result'
-             ORDER BY id ASC",
-        )
-        .expect("tool result parts should be queryable");
-    let relative_paths = statement
-        .query_map([session.session_code.as_str()], |row| {
-            let content: String = row.get(0)?;
-            let value: serde_json::Value = serde_json::from_str(&content).unwrap();
-            Ok(value["metadata"]["relativePath"]
-                .as_str()
-                .unwrap()
-                .to_string())
-        })
-        .expect("tool result paths should map")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("tool result paths should load");
-    assert_eq!(relative_paths.len(), 2);
-    assert_ne!(relative_paths[0], relative_paths[1]);
-    assert!(relative_paths[0].contains("0001-echo.txt"));
-    assert!(relative_paths[1].contains("0002-echo.txt"));
-    for relative_path in relative_paths {
-        assert!(
-            artifact_root.join(relative_path).exists(),
-            "externalized output file should exist"
-        );
-    }
-    let tool_started_count: i64 = connection
-        .query_row(
-            "SELECT count(1) FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.tool.started'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("tool started events should be queryable");
-    let tool_completed_count: i64 = connection
-        .query_row(
-            "SELECT count(1) FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.tool.completed'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("tool completed events should be queryable");
-    let tool_failed_count: i64 = connection
-        .query_row(
-            "SELECT count(1) FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.tool.failed'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("tool failed events should be queryable");
-    let failed_part_count: i64 = connection
-        .query_row(
-            "SELECT count(1) FROM agent_transcript_parts WHERE session_code = ?1 AND part_type = 'tool_result' AND status = 'failed'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("tool result status should be queryable");
-    assert_eq!(tool_started_count, 2);
-    assert_eq!(tool_completed_count, 2);
-    assert_eq!(tool_failed_count, 0);
-    assert_eq!(failed_part_count, 0);
-}
-
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_executes_remaining_parallel_budget_before_failing() {
     let registry = ToolRegistry::default();
     let executed = Arc::new(AtomicUsize::new(0));
@@ -2298,7 +1185,7 @@ async fn react_agent_executes_remaining_parallel_budget_before_failing() {
             }
         })))
         .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![
                 ToolCall {
@@ -2333,7 +1220,7 @@ async fn react_agent_executes_remaining_parallel_budget_before_failing() {
     .build()
     .expect("agent builder should succeed");
 
-    let mut context = base_context("RUN-PARALLEL-BUDGET");
+    let mut context = base_context("efeb50dc-3e9c-5f47-93e7-fb27054c4018");
     context.limits.max_tool_calls = 3;
     context.limits.max_parallel_tool_calls = 2;
     let result = agent
@@ -2361,7 +1248,7 @@ async fn react_agent_executes_remaining_parallel_budget_before_failing() {
     assert_eq!(executed.load(Ordering::SeqCst), 3);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_publishes_tool_agui_correlation_payloads() {
     let long_command = "cargo test --package tron-backend --test agent_runtime ".repeat(3);
     let expected_args = serde_json::to_string(&json!({ "command": long_command.clone() }))
@@ -2390,7 +1277,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
     .register_sink(sink.clone())
     .build();
     let (native_host, presentation) = native_presentation_fixture();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("echo", json!({"command": long_command})),
             ModelResponse::final_output("after-tool"),
@@ -2403,7 +1290,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
     .expect("agent builder should succeed");
 
     agent
-        .run(base_context("RUN-TOOL-META"))
+        .run(base_context("4420c784-3ccb-5756-9ab2-6cda552745c1"))
         .await
         .expect("tool run should pass");
 
@@ -2451,7 +1338,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
         Some(invocation_id.as_str())
     );
     let protocol = presentation.protocol_events("CONV-1").unwrap();
-    assert_native_source_identity(&protocol, "RUN-TOOL-META");
+    assert_native_source_identity(&protocol, "4420c784-3ccb-5756-9ab2-6cda552745c1");
     let start = protocol
         .iter()
         .find(|event| event.sse_event == "TOOL_CALL_START")
@@ -2490,7 +1377,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_publishes_tool_progress_activity_events() {
     let registry = ToolRegistry::default();
     registry
@@ -2507,7 +1394,7 @@ async fn react_agent_publishes_tool_progress_activity_events() {
     .register_sink(sink.clone())
     .build();
     let (native_host, presentation) = native_presentation_fixture();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("progress", json!({})),
             ModelResponse::final_output("after-progress"),
@@ -2519,7 +1406,7 @@ async fn react_agent_publishes_tool_progress_activity_events() {
     .build()
     .expect("agent builder should succeed");
 
-    let mut context = base_context("RUN-TOOL-PROGRESS");
+    let mut context = base_context("39cfe5c2-cf4e-5faf-adff-79e48a427562");
     context.tools = vec![EffectiveTool {
         tool_name: "progress".into(),
         domain_code: None,
@@ -2554,7 +1441,7 @@ async fn react_agent_publishes_tool_progress_activity_events() {
         vec!["first progress line", "second progress line"]
     );
     let protocol = presentation.protocol_events("CONV-1").unwrap();
-    assert_native_source_identity(&protocol, "RUN-TOOL-PROGRESS");
+    assert_native_source_identity(&protocol, "39cfe5c2-cf4e-5faf-adff-79e48a427562");
     let activities: Vec<_> = protocol
         .iter()
         .filter(|event| {
@@ -2583,7 +1470,7 @@ async fn react_agent_publishes_tool_progress_activity_events() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_publishes_parallel_tool_progress_activity_events() {
     let registry = ToolRegistry::default();
     registry
@@ -2600,7 +1487,7 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
     .register_sink(sink.clone())
     .build();
     let (native_host, presentation) = native_presentation_fixture();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![
                 ToolCall {
@@ -2625,7 +1512,7 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
     .build()
     .expect("agent builder should succeed");
 
-    let mut context = base_context("RUN-PARALLEL-TOOL-PROGRESS");
+    let mut context = base_context("38b0fcb8-fc0d-58ca-96ee-e8c814f38020");
     context.tools = vec![EffectiveTool {
         tool_name: "progress".into(),
         domain_code: None,
@@ -2690,7 +1577,7 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
         assert!(lines.contains(&"second progress line".to_string()));
     }
     let protocol = presentation.protocol_events("CONV-1").unwrap();
-    assert_native_source_identity(&protocol, "RUN-PARALLEL-TOOL-PROGRESS");
+    assert_native_source_identity(&protocol, "38b0fcb8-fc0d-58ca-96ee-e8c814f38020");
     let activities: Vec<_> = protocol
         .iter()
         .filter(|event| {
@@ -2719,7 +1606,7 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run() {
     let oversized_output = "x".repeat(73_854);
     let registry = ToolRegistry::default();
@@ -2745,7 +1632,7 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
     .register_sink(sink.clone())
     .build();
     let (native_host, presentation) = native_presentation_fixture();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("echo", json!({"command": "large"})),
             ModelResponse::final_output("after-tool"),
@@ -2758,7 +1645,7 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
     .expect("agent builder should succeed");
 
     // Exercise event truncation without also overflowing the model input budget.
-    let mut context = base_context("RUN-TOOL-OVERSIZE");
+    let mut context = base_context("24e4c1d9-abfd-5b3f-aff6-d1da60e55e72");
     // Native protected history costs 148358 tokens, beyond the old 127845-token allocation.
     context.model.context_window_tokens = Some(256_000);
     let result = agent
@@ -2783,7 +1670,7 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
     assert!(truncated_result.len() <= 4096);
     assert!(truncated_result.contains("[truncated: original_bytes=73854]"));
     let protocol = presentation.protocol_events("CONV-1").unwrap();
-    assert_native_source_identity(&protocol, "RUN-TOOL-OVERSIZE");
+    assert_native_source_identity(&protocol, "24e4c1d9-abfd-5b3f-aff6-d1da60e55e72");
     let start = protocol
         .iter()
         .find(|event| event.sse_event == "TOOL_CALL_START")
@@ -2802,10 +1689,10 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
     assert!(!protocol.iter().any(|event| event.sse_event == "RUN_ERROR"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_registry_rejects_missing_or_unauthorized_tools() {
     let registry = ToolRegistry::default();
-    let context = base_context("RUN-DENIED");
+    let context = base_context("81af840c-9358-508b-9a4f-e7806e8f2092");
 
     let missing = registry
         .execute_allowed(
@@ -2868,7 +1755,7 @@ fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
         skill_name: None,
         required_variable_keys: Vec::new(),
     };
-    let mut context = base_context("RUN-EFFECTIVE-HIDDEN");
+    let mut context = base_context("280b193d-cc75-5027-8197-45ece3c9fc8b");
     context.tools = vec![discovery.clone()];
     context.effective_tools = vec![discovery, write_text];
 
@@ -2897,174 +1784,9 @@ fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
     );
 }
 
-#[tokio::test]
-async fn react_agent_recovers_after_missing_and_unauthorized_tools() {
-    for (label, tool_name, register_tool, allow_tool, expected_fragment) in [
-        ("missing", "missing_tool", false, true, "is not registered"),
-        ("unauthorized", "hidden_tool", true, false, "is not allowed"),
-    ] {
-        let database_url = temp_database_url(&format!("agent-runtime-stm-tool-{label}"));
-        let chats = ChatService::new(
-            SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
-        );
-        let session = chats
-            .create_session(
-                CreateChatSessionCommand {
-                    workspace_code: Some("TRON_CORE".into()),
-                    project_code: None,
-                    title: Some(format!("STM tool {label}")),
-                    app_code: None,
-                    task_code: None,
-                    source_type: None,
-                    source_code: None,
-                    agent_code: Some("main-agent".into()),
-                },
-                Some("USR-1".into()),
-            )
-            .expect("session should be created");
-        let short_term_memory = ShortTermMemoryService::new(
-            SqliteShortTermMemoryRepository::connect(&database_url)
-                .expect("short-term memory repository should connect"),
-            ShortTermMemoryConfig::default(),
-        );
-        let mut context = base_context(&format!("RUN-STM-TOOL-{label}"));
-        context.conversation_code = Some(session.session_code.clone());
-        context.workspace_code = session.workspace_code.clone();
-        context.messages = vec![AgentMessage::user("trigger tool failure")];
-        context.tools = if allow_tool {
-            vec![EffectiveTool {
-                tool_name: tool_name.into(),
-                domain_code: None,
-                description: format!("{tool_name} test tool"),
-                input_schema: json!({"type": "object"}),
-                skill_name: Some("planner".into()),
-                required_variable_keys: Vec::new(),
-            }]
-        } else {
-            Vec::new()
-        };
-        let input_code = short_term_memory
-            .record_user_input(&context, "trigger tool failure")
-            .expect("input should be recorded");
-        context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-            session_code: session.session_code.clone(),
-            input_code,
-            input_kind: "USER_PROMPT".into(),
-            input_metadata: None,
-            prompt_prefix: vec![AgentMessage::system("system seed")],
-            prompt_prefix_sources: Vec::new(),
-            current_input_message: None,
-            agent_code: Some("main-agent".into()),
-            todo_enabled: false,
-        });
-
-        let registry = ToolRegistry::default();
-        if register_tool {
-            registry
-                .register(Arc::new(InProcessTool::new(tool_name, |request| {
-                    Ok(ToolObservation {
-                        tool_name: request.tool_name,
-                        output: "hidden".into(),
-                    })
-                })))
-                .expect("hidden tool should register");
-        }
-        let final_output = format!("recovered after {label} tool");
-        let agent = ReactAgentBuilder::new(
-            Arc::new(ScriptedModelClient::new(vec![
-                ModelResponse::tool_call(tool_name, json!({})),
-                ModelResponse::final_output(final_output.clone()),
-            ])),
-            Arc::new(registry),
-            tron_backend::shared::event_bus::EventBusHandle::disabled(),
-        )
-        .with_short_term_memory(Some(short_term_memory))
-        .build()
-        .expect("agent builder should succeed");
-
-        let result = agent
-            .run(context)
-            .await
-            .expect("a rejected tool invocation should be recoverable by the model");
-        assert_eq!(result.final_output, final_output, "{label}");
-        assert_eq!(result.observations.len(), 1, "{label}");
-        assert_eq!(result.observations[0].tool_name, tool_name, "{label}");
-        assert!(
-            result.observations[0].output.contains(expected_fragment),
-            "{label}: {}",
-            result.observations[0].output
-        );
-
-        let connection = rusqlite::Connection::open(&database_url)
-            .expect("short-term memory database should reopen");
-        let tool_started_count: i64 = connection
-            .query_row(
-                "SELECT count(1)
-                 FROM agent_transcript_events
-                 WHERE session_code = ?1
-                   AND event_type = 'agent.tool.started'",
-                [session.session_code.as_str()],
-                |row| row.get(0),
-            )
-            .expect("tool started event should be queryable");
-        let tool_failed_count: i64 = connection
-            .query_row(
-                "SELECT count(1)
-                 FROM agent_transcript_events
-                 WHERE session_code = ?1
-                   AND event_type = 'agent.tool.failed'",
-                [session.session_code.as_str()],
-                |row| row.get(0),
-            )
-            .expect("tool failed event should be queryable");
-        let (status, visibility, content_text, content_json): (String, String, String, String) =
-            connection
-                .query_row(
-                    "SELECT status, visibility, content_text, content_json
-                 FROM agent_transcript_parts
-                 WHERE session_code = ?1
-                   AND part_type = 'tool_result'
-                 ORDER BY id DESC
-                 LIMIT 1",
-                    [session.session_code.as_str()],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-                )
-                .expect("failed tool result should be queryable");
-        let tool_call_visibility: String = connection
-            .query_row(
-                "SELECT visibility
-                 FROM agent_transcript_parts
-                 WHERE session_code = ?1
-                   AND part_type = 'tool_call'
-                 ORDER BY id DESC
-                 LIMIT 1",
-                [session.session_code.as_str()],
-                |row| row.get(0),
-            )
-            .expect("failed tool call should remain in model-visible memory");
-        assert_eq!(tool_started_count, 1, "{label}");
-        assert_eq!(tool_failed_count, 1, "{label}");
-        assert_eq!(status, "failed", "{label}");
-        assert_eq!(visibility, "model", "{label}");
-        assert_eq!(tool_call_visibility, "model", "{label}");
-        assert!(
-            content_text.contains(expected_fragment),
-            "{label}: {content_text}"
-        );
-        let parsed_content: serde_json::Value =
-            serde_json::from_str(&content_json).expect("tool result content JSON should parse");
-        assert_eq!(parsed_content["toolName"], json!(tool_name), "{label}");
-        let call_id = parsed_content["callId"]
-            .as_str()
-            .expect("failed tool result should keep generated call id");
-        assert!(call_id.starts_with("generated_call_"), "{label}: {call_id}");
-        assert_eq!(parsed_content["modelCallId"], json!(call_id), "{label}");
-    }
-}
-
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn model_request_builders_use_frozen_model_config() {
-    let config = base_context("RUN-MODEL").model;
+    let config = base_context("00036f81-8c18-565a-bb47-0f37cb5c7e4b").model;
     let request = ModelRequest {
         messages: vec![AgentMessage::user("hi")],
         tools: vec![EffectiveTool {
@@ -3094,7 +1816,7 @@ async fn model_request_builders_use_frozen_model_config() {
     assert_eq!(embeddings["input"], json!("embed me"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn max_step_exhaustion_fails_without_output_success() {
     let context = AgentRunContext {
         limits: AgentRunLimits {
@@ -3102,7 +1824,7 @@ async fn max_step_exhaustion_fails_without_output_success() {
             max_tool_calls: 1,
             max_parallel_tool_calls: 1,
         },
-        ..base_context("RUN-LIMIT")
+        ..base_context("96663e53-8e55-55fb-8731-7d7e4ff52f3c")
     };
     let registry = ToolRegistry::default();
     registry
@@ -3113,7 +1835,7 @@ async fn max_step_exhaustion_fails_without_output_success() {
             })
         })))
         .expect("tool should register");
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![ModelResponse::tool_call(
             "echo",
             json!({}),
@@ -3143,48 +1865,7 @@ async fn max_step_exhaustion_fails_without_output_success() {
     assert_eq!(snapshot.tool_calls, 1);
 }
 
-#[tokio::test]
-async fn react_agent_marks_short_term_memory_run_failed_when_prepare_persistence_fails() {
-    let repository = ContextEpochFailingRepository::default();
-    let event_probe = repository.clone();
-    let short_term_memory =
-        ShortTermMemoryService::new(repository, ShortTermMemoryConfig::default());
-    let agent = ReactAgentBuilder::new(
-        Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
-            "unreachable",
-        )])),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_short_term_memory(Some(short_term_memory))
-    .build()
-    .expect("agent builder should succeed");
-    let mut context = base_context("RUN-STM-PREPARE-FAIL");
-    context.conversation_code = Some("SESSION-STM-PREPARE-FAIL".into());
-    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-        session_code: "SESSION-STM-PREPARE-FAIL".into(),
-        input_code: "ATI-1".into(),
-        input_kind: "USER_PROMPT".into(),
-        input_metadata: None,
-        prompt_prefix: Vec::new(),
-        prompt_prefix_sources: Vec::new(),
-        current_input_message: None,
-        agent_code: Some("main-agent".into()),
-        todo_enabled: false,
-    });
-
-    let error = agent
-        .run(context)
-        .await
-        .expect_err("prepare persistence failure should fail the run");
-
-    assert_eq!(error.to_string(), "short-term memory storage failure");
-    let events = event_probe.events();
-    assert!(events.contains(&"agent.run.started".to_string()));
-    assert!(events.contains(&"agent.run.failed".to_string()));
-}
-
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn zero_tool_call_limit_is_rejected_before_model_execution() {
     let context = AgentRunContext {
         limits: AgentRunLimits {
@@ -3192,9 +1873,9 @@ async fn zero_tool_call_limit_is_rejected_before_model_execution() {
             max_tool_calls: 0,
             max_parallel_tool_calls: 1,
         },
-        ..base_context("RUN-ZERO-TOOL")
+        ..base_context("50bbd0a5-9537-5a2b-ad2d-08d22c560987")
     };
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![])),
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3210,7 +1891,7 @@ async fn zero_tool_call_limit_is_rejected_before_model_execution() {
     assert_eq!(error.to_string(), "maxToolCalls must be greater than zero");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn zero_parallel_tool_call_limit_is_rejected_before_model_execution() {
     let context = AgentRunContext {
         limits: AgentRunLimits {
@@ -3218,9 +1899,9 @@ async fn zero_parallel_tool_call_limit_is_rejected_before_model_execution() {
             max_tool_calls: 1,
             max_parallel_tool_calls: 0,
         },
-        ..base_context("RUN-ZERO-PARALLEL")
+        ..base_context("d2b55ed7-6f46-559e-abbe-8573171fb04f")
     };
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(ScriptedModelClient::new(vec![])),
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3239,26 +1920,31 @@ async fn zero_parallel_tool_call_limit_is_rejected_before_model_execution() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_second_run() {
     let active_runs = ActiveRunRegistry::new();
     let guard = active_runs
-        .register("SESSION-STEER", "RUN-STEER", "REACT", true)
+        .register(
+            "SESSION-STEER",
+            "5e71bc66-db6e-5975-8008-ee147ee84f5e",
+            "REACT",
+            true,
+        )
         .expect("active run should register");
     let control = active_runs
-        .control("SESSION-STEER", "RUN-STEER")
+        .control("SESSION-STEER", "5e71bc66-db6e-5975-8008-ee147ee84f5e")
         .expect("react run control should resolve");
     let model_client = BlockingFirstResponseModelClient::new();
     let started = model_client.started.clone();
     let release = model_client.release.clone();
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(model_client.clone()),
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
     )
     .build()
     .expect("agent builder should succeed");
-    let mut context = base_context("RUN-STEER");
+    let mut context = base_context("5e71bc66-db6e-5975-8008-ee147ee84f5e");
     context.conversation_code = Some("SESSION-STEER".into());
     let started_signal = started.notified();
     tokio::pin!(started_signal);
@@ -3266,16 +1952,20 @@ async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_s
 
     started_signal.await;
     active_runs
-        .accept_steer("SESSION-STEER", "RUN-STEER", || {
-            Ok::<_, ()>((
-                (),
-                AgentSteerInput {
-                    steer_code: "MSG-STEER-1".into(),
-                    content: "change direction now".into(),
-                    attachments: Vec::new(),
-                },
-            ))
-        })
+        .accept_steer(
+            "SESSION-STEER",
+            "5e71bc66-db6e-5975-8008-ee147ee84f5e",
+            || {
+                Ok::<_, ()>((
+                    (),
+                    AgentSteerInput {
+                        steer_code: "MSG-STEER-1".into(),
+                        content: "change direction now".into(),
+                        attachments: Vec::new(),
+                    },
+                ))
+            },
+        )
         .expect("steer should route to the active run")
         .expect("steer acceptance should succeed");
     release.notify_one();
@@ -3284,7 +1974,7 @@ async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_s
         .await
         .expect("react run task should join")
         .expect("react run should complete");
-    assert_eq!(result.run_code, "RUN-STEER");
+    assert_eq!(result.run_code, "5e71bc66-db6e-5975-8008-ee147ee84f5e");
     assert_eq!(result.step_count, 2);
     assert_eq!(
         result.final_output,
@@ -3313,118 +2003,19 @@ async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_s
     drop(guard);
 }
 
-#[tokio::test]
-async fn react_agent_preserves_unresolved_requests_when_steering_with_short_term_memory() {
-    let database_url = temp_database_url("agent-runtime-steer-memory");
-    let chat_repository =
-        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
-    let chats = ChatService::new(chat_repository);
-    let session = chats
-        .create_session(
-            CreateChatSessionCommand {
-                workspace_code: Some("TRON_CORE".into()),
-                project_code: None,
-                title: Some("Steer memory".into()),
-                app_code: None,
-                task_code: None,
-                source_type: None,
-                source_code: None,
-                agent_code: Some("main-agent".into()),
-            },
-            Some("USR-1".into()),
-        )
-        .expect("session should be created");
-    let memory_repository = SqliteShortTermMemoryRepository::connect(&database_url)
-        .expect("short-term memory repository should connect");
-    let short_term_memory =
-        ShortTermMemoryService::new(memory_repository, ShortTermMemoryConfig::default());
-
-    let active_runs = ActiveRunRegistry::new();
-    let guard = active_runs
-        .register(&session.session_code, "RUN-STEER-MEMORY", "REACT", true)
-        .expect("active run should register");
-    let control = active_runs
-        .control(&session.session_code, "RUN-STEER-MEMORY")
-        .expect("react run control should resolve");
-    let model_client = BlockingFirstResponseModelClient::new();
-    let started = model_client.started.clone();
-    let release = model_client.release.clone();
-    let agent = ReactAgentBuilder::new(
-        Arc::new(model_client.clone()),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_short_term_memory(Some(short_term_memory.clone()))
-    .build()
-    .expect("agent builder should succeed");
-
-    let original_request = "summarize today's five trending AI projects";
-    let mut context = base_context("RUN-STEER-MEMORY");
-    context.conversation_code = Some(session.session_code.clone());
-    context.workspace_code = session.workspace_code.clone();
-    context.messages = vec![AgentMessage::user(original_request)];
-    let input_code = short_term_memory
-        .record_user_input(&context, original_request)
-        .expect("original request should be recorded");
-    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-        session_code: session.session_code.clone(),
-        input_code,
-        input_kind: "USER_PROMPT".into(),
-        input_metadata: None,
-        prompt_prefix: vec![AgentMessage::system("system seed")],
-        prompt_prefix_sources: Vec::new(),
-        current_input_message: None,
-        agent_code: Some("main-agent".into()),
-        todo_enabled: false,
-    });
-
-    let started_signal = started.notified();
-    tokio::pin!(started_signal);
-    let run = tokio::spawn(async move { agent.run_with_control(context, Some(control)).await });
-
-    started_signal.await;
-    active_runs
-        .accept_steer(&session.session_code, "RUN-STEER-MEMORY", || {
-            Ok::<_, ()>((
-                (),
-                AgentSteerInput {
-                    steer_code: "MSG-STEER-MEMORY-1".into(),
-                    content: "what time is it?".into(),
-                    attachments: Vec::new(),
-                },
-            ))
-        })
-        .expect("steer should route to the active run")
-        .expect("steer acceptance should succeed");
-    release.notify_one();
-
-    let result = run
-        .await
-        .expect("react run task should join")
-        .expect("react run should complete");
-    assert_eq!(result.step_count, 2);
-
-    let requests = model_client.requests();
-    assert_eq!(requests.len(), 2);
-    for request in &requests {
-        assert!(request.messages.iter().any(|message| {
-            message.role == "user" && message.plain_text_content() == original_request
-        }));
-    }
-    assert!(requests[1].messages.iter().any(|message| {
-        message.role == "user" && message.plain_text_content() == "what time is it?"
-    }));
-    drop(guard);
-}
-
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
     let active_runs = ActiveRunRegistry::new();
     let _guard = active_runs
-        .register("SESSION-TOOL-STEER", "RUN-TOOL-STEER", "REACT", true)
+        .register(
+            "SESSION-TOOL-STEER",
+            "f13d61b4-5c6e-5c62-8f48-100cba1df259",
+            "REACT",
+            true,
+        )
         .expect("active run should register");
     let control = active_runs
-        .control("SESSION-TOOL-STEER", "RUN-TOOL-STEER")
+        .control("SESSION-TOOL-STEER", "f13d61b4-5c6e-5c62-8f48-100cba1df259")
         .expect("react run control should resolve");
     let tool_started = Arc::new(Notify::new());
     let tool_gate = Arc::new((Mutex::new(false), Condvar::new()));
@@ -3453,14 +2044,14 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
         Ok(ModelResponse::tool_call("blocking-tool", json!({}))),
         Ok(ModelResponse::final_output("after tool steer")),
     ]);
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         Arc::new(model_client.clone()),
         Arc::new(registry),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
     )
     .build()
     .expect("agent builder should succeed");
-    let mut context = base_context("RUN-TOOL-STEER");
+    let mut context = base_context("f13d61b4-5c6e-5c62-8f48-100cba1df259");
     context.conversation_code = Some("SESSION-TOOL-STEER".into());
     context.tools.push(EffectiveTool {
         tool_name: "blocking-tool".into(),
@@ -3476,16 +2067,20 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
 
     tool_started_signal.await;
     active_runs
-        .accept_steer("SESSION-TOOL-STEER", "RUN-TOOL-STEER", || {
-            Ok::<_, ()>((
-                (),
-                AgentSteerInput {
-                    steer_code: "MSG-STEER-TOOL".into(),
-                    content: "use the completed tool result differently".into(),
-                    attachments: Vec::new(),
-                },
-            ))
-        })
+        .accept_steer(
+            "SESSION-TOOL-STEER",
+            "f13d61b4-5c6e-5c62-8f48-100cba1df259",
+            || {
+                Ok::<_, ()>((
+                    (),
+                    AgentSteerInput {
+                        steer_code: "MSG-STEER-TOOL".into(),
+                        content: "use the completed tool result differently".into(),
+                        attachments: Vec::new(),
+                    },
+                ))
+            },
+        )
         .expect("steer should route while the tool is in flight")
         .expect("steer acceptance should succeed");
     {
@@ -3498,7 +2093,7 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
         .await
         .expect("react run task should join")
         .expect("react run should complete");
-    assert_eq!(result.run_code, "RUN-TOOL-STEER");
+    assert_eq!(result.run_code, "f13d61b4-5c6e-5c62-8f48-100cba1df259");
     assert_eq!(result.final_output, "after tool steer");
     let requests = model_client.requests();
     assert_eq!(requests.len(), 2);
@@ -3516,12 +2111,12 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn framework_restores_responses_continuation_after_host_restart() {
     use tron_backend::application::agent::FrameworkHost;
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("framework.sqlite3");
-    let host = FrameworkHost::persistent(&path, None);
+    let host = fixture_host(FrameworkHost::persistent(&path, None));
     let first = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output_with_usage_and_response_id(
             "first answer",
@@ -3529,7 +2124,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
             Some("resp-persisted".into()),
         ),
     )]));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         first,
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3537,7 +2132,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     .with_framework_host(Some(host.clone()))
     .build()
     .unwrap();
-    let mut context = base_context("DURABLE-1");
+    let mut context = base_context("24d910a1-ba3b-55a6-b27b-14fc9f21168b");
     context.model.protocol = AgentModelProtocol::Responses;
     context.model.responses_stateful_enabled = true;
     context.tools.clear();
@@ -3545,7 +2140,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     host.close().await;
     drop(agent);
     drop(host);
-    let host = FrameworkHost::persistent(&path, None);
+    let host = fixture_host(FrameworkHost::persistent(&path, None));
     let second = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output_with_usage_and_response_id(
             "second answer",
@@ -3553,7 +2148,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
             Some("resp-second".into()),
         ),
     )]));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         second.clone(),
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3561,7 +2156,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     .with_framework_host(Some(host.clone()))
     .build()
     .unwrap();
-    context.run_code = "DURABLE-2".into();
+    context.run_code = "5416d829-e857-539a-89f0-a745a8fc3476".into();
     context.messages = vec![AgentMessage::user("follow up")];
     agent.run(context.clone()).await.unwrap();
     let requests = second.requests();
@@ -3584,7 +2179,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
             .any(|message| message.plain_text_content().contains("first answer"))
     );
     // Same endpoint/model with another credential must not reuse the previous account ID.
-    context.run_code = "DURABLE-ACCOUNT".into();
+    context.run_code = "36af60a0-7b16-500e-b443-6963d4618f4c".into();
     context.model.api_key = "another-account-key".into();
     context.messages = vec![AgentMessage::user("another account")];
     let account = Arc::new(ScriptedResultModelClient::new(vec![Ok(
@@ -3594,7 +2189,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
             Some("resp-account".into()),
         ),
     )]));
-    let account_agent = ReactAgentBuilder::new(
+    let account_agent = native_agent_builder(
         account.clone(),
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3612,13 +2207,13 @@ async fn framework_restores_responses_continuation_after_host_restart() {
             .any(|m| m.plain_text_content().contains("first answer"))
     );
     // Changing the provider must replay the full transcript, not reuse its ID.
-    context.run_code = "DURABLE-3".into();
+    context.run_code = "ad3ab75a-134b-592b-b9aa-fd24b60d3d30".into();
     context.model.base_url = "https://another-provider.invalid/v1".into();
     context.messages = vec![AgentMessage::user("different provider")];
     let switched = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output("switched"),
     )]));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         switched.clone(),
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3638,12 +2233,12 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     host.close().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn framework_question_releases_session_and_resumes_durable_interaction() {
     use tron_backend::application::agent::FrameworkHost;
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("questions.sqlite3");
-    let host = FrameworkHost::persistent(&path, None);
+    let host = fixture_host(FrameworkHost::persistent(&path, None));
     let registry = Arc::new(ToolRegistry::default());
     let client = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::tool_call(
@@ -3651,7 +2246,7 @@ async fn framework_question_releases_session_and_resumes_durable_interaction() {
             json!({"intro":"Choose a target","questions":[{"question":"Where?","options":[{"label":"Local"},{"label":"Remote"}]}]}),
         ),
     )]));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         client.clone(),
         registry.clone(),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3659,7 +2254,7 @@ async fn framework_question_releases_session_and_resumes_durable_interaction() {
     .with_framework_host(Some(host.clone()))
     .build()
     .unwrap();
-    let mut context = base_context("QUESTION-1");
+    let mut context = base_context("84b2d51f-c1df-5326-85d6-c17c73a3e435");
     context.tools = vec![tron_backend::application::agent::ask_user_definition(
         "en-US",
     )];
@@ -3674,15 +2269,15 @@ async fn framework_question_releases_session_and_resumes_durable_interaction() {
     let interaction = question["frameworkInteractionId"]
         .as_str()
         .expect("durable interaction identity");
-    let request_code = format!("INPUT-FW-{interaction}");
+    let request_code = interaction.to_owned();
     host.close().await;
     drop(agent);
     drop(host);
-    let host = FrameworkHost::persistent(&path, None);
+    let host = fixture_host(FrameworkHost::persistent(&path, None));
     let answer = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output("using local"),
     )]));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         answer.clone(),
         registry,
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3690,7 +2285,7 @@ async fn framework_question_releases_session_and_resumes_durable_interaction() {
     .with_framework_host(Some(host.clone()))
     .build()
     .unwrap();
-    context.run_code = "QUESTION-2".into();
+    context.run_code = "d6f8f3c8-2d5a-5ab0-9cca-d7114e085be0".into();
     context.messages = vec![AgentMessage::user("Use Local")];
     context.messages[0].parts.push(tron_backend::domain::agent::AgentMessagePart::Context {
         kind: "tron_interaction_response".into(), text: String::new(),
@@ -3728,16 +2323,16 @@ async fn framework_question_releases_session_and_resumes_durable_interaction() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn official_command_returns_after_ten_seconds_and_remains_readable_and_stoppable_across_runs()
 {
-    use tron_backend::application::agent::FrameworkHost;
     let directory = tempfile::tempdir().unwrap();
-    let host = FrameworkHost::temporary(None).unwrap();
+    let host =
+        fixture_host(tron_backend::application::agent::FrameworkHost::temporary(None).unwrap());
     let check_host = host.clone();
     let checked = tokio::spawn(async move {
         let host = check_host;
-        let mut context = base_context("COMMAND-1");
+        let mut context = base_context("c974ffcd-c1ae-5ab3-91dc-1ac96b9c84ed");
         // Real native command schema/history costs 9714 tokens, beyond the old 7496-token allocation.
         context.model.context_window_tokens = Some(16_384);
         context.execution_scope.local_directory = Some(directory.path().display().to_string());
@@ -3771,7 +2366,7 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
         )
         .register_sink(event_sink.clone())
         .build();
-        let agent = ReactAgentBuilder::new(client, Arc::new(ToolRegistry::default()), events)
+        let agent = native_agent_builder(client, Arc::new(ToolRegistry::default()), events)
             .with_framework_host(Some(host.clone()))
             .build()
             .unwrap();
@@ -3797,7 +2392,7 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
                 ModelResponse::tool_call(name, json!({"taskId":id})),
                 ModelResponse::final_output("done"),
             ]));
-            let agent = ReactAgentBuilder::new(
+            let agent = native_agent_builder(
                 client,
                 Arc::new(ToolRegistry::default()),
                 tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3805,7 +2400,7 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
             .with_framework_host(Some(host.clone()))
             .build()
             .unwrap();
-            context.run_code = format!("COMMAND-{}", index + 2);
+            context.run_code = eliteforge_agent_core::RunId::new_v4().to_string();
             context.messages = vec![AgentMessage::user(name)];
             let result = agent.run(context.clone()).await.unwrap();
             let output: serde_json::Value =
@@ -3822,11 +2417,12 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
     checked.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn framework_refreshes_host_instructions_without_losing_persisted_conversation() {
     use tron_backend::application::agent::FrameworkHost;
-    let host = FrameworkHost::temporary(None).unwrap();
-    let mut context = base_context("PREFIX-1");
+    let host =
+        fixture_host(tron_backend::application::agent::FrameworkHost::temporary(None).unwrap());
+    let mut context = base_context("a00bb4d1-c9c0-5304-825c-da979c0978f7");
     context.messages = vec![
         AgentMessage::system("old host instruction"),
         AgentMessage::user("first question"),
@@ -3834,7 +2430,7 @@ async fn framework_refreshes_host_instructions_without_losing_persisted_conversa
     let first = Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
         "first answer",
     )]));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         first,
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3843,7 +2439,7 @@ async fn framework_refreshes_host_instructions_without_losing_persisted_conversa
     .build()
     .unwrap();
     agent.run(context.clone()).await.unwrap();
-    context.run_code = "PREFIX-2".into();
+    context.run_code = "d1f5da0c-ec26-5546-a8ad-cfb090111d94".into();
     context.messages = vec![
         AgentMessage::system("new host instruction"),
         AgentMessage::user("second question"),
@@ -3851,7 +2447,7 @@ async fn framework_refreshes_host_instructions_without_losing_persisted_conversa
     let second = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output("second answer"),
     )]));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         second.clone(),
         Arc::new(ToolRegistry::default()),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
@@ -3876,7 +2472,7 @@ async fn framework_refreshes_host_instructions_without_losing_persisted_conversa
     host.close().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn framework_retries_only_the_model_after_a_tool_side_effect() {
     let executions = Arc::new(AtomicUsize::new(0));
     let counter = executions.clone();
@@ -3904,14 +2500,14 @@ async fn framework_retries_only_the_model_after_a_tool_side_effect() {
         ),
         Ok(ModelResponse::final_output("retried-model-only")),
     ]));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         client.clone(),
         Arc::new(registry),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
     )
     .build()
     .unwrap();
-    let mut context = base_context("MODEL-RETRY-AFTER-TOOL");
+    let mut context = base_context("20d49f43-9eaa-52d2-823d-22a4aea4ddad");
     context.model.max_retries = Some(1);
     let result = agent.run(context).await.unwrap();
     assert_eq!(result.final_output, "retried-model-only");
@@ -3993,13 +2589,13 @@ impl ModelClient for FloodThenFinalModel {
         Box::pin(async {})
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn framework_stream_overflow_stops_unfinished_provider_without_retry_and_releases_session() {
-    use tron_backend::application::agent::FrameworkHost;
     let calls = Arc::new(AtomicUsize::new(0));
     let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let host = FrameworkHost::temporary(None).unwrap();
-    let agent = ReactAgentBuilder::new(
+    let host =
+        fixture_host(tron_backend::application::agent::FrameworkHost::temporary(None).unwrap());
+    let agent = native_agent_builder(
         Arc::new(FloodThenFinalModel {
             calls: calls.clone(),
             dropped: dropped.clone(),
@@ -4010,7 +2606,7 @@ async fn framework_stream_overflow_stops_unfinished_provider_without_retry_and_r
     .with_framework_host(Some(host.clone()))
     .build()
     .unwrap();
-    let mut context = base_context("STREAM-FLOOD");
+    let mut context = base_context("b1a11ea9-45bc-53bd-8ad3-52053af44da2");
     context.tools.clear();
     let result = tokio::time::timeout(
         Duration::from_secs(3),
@@ -4030,13 +2626,13 @@ async fn framework_stream_overflow_stops_unfinished_provider_without_retry_and_r
         1,
         "partial output must never be retried"
     );
-    context.run_code = "STREAM-RECOVERED".into();
+    context.run_code = "41fcc393-9373-594a-a99a-8cdc7a533b2b".into();
     let result = agent.run_stream(context, Arc::new(|_| {})).await.unwrap();
     assert_eq!(result.final_output, "recovered");
     host.close().await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn framework_main_rich_input_and_remaining_output_budget_reach_actual_http_body() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tron_backend::adapters::outbound::model::{HttpModelClient, HttpModelProviderClient};
@@ -4074,7 +2670,7 @@ async fn framework_main_rich_input_and_remaining_output_budget_reach_actual_http
                 serde_json::from_slice(&bytes[end..end + length]).unwrap();
             bodies.push(body);
             let response = if index == 0 {
-                json!({"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"echo","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":21192,"completion_tokens":0}})
+                json!({"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"echo","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":30,"completion_tokens":34162}})
             } else {
                 json!({"choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":1}})
             };
@@ -4100,16 +2696,19 @@ async fn framework_main_rich_input_and_remaining_output_budget_reach_actual_http
             eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
         ),
     )));
-    let agent = ReactAgentBuilder::new(
+    let agent = native_agent_builder(
         client.clone(),
         Arc::new(registry),
         tron_backend::shared::event_bus::EventBusHandle::disabled(),
     )
     .build()
     .unwrap();
-    let mut context = base_context("MAIN-WIRE-BUDGET");
+    let mut context = base_context("d23f0364-294e-5f9f-862f-dbd154138a10");
     context.model.base_url = url;
-    context.model.context_window_tokens = Some(8000);
+    // Leave enough context capacity for the complete protected image/tool turn.
+    // The first response leaves 6,000 total tokens: enough for the next image
+    // request, but less than its input plus the configured 4,096-token output.
+    context.model.context_window_tokens = Some(16000);
     context.model.max_tokens = Some(4096);
     context.model.temperature = Some(0.25);
     context.model.top_p = Some(0.8);
@@ -4134,1295 +2733,25 @@ async fn framework_main_rich_input_and_remaining_output_budget_reach_actual_http
     );
 }
 
-// Real provider requests: fixtures are independent loopback services and temp SQLite.
-struct ProviderTcpServer {
-    url: String,
-    requests: Arc<Mutex<Vec<serde_json::Value>>>,
-    active: Arc<AtomicUsize>,
-    task: tokio::task::JoinHandle<()>,
-}
-impl Drop for ProviderTcpServer {
-    fn drop(&mut self) {
-        self.task.abort();
-    }
-}
-impl ProviderTcpServer {
-    async fn new(responses: Vec<serde_json::Value>, stall: bool) -> Self {
-        Self::with_gate(responses, stall, None).await
-    }
-    async fn with_gate(
-        responses: Vec<serde_json::Value>,
-        stall: bool,
-        gate: Option<Arc<Notify>>,
-    ) -> Self {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("http://{}", listener.local_addr().unwrap());
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let recorded = requests.clone();
-        let active = Arc::new(AtomicUsize::new(0));
-        let connections = active.clone();
-        let task = tokio::spawn(async move {
-            let mut index = 0;
-            loop {
-                let (mut socket, _) = listener.accept().await.unwrap();
-                let requests = recorded.clone();
-                let active = connections.clone();
-                let value = &responses[index.min(responses.len() - 1)];
-                let status = value
-                    .get("_http_status")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(200);
-                let response = value.get("_http_body").unwrap_or(value).to_string();
-                index += 1;
-                let gate = gate.clone();
-                active.fetch_add(1, Ordering::SeqCst);
-                tokio::spawn(async move {
-                    struct Connection(Arc<AtomicUsize>);
-                    impl Drop for Connection {
-                        fn drop(&mut self) {
-                            self.0.fetch_sub(1, Ordering::SeqCst);
-                        }
-                    }
-                    let _connection = Connection(active);
-                    let mut bytes = vec![];
-                    let mut buffer = [0; 4096];
-                    let (end, length) = loop {
-                        let n = socket.read(&mut buffer).await.unwrap();
-                        if n == 0 {
-                            return;
-                        }
-                        bytes.extend_from_slice(&buffer[..n]);
-                        if let Some(end) = bytes.windows(4).position(|value| value == b"\r\n\r\n") {
-                            let length = String::from_utf8_lossy(&bytes[..end])
-                                .lines()
-                                .find_map(|line| {
-                                    line.to_ascii_lowercase()
-                                        .strip_prefix("content-length:")
-                                        .map(|value| value.trim().parse::<usize>().unwrap())
-                                })
-                                .unwrap();
-                            break (end + 4, length);
-                        }
-                    };
-                    while bytes.len() < end + length {
-                        let n = socket.read(&mut buffer).await.unwrap();
-                        if n == 0 {
-                            return;
-                        }
-                        bytes.extend_from_slice(&buffer[..n]);
-                    }
-                    requests
-                        .lock()
-                        .unwrap()
-                        .push(serde_json::from_slice(&bytes[end..end + length]).unwrap());
-                    if stall {
-                        let _ = socket.read(&mut buffer).await;
-                        return;
-                    }
-                    if let Some(gate) = gate {
-                        tokio::select! { _ = gate.notified() => {}, _ = socket.read(&mut buffer) => {return;} }
-                    }
-                    let _ = socket.write_all(format!("HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await;
-                });
-            }
-        });
-        Self {
-            url,
-            requests,
-            active,
-            task,
+fn fixture_host(
+    host: tron_backend::application::agent::FrameworkHost,
+) -> tron_backend::application::agent::FrameworkHost {
+    use tron_backend::application::chat::ChatRepository;
+    let mut repository = SqliteChatRepository::with_host(host.clone()).unwrap();
+    for fixture_session in ["CONV-1", "SESSION-STEER", "SESSION-TOOL-STEER"] {
+        if repository.get_session(fixture_session).is_err() {
+            let session=serde_json::from_value(json!({"id":1,"sessionCode":fixture_session,"workspaceCode":"TRON_CORE","title":"runtime fixture","status":"ACTIVE","sourceType":"MANUAL","createdAt":"","updatedAt":""})).unwrap();
+            repository.create_session(&session).unwrap();
         }
     }
-    fn bodies(&self) -> Vec<serde_json::Value> {
-        self.requests.lock().unwrap().clone()
-    }
-    async fn drained(&self) {
-        tokio::time::timeout(Duration::from_secs(3), async {
-            while self.active.load(Ordering::SeqCst) != 0 {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap();
-    }
+    host
 }
-fn provider_answer(text: &str) -> serde_json::Value {
-    json!({"choices":[{"message":{"role":"assistant","content":text},"finish_reason":"stop"}],"usage":{"prompt_tokens":24,"completion_tokens":12,"prompt_tokens_details":{"cached_tokens":16},"completion_tokens_details":{"reasoning_tokens":2}}})
+fn native_agent_builder(
+    client: Arc<dyn ModelClient>,
+    registry: Arc<ToolRegistry>,
+    events: tron_backend::shared::event_bus::EventBusHandle,
+) -> ReactAgentBuilder {
+    ReactAgentBuilder::new(client, registry, events).with_framework_host(Some(fixture_host(
+        tron_backend::application::agent::FrameworkHost::temporary(None).unwrap(),
+    )))
 }
-fn real_provider_client() -> Arc<tron_backend::adapters::outbound::model::HttpModelClient> {
-    Arc::new(
-        tron_backend::adapters::outbound::model::HttpModelClient::new(Arc::new(
-            tron_backend::adapters::outbound::model::HttpModelProviderClient::new(
-                eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
-            ),
-        )),
-    )
-}
-fn configured_provider_fixture(
-    label: &str,
-    config: ShortTermMemoryConfig,
-    id: i64,
-) -> (
-    String,
-    String,
-    ShortTermMemoryService,
-    AgentRunContext,
-    String,
-) {
-    let (database, session, old, mut context, prompt) = auto_compaction_fixture(label, id);
-    drop(old);
-    let service = ShortTermMemoryService::with_id_provider(
-        SqliteShortTermMemoryRepository::connect(&database).unwrap(),
-        config,
-        Arc::new(FixedSnowflakeIdProvider::new(id + 500)),
-    );
-    context.model.context_window_tokens = Some(40_000);
-    context.model.max_tokens = Some(512);
-    context.stream_key = Some(session.clone());
-    (database, session, service, context, prompt)
-}
-#[tokio::test]
-async fn provider_layout_order_changes_actual_http_and_protects_system_from_data() {
-    for reversed in [false, true] {
-        let mut config = ShortTermMemoryConfig::default();
-        config.compaction.trigger_ratio_bps = 10_000;
-        if reversed {
-            config.context.providers.order.swap(1, 4);
-        }
-        let (database, _, memory, mut context, _) = configured_provider_fixture(
-            if reversed {
-                "provider-order-b"
-            } else {
-                "provider-order-a"
-            },
-            config,
-            820_000_000_000_000_000 + i64::from(reversed) * 1000,
-        );
-        context
-            .short_term_memory
-            .as_mut()
-            .unwrap()
-            .prompt_prefix
-            .push(AgentMessage::context_block(
-                "application_execution_context",
-                "HOST APPLICATION DATA",
-            ));
-        add_provider_working(&memory, &mut context, "HOST WORKING DATA");
-        let server = ProviderTcpServer::new(vec![provider_answer("done")], false).await;
-        context.model.base_url = server.url.clone();
-        let client = real_provider_client();
-        let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-        let agent = ReactAgentBuilder::new(
-            client.clone(),
-            Arc::new(ToolRegistry::default()),
-            tron_backend::shared::event_bus::EventBusHandle::disabled(),
-        )
-        .with_framework_host(Some(host.clone()))
-        .with_short_term_memory(Some(memory.clone()))
-        .build()
-        .unwrap();
-        assert_eq!(agent.run(context).await.unwrap().final_output, "done");
-        let bodies = server.bodies();
-        assert_eq!(bodies.len(), 1, "no trigger means zero auxiliary requests");
-        let messages = bodies[0]["messages"].as_array().unwrap();
-        let system = messages
-            .iter()
-            .position(|m| m["role"] == "system" && m.to_string().contains("system seed"))
-            .unwrap();
-        let application = messages
-            .iter()
-            .position(|m| m.to_string().contains("HOST APPLICATION DATA"))
-            .unwrap();
-        assert_eq!(messages[application]["role"], "user");
-        let working = messages
-            .iter()
-            .position(|message| message.to_string().contains("HOST WORKING DATA"))
-            .unwrap();
-        assert!(
-            system < application && system < working,
-            "trusted prefix remains stable"
-        );
-        assert_eq!(
-            application < working,
-            !reversed,
-            "nonempty scoped provider sources must follow configuration order"
-        );
-        host.close().await;
-        client.close().await;
-        server.drained().await;
-        drop(agent);
-        drop(memory);
-        let _ = std::fs::remove_file(database);
-    }
-}
-#[tokio::test]
-async fn provider_history_single_trigger_below_global_commits_true_checkpoint_usage() {
-    let mut config = ShortTermMemoryConfig::default();
-    config.compaction.trigger_ratio_bps = 9_000;
-    config.context.providers.history.trigger_ratio_bps = 2_000;
-    config.context.providers.history.target_ratio_bps = 1_000;
-    let (database, session, memory, mut context, prompt) =
-        configured_provider_fixture("provider-history-only", config, 821_000_000_000_000_000);
-    let server = ProviderTcpServer::new(
-        vec![
-            provider_answer(r#"{"summary":"HISTORY SINGLE SUMMARY"}"#),
-            provider_answer("done"),
-        ],
-        false,
-    )
-    .await;
-    context.model.base_url = server.url.clone();
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let agent = ReactAgentBuilder::new(
-        client.clone(),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_framework_host(Some(host.clone()))
-    .with_short_term_memory(Some(memory.clone()))
-    .build()
-    .unwrap();
-    let source = memory.prepare_model_context(&context).unwrap();
-    assert!(
-        !source.compaction_trigger_reached,
-        "single block pressure must be below the global trigger"
-    );
-    let result = tokio::time::timeout(Duration::from_secs(5), agent.run(context))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(result.final_output, "done");
-    let bodies = server.bodies();
-    assert_eq!(bodies.len(), 2);
-    assert!(bodies[1].to_string().contains("HISTORY SINGLE SUMMARY"));
-    assert!(bodies[1].to_string().contains(&prompt));
-    let checkpoint = memory.latest_compaction(&session).unwrap().unwrap();
-    let connection = rusqlite::Connection::open(&database).unwrap();
-    let metadata: String = connection
-        .query_row(
-            "SELECT metadata_json FROM agent_transcript_messages WHERE message_code=?1",
-            [checkpoint.checkpoint_message_code],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let audit: serde_json::Value = serde_json::from_str(&metadata).unwrap();
-    assert_eq!(audit["tokenUsage"]["cachedInputTokens"], 16);
-    assert_eq!(audit["tokenUsage"]["reasoningTokens"], 2);
-    assert_eq!(audit["coverage"], "head_only_tail_replayed");
-    assert_eq!(
-        audit["retainedHistoryRatioBps"], 1000,
-        "checkpoint must report the actual provider target"
-    );
-    let final_event:String=connection.query_row("SELECT payload_json FROM agent_transcript_events WHERE event_type='agent.context.assembled' AND json_extract(payload_json,'$.source')='framework.default-context-assembler' ORDER BY seq DESC LIMIT 1",[],|row|row.get(0)).unwrap();
-    let final_event: serde_json::Value = serde_json::from_str(&final_event).unwrap();
-    assert_eq!(
-        final_event["budgetBreakdown"]["retainedHistoryRatioBps"],
-        1000
-    );
-
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(connection);
-    drop(agent);
-    drop(memory);
-    let _ = std::fs::remove_file(database);
-}
-
-fn semantic_working(config: &mut ShortTermMemoryConfig) {
-    use tron_backend::application::short_term_memory::ContextReductionStrategy;
-    config.context.providers.working.strategy = ContextReductionStrategy::Semantic;
-    config.context.providers.working.trigger_ratio_bps = 5_000;
-    config.context.providers.working.target_ratio_bps = 2_000;
-    config.context.providers.history.trigger_ratio_bps = 2_000;
-    config.context.providers.history.target_ratio_bps = 1_000;
-}
-fn add_provider_working(
-    memory: &ShortTermMemoryService,
-    context: &mut AgentRunContext,
-    content: &str,
-) {
-    context.short_term_memory.as_mut().unwrap().todo_enabled = true;
-    let characters = content.chars().collect::<Vec<_>>();
-    let items = characters
-        .chunks(400)
-        .enumerate()
-        .map(
-            |(position, chunk)| tron_backend::application::short_term_memory::TodoUpdateItem {
-                todo_code: None,
-                position: position as i64,
-                content: chunk.iter().collect(),
-                status: if position == 0 {
-                    "in_progress"
-                } else {
-                    "pending"
-                }
-                .into(),
-                priority: "high".into(),
-            },
-        )
-        .collect();
-    memory.replace_todos(context, items).unwrap();
-}
-#[tokio::test]
-async fn provider_global_coordinates_strategies_reuses_data_after_history_refresh_and_replays_usage()
- {
-    use tron_backend::application::agent::AgentAguiReplayStore;
-    let mut config = ShortTermMemoryConfig::default();
-    semantic_working(&mut config);
-    config.compaction.trigger_ratio_bps = 2_000;
-    let (database, session, memory, mut context, _) =
-        configured_provider_fixture("provider-global", config, 822_000_000_000_000_000);
-    add_provider_working(
-        &memory,
-        &mut context,
-        &format!("RETAIN AUTHORIZED TODO {}", "W".repeat(1_500)),
-    );
-    let server = ProviderTcpServer::new(
-        vec![
-            provider_answer(r#"{"summary":"WORKING SUMMARY"}"#),
-            provider_answer(r#"{"summary":"HISTORY SUMMARY"}"#),
-            provider_answer("done"),
-        ],
-        false,
-    )
-    .await;
-    context.model.base_url = server.url.clone();
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let sink = Arc::new(RecordingEventSink::with_route_class(
-        "provider-usage",
-        BusRouteClass::Agui,
-    ));
-    let replay = Arc::new(
-        tron_backend::adapters::outbound::persistence::SqliteAgentEventReplayStore::connect(
-            &database,
-        )
-        .unwrap(),
-    );
-    let bus = EventBusRuntimeBuilder::new(
-        EventBusConfig::default(),
-        Arc::new(FixedSnowflakeIdProvider::new(829_000_000_000_000_000)),
-    )
-    .register_sink(sink.clone())
-    .register_sink(replay.clone())
-    .build();
-    let agent = ReactAgentBuilder::new(client.clone(), Arc::new(ToolRegistry::default()), bus)
-        .with_framework_host(Some(host.clone()))
-        .with_short_term_memory(Some(memory.clone()))
-        .build()
-        .unwrap();
-    assert_eq!(
-        tokio::time::timeout(Duration::from_secs(5), agent.run(context))
-            .await
-            .unwrap()
-            .unwrap()
-            .final_output,
-        "done"
-    );
-    let bodies = server.bodies();
-    assert_eq!(
-        bodies.len(),
-        3,
-        "both paid reducers share the old 3-call ceiling and unchanged working summary must be cached on refresh"
-    );
-    assert!(bodies[0].to_string().contains("RETAIN AUTHORIZED TODO"));
-    assert!(bodies[2].to_string().contains("WORKING SUMMARY"));
-    assert!(bodies[2].to_string().contains("HISTORY SUMMARY"));
-    tokio::time::timeout(Duration::from_secs(3), async {
-        loop {
-            if replay
-                .replay_agui_events(&session)
-                .unwrap()
-                .iter()
-                .any(|e| e.event_name == "agent.context.block_compressed")
-            {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
-    let events = replay.replay_agui_events(&session).unwrap();
-    let audits = events
-        .iter()
-        .filter(|event| event.event_name == "agent.context.block_compressed")
-        .collect::<Vec<_>>();
-    assert_eq!(audits.len(), 1, "cached bytes must not repeat prior audit");
-    let protocol = replay.replay_protocol_events(&session).unwrap();
-    let custom = protocol
-        .iter()
-        .find(|event| event.data["name"] == "tron.short_term_memory.context.block_compressed")
-        .unwrap();
-    assert_eq!(
-        custom.data["value"]["blockId"],
-        "current_session_working_state"
-    );
-    assert_eq!(
-        custom.data["value"]["usageAudit"]["providerUsage"]["cachedInputTokens"],
-        16
-    );
-    let audit: serde_json::Value =
-        serde_json::from_str(audits[0].metadata.get("usage_audit_json").unwrap()).unwrap();
-    assert_eq!(audit["providerUsage"]["cachedInputTokens"], 16);
-    assert_eq!(audit["providerUsage"]["reasoningTokens"], 2);
-    assert_eq!(audit["usageConfidence"], "actual");
-    let connection = rusqlite::Connection::open(&database).unwrap();
-    let metadata:String=connection.query_row("SELECT metadata_json FROM agent_transcript_events WHERE event_type='agent.context.block_compressed'",[],|row|row.get(0)).unwrap();
-    assert!(metadata.contains("usage_audit_json"));
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(agent);
-    drop(memory);
-    drop(replay);
-    drop(connection);
-    let _ = std::fs::remove_file(database);
-}
-#[tokio::test]
-async fn provider_stop_during_semantic_auxiliary_closes_transport_without_audit_or_checkpoint() {
-    let mut config = ShortTermMemoryConfig::default();
-    semantic_working(&mut config);
-    config.compaction.trigger_ratio_bps = 10_000;
-    let (database, session, memory, mut context, _) =
-        configured_provider_fixture("provider-stop", config, 823_000_000_000_000_000);
-    add_provider_working(
-        &memory,
-        &mut context,
-        &format!("UNFINISHED TODO {}", "W".repeat(1_500)),
-    );
-    let server = ProviderTcpServer::new(vec![provider_answer("unreachable")], true).await;
-    context.model.base_url = server.url.clone();
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let registry = ActiveRunRegistry::new();
-    let runtime_registry = tron_backend::application::agent::AgentRuntimeRegistry::new(
-        client.clone(),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-        reqwest::Client::new(),
-    )
-    .with_framework_host(Some(host.clone()))
-    .with_short_term_memory(Some(memory.clone()))
-    .with_active_runs(registry.clone());
-    let executor = tron_backend::application::agent::AgentRunExecutor::new(runtime_registry);
-    let run_code = context.run_code.clone();
-    let task = tokio::spawn(async move {
-        executor
-            .execute_with_selection(
-                tron_backend::application::agent::RuntimeAdapterSelection::React,
-                context,
-                None,
-                None,
-                None,
-            )
-            .await
-    });
-    tokio::time::timeout(Duration::from_secs(3), async {
-        while server.bodies().is_empty() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
-    registry.request_stop(&session, &run_code).unwrap();
-    assert!(
-        tokio::time::timeout(Duration::from_secs(3), task)
-            .await
-            .unwrap()
-            .unwrap()
-            .is_err()
-    );
-    server.drained().await;
-    assert_eq!(server.bodies().len(), 1);
-    assert!(memory.latest_compaction(&session).unwrap().is_none());
-    let connection = rusqlite::Connection::open(&database).unwrap();
-    let audits:i64=connection.query_row("SELECT COUNT(*) FROM agent_transcript_events WHERE event_type='agent.context.block_compressed'",[],|row|row.get(0)).unwrap();
-    assert_eq!(audits, 0);
-    host.close().await;
-    client.close().await;
-    drop(memory);
-    drop(connection);
-    let _ = std::fs::remove_file(database);
-}
-
-fn provider_responses_answer(id: &str) -> serde_json::Value {
-    json!({"id":id,"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":24,"output_tokens":12,"input_tokens_details":{"cached_tokens":16},"output_tokens_details":{"reasoning_tokens":2}}})
-}
-#[tokio::test]
-async fn provider_final_layout_resets_responses_continuation_but_plain_append_reuses_it() {
-    let mut config = ShortTermMemoryConfig::default();
-    config.compaction.auto_enabled = false;
-    let (database, session, memory, mut context, _) = configured_provider_fixture(
-        "provider-continuation",
-        config.clone(),
-        824_000_000_000_000_000,
-    );
-    let server = ProviderTcpServer::new(
-        vec![
-            provider_responses_answer("response-a"),
-            provider_responses_answer("response-b"),
-            provider_responses_answer("response-c"),
-        ],
-        false,
-    )
-    .await;
-    context.model.base_url = server.url.clone();
-    context.model.protocol = AgentModelProtocol::Responses;
-    context.model.responses_stateful_enabled = true;
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    for index in 0..3 {
-        if index == 1 {
-            config.context.providers.order.swap(0, 1);
-        }
-        let memory = if index == 0 {
-            memory.clone()
-        } else {
-            ShortTermMemoryService::with_id_provider(
-                SqliteShortTermMemoryRepository::connect(&database).unwrap(),
-                config.clone(),
-                Arc::new(FixedSnowflakeIdProvider::new(
-                    824_100_000_000_000_000 + index * 1000,
-                )),
-            )
-        };
-        let mut current = context.clone();
-        current.run_code = format!("PROVIDER-CONTINUATION-{index}");
-        if index > 0 {
-            let prompt = format!("append {index}");
-            current.messages = vec![AgentMessage::user(&prompt)];
-            current.short_term_memory.as_mut().unwrap().input_code =
-                memory.record_user_input(&current, &prompt).unwrap();
-        }
-        let agent = ReactAgentBuilder::new(
-            client.clone(),
-            Arc::new(ToolRegistry::default()),
-            tron_backend::shared::event_bus::EventBusHandle::disabled(),
-        )
-        .with_framework_host(Some(host.clone()))
-        .with_short_term_memory(Some(memory))
-        .build()
-        .unwrap();
-        assert_eq!(agent.run(current).await.unwrap().final_output, "done");
-    }
-    let bodies = server.bodies();
-    assert_eq!(bodies.len(), 3);
-    assert!(bodies[0].get("previous_response_id").is_none());
-    assert!(
-        bodies[1].get("previous_response_id").is_none(),
-        "changed final layout must replay full inputs"
-    );
-    assert_eq!(
-        bodies[2]["previous_response_id"], "response-b",
-        "an ordinary appended history turn should keep the same stable nonhistory context"
-    );
-    assert!(bodies[1].to_string().contains("system seed"));
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(memory);
-    let _ = std::fs::remove_file(database);
-    let _ = session;
-}
-#[tokio::test]
-async fn provider_semantic_actual_summary_input_capacity_rejects_before_http() {
-    let mut config = ShortTermMemoryConfig::default();
-    semantic_working(&mut config);
-    // Reserve a usable reduced data target to reach the separate summary model input-capacity check.
-    config
-        .context
-        .blocks
-        .current_session_working_state
-        .max_ratio_bps = None;
-    config.compaction.trigger_ratio_bps = 10_000;
-    let (database, _, memory, mut context, _) =
-        configured_provider_fixture("provider-aux-capacity", config, 825_000_000_000_000_000);
-    add_provider_working(
-        &memory,
-        &mut context,
-        &format!("TOO LARGE SUMMARY SOURCE {}", "W".repeat(3_800)),
-    );
-    let server = ProviderTcpServer::new(vec![provider_answer("unreachable")], false).await;
-    context.model.base_url = server.url.clone();
-    context.model.max_tokens = Some(0);
-    context.model.context_window_tokens = Some(8_000);
-    // Main can fit this full source. Existing summary policy reserves 4096,
-    // leaving only 3904 input tokens for its actual summary request.
-    let connection = rusqlite::Connection::open(&database).unwrap();
-    connection.execute("DELETE FROM agent_transcript_parts WHERE message_code IN (SELECT message_code FROM agent_transcript_messages WHERE run_code LIKE 'RUN-AUTO-OLD-%')",[]).unwrap();
-    connection
-        .execute(
-            "DELETE FROM agent_transcript_messages WHERE run_code LIKE 'RUN-AUTO-OLD-%'",
-            [],
-        )
-        .unwrap();
-    let raw = memory.prepare_model_context(&context).unwrap();
-    assert!(
-        raw.estimated_tokens < 8_000,
-        "main source must fit: {}",
-        raw.estimated_tokens
-    );
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let agent = ReactAgentBuilder::new(
-        client.clone(),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_framework_host(Some(host.clone()))
-    .with_short_term_memory(Some(memory.clone()))
-    .build()
-    .unwrap();
-    let error = agent.run(context).await.unwrap_err();
-    assert!(
-        error.to_string().contains("summary-model input limit"),
-        "must fail specifically at auxiliary capacity: {error}"
-    );
-    assert!(
-        server.bodies().is_empty(),
-        "output reserve must not be treated as additional auxiliary input capacity"
-    );
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(agent);
-    drop(memory);
-    let _ = std::fs::remove_file(database);
-}
-
-fn provider_overflow() -> serde_json::Value {
-    json!({"_http_status":400,"_http_body":{"error":{"code":"context_length_exceeded","message":"maximum context length exceeded"}}})
-}
-#[tokio::test]
-async fn provider_overflow_respects_keep_and_zero_auxiliary_allowance() {
-    use tron_backend::application::short_term_memory::ContextReductionStrategy;
-    for keep in [false, true] {
-        let mut config = ShortTermMemoryConfig::default();
-        config.compaction.trigger_ratio_bps = 10_000;
-        if keep {
-            config.context.providers.history.strategy = ContextReductionStrategy::Keep;
-        } else {
-            config.context.providers.max_auxiliary_calls_per_step = 0;
-        }
-        let (database, session, memory, mut context, _) = configured_provider_fixture(
-            if keep {
-                "provider-overflow-keep"
-            } else {
-                "provider-overflow-zero"
-            },
-            config,
-            826_000_000_000_000_000 + i64::from(keep) * 1000,
-        );
-        let server = ProviderTcpServer::new(vec![provider_overflow()], false).await;
-        context.model.base_url = server.url.clone();
-        context.model.max_retries = Some(1);
-        let client = real_provider_client();
-        let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-        let agent = ReactAgentBuilder::new(
-            client.clone(),
-            Arc::new(ToolRegistry::default()),
-            tron_backend::shared::event_bus::EventBusHandle::disabled(),
-        )
-        .with_framework_host(Some(host.clone()))
-        .with_short_term_memory(Some(memory.clone()))
-        .build()
-        .unwrap();
-        assert!(agent.run(context).await.is_err());
-        assert_eq!(
-            server.bodies().len(),
-            1,
-            "configured keep/zero auxiliary ceiling must not dispatch implicit history recovery"
-        );
-        assert!(memory.latest_compaction(&session).unwrap().is_none());
-        host.close().await;
-        client.close().await;
-        server.drained().await;
-        drop(agent);
-        drop(memory);
-        let _ = std::fs::remove_file(database);
-    }
-}
-#[tokio::test]
-async fn provider_overflow_cached_same_final_projection_stops_without_second_main_call() {
-    use tron_backend::application::short_term_memory::ContextReductionStrategy;
-    let mut config = ShortTermMemoryConfig::default();
-    semantic_working(&mut config);
-    config.context.providers.history.strategy = ContextReductionStrategy::Keep;
-    config.compaction.trigger_ratio_bps = 2_000;
-    let (database, _, memory, mut context, _) =
-        configured_provider_fixture("provider-overflow-no-gain", config, 827_000_000_000_000_000);
-    add_provider_working(
-        &memory,
-        &mut context,
-        &format!("KEEP SOURCE STABLE {}", "W".repeat(1500)),
-    );
-    let server = ProviderTcpServer::new(
-        vec![
-            provider_answer(r#"{"summary":"STABLE WORKING SUMMARY"}"#),
-            provider_overflow(),
-        ],
-        false,
-    )
-    .await;
-    context.model.base_url = server.url.clone();
-    context.model.max_retries = Some(1);
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let agent = ReactAgentBuilder::new(
-        client.clone(),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_framework_host(Some(host.clone()))
-    .with_short_term_memory(Some(memory.clone()))
-    .build()
-    .unwrap();
-    assert!(agent.run(context).await.is_err());
-    assert_eq!(
-        server.bodies().len(),
-        2,
-        "cached source-relative reduction is not progress relative to the actual failed model input"
-    );
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(agent);
-    drop(memory);
-    let _ = std::fs::remove_file(database);
-}
-#[tokio::test]
-async fn provider_live_guard_rejects_todo_change_after_paid_aux_and_preserves_actual_audit() {
-    use tron_backend::application::agent::AgentAguiReplayStore;
-    let mut config = ShortTermMemoryConfig::default();
-    semantic_working(&mut config);
-    config.compaction.trigger_ratio_bps = 10_000;
-    let (database, session, memory, mut context, _) =
-        configured_provider_fixture("provider-live-update", config, 828_000_000_000_000_000);
-    add_provider_working(
-        &memory,
-        &mut context,
-        &format!("ORIGINAL TODO {}", "W".repeat(1500)),
-    );
-    let gate = Arc::new(Notify::new());
-    let server = ProviderTcpServer::with_gate(
-        vec![provider_answer(r#"{"summary":"STALE OLD SUMMARY"}"#)],
-        false,
-        Some(gate.clone()),
-    )
-    .await;
-    context.model.base_url = server.url.clone();
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let replay = Arc::new(
-        tron_backend::adapters::outbound::persistence::SqliteAgentEventReplayStore::connect(
-            &database,
-        )
-        .unwrap(),
-    );
-    let bus = EventBusRuntimeBuilder::new(
-        EventBusConfig::default(),
-        Arc::new(FixedSnowflakeIdProvider::new(828_500_000_000_000_000)),
-    )
-    .register_sink(replay.clone())
-    .build();
-    let agent = Arc::new(
-        ReactAgentBuilder::new(client.clone(), Arc::new(ToolRegistry::default()), bus)
-            .with_framework_host(Some(host.clone()))
-            .with_short_term_memory(Some(memory.clone()))
-            .build()
-            .unwrap(),
-    );
-    let task = tokio::spawn({
-        let agent = agent.clone();
-        let context = context.clone();
-        async move { agent.run(context).await }
-    });
-    tokio::time::timeout(Duration::from_secs(3), async {
-        while server.bodies().is_empty() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
-    add_provider_working(&memory, &mut context, "NEW AUTHORIZED TODO");
-    gate.notify_one();
-    assert!(
-        tokio::time::timeout(Duration::from_secs(3), task)
-            .await
-            .unwrap()
-            .unwrap()
-            .is_err()
-    );
-    assert_eq!(
-        server.bodies().len(),
-        1,
-        "stale data must not reach primary HTTP"
-    );
-    assert!(memory.latest_compaction(&session).unwrap().is_none());
-    tokio::time::timeout(Duration::from_secs(3), async {
-        while replay
-            .replay_agui_events(&session)
-            .unwrap()
-            .iter()
-            .all(|e| e.event_name != "agent.context.block_compressed")
-        {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
-    let events = replay.replay_agui_events(&session).unwrap();
-    let audit = events
-        .iter()
-        .find(|e| e.event_name == "agent.context.block_compressed")
-        .unwrap();
-    let usage: serde_json::Value =
-        serde_json::from_str(audit.metadata.get("usage_audit_json").unwrap()).unwrap();
-    assert_eq!(usage["providerUsage"]["inputTokens"], 24);
-    assert_eq!(
-        memory.list_todos(&session).unwrap()[0].content,
-        "NEW AUTHORIZED TODO"
-    );
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(agent);
-    drop(memory);
-    drop(replay);
-    let _ = std::fs::remove_file(database);
-}
-
-#[tokio::test]
-async fn provider_after_protocol_percentages_coordinate_recoverable_tools_pressure() {
-    use tron_backend::application::short_term_memory::{
-        CompactionContextPolicy, ModelCompactionOutput,
-    };
-    let mut config = ShortTermMemoryConfig::default();
-    config.compaction.trigger_ratio_bps = 5_000;
-    config.context.blocks.seed_prompt_prefix.max_tokens = None;
-    config
-        .context
-        .blocks
-        .current_session_checkpoint
-        .max_ratio_bps = Some(3_000);
-    config.context.blocks.current_session_checkpoint.max_tokens = None;
-    config.context.blocks.session_family_context.max_ratio_bps = Some(0);
-    config
-        .context
-        .blocks
-        .current_session_working_state
-        .max_ratio_bps = Some(2_000);
-    config
-        .context
-        .blocks
-        .current_session_working_state
-        .max_tokens = None;
-    config.context.providers.checkpoint.target_ratio_bps = 5_000;
-    config.context.providers.working.strategy =
-        tron_backend::application::short_term_memory::ContextReductionStrategy::Bound;
-    config.context.providers.working.target_ratio_bps = 5_000;
-    let (database, session, memory, mut context, _) = configured_provider_fixture(
-        "provider-protocol-pressure",
-        config,
-        830_000_000_000_000_000,
-    );
-    let prepared = memory
-        .prepare_automatic_model_compaction_input(
-            &session,
-            "fixture-existing-checkpoint",
-            CompactionContextPolicy {
-                todo_enabled: false,
-            },
-            context.model.context_window_tokens,
-            context.model.max_tokens,
-            Some(&context.run_code),
-            None,
-            Some(6_000),
-        )
-        .unwrap();
-    memory
-        .commit_model_compaction(
-            prepared,
-            ModelCompactionOutput {
-                summary: format!("EXISTING CHECKPOINT {}", "C".repeat(12_000)),
-                token_usage: None,
-                provider_metadata: None,
-            },
-            &context.model,
-        )
-        .unwrap();
-    add_provider_working(
-        &memory,
-        &mut context,
-        &format!("AUTHORIZED WORKING {}", "W".repeat(8_000)),
-    );
-    context.short_term_memory.as_mut().unwrap().prompt_prefix = vec![AgentMessage::system(
-        format!("PROTECTED SYSTEM {}", "S".repeat(13_000)),
-    )];
-    context.tools = vec![EffectiveTool {
-        tool_name: "pressure_tool".into(),
-        domain_code: None,
-        description: "T".repeat(44_000),
-        input_schema: json!({"type":"object"}),
-        skill_name: None,
-        required_variable_keys: vec![],
-    }];
-    let registry = ToolRegistry::default();
-    registry
-        .register(Arc::new(InProcessTool::new("pressure_tool", |_| {
-            Ok(ToolObservation {
-                tool_name: "pressure_tool".into(),
-                output: "unused".into(),
-            })
-        })))
-        .unwrap();
-    let server = ProviderTcpServer::new(
-        vec![
-            provider_answer(r#"{"summary":"COORDINATED HISTORY"}"#),
-            provider_answer("done"),
-        ],
-        false,
-    )
-    .await;
-    context.model.base_url = server.url.clone();
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let agent = ReactAgentBuilder::new(
-        client.clone(),
-        Arc::new(registry),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_framework_host(Some(host.clone()))
-    .with_short_term_memory(Some(memory.clone()))
-    .build()
-    .unwrap();
-    assert_eq!(agent.run(context).await.unwrap().final_output, "done");
-    let bodies = server.bodies();
-    assert!(bodies.len() <= 3);
-    let final_body = bodies.last().unwrap();
-    assert!(final_body.to_string().contains("PROTECTED SYSTEM"));
-    assert!(final_body.to_string().contains(&"S".repeat(13_000)));
-    assert_eq!(final_body["tools"].as_array().unwrap().len(), 1);
-    let connection = rusqlite::Connection::open(&database).unwrap();
-    let report:String=connection.query_row("SELECT payload_json FROM agent_transcript_events WHERE event_type='agent.context.assembled' AND json_extract(payload_json,'$.source')='framework.default-context-assembler' ORDER BY seq DESC LIMIT 1",[],|row|row.get(0)).unwrap();
-    let report: serde_json::Value = serde_json::from_str(&report).unwrap();
-    let assembly = &report["contextReport"];
-    assert!(
-        assembly["protocol_tokens"].as_u64().unwrap()
-            > assembly["input_capacity"].as_u64().unwrap() / 10
-    );
-    assert!(
-        assembly["estimated_input_tokens"].as_u64().unwrap()
-            <= assembly["input_capacity"].as_u64().unwrap()
-    );
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(agent);
-    drop(memory);
-    drop(connection);
-    let _ = std::fs::remove_file(database);
-}
-
-#[tokio::test]
-async fn provider_auxiliary_transport_timeout_releases_connection_and_audits_unavailable_usage() {
-    use tron_backend::application::agent::AgentAguiReplayStore;
-    let mut config = ShortTermMemoryConfig::default();
-    semantic_working(&mut config);
-    config.compaction.trigger_ratio_bps = 10_000;
-    let (database, session, memory, mut context, _) =
-        configured_provider_fixture("provider-timeout", config, 831_000_000_000_000_000);
-    add_provider_working(
-        &memory,
-        &mut context,
-        &format!("TIMEOUT TODO {}", "W".repeat(1500)),
-    );
-    let server = ProviderTcpServer::new(vec![provider_answer("unreachable")], true).await;
-    context.model.base_url = server.url.clone();
-    let transport = eliteforge_agent_official_plugin_model_http::ModelHttpClient::from_builder(
-        reqwest::Client::builder().timeout(Duration::from_millis(150)),
-    )
-    .unwrap();
-    let client = Arc::new(
-        tron_backend::adapters::outbound::model::HttpModelClient::new(Arc::new(
-            tron_backend::adapters::outbound::model::HttpModelProviderClient::new(transport),
-        )),
-    );
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let replay = Arc::new(
-        tron_backend::adapters::outbound::persistence::SqliteAgentEventReplayStore::connect(
-            &database,
-        )
-        .unwrap(),
-    );
-    let bus = EventBusRuntimeBuilder::new(
-        EventBusConfig::default(),
-        Arc::new(FixedSnowflakeIdProvider::new(831_500_000_000_000_000)),
-    )
-    .register_sink(replay.clone())
-    .build();
-    let agent = ReactAgentBuilder::new(client.clone(), Arc::new(ToolRegistry::default()), bus)
-        .with_framework_host(Some(host.clone()))
-        .with_short_term_memory(Some(memory.clone()))
-        .build()
-        .unwrap();
-    assert!(
-        tokio::time::timeout(Duration::from_secs(3), agent.run(context))
-            .await
-            .unwrap()
-            .is_err()
-    );
-    server.drained().await;
-    assert_eq!(server.bodies().len(), 1);
-    assert!(memory.latest_compaction(&session).unwrap().is_none());
-    tokio::time::timeout(Duration::from_secs(3), async {
-        while replay
-            .replay_agui_events(&session)
-            .unwrap()
-            .iter()
-            .all(|e| e.event_name != "agent.context.block_compressed")
-        {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
-    let events = replay.replay_agui_events(&session).unwrap();
-    let event = events
-        .iter()
-        .find(|e| e.event_name == "agent.context.block_compressed")
-        .unwrap();
-    assert_eq!(event.outcome, "FAILURE");
-    let audit: serde_json::Value =
-        serde_json::from_str(event.metadata.get("usage_audit_json").unwrap()).unwrap();
-    assert!(audit["providerUsage"].is_null());
-    assert_eq!(audit["usageConfidence"], "unavailable");
-    assert!(
-        audit["requestEstimate"]["estimatedInputTokens"]
-            .as_u64()
-            .unwrap()
-            > 0
-    );
-    host.close().await;
-    client.close().await;
-    drop(agent);
-    drop(memory);
-    drop(replay);
-    let _ = std::fs::remove_file(database);
-}
-
-#[tokio::test]
-async fn provider_default_working_bounds_complete_legal_todo_source_inside_sdk() {
-    let mut config = ShortTermMemoryConfig::default();
-    config.compaction.trigger_ratio_bps = 10_000;
-    let (database, session, memory, mut context, _) =
-        configured_provider_fixture("provider-default-todos", config, 832_000_000_000_000_000);
-    context.short_term_memory.as_mut().unwrap().todo_enabled = true;
-    let items = (0..40)
-        .map(
-            |position| tron_backend::application::short_term_memory::TodoUpdateItem {
-                todo_code: None,
-                position,
-                content: format!("LEGAL TODO {position} {}", "W".repeat(400)),
-                status: "pending".into(),
-                priority: "high".into(),
-            },
-        )
-        .collect();
-    memory.replace_todos(&context, items).unwrap();
-    let raw = memory.prepare_model_context(&context).unwrap();
-    let source = serde_json::to_string(&raw.sources.as_ref().unwrap().working).unwrap();
-    assert!(source.contains("LEGAL TODO 39"));
-    assert!(source.len() > 4_000, "no legacy 4k pre-truncation");
-    let server = ProviderTcpServer::new(vec![provider_answer("done")], false).await;
-    context.model.base_url = server.url.clone();
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let agent = ReactAgentBuilder::new(
-        client.clone(),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_framework_host(Some(host.clone()))
-    .with_short_term_memory(Some(memory.clone()))
-    .build()
-    .unwrap();
-    assert_eq!(agent.run(context).await.unwrap().final_output, "done");
-    let bodies = server.bodies();
-    assert_eq!(bodies.len(), 1, "default bound uses no auxiliary HTTP");
-    assert!(bodies[0].to_string().contains("LEGAL TODO 0"));
-    assert!(!bodies[0].to_string().contains("LEGAL TODO 39"));
-    let connection = rusqlite::Connection::open(&database).unwrap();
-    let report:String=connection.query_row("SELECT payload_json FROM agent_transcript_events WHERE event_type='agent.context.assembled' AND json_extract(payload_json,'$.source')='framework.default-context-assembler' ORDER BY seq DESC LIMIT 1",[],|row|row.get(0)).unwrap();
-    let report: serde_json::Value = serde_json::from_str(&report).unwrap();
-    let block = report["contextReport"]["blocks"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|b| b["id"] == "current_session_working_state")
-        .unwrap();
-    assert!(block["final_tokens"].as_u64().unwrap() <= 2_000);
-    assert!(block["original_tokens"].as_u64().unwrap() > 4_000);
-    assert_eq!(memory.list_todos(&session).unwrap().len(), 40);
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(agent);
-    drop(memory);
-    drop(connection);
-    let _ = std::fs::remove_file(database);
-}
-
-#[tokio::test]
-async fn provider_working_bound_preserves_goal_before_todos() {
-    let mut config = ShortTermMemoryConfig::default();
-    config.compaction.trigger_ratio_bps = 10_000;
-    config
-        .context
-        .blocks
-        .current_session_working_state
-        .max_ratio_bps = None;
-    config
-        .context
-        .blocks
-        .current_session_working_state
-        .max_tokens = Some(800);
-    let (database, session, memory, mut context, _) =
-        configured_provider_fixture("provider-goal-priority", config, 833_000_000_000_000_000);
-    context.short_term_memory.as_mut().unwrap().todo_enabled = true;
-    memory
-        .set_goal(
-            tron_backend::application::short_term_memory::SetGoalCommand {
-                session_code: session.clone(),
-                objective: "Preserve the active session goal under pressure".into(),
-                max_runs: Some(5),
-            },
-        )
-        .unwrap();
-    memory
-        .replace_todos(
-            &context,
-            (0..10)
-                .map(
-                    |position| tron_backend::application::short_term_memory::TodoUpdateItem {
-                        todo_code: None,
-                        position,
-                        content: format!("LOWER PRIORITY TODO {position} {}", "T".repeat(400)),
-                        status: "pending".into(),
-                        priority: "high".into(),
-                    },
-                )
-                .collect(),
-        )
-        .unwrap();
-    let raw = memory.prepare_model_context(&context).unwrap();
-    assert!(
-        serde_json::to_string(&raw.sources.unwrap().working)
-            .unwrap()
-            .contains("LOWER PRIORITY TODO 9")
-    );
-    let server = ProviderTcpServer::new(vec![provider_answer("done")], false).await;
-    context.model.base_url = server.url.clone();
-    let client = real_provider_client();
-    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-    let agent = ReactAgentBuilder::new(
-        client.clone(),
-        Arc::new(ToolRegistry::default()),
-        tron_backend::shared::event_bus::EventBusHandle::disabled(),
-    )
-    .with_framework_host(Some(host.clone()))
-    .with_short_term_memory(Some(memory.clone()))
-    .build()
-    .unwrap();
-    assert_eq!(agent.run(context).await.unwrap().final_output, "done");
-    let bodies = server.bodies();
-    assert_eq!(bodies.len(), 1);
-    let rendered = bodies[0].to_string();
-    assert!(
-        rendered.contains("Preserve the active session goal under pressure"),
-        "{rendered}"
-    );
-    assert!(!rendered.contains("LOWER PRIORITY TODO 9"));
-    let connection = rusqlite::Connection::open(&database).unwrap();
-    let report:String=connection.query_row("SELECT payload_json FROM agent_transcript_events WHERE event_type='agent.context.assembled' AND json_extract(payload_json,'$.source')='framework.default-context-assembler' ORDER BY seq DESC LIMIT 1",[],|row|row.get(0)).unwrap();
-    let report: serde_json::Value = serde_json::from_str(&report).unwrap();
-    let working = report["contextReport"]["blocks"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|block| block["id"] == "current_session_working_state")
-        .unwrap();
-    assert!(working["final_tokens"].as_u64().unwrap() <= 800);
-    assert!(working["original_tokens"].as_u64().unwrap() > 800);
-    host.close().await;
-    client.close().await;
-    server.drained().await;
-    drop(agent);
-    drop(memory);
-    drop(connection);
-    let _ = std::fs::remove_file(database);
-}
-
-#[tokio::test]
-async fn provider_full_retention_keep_is_noop_and_explicit_invalid_checkpoint_is_rejected() {
-    for keep in [true, false] {
-        let mut config = ShortTermMemoryConfig::default();
-        config.compaction.retained_history_ratio_bps = 10_000;
-        config.compaction.trigger_ratio_bps = 10_000;
-        config.context.providers.history.target_ratio_bps = 10_000;
-        config.context.providers.history.strategy = if keep {
-            tron_backend::application::short_term_memory::ContextReductionStrategy::Keep
-        } else {
-            tron_backend::application::short_term_memory::ContextReductionStrategy::Checkpoint
-        };
-        let (database, session, memory, mut context, _) = configured_provider_fixture(
-            if keep {
-                "provider-retain-all"
-            } else {
-                "provider-invalid-retain"
-            },
-            config,
-            834_000_000_000_000_000 + if keep { 0 } else { 10000 },
-        );
-        let server = ProviderTcpServer::new(vec![provider_answer("done")], false).await;
-        context.model.base_url = server.url.clone();
-        let client = real_provider_client();
-        let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
-        let agent = ReactAgentBuilder::new(
-            client.clone(),
-            Arc::new(ToolRegistry::default()),
-            tron_backend::shared::event_bus::EventBusHandle::disabled(),
-        )
-        .with_framework_host(Some(host.clone()))
-        .with_short_term_memory(Some(memory.clone()))
-        .build()
-        .unwrap();
-        let result = agent.run(context).await;
-        if keep {
-            assert_eq!(result.unwrap().final_output, "done");
-            assert_eq!(server.bodies().len(), 1);
-            assert!(memory.latest_compaction(&session).unwrap().is_none());
-        } else {
-            assert!(
-                result
-                    .unwrap_err()
-                    .to_string()
-                    .contains("compression target must be below trigger")
-            );
-            assert!(server.bodies().is_empty());
-        }
-        host.close().await;
-        client.close().await;
-        server.drained().await;
-        drop(agent);
-        drop(memory);
-        let _ = std::fs::remove_file(database);
-    }
-}
-
-#[path = "support/native_model_runtime.rs"]
-mod native_model_runtime;

@@ -13,19 +13,13 @@ pub(super) fn optional_ratio<'de, D: Deserializer<'de>>(
     optional_basis_points(deserializer, true)
 }
 
-pub(super) fn optional_weight<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Option<u32>, D::Error> {
-    optional_basis_points(deserializer, false)
-}
-
 fn optional_basis_points<'de, D: Deserializer<'de>>(
     deserializer: D,
     bounded_ratio: bool,
 ) -> Result<Option<u32>, D::Error> {
     Option::<PercentageOrBasisPoints>::deserialize(deserializer)?
         .map(|value| match value {
-            // Preserve the existing treatment of legacy integer BPS values.
+            // Integer values are expressed in basis points.
             PercentageOrBasisPoints::BasisPoints(value) => Ok(value),
             PercentageOrBasisPoints::Percentage(value) => {
                 let points = parse_percentage(&value).map_err(D::Error::custom)?;

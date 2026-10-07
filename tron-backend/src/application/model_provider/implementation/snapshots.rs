@@ -47,10 +47,13 @@ impl ModelProviderService {
             .and_then(Value::as_str)
             .map(str::to_owned);
         let now = now_millis();
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
+
+        let this = self.clone();
+        let worker_run_code = run_code.to_owned();
+        let worker_workspace_code = workspace_code.to_owned();
+        let worker_quality_type = quality_type.clone();
+        let worker_now = now.clone();
+        this.connection.clone().call(move |connection| { let run_code=worker_run_code.as_str(); let workspace_code=&worker_workspace_code; let quality_type=worker_quality_type;  let now=worker_now;
         connection
             .execute(
                 "INSERT INTO provider_model_run_snapshots (
@@ -82,6 +85,7 @@ impl ModelProviderService {
             )
             .map_err(|_| ModelProviderError::Storage)?;
         Ok(())
+     },||ModelProviderError::Storage)
     }
 
     /// Persist the choice before invocation. Stream callbacks later enrich this
@@ -119,24 +123,32 @@ impl ModelProviderService {
             .as_deref()
             .filter(|value| !value.trim().is_empty())
             .map(|model_code| {
-                let connection = self
-                    .connection
-                    .lock()
-                    .map_err(|_| ModelProviderError::Storage)?;
-                read_catalog_model(
-                    &connection,
-                    ModelProviderCode::PersonAi,
-                    model_code,
-                    quality_type,
+                let this = self.clone();
+                let worker_quality_type = quality_type.clone();
+                let worker_model_code = model_code.to_owned();
+                this.connection.clone().call(
+                    move |connection| {
+                        let quality_type = worker_quality_type;
+                        let model_code = worker_model_code.as_str();
+                        read_catalog_model(
+                            &connection,
+                            ModelProviderCode::PersonAi,
+                            model_code,
+                            quality_type,
+                        )
+                    },
+                    || ModelProviderError::Storage,
                 )
             })
             .transpose()?
             .flatten();
         let now = now_millis();
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
+
+        let this = self.clone();
+        let worker_run_code = run_code.to_owned();
+        let worker_session_code = session_code.to_owned();
+        let worker_workspace_code = workspace_code.to_owned();
+        this.connection.clone().call(move |connection| { let run_code=worker_run_code.as_str(); let session_code=&worker_session_code; let workspace_code=&worker_workspace_code;
         connection
             .execute(
                 "INSERT INTO provider_model_run_snapshots (
@@ -175,5 +187,6 @@ impl ModelProviderService {
             )
             .map_err(|_| ModelProviderError::Storage)?;
         Ok(())
+     },||ModelProviderError::Storage)
     }
 }

@@ -1,3 +1,4 @@
+use super::SqliteRagRepositorySql;
 use std::collections::BTreeSet;
 
 use rusqlite::Connection;
@@ -12,7 +13,6 @@ use crate::{
 };
 
 use super::{
-    SqliteRagRepository,
     indexes::{fts_table_name, supported_vector_dimensions, table_exists, vec_table_name},
     sql_plan::quote_identifier,
     storage_error,
@@ -22,7 +22,7 @@ mod tree_schema;
 use tree_schema::ensure_tree_storage_table;
 
 pub(super) fn apply_extension_index_migration(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
 ) -> Result<(), RagError> {
     drop_retired_extension_tables(&repository.connection)?;
     for corpus in repository.list_corpora()? {
@@ -35,7 +35,7 @@ pub(super) fn apply_extension_index_migration(
 }
 
 pub(super) fn ensure_runtime_storage_for_corpus(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     corpus: &RagCorpusRecord,
 ) -> Result<(), RagError> {
     let binding = &corpus.storage_binding;
@@ -109,7 +109,9 @@ fn drop_retired_extension_tables(connection: &Connection) -> Result<(), RagError
     Ok(())
 }
 
-fn configured_fulltext_tables(repository: &SqliteRagRepository) -> Result<Vec<String>, RagError> {
+fn configured_fulltext_tables(
+    repository: &SqliteRagRepositorySql<'_>,
+) -> Result<Vec<String>, RagError> {
     let mut tables = Vec::new();
     for corpus in repository.list_corpora()? {
         if corpus.status != RagStatus::Enabled {
@@ -135,7 +137,7 @@ fn configured_fulltext_tables(repository: &SqliteRagRepository) -> Result<Vec<St
     Ok(tables)
 }
 
-fn rebuild_all_extension_indexes(repository: &SqliteRagRepository) -> Result<(), RagError> {
+fn rebuild_all_extension_indexes(repository: &SqliteRagRepositorySql<'_>) -> Result<(), RagError> {
     for table in configured_fulltext_tables(repository)? {
         if !table_exists(&repository.connection, &table)? {
             continue;

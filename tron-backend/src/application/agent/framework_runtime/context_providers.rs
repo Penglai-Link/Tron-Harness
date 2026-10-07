@@ -77,18 +77,21 @@ pub(super) async fn assemble(
             instructions.push(instruction.clone());
         }
     }
-    let application = source
+    let mut application = source
         .prefix
         .iter()
         .filter(|m| !matches!(m.role.as_str(), "system" | "developer"))
         .cloned()
         .collect::<Vec<_>>();
-    let mut history = input.history.clone();
-    history.messages =
-        messages::encode_history_preserving(&source.history, &input.history.messages)
-            .map_err(fw::AgentError::InvalidConfiguration)?;
-    history.generation = source.revision.generation.clone();
-    history.revision = source.revision.revision;
+    if application.is_empty() {
+        if let Some(mut scope) =
+            crate::application::agent::execution_context_message(&context.execution_scope)
+        {
+            scope.role = "user".into();
+            application.push(scope);
+        }
+    }
+    let history = input.history.clone();
     let budget = fw::ContextBudget {
         max_tokens: input
             .budget
@@ -121,8 +124,15 @@ pub(super) async fn assemble(
         available,
     )?
     .max_tokens;
-    let visual_enabled=host.harness.framework_knowledge_bases().is_some_and(|s|s.visual_context_enabled());
-    let knowledge_cap = if visual_enabled { available.max_tokens.min(16_000) } else { (working_cap / 2).min(1200) };
+    let visual_enabled = host
+        .harness
+        .framework_knowledge_bases()
+        .is_some_and(|s| s.visual_context_enabled());
+    let knowledge_cap = if visual_enabled {
+        available.max_tokens.min(16_000)
+    } else {
+        (working_cap / 2).min(1200)
+    };
     let mut contributors: Vec<Arc<dyn fw::ContextContributor>> = Vec::new();
     contributors.push(Arc::new(knowledge_base_context::KnowledgeBaseContributor {
         service: host.harness.framework_knowledge_bases(),
@@ -227,7 +237,14 @@ pub(super) async fn assemble(
     {
         block = compression(block, &config.context.providers.history)?;
         match config.context.providers.history.strategy {
-            Strategy::Checkpoint => block.reducer = Arc::new(CheckpointHistory { host: host.clone(), context: context.clone(), projection: projection.clone(), overflow: force.then(|| "provider_context_overflow".to_owned()) }),
+            Strategy::Checkpoint => {
+                let model = host.harness.framework_compaction_model_config(&context.model);
+                let compressor = memory::ModelCompressor::new(
+                    super::model::compaction_model_reference(&input.run.extensions,input.model)?,
+                    memory::CompressionOptions { max_input_tokens: model.context_window_tokens.unwrap_or(128_000).saturating_sub(model.max_tokens.unwrap_or(4096)) as usize, max_summary_bytes: model.max_tokens.unwrap_or(4096) as usize, max_model_calls: 16 },
+                )?.with_store(host.summaries.clone(), "tron.history.native-v1")?;
+                block.reducer = Arc::new(ScopedReduction { inner:Arc::new(compressor), extensions:host.harness.framework_compaction_extensions(&model), limits:input.limits.clone() });
+            },
             Strategy::Keep => {},
             _ => return Err(fw::AgentError::InvalidConfiguration("protocol history supports keep or checkpoint; data reducers cannot rewrite tool history".into())),
         }
@@ -252,12 +269,25 @@ pub(super) async fn assemble(
         ));
     }
     let base_policy: Arc<dyn fw::ContextBudgetPolicy> = Arc::new(SharedSeedBudget {
-        max_tokens: seed_cap, working_pool: Some(working_cap), knowledge_cap: (working_cap / 2).min(1200),
+        max_tokens: seed_cap,
+        working_pool: Some(working_cap),
+        knowledge_cap: (working_cap / 2).min(1200),
     });
     let policy: Arc<dyn fw::ContextBudgetPolicy> = if visual_enabled {
-        Arc::new(memory::BorrowHistoryForData { base:base_policy, block_id:"knowledge_base".into(), max_tokens:knowledge_cap,
-            protected_history_tokens:memory::required_recent_turn_tokens(&history.messages,input.model,input.estimator).await?, })
-    } else {base_policy};
+        Arc::new(memory::BorrowHistoryForData {
+            base: base_policy,
+            block_id: "knowledge_base".into(),
+            max_tokens: knowledge_cap,
+            protected_history_tokens: memory::required_recent_turn_tokens(
+                &history.messages,
+                input.model,
+                input.estimator,
+            )
+            .await?,
+        })
+    } else {
+        base_policy
+    };
     let assembler = fw::DefaultContextAssembler::new(fw::ContextLayout(layout), contributors)?
         .with_policy(policy)
         .with_global_compression(
@@ -424,75 +454,6 @@ impl fw::ContextReducer for ScopedReduction {
             .await
     }
 }
-struct CheckpointHistory {
-    host: Arc<HostExecution>,
-    context: AgentRunContext,
-    projection: PreparedModelContext,
-    overflow: Option<String>,
-}
-#[async_trait]
-impl fw::ContextReducer for CheckpointHistory {
-    async fn reduce(
-        &self,
-        input: &fw::ContextReductionInput<'_>,
-    ) -> Result<Vec<fw::Message>, fw::AgentError> {
-        if input.compression.is_some() {
-            let mut projection = self.projection.clone();
-            if let Some(directive) = input.compression {
-                projection.effective_retained_history_tokens = Some(
-                    directive
-                        .target_tokens
-                        .min(input.budget.max_tokens)
-                        .min(u32::MAX as usize) as u32,
-                );
-                projection.compaction_tail_start_seq = None;
-            }
-            if let Some(job) = self
-                .host
-                .harness
-                .framework_compaction_job(
-                    &self.context,
-                    &projection,
-                    self.overflow.as_deref(),
-                    input.limits,
-                )
-                .map_err(|e| fw::AgentError::Run(e.to_string()))?
-            {
-                let mut run = input.run.clone();
-                if let Some(model) =
-                    job.request
-                        .extensions
-                        .get::<crate::application::agent::runtime::CompactionModelInput>()
-                {
-                    run.extensions.insert((*model).clone());
-                }
-                let result = if let Some(workflow) = &job.workflow {
-                    workflow
-                        .run(&run, input.models, &job.limits, &job.model)
-                        .await
-                } else {
-                    input
-                        .models
-                        .invoke_auxiliary(
-                            &job.model,
-                            job.request.clone(),
-                            &job.stage,
-                            &job.limits,
-                            &run,
-                        )
-                        .await
-                };
-                job.completion.complete(result).await?;
-                return Err(fw::ContextError::RefreshRequired {
-                    source_revision: job.source_revision,
-                }
-                .into());
-            }
-        }
-        fw::KeepContext.reduce(input).await
-    }
-}
-
 struct LiveSourceGuard {
     host: Arc<HostExecution>,
     context: AgentRunContext,

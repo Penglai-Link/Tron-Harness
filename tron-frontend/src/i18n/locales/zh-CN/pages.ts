@@ -1,5 +1,15 @@
 export const pages = {
   archivedChats: {
+    errors: {"CHAT_SESSION_NOT_FOUND": "会话不存在。", "CHAT_SESSION_MUST_BE_ARCHIVED": "请先归档会话。", "CHAT_SESSION_RUN_ACTIVE": "会话正在运行，稍后重试。", "CHAT_SESSION_ARCHIVED": "会话已归档。", "CHAT_SESSION_DELETE_FAILED": "删除失败，可重试此项。"},
+    cancel: "取消",
+    deleteTitle: "删除归档会话？",
+    itemLabel: "归档会话",
+    statuses: {"ACTIVE": "进行中", "PAUSED": "已暂停", "BLOCKED": "受阻", "COMPLETED": "已完成", "CANCELLED": "已取消", "CLEARED": "已清除", "RUNNING": "运行中", "AWAITING_INPUT": "等待回答", "EXHAUSTED": "达到运行限制", "FAILED": "失败", "RECOVERY_REQUIRED": "需要恢复"},
+    verdicts: {"CONTINUE": "继续", "COMPLETED": "已完成", "BLOCKED": "受阻", "NEEDS_USER_INPUT": "需要用户回答"},
+    eventKinds: {"GOAL_SET": "目标已设置", "GOAL_CREATED": "目标已创建", "GOAL_UPDATED": "目标已更新", "GOAL_STATE_CHANGED": "目标状态变更", "GOAL_JUDGED": "目标判定", "GOAL_JUDGE_FAILED": "目标判定失败", tron: { goal: { operator: "操作记录" } }},
+    runKinds: {"REACT": "ReAct", "EXTERNAL": "外部代理", "CONTINUATION": "继续执行", "SUMMARY": "摘要"},
+    roles: {"User": "用户", "Assistant": "助手", "USER": "用户", "ASSISTANT": "助手", "SYSTEM": "系统", "TOOL": "工具", "DEVELOPER": "开发者", "AGENT": "代理", "user": "用户", "assistant": "助手", "system": "系统", "tool": "工具", "developer": "开发者"},
+    goalRecords: "目标判定记录",
     title: "已归档会话",
     refresh: "刷新",
     workspace: "工作空间",
@@ -1108,6 +1118,7 @@ export const pages = {
         CLEARED: "已清除",
       },
       goalVerdicts: {
+        NEEDS_USER_INPUT: "等待输入",
         CONTINUE: "继续",
         COMPLETED: "完成",
         BLOCKED: "阻塞",

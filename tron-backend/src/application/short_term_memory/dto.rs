@@ -1,10 +1,6 @@
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 
-use crate::domain::agent::{
-    AgentMessage, AgentModelConfig, ModelRequest, ModelTokenUsage, TokenEstimateSnapshot,
-    TokenUsageAuditSnapshot,
-};
+use crate::domain::agent::{AgentMessage, AgentModelConfig};
 
 #[derive(Clone)]
 pub struct SessionSummaryJobContext {
@@ -20,148 +16,6 @@ pub struct SessionSummaryRunOutcome {
     pub status: String,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
-}
-
-#[derive(Clone)]
-pub struct PreparedSessionSummaryJob {
-    pub context: SessionSummaryJobContext,
-    pub outcome: SessionSummaryRunOutcome,
-    pub snapshot_code: String,
-    pub created_at: String,
-}
-
-pub struct PreparedSessionSummaryInput {
-    pub job: PreparedSessionSummaryJob,
-    pub source_start_seq: i64,
-    pub source_end_seq: i64,
-    pub previous_snapshot_code: Option<String>,
-    pub prompt_hash: String,
-    pub prompt_version: u64,
-    pub input_token_estimate: u32,
-    pub max_input_tokens: u32,
-    pub request: ModelRequest,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ModelSessionSummaryOutput {
-    pub markdown: String,
-    pub token_usage: Option<ModelTokenUsage>,
-    pub provider_metadata: Option<Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SessionSummaryFailure {
-    pub error_code: String,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateCompactionCommand {
-    pub session_code: String,
-    pub reason: Option<String>,
-    pub note: Option<String>,
-    #[serde(default)]
-    pub todo_enabled: Option<bool>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolTranscriptStatus {
-    Completed,
-    Failed,
-}
-
-impl ToolTranscriptStatus {
-    pub fn event_type(self) -> &'static str {
-        match self {
-            Self::Completed => "agent.tool.completed",
-            Self::Failed => "agent.tool.failed",
-        }
-    }
-
-    pub fn part_status(self) -> &'static str {
-        match self {
-            Self::Completed => "completed",
-            Self::Failed => "failed",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CompactionContextPolicy {
-    pub todo_enabled: bool,
-}
-
-impl CompactionContextPolicy {
-    pub fn enabled() -> Self {
-        Self { todo_enabled: true }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PreparedCompactionInput {
-    pub session_code: String,
-    pub workspace_code: String,
-    pub run_code: Option<String>,
-    pub reason: Option<String>,
-    pub note: Option<String>,
-    pub todo_enabled: bool,
-    pub enforce_idle: bool,
-    pub strategy: String,
-    pub triggered_by: String,
-    pub source: String,
-    pub previous_checkpoint_message_code: Option<String>,
-    pub previous_checkpoint_included_recent: bool,
-    pub coverage: String,
-    // Legacy replay field name: this is the checkpoint format version, not the old selector policy.
-    pub selector_version: u32,
-    pub selection_source_end_seq: i64,
-    pub trigger_ratio_bps: u32,
-    pub retained_history_ratio_bps: u32,
-    pub effective_retained_history_tokens: u32,
-    pub source_start_seq: i64,
-    pub source_end_seq: i64,
-    pub tail_start_seq: i64,
-    pub source_message_count: usize,
-    pub selection_source_message_count: usize,
-    pub source_token_estimate: u32,
-    pub tail_token_estimate: u32,
-    pub compaction_input_token_estimate: u32,
-    pub max_input_tokens: u32,
-    pub recent: String,
-    pub prompt: String,
-    pub prompt_hash: String,
-    pub pinned_start_seq: Option<i64>,
-    /// Authorized semantic records for the Framework memory plugin.
-    pub history: Vec<String>,
-    pub previous_summary: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModelCompactionFailure {
-    pub error_code: String,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ModelCompactionOutput {
-    pub summary: String,
-    pub token_usage: Option<ModelTokenUsage>,
-    pub provider_metadata: Option<Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModelRequestTranscriptFacts {
-    pub estimated_tokens: u32,
-    pub message_hashes: Vec<String>,
-    pub tool_schema_token_estimate: u32,
-    pub budget_breakdown: Option<ContextBudgetBreakdown>,
-    pub over_budget_reason: Option<String>,
-    pub protocol: String,
-    pub previous_response_id_present: bool,
-    pub context_window_estimate: Option<u32>,
-    pub checkpoint_code: Option<String>,
-    pub usage_estimate: Option<TokenEstimateSnapshot>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -202,87 +56,6 @@ pub struct UpdateGoalCommand {
 pub struct GoalSessionCommand {
     pub session_code: String,
     pub goal_code: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct GoalLoopDecision {
-    pub goal_code: String,
-    pub verdict: String,
-    pub reason: String,
-    pub continuation_prompt: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PreparedGoalJudgeInput {
-    pub session_code: String,
-    pub workspace_code: String,
-    pub goal_code: String,
-    pub run_code: String,
-    pub input_code: Option<String>,
-    pub expected_revision: i64,
-    pub runs_used_after_judge: u32,
-    pub max_runs: u32,
-    pub prompt: String,
-    pub prompt_hash: String,
-    pub final_output_hash: String,
-    pub input_token_estimate: u32,
-    pub input_preview: Value,
-    pub no_progress_candidate: bool,
-    pub no_progress_detected: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalJudgeOutput {
-    pub verdict: String,
-    pub reason: String,
-    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
-    pub completion_evidence: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
-    pub missing_evidence: Vec<String>,
-    #[serde(default)]
-    pub required_user_input: Option<String>,
-    #[serde(default)]
-    pub next_step_hint: Option<String>,
-    #[serde(default)]
-    pub continuation_prompt: Option<String>,
-}
-
-fn deserialize_optional_string_list<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let Some(value) = Option::<Value>::deserialize(deserializer)? else {
-        return Ok(Vec::new());
-    };
-    match value {
-        Value::String(item) => Ok(normalized_string_list(vec![item])),
-        Value::Array(items) => items
-            .into_iter()
-            .map(|item| match item {
-                Value::String(value) => Ok(value),
-                _ => Err(serde::de::Error::custom("evidence items must be strings")),
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(normalized_string_list),
-        _ => Err(serde::de::Error::custom(
-            "evidence must be a string or string array",
-        )),
-    }
-}
-
-fn normalized_string_list(items: Vec<String>) -> Vec<String> {
-    items
-        .into_iter()
-        .map(|item| item.trim().to_string())
-        .filter(|item| !item.is_empty())
-        .collect()
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GoalJudgeFailure {
-    pub error_code: String,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -354,9 +127,4 @@ pub struct ContextBudgetBreakdown {
     pub raw_tail_message_count: Option<usize>,
     pub compressed_history_message_count: Option<usize>,
     pub raw_tail_start_seq: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ModelResponseTranscriptFacts {
-    pub usage_audit: Option<TokenUsageAuditSnapshot>,
 }

@@ -18,6 +18,9 @@ impl fw::ChatExecutor for AuxiliaryAllowance<'_> {
     fn catalog_snapshot(&self) -> Arc<fw::ModelCatalog> {
         self.inner.catalog_snapshot()
     }
+    fn catalog_for_run(&self, run: &fw::RunContext) -> Arc<fw::ModelCatalog> {
+        self.inner.catalog_for_run(run)
+    }
     async fn validate_async(&self) -> Result<(), fw::AgentError> {
         self.inner.validate_async().await
     }

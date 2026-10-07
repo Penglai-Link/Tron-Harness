@@ -1,3 +1,4 @@
+use super::SqliteRagRepositorySql;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
@@ -7,7 +8,6 @@ use crate::{
 };
 
 use super::{
-    SqliteRagRepository,
     sql_plan::{SqliteRagCorpusPlan, quote_identifier},
     storage_error,
 };
@@ -15,7 +15,7 @@ use super::{
 const VECTOR_INDEX_DIMENSIONS: &[i64] = &[TRON_VECTOR_INDEX_DIMENSION as i64];
 
 pub(super) fn apply_extension_index_migration(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
 ) -> Result<(), RagError> {
     super::index_schema::apply_extension_index_migration(repository)
 }

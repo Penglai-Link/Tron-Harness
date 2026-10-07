@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use rusqlite::{Connection, Error as SqliteError, OptionalExtension, params};
+use rusqlite::{Error as SqliteError, OptionalExtension, params};
 
 use crate::{
     application::resource::ResourceRepository,
@@ -35,33 +35,23 @@ const RESOURCE_MANAGEMENT_SIMPLIFY_VERSION: &str = "20260818_0001";
 const CHAT_SESSION_ATTACHMENTS_RESOURCE_VERSION: &str = "20260820_0001";
 
 pub struct SqliteResourceRepository {
-    connection: Connection,
+    connection: super::framework_storage::SharedDatabase,
 }
 
 impl SqliteResourceRepository {
     pub fn connect(database_url: &str) -> Result<Self, ResourceError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
-        connection
-            .execute_batch("PRAGMA foreign_keys = ON;")
-            .map_err(storage_error)?;
+        let connection =
+            super::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
         let mut repository = Self { connection };
         repository.apply_migrations()?;
         Ok(repository)
     }
 
     fn apply_migrations(&mut self) -> Result<(), ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        self.connection.call(move |connection| {
+
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         transaction
             .execute_batch(
                 "CREATE TABLE IF NOT EXISTS resource_management_migrations (
@@ -120,5 +110,7 @@ impl SqliteResourceRepository {
         }
         ensure_server_account_parent_guards(&transaction)?;
         transaction.commit().map_err(storage_error)
+
+        }, || ResourceError::StorageFailure)
     }
 }

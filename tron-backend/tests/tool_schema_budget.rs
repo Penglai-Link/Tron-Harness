@@ -5,10 +5,7 @@ use std::{
 
 use serde_json::{Value, json};
 use tron_backend::{
-    adapters::outbound::{
-        model::{chat_completions_request, responses_request},
-        persistence::SqliteShortTermMemoryRepository,
-    },
+    adapters::outbound::model::{chat_completions_request, responses_request},
     application::{
         agent::{
             BusinessToolCatalog, ModelClient, ReactAgentBuilder, ToolSchemaCache,
@@ -46,7 +43,7 @@ fn context() -> AgentRunContext {
     AgentRunContext {
         agent_code: None,
         conversation_code: None,
-        run_code: "RUN-SCHEMA".into(),
+        run_code: eliteforge_agent_core::RunId::new_v4().to_string(),
         workspace_code: "TRON_CORE".into(),
         user_code: None,
         locale: "en-US".into(),
@@ -239,12 +236,12 @@ fn builder(
         Arc::new(FixedSnowflakeIdProvider::new(100)),
     )
     .build();
-    ReactAgentBuilder::new(client, registry, events).with_short_term_memory(config.map(|config| {
-        ShortTermMemoryService::new(
-            SqliteShortTermMemoryRepository::connect(":memory:").unwrap(),
-            config,
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    ReactAgentBuilder::new(client, registry, events)
+        .with_framework_host(Some(host.clone()))
+        .with_short_term_memory(
+            config.map(|config| ShortTermMemoryService::with_host(host, config)),
         )
-    }))
 }
 
 fn limit_config(limit: u32) -> ShortTermMemoryConfig {
@@ -401,7 +398,7 @@ fn adapters_send_the_same_payload_that_was_measured_and_ignore_stale_snapshots()
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn runtime_reuses_schema_within_a_run_but_not_across_runs() {
     let client = ScriptedClient::new(vec![
         ModelResponse::tool_calls_with_usage(vec![call("echo", "", "echo-1")], None),
@@ -411,7 +408,7 @@ async fn runtime_reuses_schema_within_a_run_but_not_across_runs() {
     let agent = builder(client.clone(), None).build().unwrap();
     agent.run(context()).await.unwrap();
     let mut next = context();
-    next.run_code = "RUN-SCHEMA-NEXT".into();
+    next.run_code = eliteforge_agent_core::RunId::new_v4().to_string();
     agent.run(next).await.unwrap();
     let requests = client.requests.lock().unwrap();
     let snapshots = requests
@@ -422,7 +419,7 @@ async fn runtime_reuses_schema_within_a_run_but_not_across_runs() {
     assert!(!Arc::ptr_eq(snapshots[1], snapshots[2]));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn initial_schema_overflow_never_calls_model_even_without_a_session() {
     for service in [false, true] {
         let client = ScriptedClient::new(vec![ModelResponse::final_output("must not execute")]);
@@ -437,7 +434,7 @@ async fn initial_schema_overflow_never_calls_model_even_without_a_session() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn rejected_expansion_preserves_tools_cache_and_call_id() {
     let context = discovery_context(
         vec![tool("large", "large", 10_000)],
@@ -471,7 +468,7 @@ async fn rejected_expansion_preserves_tools_cache_and_call_id() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn schema_within_its_own_limit_still_counts_toward_total_input_budget() {
     for service in [false, true] {
         let mut context = context();
@@ -522,7 +519,7 @@ async fn schema_within_its_own_limit_still_counts_toward_total_input_budget() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn parallel_expansions_check_the_merged_tool_set() {
     let hidden = vec![
         tool("left_work", "left", 600),
@@ -580,7 +577,7 @@ async fn parallel_expansions_check_the_merged_tool_set() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn expansion_persistence_and_idempotence_keep_correct_snapshots() {
     for mode in [
         ExpandedDomainPersistenceMode::StickyExpanded,

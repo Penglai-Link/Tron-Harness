@@ -1,5 +1,3 @@
-use sha2::{Digest, Sha256};
-
 use crate::application::short_term_memory::ShortTermMemoryService;
 use crate::domain::{
     agent::{AgentError, AgentKind, AgentRunContext},
@@ -20,12 +18,6 @@ pub(super) fn is_context_overflow_error(message: &str) -> bool {
 
 pub(super) fn short_term_memory_error(error: ShortTermMemoryError) -> AgentError {
     AgentError::InvalidConfiguration(error.to_string())
-}
-
-pub(super) fn hash_text(text: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(text.as_bytes());
-    hex::encode(hasher.finalize())
 }
 
 pub(super) fn record_failure_on_short_term_memory_error<T>(

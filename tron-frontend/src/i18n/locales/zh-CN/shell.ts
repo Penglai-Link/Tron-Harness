@@ -143,6 +143,7 @@ export const shell = {
       registry: "注册中心",
     },
     items: {
+      archivedChats: "已归档会话",
       agents: "智能体",
       appearance: "外观",
       auditLogs: "审计日志",

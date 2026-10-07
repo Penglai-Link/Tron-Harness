@@ -16,7 +16,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
-use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tokio::{
     net::TcpListener,
@@ -108,7 +107,7 @@ async fn agent_chat_completion(
     .into_response()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn automation_options_and_empty_workspace_list() {
     let router = automation_app("options-list");
 
@@ -139,7 +138,7 @@ async fn automation_options_and_empty_workspace_list() {
     assert_eq!(response_json(list_response).await["data"]["total"], 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn automation_list_reports_execution_success_rate() {
     let database_path = database_path("list-success-rate");
     let config = prepared_config(config_for_path(database_path));
@@ -222,7 +221,7 @@ async fn automation_list_reports_execution_success_rate() {
     assert!((rate - (2.0 / 3.0)).abs() < f64::EPSILON);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() {
     let database_path = database_path("list-filters");
     let config = prepared_config(config_for_path(database_path));
@@ -330,7 +329,7 @@ async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() 
     assert_ne!(active.automation_code, paused.automation_code);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn create_automation_validates_workspace_prompt_and_cron_and_defaults_to_paused() {
     let router = automation_app("create-validation");
 
@@ -396,7 +395,7 @@ async fn create_automation_validates_workspace_prompt_and_cron_and_defaults_to_p
     assert_eq!(body["data"]["workspaceCode"], "TRON_CORE");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn manual_execution_persists_history_and_rolls_up_latest_result() {
     let server = recording_agent_model_server().await;
     let database_path = database_path("manual-execution");
@@ -506,7 +505,7 @@ async fn manual_execution_persists_history_and_rolls_up_latest_result() {
 }
 
 #[test]
-fn automation_execution_summary_uses_session_final_assistant_reply() {
+fn automation_execution_summary_persists_the_runner_final_reply() {
     let database_path = database_path("execution-summary-session-reply");
     let config = prepared_config(config_for_path(database_path));
     let database_url = config.database_url.clone();
@@ -567,19 +566,12 @@ fn automation_execution_summary_uses_session_final_assistant_reply() {
         .expect("execution should record")
         .expect("execution should insert");
 
-    insert_chat_assistant_message(
-        &database_url,
-        session_code,
-        "MSG-SUMMARY-FINAL",
-        "Chat session final reply.",
-    );
-
     repository
         .complete_execution_record(
             &automation.automation_code,
             &record.execution_code,
             AutomationExecutionStatus::Success,
-            Some(fallback_summary),
+            Some("Chat session final reply.".into()),
             Some(session_code.into()),
             "2026-06-24T12:01:00Z",
         )
@@ -604,7 +596,7 @@ fn automation_execution_summary_uses_session_final_assistant_reply() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     let server = recording_agent_model_server().await;
     let database_path = database_path("internal-tools");
@@ -774,7 +766,7 @@ async fn active_automation_scheduler_persists_real_tick() {
     wait_for_model_requests(&server, 1, Duration::from_secs(3)).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn scheduler_ticks_are_claimed_once_across_multiple_instances() {
     let server = recording_agent_model_server().await;
     let database_path = database_path("scheduler-multi-instance");
@@ -861,7 +853,7 @@ async fn scheduler_ticks_are_claimed_once_across_multiple_instances() {
     drop(first_state);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lifecycle_and_bootstrap_scheduler_only_track_active_automations() {
     let database_path = database_path("scheduler-bootstrap");
     let config = prepared_config(config_for_path(database_path));
@@ -1163,23 +1155,6 @@ fn database_path(test_name: &str) -> PathBuf {
                 .unwrap()
                 .as_nanos()
         ))
-}
-
-fn insert_chat_assistant_message(
-    database_url: &str,
-    session_code: &str,
-    message_code: &str,
-    content: &str,
-) {
-    let connection = Connection::open(database_url).expect("test db should open");
-    connection
-        .execute(
-            "INSERT INTO chat_messages
-             (id, message_code, session_code, run_code, role, channel, actor, content, created_at)
-             VALUES (910000000200000000, ?1, ?2, 'RUN-SUMMARY-FINAL', 'ASSISTANT', 'MAIN_AGENT', 'main-agent', ?3, 1000)",
-            params![message_code, session_code, content],
-        )
-        .expect("chat assistant message should insert");
 }
 
 async fn create_automation(

@@ -8,7 +8,7 @@ mod canonical_event;
 mod dto;
 mod error;
 mod execution_context;
-mod framework_runtime;
+pub(crate) mod framework_runtime;
 pub use execution_context::{
     execution_context_message, project_instructions_message, refresh_execution_context,
 };

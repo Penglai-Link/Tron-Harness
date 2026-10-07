@@ -1,16 +1,15 @@
 //! Atomic activation of one complete product generation.
 use super::*;
 
-impl SqliteKnowledgeIngestionQueue {
+impl SqliteKnowledgeIngestionQueueSql<'_> {
     pub(super) fn publish_generation(
         &self,
         lease: &IngestionLease,
         now: i64,
         ready: &Value,
     ) -> Result<(), IngestionQueueError> {
-        let mut conn = self.connection.lock().map_err(storage)?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let conn = &*self.connection;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
         let mut task = leased(&tx, lease, now)?;
         if task.stage != IngestionStage::Publishing
@@ -74,5 +73,24 @@ impl SqliteKnowledgeIngestionQueue {
         clear_lease(&mut task);
         write(&tx, &task)?;
         tx.commit().map_err(storage)
+    }
+}
+
+impl SqliteKnowledgeIngestionQueue {
+    pub(super) fn publish_generation(
+        &self,
+        lease: &IngestionLease,
+        now: i64,
+        ready: &Value,
+    ) -> Result<(), IngestionQueueError> {
+        let lease = lease.to_owned();
+        let ready = ready.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteKnowledgeIngestionQueueSql { connection }
+                    .publish_generation(&lease, now, &ready)
+            },
+            || storage("database worker stopped"),
+        )
     }
 }

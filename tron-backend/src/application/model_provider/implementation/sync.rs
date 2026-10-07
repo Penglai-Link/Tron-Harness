@@ -8,10 +8,11 @@ impl ModelProviderService {
         let now = now_millis();
         let sync_run_code = sync_run_code(now);
         {
-            let connection = self
-                .connection
-                .lock()
-                .map_err(|_| ModelProviderError::Storage)?;
+            let this = self.clone();
+            let worker_provider_code = provider_code.clone();
+            let worker_now = now.clone();
+            let worker_sync_run_code = sync_run_code.clone();
+            this.connection.clone().call(move |connection| { let provider_code=worker_provider_code; let now=worker_now; let sync_run_code=worker_sync_run_code;
             let row = read_connection(&connection, provider_code)?
                 .ok_or(ModelProviderError::ConnectionNotReady)?;
             if matches!(
@@ -35,6 +36,8 @@ impl ModelProviderService {
                 )
                 .map_err(|_| ModelProviderError::Storage)?;
             trim_provider_sync_runs(&connection, provider_code)?;
+
+Ok(()) },||ModelProviderError::Storage)?
         }
         let credentials = match self.active_credentials(provider_code).await {
             Ok(credentials) => credentials,
@@ -50,12 +53,13 @@ impl ModelProviderService {
         match result {
             Ok((catalog, multimedia_catalog)) => {
                 let completed_at = now_millis();
-                let connection = self
-                    .connection
-                    .lock()
-                    .map_err(|_| ModelProviderError::Storage)?;
-                let transaction = connection
-                    .unchecked_transaction()
+
+                let this = self.clone();
+                let worker_provider_code = provider_code.clone();
+                let worker_now = now.clone();
+                let worker_sync_run_code = sync_run_code.clone();
+                this.connection.clone().call(move |connection| { let provider_code=worker_provider_code; let now=worker_now; let sync_run_code=worker_sync_run_code;
+                let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate)
                     .map_err(|_| ModelProviderError::Storage)?;
                 apply_catalog_snapshot(&transaction, provider_code, &catalog, completed_at)?;
                 apply_multimedia_catalog_snapshot(
@@ -98,6 +102,7 @@ impl ModelProviderService {
                     model_count: Some(catalog.len().saturating_add(multimedia_catalog.len())),
                     error_summary: None,
                 })
+             },||ModelProviderError::Storage)
             }
             Err(error) => {
                 self.finish_sync_failure(provider_code, &sync_run_code, &error)
@@ -159,12 +164,11 @@ impl ModelProviderService {
         provider_code: ModelProviderCode,
     ) -> Result<ProviderConnectionView, ModelProviderError> {
         let now = now_millis();
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let transaction = connection
-            .transaction()
+
+        let this = self.clone();
+        let worker_provider_code = provider_code.clone();
+        this.connection.clone().call(move |connection| { let provider_code=worker_provider_code;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| ModelProviderError::Storage)?;
         transaction
             .execute(
@@ -212,5 +216,6 @@ impl ModelProviderService {
             row,
             catalog_model_count(&connection, provider_code)?,
         ))
+     },||ModelProviderError::Storage)
     }
 }

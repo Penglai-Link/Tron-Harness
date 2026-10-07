@@ -9,10 +9,7 @@ use serde::Deserialize;
 
 use crate::{
     app::AppState,
-    application::short_term_memory::{
-        CreateCompactionCommand, GoalSessionCommand, ModelCompactionFailure, ModelCompactionOutput,
-        SetGoalCommand, UpdateGoalCommand,
-    },
+    application::short_term_memory::{GoalSessionCommand, SetGoalCommand, UpdateGoalCommand},
     domain::short_term_memory::ShortTermMemoryError,
     response::{ApiResponse, EmptyData},
 };
@@ -33,7 +30,6 @@ pub(crate) struct CreateCompactionRequest {
     model_code: Option<String>,
     reason: Option<String>,
     note: Option<String>,
-    todo_enabled: Option<bool>,
 }
 
 pub async fn get_todos(
@@ -122,7 +118,7 @@ pub async fn create_compaction(
     let model_code = command.model_code.clone();
     let workspace_code = match state
         .short_term_memory
-        .session_workspace_for_compaction(&command.session_code)
+        .ensure_session(&command.session_code)
     {
         Ok(workspace_code) => workspace_code,
         Err(error) => return short_term_memory_error_response(error),
@@ -141,47 +137,16 @@ pub async fn create_compaction(
         Err(_) => return short_term_memory_error_response(ShortTermMemoryError::StorageFailure),
     };
     let model = state.short_term_memory.compaction_model_config(&base_model);
-    let command = CreateCompactionCommand {
-        session_code: command.session_code,
-        reason: command.reason,
-        note: command.note,
-        todo_enabled: command.todo_enabled,
-    };
-    let input = match state
-        .short_term_memory
-        .prepare_manual_model_compaction_input(
-            command,
-            model.context_window_tokens,
-            model.max_tokens,
-        ) {
-        Ok(input) => input,
-        Err(error) => return short_term_memory_error_response(error),
-    };
-    let result = match state
-        .agent_model_client
-        .compact_memory(&model, &input.history, input.previous_summary.as_deref())
-        .await
-    {
-        Ok(result) => result,
-        Err(message) => {
-            let failure = ModelCompactionFailure {
-                error_code: "COMPACTION_MODEL_REQUEST_FAILED".into(),
-                message: message.clone(),
-            };
-            let _ = state
-                .short_term_memory
-                .record_compaction_failed(&input, &failure);
-            return compaction_model_error_response("COMPACTION_MODEL_REQUEST_FAILED", message);
-        }
-    };
-    let output = ModelCompactionOutput {
-        summary: result.summary.clone(),
-        token_usage: crate::application::short_term_memory::memory_provider_usage(&result),
-        provider_metadata: None,
-    };
     match state
         .short_term_memory
-        .commit_model_compaction(input, output, &model)
+        .summarize(
+            &command.session_code,
+            &model,
+            state.agent_model_client.clone(),
+            command.reason,
+            command.note,
+        )
+        .await
     {
         Ok(compaction) => Json(ApiResponse::success(compaction)).into_response(),
         Err(error) => short_term_memory_error_response(error),

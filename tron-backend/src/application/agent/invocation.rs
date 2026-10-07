@@ -11,8 +11,6 @@ pub(crate) use attachments::user_prompt_message;
 
 use std::sync::Arc;
 
-use rand::RngCore;
-
 use crate::{
     application::{
         app::AppService, mcp::McpService, prompt::PromptService,
@@ -392,9 +390,7 @@ impl AgentInvocationService {
 }
 
 pub fn generate_agent_run_code() -> String {
-    let timestamp = chrono::Utc::now().timestamp_millis();
-    let mut rng = rand::rng();
-    format!("RUN-{timestamp}-{:016X}", rng.next_u64())
+    eliteforge_agent_core::RunId::new_v4().to_string()
 }
 
 pub(crate) fn build_system_runtime_model_config(

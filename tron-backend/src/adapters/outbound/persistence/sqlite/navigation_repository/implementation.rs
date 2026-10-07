@@ -1,4 +1,4 @@
-impl NavigationRepository for SqliteNavigationRepository {
+impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
     fn next_id(&mut self) -> Result<i64, NavigationError> {
         self.connection
             .query_row(
@@ -30,7 +30,7 @@ impl NavigationRepository for SqliteNavigationRepository {
     }
 
     fn save_domain(&mut self, domain: &NavigationDomain) -> Result<(), NavigationError> {
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         if domain.is_default {
             tx.execute(
                 "UPDATE navigation_domains SET is_default = 0 WHERE domain_code <> ?1",
@@ -154,7 +154,7 @@ impl NavigationRepository for SqliteNavigationRepository {
     }
 
     fn save_menu(&mut self, menu: &NavigationMenu) -> Result<(), NavigationError> {
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         tx.execute(
             "INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, enabled, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
@@ -237,7 +237,7 @@ impl NavigationRepository for SqliteNavigationRepository {
             item.position,
             parent_id,
         );
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         move_positions_out_of_way(&tx, tree_id)?;
         tx.execute("INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) SELECT ?1, ?2, id, ?3, ?4, ?5 FROM navigation_menus WHERE menu_code = ?6", params![item.id.value(), tree_id, parent_id, 2 * POSITION_WORK_OFFSET, item.child_display.as_storage(), item.menu.menu_code]).map_err(|error| if error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation) { NavigationError::DuplicateDomainItem } else { NavigationError::StorageFailure })?;
         apply_position_assignments(&tx, tree_id, &mut assignments)?;
@@ -265,7 +265,7 @@ impl NavigationRepository for SqliteNavigationRepository {
             command.position,
             parent_id,
         );
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         move_positions_out_of_way(&tx, tree_id)?;
         let child_display = command.child_display.unwrap_or(item.child_display);
         tx.execute("UPDATE navigation_menu_tree_items SET parent_item_id = ?2, position = ?3, child_display = ?4 WHERE id = ?1", params![item_id, parent_id, 2 * POSITION_WORK_OFFSET, child_display.as_storage()]).map_err(storage_error)?;
@@ -276,7 +276,7 @@ impl NavigationRepository for SqliteNavigationRepository {
     fn remove_item(&mut self, domain_code: &str, menu_code: &str) -> Result<(), NavigationError> {
         let tree_id = self.tree_id(domain_code)?;
         let item_id: i64 = self.connection.query_row("SELECT i.id FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id = i.menu_id WHERE i.tree_id = ?1 AND m.menu_code = ?2", params![tree_id, menu_code], |row| row.get(0)).optional().map_err(storage_error)?.ok_or(NavigationError::ItemNotFound)?;
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         tx.execute(
             "DELETE FROM navigation_menu_tree_items WHERE id = ?1",
             [item_id],
@@ -309,12 +309,12 @@ impl NavigationRepository for SqliteNavigationRepository {
             })
             .collect::<Vec<_>>();
         roots.sort_by_key(|item| item.position);
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         move_positions_out_of_way(&tx, target_domain_id)?;
         let mut next_id = Self::next_id_tx(&tx)?;
         let mut mapped = BTreeMap::new();
         fn visit(
-            tx: &rusqlite::Transaction<'_>,
+            tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
             source: &[NavigationTreeItem],
             selected: &BTreeSet<String>,
             item: &NavigationTreeItem,
@@ -399,7 +399,7 @@ impl NavigationRepository for SqliteNavigationRepository {
             .iter()
             .map(|item| item.domain_code)
             .collect::<BTreeSet<_>>();
-        let tx = self.connection.transaction().map_err(storage_error)?;
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         let mut tree_ids = BTreeMap::new();
         for domain_code in tree_codes {
             let domain_id = tx
@@ -622,4 +622,187 @@ fn ensure_database_parent(database_url: &str) -> Result<(), NavigationError> {
 
 fn storage_error(_error: rusqlite::Error) -> NavigationError {
     NavigationError::StorageFailure
+}
+
+impl NavigationRepository for SqliteNavigationRepository {
+    fn next_id(&mut self) -> Result<i64, NavigationError> {
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.next_id(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_domains(&mut self) -> Result<Vec<NavigationDomain>, NavigationError> {
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.list_domains(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn get_domain(&mut self, domain_code: &str) -> Result<NavigationDomain, NavigationError> {
+        let domain_code = domain_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.get_domain(&domain_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn save_domain(&mut self, domain: &NavigationDomain) -> Result<(), NavigationError> {
+        let domain = domain.to_owned();
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.save_domain(&domain),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_domain(&mut self, domain_code: &str) -> Result<(), NavigationError> {
+        let domain_code = domain_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }.delete_domain(&domain_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_menu_trees(&mut self) -> Result<Vec<NavigationMenuTree>, NavigationError> {
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.list_menu_trees(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn get_menu_tree(&mut self, tree_code: &str) -> Result<NavigationMenuTree, NavigationError> {
+        let tree_code = tree_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }.get_menu_tree(&tree_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_menus(
+        &mut self,
+        query: &MenuQuery,
+    ) -> Result<NavigationPage<NavigationMenu>, NavigationError> {
+        let query = query.to_owned();
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.list_menus(&query),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn get_menu(&mut self, menu_code: &str) -> Result<NavigationMenu, NavigationError> {
+        let menu_code = menu_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.get_menu(&menu_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn save_menu(&mut self, menu: &NavigationMenu) -> Result<(), NavigationError> {
+        let menu = menu.to_owned();
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.save_menu(&menu),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_menu(&mut self, menu_code: &str) -> Result<(), NavigationError> {
+        let menu_code = menu_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.delete_menu(&menu_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn menu_usage_count(&mut self, menu_code: &str) -> Result<i64, NavigationError> {
+        let menu_code = menu_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }.menu_usage_count(&menu_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn menu_has_children(&mut self, menu_code: &str) -> Result<bool, NavigationError> {
+        let menu_code = menu_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }.menu_has_children(&menu_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_items(
+        &mut self,
+        domain_code: &str,
+    ) -> Result<Vec<NavigationTreeItem>, NavigationError> {
+        let domain_code = domain_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteNavigationRepositorySql { connection }.list_items(&domain_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn add_item(
+        &mut self,
+        domain_code: &str,
+        item: &NavigationTreeItem,
+    ) -> Result<(), NavigationError> {
+        let domain_code = domain_code.to_owned();
+        let item = item.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }.add_item(&domain_code, &item)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_item(
+        &mut self,
+        domain_code: &str,
+        menu_code: &str,
+        command: &UpdateMenuItemCommand,
+    ) -> Result<(), NavigationError> {
+        let domain_code = domain_code.to_owned();
+        let menu_code = menu_code.to_owned();
+        let command = command.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }.update_item(
+                    &domain_code,
+                    &menu_code,
+                    &command,
+                )
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn remove_item(&mut self, domain_code: &str, menu_code: &str) -> Result<(), NavigationError> {
+        let domain_code = domain_code.to_owned();
+        let menu_code = menu_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }.remove_item(&domain_code, &menu_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn copy_tree(
+        &mut self,
+        target_domain_code: &str,
+        command: &CopyMenuTreeCommand,
+    ) -> Result<(), NavigationError> {
+        let target_domain_code = target_domain_code.to_owned();
+        let command = command.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }
+                    .copy_tree(&target_domain_code, &command)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn restore_default_menu_trees(
+        &mut self,
+        items: &[DefaultNavigationMenuTreeItem],
+    ) -> Result<i64, NavigationError> {
+        let items = items.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql { connection }.restore_default_menu_trees(&items)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

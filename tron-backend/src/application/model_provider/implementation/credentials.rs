@@ -6,32 +6,41 @@ impl ModelProviderService {
         workspace_code: &str,
         model_type: ModelType,
     ) -> Result<Option<ModelSelection>, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        effective_default_selection(&connection, workspace_code, model_type)
+        let this = self.clone();
+        let worker_workspace_code = workspace_code.to_owned();
+        let worker_model_type = model_type.clone();
+        this.connection.clone().call(
+            move |connection| {
+                let workspace_code = &worker_workspace_code;
+                let model_type = worker_model_type;
+                effective_default_selection(&connection, workspace_code, model_type)
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub(super) fn person_ai_selection_from_legacy_code(
         &self,
         model_code: &str,
     ) -> Result<Option<ModelSelection>, ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        Ok(
-            read_catalog_model(&connection, ModelProviderCode::PersonAi, model_code, None)?.map(
-                |model| {
-                    ModelSelection::person_ai_fixed(
-                        model_code,
-                        model
-                            .quality_type
-                            .expect("chat catalog models always have a quality"),
-                    )
-                },
-            ),
+        let this = self.clone();
+        let worker_model_code = model_code.to_owned();
+        this.connection.clone().call(
+            move |connection| {
+                let model_code = &worker_model_code;
+                Ok(
+                    read_catalog_model(&connection, ModelProviderCode::PersonAi, model_code, None)?
+                        .map(|model| {
+                            ModelSelection::person_ai_fixed(
+                                model_code,
+                                model
+                                    .quality_type
+                                    .expect("chat catalog models always have a quality"),
+                            )
+                        }),
+                )
+            },
+            || ModelProviderError::Storage,
         )
     }
 
@@ -39,22 +48,26 @@ impl ModelProviderService {
         &self,
         provider_code: ModelProviderCode,
     ) -> Result<(), ModelProviderError> {
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let row = read_connection(&connection, provider_code)?
-            .ok_or(ModelProviderError::ConnectionNotReady)?;
-        if matches!(
-            row.status,
-            ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
-        ) {
-            Ok(())
-        } else if row.status == ProviderConnectionStatus::AuthRequired {
-            Err(ModelProviderError::AuthenticationRequired)
-        } else {
-            Err(ModelProviderError::ConnectionNotReady)
-        }
+        let this = self.clone();
+        let worker_provider_code = provider_code.clone();
+        this.connection.clone().call(
+            move |connection| {
+                let provider_code = worker_provider_code;
+                let row = read_connection(&connection, provider_code)?
+                    .ok_or(ModelProviderError::ConnectionNotReady)?;
+                if matches!(
+                    row.status,
+                    ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
+                ) {
+                    Ok(())
+                } else if row.status == ProviderConnectionStatus::AuthRequired {
+                    Err(ModelProviderError::AuthenticationRequired)
+                } else {
+                    Err(ModelProviderError::ConnectionNotReady)
+                }
+            },
+            || ModelProviderError::Storage,
+        )
     }
 
     pub(super) async fn active_credentials(
@@ -62,12 +75,18 @@ impl ModelProviderService {
         provider_code: ModelProviderCode,
     ) -> Result<ProviderCredentials, ModelProviderError> {
         let row = {
-            let connection = self
-                .connection
-                .lock()
-                .map_err(|_| ModelProviderError::Storage)?;
-            read_connection(&connection, provider_code)?
-                .ok_or(ModelProviderError::ConnectionNotReady)?
+            let this = self.clone();
+            let worker_provider_code = provider_code.clone();
+            this.connection.clone().call(
+                move |connection| {
+                    let provider_code = worker_provider_code;
+                    Ok({
+                        read_connection(&connection, provider_code)?
+                            .ok_or(ModelProviderError::ConnectionNotReady)?
+                    })
+                },
+                || ModelProviderError::Storage,
+            )?
         };
         if row.status == ProviderConnectionStatus::AuthRequired {
             return Err(ModelProviderError::AuthenticationRequired);
@@ -135,12 +154,18 @@ impl ModelProviderService {
     ) -> Result<ProviderCredentials, ModelProviderError> {
         let _refresh_guard = self.token_refresh_lock.lock().await;
         let row = {
-            let connection = self
-                .connection
-                .lock()
-                .map_err(|_| ModelProviderError::Storage)?;
-            read_connection(&connection, provider_code)?
-                .ok_or(ModelProviderError::ConnectionNotReady)?
+            let this = self.clone();
+            let worker_provider_code = provider_code.clone();
+            this.connection.clone().call(
+                move |connection| {
+                    let provider_code = worker_provider_code;
+                    Ok({
+                        read_connection(&connection, provider_code)?
+                            .ok_or(ModelProviderError::ConnectionNotReady)?
+                    })
+                },
+                || ModelProviderError::Storage,
+            )?
         };
         if !matches!(
             row.status,
@@ -156,7 +181,7 @@ impl ModelProviderService {
             .credentials_encrypted
             .as_deref()
             .ok_or(ModelProviderError::AuthenticationRequired)?;
-        let mut credentials = self.decrypt_credentials(encrypted).map_err(|_| {
+        let credentials = self.decrypt_credentials(encrypted).map_err(|_| {
             let _ = self.mark_auth_required(provider_code, "credential decryption failed");
             ModelProviderError::AuthenticationRequired
         })?;
@@ -195,12 +220,13 @@ impl ModelProviderService {
         // Activation does not take the async refresh lock. Check the exact
         // identity and original encrypted credentials while holding the SQLite
         // write transaction, before applying either success or failure.
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let transaction = connection
-            .transaction()
+
+        let this = self.clone();
+        let worker_provider_code = provider_code.clone();
+        let worker_row = row.clone();
+        let worker_credentials = credentials.clone();
+        this.connection.clone().call(move |connection| { let provider_code=worker_provider_code; let row=worker_row;  let mut credentials=worker_credentials;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| ModelProviderError::Storage)?;
         let active = read_connection(&transaction, provider_code)?
             .ok_or(ModelProviderError::ConnectionNotReady)?;
@@ -238,14 +264,14 @@ impl ModelProviderService {
                     ).map_err(|_| ModelProviderError::Storage)?;
                 }
                 if unbound {
-                    self.invalidate_unbound_catalog(&transaction, now)?;
+                    this.invalidate_unbound_catalog(&transaction, now)?;
                 }
                 transaction
                     .commit()
                     .map_err(|_| ModelProviderError::Storage)?;
                 if unbound {
-                    self.device_unbound.store(true, Ordering::SeqCst);
-                    let _ = self.server_auth_events.send(());
+                    this.device_unbound.store(true, Ordering::SeqCst);
+                    let _ = this.server_auth_events.send(());
                 }
                 return Err(if unbound {
                     ModelProviderError::DeviceUnbound
@@ -257,7 +283,7 @@ impl ModelProviderService {
         credentials.token = refreshed.token;
         credentials.refresh_token = refreshed.refresh_token;
         credentials.authorization_expires_at = refreshed.authorization_expires_at;
-        let encrypted = self.encrypt_credentials(&credentials)?;
+        let encrypted = this.encrypt_credentials(&credentials)?;
         transaction.execute(
             "UPDATE provider_connections SET credentials_encrypted = ?2, authorization_expires_at = ?3,
              status = ?4, last_error = NULL, updated_at = ?5 WHERE provider_code = ?1",
@@ -274,11 +300,12 @@ impl ModelProviderService {
             .commit()
             .map_err(|_| ModelProviderError::Storage)?;
         Ok(credentials)
+     },||ModelProviderError::Storage)
     }
 
     pub(super) fn invalidate_unbound_catalog(
         &self,
-        transaction: &rusqlite::Transaction<'_>,
+        transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
         now: i64,
     ) -> Result<(), ModelProviderError> {
         transaction
@@ -326,12 +353,11 @@ impl ModelProviderService {
 
     pub(super) fn clear_credentials_after_device_unbound(&self) -> Result<(), ModelProviderError> {
         let now = now_millis();
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
-        let transaction = connection
-            .unchecked_transaction()
+
+        let this = self.clone();
+        let worker_now = now.clone();
+        this.connection.clone().call(move |connection| { let now=worker_now;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| ModelProviderError::Storage)?;
         transaction
             .execute(
@@ -386,9 +412,10 @@ impl ModelProviderService {
         transaction
             .commit()
             .map_err(|_| ModelProviderError::Storage)?;
-        self.device_unbound.store(true, Ordering::SeqCst);
-        let _ = self.server_auth_events.send(());
+        this.device_unbound.store(true, Ordering::SeqCst);
+        let _ = this.server_auth_events.send(());
         Ok(())
+     },||ModelProviderError::Storage)
     }
 
     pub(super) async fn finish_sync_failure(
@@ -402,10 +429,13 @@ impl ModelProviderService {
         }
         let now = now_millis();
         let summary = safe_error_summary(error);
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
+
+        let this = self.clone();
+        let worker_provider_code = provider_code.clone();
+        let worker_sync_run_code = sync_run_code.to_owned();
+        let worker_error = error.to_owned();
+        let worker_now = now.clone();
+        this.connection.clone().call(move |connection| { let provider_code=worker_provider_code; let sync_run_code=&worker_sync_run_code; let error=&worker_error; let now=worker_now;
         let status = if matches!(error, ModelProviderError::AuthenticationRequired) {
             ProviderConnectionStatus::AuthRequired
         } else {
@@ -424,6 +454,7 @@ impl ModelProviderService {
             )
             .map_err(|_| ModelProviderError::Storage)?;
         Ok(())
+     },||ModelProviderError::Storage)
     }
 
     pub(super) fn mark_auth_required(
@@ -432,10 +463,11 @@ impl ModelProviderService {
         message: &str,
     ) -> Result<(), ModelProviderError> {
         let now = now_millis();
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| ModelProviderError::Storage)?;
+
+        let this = self.clone();
+        let worker_provider_code = provider_code.clone();
+        let worker_message = message.to_owned();
+        this.connection.clone().call(move |connection| { let provider_code=worker_provider_code; let message=&worker_message;
         connection
             .execute(
                 "UPDATE provider_connections SET status = ?2, last_error = ?3, updated_at = ?4 WHERE provider_code = ?1",
@@ -469,6 +501,7 @@ impl ModelProviderService {
             }
         }
         Ok(())
+     },||ModelProviderError::Storage)
     }
 
     pub(super) fn adapter(

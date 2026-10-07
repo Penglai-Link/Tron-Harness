@@ -124,7 +124,12 @@ fn collect_leaf_paths(value: &Value, prefix: &str, paths: &mut Vec<String>) {
                 collect_leaf_paths(value, &path, paths);
             }
         }
-        Value::Sequence(_) if matches!(prefix, "shortTermMemory.context.providers.order" | "mineru.nodes") => {
+        Value::Sequence(_)
+            if matches!(
+                prefix,
+                "shortTermMemory.context.providers.order" | "mineru.nodes"
+            ) =>
+        {
             paths.push(prefix.to_owned());
         }
         Value::Sequence(sequence) => {
@@ -274,26 +279,48 @@ pub(super) fn effective_context_value(
             "shortTermMemory.compaction.triggerRatio",
             json!(ratio(config.compaction.trigger_ratio_bps)),
         ),
-        (
-            "shortTermMemory.compaction.retainedHistoryRatio",
-            json!(ratio(config.compaction.retained_history_ratio_bps)),
-        ),
     ] {
         set_value_at_path(&mut value, field, projected)?;
     }
-    let mineru=AppConfig::effective_mineru(content,path).map_err(|e|SystemConfigError::InvalidYaml(e.to_string()))?;
-    for (field,projected) in [
-        ("mineru.ocrMode",json!(mineru.ocr_mode)),("mineru.parserProfile",json!(mineru.parser_profile)),
-        ("mineru.expectedParserVersion",json!(mineru.expected_parser_version)),("mineru.nodes",json!(mineru.nodes)),
-        ("mineru.ingestion",json!(mineru.ingestion)),
-        ("mineru.enabled",json!(mineru.enabled)),("mineru.baseUrl",json!(mineru.base_url)),
-        ("mineru.visualContextEnabled",json!(mineru.visual_context_enabled)),
-        ("mineru.imageDescription.enabled",json!(mineru.image_description.enabled)),
-        ("mineru.imageDescription.modelCode",json!(mineru.image_description.model_code)),
-        ("mineru.imageDescription.maxImagesPerDocument",json!(mineru.image_description.max_images_per_document)),
-        ("mineru.imageDescription.timeoutSeconds",json!(mineru.image_description.timeout_seconds)),
-        ("mineru.defaultTier",json!(mineru.default_tier)),("mineru.timeoutSeconds",json!(mineru.timeout_seconds)),("mineru.maxBytes",json!(mineru.max_bytes))
-    ] {set_value_at_path(&mut value,field,projected)?;}
+    let mineru = AppConfig::effective_mineru(content, path)
+        .map_err(|e| SystemConfigError::InvalidYaml(e.to_string()))?;
+    for (field, projected) in [
+        ("mineru.ocrMode", json!(mineru.ocr_mode)),
+        ("mineru.parserProfile", json!(mineru.parser_profile)),
+        (
+            "mineru.expectedParserVersion",
+            json!(mineru.expected_parser_version),
+        ),
+        ("mineru.nodes", json!(mineru.nodes)),
+        ("mineru.ingestion", json!(mineru.ingestion)),
+        ("mineru.enabled", json!(mineru.enabled)),
+        ("mineru.baseUrl", json!(mineru.base_url)),
+        (
+            "mineru.visualContextEnabled",
+            json!(mineru.visual_context_enabled),
+        ),
+        (
+            "mineru.imageDescription.enabled",
+            json!(mineru.image_description.enabled),
+        ),
+        (
+            "mineru.imageDescription.modelCode",
+            json!(mineru.image_description.model_code),
+        ),
+        (
+            "mineru.imageDescription.maxImagesPerDocument",
+            json!(mineru.image_description.max_images_per_document),
+        ),
+        (
+            "mineru.imageDescription.timeoutSeconds",
+            json!(mineru.image_description.timeout_seconds),
+        ),
+        ("mineru.defaultTier", json!(mineru.default_tier)),
+        ("mineru.timeoutSeconds", json!(mineru.timeout_seconds)),
+        ("mineru.maxBytes", json!(mineru.max_bytes)),
+    ] {
+        set_value_at_path(&mut value, field, projected)?;
+    }
     Ok(value)
 }
 

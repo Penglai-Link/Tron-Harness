@@ -6,7 +6,6 @@ use crate::{
 use super::{
     super::{ActiveRunControl, AgentSteerInput, user_prompt_message},
     ModelStreamSink, ReactAgent,
-    runtime_helpers::short_term_memory_error,
 };
 
 impl ReactAgent {
@@ -30,19 +29,12 @@ impl ReactAgent {
 }
 
 pub(super) fn record_inputs(
-    short_term_memory: Option<&ShortTermMemoryService>,
-    context: &AgentRunContext,
+    _short_term_memory: Option<&ShortTermMemoryService>,
+    _context: &AgentRunContext,
     inputs: Vec<AgentSteerInput>,
 ) -> Result<Vec<AgentMessage>, AgentError> {
     inputs
         .into_iter()
-        .map(|input| {
-            if let Some(short_term_memory) = short_term_memory {
-                short_term_memory
-                    .record_steer_input(context, &input.content, &input.steer_code)
-                    .map_err(short_term_memory_error)?;
-            }
-            Ok(user_prompt_message(input.content, &input.attachments))
-        })
+        .map(|input| Ok(user_prompt_message(input.content, &input.attachments)))
         .collect()
 }

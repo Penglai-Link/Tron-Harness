@@ -1,3 +1,4 @@
+use super::SqliteRagRepositorySql;
 use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 
@@ -17,7 +18,7 @@ use super::{
     storage_error,
 };
 
-impl RagDiagnosticsRepository for SqliteRagRepository {
+impl RagDiagnosticsRepository for SqliteRagRepositorySql<'_> {
     fn debug_source(
         &self,
         request: &RagDebugSourceRequest,
@@ -60,7 +61,7 @@ impl RagDiagnosticsRepository for SqliteRagRepository {
 }
 
 fn debug_source(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
     request: &RagDebugSourceRequest,
 ) -> Result<Option<RagDebugSourceResult>, RagError> {
@@ -132,7 +133,7 @@ fn debug_source(
 }
 
 fn debug_text_units(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
     request: &RagDebugSourceRequest,
 ) -> Result<Vec<RagDebugTextUnitRecord>, RagError> {
@@ -227,7 +228,7 @@ fn debug_text_units(
 }
 
 fn debug_warnings(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
     request: &RagDebugSourceRequest,
 ) -> Result<Vec<RagDiagnosticWarningRecord>, RagError> {
@@ -282,4 +283,23 @@ fn json_string(value: &Value) -> Result<String, RagError> {
 
 fn parse_json(raw: &str) -> Value {
     serde_json::from_str(raw).unwrap_or_else(|_| json!({}))
+}
+
+impl RagDiagnosticsRepository for SqliteRagRepository {
+    fn debug_source(
+        &self,
+        request: &RagDebugSourceRequest,
+    ) -> Result<Option<RagDebugSourceResult>, RagError> {
+        let request = request.to_owned();
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.debug_source(&request),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError> {
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.persist_search_trace(trace),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

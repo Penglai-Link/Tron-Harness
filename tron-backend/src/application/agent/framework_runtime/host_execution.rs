@@ -13,6 +13,11 @@ impl FrameworkHost {
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
         registration.ensure_active()?;
+        crate::adapters::outbound::persistence::sqlite::SqliteChatRepository::ensure_run_session(
+            self, &context,
+        )
+        .await
+        .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?;
         let mut lifecycle = host_run::ProductLifecycle::start(&harness, &context)?;
         let agent = self.agent().await.map_err(map_error)?;
         let session = context
@@ -45,7 +50,16 @@ impl FrameworkHost {
             }
             (&context.messages[..current], &context.messages[current])
         };
-        let history = super::super::messages::encode_history(history)
+        let prefix_len = context.short_term_memory.as_ref().map_or_else(
+            || {
+                history
+                    .iter()
+                    .take_while(|message| matches!(message.role.as_str(), "system" | "developer"))
+                    .count()
+            },
+            |memory| memory.prompt_prefix.len().min(history.len()),
+        );
+        let history = super::super::messages::encode_history(&history[prefix_len..])
             .map_err(AgentError::InvalidConfiguration)?;
         let input = super::super::messages::encode(current)
             .map_err(AgentError::InvalidConfiguration)?
@@ -60,7 +74,27 @@ impl FrameworkHost {
                 .map_err(map_error)?;
         }
         let mut request = fw::RunRequest::new(&session, input);
-        host_interactions::apply_answers(agent, &session, &answers, &mut request).await?;
+        request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(|e| {
+            AgentError::InvalidConfiguration(format!("invalid native run identity: {e}"))
+        })?);
+        let framework = self.framework().await.map_err(map_error)?;
+        request.goal_id = framework
+            .goals()
+            .map_err(map_error)?
+            .active(&session)
+            .await
+            .map_err(|e| map_error(e.into()))?
+            .map(|g| g.id);
+        self.shared_database()
+            .await
+            .map_err(|e| map_error(e.into()))?
+            .transaction(async {
+                host_interactions::apply_answers(agent, &session, &answers, &mut request)
+                    .await
+                    .map_err(|e| fw::StateError::Backend(e.to_string()))
+            })
+            .await
+            .map_err(|e| map_error(e.into()))?;
         request.limits.max_steps = context.limits.max_steps as usize;
         request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
         request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;

@@ -1,4 +1,4 @@
-//! Product HTTP + native Framework + SQLite STM paused execution lifecycle.
+//! Product HTTP and native Framework paused execution lifecycle.
 use super::*;
 use tron_backend::{
     app::{AppState, build_router_with_state},
@@ -18,19 +18,16 @@ fn isolated_state(config: AppConfig, seed: i64) -> AppState {
     .unwrap()
 }
 
-fn lease_count(database: &str, session: &str) -> i64 {
-    Connection::open(database)
-        .unwrap()
-        .query_row(
-            "SELECT count(*) FROM agent_session_run_leases WHERE session_code=?1",
-            [session],
-            |row| row.get(0),
-        )
-        .unwrap()
+async fn live_run_count(database: &str, session: &str) -> usize {
+    common::native_runs(database, session)
+        .await
+        .into_iter()
+        .filter(|run| run.status == eliteforge_agent_core::ManagedRunStatus::Running)
+        .count()
 }
 
-#[tokio::test]
-async fn chat_question_resume_releases_physical_stm_lease_with_and_without_restart() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn chat_question_resume_drains_native_execution_with_and_without_restart() {
     for restart in [false, true] {
         let directory = tempfile::tempdir().unwrap();
         let mut config = AppConfig::default();
@@ -47,7 +44,7 @@ async fn chat_question_resume_releases_physical_stm_lease_with_and_without_resta
                 async move {
                     requests.lock().unwrap().push(payload.clone());
                     if payload["stream"] != true {
-                        return valid_mock_completion(&payload, "Paused question session summary");
+                        return session_summary_mock_response();
                     }
                     let first = main_calls.fetch_add(1, Ordering::SeqCst) == 0;
                     let delta = if first {
@@ -97,9 +94,9 @@ async fn chat_question_resume_releases_physical_stm_lease_with_and_without_resta
         );
         assert!(!waiting.contains("event: RUN_ERROR"), "{waiting}");
         assert_eq!(
-            lease_count(&config.database_url, &session),
+            live_run_count(&config.database_url, &session).await,
             0,
-            "native wait/drain must finish before the physical STM lease is released"
+            "native wait/drain must finish before the product reservation is released"
         );
         let active = request_with_headers(
             &app,
@@ -126,14 +123,13 @@ async fn chat_question_resume_releases_physical_stm_lease_with_and_without_resta
         let request_code = pending["requestCode"].as_str().unwrap().to_owned();
         let question = pending["questions"][0]["questionCode"].clone();
         let option = pending["questions"][0]["options"][0]["optionCode"].clone();
-        let connection = Connection::open(&config.database_url).unwrap();
-        let events = connection.prepare("SELECT event_type FROM agent_transcript_events WHERE session_code=?1 AND event_type LIKE 'agent.run.%' ORDER BY seq").unwrap().query_map([&session],|row|row.get::<_,String>(0)).unwrap().collect::<Result<Vec<_>,_>>().unwrap();
+        let runs = common::native_runs(&config.database_url, &session).await;
+        assert_eq!(runs.len(), 1);
         assert_eq!(
-            events,
-            vec!["agent.run.started", "agent.run.awaiting_input"],
-            "waiting must not be audited as completed or failed"
+            runs[0].status,
+            eliteforge_agent_core::ManagedRunStatus::AwaitingInput
         );
-        drop(connection);
+        let paused_run_id = runs[0].id;
         if restart {
             state.agent_framework.close().await;
             state.agent_framework.wait_shutdown_completion().await;
@@ -142,9 +138,9 @@ async fn chat_question_resume_releases_physical_stm_lease_with_and_without_resta
             state = isolated_state(config.clone(), 849_000_000_000_000_000);
             app = build_router_with_state(state.clone()).unwrap();
             assert_eq!(
-                lease_count(&config.database_url, &session),
+                live_run_count(&config.database_url, &session).await,
                 0,
-                "restart must not backfill a lease for the paused execution"
+                "restart must not reactivate the paused native execution"
             );
             let reloaded = request_with_headers(
                 &app,
@@ -163,7 +159,9 @@ async fn chat_question_resume_releases_physical_stm_lease_with_and_without_resta
         }
         let resumed = request_with_headers(&app,Method::POST,&format!("/api/v1/chats/sessions/{session}/user-input-requests/{request_code}/answers/stream"),
             Some(json!({"answers":[{"questionCode":question,"answerKind":"Option","optionCode":option}]})),None,Some(&authorization)).await;
-        assert_eq!(resumed.status(), StatusCode::OK);
+        if resumed.status() != StatusCode::OK {
+            panic!("resume failed: {}", response_json(resumed).await);
+        }
         let resumed = String::from_utf8(
             to_bytes(resumed.into_body(), usize::MAX)
                 .await
@@ -178,7 +176,7 @@ async fn chat_question_resume_releases_physical_stm_lease_with_and_without_resta
             2,
             "resume must neither rerun the question tool nor dispatch duplicate main calls"
         );
-        assert_eq!(lease_count(&config.database_url, &session), 0);
+        assert_eq!(live_run_count(&config.database_url, &session).await, 0);
         {
             let requests = requests.lock().unwrap();
             let resumed = requests
@@ -197,13 +195,9 @@ async fn chat_question_resume_releases_physical_stm_lease_with_and_without_resta
             );
             assert!(resumed.to_string().contains("Acceptance Local"));
         }
-        let connection = Connection::open(&config.database_url).unwrap();
-        let recovered:i64=connection.query_row("SELECT count(*) FROM agent_transcript_events WHERE session_code=?1 AND event_type='agent.run.recovered'",[&session],|row|row.get(0)).unwrap();
-        assert_eq!(
-            recovered, 0,
-            "an explicit waiting execution must never be recovered as an abandoned run"
-        );
-        drop(connection);
+        let runs = common::native_runs(&config.database_url, &session).await;
+        assert!(runs.iter().any(|run| run.id == paused_run_id
+            && run.status == eliteforge_agent_core::ManagedRunStatus::Completed));
         state.agent_framework.close().await;
         state.agent_framework.wait_shutdown_completion().await;
         provider_task.abort();

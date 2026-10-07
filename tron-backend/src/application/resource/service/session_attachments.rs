@@ -133,17 +133,22 @@ impl ResourceService {
         Ok((record, start_byte, bytes))
     }
 
-    /// Delete the physical objects before removing their private references.
-    /// If storage cleanup fails the session stays intact, making the operation
-    /// retryable and ensuring a successfully deleted session has no attachment
-    /// objects left behind.
-    pub fn delete_chat_session_attachments(&self, session_code: &str) -> Result<(), ResourceError> {
-        let records =
-            self.repository(|repository| repository.list_chat_session_attachments(session_code))?;
-        for record in &records {
-            self.storage.delete(&record.storage_locator)?;
+    pub fn chat_session_attachment_records(
+        &self,
+        session_code: &str,
+    ) -> Result<Vec<ChatSessionAttachmentRecord>, ResourceError> {
+        self.repository(|repository| repository.list_chat_session_attachments(session_code))
+    }
+
+    pub fn cleanup_chat_session_attachment_files(&self, records: &[ChatSessionAttachmentRecord]) {
+        for record in records {
+            if let Err(error) = self.storage.delete(&record.storage_locator) {
+                eprintln!(
+                    "attachment {} file cleanup failed after session deletion: {error:?}",
+                    record.attachment_code
+                );
+            }
         }
-        self.repository(|repository| repository.delete_chat_session_attachments(session_code))
     }
 
     fn next_chat_session_attachment_object_key(

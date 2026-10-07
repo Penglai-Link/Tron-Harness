@@ -15,7 +15,7 @@ impl FrameworkHost {
         *binding = Some(client);
         Ok(())
     }
-    pub(super) async fn summary_store(&self) -> Result<Arc<dyn SummaryStore>, fw::AgentError> {
+    pub(crate) async fn summary_store(&self) -> Result<Arc<dyn SummaryStore>, fw::AgentError> {
         self.ensure_open()
             .map_err(fw::AgentError::InvalidConfiguration)?;
         self.framework()

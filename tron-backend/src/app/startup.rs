@@ -89,6 +89,9 @@ impl AppReadiness {
 
 #[derive(Debug)]
 pub enum AppBootstrapError {
+    DatabaseInitFailed {
+        source: std::io::Error,
+    },
     ProfileRegistryInitFailed {
         source: crate::application::profile::ProfileRegistryError,
     },
@@ -105,6 +108,9 @@ pub enum AppBootstrapError {
 impl fmt::Display for AppBootstrapError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::DatabaseInitFailed { .. } => {
+                formatter.write_str("temporary database failed to initialize")
+            }
             Self::ProfileRegistryInitFailed { .. } => {
                 formatter.write_str("profile registry failed to initialize")
             }
@@ -125,6 +131,7 @@ impl fmt::Display for AppBootstrapError {
 impl Error for AppBootstrapError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            Self::DatabaseInitFailed { source } => Some(source),
             Self::ProfileRegistryInitFailed { source } => Some(source),
             Self::GraphInitFailed { source, .. } => Some(source),
             Self::RagInitFailed { source, .. } => Some(source),

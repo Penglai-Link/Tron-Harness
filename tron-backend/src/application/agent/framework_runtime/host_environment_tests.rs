@@ -21,6 +21,13 @@ async fn main_and_continuation_share_storage_and_agent_close_keeps_framework_ali
     assert!(main.close().await.is_success());
     assert!(!continuation.framework().is_closed());
     assert_eq!(continuation.conversation(&key).await.unwrap().revision, 1);
+    continuation
+        .framework()
+        .sessions()
+        .unwrap()
+        .archive(&key.session_id)
+        .await
+        .unwrap();
     assert!(
         continuation
             .framework()
@@ -28,14 +35,15 @@ async fn main_and_continuation_share_storage_and_agent_close_keeps_framework_ali
             .await
             .unwrap()
     );
-    assert!(
-        continuation
-            .conversation(&key)
-            .await
-            .unwrap()
-            .messages
-            .is_empty()
-    );
+    let framework = continuation.framework();
+    let store = framework
+        .services()
+        .unwrap()
+        .get::<fw::ConversationStoreService>()
+        .unwrap()
+        .0
+        .clone();
+    assert!(store.history(&key.session_id).await.unwrap().is_empty());
     assert!(host.close().await.is_success());
     assert!(continuation.framework().is_closed());
 }

@@ -7,7 +7,7 @@ use crate::application::agent::{ActiveRunControl, ModelStreamSink, runtime::Reac
 use crate::domain::agent::{AgentError, AgentRunContext, AgentRunResult};
 use eliteforge_agent_core as fw;
 use eliteforge_agent_framework::{Agent, AgentSelection, Framework};
-use eliteforge_agent_official_plugin_storage_local::SqliteConversationStore;
+
 use eliteforge_agent_official_plugin_tools_local::FileReferenceReaderService;
 use std::{
     collections::BTreeMap,
@@ -65,7 +65,8 @@ struct Host {
     observe_enabled: Arc<std::sync::atomic::AtomicBool>,
     external_agent: OnceCell<Agent>,
     continuation_agent: OnceCell<Agent>,
-    native_sessions: OnceCell<SqliteConversationStore>,
+    database:
+        OnceCell<crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase>,
     native_bindings: super::native_sessions::Bindings,
     closed: std::sync::atomic::AtomicBool,
     control: host_control::NativeRuns,
@@ -241,7 +242,7 @@ impl FrameworkHost {
             observe_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             external_agent: OnceCell::new(),
             continuation_agent: OnceCell::new(),
-            native_sessions: OnceCell::new(),
+            database: OnceCell::new(),
             native_bindings: Default::default(),
             closed: Default::default(),
             control: Default::default(),
@@ -275,7 +276,7 @@ impl FrameworkHost {
             observe_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             external_agent: OnceCell::new(),
             continuation_agent: OnceCell::new(),
-            native_sessions: OnceCell::new(),
+            database: OnceCell::new(),
             native_bindings: Default::default(),
             closed: Default::default(),
             control: Default::default(),
@@ -299,7 +300,7 @@ impl FrameworkHost {
                 "database path is required".into(),
             ));
         }
-        let path = Path::new(database).with_extension("agent-framework.sqlite3");
+        let path = PathBuf::from(database);
         Ok(Self::persistent(path, Some(resources)))
     }
     async fn agent(&self) -> Result<&Agent, fw::AgentError> {

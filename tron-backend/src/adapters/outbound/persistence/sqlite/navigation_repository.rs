@@ -28,8 +28,11 @@ use super::migrations::{
 
 const POSITION_WORK_OFFSET: i64 = 1_000_000_000;
 
+struct SqliteNavigationRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteNavigationRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
 include!("navigation_repository/storage.rs");

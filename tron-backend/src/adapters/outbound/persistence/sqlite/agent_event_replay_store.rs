@@ -1,19 +1,8 @@
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::Path,
-    sync::{
-        Arc, Mutex,
-        mpsc::{SyncSender, TrySendError, sync_channel},
-    },
-    thread,
-};
-
-use rusqlite::{Connection, OptionalExtension, params};
-
+//! AG-UI frames and delivery diagnostics use the Framework event abstraction.
+use super::framework_storage::blocking;
 use crate::{
     application::agent::{
-        AgentAguiReplayStore, CanonicalRuntimeEvent,
+        AgentAguiReplayStore, CanonicalRuntimeEvent, FrameworkHost,
         agui_translate::{
             translate_agui_event, translate_native_agui_event, translate_protocol_events,
         },
@@ -22,418 +11,357 @@ use crate::{
     domain::agent::{AgentAguiEvent, AgentAguiProtocolEvent},
     shared::event_bus::{BusEvent, EventSink},
 };
+use eliteforge_agent_core as fw;
+use eliteforge_agent_official_plugin_storage_local::SqliteDatabase;
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc, Mutex, OnceLock,
+        mpsc::{SyncSender, sync_channel},
+    },
+    thread,
+};
 
-use super::migrations::AGENT_RUNTIME_EVENT_REPLAY_MIGRATION;
-
+const HEALTH: &str = "tron/presentation-health";
+struct Storage {
+    sessions: fw::SessionService,
+    database: SqliteDatabase,
+    native_run_active: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+}
 pub struct SqliteAgentEventReplayStore {
-    connection: Arc<Mutex<Connection>>,
+    storage: Arc<OnceLock<Storage>>,
     failures: Arc<Mutex<BTreeMap<String, String>>>,
     health_flush: SyncSender<()>,
 }
-
 impl SqliteAgentEventReplayStore {
-    pub fn connect(database_url: &str) -> Result<Self, String> {
-        ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(|error| format!("agent event replay database open failed: {error}"))?;
-        connection
-            .execute_batch(AGENT_RUNTIME_EVENT_REPLAY_MIGRATION)
-            .map_err(|error| format!("agent event replay migration failed: {error}"))?;
-
-        connection
-            .execute_batch(include_str!(
-                "../../../../../migrations/20261002_0001_create_agent_runtime_replay_health.sql"
-            ))
-            .map_err(|error| format!("agent event replay health migration failed: {error}"))?;
-
-        let connection = Arc::new(Mutex::new(connection));
-        let failures = Arc::new(Mutex::new(BTreeMap::new()));
+    pub fn new() -> Result<Self, String> {
+        let storage = Arc::new(OnceLock::<Storage>::new());
+        let failures = Arc::new(Mutex::new(BTreeMap::<String, String>::new()));
         let (health_flush, signals) = sync_channel(1);
-        let worker_connection = connection.clone();
+        let worker_storage = storage.clone();
         let worker_failures = failures.clone();
         thread::Builder::new()
-            .name("tron-agent-replay-health".into())
+            .name("tron-presentation-health".into())
             .spawn(move || {
                 while signals.recv().is_ok() {
-                    let attempt = (|| {
-                        let mut connection = worker_connection
-                            .lock()
-                            .map_err(|_| "replay health connection unavailable".to_string())?;
-                        let transaction = connection.transaction().map_err(|error| {
-                            format!("replay health transaction failed: {error}")
-                        })?;
-                        write_pending_failures(&transaction, &worker_failures)?;
-                        transaction
-                            .commit()
-                            .map_err(|error| format!("replay health commit failed: {error}"))
-                    })();
-                    if attempt.is_err() {
-                        // The live registry remains authoritative until durable acknowledgment.
-                        // No retry loop can spin indefinitely on an unavailable disk.
-                        if let Ok(mut failures) = worker_failures.lock() {
-                            failures.entry(String::new()).or_insert_with(|| {
-                                "presentation replay health acknowledgment unavailable".into()
-                            });
+                    let snapshot = worker_failures
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .clone();
+                    let Some(storage) = worker_storage.get() else {
+                        continue;
+                    };
+                    let result = blocking(storage.database.transaction(async {
+                        for (key, detail) in &snapshot {
+                            let context = format!("tron.replay-failure/{key}");
+                            if storage
+                                .sessions
+                                .read_context(HEALTH, &context)
+                                .await?
+                                .is_none()
+                            {
+                                storage
+                                    .sessions
+                                    .write_context(
+                                        HEALTH,
+                                        &context,
+                                        None,
+                                        serde_json::json!({"detail":detail}),
+                                    )
+                                    .await?;
+                            }
                         }
+                        Ok(())
+                    }));
+                    if let Err(error) = result {
+                        eprintln!("Framework replay diagnostics failed: {error}");
                     }
                 }
             })
-            .map_err(|error| format!("agent replay health worker failed: {error}"))?;
+            .map_err(|e| e.to_string())?;
         Ok(Self {
-            connection,
+            storage,
             failures,
             health_flush,
         })
     }
-
-    fn persist(&self, event: &BusEvent) -> Result<(), String> {
-        let Some(stream_key) = event.stream_key().map(str::to_string) else {
-            return Ok(());
+    pub fn connect(path: &str) -> Result<Self, String> {
+        let store = Self::new()?;
+        let host = if path == ":memory:" {
+            FrameworkHost::temporary(None).map_err(|e| e.to_string())?
+        } else {
+            FrameworkHost::persistent(path, None)
         };
-        let Some(canonical) = CanonicalRuntimeEvent::from_bus_event_name(event.event_name.as_str())
-        else {
-            return Ok(());
-        };
-
-        let bus_event_id = event.event_id.as_decimal_string();
-        let run_code = event
-            .subject
-            .as_ref()
-            .and_then(|subject| subject.subject_code.clone());
-        let created_at = chrono::Utc::now().timestamp_millis();
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| "agent event replay connection unavailable".to_string())?;
-
-        let transaction = connection
-            .transaction()
-            .map_err(|error| format!("agent event replay transaction failed: {error}"))?;
-
-        self.flush_failures(&transaction)?;
-
-        if let Some(agui_event) = translate_agui_event(&stream_key, event) {
-            let payload_json = serde_json::to_string(&agui_event)
-                .map_err(|error| format!("agent event replay serialize agui failed: {error}"))?;
-            transaction
-                .execute(
-                    "INSERT OR IGNORE INTO agent_runtime_event_replay (
-                        bus_event_id,
-                        stream_key,
-                        run_code,
-                        occurred_at,
-                        canonical_event_code,
-                        category,
-                        ordinal,
-                        sse_event,
-                        payload_json,
-                        created_at
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, 'AGUI', 0, NULL, ?6, ?7)",
-                    params![
-                        bus_event_id,
-                        stream_key,
-                        run_code,
-                        event.occurred_at_ms,
-                        canonical.code(),
-                        payload_json,
-                        created_at,
-                    ],
-                )
-                .map_err(|error| format!("agent event replay insert agui failed: {error}"))?;
-        }
-
-        let protocol_events = translate_protocol_events(&stream_key, event);
-        for (index, protocol_event) in protocol_events.into_iter().enumerate() {
-            let payload_json = serde_json::to_string(&protocol_event).map_err(|error| {
-                format!("agent event replay serialize protocol failed: {error}")
-            })?;
-            transaction
-                .execute(
-                    "INSERT OR IGNORE INTO agent_runtime_event_replay (
-                        bus_event_id,
-                        stream_key,
-                        run_code,
-                        occurred_at,
-                        canonical_event_code,
-                        category,
-                        ordinal,
-                        sse_event,
-                        payload_json,
-                        created_at
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, 'PROTOCOL', ?6, ?7, ?8, ?9)",
-                    params![
-                        bus_event_id,
-                        stream_key,
-                        run_code,
-                        event.occurred_at_ms,
-                        canonical.code(),
-                        i64::try_from(index).unwrap_or(i64::MAX),
-                        protocol_event.sse_event,
-                        payload_json,
-                        created_at,
-                    ],
-                )
-                .map_err(|error| format!("agent event replay insert protocol failed: {error}"))?;
-        }
-
-        transaction
-            .commit()
-            .map_err(|error| format!("agent event replay commit failed: {error}"))?;
-
+        store.bind_framework(&host)?;
+        Ok(store)
+    }
+    pub fn bind_framework(&self, host: &FrameworkHost) -> Result<(), String> {
+        let framework = blocking(host.storage_framework()).map_err(|e| e.to_string())?;
+        let sessions = framework.sessions().map_err(|e| e.to_string())?;
+        blocking(async {
+            match sessions.get(HEALTH).await {
+                Ok(_) => {}
+                Err(fw::StateError::NotFound) => {
+                    let mut health = fw::SessionRecord::new("Presentation delivery diagnostics");
+                    health.id = HEALTH.into();
+                    sessions.create(health).await?;
+                }
+                Err(e) => return Err(e),
+            };
+            Ok::<_, fw::StateError>(())
+        })
+        .map_err(|e| e.to_string())?;
+        self.storage
+            .set(Storage {
+                sessions,
+                database: blocking(host.shared_database()).map_err(|e| e.to_string())?,
+                native_run_active: host.native_run_observer(),
+            })
+            .map_err(|_| "replay storage already bound".to_owned())?;
+        let _ = self.health_flush.try_send(());
         Ok(())
     }
-
-    fn flush_failures(&self, connection: &Connection) -> Result<(), String> {
-        write_pending_failures(connection, &self.failures)
+    fn storage(&self) -> Result<&Storage, String> {
+        self.storage
+            .get()
+            .ok_or_else(|| "Framework presentation storage is not bound".into())
     }
-
-    fn replay_by_category(&self, stream_key: &str, category: &str) -> Result<Vec<String>, String> {
-        let stream_key = stream_key.trim();
-        if stream_key.is_empty() {
-            return Ok(Vec::new());
+    async fn session(storage: &Storage, key: &str) -> Result<String, fw::StateError> {
+        match storage.sessions.get(key).await {
+            Ok(s) => Ok(s.id),
+            Err(fw::StateError::NotFound) => {
+                let id = fw::RunId::parse_str(key).map_err(|_| fw::StateError::NotFound)?;
+                Ok(storage.sessions.store.get_run(id).await?.session_id)
+            }
+            Err(e) => Err(e),
         }
-        let connection = self
-            .connection
-            .lock()
-            .map_err(|_| "agent event replay connection unavailable".to_string())?;
-        let mut statement = connection
-            .prepare(
-                "SELECT payload_json
-                 FROM agent_runtime_event_replay
-                 WHERE stream_key = ?1
-                   AND category = ?2
-                 ORDER BY id ASC, ordinal ASC",
-            )
-            .map_err(|error| format!("agent event replay query prepare failed: {error}"))?;
-        statement
-            .query_map(params![stream_key, category], |row| row.get::<_, String>(0))
-            .map_err(|error| format!("agent event replay query map failed: {error}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("agent event replay query collect failed: {error}"))
     }
-
-    fn persist_protocol_event(
+    fn append(
         &self,
-        stream_key: &str,
-        event: AgentAguiProtocolEvent,
+        key: &str,
+        identity: &str,
+        frames: Vec<(&str, serde_json::Value)>,
     ) -> Result<(), String> {
-        let stream_key = stream_key.trim();
-        if stream_key.is_empty() {
+        let storage = self.storage()?;
+        blocking(storage.database.transaction(async {
+            let session = Self::session(storage, key).await?;
+            for (index, (category, frame)) in frames.into_iter().enumerate() {
+                let mut event = fw::SessionEvent::new(
+                    &session,
+                    format!("tron.agui.{category}"),
+                    serde_json::json!({"streamKey":key,"frame":frame}),
+                );
+                event.id = format!("tron.agui/{key}/{identity}/{category}/{index}");
+                event.run_id = fw::RunId::parse_str(key).ok().filter(|_| key != session);
+                storage.sessions.store.append_event(event).await?;
+            }
+            Ok(())
+        }))
+        .map_err(|e| e.to_string())
+    }
+    fn persist(&self, event: &BusEvent) -> Result<(), String> {
+        let Some(key) = event.stream_key() else {
             return Ok(());
+        };
+        let mut frames = vec![];
+        if let Some(frame) = translate_agui_event(key, event) {
+            frames.push((
+                "audit",
+                serde_json::to_value(frame).map_err(|e| e.to_string())?,
+            ));
         }
-        let payload_json = serde_json::to_string(&event)
-            .map_err(|error| format!("agent event replay serialize protocol failed: {error}"))?;
-        let run_code = event
-            .data
-            .get("runId")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_string);
-        let occurred_at = event
-            .data
-            .get("timestamp")
-            .and_then(serde_json::Value::as_i64)
-            .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
-        let bus_event_id = protocol_event_identity(&event)
-            .unwrap_or_else(|| format!("host-protocol:{}", eliteforge_agent_core::RunId::new_v4()));
-        let created_at = chrono::Utc::now().timestamp_millis();
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| "agent event replay connection unavailable".to_string())?;
-        let transaction = connection
-            .transaction()
-            .map_err(|error| format!("agent event replay transaction failed: {error}"))?;
-        self.flush_failures(&transaction)?;
-        transaction
-            .execute(
-                "INSERT OR IGNORE INTO agent_runtime_event_replay (
-                    bus_event_id,
-                    stream_key,
-                    run_code,
-                    occurred_at,
-                    canonical_event_code,
-                    category,
-                    ordinal,
-                    sse_event,
-                    payload_json,
-                    created_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, 'PROTOCOL', 0, ?6, ?7, ?8)",
-                params![
-                    bus_event_id,
-                    stream_key,
-                    run_code,
-                    occurred_at,
-                    event.sse_event,
-                    event.sse_event,
-                    payload_json,
-                    created_at,
-                ],
-            )
-            .map_err(|error| format!("agent event replay insert protocol failed: {error}"))?;
-        if let Some(audit) = translate_native_agui_event(stream_key, &event) {
-            let audit_json = serde_json::to_string(&audit)
-                .map_err(|error| format!("native audit serialize failed: {error}"))?;
-            transaction.execute("INSERT OR IGNORE INTO agent_runtime_event_replay (bus_event_id,stream_key,run_code,occurred_at,canonical_event_code,category,ordinal,sse_event,payload_json,created_at) VALUES (?1,?2,?3,?4,?5,'AGUI',0,NULL,?6,?7)",params![bus_event_id,stream_key,run_code,occurred_at,audit.metadata.get("canonicalEvent"),audit_json,created_at]).map_err(|error|format!("native audit insert failed: {error}"))?;
+        for frame in translate_protocol_events(key, event) {
+            frames.push((
+                "protocol",
+                serde_json::to_value(frame).map_err(|e| e.to_string())?,
+            ));
         }
-        transaction
-            .commit()
-            .map_err(|error| format!("agent event replay commit failed: {error}"))?;
-        Ok(())
+        self.append(key, &event.event_id.as_decimal_string(), frames)
+    }
+    fn replay<T: serde::de::DeserializeOwned + Send>(
+        &self,
+        key: &str,
+        category: &str,
+    ) -> Result<Vec<T>, String> {
+        if key.trim().is_empty() {
+            return Ok(vec![]);
+        }
+        let storage = self.storage()?;
+        blocking(async {
+            let session = match Self::session(storage, key).await {
+                Ok(s) => s,
+                Err(fw::StateError::NotFound) => return Ok(vec![]),
+                Err(e) => return Err(e.to_string()),
+            };
+            let mut after = 0;
+            let mut result = vec![];
+            let kind = format!("tron.agui.{category}");
+            loop {
+                let page = storage
+                    .sessions
+                    .store
+                    .list_events(&session, after, 1000)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if page.is_empty() {
+                    break;
+                }
+                after = page.last().unwrap().sequence;
+                for event in page {
+                    if event.kind == kind && event.payload["streamKey"].as_str() == Some(key) {
+                        result.push(
+                            serde_json::from_value(event.payload["frame"].clone())
+                                .map_err(|e| e.to_string())?,
+                        );
+                    }
+                }
+            }
+            Ok(result)
+        })
     }
 }
-
 impl AgentAguiReplayStore for SqliteAgentEventReplayStore {
     fn append_protocol_event(
         &self,
-        stream_key: &str,
+        key: &str,
         event: AgentAguiProtocolEvent,
     ) -> Result<(), String> {
-        self.persist_protocol_event(stream_key, event)
-    }
-
-    fn record_delivery_failure(&self, stream_key: &str, detail: &str) {
-        // This callback also runs on nonblocking bus handoff failures; never perform I/O here.
-        if let Ok(mut failures) = self.failures.lock() {
-            if failures.len() >= 1024 && !failures.contains_key(stream_key) {
-                failures
-                    .entry(String::new())
-                    .or_insert_with(|| "presentation replay delivery failed".into());
-            } else {
-                failures
-                    .entry(stream_key.to_owned())
-                    .or_insert_with(|| detail.chars().take(512).collect());
-            }
+        let identity =
+            protocol_event_identity(&event).unwrap_or_else(|| fw::RunId::new_v4().to_string());
+        let mut frames = vec![(
+            "protocol",
+            serde_json::to_value(&event).map_err(|e| e.to_string())?,
+        )];
+        if let Some(audit) = translate_native_agui_event(key, &event) {
+            frames.push((
+                "audit",
+                serde_json::to_value(audit).map_err(|e| e.to_string())?,
+            ));
         }
-        // Capacity one coalesces notifications; the bounded registry retains every
-        // affected scope until the worker's SQLite transaction acknowledges it.
-        match self.health_flush.try_send(()) {
-            Ok(()) | Err(TrySendError::Full(())) => {}
-            Err(TrySendError::Disconnected(())) => {
-                if let Ok(mut failures) = self.failures.lock() {
-                    failures.entry(String::new()).or_insert_with(|| {
-                        "presentation replay health acknowledgment unavailable".into()
-                    });
+        self.append(key, &identity, frames)
+    }
+    fn record_delivery_failure(&self, key: &str, detail: &str) {
+        let mut failures = self.failures.lock().unwrap_or_else(|e| e.into_inner());
+        let key = if failures.len() >= 1024 && !failures.contains_key(key) {
+            ""
+        } else {
+            key
+        };
+        failures
+            .entry(key.into())
+            .or_insert_with(|| detail.chars().take(512).collect());
+        drop(failures);
+        if self.health_flush.try_send(()).is_err() {
+            // Full means a flush is already queued; the retained registry is authoritative.
+        }
+    }
+    fn replay_failure(&self, key: &str) -> Option<String> {
+        let failures = self.failures.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(detail) = failures.get(key).or_else(|| failures.get("")) {
+            return Some(detail.clone());
+        }
+        drop(failures);
+        let storage = match self.storage() {
+            Ok(s) => s,
+            Err(e) => return Some(e),
+        };
+        let durable = blocking(async {
+            for key in [key, ""] {
+                match storage
+                    .sessions
+                    .read_context(HEALTH, &format!("tron.replay-failure/{key}"))
+                    .await
+                {
+                    Ok(Some((_, value))) => return value["detail"].as_str().map(str::to_owned),
+                    Ok(None) => {}
+                    Err(e) => return Some(e.to_string()),
                 }
             }
+            None
+        });
+        if durable.is_some() {
+            return durable;
         }
-    }
-
-    fn replay_failure(&self, stream_key: &str) -> Option<String> {
-        let memory = match self.failures.lock() {
-            Ok(failures) => failures
-                .get(stream_key)
-                .or_else(|| failures.get(""))
-                .cloned(),
-            Err(_) => return Some("presentation replay diagnostics unavailable".into()),
+        let frames: Vec<AgentAguiProtocolEvent> = match self.replay(key, "protocol") {
+            Ok(frames) => frames,
+            Err(error) => return Some(error),
         };
-        if memory.is_some() {
-            return memory;
+        let mut unfinished = BTreeMap::<String, String>::new();
+        for frame in frames {
+            let execution = frame.data["metadata"]["framework"]["executionId"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned();
+            if execution.is_empty() {
+                continue;
+            }
+            match frame.sse_event.as_str() {
+                "RUN_STARTED" => {
+                    let run = frame.data["metadata"]["framework"]["runId"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned();
+                    unfinished.insert(execution, run);
+                }
+                "RUN_FINISHED" | "RUN_ERROR" => {
+                    unfinished.remove(&execution);
+                }
+                _ => {}
+            }
         }
-        let Ok(connection) = self.connection.lock() else {
-            return Some("presentation replay diagnostics unavailable".into());
-        };
-        match connection.query_row(
-            "SELECT detail FROM agent_runtime_event_replay_failure WHERE stream_key = ?1 OR stream_key = '' LIMIT 1",
-            [stream_key], |row| row.get::<_, String>(0),
-        ).optional() {
-            Ok(failure) => failure,
-            Err(_) => Some("presentation replay diagnostics unavailable".into()),
-        }
+        blocking(async {
+            for run in unfinished.values() {
+                // Native persistence admission and terminal presentation drain
+                // are both covered by the owning host registration.
+                if (storage.native_run_active)(run) {
+                    continue;
+                }
+                let live = match fw::RunId::parse_str(run) {
+                    Ok(id) => match storage.sessions.store.get_run(id).await {
+                        Ok(record) => {
+                            record.status == fw::ManagedRunStatus::Running
+                                && record.lease_until_ms > fw::lifecycle_time_ms()
+                        }
+                        Err(fw::StateError::NotFound) => false,
+                        Err(error) => return Some(error.to_string()),
+                    },
+                    Err(_) => false,
+                };
+                if !live {
+                    return Some("native execution has no terminal presentation event".into());
+                }
+            }
+            None
+        })
     }
-
-    fn replay_agui_events(&self, stream_key: &str) -> Result<Vec<AgentAguiEvent>, String> {
-        self.replay_by_category(stream_key, "AGUI")?
-            .into_iter()
-            .map(|payload| {
-                serde_json::from_str::<AgentAguiEvent>(&payload)
-                    .map_err(|error| format!("agent event replay deserialize agui failed: {error}"))
-            })
-            .collect()
+    fn replay_agui_events(&self, key: &str) -> Result<Vec<AgentAguiEvent>, String> {
+        self.replay(key, "audit")
     }
-
-    fn replay_protocol_events(
-        &self,
-        stream_key: &str,
-    ) -> Result<Vec<AgentAguiProtocolEvent>, String> {
-        self.replay_by_category(stream_key, "PROTOCOL")?
-            .into_iter()
-            .map(|payload| {
-                serde_json::from_str::<AgentAguiProtocolEvent>(&payload).map_err(|error| {
-                    format!("agent event replay deserialize protocol failed: {error}")
-                })
-            })
-            .collect()
+    fn replay_protocol_events(&self, key: &str) -> Result<Vec<AgentAguiProtocolEvent>, String> {
+        self.replay(key, "protocol")
     }
 }
-
 impl EventSink for SqliteAgentEventReplayStore {
     fn name(&self) -> &'static str {
-        "agent_event_replay_store"
+        "framework_agui_replay"
     }
-
     fn accepts(&self, event: &BusEvent) -> bool {
         event.stream_key().is_some()
-            && CanonicalRuntimeEvent::from_bus_event_name(event.event_name.as_str()).is_some()
+            && CanonicalRuntimeEvent::from_bus_event_name(&event.event_name).is_some()
     }
-
     fn delivery_failed(&self, event: &BusEvent, detail: &str) {
-        if let Some(stream_key) = event.stream_key() {
-            self.record_delivery_failure(stream_key, detail);
+        if let Some(key) = event.stream_key() {
+            self.record_delivery_failure(key, detail);
         }
     }
-
-    fn delivery_rejected(&self, stream_key: &str, detail: &str) {
-        self.record_delivery_failure(stream_key, detail);
+    fn delivery_rejected(&self, key: &str, detail: &str) {
+        self.record_delivery_failure(key, detail);
     }
-
-    fn handle(&self, event: std::sync::Arc<BusEvent>) {
-        if let Err(error) = self.persist(event.as_ref()) {
-            if let Some(stream_key) = event.stream_key() {
-                self.record_delivery_failure(stream_key, &error);
+    fn handle(&self, event: Arc<BusEvent>) {
+        if let Err(e) = self.persist(&event) {
+            if let Some(key) = event.stream_key() {
+                self.record_delivery_failure(key, &e);
             }
         }
     }
-}
-
-fn ensure_database_parent(database_url: &str) -> Result<(), String> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("agent event replay database directory failed: {error}"))?;
-    }
-    Ok(())
-}
-
-fn write_pending_failures(
-    connection: &Connection,
-    failures: &Mutex<BTreeMap<String, String>>,
-) -> Result<(), String> {
-    // Never hold the diagnostics mutex during database I/O: failure feedback also
-    // runs on the nonblocking event-bus publication path.
-    let keys = failures
-        .lock()
-        .map_err(|_| "presentation replay diagnostics unavailable".to_string())?
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>();
-    for stream_key in keys {
-        connection.execute(
-            "INSERT OR IGNORE INTO agent_runtime_event_replay_failure(stream_key, detail, created_at) VALUES (?1, ?2, ?3)",
-            params![stream_key,"presentation replay delivery incomplete",chrono::Utc::now().timestamp_millis()],
-        ).map_err(|error|format!("agent event replay health write failed: {error}"))?;
-    }
-    Ok(())
 }

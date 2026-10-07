@@ -1,17 +1,10 @@
-impl SqliteNavigationRepository {
-    pub fn connect(database_url: &str) -> Result<Self, NavigationError> {
+impl<'a> SqliteNavigationRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, NavigationError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
+
         connection
             .execute_batch(NAVIGATION_MIGRATION)
             .map_err(|error| navigation_migration_error("base navigation", error))?;
@@ -260,7 +253,11 @@ impl SqliteNavigationRepository {
         Ok(())
     }
 
-    fn next_id_tx(tx: &rusqlite::Transaction<'_>) -> Result<i64, NavigationError> {
+    fn next_id_tx(
+        tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<
+            '_,
+        >,
+    ) -> Result<i64, NavigationError> {
         tx.query_row(
             "SELECT COALESCE(MAX(id), 734500000000000000) FROM (
                  SELECT id FROM navigation_domains
@@ -279,7 +276,9 @@ impl SqliteNavigationRepository {
     }
 
     fn normalize_tree_positions(
-        tx: &rusqlite::Transaction<'_>,
+        tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<
+            '_,
+        >,
         tree_id: i64,
     ) -> Result<(), NavigationError> {
         let mut statement = tx
@@ -341,7 +340,7 @@ fn navigation_migration_error(stage: &str, error: rusqlite::Error) -> Navigation
 }
 
 fn move_positions_out_of_way(
-    tx: &rusqlite::Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     tree_id: i64,
 ) -> Result<(), NavigationError> {
     tx.execute(
@@ -353,7 +352,7 @@ fn move_positions_out_of_way(
 }
 
 fn apply_position_assignments(
-    tx: &rusqlite::Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     tree_id: i64,
     assignments: &mut [(i64, Option<i64>, i64)],
 ) -> Result<(), NavigationError> {
@@ -471,4 +470,18 @@ fn parent_code_for_code<'a>(
     parent_code: Option<&str>,
 ) -> Option<&'a NavigationTreeItem> {
     parent_code.and_then(|code| items.iter().find(|item| item.menu.menu_code == code))
+}
+
+impl SqliteNavigationRepository {
+    pub fn connect(database_url: &str) -> Result<Self, NavigationError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteNavigationRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
 }

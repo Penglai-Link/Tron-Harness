@@ -1,4 +1,5 @@
-use rusqlite::{Transaction, params};
+use super::SqliteRagRepositorySql;
+use rusqlite::params;
 
 use crate::{
     application::rag::{
@@ -14,15 +15,14 @@ use super::{
     storage_error,
 };
 
-impl RagSourceLifecycleRepository for SqliteRagRepository {
+impl RagSourceLifecycleRepository for SqliteRagRepositorySql<'_> {
     fn deactivate_source(&self, command: RagDeactivateSourceCommand) -> Result<(), RagError> {
         let corpus = self
             .get_corpus(&command.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
         let plan = compile_sql_corpus_plan(self, &corpus)?;
-        let tx = self
-            .connection
-            .unchecked_transaction()
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
+            .connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(storage_error)?;
         mark_source_disabled(&tx, &plan, &command)?;
         delete_text_unit_indexes_for_source(
@@ -38,7 +38,7 @@ impl RagSourceLifecycleRepository for SqliteRagRepository {
 }
 
 fn mark_source_disabled(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagDeactivateSourceCommand,
 ) -> Result<(), RagError> {
@@ -63,7 +63,7 @@ fn mark_source_disabled(
 }
 
 fn update_status(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     table_name: &str,
     status_column: &str,
     command: &RagDeactivateSourceCommand,
@@ -89,4 +89,13 @@ fn update_status(
     )
     .map_err(storage_error)?;
     Ok(())
+}
+
+impl RagSourceLifecycleRepository for SqliteRagRepository {
+    fn deactivate_source(&self, command: RagDeactivateSourceCommand) -> Result<(), RagError> {
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.deactivate_source(command),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

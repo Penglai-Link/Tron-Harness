@@ -1,11 +1,8 @@
-use crate::shared::event_bus::BusOutcome;
-use crate::{
-    application::short_term_memory::ToolTranscriptStatus,
-    domain::agent::{
-        AgentError, AgentRunContext, ExpandedDomainPersistenceMode, ToolContextDelta,
-        ToolExposureMode, ToolObservation,
-    },
+use crate::domain::agent::{
+    AgentError, AgentRunContext, ExpandedDomainPersistenceMode, ToolContextDelta, ToolExposureMode,
+    ToolObservation,
 };
+use crate::shared::event_bus::BusOutcome;
 
 use super::super::{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, TurnStateAdapter};
 use super::ReactAgent;
@@ -13,20 +10,13 @@ use super::ReactAgent;
 impl ReactAgent {
     fn record_tool_observation_message(
         &self,
-        context: &AgentRunContext,
+        _context: &AgentRunContext,
         turn_state: &mut TurnStateAdapter,
         observation: &ToolObservation,
         model_call_id: Option<String>,
-        sequence: u32,
-        status: ToolTranscriptStatus,
+        _sequence: u32,
     ) -> Result<crate::domain::agent::AgentMessage, AgentError> {
-        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
-            short_term_memory
-                .record_tool_result(context, observation, model_call_id, sequence, status)
-                .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))
-        } else {
-            Ok(turn_state.record_tool_observation(observation, model_call_id))
-        }
+        Ok(turn_state.record_tool_observation(observation, model_call_id))
     }
 }
 
@@ -109,9 +99,9 @@ impl ReactAgent {
         context: &AgentRunContext,
         id: &str,
         name: &str,
-        provider_id: &str,
+        _provider_id: &str,
         input: &serde_json::Value,
-        sequence: u32,
+        _sequence: u32,
     ) -> Result<(), AgentError> {
         self.publish_tool(
             context,
@@ -133,11 +123,6 @@ impl ReactAgent {
             Some(input),
             None,
         )?;
-        if let Some(memory) = &self.short_term_memory {
-            memory
-                .record_tool_started(context, name, Some(provider_id), sequence)
-                .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?;
-        }
         Ok(())
     }
     pub(crate) fn framework_tool_activity(
@@ -200,11 +185,6 @@ impl ReactAgent {
             &observation,
             Some(provider_id.into()),
             sequence,
-            if failed {
-                ToolTranscriptStatus::Failed
-            } else {
-                ToolTranscriptStatus::Completed
-            },
         )?;
         collapse_ephemeral_expanded_domains(context, &observation.tool_name);
         self.publish_tool(

@@ -1,5 +1,5 @@
 fn persist_tree_nodes(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
@@ -16,7 +16,7 @@ fn persist_tree_nodes(
 }
 
 fn delete_tree_rows_for_source(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
@@ -54,7 +54,7 @@ fn delete_tree_rows_for_source(
 }
 
 fn tree_rowids_for_source(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     table_name: &str,
     command: &RagPersistIngestCommand,
 ) -> Result<Vec<i64>, RagError> {
@@ -84,7 +84,7 @@ fn tree_rowids_for_source(
 }
 
 fn delete_rowids(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     table_name: &str,
     rowids: &[i64],
 ) -> Result<(), RagError> {
@@ -93,40 +93,68 @@ fn delete_rowids(
     }
     let table = quote_identifier(table_name)?;
     for rowid in rowids {
-        tx.execute(&format!("DELETE FROM {table} WHERE rowid = ?1"), params![rowid])
-            .map_err(storage_error)?;
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE rowid = ?1"),
+            params![rowid],
+        )
+        .map_err(storage_error)?;
     }
     Ok(())
 }
 
 fn persist_tree_node(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     node: &RagTreeNodeWrite,
     now: i64,
 ) -> Result<(), RagError> {
     let mut values = Vec::new();
-    push_text(&mut values, &plan.tree_columns, "tree_node_code", &node.tree_node_code);
+    push_text(
+        &mut values,
+        &plan.tree_columns,
+        "tree_node_code",
+        &node.tree_node_code,
+    );
     push_text(
         &mut values,
         &plan.tree_columns,
         "parent_node_code",
         &node.parent_node_code,
     );
-    push_text(&mut values, &plan.tree_columns, "source_code", &node.source_code);
+    push_text(
+        &mut values,
+        &plan.tree_columns,
+        "source_code",
+        &node.source_code,
+    );
     push_text(
         &mut values,
         &plan.tree_columns,
         "source_version",
         &node.source_version,
     );
-    push_text(&mut values, &plan.tree_columns, "scope_type", &node.scope_type);
-    push_text(&mut values, &plan.tree_columns, "scope_code", &node.scope_code);
+    push_text(
+        &mut values,
+        &plan.tree_columns,
+        "scope_type",
+        &node.scope_type,
+    );
+    push_text(
+        &mut values,
+        &plan.tree_columns,
+        "scope_code",
+        &node.scope_code,
+    );
     push_text(&mut values, &plan.tree_columns, "path_key", &node.path_key);
     push_integer(&mut values, &plan.tree_columns, "level", node.level);
     push_integer(&mut values, &plan.tree_columns, "ordinal", node.ordinal);
     push_text(&mut values, &plan.tree_columns, "title", &node.title);
-    push_text(&mut values, &plan.tree_columns, "summary_text", &node.summary_text);
+    push_text(
+        &mut values,
+        &plan.tree_columns,
+        "summary_text",
+        &node.summary_text,
+    );
     push_integer(
         &mut values,
         &plan.tree_columns,
@@ -231,7 +259,7 @@ fn persist_tree_node(
 }
 
 fn sync_tree_indexes(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
     node: &RagTreeNodeWrite,
 ) -> Result<(), RagError> {
@@ -272,7 +300,7 @@ fn sync_tree_indexes(
 }
 
 fn tree_rowid_for_node(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     table_name: &str,
     node: &RagTreeNodeWrite,
 ) -> Result<i64, RagError> {

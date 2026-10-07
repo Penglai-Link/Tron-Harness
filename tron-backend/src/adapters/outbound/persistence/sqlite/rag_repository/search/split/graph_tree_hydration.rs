@@ -1,4 +1,4 @@
-impl SqliteRagRepository {
+impl<'a> SqliteRagRepositorySql<'a> {
     pub(crate) fn hydrate_graph_tree_rows_from_text_units(
         &self,
         corpus: &crate::domain::rag::RagCorpusRecord,
@@ -14,7 +14,7 @@ impl SqliteRagRepository {
 }
 
 fn hydrate_graph_tree_row_from_text_units(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
     row: RagSearchRow,
 ) -> Result<Vec<RagSearchRow>, RagError> {
@@ -76,9 +76,8 @@ fn hydrate_graph_tree_row_from_text_units(
             hydrated.ordinal = unit.get(4)?;
             hydrated.token_count = unit.get::<_, Option<i64>>(5)?.unwrap_or(0);
             hydrated.embedding = None;
-            hydrated.text_metadata = parse_metadata_json(
-                unit.get::<_, Option<String>>(6)?.as_deref().unwrap_or("{}"),
-            );
+            hydrated.text_metadata =
+                parse_metadata_json(unit.get::<_, Option<String>>(6)?.as_deref().unwrap_or("{}"));
             hydrated.field_values = tree_output_field_values(&row);
             Ok(hydrated)
         })
@@ -105,4 +104,21 @@ fn tree_output_field_values(row: &RagSearchRow) -> Map<String, Value> {
     let mut values = row.field_values.clone();
     values.remove("coveredTextUnitCodes");
     values
+}
+
+impl SqliteRagRepository {
+    pub(crate) fn hydrate_graph_tree_rows_from_text_units(
+        &self,
+        corpus: &crate::domain::rag::RagCorpusRecord,
+        rows: Vec<RagSearchRow>,
+    ) -> Result<Vec<RagSearchRow>, RagError> {
+        let corpus = corpus.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteRagRepositorySql { connection }
+                    .hydrate_graph_tree_rows_from_text_units(&corpus, rows)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

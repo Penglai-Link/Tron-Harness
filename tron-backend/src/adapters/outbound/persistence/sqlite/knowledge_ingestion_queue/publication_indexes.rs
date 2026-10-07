@@ -1,6 +1,9 @@
 use super::*;
 
-fn exists(tx: &Transaction<'_>, name: &str) -> Result<bool, IngestionQueueError> {
+fn exists(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    name: &str,
+) -> Result<bool, IngestionQueueError> {
     tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?1)",
         [name],
@@ -10,7 +13,7 @@ fn exists(tx: &Transaction<'_>, name: &str) -> Result<bool, IngestionQueueError>
 }
 
 pub(super) fn validate_vectors(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     kb: &str,
     source: &str,
     count: usize,
@@ -28,7 +31,7 @@ pub(super) fn validate_vectors(
 /// The product corpus uses one embedded text/vector table. Retire extension
 /// rows in the same publication transaction so stale generations cannot fill KNN.
 pub(super) fn retire_indexes(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     kb: &str,
     source: &str,
 ) -> Result<(), IngestionQueueError> {

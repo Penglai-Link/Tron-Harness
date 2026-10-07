@@ -1,24 +1,31 @@
 impl ResourceRepository for SqliteResourceRepository {
     fn list_files(&mut self) -> Result<Vec<ResourceFileRecord>, ResourceError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT workspace_code, resource_code, kind, name, description,
+        self.connection.call(
+            move |connection| {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT workspace_code, resource_code, kind, name, description,
                         file_name, file_extension, byte_size, storage_locator, allow_inheritance,
                         revision, created_at, updated_at
                  FROM resource_files
                  ORDER BY workspace_code, resource_code",
-            )
-            .map_err(storage_error)?;
-        statement
-            .query_map([], file_from_row)
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
+                    )
+                    .map_err(storage_error)?;
+                statement
+                    .query_map([], file_from_row)
+                    .map_err(storage_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(storage_error)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn insert_file(&mut self, record: &ResourceFileRecord) -> Result<(), ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let record = record.to_owned();
+        self.connection.call(move |connection| {
+            let record = &record;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         claim_resource_code(
             &transaction,
             &record.workspace_code,
@@ -50,34 +57,42 @@ impl ResourceRepository for SqliteResourceRepository {
             )
             .map_err(storage_error)?;
         transaction.commit().map_err(storage_error)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn update_file(&mut self, record: &ResourceFileRecord) -> Result<bool, ResourceError> {
-        let changed = self
-            .connection
-            .execute(
-                "UPDATE resource_files
+        let record = record.to_owned();
+        self.connection.call(
+            move |connection| {
+                let record = &record;
+                let changed = connection
+                    .execute(
+                        "UPDATE resource_files
                  SET kind = ?3, name = ?4, description = ?5, file_name = ?6,
                      file_extension = ?7, byte_size = ?8, storage_locator = ?9,
                      allow_inheritance = ?10, updated_at = ?11, revision = revision + 1
                  WHERE workspace_code = ?1 AND resource_code = ?2 AND revision = ?12",
-                params![
-                    record.workspace_code,
-                    record.resource_code,
-                    record.kind.as_str(),
-                    record.name,
-                    record.description,
-                    record.file_name,
-                    record.file_extension,
-                    record.byte_size as i64,
-                    record.storage_locator,
-                    bool_to_int(record.allow_inheritance),
-                    timestamp_to_millis(&record.updated_at),
-                    record.revision as i64,
-                ],
-            )
-            .map_err(storage_error)?;
-        Ok(changed > 0)
+                        params![
+                            record.workspace_code,
+                            record.resource_code,
+                            record.kind.as_str(),
+                            record.name,
+                            record.description,
+                            record.file_name,
+                            record.file_extension,
+                            record.byte_size as i64,
+                            record.storage_locator,
+                            bool_to_int(record.allow_inheritance),
+                            timestamp_to_millis(&record.updated_at),
+                            record.revision as i64,
+                        ],
+                    )
+                    .map_err(storage_error)?;
+                Ok(changed > 0)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn delete_file(
@@ -86,7 +101,12 @@ impl ResourceRepository for SqliteResourceRepository {
         resource_code: &str,
         revision: u64,
     ) -> Result<bool, ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let workspace_code = workspace_code.to_owned();
+        let resource_code = resource_code.to_owned();
+        self.connection.call(move |connection| {
+            let workspace_code = &workspace_code;
+            let resource_code = &resource_code;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         let deleted = transaction
             .execute(
                 "DELETE FROM resource_files
@@ -99,32 +119,41 @@ impl ResourceRepository for SqliteResourceRepository {
         }
         transaction.commit().map_err(storage_error)?;
         Ok(deleted > 0)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn list_data_source_connections(
         &mut self,
     ) -> Result<Vec<DataSourceConnectionRecord>, ResourceError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT workspace_code, resource_code, kind, name, description,
+        self.connection.call(
+            move |connection| {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT workspace_code, resource_code, kind, name, description,
                         attributes_json, allow_inheritance, revision, created_at, updated_at
                  FROM resource_data_source_connections
                  ORDER BY workspace_code, resource_code",
-            )
-            .map_err(storage_error)?;
-        statement
-            .query_map([], data_source_from_row)
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
+                    )
+                    .map_err(storage_error)?;
+                statement
+                    .query_map([], data_source_from_row)
+                    .map_err(storage_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(storage_error)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn insert_data_source_connection(
         &mut self,
         record: &DataSourceConnectionRecord,
     ) -> Result<(), ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let record = record.to_owned();
+        self.connection.call(move |connection| {
+            let record = &record;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         claim_resource_code(
             &transaction,
             &record.workspace_code,
@@ -152,32 +181,40 @@ impl ResourceRepository for SqliteResourceRepository {
             )
             .map_err(storage_error)?;
         transaction.commit().map_err(storage_error)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn update_data_source_connection(
         &mut self,
         record: &DataSourceConnectionRecord,
     ) -> Result<bool, ResourceError> {
-        let changed = self
-            .connection
-            .execute(
-                "UPDATE resource_data_source_connections
+        let record = record.to_owned();
+        self.connection.call(
+            move |connection| {
+                let record = &record;
+                let changed = connection
+                    .execute(
+                        "UPDATE resource_data_source_connections
                  SET name = ?3, description = ?4, attributes_json = ?5,
                      allow_inheritance = ?6, updated_at = ?7, revision = revision + 1
                  WHERE workspace_code = ?1 AND resource_code = ?2 AND revision = ?8",
-                params![
-                    record.workspace_code,
-                    record.resource_code,
-                    record.name,
-                    record.description,
-                    value_to_storage(&record.attributes)?,
-                    bool_to_int(record.allow_inheritance),
-                    timestamp_to_millis(&record.updated_at),
-                    record.revision as i64,
-                ],
-            )
-            .map_err(storage_error)?;
-        Ok(changed > 0)
+                        params![
+                            record.workspace_code,
+                            record.resource_code,
+                            record.name,
+                            record.description,
+                            value_to_storage(&record.attributes)?,
+                            bool_to_int(record.allow_inheritance),
+                            timestamp_to_millis(&record.updated_at),
+                            record.revision as i64,
+                        ],
+                    )
+                    .map_err(storage_error)?;
+                Ok(changed > 0)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn delete_data_source_connection(
@@ -186,7 +223,12 @@ impl ResourceRepository for SqliteResourceRepository {
         resource_code: &str,
         revision: u64,
     ) -> Result<bool, ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let workspace_code = workspace_code.to_owned();
+        let resource_code = resource_code.to_owned();
+        self.connection.call(move |connection| {
+            let workspace_code = &workspace_code;
+            let resource_code = &resource_code;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         let deleted = transaction
             .execute(
                 "DELETE FROM resource_data_source_connections
@@ -199,27 +241,36 @@ impl ResourceRepository for SqliteResourceRepository {
         }
         transaction.commit().map_err(storage_error)?;
         Ok(deleted > 0)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn list_servers(&mut self) -> Result<Vec<ServerRecord>, ResourceError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT workspace_code, resource_code, name, description, host, port,
+        self.connection.call(
+            move |connection| {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT workspace_code, resource_code, name, description, host, port,
                         allow_inheritance, revision, created_at, updated_at
                  FROM resource_servers
                  ORDER BY workspace_code, resource_code",
-            )
-            .map_err(storage_error)?;
-        statement
-            .query_map([], server_from_row)
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
+                    )
+                    .map_err(storage_error)?;
+                statement
+                    .query_map([], server_from_row)
+                    .map_err(storage_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(storage_error)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn insert_server(&mut self, record: &ServerRecord) -> Result<(), ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let record = record.to_owned();
+        self.connection.call(move |connection| {
+            let record = &record;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         claim_resource_code(
             &transaction,
             &record.workspace_code,
@@ -228,6 +279,8 @@ impl ResourceRepository for SqliteResourceRepository {
         )?;
         insert_server_record(&transaction, record)?;
         transaction.commit().map_err(storage_error)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn insert_server_bundle(
@@ -235,6 +288,11 @@ impl ResourceRepository for SqliteResourceRepository {
         server: &ServerRecord,
         initial_account: &ServerAccountRecord,
     ) -> Result<(), ResourceError> {
+        let server = server.to_owned();
+        let initial_account = initial_account.to_owned();
+        self.connection.call(move |connection| {
+            let server = &server;
+            let initial_account = &initial_account;
         if server.workspace_code != initial_account.workspace_code
             || server.resource_code == initial_account.resource_code
             || initial_account.server_workspace_code != server.workspace_code
@@ -242,7 +300,7 @@ impl ResourceRepository for SqliteResourceRepository {
         {
             return Err(ResourceError::InvalidInput);
         }
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         claim_resource_code(
             &transaction,
             &server.workspace_code,
@@ -258,30 +316,38 @@ impl ResourceRepository for SqliteResourceRepository {
         insert_server_record(&transaction, server)?;
         insert_server_account_record(&transaction, initial_account)?;
         transaction.commit().map_err(storage_error)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn update_server(&mut self, record: &ServerRecord) -> Result<bool, ResourceError> {
-        let changed = self
-            .connection
-            .execute(
-                "UPDATE resource_servers
+        let record = record.to_owned();
+        self.connection.call(
+            move |connection| {
+                let record = &record;
+                let changed = connection
+                    .execute(
+                        "UPDATE resource_servers
                  SET name = ?3, description = ?4, host = ?5, port = ?6,
                      allow_inheritance = ?7, updated_at = ?8, revision = revision + 1
                  WHERE workspace_code = ?1 AND resource_code = ?2 AND revision = ?9",
-                params![
-                    record.workspace_code,
-                    record.resource_code,
-                    record.name,
-                    record.description,
-                    record.host,
-                    record.port as i64,
-                    bool_to_int(record.allow_inheritance),
-                    timestamp_to_millis(&record.updated_at),
-                    record.revision as i64,
-                ],
-            )
-            .map_err(storage_error)?;
-        Ok(changed > 0)
+                        params![
+                            record.workspace_code,
+                            record.resource_code,
+                            record.name,
+                            record.description,
+                            record.host,
+                            record.port as i64,
+                            bool_to_int(record.allow_inheritance),
+                            timestamp_to_millis(&record.updated_at),
+                            record.revision as i64,
+                        ],
+                    )
+                    .map_err(storage_error)?;
+                Ok(changed > 0)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn delete_server_if_no_accounts(
@@ -290,7 +356,12 @@ impl ResourceRepository for SqliteResourceRepository {
         resource_code: &str,
         revision: u64,
     ) -> Result<bool, ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let workspace_code = workspace_code.to_owned();
+        let resource_code = resource_code.to_owned();
+        self.connection.call(move |connection| {
+            let workspace_code = &workspace_code;
+            let resource_code = &resource_code;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         let has_accounts = transaction
             .query_row(
                 "SELECT EXISTS(
@@ -317,30 +388,39 @@ impl ResourceRepository for SqliteResourceRepository {
         }
         transaction.commit().map_err(storage_error)?;
         Ok(deleted > 0)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn list_server_accounts(&mut self) -> Result<Vec<ServerAccountRecord>, ResourceError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT workspace_code, resource_code, server_workspace_code, server_code,
+        self.connection.call(
+            move |connection| {
+                let mut statement = connection
+                    .prepare(
+                        "SELECT workspace_code, resource_code, server_workspace_code, server_code,
                         name, description,
                         username, authentication_type, password_variable_key,
                         private_key_variable_key, private_key_passphrase_variable_key,
                         allow_inheritance, revision, created_at, updated_at
                  FROM resource_server_accounts
                  ORDER BY workspace_code, resource_code",
-            )
-            .map_err(storage_error)?;
-        statement
-            .query_map([], server_account_from_row)
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
+                    )
+                    .map_err(storage_error)?;
+                statement
+                    .query_map([], server_account_from_row)
+                    .map_err(storage_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(storage_error)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn insert_server_account(&mut self, record: &ServerAccountRecord) -> Result<(), ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let record = record.to_owned();
+        self.connection.call(move |connection| {
+            let record = &record;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         claim_resource_code(
             &transaction,
             &record.workspace_code,
@@ -349,38 +429,46 @@ impl ResourceRepository for SqliteResourceRepository {
         )?;
         insert_server_account_record(&transaction, record)?;
         transaction.commit().map_err(storage_error)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn update_server_account(
         &mut self,
         record: &ServerAccountRecord,
     ) -> Result<bool, ResourceError> {
-        let changed = self
-            .connection
-            .execute(
-                "UPDATE resource_server_accounts
+        let record = record.to_owned();
+        self.connection.call(
+            move |connection| {
+                let record = &record;
+                let changed = connection
+                    .execute(
+                        "UPDATE resource_server_accounts
                  SET name = ?3, description = ?4, username = ?5, authentication_type = ?6,
                      password_variable_key = ?7, private_key_variable_key = ?8,
                      private_key_passphrase_variable_key = ?9, allow_inheritance = ?10,
                      updated_at = ?11, revision = revision + 1
                  WHERE workspace_code = ?1 AND resource_code = ?2 AND revision = ?12",
-                params![
-                    record.workspace_code,
-                    record.resource_code,
-                    record.name,
-                    record.description,
-                    record.username,
-                    authentication_type_to_storage(record.authentication_type),
-                    record.password_variable_key,
-                    record.private_key_variable_key,
-                    record.private_key_passphrase_variable_key,
-                    bool_to_int(record.allow_inheritance),
-                    timestamp_to_millis(&record.updated_at),
-                    record.revision as i64,
-                ],
-            )
-            .map_err(storage_error)?;
-        Ok(changed > 0)
+                        params![
+                            record.workspace_code,
+                            record.resource_code,
+                            record.name,
+                            record.description,
+                            record.username,
+                            authentication_type_to_storage(record.authentication_type),
+                            record.password_variable_key,
+                            record.private_key_variable_key,
+                            record.private_key_passphrase_variable_key,
+                            bool_to_int(record.allow_inheritance),
+                            timestamp_to_millis(&record.updated_at),
+                            record.revision as i64,
+                        ],
+                    )
+                    .map_err(storage_error)?;
+                Ok(changed > 0)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn delete_server_account(
@@ -389,7 +477,12 @@ impl ResourceRepository for SqliteResourceRepository {
         resource_code: &str,
         revision: u64,
     ) -> Result<bool, ResourceError> {
-        let transaction = self.connection.transaction().map_err(storage_error)?;
+        let workspace_code = workspace_code.to_owned();
+        let resource_code = resource_code.to_owned();
+        self.connection.call(move |connection| {
+            let workspace_code = &workspace_code;
+            let resource_code = &resource_code;
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         let deleted = transaction
             .execute(
                 "DELETE FROM resource_server_accounts
@@ -402,31 +495,40 @@ impl ResourceRepository for SqliteResourceRepository {
         }
         transaction.commit().map_err(storage_error)?;
         Ok(deleted > 0)
+
+        }, || ResourceError::StorageFailure)
     }
 
     fn insert_chat_session_attachment(
         &mut self,
         record: &ChatSessionAttachmentRecord,
     ) -> Result<(), ResourceError> {
-        self.connection
-            .execute(
-                "INSERT INTO resource_chat_session_attachments (
+        let record = record.to_owned();
+        self.connection.call(
+            move |connection| {
+                let record = &record;
+                connection
+                    .execute(
+                        "INSERT INTO resource_chat_session_attachments (
                     workspace_code, session_code, attachment_code, file_name,
                     content_type, byte_size, storage_locator, created_at
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    record.workspace_code,
-                    record.session_code,
-                    record.attachment_code,
-                    record.file_name,
-                    record.content_type,
-                    record.byte_size as i64,
-                    record.storage_locator,
-                    timestamp_to_millis(&record.created_at),
-                ],
-            )
-            .map_err(storage_error)?;
-        Ok(())
+                        params![
+                            record.workspace_code,
+                            record.session_code,
+                            record.attachment_code,
+                            record.file_name,
+                            record.content_type,
+                            record.byte_size as i64,
+                            record.storage_locator,
+                            timestamp_to_millis(&record.created_at),
+                        ],
+                    )
+                    .map_err(storage_error)?;
+                Ok(())
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn get_chat_session_attachment(
@@ -435,48 +537,55 @@ impl ResourceRepository for SqliteResourceRepository {
         session_code: &str,
         attachment_code: &str,
     ) -> Result<ChatSessionAttachmentRecord, ResourceError> {
-        self.connection
-            .query_row(
-                "SELECT workspace_code, session_code, attachment_code, file_name,
+        let workspace_code = workspace_code.to_owned();
+        let session_code = session_code.to_owned();
+        let attachment_code = attachment_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                let workspace_code = &workspace_code;
+                let session_code = &session_code;
+                let attachment_code = &attachment_code;
+                connection
+                    .query_row(
+                        "SELECT workspace_code, session_code, attachment_code, file_name,
                         content_type, byte_size, storage_locator, created_at
                  FROM resource_chat_session_attachments
                  WHERE workspace_code = ?1 AND session_code = ?2 AND attachment_code = ?3",
-                params![workspace_code, session_code, attachment_code],
-                chat_session_attachment_from_row,
-            )
-            .optional()
-            .map_err(storage_error)?
-            .ok_or(ResourceError::NotFound)
+                        params![workspace_code, session_code, attachment_code],
+                        chat_session_attachment_from_row,
+                    )
+                    .optional()
+                    .map_err(storage_error)?
+                    .ok_or(ResourceError::NotFound)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 
     fn list_chat_session_attachments(
         &mut self,
         session_code: &str,
     ) -> Result<Vec<ChatSessionAttachmentRecord>, ResourceError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT workspace_code, session_code, attachment_code, file_name,
+        let session_code = session_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                let session_code = &session_code;
+                let mut statement = connection
+                    .prepare(
+                        "SELECT workspace_code, session_code, attachment_code, file_name,
                         content_type, byte_size, storage_locator, created_at
                  FROM resource_chat_session_attachments
                  WHERE session_code = ?1
                  ORDER BY created_at, id",
-            )
-            .map_err(storage_error)?;
-        statement
-            .query_map([session_code], chat_session_attachment_from_row)
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
-    }
-
-    fn delete_chat_session_attachments(&mut self, session_code: &str) -> Result<(), ResourceError> {
-        self.connection
-            .execute(
-                "DELETE FROM resource_chat_session_attachments WHERE session_code = ?1",
-                [session_code],
-            )
-            .map_err(storage_error)?;
-        Ok(())
+                    )
+                    .map_err(storage_error)?;
+                statement
+                    .query_map([session_code], chat_session_attachment_from_row)
+                    .map_err(storage_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(storage_error)
+            },
+            || ResourceError::StorageFailure,
+        )
     }
 }

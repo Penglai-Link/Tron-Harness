@@ -1,21 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, RefreshCcw, RotateCcw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { PageHeader, SurfaceCard } from "@/shared";
+import { PageHeader } from "@/shared";
+import { DataTable } from "@/components/data-table";
+import { SelectInput } from "@/components/forms";
+import { SelectItem } from "@/components/ui/select";
+import { TablePagination } from "@/components/table-pagination";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchWorkspaceOptions } from "@/domain/admin/api";
 import type { WorkspaceOption } from "@/shared/types/WorkspaceSpace";
-import type { ChatMessage, ChatSession } from "@/domain/chat/model";
+import type { ArchivedMessage, ArchivedSession, ArchivedSessionDetail } from "@/domain/admin/api/archivedChatsApi";
 import {
   deleteArchivedChatSessions,
-  fetchArchivedChatMessages,
+  fetchArchivedChatDetail,
+  downloadArchivedChatAttachment,
   fetchArchivedChatSessions,
   restoreArchivedChatSession,
   type ArchivedChatSessionDeleteItem,
 } from "@/domain/admin/api/archivedChatsApi";
 import { useToast } from "@/components/ui/toast";
-import { downloadChatSessionAttachment } from "@/domain/chat/api/chatAttachmentApi";
 
 const PAGE_SIZE = 25;
 
@@ -23,8 +29,8 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-function displayTimestamp(value: string) {
-  return value.replace("T", " ").replace(/\.\d+(Z|[+-]\d{2}:?\d{2})?$/, "");
+function displayTimestamp(value: number) {
+  return new Date(value).toLocaleString(document.documentElement.lang || undefined);
 }
 
 export function ArchivedChatsPage() {
@@ -32,17 +38,22 @@ export function ArchivedChatsPage() {
   const toast = useToast();
   const [workspaceOptions, setWorkspaceOptions] = useState<WorkspaceOption[]>([]);
   const [workspaceCode, setWorkspaceCode] = useState("");
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessions, setSessions] = useState<ArchivedSession[]>([]);
   const [total, setTotal] = useState(0);
   const [current, setCurrent] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [failedCodes, setFailedCodes] = useState<string[]>([]);
   const [deleteErrors, setDeleteErrors] = useState<ArchivedChatSessionDeleteItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [deleteCodes, setDeleteCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [viewing, setViewing] = useState<ChatSession | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [viewing, setViewing] = useState<ArchivedSession | null>(null);
+  const [messages, setMessages] = useState<ArchivedMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [detail, setDetail] = useState<ArchivedSessionDetail | null>(null);
+  const listRequest = useRef(0);
+  const detailRequest = useRef(0);
 
   const workspaceLabels = useMemo(
     () => new Map(workspaceOptions.map((workspace) => [workspace.workspaceCode, workspace.label || workspace.name])),
@@ -50,28 +61,30 @@ export function ArchivedChatsPage() {
   );
 
   const loadSessions = useCallback(async (page: number) => {
+    const generation = ++listRequest.current;
     setLoading(true);
     try {
       const query = {
         workspaceCode: workspaceCode || undefined,
         current: page,
-        size: PAGE_SIZE,
+        size: pageSize,
       };
       let result = await fetchArchivedChatSessions(query);
-      const lastPage = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
+      const lastPage = Math.max(1, Math.ceil(result.total / pageSize));
       if (page > lastPage) {
         result = await fetchArchivedChatSessions({ ...query, current: lastPage });
       }
+      if (generation !== listRequest.current) return;
       setSessions(result.records);
       setTotal(result.total);
       setCurrent(result.current);
       setSelectedCodes(new Set());
     } catch (error) {
-      toast.error(getErrorMessage(error, t("pages:archivedChats.loadFailed")));
+      if (generation === listRequest.current) toast.error(getErrorMessage(error, t("pages:archivedChats.loadFailed")));
     } finally {
-      setLoading(false);
+      if (generation === listRequest.current) setLoading(false);
     }
-  }, [toast, t, workspaceCode]);
+  }, [toast, t, workspaceCode, pageSize]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +98,10 @@ export function ArchivedChatsPage() {
 
   useEffect(() => {
     setCurrent(1);
+    setSelectedCodes(new Set()); setFailedCodes([]); setDeleteErrors([]);
+    ++detailRequest.current; setViewing(null); setDetail(null);
     void loadSessions(1);
+    return () => { ++listRequest.current; ++detailRequest.current; };
   }, [loadSessions]);
 
   const toggleSelected = (sessionCode: string) => {
@@ -103,23 +119,29 @@ export function ArchivedChatsPage() {
       : new Set(sessions.map((session) => session.sessionCode)));
   };
 
-  const openSession = async (session: ChatSession) => {
+  const openSession = async (session: ArchivedSession) => {
+    const generation = ++detailRequest.current;
     setViewing(session);
+    setDetail(null);
     setMessages([]);
     setMessagesLoading(true);
     try {
-      setMessages(await fetchArchivedChatMessages(session.sessionCode));
+      const result = await fetchArchivedChatDetail(session.sessionCode);
+      if (generation !== detailRequest.current) return;
+      setDetail(result); setMessages(result.messages);
     } catch (error) {
-      toast.error(getErrorMessage(error, t("pages:archivedChats.viewFailed")));
+      if (generation === detailRequest.current) toast.error(getErrorMessage(error, t("pages:archivedChats.viewFailed")));
     } finally {
-      setMessagesLoading(false);
+      if (generation === detailRequest.current) setMessagesLoading(false);
     }
   };
 
-  const restoreSession = async (session: ChatSession) => {
+  const restoreSession = async (session: ArchivedSession) => {
     setBusy(true);
     try {
       await restoreArchivedChatSession(session.sessionCode);
+      window.dispatchEvent(new CustomEvent("tron:chat-session-updated", { detail: { workspaceCode: session.workspaceCode, sessionCode: session.sessionCode } }));
+      if (viewing?.sessionCode === session.sessionCode) { ++detailRequest.current; setViewing(null); setDetail(null); }
       toast.success(t("pages:archivedChats.restored"));
       setFailedCodes((codes) => codes.filter((code) => code !== session.sessionCode));
       setDeleteErrors((items) => items.filter((item) => item.sessionCode !== session.sessionCode));
@@ -131,13 +153,17 @@ export function ArchivedChatsPage() {
     }
   };
 
-  const deleteSelected = async (codes: string[]) => {
+  const deleteSelected = (codes: string[]) => setDeleteCodes(codes);
+
+  const confirmDelete = async () => {
+    const codes = deleteCodes;
     if (codes.length === 0) return;
-    const confirmed = window.confirm(t("pages:archivedChats.confirmDelete", { count: codes.length }));
-    if (!confirmed) return;
     setBusy(true);
     try {
       const result = await deleteArchivedChatSessions(codes);
+      if (viewing && result.items.some((item) => item.success && item.sessionCode === viewing.sessionCode)) {
+        ++detailRequest.current; setViewing(null); setDetail(null);
+      }
       const failures = result.items.filter((item: ArchivedChatSessionDeleteItem) => !item.success);
       const failed = failures.map((item) => item.sessionCode);
       setFailedCodes(failed);
@@ -155,12 +181,13 @@ export function ArchivedChatsPage() {
       toast.error(getErrorMessage(error, t("pages:archivedChats.deleteFailed")));
     } finally {
       setBusy(false);
+      setDeleteCodes([]);
     }
   };
 
-  const downloadAttachment = async (session: ChatSession, attachment: NonNullable<ChatMessage["attachments"]>[number]) => {
+  const downloadAttachment = async (session: ArchivedSession, attachment: NonNullable<ArchivedMessage["attachments"]>[number]) => {
     try {
-      const response = await downloadChatSessionAttachment(session, attachment);
+      const response = await downloadArchivedChatAttachment(session.sessionCode, attachment.resourceCode || attachment.id);
       const url = URL.createObjectURL(response.blob);
       const link = document.createElement("a");
       link.href = url;
@@ -172,126 +199,105 @@ export function ArchivedChatsPage() {
     }
   };
 
+  const nativeLabel = (group: string, value: string) => t(`pages:archivedChats.${group}.${value}`, { defaultValue: value });
+
   const allSelected = sessions.length > 0 && selectedCodes.size === sessions.length;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <>
-      <PageHeader
-        title={t("pages:archivedChats.title")}
-        actions={
-          <Button variant="secondary" disabled={loading || busy} onClick={() => void loadSessions(current)}>
-            <RefreshCcw />
-            {t("pages:archivedChats.refresh")}
-          </Button>
-        }
-      />
-      <SurfaceCard className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm">
-            <span>{t("pages:archivedChats.workspace")}</span>
-            <select
-              className="h-9 min-w-56 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface)] px-3"
-              value={workspaceCode}
-              onChange={(event) => { setCurrent(1); setWorkspaceCode(event.target.value); }}
+      <PageHeader title={t("pages:archivedChats.title")} />
+      <DataTable<ArchivedSession>
+        rows={loading ? [] : sessions}
+        rowKey={(session) => session.sessionCode}
+        tableClassName="table-fixed min-w-[800px]"
+        isRowSelected={(session) => selectedCodes.has(session.sessionCode)}
+        emptyState={t(loading ? "pages:archivedChats.loading" : "pages:archivedChats.empty")}
+        toolbar={(
+          <>
+            <SelectInput
+              aria-label={t("pages:archivedChats.workspace")}
+              className="w-full sm:w-64"
+              value={workspaceCode || "__all__"}
+              onValueChange={(value) => setWorkspaceCode(value === "__all__" ? "" : String(value))}
             >
-              <option value="">{t("pages:archivedChats.allWorkspaces")}</option>
-              {workspaceOptions.map((workspace) => (
-                <option key={workspace.workspaceCode} value={workspace.workspaceCode}>
-                  {workspace.label || workspace.name} · {workspace.workspaceCode}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span className="text-sm text-[var(--color-on-surface-variant)]">
-            {t("pages:archivedChats.total", { count: total })}
-          </span>
-          <div className="ml-auto flex flex-wrap gap-2">
-            {failedCodes.length > 0 && (
-              <Button variant="secondary" disabled={busy} onClick={() => void deleteSelected(failedCodes)}>
-                <RefreshCcw />
-                {t("pages:archivedChats.retryFailures", { count: failedCodes.length })}
-              </Button>
-            )}
-            <Button variant="destructive" disabled={busy || selectedCodes.size === 0} onClick={() => void deleteSelected([...selectedCodes])}>
-              <Trash2 />
-              {t("pages:archivedChats.deleteSelected", { count: selectedCodes.size })}
-            </Button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto rounded-lg border border-[var(--color-outline-variant)]">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]">
-              <tr>
-                <th className="w-10 px-3 py-3"><input type="checkbox" aria-label={t("pages:archivedChats.selectPage")} checked={allSelected} onChange={toggleAll} /></th>
-                <th className="px-3 py-3">{t("pages:archivedChats.session")}</th>
-                <th className="px-3 py-3">{t("pages:archivedChats.workspace")}</th>
-                <th className="px-3 py-3">{t("pages:archivedChats.updatedAt")}</th>
-                <th className="px-3 py-3 text-right">{t("pages:archivedChats.actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={5} className="px-3 py-10 text-center text-[var(--color-on-surface-variant)]">{t("pages:archivedChats.loading")}</td></tr>
-              ) : sessions.length === 0 ? (
-                <tr><td colSpan={5} className="px-3 py-10 text-center text-[var(--color-on-surface-variant)]">{t("pages:archivedChats.empty")}</td></tr>
-              ) : sessions.map((session) => (
-                <tr key={session.sessionCode} className="border-t border-[var(--color-outline-variant)]">
-                  <td className="px-3 py-3"><input type="checkbox" aria-label={t("pages:archivedChats.selectSession", { title: session.title })} checked={selectedCodes.has(session.sessionCode)} onChange={() => toggleSelected(session.sessionCode)} /></td>
-                  <td className="px-3 py-3">
-                    <div className="font-medium">{session.title}</div>
-                    <div className="font-mono text-xs text-[var(--color-on-surface-variant)]">{session.sessionCode}</div>
-                  </td>
-                  <td className="px-3 py-3">
-                    <div>{workspaceLabels.get(session.workspaceCode) ?? session.workspaceCode}</div>
-                    <div className="font-mono text-xs text-[var(--color-on-surface-variant)]">{session.workspaceCode}</div>
-                  </td>
-                  <td className="px-3 py-3 font-mono text-xs">{displayTimestamp(session.updatedAt)}</td>
-                  <td className="px-3 py-3">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="secondary" size="sm" disabled={busy} onClick={() => void openSession(session)}><Eye />{t("pages:archivedChats.view")}</Button>
-                      <Button variant="secondary" size="sm" disabled={busy} onClick={() => void restoreSession(session)}><RotateCcw />{t("pages:archivedChats.restore")}</Button>
-                      <Button variant="destructive" size="sm" disabled={busy} onClick={() => void deleteSelected([session.sessionCode])}><Trash2 />{t("pages:archivedChats.delete")}</Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex items-center justify-between text-sm text-[var(--color-on-surface-variant)]">
-          <span>{t("pages:archivedChats.pageOf", { current, total: pageCount })}</span>
-          <div className="flex gap-2">
-            <Button variant="secondary" size="sm" disabled={loading || current <= 1} onClick={() => void loadSessions(current - 1)}>{t("pages:archivedChats.previous")}</Button>
-            <Button variant="secondary" size="sm" disabled={loading || current >= pageCount} onClick={() => void loadSessions(current + 1)}>{t("pages:archivedChats.next")}</Button>
-          </div>
-        </div>
+              <SelectItem value="__all__">{t("pages:archivedChats.allWorkspaces")}</SelectItem>
+              {workspaceOptions.map((workspace) => <SelectItem key={workspace.workspaceCode} value={workspace.workspaceCode}>{workspace.label || workspace.name}</SelectItem>)}
+            </SelectInput>
+            <div className="ml-auto flex items-center gap-2">
+              {failedCodes.length > 0 && <Button variant="secondary" disabled={busy} onClick={() => void deleteSelected(failedCodes)}><RefreshCcw />{t("pages:archivedChats.retryFailures", { count: failedCodes.length })}</Button>}
+              {selectedCodes.size > 0 && <Button variant="destructive" disabled={busy} onClick={() => void deleteSelected([...selectedCodes])}><Trash2 />{t("pages:archivedChats.deleteSelected", { count: selectedCodes.size })}</Button>}
+              <Button variant="ghost" size="icon" aria-label={t("pages:archivedChats.refresh")} title={t("pages:archivedChats.refresh")} disabled={loading || busy} onClick={() => void loadSessions(current)}><RefreshCcw /></Button>
+            </div>
+          </>
+        )}
+        pagination={<TablePagination
+          itemLabel={t("pages:archivedChats.itemLabel")}
+          totalItems={total}
+          startItem={total === 0 ? 0 : (current - 1) * pageSize + 1}
+          endItem={Math.min(current * pageSize, total)}
+          page={current}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          onPageChange={loading || busy ? undefined : (page) => void loadSessions(Math.max(1, Math.min(page, pageCount)))}
+          onPageSizeChange={loading || busy ? undefined : setPageSize}
+        />}
+        columns={[
+          { id: "selection", width: "56px", header: <input type="checkbox" aria-label={t("pages:archivedChats.selectPage")} checked={allSelected} disabled={loading || busy || sessions.length === 0} onChange={toggleAll} />, render: (session) => <input type="checkbox" aria-label={t("pages:archivedChats.selectSession", { title: session.title })} checked={selectedCodes.has(session.sessionCode)} disabled={busy} onChange={() => toggleSelected(session.sessionCode)} /> },
+          { id: "session", header: t("pages:archivedChats.session"), cellClassName: "min-w-0", render: (session) => <p className="truncate font-medium" title={session.title}>{session.title}</p> },
+          { id: "workspace", header: t("pages:archivedChats.workspace"), width: "180px", render: (session) => <p className="truncate" title={session.workspaceCode}>{workspaceLabels.get(session.workspaceCode) ?? session.workspaceCode}</p> },
+          { id: "updatedAt", header: t("pages:archivedChats.updatedAt"), width: "210px", render: (session) => <time className="text-xs">{displayTimestamp(session.updatedAt)}</time> },
+          { id: "actions", header: t("pages:archivedChats.actions"), width: "152px", align: "right", headerClassName: "sticky right-0 z-20 border-l border-[var(--color-outline-variant)] bg-[var(--tron-table-header-bg,var(--color-elevated-surface))]", cellClassName: "sticky right-0 z-10 border-l border-[var(--color-outline-variant)] bg-[var(--_tron-row-bg)]", render: (session) => <div className="flex justify-end gap-1">
+            <Button variant="ghost" size="icon" title={t("pages:archivedChats.view")} aria-label={t("pages:archivedChats.view")} disabled={busy} onClick={() => void openSession(session)}><Eye /></Button>
+            <Button variant="ghost" size="icon" title={t("pages:archivedChats.restore")} aria-label={t("pages:archivedChats.restore")} disabled={busy} onClick={() => void restoreSession(session)}><RotateCcw /></Button>
+            <Button variant="ghost" size="icon" className="text-[var(--color-error)]" title={t("pages:archivedChats.delete")} aria-label={t("pages:archivedChats.delete")} disabled={busy} onClick={() => void deleteSelected([session.sessionCode])}><Trash2 /></Button>
+          </div> },
+        ]}
+      />
         {deleteErrors.length > 0 && (
           <ul className="space-y-1 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error-container)]/30 p-3 text-xs" aria-live="polite">
             {deleteErrors.map((item) => (
               <li key={item.sessionCode}>
-                <span className="font-mono">{item.sessionCode}</span>: {item.message || t("pages:archivedChats.deleteFailed")}
+                <span className="font-mono">{item.sessionCode}</span>: {t(`pages:archivedChats.errors.${item.errorCode}`, { defaultValue: t("pages:archivedChats.deleteFailed") })}
               </li>
             ))}
           </ul>
         )}
-      </SurfaceCard>
 
       {viewing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewing(null); }}>
-          <section className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-[var(--color-surface)] shadow-xl" role="dialog" aria-modal="true" aria-labelledby="archived-chat-title">
-            <header className="flex items-start justify-between gap-4 border-b border-[var(--color-outline-variant)] p-4">
-              <div className="min-w-0"><h2 id="archived-chat-title" className="truncate font-semibold">{viewing.title}</h2><p className="font-mono text-xs text-[var(--color-on-surface-variant)]">{viewing.sessionCode}</p></div>
-              <Button variant="secondary" size="sm" onClick={() => setViewing(null)}>{t("pages:archivedChats.close")}</Button>
-            </header>
-            <div className="overflow-y-auto p-4">
+        <Dialog open onOpenChange={(open) => { if (!open) { ++detailRequest.current; setViewing(null); } }}>
+          <DialogContent className="max-w-3xl" closeLabel={t("common:actions.close")}>
+            <DialogHeader>
+              <DialogTitle className="truncate">{viewing.title}</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[70vh] overflow-y-auto">
+
+              {detail && (detail.goals.length > 0 || detail.runs.length > 0) && (
+                <div className="mb-4 space-y-2 text-sm">
+                  {detail.goals.map((goal) => <details key={goal.goalCode} className="rounded-lg border border-[var(--color-outline-variant)] p-3">
+                    <summary className="cursor-pointer">{goal.objective} · {nativeLabel("statuses", goal.status)} · {goal.runsUsed}/{goal.maxRuns}</summary>
+                    {goal.reason && <p className="mt-2">{goal.reason}</p>}
+                    {goal.criteria.length > 0 && <ul className="mt-2 space-y-1">{goal.criteria.map((criterion) => <li key={criterion.id}>{criterion.completed ? "✓" : "○"} {criterion.text}</li>)}</ul>}
+                    {goal.lastDecision && <p className="mt-2">{nativeLabel("verdicts", goal.lastDecision.verdict)} · {goal.lastDecision.reason}{goal.lastDecision.required_input ? ` · ${goal.lastDecision.required_input}` : ""}</p>}
+                    {goal.progress != null && <pre className="mt-2 whitespace-pre-wrap break-words text-xs">{JSON.stringify(goal.progress, null, 2)}</pre>}
+                    <p className="mt-3 font-medium">{t("pages:archivedChats.goalRecords")}</p>
+                    <ol className="mt-3 space-y-2">{detail.goalEvents.filter((event) => event.goalCode === goal.goalCode).map((event) => <li key={event.eventCode} className="border-t border-[var(--color-outline-variant)] pt-2 text-xs">
+                      <p>{displayTimestamp(event.createdAt)} · {nativeLabel("eventKinds", event.kind)}{event.runCode ? ` · ${event.runCode}` : ""}</p>
+                      <pre className="whitespace-pre-wrap break-words">{JSON.stringify(event.payload, null, 2)}</pre>
+                    </li>)}</ol>
+                  </details>)}
+                  {detail.runs.map((run) => <p key={run.runCode} className="font-mono text-xs">{nativeLabel("runKinds", run.kind)} · {nativeLabel("statuses", run.status)} · {run.runCode}</p>)}
+                </div>
+              )}
+              {detail?.history.map((branch) => <details key={`${branch.branch}:${branch.generation}`} className="mb-3 rounded-lg border border-[var(--color-outline-variant)] p-3">
+                <summary className="cursor-pointer text-xs">{branch.branch} · {branch.messages.length}</summary>
+                <ol className="mt-2 space-y-2">{branch.messages.map((message) => <li key={message.messageCode} className="whitespace-pre-wrap break-words text-xs"><span className="font-medium">{nativeLabel("roles", message.role)}</span>: {message.content}</li>)}</ol>
+              </details>)}
               {messagesLoading ? <p>{t("pages:archivedChats.loading")}</p> : messages.length === 0 ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:archivedChats.noMessages")}</p> : (
                 <ol className="space-y-4">
                   {messages.map((message) => (
                     <li key={message.messageCode} className="rounded-lg border border-[var(--color-outline-variant)] p-3">
-                      <div className="mb-2 flex justify-between gap-3 text-xs text-[var(--color-on-surface-variant)]"><span>{message.role} · {message.actor}</span><time>{displayTimestamp(message.createdAt)}</time></div>
+                      <div className="mb-2 flex justify-between gap-3 text-xs text-[var(--color-on-surface-variant)]"><span>{nativeLabel("roles", message.role)} · {nativeLabel("roles", message.actor)}</span><time>{displayTimestamp(message.createdAt)}</time></div>
                       <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>
                       {(message.attachments?.length ?? 0) > 0 && <ul className="mt-2 space-y-1 border-t border-[var(--color-outline-variant)] pt-2 text-xs">{message.attachments?.map((attachment) => <li key={attachment.id}><button type="button" className="text-left underline underline-offset-2" onClick={() => void downloadAttachment(viewing, attachment)}>📎 {attachment.fileName || attachment.title || attachment.summary}</button></li>)}</ul>}
                     </li>
@@ -299,9 +305,19 @@ export function ArchivedChatsPage() {
                 </ol>
               )}
             </div>
-          </section>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
+      <ConfirmDialog
+        open={deleteCodes.length > 0}
+        title={t("pages:archivedChats.deleteTitle")}
+        description={t("pages:archivedChats.confirmDelete", { count: deleteCodes.length })}
+        cancelText={t("pages:archivedChats.cancel")}
+        confirmText={t("pages:archivedChats.delete")}
+        pending={busy}
+        onCancel={() => setDeleteCodes([])}
+        onConfirm={() => void confirmDelete()}
+      />
     </>
   );
 }

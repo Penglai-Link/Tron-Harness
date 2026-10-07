@@ -82,10 +82,6 @@ impl ReactRuntime {
             .with_auto_model_router(self.auto_model_router.clone())
             .build()
             .map_err(map_agent_error)?;
-            let mut cancellation_cleanup = ReactRuntimeCancellationCleanup::new(
-                self.short_term_memory.clone(),
-                context.clone(),
-            );
             let result = match sink {
                 Some(sink) => {
                     agent
@@ -94,40 +90,8 @@ impl ReactRuntime {
                 }
                 None => agent.run_with_control(context, steer_control).await,
             };
-            cancellation_cleanup.disarm();
             result.map_err(map_agent_error)
         })
-    }
-}
-
-struct ReactRuntimeCancellationCleanup {
-    short_term_memory: Option<ShortTermMemoryService>,
-    context: AgentRunContext,
-    armed: bool,
-}
-
-impl ReactRuntimeCancellationCleanup {
-    fn new(short_term_memory: Option<ShortTermMemoryService>, context: AgentRunContext) -> Self {
-        Self {
-            armed: short_term_memory.is_some() && context.short_term_memory.is_some(),
-            short_term_memory,
-            context,
-        }
-    }
-
-    fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-impl Drop for ReactRuntimeCancellationCleanup {
-    fn drop(&mut self) {
-        if !self.armed {
-            return;
-        }
-        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
-            let _ = short_term_memory.record_run_failed(&self.context, "run_stopped");
-        }
     }
 }
 

@@ -1,53 +1,49 @@
+//! Tron scope checks, business state and display projections over Framework stores.
 mod assembler;
-#[cfg(test)]
-mod assembler_tests;
 mod config;
 mod dto;
-mod history_retention;
-mod port;
+mod native_service;
 mod provider_config;
-mod service;
-mod service_provider;
-pub(crate) use service_provider::memory_provider_usage;
-mod service_access;
-mod service_budget;
-mod service_compaction;
-mod service_compaction_model;
-mod service_compaction_summary;
-mod service_context;
-mod service_events;
-mod service_family;
-mod service_family_context;
-mod service_family_support;
-mod service_goal_judge_model;
-mod service_goal_judge_payload;
-mod service_goals;
-mod service_input;
-mod service_parts;
-mod service_session_summary;
-mod service_session_summary_support;
-mod service_todos;
-mod service_tool_output;
-
-pub(crate) use assembler::{estimate_messages_tokens, truncate_checkpoint_message};
+mod redaction;
 pub use config::{
     CompactionPolicyConfig, ContextBlockBudgetConfig, ContextBlockBudgets, ContextBudgetConfig,
-    EventLogConfig, FamilyLoadConfig, GoalLoopConfig, ModelContextBudgetPlan,
-    ShortTermMemoryConfig, ToolOutputConfig,
+    FamilyLoadConfig, GoalLoopConfig, ModelContextBudgetPlan, ShortTermMemoryConfig,
 };
 pub use dto::{
-    CompactionContextPolicy, ContextBudgetBreakdown, CreateCompactionCommand, GoalJudgeFailure,
-    GoalJudgeOutput, GoalLoopDecision, GoalSessionCommand, ModelCompactionFailure,
-    ModelCompactionOutput, ModelRequestTranscriptFacts, ModelResponseTranscriptFacts,
-    ModelSessionSummaryOutput, PreparedCompactionInput, PreparedContextSources,
-    PreparedGoalJudgeInput, PreparedModelContext, PreparedSessionSummaryInput,
-    PreparedSessionSummaryJob, ReplaceTodosCommand, SessionSummaryFailure,
-    SessionSummaryJobContext, SessionSummaryRunOutcome, SetGoalCommand, TodoUpdateItem,
-    ToolTranscriptStatus, UpdateGoalCommand,
+    ContextBudgetBreakdown, GoalSessionCommand, PreparedContextSources, PreparedModelContext,
+    ReplaceTodosCommand, SessionSummaryJobContext, SessionSummaryRunOutcome, SetGoalCommand,
+    TodoUpdateItem, UpdateGoalCommand,
 };
-pub use port::ShortTermMemoryRepository;
+pub use native_service::ShortTermMemoryService;
 pub use provider_config::{
     ContextPriceInputs, ContextProviderPolicy, ContextProvidersConfig, ContextReductionStrategy,
 };
-pub use service::ShortTermMemoryService;
-pub(crate) use service_session_summary_support::redact_sensitive_text;
+pub(crate) use redaction::redact_sensitive_text;
+
+pub(crate) fn memory_provider_usage(
+    result: &eliteforge_agent_memory::MemoryCompactionResult,
+) -> Option<crate::domain::agent::ModelTokenUsage> {
+    result
+        .provider_usage
+        .as_ref()
+        .map(|u| crate::domain::agent::ModelTokenUsage {
+            input_tokens: u.input_tokens.min(u32::MAX as u64) as u32,
+            output_tokens: u.output_tokens.min(u32::MAX as u64) as u32,
+            total_tokens: u
+                .input_tokens
+                .saturating_add(u.output_tokens)
+                .min(u32::MAX as u64) as u32,
+            cached_input_tokens: result
+                .provider_metrics
+                .as_ref()
+                .and_then(|m| m.cached_input_tokens)
+                .map(|v| v.min(u32::MAX as u64) as u32),
+            reasoning_tokens: result
+                .provider_metrics
+                .as_ref()
+                .and_then(|m| m.reasoning_tokens)
+                .map(|v| v.min(u32::MAX as u64) as u32),
+        })
+}
+
+pub(crate) use assembler::{estimate_messages_tokens, truncate_checkpoint_message};

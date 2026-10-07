@@ -27,6 +27,9 @@ export class ApiError extends Error {
   }
 }
 
+let apiWorkspaceCode: string | null = null;
+export function setApiWorkspaceCode(code: string | null) { apiWorkspaceCode = code; }
+
 let apiAccessToken: string | null = null;
 let unauthorizedHandler: (() => Promise<boolean>) | null = null;
 
@@ -134,6 +137,9 @@ export function buildApiUrl(
     url.searchParams.set(key, String(value));
   });
 
+  if ((url.pathname.startsWith("/api/v1/chats/") || url.pathname.startsWith("/api/v1/agents/agui/streams/") || url.pathname.startsWith("/api/v1/agents/runs")) && !url.searchParams.has("workspaceCode") && apiWorkspaceCode) {
+    url.searchParams.set("workspaceCode", apiWorkspaceCode);
+  }
   return url.toString();
 }
 

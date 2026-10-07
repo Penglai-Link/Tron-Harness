@@ -21,7 +21,7 @@ pub(super) fn eligible(task: &IngestionTask, endpoint: &ParseEndpointCapacity) -
 }
 
 pub(super) fn waiting(
-    tx: &Transaction<'_>,
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     task: &mut IngestionTask,
     reason: IngestionWaitReason,
 ) -> Result<(), IngestionQueueError> {
@@ -41,14 +41,17 @@ pub(super) fn waiting(
 }
 
 pub(super) fn report(
-    queue: &SqliteKnowledgeIngestionQueue,
+    queue: &SqliteKnowledgeIngestionQueueSql<'_>,
     now: i64,
     endpoints: &[ParseEndpointCapacity],
     unavailable: &[(Option<String>, IngestionWaitReason)],
 ) -> Result<(), IngestionQueueError> {
-    let mut conn = queue.connection.lock().map_err(storage)?;
-    let tx = conn
-        .transaction_with_behavior(TransactionBehavior::Immediate)
+    let conn = &*queue.connection;
+    let tx =
+        crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+            &conn,
+            TransactionBehavior::Immediate,
+        )
         .map_err(storage)?;
     let ids = {
         let mut stmt = tx.prepare("SELECT id FROM knowledge_base_ingestion_tasks WHERE stage IN ('Parsing','Chunking') AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0 AND ((state='QUEUED' AND retry_after_ms<=?1) OR (state='RUNNING' AND lease_until_ms<=?1)) ORDER BY rowid").map_err(storage)?;

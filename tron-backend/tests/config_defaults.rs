@@ -45,28 +45,10 @@ fn application_yaml_uses_home_storage_defaults() {
             .max_tokens,
         Some(16000)
     );
-    assert!(
-        !config
-            .short_term_memory
-            .context
-            .reasoning_summary_replay_enabled
-    );
-    assert_eq!(config.short_term_memory.event_log.mode, "full");
-    assert_eq!(config.short_term_memory.event_log.retention_days, 5);
-    assert_eq!(config.short_term_memory.event_log.max_payload_bytes, 8192);
-    assert!(config.short_term_memory.event_log.cleanup_on_startup);
+
     assert_eq!(config.short_term_memory.compaction.trigger_ratio_bps, 8000);
-    assert_eq!(
-        config
-            .short_term_memory
-            .compaction
-            .retained_history_ratio_bps,
-        2000
-    );
-    assert_eq!(
-        config.mineru.base_url,
-        "https://pre-platform.cisdigital.cn/mineru"
-    );
+
+    assert_eq!(config.mineru.base_url, "http://127.0.0.1:8000");
     assert_eq!(config.mineru.parse_endpoint, "/file_parse");
 }
 
@@ -132,22 +114,11 @@ fn short_term_memory_yaml_overrides_load_policy() {
         &config_path,
         r#"
 shortTermMemory:
-  toolOutput:
-    root: /tmp/stm-tools
-    externalizeAboveBytes: 64
-  eventLog:
-    mode: lifecycleOnly
-    retentionDays: 9
-    maxPayloadBytes: 4096
-    cleanupOnStartup: false
-    cleanupBatchSize: 123
-    cleanupMaxRowsPerStartup: 456
   context:
     defaultContextWindowTokens: 16000
     familyContextMaxRatioBps: 750
     familyContextHardCapTokens: 2000
     familyContextMaxChars: 1200
-    reasoningSummaryReplayEnabled: true
     blocks:
       seedPromptPrefix:
         maxRatioBps: 2500
@@ -158,23 +129,11 @@ shortTermMemory:
       currentSessionWorkingState:
         maxTokens: 300
   familyLoad:
-    defaultMaxSnapshots: 2
     defaultMaxSessions: 4
-    defaultSnapshotMaxChars: 700
-    defaultTtlHours: 24
-    taskWeightBps: 7000
-    requirementWeightBps: 2000
-    workspaceChatWeightBps: 500
-    workspaceHeartbeatWeightBps: 250
-    otherWeightBps: 100
   compaction:
     triggerRatioBps: 7500
-    retainedHistoryRatioBps: 1250
   goalLoop:
     maxRuns: 7
-    maxConsecutiveJudgeFailures: 2
-    judgeInputMaxChars: 2000
-    judgeOutputMaxTokens: 512
 "#,
     )
     .expect("temp config should be written");
@@ -182,23 +141,7 @@ shortTermMemory:
     let config = AppConfig::from_yaml_file(&config_path).expect("temp config should load");
 
     fs::remove_file(&config_path).expect("temp config should be removed");
-    assert_eq!(config.short_term_memory.tool_output.root, "/tmp/stm-tools");
-    assert_eq!(
-        config.short_term_memory.tool_output.externalize_above_bytes,
-        64
-    );
-    assert_eq!(config.short_term_memory.event_log.mode, "lifecycleOnly");
-    assert_eq!(config.short_term_memory.event_log.retention_days, 9);
-    assert_eq!(config.short_term_memory.event_log.max_payload_bytes, 4096);
-    assert!(!config.short_term_memory.event_log.cleanup_on_startup);
-    assert_eq!(config.short_term_memory.event_log.cleanup_batch_size, 123);
-    assert_eq!(
-        config
-            .short_term_memory
-            .event_log
-            .cleanup_max_rows_per_startup,
-        456
-    );
+
     assert_eq!(
         config
             .short_term_memory
@@ -215,14 +158,9 @@ shortTermMemory:
             .family_context_max_ratio_bps,
         750
     );
-    assert!(
-        config
-            .short_term_memory
-            .context
-            .reasoning_summary_replay_enabled
-    );
+
     assert_eq!(config.short_term_memory.family_load.default_max_sessions, 4);
-    assert_eq!(config.short_term_memory.family_load.task_weight_bps, 7000);
+
     let current_family_load = serde_json::to_value(&config.short_term_memory.family_load)
         .expect("runtime family-load config should serialize");
     assert!(current_family_load.get("default_max_snapshots").is_none());
@@ -238,18 +176,8 @@ shortTermMemory:
     );
     assert!(config.short_term_memory.compaction.auto_enabled);
     assert_eq!(config.short_term_memory.compaction.trigger_ratio_bps, 7500);
-    assert_eq!(
-        config
-            .short_term_memory
-            .compaction
-            .retained_history_ratio_bps,
-        1250
-    );
+
     assert_eq!(config.short_term_memory.goal_loop.max_runs, 7);
-    assert_eq!(
-        config.short_term_memory.goal_loop.judge_output_max_tokens,
-        512
-    );
 }
 
 #[test]
@@ -298,15 +226,8 @@ shortTermMemory:
       toolSchema:
         maxRatio: "20%"
         maxTokens: 6000
-  familyLoad:
-    taskWeight: "65%"
-    requirementWeight: "25%"
-    workspaceChatWeight: "10%"
-    workspaceHeartbeatWeight: "10%"
-    otherWeight: "150%"
   compaction:
     triggerRatio: "80%"
-    retainedHistoryRatio: "12.34%"
 "#,
     )
     .unwrap()
@@ -336,16 +257,9 @@ shortTermMemory:
             .max_ratio_bps,
         Some(1)
     );
-    assert_eq!(config.family_load.task_weight_bps, 6500);
-    assert_eq!(config.family_load.requirement_weight_bps, 2500);
-    assert_eq!(config.family_load.workspace_chat_weight_bps, 1000);
-    assert_eq!(config.family_load.workspace_heartbeat_weight_bps, 1000);
-    assert_eq!(
-        config.family_load.other_weight_bps, 15000,
-        "weights are relative, not capped ratios"
-    );
+
     assert_eq!(config.compaction.trigger_ratio_bps, 8000);
-    assert_eq!(config.compaction.retained_history_ratio_bps, 1234);
+
     assert_eq!(
         config
             .model_context_budget_plan(Some(32_000), Some(4_000))
@@ -377,29 +291,7 @@ fn short_term_memory_percentages_reject_conflicting_aliases_in_both_orders() {
             "maxRatio",
             "maxRatioBps",
         ),
-        ("  familyLoad:\n", "taskWeight", "taskWeightBps"),
-        (
-            "  familyLoad:\n",
-            "requirementWeight",
-            "requirementWeightBps",
-        ),
-        (
-            "  familyLoad:\n",
-            "workspaceChatWeight",
-            "workspaceChatWeightBps",
-        ),
-        (
-            "  familyLoad:\n",
-            "workspaceHeartbeatWeight",
-            "workspaceHeartbeatWeightBps",
-        ),
-        ("  familyLoad:\n", "otherWeight", "otherWeightBps"),
         ("  compaction:\n", "triggerRatio", "triggerRatioBps"),
-        (
-            "  compaction:\n",
-            "retainedHistoryRatio",
-            "retainedHistoryRatioBps",
-        ),
     ] {
         let indent = if name == "maxRatio" {
             "        "

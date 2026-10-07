@@ -16,24 +16,19 @@ use crate::{
 
 use super::migrations::SKILL_REGISTRY_MIGRATION;
 
+struct SqliteSkillRegistryRepositorySql<'a> {
+    connection: &'a mut Connection,
+}
 pub struct SqliteSkillRegistryRepository {
-    connection: Connection,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
-impl SqliteSkillRegistryRepository {
-    pub fn connect(database_url: &str) -> Result<Self, SkillError> {
+impl<'a> SqliteSkillRegistryRepositorySql<'a> {
+    pub fn initialize(
+        database_url: &str,
+        connection: &'a mut Connection,
+    ) -> Result<Self, SkillError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
-            Connection::open_with_flags(
-                database_url,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_CREATE
-                    | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-            )
-        } else {
-            Connection::open(database_url)
-        }
-        .map_err(storage_error)?;
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
@@ -48,7 +43,7 @@ impl SqliteSkillRegistryRepository {
     }
 }
 
-impl SkillRegistryRepository for SqliteSkillRegistryRepository {
+impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
     fn list_registry_skills(&mut self) -> Result<Vec<RegistrySkill>, SkillError> {
         let mut statement = self
             .connection
@@ -458,4 +453,133 @@ fn managed_by_from_storage(value: &str) -> Result<SkillManagedBy, rusqlite::Erro
 
 fn storage_error(_error: rusqlite::Error) -> SkillError {
     SkillError::StorageFailure
+}
+
+impl SqliteSkillRegistryRepository {
+    pub fn connect(database_url: &str) -> Result<Self, SkillError> {
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
+        let database_url = database_url.to_owned();
+        connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql::initialize(&database_url, connection).map(|_| ())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )?;
+        Ok(Self { connection })
+    }
+}
+impl SkillRegistryRepository for SqliteSkillRegistryRepository {
+    fn list_registry_skills(&mut self) -> Result<Vec<RegistrySkill>, SkillError> {
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }.list_registry_skills()
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_registry_skill(&mut self, skill: &RegistrySkill) -> Result<(), SkillError> {
+        let skill = skill.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }.upsert_registry_skill(&skill)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_registry_skill(&mut self, skill_name: &str) -> Result<bool, SkillError> {
+        let skill_name = skill_name.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }.delete_registry_skill(&skill_name)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_workspace_bindings(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<WorkspaceSkillBinding>, SkillError> {
+        let workspace_code = workspace_code.map(ToOwned::to_owned);
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }
+                    .list_workspace_bindings(workspace_code.as_deref())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_workspace_binding(
+        &mut self,
+        binding: &WorkspaceSkillBinding,
+    ) -> Result<(), SkillError> {
+        let binding = binding.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }.upsert_workspace_binding(&binding)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_binding(
+        &mut self,
+        workspace_code: &str,
+        skill_name: &str,
+    ) -> Result<bool, SkillError> {
+        let workspace_code = workspace_code.to_owned();
+        let skill_name = skill_name.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }
+                    .delete_workspace_binding(&workspace_code, &skill_name)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_bindings_for_skill(&mut self, skill_name: &str) -> Result<(), SkillError> {
+        let skill_name = skill_name.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }
+                    .delete_bindings_for_skill(&skill_name)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn get_rag_index_state(
+        &mut self,
+        workspace_code: &str,
+        skill_name: &str,
+    ) -> Result<Option<SkillRagIndexRecord>, SkillError> {
+        let workspace_code = workspace_code.to_owned();
+        let skill_name = skill_name.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }
+                    .get_rag_index_state(&workspace_code, &skill_name)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_rag_index_states(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<SkillRagIndexRecord>, SkillError> {
+        let workspace_code = workspace_code.map(ToOwned::to_owned);
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }
+                    .list_rag_index_states(workspace_code.as_deref())
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_rag_index_state(&mut self, state: &SkillRagIndexRecord) -> Result<(), SkillError> {
+        let state = state.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }.upsert_rag_index_state(&state)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }

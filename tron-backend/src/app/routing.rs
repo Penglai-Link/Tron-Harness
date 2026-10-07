@@ -67,6 +67,10 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(navigation_routes())
         .merge(terminal_routes())
         .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::adapters::inbound::http::chats::workspace_scope::require_workspace,
+        ))
+        .route_layer(middleware::from_fn_with_state(
             state.profiles.clone(),
             require_profile,
         ))

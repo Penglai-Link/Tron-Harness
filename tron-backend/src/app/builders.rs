@@ -43,47 +43,6 @@ fn build_automation_service(
     AutomationService::with_event_bus(repository, workspaces, event_bus)
 }
 
-fn build_chat_service_with_id_provider<I>(database_url: &str, id_provider: Arc<I>) -> ChatService
-where
-    I: SnowflakeIdProvider + 'static,
-{
-    let repository = SqliteChatRepository::connect(database_url)
-        .expect("chat SQLite repository should initialize");
-    ChatService::with_id_provider(repository, id_provider)
-}
-
-fn build_short_term_memory_service_with_id_provider<I>(
-    database_url: &str,
-    config: &AppConfig,
-    id_provider: Arc<I>,
-    variable_cipher: Arc<dyn crate::application::variable::VariableCipher>,
-) -> ShortTermMemoryService
-where
-    I: SnowflakeIdProvider + 'static,
-{
-    let repository = SqliteShortTermMemoryRepository::connect(database_url)
-        .expect("short-term memory SQLite repository should initialize");
-    let service = ShortTermMemoryService::with_id_provider(
-        repository,
-        config.short_term_memory.clone(),
-        id_provider,
-    )
-    .with_variable_cipher(variable_cipher);
-    service
-        .recover_goal_state_on_startup()
-        .expect("short-term memory goal recovery should initialize");
-    service
-        .recover_session_summaries_on_startup()
-        .expect("short-term memory session summary recovery should initialize");
-    if let Err(error) = service.cleanup_event_log_on_startup() {
-        eprintln!("short-term memory event log cleanup skipped: {error:?}");
-    }
-    if let Err(error) = service.sweep_externalized_tool_output_orphans() {
-        eprintln!("short-term memory tool output orphan sweep skipped: {error:?}");
-    }
-    service
-}
-
 fn build_variable_service(
     database_url: &str,
     workspaces: WorkspaceService,
@@ -130,9 +89,9 @@ fn build_resource_service(
         config.resource.clone(),
         storage_profiles,
         event_bus,
-        Arc::new(ProtocolResourceConnectionVerifier::new(Duration::from_millis(
-            config.resource.connection_verification_timeout_ms,
-        ))),
+        Arc::new(ProtocolResourceConnectionVerifier::new(
+            Duration::from_millis(config.resource.connection_verification_timeout_ms),
+        )),
     )
     .expect("resource service should initialize")
     .with_profile_scope()
@@ -185,8 +144,11 @@ fn build_model_provider_service(
     database_url: &str,
     variables: VariableService,
 ) -> crate::application::model_provider::ModelProviderService {
-    crate::application::model_provider::ModelProviderService::connect(database_url, variables.cipher())
-        .expect("model provider SQLite repository should initialize")
+    crate::application::model_provider::ModelProviderService::connect(
+        database_url,
+        variables.cipher(),
+    )
+    .expect("model provider SQLite repository should initialize")
 }
 
 fn build_prompt_service(
@@ -223,12 +185,6 @@ fn should_seed_builtin_prompts(database_url: &str) -> bool {
                     .is_some_and(|name| name.starts_with("tron-"))
         }
     }
-}
-
-fn build_agent_run_history_service(database_url: &str) -> AgentRunHistoryService {
-    let repository = SqliteAgentRunRepository::connect(database_url)
-        .expect("agent run SQLite repository should initialize");
-    AgentRunHistoryService::new(repository)
 }
 
 fn build_agent_management_service(

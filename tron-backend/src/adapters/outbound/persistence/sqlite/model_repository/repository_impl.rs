@@ -1,7 +1,7 @@
 use super::storage::*;
 use super::*;
 
-impl ModelRepository for SqliteModelRepository {
+impl ModelRepository for SqliteModelRepositorySql<'_> {
     fn list_models(&mut self) -> Result<Vec<Model>, ModelError> {
         let mut statement = self
             .connection
@@ -367,5 +367,131 @@ impl ModelRepository for SqliteModelRepository {
             )
             .map_err(storage_error)?;
         Ok(())
+    }
+}
+
+impl ModelRepository for SqliteModelRepository {
+    fn list_models(&mut self) -> Result<Vec<Model>, ModelError> {
+        self.connection.call(
+            move |connection| SqliteModelRepositorySql { connection }.list_models(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn next_id(&mut self) -> Result<i64, ModelError> {
+        self.connection.call(
+            move |connection| SqliteModelRepositorySql { connection }.next_id(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_model(&mut self, model: &Model) -> Result<(), ModelError> {
+        let model = model.to_owned();
+        self.connection.call(
+            move |connection| SqliteModelRepositorySql { connection }.create_model(&model),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_model(&mut self, model: &Model) -> Result<(), ModelError> {
+        let model = model.to_owned();
+        self.connection.call(
+            move |connection| SqliteModelRepositorySql { connection }.update_model(&model),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_model(&mut self, model_code: &str) -> Result<bool, ModelError> {
+        let model_code = model_code.to_owned();
+        self.connection.call(
+            move |connection| SqliteModelRepositorySql { connection }.delete_model(&model_code),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_workspace_default_assignments(
+        &mut self,
+    ) -> Result<Vec<WorkspaceDefaultModelAssignment>, ModelError> {
+        self.connection.call(
+            move |connection| {
+                SqliteModelRepositorySql { connection }.list_workspace_default_assignments()
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_platform_default_assignments(
+        &mut self,
+    ) -> Result<Vec<PlatformDefaultModelAssignment>, ModelError> {
+        self.connection.call(
+            move |connection| {
+                SqliteModelRepositorySql { connection }.list_platform_default_assignments()
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_workspace_default_assignment(
+        &mut self,
+        assignment: &WorkspaceDefaultModelAssignment,
+    ) -> Result<(), ModelError> {
+        let assignment = assignment.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteModelRepositorySql { connection }
+                    .upsert_workspace_default_assignment(&assignment)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn upsert_platform_default_assignment(
+        &mut self,
+        assignment: &PlatformDefaultModelAssignment,
+    ) -> Result<(), ModelError> {
+        let assignment = assignment.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteModelRepositorySql { connection }
+                    .upsert_platform_default_assignment(&assignment)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_default_assignments_by_model_code(
+        &mut self,
+        model_code: &str,
+    ) -> Result<(), ModelError> {
+        let model_code = model_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteModelRepositorySql { connection }
+                    .delete_workspace_default_assignments_by_model_code(&model_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_default_assignments_by_workspace_and_model_code(
+        &mut self,
+        workspace_code: &str,
+        model_code: &str,
+    ) -> Result<(), ModelError> {
+        let workspace_code = workspace_code.to_owned();
+        let model_code = model_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteModelRepositorySql { connection }
+                    .delete_workspace_default_assignments_by_workspace_and_model_code(
+                        &workspace_code,
+                        &model_code,
+                    )
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_platform_default_assignments_by_model_code(
+        &mut self,
+        model_code: &str,
+    ) -> Result<(), ModelError> {
+        let model_code = model_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteModelRepositorySql { connection }
+                    .delete_platform_default_assignments_by_model_code(&model_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
     }
 }

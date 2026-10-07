@@ -1,5 +1,5 @@
 fn search_tree_route(
-    repository: &SqliteRagRepository,
+    repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
     query: &RagRouteSearchQuery,
     retriever: SqliteRetrieverStrategy,

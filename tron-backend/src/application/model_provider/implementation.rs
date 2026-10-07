@@ -1,11 +1,11 @@
+#[cfg(test)]
+use std::sync::Mutex;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    fs,
     future::Future,
-    path::Path,
     pin::Pin,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -18,7 +18,7 @@ use crab_serverapi::{
     multimedia::MultimediaClient,
 };
 use reqwest::Method;
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(test)]
@@ -65,7 +65,7 @@ const MAX_PROVIDER_SYNC_RUNS: i64 = 10;
 pub struct ModelProviderService {
     model_executor: Arc<eliteforge_agent_framework::ModelClient>,
     model_attempt_salt: Arc<String>,
-    connection: Arc<Mutex<Connection>>,
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
     token_refresh_lock: Arc<tokio::sync::Mutex<()>>,
     server_auth_events: broadcast::Sender<()>,
     device_unbound: Arc<AtomicBool>,
@@ -247,15 +247,18 @@ mod tests {
             })
             .expect("create test cipher"),
         );
-        let connection = Connection::open_in_memory().expect("open provider test database");
+        let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(":memory:").unwrap();
         connection
-            .execute_batch(MODEL_PROVIDER_MIGRATION)
-            .expect("create provider schema");
+            .call(
+                |c| c.execute_batch(MODEL_PROVIDER_MIGRATION),
+                || rusqlite::Error::InvalidQuery,
+            )
+            .unwrap();
         let adapter = Arc::new(UnauthorizedOnceAdapter::default());
         let service = ModelProviderService {
             model_executor: Default::default(),
             model_attempt_salt: Arc::new(eliteforge_agent_core::RunId::new_v4().to_string()),
-            connection: Arc::new(Mutex::new(connection)),
+            connection,
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
             server_auth_events: broadcast::channel(16).0,
             device_unbound: Arc::new(AtomicBool::new(false)),
@@ -279,21 +282,27 @@ mod tests {
             .expect("encrypt initial credentials");
         service
             .connection
-            .lock()
-            .expect("lock provider database")
-            .execute(
-                "INSERT INTO provider_connections (
+            .call(
+                move |connection| {
+                    connection
+                        .execute(
+                            "INSERT INTO provider_connections (
                     provider_code, server_base_url, status, credentials_encrypted, authorized_at,
                     authorization_expires_at, last_sync_at, last_error, created_at, updated_at
                  ) VALUES ('PersonAi', ?1, 'Connected', ?2, ?3, ?4, NULL, NULL, ?3, ?3)",
-                params![
-                    initial_credentials.server_base_url,
-                    encrypted,
-                    now_millis(),
-                    initial_credentials.authorization_expires_at,
-                ],
+                            params![
+                                initial_credentials.server_base_url.clone(),
+                                encrypted,
+                                now_millis(),
+                                initial_credentials.authorization_expires_at,
+                            ],
+                        )
+                        .expect("seed provider credentials");
+                    Ok::<_, rusqlite::Error>(())
+                },
+                || rusqlite::Error::InvalidQuery,
             )
-            .expect("seed provider credentials");
+            .unwrap();
 
         let identity = service.sdk_credential_attempt("expired-access");
         let rejected = eliteforge_agent_core::ModelError::Provider(Box::new(
@@ -339,8 +348,12 @@ mod tests {
             ["initial-refresh", "refresh-1"]
         );
         let stored = {
-            let connection = service.connection.lock().expect("lock provider database");
-            read_connection(&connection, ModelProviderCode::PersonAi)
+            service
+                .connection
+                .call(
+                    move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                    || ModelProviderError::Storage,
+                )
                 .expect("read provider connection")
                 .expect("provider connection exists")
         };
@@ -375,13 +388,15 @@ mod tests {
             crate::adapters::outbound::model::http_model_client::convert(&config).unwrap();
         factory.on_failure(&external, &rejected);
         assert_eq!(
-            read_connection(
-                &service.connection.lock().unwrap(),
-                ModelProviderCode::PersonAi
-            )
-            .unwrap()
-            .unwrap()
-            .status,
+            service
+                .connection
+                .call(
+                    |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                    || ModelProviderError::Storage
+                )
+                .unwrap()
+                .unwrap()
+                .status,
             ProviderConnectionStatus::Connected
         );
         config.model_code = "PERSON_AI:ROUTE:ChatAuto".into();
@@ -389,13 +404,15 @@ mod tests {
             crate::adapters::outbound::model::http_model_client::convert(&config).unwrap();
         factory.on_failure(&personai, &rejected);
         assert_eq!(
-            read_connection(
-                &service.connection.lock().unwrap(),
-                ModelProviderCode::PersonAi
-            )
-            .unwrap()
-            .unwrap()
-            .status,
+            service
+                .connection
+                .call(
+                    |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                    || ModelProviderError::Storage
+                )
+                .unwrap()
+                .unwrap()
+                .status,
             ProviderConnectionStatus::Connected
         );
         let mut rejected_current = rejected.clone();
@@ -404,13 +421,15 @@ mod tests {
         }
         factory.on_failure(&personai, &rejected_current);
         assert_eq!(
-            read_connection(
-                &service.connection.lock().unwrap(),
-                ModelProviderCode::PersonAi
-            )
-            .unwrap()
-            .unwrap()
-            .status,
+            service
+                .connection
+                .call(
+                    |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                    || ModelProviderError::Storage
+                )
+                .unwrap()
+                .unwrap()
+                .status,
             ProviderConnectionStatus::AuthRequired
         );
     }
@@ -449,14 +468,13 @@ mod tests {
             let encrypted = service
                 .encrypt_credentials(credentials)
                 .expect("encrypt profile credentials");
-            let mut connection = service.connection.lock().expect("lock provider database");
-            let transaction = connection
-                .transaction()
-                .expect("start authorization transaction");
+            let credentials = credentials.clone();
+            service.connection.call(move |connection| {
+                let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(connection,rusqlite::TransactionBehavior::Immediate).unwrap();
             replace_authorized_connection(
                 &transaction,
                 ModelProviderCode::PersonAi,
-                credentials,
+                &credentials,
                 user_id,
                 username,
                 &encrypted,
@@ -470,6 +488,8 @@ mod tests {
             transaction
                 .commit()
                 .expect("commit authorization transaction");
+                Ok::<_,ModelProviderError>(())
+            },||ModelProviderError::Storage).unwrap();
         }
 
         for (user_id, username, expected_token) in [
@@ -481,8 +501,12 @@ mod tests {
                 .activate_person_ai_profile(user_id, username)
                 .expect("activate profile credentials");
             let active = {
-                let connection = service.connection.lock().expect("lock provider database");
-                read_connection(&connection, ModelProviderCode::PersonAi)
+                service
+                    .connection
+                    .call(
+                        move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                        || ModelProviderError::Storage,
+                    )
                     .expect("read provider connection")
                     .expect("active provider connection")
             };
@@ -506,8 +530,12 @@ mod tests {
             .activate_person_ai_profile("person-charlie", "charlie")
             .expect("activate profile without stored credentials");
         let active = {
-            let connection = service.connection.lock().expect("lock provider database");
-            read_connection(&connection, ModelProviderCode::PersonAi)
+            service
+                .connection
+                .call(
+                    move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                    || ModelProviderError::Storage,
+                )
                 .expect("read provider connection")
                 .expect("active provider connection")
         };
@@ -543,8 +571,8 @@ mod tests {
                     authorization_expires_at: Some(now_millis() + 3_600_000),
                 };
                 let encrypted = service.encrypt_credentials(&credentials).unwrap();
-                let mut connection = service.connection.lock().unwrap();
-                let transaction = connection.transaction().unwrap();
+                service.connection.call(move |connection| {
+                    let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(connection,rusqlite::TransactionBehavior::Immediate).unwrap();
                 replace_authorized_connection(
                     &transaction,
                     ModelProviderCode::PersonAi,
@@ -560,6 +588,8 @@ mod tests {
                 )
                 .unwrap();
                 transaction.commit().unwrap();
+                    Ok::<_,ModelProviderError>(())
+                },||ModelProviderError::Storage).unwrap();
             }
             service
                 .activate_person_ai_profile("alice", "alice")
@@ -592,8 +622,12 @@ mod tests {
             );
             service.sdk_final_model_failure(&rejected);
             {
-                let connection = service.connection.lock().unwrap();
-                let active = read_connection(&connection, ModelProviderCode::PersonAi)
+                let active = service
+                    .connection
+                    .call(
+                        move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                        || ModelProviderError::Storage,
+                    )
                     .unwrap()
                     .unwrap();
                 assert_eq!(active.status, ProviderConnectionStatus::Connected);
@@ -626,8 +660,12 @@ mod tests {
                 running.await.unwrap(),
                 Err(ModelProviderError::ConnectionNotReady)
             ));
-            let connection = service.connection.lock().unwrap();
-            let active = read_connection(&connection, ModelProviderCode::PersonAi)
+            let active = service
+                .connection
+                .call(
+                    move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                    || ModelProviderError::Storage,
+                )
                 .unwrap()
                 .unwrap();
             assert_eq!(active.person_ai_user_id.as_deref(), Some("bob"));
@@ -640,7 +678,12 @@ mod tests {
                 "bob-token"
             );
             for user in ["alice", "bob"] {
-                let profile = read_person_ai_profile_credentials(&connection, user)
+                let profile = service
+                    .connection
+                    .call(
+                        move |connection| read_person_ai_profile_credentials(connection, user),
+                        || ModelProviderError::Storage,
+                    )
                     .unwrap()
                     .unwrap();
                 assert_eq!(profile.status, ProviderConnectionStatus::Connected);
@@ -759,12 +802,12 @@ mod tests {
 
     #[test]
     fn full_catalog_snapshot_updates_and_marks_missing_models_unavailable() {
-        let mut connection = Connection::open_in_memory().expect("open in-memory database");
+        let connection = Connection::open_in_memory().expect("open in-memory database");
         connection
             .execute_batch(MODEL_PROVIDER_MIGRATION)
             .expect("create provider tables");
 
-        let transaction = connection.transaction().expect("start first snapshot");
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection,rusqlite::TransactionBehavior::Immediate).expect("start first snapshot");
         apply_catalog_snapshot(
             &transaction,
             ModelProviderCode::PersonAi,
@@ -777,7 +820,7 @@ mod tests {
         .expect("apply first snapshot");
         transaction.commit().expect("commit first snapshot");
 
-        let transaction = connection.transaction().expect("start second snapshot");
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection,rusqlite::TransactionBehavior::Immediate).expect("start second snapshot");
         let mut updated_deepseek =
             catalog_model("deepseek-v4", "DeepSeek V4 Pro", "DeepSeek", Some(128_000));
         updated_deepseek.input_coefficient = Some(1.6);
@@ -868,18 +911,26 @@ mod tests {
         let service =
             ModelProviderService::connect(":memory:", cipher).expect("create provider service");
         {
-            let connection = service.connection.lock().expect("lock provider database");
-            connection
-                .execute(
-                    "INSERT INTO provider_catalog_models (
+            service
+                .connection
+                .call(
+                    move |connection| {
+                        connection
+                            .execute(
+                                "INSERT INTO provider_catalog_models (
                         provider_code, model_code, model_name, upstream_vendor_code,
                         upstream_vendor_name, context_window_tokens, status, first_seen_at,
                         last_seen_at, updated_at
                      ) VALUES ('PersonAi', 'deepseek-v4', 'DeepSeek V4', 'deepseek',
                         'DeepSeek', 64000, 'Available', 1, 1, 1)",
-                    [],
+                                [],
+                            )
+                            .expect("seed catalog model");
+                        Ok::<_, ModelProviderError>(())
+                    },
+                    || ModelProviderError::Storage,
                 )
-                .expect("seed catalog model");
+                .unwrap();
         }
         let config = person_ai_agent_config(
             person_ai_fixed_runtime_code(ProviderModelQuality::High, "deepseek-v4"),
