@@ -1,7 +1,7 @@
 //! Profile-owned SDK summary cache; initialization shares the host admission lock.
 use super::FrameworkHost;
 use eliteforge_agent_core as fw;
-use eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore;
+use eliteforge_agent_official_plugin_storage_local::{SummaryStore, SummaryStoreService};
 use std::sync::Arc;
 impl FrameworkHost {
     pub fn bind_model_client(
@@ -15,22 +15,14 @@ impl FrameworkHost {
         *binding = Some(client);
         Ok(())
     }
-    pub(super) async fn summary_store(&self) -> Result<Arc<SqliteSummaryStore>, fw::AgentError> {
+    pub(super) async fn summary_store(&self) -> Result<Arc<dyn SummaryStore>, fw::AgentError> {
         self.ensure_open()
             .map_err(fw::AgentError::InvalidConfiguration)?;
-        self.0
-            .summaries
-            .get_or_try_init(|| async {
-                let path = self.0.path.with_extension("context-summaries.sqlite");
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| fw::AgentError::Run(e.to_string()))?;
-                }
-                Ok(Arc::new(
-                    SqliteSummaryStore::open(path, Default::default()).await?,
-                ))
-            })
-            .await
-            .cloned()
+        self.framework()
+            .await?
+            .services()?
+            .get::<SummaryStoreService>()
+            .map(|store| store.0.clone())
+            .ok_or(fw::AgentError::MissingService("SummaryStore"))
     }
 }

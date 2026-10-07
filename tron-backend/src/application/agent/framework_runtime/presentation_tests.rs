@@ -6,14 +6,14 @@ use crate::{
 };
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
-use eliteforge_agent_framework::AgentBuilder;
 use eliteforge_agent_official_plugin_agui::{AgUiOptions, AgUiPlugin};
+use eliteforge_agent_test_support::TestBuilder;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
-fn native_builder(storage: &tempfile::TempDir) -> AgentBuilder {
+fn native_builder(storage: &tempfile::TempDir) -> TestBuilder {
     let artifacts = storage.path().join("artifacts");
     if !artifacts.exists() {
         let mut directory = std::fs::DirBuilder::new();
@@ -24,7 +24,7 @@ fn native_builder(storage: &tempfile::TempDir) -> AgentBuilder {
         }
         directory.create(&artifacts).unwrap();
     }
-    AgentBuilder::new().plugin(
+    TestBuilder::new().plugin(
         eliteforge_agent_official_plugin_storage_local::LocalStoragePlugin::new(
             storage.path().join("native.sqlite"),
             artifacts,

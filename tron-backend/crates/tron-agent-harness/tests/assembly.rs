@@ -1,3 +1,4 @@
+use eliteforge_agent_test_support::TestBuilder;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
@@ -174,7 +175,7 @@ fn request(session: &str, workspace: &str) -> RunRequest {
 }
 
 async fn agent(tool: ToolBinding, shared: Vec<ToolDescriptor>) -> Agent {
-    AgentBuilder::new()
+    TestBuilder::new()
         .default_models(false)
         .plugin(TestStoragePlugin::default())
         .plugin(AgentLoopPlugin::new(ProbeLoop {

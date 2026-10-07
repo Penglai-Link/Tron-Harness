@@ -4,6 +4,7 @@ use crate::application::agent::{
     AgentRuntimeRegistry, ModelClient, RuntimeAdapterKey, RuntimeCapabilities,
 };
 use crate::domain::agent::*;
+use eliteforge_agent_test_support::TestBuilder;
 use serde_json::json;
 use std::{
     future::Future,
@@ -151,7 +152,7 @@ async fn native_agent(
     release: Arc<Notify>,
 ) -> Agent {
     prepare_fixture_artifacts(&path);
-    AgentBuilder::new()
+    TestBuilder::new()
         .default_models(false)
         .plugin(eliteforge_agent_framework::ModelRuntimePlugin::new(
             eliteforge_agent_framework::ModelRuntime::new(
@@ -201,6 +202,7 @@ async fn native_stop_retains_product_admission_until_sdk_hooks_and_session_relea
         release.clone(),
     )
     .await;
+    assert!(host.0.framework.set(agent.framework()).is_ok());
     assert!(host.0.agent.set(agent.clone()).is_ok());
     let active = ActiveRunRegistry::new();
     let executor = AgentRunExecutor::new(
@@ -260,6 +262,7 @@ async fn dropping_native_caller_cancels_but_does_not_release_product_admission_e
         release.clone(),
     )
     .await;
+    assert!(host.0.framework.set(agent.framework()).is_ok());
     assert!(host.0.agent.set(agent.clone()).is_ok());
     let active = ActiveRunRegistry::new();
     let executor = AgentRunExecutor::new(

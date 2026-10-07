@@ -74,10 +74,10 @@ fn native_skill_descriptor(descriptor: &fw::ToolDescriptor) -> bool {
 }
 
 pub(crate) struct ToolCatalogPolicy {
-    tools_enabled: bool,
+    tools_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 impl ToolCatalogPolicy {
-    pub(crate) fn new(tools_enabled: bool) -> Self {
+    pub(crate) fn shared(tools_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
         Self { tools_enabled }
     }
 }
@@ -88,7 +88,10 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         binding: &fw::ToolBinding,
         run: &fw::RunContext,
     ) -> Result<fw::ToolBindingAdmission, fw::AgentError> {
-        if !self.tools_enabled {
+        if !self
+            .tools_enabled
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
             return Ok(fw::ToolBindingAdmission::Exclude);
         }
         let host = HostExecution::from_extensions(&run.extensions)?;
@@ -144,7 +147,10 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         &self,
         invocation: &fw::ToolInvocationContext<'_>,
     ) -> Result<fw::ToolPolicyDecision, fw::AgentError> {
-        if !self.tools_enabled {
+        if !self
+            .tools_enabled
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
             return Ok(fw::ToolPolicyDecision::Deny(
                 "tool extension is disabled".into(),
             ));

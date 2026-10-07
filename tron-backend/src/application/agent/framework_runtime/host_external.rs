@@ -5,7 +5,6 @@ use crate::{
     domain::agent::{AgentRunContext, AgentRunResult},
 };
 use eliteforge_agent_core as fw;
-use eliteforge_agent_framework::AgentBuilder;
 use eliteforge_agent_official_plugin_storage_local::SqliteConversationStore;
 use std::{fs, sync::Arc, time::Duration};
 impl FrameworkHost {
@@ -88,22 +87,7 @@ impl FrameworkHost {
         let agent = self
             .0
             .external_agent
-            .get_or_try_init(|| async {
-                AgentBuilder::new()
-                    .default_models(false)
-                    .plugin(eliteforge_agent_official_plugin_agui::AgUiPlugin::default())
-                    .plugin(
-                        eliteforge_agent_official_plugin_storage_local::LocalStoragePlugin::new(
-                            &self.0.path,
-                            self.0.path.with_extension("artifacts"),
-                        ),
-                    )
-                    .capability_pack(eliteforge_agent_capability_external::external_agent_pack(
-                        super::super::external::HostExternalAgent,
-                    ))
-                    .build()
-                    .await
-            })
+            .get_or_try_init(|| async { self.build_driver(true).await })
             .await
             .map_err(map)?;
         if let Some(parent) = self.0.path.parent() {

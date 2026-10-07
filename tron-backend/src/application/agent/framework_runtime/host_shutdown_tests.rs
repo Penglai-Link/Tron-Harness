@@ -36,7 +36,7 @@ fn assert_pty_closed(host: &FrameworkHost) {
 async fn timed_out_client_close_is_owned_and_late_report_observable_without_racing_cache() {
     let host = FrameworkHost::temporary(None).unwrap();
     let summaries = host.summary_store().await.unwrap();
-    let expected = seed_summary(&summaries).await;
+    let expected = seed_summary(summaries.as_ref()).await;
     let entered = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
     let calls = Arc::new(AtomicUsize::new(0));
@@ -61,7 +61,7 @@ async fn timed_out_client_close_is_owned_and_late_report_observable_without_raci
             .any(|value| value.contains("unfinished"))
     );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
-    assert_summary_readable(&summaries, &expected).await;
+    assert_summary_readable(summaries.as_ref(), &expected).await;
     assert_pty_closed(&host);
     release.notify_one();
     let final_report = within(host.wait_shutdown_completion()).await;
@@ -79,7 +79,7 @@ async fn timed_out_client_close_is_owned_and_late_report_observable_without_raci
             .any(|value| value.contains("still draining"))
     );
     assert_eq!(final_report.panics, 1);
-    assert_summary_closed(&summaries).await;
+    assert_summary_closed(summaries.as_ref()).await;
     assert_persisted_summary(&host, &expected).await;
     assert_eq!(host.close().await, initial);
 }
@@ -87,7 +87,7 @@ async fn timed_out_client_close_is_owned_and_late_report_observable_without_raci
 async fn stalled_native_drain_does_not_skip_independent_closes_and_retains_dependent_store_owner() {
     let host = FrameworkHost::temporary(None).unwrap();
     let summaries = host.summary_store().await.unwrap();
-    let expected = seed_summary(&summaries).await;
+    let expected = seed_summary(summaries.as_ref()).await;
     let registration = host.reserve_native("stalled-native").unwrap();
     let entered = Arc::new(Notify::new());
     let release = Arc::new(Notify::new());
@@ -105,7 +105,7 @@ async fn stalled_native_drain_does_not_skip_independent_closes_and_retains_depen
     assert!(report.timeouts >= 1);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_pty_closed(&host);
-    assert_summary_readable(&summaries, &expected).await;
+    assert_summary_readable(summaries.as_ref(), &expected).await;
     drop(registration);
     let final_report = within(host.wait_shutdown_completion()).await;
     assert!(
@@ -114,7 +114,7 @@ async fn stalled_native_drain_does_not_skip_independent_closes_and_retains_depen
             .iter()
             .any(|value| value == "fixture MCP close failed")
     );
-    assert_summary_closed(&summaries).await;
+    assert_summary_closed(summaries.as_ref()).await;
     assert_persisted_summary(&host, &expected).await;
 }
 struct PanicClose;
@@ -154,13 +154,13 @@ impl ModelClient for PanicClose {
 async fn close_callback_panic_is_reported_and_other_resource_owners_still_close() {
     let host = FrameworkHost::temporary(None).unwrap();
     let summaries = host.summary_store().await.unwrap();
-    let expected = seed_summary(&summaries).await;
+    let expected = seed_summary(summaries.as_ref()).await;
     host.bind_model_client(Arc::new(PanicClose)).unwrap();
     let report = within(host.close()).await;
     assert_eq!(report.panics, 1);
     assert!(!report.is_success());
     assert_pty_closed(&host);
-    assert_summary_closed(&summaries).await;
+    assert_summary_closed(summaries.as_ref()).await;
     assert_persisted_summary(&host, &expected).await;
     assert_eq!(host.wait_shutdown_completion().await, report);
 }
@@ -191,9 +191,9 @@ fn neutral_execution_snapshot_roundtrips_full_limits_and_conservative_unknown_us
 }
 
 async fn seed_summary(
-    store: &eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore,
+    store: &dyn eliteforge_agent_official_plugin_storage_local::SummaryStore,
 ) -> eliteforge_agent_official_plugin_storage_local::VersionedSummary {
-    use eliteforge_agent_official_plugin_storage_local::{ConversationSummary, SummaryStore};
+    use eliteforge_agent_official_plugin_storage_local::ConversationSummary;
     use sha2::{Digest, Sha256};
     let value = ConversationSummary {
         format_version: 1,
@@ -217,10 +217,9 @@ async fn seed_summary(
     saved
 }
 async fn assert_summary_readable(
-    store: &eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore,
+    store: &dyn eliteforge_agent_official_plugin_storage_local::SummaryStore,
     expected: &eliteforge_agent_official_plugin_storage_local::VersionedSummary,
 ) {
-    use eliteforge_agent_official_plugin_storage_local::SummaryStore;
     let actual = store
         .load(&summary_key())
         .await
@@ -232,9 +231,8 @@ async fn assert_summary_readable(
     );
 }
 async fn assert_summary_closed(
-    store: &eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore,
+    store: &dyn eliteforge_agent_official_plugin_storage_local::SummaryStore,
 ) {
-    use eliteforge_agent_official_plugin_storage_local::SummaryStore;
     let error = store
         .load(&summary_key())
         .await
@@ -250,7 +248,7 @@ async fn assert_persisted_summary(
     expected: &eliteforge_agent_official_plugin_storage_local::VersionedSummary,
 ) {
     let reopened = eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore::open(
-        host.0.path.with_extension("context-summaries.sqlite"),
+        &host.0.path,
         Default::default(),
     )
     .await

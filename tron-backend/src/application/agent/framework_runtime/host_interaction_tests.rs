@@ -1,4 +1,5 @@
 use super::*;
+use eliteforge_agent_test_support::TestBuilder;
 #[derive(Clone)]
 struct InteractionModel {
     calls: Arc<AtomicUsize>,
@@ -68,7 +69,7 @@ async fn interaction_agent(
     prepare_fixture_artifacts(path);
     let mut descriptor = fw::ModelDescriptor::new("pending");
     descriptor.supports_tools = Some(true);
-    let mut builder=AgentBuilder::new().default_models(false)
+    let mut builder=TestBuilder::new().default_models(false)
         .plugin(eliteforge_agent_framework::ModelRuntimePlugin::new(eliteforge_agent_framework::ModelRuntime::new(eliteforge_agent_framework::ModelRuntimeUpdate::new("",0,vec![])).unwrap()))
         .plugin(fw::ModelConnectionPlugin::new(fw::ModelConnection::new("fixture",Arc::new(InteractionModel{calls:model_calls}),vec![descriptor])))
         .plugin(fw::ToolProviderPlugin::new("fixture.interaction",fw::StaticToolProvider::new(vec![fw::ToolBinding::new(
@@ -96,6 +97,7 @@ async fn generic_native_input_survives_restart_scope_schema_checks_and_resumes_w
         tool_calls.clone(),
     )
     .await;
+    assert!(original.0.framework.set(agent.framework()).is_ok());
     assert!(original.0.agent.set(agent.clone()).is_ok());
     let result = agent.run(native_request("CONV-1")).await.unwrap();
     assert_eq!(result.status, fw::RunStatus::AwaitingInput);
@@ -109,6 +111,7 @@ async fn generic_native_input_survives_restart_scope_schema_checks_and_resumes_w
         tool_calls.clone(),
     )
     .await;
+    assert!(restored.0.framework.set(agent.framework()).is_ok());
     assert!(restored.0.agent.set(agent.clone()).is_ok());
     assert_eq!(
         restored
@@ -180,6 +183,7 @@ async fn native_approval_boolean_resume_preserves_original_arguments_and_denial_
         let tool_calls = Arc::new(AtomicUsize::new(0));
         let agent =
             interaction_agent(&host.0.path, false, model_calls.clone(), tool_calls.clone()).await;
+        assert!(host.0.framework.set(agent.framework()).is_ok());
         assert!(host.0.agent.set(agent.clone()).is_ok());
         let first = agent.run(native_request("CONV-1")).await.unwrap();
         assert_eq!(first.status, fw::RunStatus::AwaitingInput);
@@ -214,6 +218,7 @@ async fn saved_native_answer_survives_restart_and_retries_idempotently_without_t
     let tool_calls = Arc::new(AtomicUsize::new(0));
     let agent =
         interaction_agent(&host.0.path, true, model_calls.clone(), tool_calls.clone()).await;
+    assert!(host.0.framework.set(agent.framework()).is_ok());
     assert!(host.0.agent.set(agent.clone()).is_ok());
     let paused = agent.run(native_request("CONV-1")).await.unwrap();
     let id = paused.interactions[0].id;
@@ -249,6 +254,7 @@ async fn saved_native_answer_survives_restart_and_retries_idempotently_without_t
     let restored = FrameworkHost::persistent(host.0.path.clone(), None);
     let agent =
         interaction_agent(&host.0.path, true, model_calls.clone(), tool_calls.clone()).await;
+    assert!(restored.0.framework.set(agent.framework()).is_ok());
     assert!(restored.0.agent.set(agent.clone()).is_ok());
     restored
         .validate_native_resume("CONV-1", std::slice::from_ref(&entry))

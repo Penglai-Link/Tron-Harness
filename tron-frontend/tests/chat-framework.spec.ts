@@ -68,6 +68,13 @@ test.beforeAll(async () => {
     await new Promise(resolveDelay => setTimeout(resolveDelay, 250));
   }
   if (!ready) throw new Error(logs);
+  const agentResponse = await fetch(`${api}/api/v1/agents/workspaces/TRON_CORE/internal`, {
+    headers: { Authorization: "Bearer profile-test-token" },
+  });
+  expect(agentResponse.ok).toBe(true);
+  const agents = (await agentResponse.json()).data;
+  expect(agents.map((agent: { agentCode: string }) => agent.agentCode)).toEqual(["main-agent"]);
+
   await post("/api/v1/admin/platform/models", {
     displayName: "Framework Acceptance", vendor: "OpenAI", protocol: "OPENAI_COMPATIBLE", modelType: "TEXT", modelCapabilities: ["TEXT_GENERATION"],
     baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiPath: "/chat/completions", apiKeyRef: "sk-acceptance", modelName: "acceptance-model", enabled: true,

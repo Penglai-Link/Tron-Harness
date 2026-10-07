@@ -40,7 +40,7 @@ async fn gaps_keep_session_exclusive_and_stop_before_binding_cancels_native_root
     );
     registry.request_stop("session", "initial").unwrap();
     let (sender, _) = tokio::sync::oneshot::channel();
-    let agent = fw::AgentBuilder::new()
+    let agent = eliteforge_agent_test_support::TestBuilder::new()
         .default_models(false)
         .plugin(fw::AgentLoopPlugin::new(ParentLoop {
             entered: tokio::sync::Mutex::new(Some(sender)),
@@ -74,7 +74,7 @@ async fn only_explicit_parent_can_admit_child_and_stop_identity_survives_child_g
         .continuation_group("session", "initial", "REACT")
         .unwrap();
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    let agent = fw::AgentBuilder::new()
+    let agent = eliteforge_agent_test_support::TestBuilder::new()
         .default_models(false)
         .plugin(fw::AgentLoopPlugin::new(ParentLoop {
             entered: tokio::sync::Mutex::new(Some(sender)),

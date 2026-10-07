@@ -1701,6 +1701,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "eliteforge-agent-test-support"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "eliteforge-agent-framework",
+ "eliteforge-agent-official-plugin-storage-local",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "elliptic-curve"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6504,6 +6516,7 @@ dependencies = [
  "eliteforge-agent-official-plugin-tools-local",
  "eliteforge-agent-official-plugin-tools-mcp",
  "eliteforge-agent-plugin-core",
+ "eliteforge-agent-test-support",
  "gmcrypto-core",
  "grafeo",
  "hex",

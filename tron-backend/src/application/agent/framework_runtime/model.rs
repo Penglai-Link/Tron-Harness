@@ -64,7 +64,7 @@ pub(super) struct HostExecution {
     pub harness: ReactAgent,
     pub state: Arc<Mutex<HostRunState>>,
     pub sink: Option<ModelStreamSink>,
-    pub summaries: Arc<eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore>,
+    pub summaries: Arc<dyn eliteforge_agent_official_plugin_storage_local::SummaryStore>,
 }
 
 impl HostExecution {

@@ -53,13 +53,6 @@ impl fw::SkillProvider for Catalog {
         panic!("catalog assembly must not read resources")
     }
 }
-struct NoProductTools;
-#[async_trait]
-impl fw::ToolProvider for NoProductTools {
-    async fn lease(&self, _: &fw::RunContext) -> Result<fw::ToolLease, fw::AgentError> {
-        Ok(fw::ToolLease::new(vec![]))
-    }
-}
 #[derive(Clone, Default)]
 struct Reports(Arc<StdMutex<Vec<fw::ContextAssemblyReport>>>);
 #[async_trait]
@@ -153,14 +146,9 @@ async fn fixture(
     let reports = Reports::default();
     let (mut packs, extensions) = host.capability_state();
     packs.insert("tron.harness".into(), false);
-    let native = host
-        .agent_builder(&packs, &extensions)
+    let framework = host
+        .framework_builder(&packs, &extensions)
         .unwrap()
-        .capability_pack(
-            tron_agent_harness::TronHarness::new(Arc::new(NoProductTools), [])
-                .with_context_preparation(TronContext, 32)
-                .capability_pack(),
-        )
         .plugin(SkillsPlugin::new(Catalog {
             reads: reads.clone(),
             description,
@@ -169,6 +157,14 @@ async fn fixture(
         .build()
         .await
         .unwrap();
+    *host.0.skills.write().unwrap() =
+        std::collections::BTreeMap::from([("fixture".into(), vec!["review".into()])]);
+    let mut selection = host
+        .main_selection(&framework, &packs, &extensions)
+        .unwrap();
+    selection.context_assembler = Some("framework.context-assembler".into());
+    let native = framework.agent(selection).build().await.unwrap();
+    assert!(host.0.framework.set(framework).is_ok());
     assert!(host.0.agent.set(native).is_ok());
     let client = Arc::new(Capture::default());
     host.bind_model_client(client.clone()).unwrap();

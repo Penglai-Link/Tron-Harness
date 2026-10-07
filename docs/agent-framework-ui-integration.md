@@ -4,6 +4,16 @@
 
 # Agent Framework / Agent UI 接入
 
+## 2026-10-07 Framework 装配适配
+
+适配 Framework main `cbb94f7` 删除旧装配入口后的 API。平台内置内部 Agent 仍只有 `main-agent`；不增加业务 Agent。
+
+- profile 的 Framework 安装本地存储、模型运行时、AG-UI、工具、上下文和能力包。`main` 通过 `AgentSelection` 选择已安装能力，不再安装或重装插件。
+- 工具权限仍由 Tron 原生 ToolPolicy 执行。ContinuationLoop 和 ExternalAgentLoop 不接受这套 ReAct 策略，使用独立驱动环境；它们通过公开存储服务契约借用 profile 的同一套存储，驱动关闭不关闭存储。
+- 会话、checkpoint、交互与摘要均由 profile 存储负责。续接不再另建 `continuation.sqlite`，摘要不再另建 `context-summaries.sqlite`。本次不迁移这些旧数据库。
+- 关闭顺序是停止 Agent、等待运行及宿主回调结束、关闭驱动环境，最后关闭 profile Framework。`agent.close()` 不承担插件关闭责任。
+- 已安装能力通过 Agent 选择切换，保留会话与 PTY。新导入的插件需要在重启 profile 后、首次运行前启用；运行期间不能把新插件装进已有 Framework。存储和模型是必需服务，不能关闭。
+
 ## 当前迁移状态
 
 **本轮收敛原生运行时职责与统一上下文来源，验收独立记录。** Tron 的 Agent 模型/工具循环、模型重试、上下文压缩执行、

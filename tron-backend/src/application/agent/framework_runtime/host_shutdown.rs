@@ -219,18 +219,22 @@ impl FrameworkHost {
                 }),
             ));
         }
-        if let Some(store) = self.0.summaries.get().cloned() {
+        for driver in [self.0.external_agent.get(), self.0.continuation_agent.get()]
+            .into_iter()
+            .flatten()
+        {
+            let framework = driver.framework();
             owners.push((
-                "summary cache",
-                spawn_close(async move {
-                    store.close().await.map_err(|e| e.to_string())?;
-                    Ok(ShutdownReport::default())
-                }),
+                "SDK driver Framework",
+                tokio::spawn(async move { framework.close().await }),
             ));
         }
         // All store callbacks start even if another one stalls or panics.
         for (name, owner) in owners {
             merge_join(name, owner.await, &mut report);
+        }
+        if let Some(framework) = self.0.framework.get() {
+            report.merge(framework.close().await);
         }
         report
     }

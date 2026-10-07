@@ -6,8 +6,8 @@ use super::{
 use crate::application::agent::{ActiveRunControl, ModelStreamSink, runtime::ReactAgent};
 use crate::domain::agent::{AgentError, AgentRunContext, AgentRunResult};
 use eliteforge_agent_core as fw;
-use eliteforge_agent_framework::{Agent, AgentBuilder};
-use eliteforge_agent_official_plugin_storage_local::{LocalStoragePlugin, SqliteConversationStore};
+use eliteforge_agent_framework::{Agent, AgentSelection, Framework};
+use eliteforge_agent_official_plugin_storage_local::SqliteConversationStore;
 use eliteforge_agent_official_plugin_tools_local::FileReferenceReaderService;
 use std::{
     collections::BTreeMap,
@@ -24,6 +24,10 @@ mod capability_state;
 mod host_continuation;
 #[path = "host_control.rs"]
 mod host_control;
+#[path = "host_driver.rs"]
+mod host_driver;
+#[path = "host_environment.rs"]
+mod host_environment;
 #[path = "host_execution.rs"]
 mod host_execution;
 #[path = "host_external.rs"]
@@ -51,11 +55,15 @@ struct Host {
     extension_state: std::sync::RwLock<BTreeMap<String, bool>>,
     config_lock: tokio::sync::Mutex<()>,
     pty: eliteforge_agent_capability_tools::PtyService,
+    framework: OnceCell<Framework>,
     agent: OnceCell<Agent>,
+    skills: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
+    installed_packs: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
+    tools_enabled: Arc<std::sync::atomic::AtomicBool>,
+    observe_enabled: Arc<std::sync::atomic::AtomicBool>,
     external_agent: OnceCell<Agent>,
     continuation_agent: OnceCell<Agent>,
     native_sessions: OnceCell<SqliteConversationStore>,
-    summaries: OnceCell<Arc<eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore>>,
     native_bindings: super::native_sessions::Bindings,
     closed: std::sync::atomic::AtomicBool,
     control: host_control::NativeRuns,
@@ -104,9 +112,19 @@ impl FrameworkHost {
         let previous = packs.clone();
         let extensions = self.0.extension_state.read().unwrap().clone();
         packs.insert(id.to_owned(), enabled);
+        if let Some(framework) = self.0.framework.get() {
+            self.main_selection(framework, &packs, &extensions)?;
+        }
         persist_capability_state(&self.0.state_path, &packs, &extensions)?;
         if let Some(agent) = self.0.agent.get() {
-            let target = self.agent_builder(&packs, &extensions)?;
+            let selection = match self.main_selection(&agent.framework(), &packs, &extensions) {
+                Ok(selection) => selection,
+                Err(error) => {
+                    let _ = persist_capability_state(&self.0.state_path, &previous, &extensions);
+                    return Err(error);
+                }
+            };
+            let target = agent.framework().agent(selection);
             if let Err(error) = agent.reconfigure(target).await {
                 let _ = persist_capability_state(&self.0.state_path, &previous, &extensions);
                 return Err(format!("{error:?}"));
@@ -119,110 +137,38 @@ impl FrameworkHost {
     pub async fn set_extension_enabled(&self, point: &str, enabled: bool) -> Result<(), String> {
         let _guard = self.0.config_lock.lock().await;
         self.ensure_external_idle()?;
+        if matches!(point, "storage" | "model") && !enabled {
+            return Err(format!("{point} is a required Framework service"));
+        }
         let packs = self.0.capability_state.read().unwrap().clone();
         let mut extensions = self.0.extension_state.read().unwrap().clone();
         let previous = extensions.clone();
         extensions.insert(point.to_owned(), enabled);
         persist_capability_state(&self.0.state_path, &packs, &extensions)?;
         if let Some(agent) = self.0.agent.get() {
-            let target = self.agent_builder(&packs, &extensions)?;
+            let selection = match self.main_selection(&agent.framework(), &packs, &extensions) {
+                Ok(selection) => selection,
+                Err(error) => {
+                    let _ = persist_capability_state(&self.0.state_path, &packs, &previous);
+                    return Err(error);
+                }
+            };
+            let target = agent.framework().agent(selection);
             if let Err(error) = agent.reconfigure(target).await {
                 let _ = persist_capability_state(&self.0.state_path, &packs, &previous);
                 return Err(format!("{error:?}"));
             }
         }
+        self.0.tools_enabled.store(
+            extensions.get("tool").copied().unwrap_or(true),
+            std::sync::atomic::Ordering::Release,
+        );
+        self.0.observe_enabled.store(
+            extensions.get("observe").copied().unwrap_or(true),
+            std::sync::atomic::Ordering::Release,
+        );
         *self.0.extension_state.write().unwrap() = extensions;
         Ok(())
-    }
-
-    fn agent_builder(
-        &self,
-        packs: &BTreeMap<String, bool>,
-        extensions: &BTreeMap<String, bool>,
-    ) -> Result<AgentBuilder, String> {
-        let enabled = |point: &str| extensions.get(point).copied().unwrap_or(true);
-        let builder = AgentBuilder::new()
-            .default_models(false)
-            .plugin(eliteforge_agent_official_plugin_agui::AgUiPlugin::default());
-        let builder = if enabled("storage") {
-            builder.plugin(LocalStoragePlugin::new(
-                &self.0.path,
-                self.0.path.with_extension("artifacts"),
-            ))
-        } else {
-            builder
-        };
-        let builder = if enabled("model") {
-            builder.plugin(eliteforge_agent_framework::ModelRuntimePlugin::new(
-                eliteforge_agent_framework::ModelRuntime::new(
-                    eliteforge_agent_framework::ModelRuntimeUpdate::new("", 0, vec![]),
-                )
-                .map_err(|error| error.to_string())?,
-            ))
-        } else {
-            builder
-        };
-        // Product authority is a host invariant, independent of the optional
-        // harness pack. Managed packs may keep model/context capabilities while
-        // the tool extension is disabled, but cannot admit any tool executor.
-        let builder = builder.plugin(fw::ToolPolicyPlugin::new(
-            "tron.harness.tool-authority",
-            super::tools::ToolCatalogPolicy::new(enabled("tool")),
-        ));
-        let builder = if enabled("observe") {
-            builder.plugin(fw::ToolMiddlewarePlugin::new(
-                "tron.harness.audit",
-                ToolAudit,
-            ))
-        } else {
-            builder
-        };
-        let builder =
-            if packs.get("framework.local.scoped").copied().unwrap_or(true) && enabled("tool") {
-                builder.capability_pack(eliteforge_agent_capability_tools::scoped_local_tools_pack(
-                    Arc::new(LocalScope),
-                    self.pty(),
-                ))
-            } else {
-                builder
-            };
-        let mut builder = if packs.get("tron.harness").copied().unwrap_or(true)
-            && enabled("context")
-            && enabled("tool")
-        {
-            builder.capability_pack(
-                tron_agent_harness::TronHarness::new(Arc::new(HarnessTools), [])
-                    .with_context_preparation(TronContext, 32)
-                    .capability_pack(),
-            )
-        } else {
-            builder
-        };
-        let manager =
-            eliteforge_agent_capability_runtime::CapabilityPackManager::new(&self.0.pack_root)
-                .map_err(|error| error.to_string())?;
-        for (package, active) in packs {
-            if !active
-                || matches!(
-                    package.as_str(),
-                    "framework.external-agent" | "framework.local.scoped" | "tron.harness"
-                )
-            {
-                continue;
-            }
-            let version = semver::VersionReq::STAR;
-            let managed = manager
-                .select(
-                    package,
-                    &version,
-                    "tron",
-                    "default",
-                    serde_json::Value::Null,
-                )
-                .map_err(|error| error.to_string())?;
-            builder = builder.capability_pack_arc(Arc::new(managed));
-        }
-        Ok(builder)
     }
 
     fn ensure_external_idle(&self) -> Result<(), String> {
@@ -285,11 +231,15 @@ impl FrameworkHost {
             capability_state: std::sync::RwLock::new(packs),
             extension_state: std::sync::RwLock::new(extensions),
             config_lock: tokio::sync::Mutex::new(()),
+            framework: OnceCell::new(),
             agent: OnceCell::new(),
+            skills: Default::default(),
+            installed_packs: Default::default(),
+            tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            observe_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             external_agent: OnceCell::new(),
             continuation_agent: OnceCell::new(),
             native_sessions: OnceCell::new(),
-            summaries: OnceCell::new(),
             native_bindings: Default::default(),
             closed: Default::default(),
             control: Default::default(),
@@ -315,11 +265,15 @@ impl FrameworkHost {
             capability_state: std::sync::RwLock::new(BTreeMap::new()),
             extension_state: std::sync::RwLock::new(BTreeMap::new()),
             config_lock: tokio::sync::Mutex::new(()),
+            framework: OnceCell::new(),
             agent: OnceCell::new(),
+            skills: Default::default(),
+            installed_packs: Default::default(),
+            tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            observe_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             external_agent: OnceCell::new(),
             continuation_agent: OnceCell::new(),
             native_sessions: OnceCell::new(),
-            summaries: OnceCell::new(),
             native_bindings: Default::default(),
             closed: Default::default(),
             control: Default::default(),
@@ -350,22 +304,12 @@ impl FrameworkHost {
         self.0
             .agent
             .get_or_try_init(|| async {
-                if let Some(parent) = self
-                    .0
-                    .path
-                    .parent()
-                    .filter(|parent| !parent.as_os_str().is_empty())
-                {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|error| fw::AgentError::InvalidConfiguration(error.to_string()))?;
-                }
-                self.prepare_artifacts()
-                    .map_err(fw::AgentError::InvalidConfiguration)?;
+                let framework = self.framework().await?;
                 let (packs, extensions) = self.capability_state();
-                self.agent_builder(&packs, &extensions)
-                    .map_err(fw::AgentError::InvalidConfiguration)?
-                    .build()
-                    .await
+                let selection = self
+                    .main_selection(framework, &packs, &extensions)
+                    .map_err(fw::AgentError::InvalidConfiguration)?;
+                framework.agent(selection).build().await
             })
             .await
     }
@@ -420,3 +364,7 @@ mod lifecycle_tests;
 #[cfg(test)]
 #[path = "context_seed_budget_tests.rs"]
 mod context_seed_budget_tests;
+
+#[cfg(test)]
+#[path = "host_environment_tests.rs"]
+mod environment_tests;
