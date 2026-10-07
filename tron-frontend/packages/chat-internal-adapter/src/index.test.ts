@@ -54,6 +54,61 @@ afterEach(() => {
 });
 
 describe("createInternalChatAdapter", () => {
+  it("scopes every chat transport to its bound workspace, including SSE and binary attachments", async () => {
+    const fixture = sessionFixture();
+    const attachment = { id: "FILE-1", kind: "file", fileName: "note.txt", contentType: "text/plain", summary: "note", metadata: {} };
+    const result = { session: fixture, messages: [], run: { runCode: "RUN-1", workspaceCode: fixture.workspaceCode, status: "COMPLETED", finalOutput: "done", stepCount: 1 } };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      // The backend requires scope outside the JSON body, including read requests.
+      expect(headers.get("X-Workspace-Code")).toBe("TRON_CORE");
+      expect(headers.get("Accept-Language")).toBe("zh-CN");
+      expect(headers.get("Authorization")).toBe("Bearer scoped-token");
+      if (url.endsWith("/stream")) return new Response(`data: ${JSON.stringify({ type: "RUN_FINISHED", productCompletion: true, result })}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
+      if (url.endsWith("/attachments/FILE-1")) return new Response("note");
+      const data = url.endsWith("/get-active-run?sessionCode=SESSION-1") ? { sessionCode: "SESSION-1", activeRun: null }
+        : url.endsWith("/steer-message") ? steerResultFixture()
+        : url.endsWith("/stop-run") ? { sessionCode: "SESSION-1", runCode: "RUN-1" }
+        : url.endsWith("/attachments") ? attachment
+        : url.endsWith("/protocol-events") || url.endsWith("/messages") || url.endsWith("/user-input-requests") ? []
+        : url.endsWith("/events") ? { events: [] } : fixture;
+      return new Response(JSON.stringify(successEnvelope(data)));
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createInternalChatAdapter({
+      workspaceCode: "TRON_CORE", baseUrl: "https://internal.example.com",
+      getAccessToken: () => "scoped-token",
+      getHeaders: () => ({ "Accept-Language": "zh-CN", "X-Workspace-Code": "OTHER" }),
+    });
+    await adapter.createSession({ workspaceCode: fixture.workspaceCode });
+    await adapter.loadMessages(fixture.sessionCode);
+    await adapter.loadAguiEvents(fixture.sessionCode);
+    await adapter.loadProtocolEvents?.(fixture.sessionCode);
+    await adapter.loadUserInputRequests?.(fixture.sessionCode);
+    await adapter.getActiveRun?.(fixture.sessionCode);
+    await adapter.streamMessage(fixture, { workspaceCode: fixture.workspaceCode, content: "hello" });
+    await adapter.steerMessage?.(fixture, { workspaceCode: fixture.workspaceCode, content: "steer" }, { expectedRunCode: "RUN-1" });
+    await adapter.stopRun?.(fixture, { expectedRunCode: "RUN-1" });
+    await adapter.answerUserInputRequestStream?.(fixture, "INPUT-1", { answers: [] });
+    await adapter.uploadAttachment?.(fixture, { file: new File(["note"], "note.txt") });
+    await adapter.downloadAttachment?.(fixture, attachment);
+    await adapter.deleteSession(fixture.sessionCode);
+    expect(fetchMock).toHaveBeenCalledTimes(13);
+  });
+
+  it("keeps in-flight workspace scopes independent when another workspace opens", async () => {
+    const scopes: string[] = [];
+    globalThis.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      scopes.push(new Headers(init?.headers).get("X-Workspace-Code")!);
+      return new Response(JSON.stringify(successEnvelope([])));
+    }) as typeof fetch;
+    const first = createInternalChatAdapter({ workspaceCode: "FIRST" });
+    const second = createInternalChatAdapter({ workspaceCode: "SECOND" });
+    await Promise.all([first.loadMessages("FIRST-SESSION"), second.loadMessages("SECOND-SESSION")]);
+    await first.loadMessages("FIRST-SESSION");
+    expect(scopes).toEqual(["FIRST", "SECOND", "FIRST"]);
+  });
+
   it("creates and removes terminal-scoped sessions with the chat session contract", async () => {
     const fetchMock = vi
       .fn()
@@ -67,6 +122,7 @@ describe("createInternalChatAdapter", () => {
       }));
     globalThis.fetch = fetchMock as typeof fetch;
     const adapter = createInternalChatAdapter({
+      workspaceCode: "TRON_CORE",
       baseUrl: "https://internal.example.com",
     });
 
@@ -98,6 +154,7 @@ describe("createInternalChatAdapter", () => {
       status: 409,
     })) as typeof fetch;
     const adapter = createInternalChatAdapter({
+      workspaceCode: "TRON_CORE",
       baseUrl: "https://internal.example.com",
     });
 
@@ -125,6 +182,7 @@ describe("createInternalChatAdapter", () => {
     }));
     globalThis.fetch = fetchMock as typeof fetch;
     const adapter = createInternalChatAdapter({
+      workspaceCode: "TRON_CORE",
       baseUrl: "https://internal.example.com",
     });
 
@@ -169,6 +227,7 @@ describe("createInternalChatAdapter", () => {
       }));
     globalThis.fetch = fetchMock as typeof fetch;
     const adapter = createInternalChatAdapter({
+      workspaceCode: "TRON_CORE",
       baseUrl: "https://internal.example.com",
     });
     const abortController = new AbortController();
@@ -224,6 +283,7 @@ describe("createInternalChatAdapter", () => {
     ));
     globalThis.fetch = fetchMock as typeof fetch;
     const adapter = createInternalChatAdapter({
+      workspaceCode: "TRON_CORE",
       baseUrl: "https://internal.example.com",
       getAccessToken: () => "internal-token",
     });
@@ -312,6 +372,7 @@ describe("createInternalChatAdapter", () => {
       }));
     globalThis.fetch = fetchMock as typeof fetch;
     const adapter = createInternalChatAdapter({
+      workspaceCode: "TRON_CORE",
       baseUrl: "https://internal.example.com",
     });
 

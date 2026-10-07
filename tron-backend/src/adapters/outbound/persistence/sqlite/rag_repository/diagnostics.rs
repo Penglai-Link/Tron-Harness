@@ -303,3 +303,37 @@ impl RagDiagnosticsRepository for SqliteRagRepository {
         )
     }
 }
+
+impl crate::application::rag::RagSourceContentRepository for SqliteRagRepository {
+    fn source_units_page(
+        &self,
+        request: RagDebugSourceRequest,
+        page: usize,
+        page_size: usize,
+    ) -> Result<crate::application::rag::RagSourceUnitsPage, RagError> {
+        if page == 0 || page_size == 0 || page_size > 100 || page > 1_000_000 {
+            return Err(RagError::DebugRequestInvalid);
+        }
+        self.connection.call(move |connection| {
+            let repository = SqliteRagRepositorySql { connection };
+            let corpus = repository.get_corpus(&request.corpus_id)?.ok_or(RagError::CorpusNotFound)?;
+            let plan = compile_sql_corpus_plan(&repository, &corpus)?;
+            let table = quote_identifier(&plan.text_unit_table)?;
+            let status = quote_identifier(&plan.text_unit_status_column)?;
+            let source_status = quote_identifier(&plan.source_status_column)?;
+            // KB uses an embedded source/text layout. A retired or staging generation is never visible.
+            if plan.has_distinct_source_table() { return Err(RagError::StorageBindingInvalid); }
+            let filter = format!("source_code=?1 AND source_version=?2 AND scope_type=?3 AND scope_code=?4 AND {status}='ACTIVE' AND {source_status}='ACTIVE'");
+            let total: usize = repository.connection.query_row(&format!("SELECT COUNT(*) FROM {table} WHERE {filter}"), params![request.source_code, request.source_version, request.scope_type, request.scope_code], |row| row.get(0)).map_err(storage_error)?;
+            let mut statement = repository.connection.prepare(&format!("SELECT text_unit_code,ordinal,text,heading_path,metadata FROM {table} WHERE {filter} ORDER BY ordinal,text_unit_code LIMIT ?5 OFFSET ?6")).map_err(storage_error)?;
+            let items = statement.query_map(params![request.source_code, request.source_version, request.scope_type, request.scope_code, page_size, (page-1)*page_size], |row| {
+                Ok(crate::application::rag::RagSourceUnit {
+                    text_unit_code: row.get(0)?, ordinal: row.get(1)?, text: row.get(2)?,
+                    heading_path: serde_json::from_str(&row.get::<_,String>(3)?).unwrap_or_default(),
+                    metadata: parse_json(&row.get::<_,String>(4)?),
+                })
+            }).map_err(storage_error)?.collect::<Result<Vec<_>,_>>().map_err(storage_error)?;
+            Ok(crate::application::rag::RagSourceUnitsPage { items, total, page, page_size })
+        }, || storage_error(rusqlite::Error::InvalidQuery))
+    }
+}

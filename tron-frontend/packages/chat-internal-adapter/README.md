@@ -19,6 +19,7 @@ import { createAgentUiAdapter, toUiInput } from "@tron/chat-agent-ui-adapter";
 
 // 1. 创建适配器实例
 const hostAdapter = createInternalChatAdapter({
+  workspaceCode: "WS-XXXXX",
   baseUrl: "https://api.your-domain.com", // 可选，默认使用当前域名
   getAccessToken: () => {
     // 返回当前的身份验证 Token
@@ -42,14 +43,15 @@ export default function App() {
 
 ## API 参考
 
-### `createInternalChatAdapter(options?: InternalAdapterOptions): ChatAdapter`
+### `createInternalChatAdapter(options: InternalChatAdapterOptions): ChatAdapter`
 
-创建一个适配器实例。
+创建绑定工作空间的适配器实例。切换工作空间时创建新实例，所有聊天、SSE、回放和附件请求都携带该空间的 `X-Workspace-Code` 请求头。
 
-#### `InternalAdapterOptions` 配置参数
+#### `InternalChatAdapterOptions` 配置参数
 
 | 参数名称 | 类型 | 必填 | 描述 |
 | :--- | :--- | :---: | :--- |
+| `workspaceCode` | `string` | 是 | 此适配器所属的工作空间，不能从全局选中状态动态读取。 |
 | `baseUrl` | `string` | 否 | 请求的基础 URL。如果不传，则默认使用当前页面的域名。 |
 | `credentials` | `RequestCredentials` | 否 | fetch 请求的 credentials 选项，默认为 `"include"`。 |
 | `getAccessToken` | `() => string \| null \| undefined \| Promise<string \| null \| undefined>` | 否 | 获取 Bearer Token 的回调函数，支持异步返回。该 Token 会被放入请求头的 `Authorization` 字段中。 |

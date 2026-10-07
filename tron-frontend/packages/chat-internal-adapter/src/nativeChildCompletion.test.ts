@@ -4,7 +4,7 @@ import { createOpenApiChatAdapter } from "../../chat-openapi-adapter/src/index";
 import type { ChatAdapter, ChatAguiStreamEvent, ChatSession, ChatSendResult } from "@tron/chat-core";
 afterEach(()=>vi.unstubAllGlobals());
 const session:ChatSession={id:1,sessionCode:"SESSION",workspaceCode:"WORKSPACE",title:"Goal",status:"ACTIVE",createdAt:"2026-10-02T00:00:00Z",updatedAt:"2026-10-02T00:00:00Z"};
-const factories:[string,()=>ChatAdapter][]=[["internal",()=>createInternalChatAdapter()],["openapi",()=>createOpenApiChatAdapter({openAppCode:"TEST-APP",appKey:"test-signing-only",userCode:"TEST-USER",nonceFactory:()=>"test-nonce",timestampFactory:()=>1})]];
+const factories:[string,()=>ChatAdapter][]=[["internal",()=>createInternalChatAdapter({ workspaceCode: "WORKSPACE" })],["openapi",()=>createOpenApiChatAdapter({openAppCode:"TEST-APP",appKey:"test-signing-only",userCode:"TEST-USER",nonceFactory:()=>"test-nonce",timestampFactory:()=>1})]];
 function response(frames:Record<string,unknown>[]) {return new Response(frames.map((frame)=>"event: "+frame.type+"\ndata: "+JSON.stringify(frame)+"\n\n").join(""),{headers:{"Content-Type":"text/event-stream"}});}
 const childError={type:"RUN_ERROR",runId:"CHILD-PRODUCT",threadId:"SESSION",code:"MODEL_PROVIDER_FAILED",message:"child provider failed",result:{status:"Failed",output:"partial native error"},metadata:{framework:{runId:"SDK-CHILD",executionId:"EXEC-CHILD",sourceSequence:3},tron:{eventId:"native:EXEC-CHILD:3:0"}}};
 async function invoke(adapter:ChatAdapter,mode:string,events:ChatAguiStreamEvent[]) {

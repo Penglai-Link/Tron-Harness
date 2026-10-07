@@ -6,6 +6,7 @@ test.afterAll(async()=>{await stopResourceUiFrontend(frontend);});
 for(const locale of ["en-US","zh-CN"] as const){
  test(`Standard inheritance and document override render in ${locale}`,async({page},testInfo)=>{
   await routeResourceUiShellApi(page);await seedResourceUiShell(page,locale);
+  await page.route("**/api/v1/chats/session-groups?*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({code:"SUCCESS",message:"ok",data:[]})}));
   const writes:unknown[]=[];
   await page.route("**/api/v1/knowledge-bases/**",async(route)=>{
    const url=new URL(route.request().url());let data:unknown;
@@ -15,16 +16,29 @@ for(const locale of ["en-US","zh-CN"] as const){
    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({code:"SUCCESS",message:"ok",data})});
   });
   await page.goto(`${frontend!.baseUrl}/knowledge-base/kb-synthetic`);await expect(page.getByText("synthetic-scanned.pdf",{exact:true})).toBeVisible();
-  await page.getByRole("button",{name:locale==="en-US"?"Settings":"设置",exact:true}).click();
+  const help=page.getByRole("button",{name:locale==="en-US"?"Document upload and deletion help":"文档上传与删除说明"});
+  await expect(page.getByText(locale==="en-US"?"Supports Markdown":"支持 Markdown",{exact:false})).not.toBeVisible();
+  await help.hover();await expect(page.getByRole("tooltip")).toContainText(locale==="en-US"?"Markdown":"支持 Markdown");
+  await page.getByRole("button",{name:locale==="en-US"?"Actions for synthetic-scanned.pdf":"操作 synthetic-scanned.pdf",exact:true}).click();
+  await page.getByRole("menuitem",{name:locale==="en-US"?"Settings":"设置",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  await expect(dialog.getByText(locale==="en-US"?"Each document can use":"每个文档可独立配置",{exact:false})).not.toBeVisible();
+  await expect(dialog.getByText(locale==="en-US"?"Unavailable quality fails":"选定质量不可用时",{exact:false})).not.toBeVisible();
+  await page.getByRole("button",{name:locale==="en-US"?"Parsing quality options":"解析质量选项说明"}).hover();
+  const qualityHelp=page.getByRole("tooltip");
+  for(const name of locale==="en-US"?["Default:","Native text:","Basic:","Standard:","Advanced:"]:["默认：","原生文本：","基础：","标准：","高级："]) await expect(qualityHelp).toContainText(name);
+  await page.screenshot({animations:"disabled",path:testInfo.outputPath(`parsing-quality-help-${locale}.png`)});
+
   await expect(page.getByText(locale==="en-US"?"Use platform default (Standard)":"继承平台（标准）",{exact:true})).toBeVisible();
   const quality=page.getByRole("combobox").first();await quality.click();
   await page.getByRole("option",{name:locale==="en-US"?"Advanced":"高级",exact:true}).click();
   await page.getByRole("button",{name:locale==="en-US"?"Save":"保存",exact:true}).click();
   await expect.poll(()=>writes.length).toBe(1);expect(writes[0]).toMatchObject({workspaceCode:"TRON_CORE",chunkConfig:null,parsingTier:"advanced"});
-  await page.screenshot({path:testInfo.outputPath(`mineru-kb-ui-${locale}.png`)});
+  await page.screenshot({animations:"disabled",path:testInfo.outputPath(`mineru-kb-ui-${locale}.png`)});
  });
  test(`Durable stages, cancellation and retry render in ${locale}`,async({page},testInfo)=>{
   await routeResourceUiShellApi(page);await seedResourceUiShell(page,locale);
+  await page.route("**/api/v1/chats/session-groups?*",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({code:"SUCCESS",message:"ok",data:[]})}));
   let state="QUEUED";const writes:string[]=[];
   await page.route("**/api/v1/knowledge-bases/**",async(route)=>{
    const url=new URL(route.request().url());
@@ -38,15 +52,62 @@ for(const locale of ["en-US","zh-CN"] as const){
    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({code:"SUCCESS",message:"ok",data})});
   });
   await page.goto(`${frontend!.baseUrl}/knowledge-base/kb-synthetic`);
-  await expect(page.locator('[data-slot="badge"]',{hasText:locale==="en-US"?"Queued":"排队中"})).toBeVisible();
-  await expect(page.getByRole("button",{name:locale==="en-US"?"Settings":"设置",exact:true})).toBeDisabled();
-  await page.getByRole("button",{name:locale==="en-US"?"Cancel":"取消",exact:true}).click();
-  await expect(page.locator('[data-slot="badge"]',{hasText:locale==="en-US"?"Cancelled":"已取消"})).toBeVisible();
-  await page.getByRole("button",{name:locale==="en-US"?"Retry":"重试",exact:true}).click();
-  await expect(page.locator('[data-slot="badge"]',{hasText:locale==="en-US"?"Embedding":"向量化中"})).toBeVisible();
+  const statusCell=page.locator("tbody tr").first().locator("td").nth(2);
+  await expect(statusCell.getByText(locale==="en-US"?"Queued":"排队中",{exact:true})).toBeVisible();
+  const actions=page.getByRole("button",{name:locale==="en-US"?"Actions for synthetic.pdf":"操作 synthetic.pdf",exact:true});
+  await actions.click();
+  await expect(page.getByRole("menuitem",{name:locale==="en-US"?"Settings":"设置",exact:true})).toHaveAttribute("aria-disabled","true");
+  const settings = page.getByRole("menuitem",{name:locale==="en-US"?"Settings":"设置",exact:true});
+  await settings.locator("..").hover();
+  await expect(page.getByRole("tooltip")).toContainText(locale==="en-US"?"while the document is processing":"文档正在处理中");
+  await expect(page.getByRole("menuitem").last()).toHaveText(locale==="en-US"?"Cancel":"取消");
+  await expect(page.getByRole("menuitem",{name:locale==="en-US"?"Download":"下载",exact:true})).toBeVisible();
+  await expect(page.getByRole("menuitem",{name:locale==="en-US"?"Preview":"预览",exact:true})).toBeVisible();
+  await expect(page.getByRole("menuitem",{name:locale==="en-US"?"Delete":"删除",exact:true})).toBeVisible();
+  await page.getByRole("menuitem",{name:locale==="en-US"?"Cancel":"取消",exact:true}).click();
+  await expect(statusCell.getByText(locale==="en-US"?"Cancelled":"已取消",{exact:true})).toBeVisible();
+  await actions.click();
+  await page.getByRole("menuitem",{name:locale==="en-US"?"Retry":"重试",exact:true}).click();
+  await expect(statusCell.getByText(locale==="en-US"?"Embedding":"向量化中",{exact:true})).toBeVisible();
+  await expect(statusCell.getByText(locale==="en-US"?"Processing":"处理中",{exact:true})).toBeVisible();
+  await expect(statusCell.locator("p")).toHaveCount(2);
+  await expect(statusCell.locator('[data-slot="badge"]')).toHaveCount(0);
   expect(writes.map(path=>path.split("/").at(-1))).toEqual(["cancel","retry"]);
   state="PUBLISHING";
-  await expect(page.locator('[data-slot="badge"]',{hasText:locale==="en-US"?"Publishing":"发布中"})).toBeVisible({timeout:6000});
-  await page.screenshot({path:testInfo.outputPath(`ingestion-${locale}.png`)});
+  await expect(statusCell.getByText(locale==="en-US"?"Publishing":"发布中",{exact:true})).toBeVisible({timeout:6000});
+  await page.screenshot({animations:"disabled",path:testInfo.outputPath(`ingestion-${locale}.png`)});
+ });
+}
+
+for (const locale of ["en-US", "zh-CN"] as const) {
+ test(`Published chunks browse past the preview limit in ${locale}`, async ({ page }, testInfo) => {
+  await routeResourceUiShellApi(page); await seedResourceUiShell(page, locale);
+  await page.route("**/api/v1/chats/session-groups?*", route => route.fulfill({ json: { code: "SUCCESS", message: "ok", data: [] } }));
+  const reads: number[] = [];
+  await page.route("**/api/v1/knowledge-bases/**", async route => {
+   const url = new URL(route.request().url());
+   expect(route.request().method()).toBe("GET");
+   let data: unknown;
+   if (url.pathname.endsWith("/chunks")) {
+    expect(url.searchParams.get("workspaceCode")).toBe("TRON_CORE");
+    const current = Number(url.searchParams.get("page")); const size = Number(url.searchParams.get("pageSize")); reads.push(current);
+    data = { total: 31, page: current, pageSize: size, items: Array.from({length: Math.min(size, 31-(current-1)*size)}, (_, n) => {
+     const ordinal = (current-1)*size+n;
+     return { textUnitCode: `unit-${ordinal}`, ordinal, text: `Published evidence ${ordinal+1}`, headingPath: [], metadata: { location: { page: ordinal+1, charStart: 0, charEnd: 100 } } };
+    }) };
+   } else data = { id: "kb-synthetic", name: "Published", description: "", workspaceCode: "TRON_CORE", documentCount: 1, agentCodes: [], defaultChunkConfig: {mode:"AUTO",maxChars:1200,overlapChars:120,headingDepth:2}, documents: [{id:"doc-published",name:"Published",fileName:"published.pdf",resourceCode:"KB_SYNTHETIC",resourceRevision:1,chunkConfig:null,status:"READY",error:null,chunkCount:31,indexRevision:1}] };
+   await route.fulfill({ json: { code: "SUCCESS", message: "ok", data } });
+  });
+  await page.goto(`${frontend!.baseUrl}/knowledge-base/kb-synthetic`);
+  await page.getByRole("button", {name: locale === "en-US" ? "Actions for published.pdf" : "操作 published.pdf", exact: true}).click();
+  await page.getByRole("menuitem", {name:locale === "en-US" ? "View chunks" : "查看分块", exact:true}).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Published evidence 1", {exact:true})).toBeVisible();
+  const next = dialog.getByRole("button", {name:locale === "en-US" ? "Next page" : "下一页", exact:true});
+  await next.click(); await expect(dialog.getByText("Published evidence 21", {exact:true})).toBeVisible();
+  await next.click(); await expect(dialog.getByText("Published evidence 31", {exact:true})).toBeVisible();
+  await expect(next).toBeDisabled();
+  expect([...new Set(reads)]).toEqual([1,2,3]);
+  await page.screenshot({animations:"disabled",path:testInfo.outputPath(`published-chunks-${locale}.png`)});
  });
 }

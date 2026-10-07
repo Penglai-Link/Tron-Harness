@@ -82,7 +82,7 @@ mineru:
   enabled: true
   baseUrl: http://127.0.0.1:8000
   parseEndpoint: /file_parse
-  timeoutSeconds: 300
+  timeoutSeconds: 1200
   maxBytes: 52428800
   backend: pipeline
   parseMethod: auto

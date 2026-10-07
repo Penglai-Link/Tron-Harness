@@ -117,6 +117,8 @@ export interface ChatContextBudgetBreakdown {
   toolSchemaBudgetTokens?: number | null;
   estimatedInputTokens: number;
   promptPrefixBudgetTokens?: number | null;
+  promptPrefixMaxRatioBps?: number | null;
+  promptPrefixMaxTokens?: number | null;
   checkpointBudgetTokens?: number | null;
   sessionFamilyContextBudgetTokens?: number | null;
   workingStateBudgetTokens?: number | null;

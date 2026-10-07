@@ -111,3 +111,10 @@ export interface ChunkPreview {
   warnings?: string[];
   chunks: { text: string; title: string; headingPath: string[]; ordinal: number; location: DocumentLocation }[];
 }
+
+export interface PublishedChunkPage {
+  items: { textUnitCode: string; ordinal: number; text: string; headingPath: string[]; metadata: { location?: DocumentLocation } }[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

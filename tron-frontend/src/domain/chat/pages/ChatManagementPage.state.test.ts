@@ -80,7 +80,7 @@ describe("tool schema context budget", () => {
         "chat.shortTermMemory.contextPanel.checkpointName": "当前会话检查点",
         "chat.shortTermMemory.contextPanel.workingStateName": "当前会话工作状态",
         "chat.shortTermMemory.contextPanel.familyContextName": "相关会话",
-        "chat.shortTermMemory.contextPanel.sessionHistoryName": "当前会话历史",
+        "chat.shortTermMemory.contextPanel.sessionHistoryName": "模型请求中的历史",
       }[key] ?? key),
     });
 
@@ -91,7 +91,7 @@ describe("tool schema context budget", () => {
       "当前会话检查点",
       "当前会话工作状态",
       "相关会话",
-      "当前会话历史",
+      "模型请求中的历史",
     ]);
     expect(blocks.every((block) => !("meta" in block))).toBe(true);
   });
@@ -103,10 +103,14 @@ describe("tool schema context budget", () => {
       promptPrefixMessageCount: 3,
       applicationContextTokens: 300,
       applicationContextMessageCount: 1,
+      promptPrefixBudgetTokens: 16000,
+      promptPrefixMaxRatioBps: 5000,
+      promptPrefixMaxTokens: 16000,
     });
     const blocks = buildContextMemoryBlocks({ breakdown, requestEstimate: null, translate: (key) => key });
     expect(blocks.find((block) => block.detailCode === "systemPrompt")?.tokens).toBe(700);
     expect(blocks.find((block) => block.detailCode === "applicationContext")?.tokens).toBe(300);
+    expect(blocks.find((block) => block.detailCode === "systemPrompt")?.limitTokens).toBe(15700);
     expect(blocks.filter((block) => block.color === "seed").reduce((sum, block) => sum + block.tokens, 0)).toBe(1000);
   });
 

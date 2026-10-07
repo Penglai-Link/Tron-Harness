@@ -234,3 +234,44 @@ pub fn safe_trace_payload(payload: &Value) -> Result<(), RagError> {
     }
     Ok(())
 }
+
+/// Published source content, without embeddings or diagnostic internals.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagSourceUnitsPage {
+    pub items: Vec<RagSourceUnit>,
+    pub total: usize,
+    pub page: usize,
+    pub page_size: usize,
+}
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagSourceUnit {
+    pub text_unit_code: String,
+    pub ordinal: i64,
+    pub text: String,
+    pub heading_path: Vec<String>,
+    pub metadata: Value,
+}
+
+/// Read-only inspection of a published embedded source generation.
+pub trait RagSourceContentRepository {
+    fn source_units_page(
+        &self,
+        request: RagDebugSourceRequest,
+        page: usize,
+        page_size: usize,
+    ) -> Result<RagSourceUnitsPage, RagError>;
+}
+impl<T: RagSourceContentRepository> RagSourceContentRepository for Arc<Mutex<T>> {
+    fn source_units_page(
+        &self,
+        request: RagDebugSourceRequest,
+        page: usize,
+        page_size: usize,
+    ) -> Result<RagSourceUnitsPage, RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .source_units_page(request, page, page_size)
+    }
+}

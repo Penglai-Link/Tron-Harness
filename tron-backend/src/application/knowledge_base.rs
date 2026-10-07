@@ -270,6 +270,50 @@ impl KnowledgeBaseService {
         kb.agent_codes = self.repository.grants(id)?;
         Ok(kb)
     }
+    pub fn published_chunks(
+        &self,
+        user: &str,
+        workspace: &str,
+        id: &str,
+        document: &str,
+        page: usize,
+        page_size: usize,
+    ) -> Result<RagSourceUnitsPage, KnowledgeBaseError> {
+        let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
+        let kb = self.owned(user, workspace, id)?;
+        let doc = self.repository.document(&kb.id, document)?;
+        if page == 0 || page_size == 0 || page_size > 100 || page > 1_000_000 {
+            return Err(KnowledgeBaseError::Invalid(
+                "Invalid chunk pagination".into(),
+            ));
+        }
+        let Some(source) = doc.active_source_code else {
+            return Ok(RagSourceUnitsPage {
+                items: vec![],
+                total: 0,
+                page,
+                page_size,
+            });
+        };
+        self.rag
+            .repository_handle()
+            .source_units_page(
+                RagDebugSourceRequest {
+                    workspace_code: workspace.into(),
+                    corpus_id: kb.id,
+                    source_code: source,
+                    source_version: "v1".into(),
+                    scope_type: "SPACE".into(),
+                    scope_code: workspace.into(),
+                    include_text_units: true,
+                    include_warnings: false,
+                },
+                page,
+                page_size,
+            )
+            .map_err(Into::into)
+    }
+
     pub fn create(
         &self,
         user: &str,

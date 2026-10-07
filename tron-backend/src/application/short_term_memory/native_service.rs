@@ -690,19 +690,19 @@ impl ShortTermMemoryService {
             let Some(view) = last else { return Ok(None) };
             if block == "toolSchema" {
                 return Ok(Some(
-                    json!({"blockCode":block,"tools":view["tools"],"budgetBreakdown":view["budgetBreakdown"]}),
+                    json!({"blockCode":block,"tools":view["tools"]}),
                 ));
             }
             let ids: &[&str] = match block {
                 "systemPrompt" => &["seed_prompt_prefix", fw::INSTRUCTIONS_BLOCK],
                 "applicationContext" => &["application_context"],
                 "familyContext" => &["session_family_context"],
+                "history" => &[fw::HISTORY_BLOCK],
                 _ => return Err(ShortTermMemoryError::GoalInvalid),
             };
             let messages = view["messages"].as_array().cloned().unwrap_or_default();
             let mut selected = Vec::new();
             let mut offset = 0;
-            let mut blocks = Vec::new();
             if let Some(reports) = view["contextReport"]["blocks"].as_array() {
                 let mut reports = reports.iter().collect::<Vec<_>>();
                 reports.sort_by_key(|report| report["position"].as_u64().unwrap_or(0));
@@ -710,14 +710,15 @@ impl ShortTermMemoryService {
                     let count = report["final_message_count"].as_u64().unwrap_or(0) as usize;
                     if report["id"].as_str().is_some_and(|id| ids.contains(&id)) {
                         selected.extend(messages.iter().skip(offset).take(count).cloned());
-                        blocks.push(report.clone());
                     }
                     offset = offset.saturating_add(count);
                 }
             }
-            Ok(Some(
-                json!({"blockCode":block,"messages":selected,"blocks":blocks,"budgetBreakdown":view["budgetBreakdown"],"executionScope":view["executionScope"]}),
-            ))
+            let mut detail = json!({"blockCode":block,"messages":selected});
+            if block == "applicationContext" {
+                detail["executionScope"] = view["executionScope"].clone();
+            }
+            Ok(Some(detail))
         })
     }
     pub fn latest_compaction(&self, session: &str) -> Result<Option<Value>, ShortTermMemoryError> {

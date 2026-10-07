@@ -19,7 +19,7 @@ interface FieldProps {
   className?: string;
   children: ReactNode;
   error?: string;
-  hint?: string;
+  hint?: ReactNode;
   hintAriaLabel?: string;
   label: ReactNode;
   required?: boolean;

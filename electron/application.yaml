@@ -56,7 +56,7 @@ mineru:
   enabled: true
   baseUrl: https://pre-platform.cisdigital.cn/mineru
   parseEndpoint: /file_parse
-  timeoutSeconds: 300
+  timeoutSeconds: 1200
   maxBytes: 52428800
   backend: pipeline
   parseMethod: auto

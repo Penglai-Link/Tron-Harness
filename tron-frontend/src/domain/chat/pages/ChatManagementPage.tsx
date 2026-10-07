@@ -117,6 +117,7 @@ import { chatApiEndpoints } from "@/domain/chat/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
+import { ContextDetailPreview, contextDetailRawValue, type ContextDetailBlock } from "@/domain/chat/components/ContextDetailPreview";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
   enqueueChatSubmission,
@@ -636,6 +637,8 @@ export function normalizeContextBudgetBreakdown(parsed: Partial<ChatContextBudge
     applicationContextMessageCount: tokenField(parsed.applicationContextMessageCount) ?? 0,
     promptPrefixMessageCount: tokenField(parsed.promptPrefixMessageCount),
     promptPrefixBudgetTokens: tokenField(parsed.promptPrefixBudgetTokens),
+    promptPrefixMaxRatioBps: tokenField(parsed.promptPrefixMaxRatioBps),
+    promptPrefixMaxTokens: tokenField(parsed.promptPrefixMaxTokens),
     promptPrefixTokens: tokenField(parsed.promptPrefixTokens) ?? 0,
     rawTailMessageCount: tokenField(parsed.rawTailMessageCount),
     rawTailStartSeq: tokenField(parsed.rawTailStartSeq),
@@ -2451,7 +2454,8 @@ type ContextBlockColor = "seed" | "tool" | "checkpoint" | "state" | "family" | "
 interface ContextMemoryBlockItem {
   code: string;
   color: ContextBlockColor;
-  detailCode?: "systemPrompt" | "toolSchema" | "familyContext" | "applicationContext";
+  detailCode?: ContextDetailBlock;
+  limitDescription?: string;
   limitTokens: number | null;
   name: string;
   stat: string;
@@ -2508,7 +2512,10 @@ export function buildContextMemoryBlocks({
       code: "01",
       color: "seed",
       detailCode: "systemPrompt",
-      limitTokens: breakdown?.promptPrefixBudgetTokens ?? null,
+      limitTokens: breakdown?.promptPrefixBudgetTokens == null ? null : Math.max(0, breakdown.promptPrefixBudgetTokens - (breakdown.applicationContextTokens ?? 0)),
+      limitDescription: breakdown?.promptPrefixMaxRatioBps != null && breakdown?.promptPrefixMaxTokens != null
+        ? translate("chat.shortTermMemory.contextPanel.seedBudgetNote", { ratio: formatPercent(breakdown.promptPrefixMaxRatioBps / 100), limit: formatCompactTokenCount(breakdown.promptPrefixMaxTokens) })
+        : undefined,
       name: translate("chat.shortTermMemory.contextPanel.systemPromptName"),
       stat: translate("chat.shortTermMemory.contextPanel.messageCount", {
         count: Math.max(0, (breakdown?.promptPrefixMessageCount ?? 0) - (breakdown?.applicationContextMessageCount ?? 0)),
@@ -2566,6 +2573,7 @@ export function buildContextMemoryBlocks({
     {
       code: "06",
       color: "history",
+      detailCode: "history",
       limitTokens: breakdown?.currentSessionHistoryBudgetTokens ?? null,
       name: translate("chat.shortTermMemory.contextPanel.sessionHistoryName"),
       stat: translate("chat.shortTermMemory.contextPanel.messageCount", { count: historyMessageCount }),
@@ -2738,392 +2746,6 @@ function ContextStructurePanel({
   );
 }
 
-type ContextPromptPrefixMessage = {
-  role: string;
-  content: string;
-  catalogKey?: string;
-  promptCode?: string;
-};
-
-function isContextDetailRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function isContextPromptPrefixMessage(value: unknown): value is ContextPromptPrefixMessage {
-  return isContextDetailRecord(value)
-    && typeof value.role === "string"
-    && typeof value.content === "string"
-    && (value.catalogKey === undefined || typeof value.catalogKey === "string")
-    && (value.promptCode === undefined || typeof value.promptCode === "string");
-}
-
-function isToolDomainDiscoveryPrompt(message: ContextPromptPrefixMessage) {
-  return message.catalogKey === "agent.domain-discovery"
-    || message.promptCode === "SYS_AGENT_DOMAIN_DISCOVERY";
-}
-
-function contextPromptPrefixMessages(detail: unknown): ContextPromptPrefixMessage[] | null {
-  if (!isContextDetailRecord(detail)) return null;
-  const candidates = [detail.promptPrefix, detail];
-  for (const candidate of candidates) {
-    if (!isContextDetailRecord(candidate)) continue;
-    const messages = candidate.messages;
-    if (Array.isArray(messages) && messages.every(isContextPromptPrefixMessage)) {
-      return messages;
-    }
-  }
-  return null;
-}
-
-type ContextPromptContentPart =
-  | { kind: "text"; value: string }
-  | { kind: "json"; value: unknown };
-
-function embeddedJsonEnd(value: string, start: number) {
-  const opening = value[start];
-  if (opening !== "{" && opening !== "[") return null;
-  const expectedClosing = opening === "{" ? "}" : "]";
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let index = start; index < value.length; index += 1) {
-    const character = value[index];
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (character === "\\") {
-        escaped = true;
-      } else if (character === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-    if (character === "\"") {
-      inString = true;
-    } else if (character === opening) {
-      depth += 1;
-    } else if (character === expectedClosing) {
-      depth -= 1;
-      if (depth === 0) return index + 1;
-    }
-  }
-  return null;
-}
-
-function contextPromptContentParts(content: string): ContextPromptContentPart[] {
-  const trimmed = content.trim();
-  if (!trimmed) return [];
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (typeof parsed === "string") return [{ kind: "text", value: parsed }];
-    return [{ kind: "json", value: parsed }];
-  } catch {
-    // System prompt templates often embed a JSON runtime value in prose.
-  }
-  for (let start = 0; start < trimmed.length; start += 1) {
-    const end = embeddedJsonEnd(trimmed, start);
-    if (end == null) continue;
-    try {
-      const json = JSON.parse(trimmed.slice(start, end)) as unknown;
-      return [
-        ...(trimmed.slice(0, start).trim() ? [{ kind: "text" as const, value: trimmed.slice(0, start).trim() }] : []),
-        { kind: "json", value: json },
-        ...contextPromptContentParts(trimmed.slice(end)),
-      ];
-    } catch {
-      // Continue scanning in case this brace belongs to ordinary prompt text.
-    }
-  }
-  return [{ kind: "text", value: content }];
-}
-
-function ContextPromptMessageContent({
-  content,
-  domainDiscovery = false,
-}: {
-  content: string;
-  domainDiscovery?: boolean;
-}) {
-  const { t } = useTranslation("pages");
-  const parts = contextPromptContentParts(content);
-  return (
-    <div className="space-y-3 text-xs leading-6 text-[var(--color-on-surface)]">
-      {parts.map((part, index) => part.kind === "text" ? (
-        <pre className="whitespace-pre-wrap break-words font-sans" key={`text-${index}`}>
-          {part.value}
-        </pre>
-      ) : domainDiscovery && Array.isArray(part.value) ? (
-        <div className="space-y-2" key={`json-${index}`}>
-          {part.value.map((item, itemIndex) => {
-            if (!isContextDetailRecord(item)) return null;
-            const name = typeof item.name === "string" ? item.name : null;
-            const code = typeof item.domainCode === "string" ? item.domainCode : null;
-            const description = typeof item.description === "string" ? item.description : null;
-            const toolCount = typeof item.toolCount === "number" ? item.toolCount : null;
-            const sampleTools = Array.isArray(item.sampleTools)
-              ? item.sampleTools.filter((tool): tool is string => typeof tool === "string")
-              : [];
-            const hasMutationTools =
-              typeof item.hasMutationTools === "boolean"
-                ? item.hasMutationTools
-                : null;
-            return (
-              <article
-                className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]"
-                key={code ?? itemIndex}
-              >
-                <div className="flex flex-wrap items-center gap-2 bg-[var(--color-surface-container-low)] px-3 py-2">
-                  <span className="font-semibold">
-                    {name ??
-                      code ??
-                      t("chat.shortTermMemory.contextPanel.detailArrayItem", {
-                        index: itemIndex + 1,
-                      })}
-                  </span>
-                  {name && code ? (
-                    <span className="rounded bg-[var(--color-surface-container)] px-1.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
-                      {code}
-                    </span>
-                  ) : null}
-                  {toolCount !== null ? (
-                    <span className="ml-auto text-[var(--color-on-surface-variant)]">
-                      {t("chat.shortTermMemory.contextPanel.toolDomainToolCount", {
-                        count: toolCount,
-                      })}
-                    </span>
-                  ) : null}
-                </div>
-                {description ? <p className="px-3 pt-2 text-[var(--color-on-surface-variant)]">{description}</p> : null}
-                {sampleTools.length > 0 ? (
-                  <div className="px-3 py-2">
-                    <div className="mb-1 text-[10px] font-medium text-[var(--color-on-surface-variant)]">
-                      {t("chat.shortTermMemory.contextPanel.toolDomainExamples")}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {sampleTools.map((tool) => (
-                        <code
-                          className="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] leading-4"
-                          key={tool}
-                        >
-                          {tool}
-                        </code>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {hasMutationTools !== null ? (
-                  <div className="px-3 pb-2 text-[10px] text-[var(--color-on-surface-variant)]">
-                    {t("chat.shortTermMemory.contextPanel.toolDomainMutationTools")}: {t(
-                      `chat.applications.preview.${hasMutationTools ? "yes" : "no"}`
-                    )}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <ContextDetailCards key={`json-${index}`} value={part.value} />
-      ))}
-    </div>
-  );
-}
-
-function ToolSchemaPreview({ value }: { value: unknown }) {
-  const { t } = useTranslation("pages");
-  if (!Array.isArray(value)) return null;
-  const tools = value.filter((item): item is Record<string, unknown> => (
-    item !== null && typeof item === "object" && !Array.isArray(item)
-  ));
-  if (tools.length === 0) return null;
-  return (
-    <div className="space-y-3">
-      {tools.map((tool, index) => {
-        const name = typeof tool.name === "string" ? tool.name : t("chat.applications.preview.tool", { index: index + 1 });
-        const domainCode = typeof tool.domainCode === "string" ? tool.domainCode : null;
-        const description = typeof tool.description === "string" ? tool.description : null;
-        return (
-          <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]" key={`${name}-${index}`}>
-            <div className="flex items-center justify-between gap-3 bg-[var(--color-surface-container-low)] px-3 py-2">
-              <span className="min-w-0 truncate font-mono text-xs font-semibold text-[var(--color-on-surface)]">{name}</span>
-              {domainCode ? (
-                <span className="shrink-0 rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{domainCode}</span>
-              ) : null}
-            </div>
-            {description ? <div className="px-3 py-3 text-xs leading-5 text-[var(--color-on-surface)]">{description}</div> : null}
-          </article>
-        );
-      })}
-    </div>
-  );
-}
-
-function ContextDetailCards({ value }: { value: unknown }) {
-  const { t } = useTranslation("pages");
-  if (value == null || (Array.isArray(value) && value.length === 0)) {
-    return (
-      <p className="text-xs text-[var(--color-on-surface-variant)]">
-        {t("chat.applications.preview.empty")}
-      </p>
-    );
-  }
-  if (Array.isArray(value))
-    return (
-      <div className="space-y-3">
-        {value.map((item, index) => (
-          <ContextDetailCards key={index} value={item} />
-        ))}
-      </div>
-    );
-  if (typeof value === "string")
-    return <ContextPromptMessageContent content={value} />;
-  if (!isContextDetailRecord(value))
-    return (
-      <p className="whitespace-pre-wrap break-words text-xs leading-6">
-        {typeof value === "boolean"
-          ? t(`chat.applications.preview.${value ? "yes" : "no"}`)
-          : String(value)}
-      </p>
-    );
-  const title = [value.appName, value.title, value.name].find(
-    (item) => typeof item === "string"
-  ) as string | undefined;
-  const entries = Object.entries(value).filter(
-    ([key, item]) =>
-      item != null &&
-      ![
-        "appName",
-        "title",
-        "name",
-        "hash",
-        "contextKind",
-        "messageCount",
-        "schemaVersion",
-      ].includes(key)
-  );
-  return (
-    <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]">
-      {title ? (
-        <h3 className="break-words bg-[var(--color-surface-container-low)] px-3 py-2 text-xs font-semibold">
-          {title}
-        </h3>
-      ) : null}
-      <dl className="space-y-3 px-3 py-3">
-        {entries.map(([key, item]) => (
-          <div key={key} className="min-w-0">
-            <dt className="mb-1 text-xs font-medium text-[var(--color-on-surface-variant)]">
-              {t(`chat.applications.preview.fields.${key}`, {
-                defaultValue: t("chat.applications.preview.content"),
-              })}
-            </dt>
-            <dd className="min-w-0 break-all">
-              {key === "status" &&
-              typeof item === "string" &&
-              ["Ready", "NotGit", "MissingDirectory", "Unavailable"].includes(
-                item
-              ) ? (
-                <p className="text-xs">
-                  {item === "Ready"
-                    ? t("chat.applications.preview.ready")
-                    : t(`chat.applications.status.${item}`)}
-                </p>
-              ) : (
-                <ContextDetailCards value={item} />
-              )}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </article>
-  );
-}
-
-function ApplicationContextPreview({ value }: { value: unknown }) {
-  const { t } = useTranslation("pages");
-  const scope =
-    isContextDetailRecord(value) && isContextDetailRecord(value.executionScope)
-      ? value.executionScope
-      : null;
-  const apps =
-    scope && Array.isArray(scope.applications) ? scope.applications : [];
-  if (apps.length > 0)
-    return (
-      <ContextDetailCards
-        value={apps.filter(isContextDetailRecord).map((app) => ({
-          appName: app.appName,
-          appCode: app.appCode,
-          ...(app.isPrimary ? { usage: t("chat.applications.primary") } : {}),
-          environment:
-            app.status === "MissingDirectory" || app.status === "Unavailable"
-              ? t("chat.applications.unknown")
-              : t(
-                  app.isWorktree
-                    ? "chat.applications.worktree"
-                    : "chat.applications.local"
-                ),
-          branchName:
-            app.branchName ??
-            (app.status === "Ready" && typeof app.headCommit === "string"
-              ? t("chat.applications.detached", {
-                  commit: app.headCommit.slice(0, 8),
-                })
-              : t("chat.applications.unknown")),
-          workingDirectory: app.workingDirectory ?? app.configuredDirectory,
-          ...(app.configuredDirectory &&
-          app.workingDirectory &&
-          app.configuredDirectory !== app.workingDirectory
-            ? { configuredDirectory: app.configuredDirectory }
-            : {}),
-          ...(app.worktreePath && app.worktreePath !== app.workingDirectory
-            ? { worktreePath: app.worktreePath }
-            : {}),
-          ...(app.status !== "Ready" ? { status: app.status } : {}),
-        }))}
-      />
-    );
-  if (scope?.localDirectory)
-    return (
-      <ContextDetailCards value={{ workingDirectory: scope.localDirectory }} />
-    );
-  return (
-    <p className="text-xs text-[var(--color-on-surface-variant)]">
-      {t("chat.applications.noSnapshot")}
-    </p>
-  );
-}
-
-function FamilyContextPreview({ value }: { value: unknown }) {
-  if (Array.isArray(value) && value.length > 0)
-    return (
-      <div className="space-y-3">
-        {value.map((item, index) => (
-          <FamilyContextPreview key={index} value={item} />
-        ))}
-      </div>
-    );
-  const text =
-    typeof value === "string"
-      ? value
-      : isContextDetailRecord(value) && typeof value.content === "string"
-      ? value.content
-      : null;
-  if (!text?.includes("<session-family-context>"))
-    return <ContextDetailCards value={value} />;
-  const entries = Array.from(
-    text.matchAll(
-      /<(source|active-state) session="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/g
-    )
-  );
-  return (
-    <ContextDetailCards
-      value={entries.map((match) => ({
-        sessionCode: match[2],
-        content: match[3].trim(),
-      }))}
-    />
-  );
-}
-
 function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlockItem; sessionCode: string }) {
   const { t } = useTranslation("pages");
   const navigate = useNavigate();
@@ -3163,23 +2785,17 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     return () => { controller.abort(); if (timer !== undefined) window.clearInterval(timer); };
   }, [block.detailCode, dialogOpen, sessionCode]);
   let parsedDetail = detail;
-  let isStructuredDetail = detail !== null && typeof detail === "object";
   if (typeof detail === "string") {
     try {
       parsedDetail = JSON.parse(detail) as unknown;
-      isStructuredDetail = parsedDetail !== null && typeof parsedDetail === "object";
     } catch {
-      isStructuredDetail = false;
+      parsedDetail = detail;
     }
   }
+  const rawValue = block.detailCode ? contextDetailRawValue(block.detailCode, parsedDetail) : parsedDetail;
   const rawDetail = detail == null
     ? ""
-    : typeof detail === "string"
-      ? (isStructuredDetail ? JSON.stringify(parsedDetail, null, 2) : detail)
-      : JSON.stringify(detail, null, 2) ?? String(detail);
-  const promptMessages = block.detailCode === "systemPrompt"
-    ? contextPromptPrefixMessages(parsedDetail)
-    : null;
+    : typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue, null, 2) ?? String(rawValue);
   const contents = (
     <>
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
@@ -3201,7 +2817,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
   return (
     <div className="py-2 first:pt-0 last:pb-0">
       {block.detailCode ? (
-        <button className="group w-full cursor-pointer rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" onClick={() => setDialogOpen(true)}>
+        <button className="group w-full cursor-pointer rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" title={block.limitDescription} onClick={() => setDialogOpen(true)}>
           {contents}
         </button>
       ) : contents}
@@ -3241,63 +2857,18 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
             ) : null}
           </div>
           <div className="min-h-0 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3">
+            {block.detailCode === "systemPrompt" && block.limitDescription ? <p className="mb-3 text-xs text-[var(--color-on-surface-variant)]">{block.limitDescription}</p> : null}
             {block.detailCode === "applicationContext" ? <p className="mb-3 text-xs text-[var(--color-on-surface-variant)]">{t("chat.applications.snapshotNote")}</p> : null}
             {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
               : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
-                : block.detailCode === "applicationContext" && detailViewMode === "preview"
-                  ? <ApplicationContextPreview value={parsedDetail} />
-                : block.detailCode === "familyContext" && detailViewMode === "preview"
-                  ? <FamilyContextPreview value={parsedDetail} />
-                : block.detailCode === "toolSchema" && isStructuredDetail && detailViewMode === "preview"
-                  ? <ToolSchemaPreview value={parsedDetail} />
-                  : block.detailCode === "systemPrompt" && isStructuredDetail && !promptMessages && detailViewMode === "preview"
-                  ? <ContextDetailCards value={parsedDetail} />
-                  : block.detailCode === "systemPrompt" && promptMessages && detailViewMode === "preview"
-                    ? promptMessages.length > 0
-                      ? <div className="space-y-3">
-                          {promptMessages.map((message, index) => (
-                            <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]" key={`${index}-${message.role}`}>
-                              <div className="flex items-center justify-between gap-3 bg-[var(--color-surface-container-low)] px-3 py-2">
-                                <span className="text-xs font-semibold text-[var(--color-on-surface)]">
-                                  {t("chat.shortTermMemory.contextPanel.detailPromptMessage", { index: index + 1 })}
-                                </span>
-                                <div className="flex min-w-0 items-center justify-end gap-1.5">
-                                  {message.promptCode ? (
-                                    <button
-                                      className="shrink-0 rounded-sm px-2 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)] hover:text-[var(--color-on-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-                                      type="button"
-                                      onClick={() => {
-                                        const promptCode = message.promptCode;
-                                        if (!promptCode) return;
-                                        const promptPath = `/prompts/detail?${new URLSearchParams({ promptCode }).toString()}`;
-                                        const tabId = useTabStore.getState().addTab({
-                                          title: t("chat.shortTermMemory.contextPanel.detailPromptManagement"),
-                                          path: promptPath,
-                                          closable: true,
-                                          activeNav: `prompt-detail:${promptCode}`,
-                                        });
-                                        useTabStore.getState().updateTab(tabId, { path: promptPath });
-                                        setDialogOpen(false);
-                                        navigate(promptPath);
-                                      }}
-                                    >
-                                      {t("chat.shortTermMemory.contextPanel.detailPromptManagement")}
-                                    </button>
-                                  ) : null}
-                                </div>
-                              </div>
-                              <div className="px-3 py-3">
-                                <ContextPromptMessageContent
-                                  content={message.content}
-                                  domainDiscovery={isToolDomainDiscoveryPrompt(message)}
-                                />
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      : <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailPromptEmpty")}</p>
-                  : detailViewMode === "preview"
-                    ? <ContextDetailCards value={parsedDetail} />
+                : detailViewMode === "preview" && block.detailCode
+                  ? <ContextDetailPreview block={block.detailCode} value={parsedDetail} onOpenPrompt={(promptCode) => {
+                      const promptPath = `/prompts/detail?${new URLSearchParams({ promptCode }).toString()}`;
+                      const tabId = useTabStore.getState().addTab({ title: t("chat.shortTermMemory.contextPanel.detailPromptManagement"), path: promptPath, closable: true, activeNav: `prompt-detail:${promptCode}` });
+                      useTabStore.getState().updateTab(tabId, { path: promptPath });
+                      setDialogOpen(false);
+                      navigate(promptPath);
+                    }} />
                   : <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[var(--color-on-surface)]">{rawDetail}</pre>}
           </div>
         </DialogContent>
@@ -4944,10 +4515,11 @@ export function ChatManagementPage() {
     () => getServiceDataSource("chat") === "mock"
       ? createTronMockChatAdapter()
       : createInternalChatAdapter({
+          workspaceCode: activeWorkspaceCode,
           getAccessToken: getApiAccessToken,
           getHeaders: () => applyCurrentLocaleHeader(new Headers()),
         }),
-    [],
+    [activeWorkspaceCode],
   );
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
   const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);

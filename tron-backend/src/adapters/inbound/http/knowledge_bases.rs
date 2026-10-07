@@ -83,6 +83,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/v1/knowledge-bases/{id}/documents/{doc}/cancel", axum::routing::post(cancel))
         .route("/api/v1/knowledge-bases/{id}/documents/{doc}/tasks", get(tasks))
+        .route("/api/v1/knowledge-bases/{id}/documents/{doc}/chunks", get(chunks))
         .route(
             "/api/v1/knowledge-bases/{id}/grants",
             get(detail).put(grants),
@@ -288,5 +289,28 @@ async fn grants(
         &q.workspace_code,
         &id,
         q.agent_codes,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChunkPageQuery {
+    workspace_code: String,
+    page: usize,
+    page_size: usize,
+}
+async fn chunks(
+    State(kb): State<KnowledgeBaseService>,
+    auth: RequestAuthContext,
+    Path((id, doc)): Path<(String, String)>,
+    Query(q): Query<ChunkPageQuery>,
+) -> Response {
+    response(kb.published_chunks(
+        &auth.user().user_code,
+        &q.workspace_code,
+        &id,
+        &doc,
+        q.page,
+        q.page_size,
     ))
 }

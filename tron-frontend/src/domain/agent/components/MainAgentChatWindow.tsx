@@ -28,6 +28,8 @@ import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { useToast } from "@/components/ui/toast";
 import { useTheme } from "@/shared";
+import { applyCurrentLocaleHeader } from "@/i18n";
+import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
 
 interface MainAgentChatWindowProps {
   currentUserDisplayName?: string;
@@ -90,6 +92,7 @@ export function MainAgentChatWindow({
   onWindowStateChange,
 }: MainAgentChatWindowProps) {
   const toast = useToast();
+  const feedback = useChatFeedback();
   const { t } = useTranslation("pages");
   const { agentReplyEffect, agentReplySpeed } = useTheme();
   const workRailLabels = useChatWorkRailLabels();
@@ -115,9 +118,11 @@ export function MainAgentChatWindow({
       getServiceDataSource("chat") === "mock"
         ? createTronMockChatAdapter()
         : createInternalChatAdapter({
+          workspaceCode,
           getAccessToken: getApiAccessToken,
+          getHeaders: () => applyCurrentLocaleHeader(new Headers()),
         }),
-    [],
+    [workspaceCode],
   );
   const controlledWindowState = Boolean(windowState && onWindowStateChange);
   const [localWindowState, setLocalWindowState] = useState<ChatFloatingState>(
@@ -195,12 +200,12 @@ export function MainAgentChatWindow({
       writePersistedMainAgentSession(sessionStorageKey, null);
       return;
     }
-    toast.error(message, { title: title ?? "Main Agent failed" });
-  }, [persistedSession, sessionStorageKey, toast]);
+    feedback.error(message, title);
+  }, [persistedSession, sessionStorageKey, feedback.error]);
 
   const handleInfo = useCallback((message: string, title?: string) => {
-    toast.info(message, { title: title ?? null });
-  }, [toast]);
+    feedback.info(message, title);
+  }, [feedback.info]);
 
   useEffect(() => {
     if (

@@ -311,7 +311,7 @@ pub(super) async fn assemble(
     };
     assembler.assemble(&mapped).await
 }
-fn block_budget(
+pub(super) fn block_budget(
     config: &crate::application::short_term_memory::ContextBlockBudgetConfig,
 ) -> Result<fw::BlockBudget, fw::AgentError> {
     if config.max_ratio_bps.is_some_and(|ratio| ratio > 10_000) {

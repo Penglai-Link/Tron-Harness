@@ -25,7 +25,8 @@ mod strategy_registry;
 pub use diagnostics::{
     RagDebugProfileResult, RagDebugSourceRecord, RagDebugSourceRequest, RagDebugSourceResult,
     RagDebugTextUnitRecord, RagDiagnosticWarningRecord, RagDiagnosticsRepository,
-    RagDiagnosticsService, RagSearchTraceWrite, safe_trace_payload,
+    RagDiagnosticsService, RagSearchTraceWrite, RagSourceContentRepository, RagSourceUnit,
+    RagSourceUnitsPage, safe_trace_payload,
 };
 pub use document_source::{
     RagDocumentParseCall, RagDocumentSourceCall, RagDocumentSourceRuntime, RagResolvedDocument,

@@ -1,4 +1,5 @@
 import { createInternalChatAdapter, createInternalTerminalAdapter } from "@tron/chat-internal-adapter";
+import { applyCurrentLocaleHeader } from "@/i18n";
 import { type AITransport, createTerminalTransport, initTerminal } from "@eliteforge/agent-ui-terminal";
 import type { ChatAguiStreamEvent, ChatUserInputAnswer } from "@tron/chat-core";
 import { fromUiResume, toUiEvent } from "@tron/chat-agent-ui-adapter";
@@ -290,8 +291,10 @@ export default Terminal;
 
 async function createTerminalChatContext(workspaceCode: string) {
   const adapterOptions = {
+    workspaceCode,
     baseUrl: TERMINAL_API_BASE_URL,
     getAccessToken: getApiAccessToken,
+    getHeaders: () => applyCurrentLocaleHeader(new Headers()),
   };
   const chatAdapter = createInternalChatAdapter(adapterOptions);
   const terminalAdapter = createInternalTerminalAdapter(adapterOptions);

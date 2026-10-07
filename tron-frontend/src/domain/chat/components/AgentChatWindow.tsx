@@ -4,6 +4,7 @@ import type * as Ui from "@eliteforge/agent-ui-chat-core";
 import type { ChatAdapter, ChatClientConfig, ChatMessageAttachment, ChatRuntimeRunState, ChatSession, SendChatMessageInput } from "@tron/chat-core";
 import { createAgentUiAdapter } from "@tron/chat-agent-ui-adapter";
 import { fromUiAttachment, fromUiSession, toUiAttachment, toUiInput, toUiSession } from "@tron/chat-agent-ui-adapter";
+import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
 
 type MappedProps = "adapter" | "config" | "initialSession" | "pendingAttachments" | "onPendingAttachmentsChange" | "onSessionChange" | "onRunStateChange" | "createSendInput";
 export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, MappedProps> {
@@ -19,7 +20,8 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
 
 /** Product context adapter only. Rendering, streaming, queues, stop and replay belong to Agent UI. */
 export function AgentChatWindow({ adapter, config, initialSession, pendingAttachments,
-  onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, ...props }: AgentChatWindowProps) {
+  onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, ...props }: AgentChatWindowProps) {
+  const feedback = useChatFeedback();
   const uiAdapter = useMemo(() => createAgentUiAdapter(adapter, config),
     [adapter, config.workspaceCode, config.appCode, config.taskCode, config.agentCode]);
   const session = useMemo(() => initialSession ? toUiSession(initialSession) : initialSession, [initialSession]);
@@ -42,6 +44,7 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
     return input ? toUiInput(input) : null;
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
   return <ChatRuntimeWindow {...props} adapter={uiAdapter}
+    errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, defaultSessionId: config.defaultSessionCode }}
     initialSession={session} pendingAttachments={attachments} createSendInput={createInput}
     onSessionChange={handleSession} onPendingAttachmentsChange={handleAttachments} onRunStateChange={handleRun} />;

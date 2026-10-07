@@ -92,7 +92,7 @@ pub struct PreparedContextSources {
     pub history: Vec<AgentMessage>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextBudgetBreakdown {
     /// Subset of prompt_prefix_tokens; kept separate for the context inspector.
@@ -110,6 +110,8 @@ pub struct ContextBudgetBreakdown {
     pub tool_schema_budget_tokens: Option<u32>,
     pub estimated_input_tokens: u32,
     pub prompt_prefix_budget_tokens: Option<u32>,
+    pub prompt_prefix_max_ratio_bps: Option<u32>,
+    pub prompt_prefix_max_tokens: Option<u32>,
     pub checkpoint_budget_tokens: Option<u32>,
     pub session_family_context_budget_tokens: Option<u32>,
     pub working_state_budget_tokens: Option<u32>,

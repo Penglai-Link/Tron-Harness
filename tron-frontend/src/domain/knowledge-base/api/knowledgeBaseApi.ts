@@ -1,5 +1,5 @@
 import { requestApi } from "@/shared/api/httpClient";
-import type { ChunkConfig, ChunkPreview, KnowledgeDocument, KnowledgeLibrary, KnowledgeLibraryDetail, ParsingTier, ParsingCapabilities } from "../model/KnowledgeLibraryModel";
+import type { PublishedChunkPage, ChunkConfig, ChunkPreview, KnowledgeDocument, KnowledgeLibrary, KnowledgeLibraryDetail, ParsingTier, ParsingCapabilities } from "../model/KnowledgeLibraryModel";
 
 const root = "/api/v1/knowledge-bases";
 const libraryPath = `${root}/{id}`;
@@ -45,4 +45,8 @@ export function getParsingCapabilities(workspaceCode: string, signal?: AbortSign
 export interface DocumentDeletion { documentId: string; state: "DELETED"; originalRetained: boolean; mineruCacheRetained: boolean }
 export function deleteKnowledgeDocument(workspaceCode: string, id: string, documentId: string) {
   return requestApi<DocumentDeletion>(`DELETE ${documentPath}`, { pathParams: { id, documentId }, queryParams: { workspaceCode } });
+}
+
+export function getPublishedKnowledgeChunks(workspaceCode: string, id: string, documentId: string, page: number, pageSize: number, signal?: AbortSignal) {
+  return requestApi<PublishedChunkPage>(`GET ${documentPath}/chunks`, { pathParams: { id, documentId }, queryParams: { workspaceCode, page, pageSize }, signal });
 }

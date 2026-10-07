@@ -311,3 +311,14 @@ fn is_sqlite_retriever(retriever: &str) -> bool {
             | "STRUCTURED_FILTER_SQLITE_V1"
     )
 }
+
+impl crate::application::rag::RagSourceContentRepository for GraphBackedRagRepository {
+    fn source_units_page(
+        &self,
+        request: RagDebugSourceRequest,
+        page: usize,
+        page_size: usize,
+    ) -> Result<crate::application::rag::RagSourceUnitsPage, RagError> {
+        self.sqlite.source_units_page(request, page, page_size)
+    }
+}

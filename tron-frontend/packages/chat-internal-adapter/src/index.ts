@@ -39,6 +39,10 @@ export interface InternalAdapterOptions {
   getHeaders?: () => HeadersInit | undefined | Promise<HeadersInit | undefined>;
 }
 
+export interface InternalChatAdapterOptions extends InternalAdapterOptions {
+  workspaceCode: string;
+}
+
 interface AguiEventSnapshot {
   replayIncomplete?: boolean;
   events: ChatAguiEvent[];
@@ -49,8 +53,9 @@ interface AguiProtocolEvent {
   sseEvent: string;
 }
 
-async function requestHeaders(options: InternalAdapterOptions) {
+async function requestHeaders(options: InternalAdapterOptions, workspaceCode?: string) {
   const headers = new Headers(await options.getHeaders?.());
+  if (workspaceCode) headers.set("X-Workspace-Code", workspaceCode);
   const accessToken = await options.getAccessToken?.();
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
@@ -58,11 +63,12 @@ async function requestHeaders(options: InternalAdapterOptions) {
   return headers;
 }
 
-export function createInternalChatAdapter(options: InternalAdapterOptions = {}): ChatAdapter {
+export function createInternalChatAdapter(options: InternalChatAdapterOptions): ChatAdapter {
+  const workspaceCode = options.workspaceCode.trim();
   const transport = createFetchTransport({
     baseUrl: options.baseUrl,
     credentials: options.credentials ?? "include",
-    getHeaders: () => requestHeaders(options),
+    getHeaders: () => requestHeaders(options, workspaceCode),
   });
 
   return {
@@ -113,7 +119,7 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
       );
       const response = await fetch(url, {
         credentials: options.credentials ?? "include",
-        headers: await requestHeaders(options),
+        headers: await requestHeaders(options, workspaceCode),
         method: "GET",
         signal,
       });

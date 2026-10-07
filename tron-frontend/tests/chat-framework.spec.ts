@@ -90,6 +90,48 @@ test.afterAll(async () => {
   await new Promise<void>(resolveClose => provider ? provider.close(() => resolveClose()) : resolveClose());
   if (directory) await rm(directory, { recursive: true, force: true });
 });
+
+async function inspectContextPreviews(page: import("@playwright/test").Page, testInfo: import("@playwright/test").TestInfo, locale: "en-US" | "zh-CN") {
+  const zh = locale === "zh-CN";
+  const sidebar = page.getByTestId("tron-right-sidebar");
+  const dialog = page.getByRole("dialog");
+  const openBlock = async (name: string) => {
+    const responsePromise = page.waitForResponse(response => response.url().includes("get-context-detail"));
+    await sidebar.getByRole("button", { name: new RegExp(`^${name}`) }).click();
+    const response = await responsePromise;
+    expect(response.ok()).toBe(true);
+    const data = (await response.json()).data;
+    expect(data.budgetBreakdown).toBeUndefined();
+    expect(data.blocks).toBeUndefined();
+    return data;
+  };
+  const close = async () => dialog.getByRole("button", { name: zh ? "关闭预览" : "Close preview", exact: true }).click();
+  const tool = await openBlock(zh ? "工具定义" : "Tool Schema");
+  expect(tool.tools.some((value: { toolName: string }) => value.toolName === "chat_ask_user")).toBe(true);
+  await expect(dialog.getByRole("heading", { name: "chat_ask_user", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("table").first()).toContainText("questions");
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`tool-definitions-${locale}.png`) });
+  await close();
+  await openBlock(zh ? "相关会话" : "Related Sessions");
+  await expect(dialog).toContainText(zh ? "没有加载相关会话摘要。" : "No related session summaries were loaded.");
+  await close();
+  const prompt = await openBlock(zh ? "系统提示词" : "System Prompt");
+  expect(prompt.messages.length).toBeGreaterThan(0);
+  await expect(dialog.getByRole("heading", { name: zh ? "第 1 条消息 · 系统" : "Message 1 · System", exact: true })).toBeVisible();
+  expect(await dialog.locator("article").count()).toBe(0);
+  await expect(dialog).toContainText("16k");
+  await dialog.getByRole("button", { name: zh ? "原文" : "Raw JSON", exact: true }).click();
+  await expect(dialog.locator("pre").last()).not.toContainText("budgetBreakdown");
+  await expect(dialog.locator("pre").last()).toContainText('"parts"');
+  await dialog.getByRole("button", { name: zh ? "预览" : "Preview", exact: true }).click();
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`system-prompt-${locale}.png`) });
+  await close();
+  const history = await openBlock(zh ? "模型请求中的历史" : "Request History");
+  expect(history.messages.length).toBeGreaterThan(0);
+  await expect(dialog).toContainText(zh ? "最近一次模型请求中的消息" : "Messages in the latest model request");
+  await close();
+}
+
 test("public chat uses the real framework, restores history and shows its context window", async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -115,14 +157,16 @@ test("public chat uses the real framework, restores history and shows its contex
   if (await open.isVisible()) await open.click();
   const sidebar = page.getByTestId("tron-right-sidebar");
   await sidebar.getByRole("tab", { name: "Short-term memory", exact: true }).click();
-  await expect(sidebar.getByText("Current Session History")).toBeVisible();
+  await expect(sidebar.getByText("Request History")).toBeVisible();
   await expect(sidebar.getByText("Session Total", { exact: true })).toBeVisible();
   await expect(sidebar).toContainText("acceptance-model · 128k window");
-  await expect(sidebar).toContainText("Current Session History· 3 messages");
+  await expect(sidebar).toContainText("Request History· 3 messages");
   await expect(sidebar.getByText("480", { exact: true })).toBeVisible();
   await expect(sidebar.getByText("240", { exact: true })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: /^System Prompt/ })).toContainText("/ 16k");
+  await inspectContextPreviews(page, testInfo, "en-US");
   expect(errors).toEqual([]);
-  await page.screenshot({ path: testInfo.outputPath("real-framework-chat-context.png") });
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("real-framework-chat-context.png") });
   await input.fill("acceptance-question: ask me to choose the target"); await input.press("Enter");
   await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByRole("paragraph")).toBeVisible();
   await page.reload();
@@ -132,5 +176,23 @@ test("public chat uses the real framework, restores history and shows its contex
   await page.getByRole("region", { name: "Assistant questions", exact: true }).getByRole("button", { name: "Continue", exact: true }).filter({ hasText: "Continue" }).click();
   await expect(transcript).toContainText("framework-question-resumed");
   expect(errors).toEqual([]);
-  await page.screenshot({ path: testInfo.outputPath("real-framework-question-resumed.png") });
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("real-framework-question-resumed.png") });
+});
+
+test("context previews show native Framework content in Chinese", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await seedResourceUiShell(page, "zh-CN");
+  await routeActiveProfileApi(page);
+  await page.goto(`${frontend!.baseUrl}/chats`);
+  await page.getByRole("button", { name: "新会话", exact: true }).click();
+  await page.getByRole("button", { name: "选择模型", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "Framework Acceptance", exact: true }).click();
+  const input = page.locator('[data-theme-part="chat-input"]');
+  await input.fill("acceptance-turn-one: 检查短期记忆");
+  await input.press("Enter");
+  await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).toContainText("framework-first-reply");
+  const open = page.getByRole("button", { name: "打开右侧边栏", exact: true });
+  if (await open.isVisible()) await open.click();
+  await page.getByTestId("tron-right-sidebar").getByRole("tab", { name: "短期记忆", exact: true }).click();
+  await inspectContextPreviews(page, testInfo, "zh-CN");
 });

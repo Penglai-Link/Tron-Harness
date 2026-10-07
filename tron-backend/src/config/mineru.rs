@@ -2,7 +2,17 @@ use serde::{Deserialize, Serialize};
 
 const DEFAULT_MINERU_BASE_URL: &str = "http://127.0.0.1:8000";
 const DEFAULT_MINERU_PARSE_ENDPOINT: &str = "/file_parse";
-const DEFAULT_MINERU_TIMEOUT_SECONDS: u64 = 1200;
+fn configured_default_timeout_seconds() -> u64 {
+    static TIMEOUT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *TIMEOUT.get_or_init(|| {
+        let config: serde_yaml::Value = serde_yaml::from_str(include_str!("../../application.yaml"))
+            .expect("packaged application configuration must be valid YAML");
+        config["mineru"]["timeoutSeconds"]
+            .as_u64()
+            .filter(|value| *value > 0)
+            .expect("packaged mineru.timeoutSeconds must be positive")
+    })
+}
 const DEFAULT_MINERU_MAX_BYTES: usize = 52_428_800;
 const DEFAULT_MINERU_BACKEND: &str = "pipeline";
 const DEFAULT_MINERU_PARSE_METHOD: &str = "auto";
@@ -40,7 +50,7 @@ impl Default for MineruConfig {
             enabled: true,
             base_url: DEFAULT_MINERU_BASE_URL.into(),
             parse_endpoint: DEFAULT_MINERU_PARSE_ENDPOINT.into(),
-            timeout_seconds: DEFAULT_MINERU_TIMEOUT_SECONDS,
+            timeout_seconds: configured_default_timeout_seconds(),
             max_bytes: DEFAULT_MINERU_MAX_BYTES,
             backend: DEFAULT_MINERU_BACKEND.into(),
             parse_method: DEFAULT_MINERU_PARSE_METHOD.into(),
@@ -54,6 +64,9 @@ impl Default for MineruConfig {
 
 impl MineruConfig {
     pub fn validate(&self) -> Result<(), String> {
+        if self.enabled && self.timeout_seconds == 0 {
+            return Err("mineru.timeoutSeconds must be positive".into());
+        }
         self.ingestion.validate()?;
         let mut ids = std::collections::BTreeSet::new();
         for node in &self.nodes {
@@ -206,6 +219,17 @@ impl KnowledgeIngestionConfig {
 #[cfg(test)]
 mod image_description_tests {
     use super::*;
+    #[test]
+    fn parse_timeout_comes_from_configuration_and_explicit_overrides_win() {
+        let packaged: serde_yaml::Value = serde_yaml::from_str(include_str!("../../application.yaml")).unwrap();
+        let mut config = MineruConfig::default();
+        assert_eq!(config.timeout_seconds, packaged["mineru"]["timeoutSeconds"].as_u64().unwrap());
+        config.apply_overrides(serde_yaml::from_str::<MineruFileConfig>("timeoutSeconds: 7").unwrap());
+        assert_eq!(config.timeout_seconds, 7);
+        config.validate().unwrap();
+        config.timeout_seconds = 0;
+        assert!(config.validate().is_err());
+    }
     #[test]
     fn default_is_off_and_partial_yaml_keeps_safe_defaults() {
         let config: ImageDescriptionConfig = serde_yaml::from_str("modelCode: PERSON_AI:FIXED:High:synthetic-vision").unwrap();

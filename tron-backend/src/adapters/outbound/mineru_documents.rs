@@ -32,13 +32,14 @@ fn invalid(e: impl std::fmt::Display) -> KnowledgeBaseError {
 }
 impl MineruKnowledgeDocumentParser {
     pub fn new(config: MineruConfig) -> Self {
+        let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(config.timeout_seconds))
+            .build()
+            .expect("MinerU HTTP client");
         Self {
             config,
-            client: Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(60))
-                .build()
-                .expect("MinerU HTTP client"),
+            client,
         }
     }
     fn url(&self, path: &str) -> Result<Url, KnowledgeBaseError> {
@@ -335,7 +336,7 @@ impl MineruKnowledgeDocumentParser {
                     job = self.get(&format!("/v1/parse/jobs/{job_id}")).await?;
                 }
                 Some("failed" | "partial" | "canceled") => {
-                    return Err(invalid(format!("MinerU解析失败，可重试（任务{job_id}）")));
+                    return Err(invalid(parse_failure(&job, &job_id)));
                 }
                 _ => return Err(invalid("MinerU返回未知任务状态")),
             }
@@ -357,6 +358,29 @@ impl MineruKnowledgeDocumentParser {
             .await?;
         decode_archive(&archive, selected, &capabilities.parser_version, &job_id)
     }
+}
+
+fn parse_failure(job: &Value, job_id: &str) -> String {
+    let error_message = |error: &Value| {
+        error["message"]
+            .as_str()
+            .or_else(|| error.as_str())
+            .filter(|message| !message.trim().is_empty())
+            .map(str::to_owned)
+    };
+    let reason = job["files"]
+        .as_array()
+        .and_then(|files| files.iter().find_map(|file| error_message(&file["error"])))
+        .or_else(|| error_message(&job["error"]));
+    // Keep remote diagnostics bounded and render them as plain text in the UI.
+    let reason = reason.map(|message| {
+        message.split_whitespace().collect::<Vec<_>>()
+            .join(" ").chars().take(1000).collect::<String>()
+    });
+    format!(
+        "MINERU_PARSE_FAILED:{}",
+        json!({"jobId": job_id, "reason": reason})
+    )
 }
 
 pub fn decode_archive(

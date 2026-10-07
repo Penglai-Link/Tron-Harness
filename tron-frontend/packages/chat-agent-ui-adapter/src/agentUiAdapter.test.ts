@@ -153,7 +153,7 @@ describe("native protocol result boundary", () => {
       { ...nativeTerminal, type: "RUN_ERROR", code: "MODEL_PROVIDER_FAILED", result },
     ]);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "SUCCESS", data: frames.map((data) => ({ data, sseEvent: data.type })), message: "" }), { headers: { "Content-Type": "application/json" } })));
-    const adapter = createAgentUiAdapter(createInternalChatAdapter(), { workspaceCode: "WORKSPACE" });
+    const adapter = createAgentUiAdapter(createInternalChatAdapter({ workspaceCode: "WORKSPACE" }), { workspaceCode: "WORKSPACE" });
     const replay = await adapter.loadProtocolEvents!("SESSION");
     expect(replay).toHaveLength(frames.length);
     replay.forEach((event, index) => {
@@ -182,7 +182,7 @@ describe("native protocol result boundary", () => {
     const incomplete = { type: "CUSTOM", runId: "ROOT", threadId: "SESSION", name: "tron.presentation.incomplete", value: { code: "AGENT_AGUI_REPLAY_INCOMPLETE" } };
     const frames = [nativeTerminal, child, warning, incomplete];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "SUCCESS", data: frames.map((data) => ({ data, sseEvent: data.type })), message: "" }), { headers: { "Content-Type": "application/json" } })));
-    const adapter = createAgentUiAdapter(createInternalChatAdapter(), { workspaceCode: "WORKSPACE" });
+    const adapter = createAgentUiAdapter(createInternalChatAdapter({ workspaceCode: "WORKSPACE" }), { workspaceCode: "WORKSPACE" });
     const replay = await adapter.loadProtocolEvents!("SESSION");
     expect(replay[0].result).toEqual(nativeResult);
     expect(replay[0].outcome).toEqual(nativeTerminal.outcome);
@@ -197,7 +197,7 @@ describe("native protocol result boundary", () => {
     const frames = [{ type: "RUN_STARTED", runId: "ROOT", threadId: "SESSION" }, { ...nativeTerminal, productCompletion: true, result: productResult }];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } })));
     const events: UiProtocolEvent[] = [];
-    const adapter = createAgentUiAdapter(createInternalChatAdapter(), { workspaceCode: "WORKSPACE" });
+    const adapter = createAgentUiAdapter(createInternalChatAdapter({ workspaceCode: "WORKSPACE" }), { workspaceCode: "WORKSPACE" });
     const result = await adapter.streamMessage(toUiSession(session), toUiInput({ workspaceCode: "WORKSPACE", content: "Continue" }), { onAguiEvent: (event) => events.push(event) });
     expect(result.run.runId).toBe("ROOT");
     expect(result.session.sessionId).toBe("SESSION");
@@ -217,7 +217,7 @@ describe("native protocol result boundary", () => {
     const failed = { ...nativeTerminal, productCompletion: true, presentationIncomplete: true, productCompletionError: { code: "CHAT_STREAM_COMPLETION_UNAVAILABLE", message: "Product acknowledgment unavailable" } };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(`event: RUN_FINISHED\ndata: ${JSON.stringify(failed)}\n\n`, { headers: { "Content-Type": "text/event-stream" } })));
     const events: UiProtocolEvent[] = [];
-    const adapter = createAgentUiAdapter(createInternalChatAdapter(), { workspaceCode: "WORKSPACE" });
+    const adapter = createAgentUiAdapter(createInternalChatAdapter({ workspaceCode: "WORKSPACE" }), { workspaceCode: "WORKSPACE" });
     await expect(adapter.streamMessage(toUiSession(session), toUiInput({ workspaceCode: "WORKSPACE", content: "Continue" }), { onAguiEvent: (event) => events.push(event) })).rejects.toMatchObject({ code: "CHAT_STREAM_COMPLETION_UNAVAILABLE" });
     expect(events[0].result).toEqual(nativeResult);
     expect(events[0].presentationIncomplete).toBe(true);
