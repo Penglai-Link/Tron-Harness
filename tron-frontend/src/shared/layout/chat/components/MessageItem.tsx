@@ -122,12 +122,12 @@ const MessageItem = ({
             <IconButton
               needHover
               className="shrink-0 hidden group-hover/session:block"
-              disabled={archiving}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 void archive();
               }}
+              disabled={archiving || running}
               icon={Archive}
             />
             {running ? (

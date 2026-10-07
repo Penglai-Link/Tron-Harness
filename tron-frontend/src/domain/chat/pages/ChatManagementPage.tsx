@@ -71,8 +71,6 @@ import { cn } from "@/shared/lib/utils";
 import {
   archiveChatSession,
   createChatSession,
-  deleteChatSession,
-  getChatActiveRun,
   listChatUserInputRequests,
   stopChatRun,
   steerChatMessage,
@@ -2221,14 +2219,14 @@ function QueryStatusLine({
 
 function SessionActionMenu({
   disabled,
+  archiveDisabled,
   onArchive,
-  onDelete,
   onRename,
   session,
 }: {
   disabled: boolean;
+  archiveDisabled: boolean;
   onArchive: (session: ChatSession) => void;
-  onDelete: (session: ChatSession) => void;
   onRename: (session: ChatSession) => void;
   session: ChatSession;
 }) {
@@ -2275,11 +2273,8 @@ function SessionActionMenu({
           <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => select(onRename)}>
             {t("chat.management.actions.rename")}
           </button>
-          <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => select(onArchive)}>
+          <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)] disabled:opacity-50" type="button" role="menuitem" disabled={archiveDisabled} onClick={() => select(onArchive)}>
             {t("chat.management.actions.archive")}
-          </button>
-          <button className="flex w-full rounded-md px-2.5 py-1.5 text-left text-[var(--color-error)] hover:bg-[var(--color-error-container)]" type="button" role="menuitem" onClick={() => select(onDelete)}>
-            {t("chat.management.actions.delete")}
           </button>
         </div>
       ) : null}
@@ -4136,7 +4131,6 @@ function SessionSidebar({
   onCollapseToggle,
   onArchiveSession,
   onCreateSession,
-  onDeleteSession,
   onRenameSession,
   onSessionSelect,
   onSourceTabSelect,
@@ -4153,7 +4147,6 @@ function SessionSidebar({
   onCollapseToggle: () => void;
   onArchiveSession: (session: ChatSession) => void;
   onCreateSession: () => void;
-  onDeleteSession: (session: ChatSession) => void;
   onRenameSession: (session: ChatSession, title: string) => Promise<void>;
   onSessionSelect: (session: ChatSession, sourceTab?: ChatSessionSourceTab) => void;
   onSourceTabSelect: (sourceTab: ChatSessionSourceTab) => void;
@@ -4309,9 +4302,9 @@ function SessionSidebar({
         />
         <SessionActionMenu
           disabled={pending}
+          archiveDisabled={runningSessionCode === session.sessionCode}
           session={session}
           onArchive={onArchiveSession}
-          onDelete={onDeleteSession}
           onRename={startInlineRename}
         />
       </div>
@@ -5065,7 +5058,6 @@ export function ChatManagementPage() {
   const [compactingSessionCode, setCompactingSessionCode] = useState("");
   const [goalActionSessionCode, setGoalActionSessionCode] = useState("");
   const [sessionActionPendingCode, setSessionActionPendingCode] = useState("");
-  const [deleteTargetSession, setDeleteTargetSession] = useState<ChatSession | null>(null);
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [pendingAttachmentsBySessionCode, setPendingAttachmentsBySessionCode] = useState<
@@ -5783,7 +5775,7 @@ export function ChatManagementPage() {
   }, [activeSession?.sessionCode]);
 
   useEffect(() => {
-    if (!activeSession?.sessionCode || deleteTargetSession || !shouldAutoFocusChatComposer()) {
+    if (!activeSession?.sessionCode || !shouldAutoFocusChatComposer()) {
       return;
     }
     const composerElement = composerRef.current;
@@ -5794,7 +5786,7 @@ export function ChatManagementPage() {
     return () => {
       window.cancelAnimationFrame(focusId);
     };
-  }, [activeSession?.sessionCode, deleteTargetSession]);
+  }, [activeSession?.sessionCode]);
 
   useEffect(() => {
     const sessionCode = activeSession?.sessionCode ?? "";
@@ -6456,42 +6448,6 @@ export function ChatManagementPage() {
         stopAbortControllerRef.current = null;
       }
       stoppingRunRef.current = false;
-    }
-  }
-
-  async function stopSessionRunBeforeMutation(sessionCode: string) {
-    const currentOwner = streamOwnershipRegistryRef.current.current;
-    const localOwner = currentOwner?.sessionCode === sessionCode
-      ? currentOwner
-      : null;
-    const snapshot = await getChatActiveRun(sessionCode);
-    const expectedRunCode = snapshot.activeRun?.runCode
-      ?? (localOwner ? activeRunCodeRef.current : "");
-    if (!expectedRunCode) {
-      if (localOwner) {
-        throw new Error("The current response is still starting; try again shortly");
-      }
-      return;
-    }
-
-    if (localOwner) {
-      detachedStreamControllersRef.current.add(localOwner.controller);
-    }
-    try {
-      await stopChatRun({ expectedRunCode, sessionCode });
-    } catch (error) {
-      if (localOwner) {
-        detachedStreamControllersRef.current.delete(localOwner.controller);
-      }
-      throw error;
-    }
-    drainedRecoveredRunKeysRef.current.add(`${sessionCode}:${expectedRunCode}`);
-    observedRecoveredRunCodesRef.current.delete(sessionCode);
-    if (localOwner) detachLocalRunObserver(sessionCode);
-    if (activeSessionCodeRef.current === sessionCode) {
-      setActiveRunRefreshKey((current) => current + 1);
-      setActiveChatReplayRefreshKey((current) => current + 1);
-      setActiveChatDataRefreshKey((current) => current + 1);
     }
   }
 
@@ -7351,7 +7307,6 @@ export function ChatManagementPage() {
     );
     setSessionActionPendingCode(session.sessionCode);
     try {
-      await stopSessionRunBeforeMutation(session.sessionCode);
       const archived = await archiveChatSession(session.sessionCode);
       invalidateQueuedSession(archived.sessionCode);
       const nextGroups = removeSession(sessionGroups, archived.sessionCode);
@@ -7395,44 +7350,6 @@ export function ChatManagementPage() {
       toast.error(message, { title: t("chat.management.toasts.archiveSessionFailed") });
     } finally {
       setSessionActionPendingCode("");
-    }
-  }
-
-  async function confirmDeleteSession() {
-    if (!deleteTargetSession) return;
-    const session = deleteTargetSession;
-    const returnSourceTab = requestedSourceTab ?? activeSourceTab;
-
-    setSessionActionPendingCode(session.sessionCode);
-    try {
-      await stopSessionRunBeforeMutation(session.sessionCode);
-      const deleted = await deleteChatSession(session.sessionCode);
-      invalidateQueuedSession(deleted.sessionCode);
-      const nextGroups = removeSession(sessionGroups, deleted.sessionCode);
-      setSessionGroups(nextGroups);
-      setUnseenSessionCodes((current) => {
-        if (!current.has(deleted.sessionCode)) return current;
-        const next = new Set(current);
-        next.delete(deleted.sessionCode);
-        return next;
-      });
-      if (activeSessionCode === deleted.sessionCode) {
-        selectSessionAfterRemoval(nextGroups, returnSourceTab);
-      }
-      forgetSessionModelSelection(deleted.sessionCode);
-      forgetRightPanelSnapshot(deleted.sessionCode);
-      forgetComposerDraft(deleted.sessionCode);
-      // Clear MainAgentChatWindow's persisted session if it matches the deleted one
-      forgetMainAgentPersistedSession(activeWorkspaceCode, deleted.sessionCode);
-      toast.success(t("chat.management.toasts.sessionDeleted"), { title: deleted.sessionCode });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t("chat.management.toasts.deleteSessionFailed");
-      toast.error(message, { title: t("chat.management.toasts.deleteSessionFailed") });
-    } finally {
-      setSessionActionPendingCode("");
-      setDeleteTargetSession((current) => (
-        current?.sessionCode === session.sessionCode ? null : current
-      ));
     }
   }
 
@@ -7495,7 +7412,6 @@ export function ChatManagementPage() {
           onArchiveSession={(session) => void handleArchiveSession(session)}
           onCollapseToggle={() => setUserSidebarCollapsed((value) => !value)}
           onCreateSession={() => void handleCreateSession()}
-          onDeleteSession={setDeleteTargetSession}
           onRenameSession={handleSidebarRenameSession}
           onSessionSelect={handleSessionSelect}
           onSourceTabSelect={handleSourceTabSelect}
@@ -7549,23 +7465,6 @@ export function ChatManagementPage() {
           />
         ) : null}
       </main>
-      <ConfirmDialog
-        ariaLabel={t("chat.management.deleteDialog.aria")}
-        cancelText={t("chat.management.deleteDialog.cancel")}
-        confirmText={sessionActionPendingCode === deleteTargetSession?.sessionCode ? t("chat.management.deleteDialog.confirming") : t("chat.management.deleteDialog.confirm")}
-        description={deleteTargetSession
-          ? t("chat.management.deleteDialog.description", { title: deleteTargetSession.title })
-          : undefined}
-        open={Boolean(deleteTargetSession)}
-        pending={sessionActionPendingCode === deleteTargetSession?.sessionCode}
-        title={t("chat.management.deleteDialog.title")}
-        tone="danger"
-        onCancel={() => {
-          if (sessionActionPendingCode === deleteTargetSession?.sessionCode) return;
-          setDeleteTargetSession(null);
-        }}
-        onConfirm={() => void confirmDeleteSession()}
-      />
     </div>
     </AgentTerminalSessionContext.Provider>
   );

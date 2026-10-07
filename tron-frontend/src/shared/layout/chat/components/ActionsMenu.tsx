@@ -39,12 +39,18 @@ const ActionsMenu = ({
   async function archiveChats() {
     setPending(true);
     try {
-      await Promise.all(
+      const outcomes = await Promise.allSettled(
         sessions.map((session) => archiveChatSession(session.sessionCode)),
       );
       onRefresh();
       setArchiveChatsOpen(false);
-      toast.success(t("shell:chatSidebar.project.archived"));
+      const failed = outcomes.filter((outcome) => outcome.status === "rejected").length;
+      const succeeded = outcomes.length - failed;
+      if (failed > 0) {
+        toast.error(t("shell:chatSidebar.project.archivePartial", { succeeded, failed }));
+      } else {
+        toast.success(t("shell:chatSidebar.project.archived"));
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.project.archiveFailed"));
     } finally {

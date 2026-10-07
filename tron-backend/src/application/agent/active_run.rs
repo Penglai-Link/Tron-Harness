@@ -21,6 +21,7 @@ pub struct AgentSteerInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActiveRunError {
     AlreadyActive,
+    SessionArchived,
     NoActiveRun,
     RunMismatch { active_run_code: String },
     RuntimeUnsupported { runtime_adapter_key: String },
@@ -56,6 +57,7 @@ impl Display for ActiveRunError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::AlreadyActive => formatter.write_str("session already has an active run"),
+            Self::SessionArchived => formatter.write_str("session is archived"),
             Self::NoActiveRun => formatter.write_str("session has no active run"),
             Self::RunMismatch { active_run_code } => write!(
                 formatter,
@@ -85,6 +87,7 @@ pub struct ActiveRunRegistry {
 struct ActiveRunRegistryInner {
     entries: Mutex<BTreeMap<String, Arc<ActiveRunEntry>>>,
     admission: Mutex<()>,
+    archived_sessions: Mutex<std::collections::BTreeSet<String>>,
     groups: Mutex<BTreeMap<String, Arc<group::ActiveRunGroup>>>,
 }
 
@@ -173,6 +176,15 @@ impl ActiveRunRegistry {
             .entries
             .lock()
             .map_err(|_| ActiveRunError::RegistryUnavailable)?;
+        if self
+            .inner
+            .archived_sessions
+            .lock()
+            .map_err(|_| ActiveRunError::RegistryUnavailable)?
+            .contains(session_code)
+        {
+            return Err(ActiveRunError::SessionArchived);
+        }
         if entries.contains_key(session_code) {
             return Err(ActiveRunError::AlreadyActive);
         }
@@ -194,6 +206,55 @@ impl ActiveRunRegistry {
             entry,
             session_code: session_code.to_string(),
         })
+    }
+
+    /// Atomically block new runs for an idle session. Existing reservations
+    /// win the race and make archiving fail with AlreadyActive.
+    pub fn retire_session(&self, session_code: &str) -> Result<(), ActiveRunError> {
+        let _admission = self
+            .inner
+            .admission
+            .lock()
+            .map_err(|_| ActiveRunError::RegistryUnavailable)?;
+        if self
+            .inner
+            .entries
+            .lock()
+            .map_err(|_| ActiveRunError::RegistryUnavailable)?
+            .contains_key(session_code)
+            || self.group_snapshot(session_code)?.is_some()
+        {
+            return Err(ActiveRunError::AlreadyActive);
+        }
+        self.inner
+            .archived_sessions
+            .lock()
+            .map_err(|_| ActiveRunError::RegistryUnavailable)?
+            .insert(session_code.to_string());
+        Ok(())
+    }
+
+    /// Reopen run admission after a successful restore or failed archive write.
+    pub fn reactivate_session(&self, session_code: &str) -> Result<(), ActiveRunError> {
+        let _admission = self
+            .inner
+            .admission
+            .lock()
+            .map_err(|_| ActiveRunError::RegistryUnavailable)?;
+        self.inner
+            .archived_sessions
+            .lock()
+            .map_err(|_| ActiveRunError::RegistryUnavailable)?
+            .remove(session_code);
+        Ok(())
+    }
+
+    pub fn is_retired(&self, session_code: &str) -> Result<bool, ActiveRunError> {
+        self.inner
+            .archived_sessions
+            .lock()
+            .map(|sessions| sessions.contains(session_code))
+            .map_err(|_| ActiveRunError::RegistryUnavailable)
     }
 
     pub fn control(

@@ -6,9 +6,10 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    answer_user_input, archive_session, create_session, delete_session,
-    download_session_attachment, list_messages, list_session_groups, list_user_input_requests,
-    patch_session, send_message, steer_message, stream_message, upload_session_attachment,
+    answer_user_input, archive_session, batch_delete_archived_sessions, create_session,
+    delete_session, download_session_attachment, list_archived_sessions, list_messages,
+    list_session_groups, list_user_input_requests, patch_session, restore_session, send_message,
+    steer_message, stream_message, upload_session_attachment,
 };
 use super::run_control::{get_active_run, stop_run};
 use super::short_term_memory::{
@@ -24,6 +25,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}/stop", post(super::terminals::stop))
         .route("/api/v1/chats/sessions/applications", get(super::application_context::get_session_applications))
         .route("/api/v1/chats/session-groups", get(list_session_groups))
+        .route("/api/v1/chats/archived-sessions", get(list_archived_sessions))
+        .route("/api/v1/chats/archived-sessions/batch-delete", post(batch_delete_archived_sessions))
+        .route("/api/v1/chats/sessions/{session_code}/restore", post(restore_session))
         .route("/api/v1/chats/sessions", post(create_session))
         .route("/api/v1/chats/sessions/get-active-run", get(get_active_run))
         .route("/api/v1/chats/sessions/steer-message", post(steer_message))

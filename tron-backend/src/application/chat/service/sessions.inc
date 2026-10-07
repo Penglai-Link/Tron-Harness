@@ -137,18 +137,100 @@ impl ChatService {
         self.repository().get_session(session_code)
     }
 
+    pub fn ensure_session_writable(&self, session_code: &str) -> Result<(), ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        if session.status != ChatSessionStatus::Active
+            || self
+                .active_runs
+                .is_retired(session_code)
+                .map_err(|_| ChatError::StorageFailure)?
+        {
+            return Err(ChatError::SessionArchived);
+        }
+        Ok(())
+    }
+
     pub fn archive_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        if self
+            .execution_memory
+            .as_ref()
+            .map(|memory| memory.get_active_goal(session_code))
+            .transpose()
+            .map_err(|_| ChatError::StorageFailure)?
+            .flatten()
+            .is_some()
+        {
+            return Err(ChatError::SessionRunActive);
+        }
+        self.active_runs
+            .retire_session(session_code)
+            .map_err(|error| {
+                if matches!(
+                    error,
+                    crate::application::agent::ActiveRunError::AlreadyActive
+                ) {
+                    ChatError::SessionRunActive
+                } else {
+                    ChatError::StorageFailure
+                }
+            })?;
+        if session.status == ChatSessionStatus::Archived {
+            return Ok(session);
+        }
         let updated_at = current_timestamp();
-        self.repository().update_session_status(
+        if let Err(error) = self.repository().update_session_status(
             session_code,
             ChatSessionStatus::Archived,
             &updated_at,
-        )?;
+        ) {
+            let _ = self.active_runs.reactivate_session(session_code);
+            return Err(error);
+        }
         self.repository().get_session(session_code)
+    }
+
+    pub fn restore_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        if session.status == ChatSessionStatus::Active {
+            self.active_runs
+                .reactivate_session(session_code)
+                .map_err(|_| ChatError::StorageFailure)?;
+            return Ok(session);
+        }
+        let updated_at = current_timestamp();
+        self.repository().update_session_status(
+            session_code,
+            ChatSessionStatus::Active,
+            &updated_at,
+        )?;
+        self.active_runs
+            .reactivate_session(session_code)
+            .map_err(|_| ChatError::StorageFailure)?;
+        self.repository().get_session(session_code)
+    }
+
+    pub fn list_archived_sessions(
+        &self,
+        workspace_code: Option<&str>,
+        current: u32,
+        size: u32,
+    ) -> Result<(Vec<ChatSession>, u64), ChatError> {
+        let current = current.max(1);
+        let size = size.clamp(1, 100);
+        let offset = current.saturating_sub(1).saturating_mul(size);
+        self.repository()
+            .list_archived_sessions(workspace_code, offset, size)
+    }
+
+    pub fn prepare_session_deletion(&self, session_code: &str) -> Result<(), ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        self.ensure_archived_session_inactive(session_code, &session)
     }
 
     pub fn delete_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
         let session = self.repository().get_session(session_code)?;
+        self.ensure_archived_session_inactive(session_code, &session)?;
         if let Some(resources) = self.resources.as_ref() {
             resources
                 .delete_chat_session_attachments(session_code)
@@ -158,6 +240,40 @@ impl ChatService {
         Ok(session)
     }
 
+    fn ensure_archived_session_inactive(
+        &self,
+        session_code: &str,
+        session: &ChatSession,
+    ) -> Result<(), ChatError> {
+        if session.status != ChatSessionStatus::Archived {
+            return Err(ChatError::SessionMustBeArchived);
+        }
+        if self
+            .execution_memory
+            .as_ref()
+            .map(|memory| memory.get_active_goal(session_code))
+            .transpose()
+            .map_err(|_| ChatError::StorageFailure)?
+            .flatten()
+            .is_some()
+        {
+            return Err(ChatError::SessionRunActive);
+        }
+        self.active_runs
+            .retire_session(session_code)
+            .map_err(|error| {
+                if matches!(
+                    error,
+                    crate::application::agent::ActiveRunError::AlreadyActive
+                ) {
+                    ChatError::SessionRunActive
+                } else {
+                    ChatError::StorageFailure
+                }
+            })?;
+        Ok(())
+    }
+
     pub fn store_session_attachment_from_reader(
         &self,
         session_code: &str,
@@ -165,6 +281,9 @@ impl ChatService {
         source: &mut dyn std::io::Read,
     ) -> Result<ChatMessageAttachment, ChatError> {
         let session = self.repository().get_session(session_code)?;
+        if session.status != ChatSessionStatus::Active {
+            return Err(ChatError::SessionArchived);
+        }
         let resources = self.resources.as_ref().ok_or(ChatError::StorageFailure)?;
         let id = self
             .id_provider
@@ -226,6 +345,10 @@ impl ChatService {
         session_code: &str,
         command: UpdateChatSessionCommand,
     ) -> Result<ChatSession, ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        if session.status != ChatSessionStatus::Active {
+            return Err(ChatError::SessionArchived);
+        }
         let title = normalized_required(command.title).ok_or(ChatError::SessionTitleRequired)?;
         let updated_at = current_timestamp();
         self.repository()
@@ -253,6 +376,9 @@ impl ChatService {
         answers: Vec<ChatUserInputAnswer>,
     ) -> Result<SendChatMessageCommand, ChatError> {
         let session = self.repository().get_session(session_code)?;
+        if session.status != ChatSessionStatus::Active {
+            return Err(ChatError::SessionArchived);
+        }
         let request = self
             .repository()
             .list_user_input_requests(session_code)?
@@ -263,19 +389,32 @@ impl ChatService {
             return Err(ChatError::UserInputAlreadyAnswered);
         }
         validate_user_input_answers(&request.questions, &answers)?;
-        let responses = request.questions.iter().filter_map(|question| {
-            let answer = answers.iter().find(|answer| answer.question_code == question.question_code)?;
-            let answer_text = match answer.answer_kind {
-                ChatUserInputAnswerKind::Option => answer.option_code.as_deref()
-                    .and_then(|code| question.options.iter().find(|option| option.option_code == code))
-                    .map(|option| option.label.clone())
-                    .or_else(|| answer.option_code.clone())
-                    .unwrap_or_default(),
-                ChatUserInputAnswerKind::Other => answer.other_text.clone().unwrap_or_default(),
-                ChatUserInputAnswerKind::Skipped => "Skipped".into(),
-            };
-            Some(json!({ "question": question.question, "answer": answer_text }))
-        }).collect::<Vec<_>>();
+        let responses = request
+            .questions
+            .iter()
+            .filter_map(|question| {
+                let answer = answers
+                    .iter()
+                    .find(|answer| answer.question_code == question.question_code)?;
+                let answer_text = match answer.answer_kind {
+                    ChatUserInputAnswerKind::Option => answer
+                        .option_code
+                        .as_deref()
+                        .and_then(|code| {
+                            question
+                                .options
+                                .iter()
+                                .find(|option| option.option_code == code)
+                        })
+                        .map(|option| option.label.clone())
+                        .or_else(|| answer.option_code.clone())
+                        .unwrap_or_default(),
+                    ChatUserInputAnswerKind::Other => answer.other_text.clone().unwrap_or_default(),
+                    ChatUserInputAnswerKind::Skipped => "Skipped".into(),
+                };
+                Some(json!({ "question": question.question, "answer": answer_text }))
+            })
+            .collect::<Vec<_>>();
         let answered_at = current_timestamp();
         let answered = self.repository().answer_user_input_request(
             session_code,
@@ -312,17 +451,32 @@ impl ChatService {
 
     /// Product session/model mapping only; native schema and answer CAS live in the SDK.
     pub fn native_resume_command(
-        &self, session_code: &str, entry: crate::application::chat::ChatResumeEntry,
-        model_code: Option<String>, reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+        &self,
+        session_code: &str,
+        entry: crate::application::chat::ChatResumeEntry,
+        model_code: Option<String>,
+        reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
     ) -> Result<SendChatMessageCommand, ChatError> {
-        let session=self.repository().get_session(session_code)?;
+        let session = self.repository().get_session(session_code)?;
         Ok(SendChatMessageCommand {
-            run_code:None,content:None,workspace_code:Some(session.workspace_code),app_code:session.app_code,
-            task_code:session.task_code,agent_code:session.agent_code,
-            model_selection:Self::continuation_model_selection(model_code.as_deref()),model_code,
-            system_model_id:None,reasoning_effort,page_context:None,limits:None,tools:Vec::new(),attachments:Vec::new(),
-            client_capabilities:Some(crate::domain::chat::ChatClientCapabilities {user_input_requests:true}),
-            resume:vec![entry],
+            run_code: None,
+            content: None,
+            workspace_code: Some(session.workspace_code),
+            app_code: session.app_code,
+            task_code: session.task_code,
+            agent_code: session.agent_code,
+            model_selection: Self::continuation_model_selection(model_code.as_deref()),
+            model_code,
+            system_model_id: None,
+            reasoning_effort,
+            page_context: None,
+            limits: None,
+            tools: Vec::new(),
+            attachments: Vec::new(),
+            client_capabilities: Some(crate::domain::chat::ChatClientCapabilities {
+                user_input_requests: true,
+            }),
+            resume: vec![entry],
         })
     }
 

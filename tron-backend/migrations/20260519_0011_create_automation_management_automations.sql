@@ -41,6 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_automations_workspace_status ON automations(works
 CREATE INDEX IF NOT EXISTS idx_automations_workspace_updated ON automations(workspace_code, updated_at);
 CREATE INDEX IF NOT EXISTS idx_automation_executions_automation_started ON automation_execution_records(automation_code, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_automation_executions_workspace_started ON automation_execution_records(workspace_code, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_automation_executions_session ON automation_execution_records(session_code);
 DELETE FROM automation_execution_records
 WHERE trigger_source = 'Scheduler'
   AND scheduled_at IS NOT NULL

@@ -18,3 +18,6 @@ CREATE INDEX IF NOT EXISTS idx_agent_runtime_event_replay_stream_order
 
 CREATE INDEX IF NOT EXISTS idx_agent_runtime_event_replay_stream_category
     ON agent_runtime_event_replay(stream_key, category, occurred_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_agent_runtime_event_replay_run
+    ON agent_runtime_event_replay(run_code);

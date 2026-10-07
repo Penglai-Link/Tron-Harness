@@ -40,6 +40,8 @@ mod host_run;
 mod host_shutdown;
 #[path = "host_snapshot.rs"]
 mod host_snapshot;
+#[path = "host_storage.rs"]
+mod host_storage;
 #[path = "host_summary.rs"]
 mod host_summary;
 use capability_state::{load_capability_state, persist_capability_state};

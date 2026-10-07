@@ -70,6 +70,8 @@ pub(super) const AGENT_RUN_REASONING_EFFORT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260817_0003_add_agent_run_reasoning_effort.sql");
 pub(super) const CHAT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260527_0018_create_chat_management.sql");
+pub(super) const CHAT_ARCHIVE_CLEANUP_INDEXES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20261007_0001_add_chat_archive_cleanup_indexes.sql");
 pub(super) const CHAT_SESSION_AGENT_CODE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260530_0023_add_chat_session_agent_code.sql");
 pub(super) const CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION: &str = include_str!(

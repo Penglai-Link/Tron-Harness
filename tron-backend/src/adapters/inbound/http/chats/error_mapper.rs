@@ -34,6 +34,21 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_SESSION_NOT_FOUND",
             "chat session was not found".to_string(),
         ),
+        ChatError::SessionMustBeArchived => (
+            StatusCode::CONFLICT,
+            "CHAT_SESSION_MUST_BE_ARCHIVED",
+            "only archived chat sessions can be permanently deleted".to_string(),
+        ),
+        ChatError::SessionArchived => (
+            StatusCode::CONFLICT,
+            "CHAT_SESSION_ARCHIVED",
+            "archived chat sessions cannot be changed or resumed".to_string(),
+        ),
+        ChatError::SessionRunActive => (
+            StatusCode::CONFLICT,
+            "CHAT_SESSION_RUN_ACTIVE",
+            "running chat sessions cannot be archived".to_string(),
+        ),
         ChatError::SessionTitleRequired => (
             StatusCode::BAD_REQUEST,
             "CHAT_SESSION_TITLE_REQUIRED",

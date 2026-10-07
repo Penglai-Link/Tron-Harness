@@ -14,7 +14,8 @@ use crate::{
 use super::chat_message_attachments::{attachments_from_storage, attachments_to_storage};
 use super::migrations::{
     CHAT_MANAGEMENT_MIGRATION, CHAT_MESSAGE_ATTACHMENTS_MIGRATION,
-    CHAT_MESSAGE_TOKEN_USAGE_MIGRATION, CHAT_SESSION_AGENT_CODE_MIGRATION,
+    CHAT_ARCHIVE_CLEANUP_INDEXES_MIGRATION, CHAT_MESSAGE_TOKEN_USAGE_MIGRATION,
+    CHAT_SESSION_AGENT_CODE_MIGRATION,
     CHAT_SESSION_LEGACY_SOURCE_MIGRATION, CHAT_SESSION_SOURCE_MIGRATION,
     CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION, CHAT_SESSION_VISIBILITY_MIGRATION,
     CHAT_SESSION_PROJECT_CODE_MIGRATION,
@@ -105,6 +106,10 @@ impl SqliteChatRepository {
                 .execute_batch(CHAT_USER_INPUT_REQUESTS_MIGRATION)
                 .map_err(storage_error)?;
         }
+        repository
+            .connection
+            .execute_batch(CHAT_ARCHIVE_CLEANUP_INDEXES_MIGRATION)
+            .map_err(storage_error)?;
         Ok(repository)
     }
 }

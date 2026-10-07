@@ -109,3 +109,6 @@ CREATE TABLE IF NOT EXISTS provider_model_run_snapshots (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_provider_run_snapshots_session
+    ON provider_model_run_snapshots(session_code);

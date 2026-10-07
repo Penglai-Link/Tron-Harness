@@ -43,6 +43,11 @@ impl ChatService {
                     .map(|active_run| active_run.run_code);
                 return Err(ChatSendError::RunAlreadyActive { active_run_code });
             }
+            Err(ActiveRunError::SessionArchived) => {
+                return Err(ChatSendError::Chat(
+                    crate::domain::chat::ChatError::SessionArchived,
+                ));
+            }
             Err(error) => {
                 return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
                     error.to_string(),

@@ -6,6 +6,29 @@ pub trait ChatRepository: Send {
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError>;
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError>;
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError>;
+    fn list_archived_sessions(
+        &mut self,
+        workspace_code: Option<&str>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<(Vec<ChatSession>, u64), ChatError> {
+        let mut sessions = self
+            .list_sessions()?
+            .into_iter()
+            .filter(|session| {
+                session.status == crate::domain::chat::ChatSessionStatus::Archived
+                    && workspace_code.is_none_or(|code| session.workspace_code == code)
+            })
+            .collect::<Vec<_>>();
+        let total = sessions.len() as u64;
+        let start = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(sessions.len());
+        let end = start
+            .saturating_add(usize::try_from(limit).unwrap_or(usize::MAX))
+            .min(sessions.len());
+        Ok((sessions.drain(start..end).collect(), total))
+    }
     fn get_session(&mut self, session_code: &str) -> Result<ChatSession, ChatError>;
     fn update_session_status(
         &mut self,

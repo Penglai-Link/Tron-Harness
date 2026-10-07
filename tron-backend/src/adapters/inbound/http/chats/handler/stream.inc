@@ -7,6 +7,9 @@ pub async fn send_message(
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
+    if let Err(error) = state.chats.ensure_session_writable(&session_code) {
+        return chat_error_response(error);
+    }
     if let Err(response) = ensure_no_active_run(&state, &session_code) {
         return response;
     }
@@ -136,6 +139,9 @@ pub(crate) async fn stream_message_command(
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
+    if let Err(error) = state.chats.ensure_session_writable(&session_code) {
+        return chat_error_response(error);
+    }
     if let Err(response) = ensure_no_active_run(&state, &session_code) {
         return response;
     }

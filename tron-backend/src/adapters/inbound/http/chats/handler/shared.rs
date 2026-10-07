@@ -118,6 +118,9 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
         ChatSendError::Chat(ChatError::AttachmentNotFound) => "CHAT_ATTACHMENT_NOT_FOUND",
         ChatSendError::Chat(ChatError::MessageRequired) => "CHAT_MESSAGE_REQUIRED",
         ChatSendError::Chat(ChatError::SessionNotFound) => "CHAT_SESSION_NOT_FOUND",
+        ChatSendError::Chat(ChatError::SessionMustBeArchived) => "CHAT_SESSION_MUST_BE_ARCHIVED",
+        ChatSendError::Chat(ChatError::SessionArchived) => "CHAT_SESSION_ARCHIVED",
+        ChatSendError::Chat(ChatError::SessionRunActive) => "CHAT_SESSION_RUN_ACTIVE",
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "CHAT_SESSION_TITLE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "CHAT_WORKSPACE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => "CHAT_WORKSPACE_FORBIDDEN",
@@ -147,6 +150,15 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
         }
         ChatSendError::Chat(ChatError::MessageRequired) => "message content is required".into(),
         ChatSendError::Chat(ChatError::SessionNotFound) => "chat session was not found".into(),
+        ChatSendError::Chat(ChatError::SessionMustBeArchived) => {
+            "only archived chat sessions can be permanently deleted".into()
+        }
+        ChatSendError::Chat(ChatError::SessionArchived) => {
+            "archived chat sessions cannot be changed or resumed".into()
+        }
+        ChatSendError::Chat(ChatError::SessionRunActive) => {
+            "running chat sessions cannot be archived".into()
+        }
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "session title is required".into(),
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "workspaceCode is required".into(),
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => {

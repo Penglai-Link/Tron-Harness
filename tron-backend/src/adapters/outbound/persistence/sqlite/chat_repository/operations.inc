@@ -30,7 +30,44 @@ impl ChatRepository for SqliteChatRepository {
 
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError> {
         let tx = self.connection.transaction().map_err(storage_error)?;
+        if table_exists(&tx, "agent_runtime_event_replay")? {
+            let query = if table_exists(&tx, "agent_runs")? {
+                "DELETE FROM agent_runtime_event_replay
+                 WHERE stream_key = ?1 OR run_code IN (
+                     SELECT run_code FROM agent_runs WHERE conversation_code = ?1
+                 )"
+            } else {
+                "DELETE FROM agent_runtime_event_replay WHERE stream_key = ?1"
+            };
+            tx.execute(query, [session_code]).map_err(storage_error)?;
+        }
+        if table_exists(&tx, "agent_runtime_event_replay_failure")? {
+            let query = if table_exists(&tx, "agent_runs")? {
+                "DELETE FROM agent_runtime_event_replay_failure
+                 WHERE stream_key = ?1 OR stream_key IN (
+                     SELECT run_code FROM agent_runs WHERE conversation_code = ?1
+                 )"
+            } else {
+                "DELETE FROM agent_runtime_event_replay_failure WHERE stream_key = ?1"
+            };
+            tx.execute(query, [session_code]).map_err(storage_error)?;
+        }
+        if table_exists(&tx, "agent_runs")? {
+            tx.execute(
+                "DELETE FROM agent_runs WHERE conversation_code = ?1",
+                [session_code],
+            )
+            .map_err(storage_error)?;
+        }
         delete_short_term_memory_rows_for_session(&tx, session_code)?;
+        for table in [
+            "automation_execution_records",
+            "provider_model_run_snapshots",
+            "conversation_runtime_sessions",
+            "chat_session_auto_model_routes",
+        ] {
+            delete_session_rows_if_table_exists(&tx, table, session_code)?;
+        }
         tx.execute(
             "DELETE FROM chat_user_input_requests WHERE session_code = ?1",
             [session_code],
@@ -70,6 +107,41 @@ impl ChatRepository for SqliteChatRepository {
             .map_err(storage_error)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(storage_error)
+    }
+
+    fn list_archived_sessions(
+        &mut self,
+        workspace_code: Option<&str>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<(Vec<ChatSession>, u64), ChatError> {
+        let total = self
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM chat_sessions
+                 WHERE status = 'ARCHIVED'
+                   AND COALESCE(visibility, 'VISIBLE') != 'HIDDEN'
+                   AND (?1 IS NULL OR workspace_code = ?1)",
+                [workspace_code],
+                |row| row.get::<_, u64>(0),
+            )
+            .map_err(storage_error)?;
+        let mut statement = self.connection.prepare(
+            "SELECT id, session_code, workspace_code, project_code, user_code, app_code, task_code, agent_code, title, status, last_run_code, last_run_status, created_at, updated_at,
+                    system_agent_session_id, source_type, source_code
+             FROM chat_sessions
+             WHERE status = 'ARCHIVED'
+               AND COALESCE(visibility, 'VISIBLE') != 'HIDDEN'
+               AND (?1 IS NULL OR workspace_code = ?1)
+             ORDER BY updated_at DESC, id DESC
+             LIMIT ?2 OFFSET ?3",
+        ).map_err(storage_error)?;
+        let sessions = statement
+            .query_map(params![workspace_code, limit, offset], row_to_session)
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)?;
+        Ok((sessions, total))
     }
 
     fn get_session(&mut self, session_code: &str) -> Result<ChatSession, ChatError> {
@@ -383,5 +455,4 @@ impl ChatRepository for SqliteChatRepository {
             .find(|item| item.request_code == request_code)
             .ok_or(ChatError::UserInputRequestNotFound)
     }
-
 }

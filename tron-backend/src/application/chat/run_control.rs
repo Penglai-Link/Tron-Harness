@@ -130,6 +130,7 @@ impl From<ActiveRunError> for ChatRunControlError {
             }
             ActiveRunError::RunFinishing => Self::RunFinishing,
             ActiveRunError::AlreadyActive
+            | ActiveRunError::SessionArchived
             | ActiveRunError::RunStarting
             | ActiveRunError::RuntimeUnsupported { .. }
             | ActiveRunError::RegistryUnavailable => Self::RegistryUnavailable,

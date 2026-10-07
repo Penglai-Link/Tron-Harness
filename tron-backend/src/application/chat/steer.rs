@@ -27,6 +27,7 @@ impl From<ActiveRunError> for ChatSteerError {
             },
             ActiveRunError::RunStarting => Self::RunStarting,
             ActiveRunError::RunFinishing => Self::RunFinishing,
+            ActiveRunError::SessionArchived => Self::Chat(ChatError::SessionArchived),
             ActiveRunError::AlreadyActive | ActiveRunError::RegistryUnavailable => {
                 Self::RegistryUnavailable
             }

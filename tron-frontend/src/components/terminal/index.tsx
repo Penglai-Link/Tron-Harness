@@ -5,6 +5,7 @@ import { fromUiResume, toUiEvent } from "@tron/chat-agent-ui-adapter";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useLocale } from "@/i18n";
+import { archiveChatSession } from "@/domain/chat/hooks";
 import { getApiAccessToken, getApiBaseUrl } from "@/shared/api/httpClient";
 import { useTheme, useWorkspaceSpaces } from "@/shared";
 
@@ -320,9 +321,12 @@ async function disposeTerminalChatSession(context: Promise<TerminalChatContext>)
     }
   } catch (error) {
     console.warn("Terminal chat run cleanup failed", error);
-  } finally {
-    await chatAdapter.deleteSession(session.sessionCode).catch((error: unknown) => {
-      console.warn("Terminal chat session cleanup failed", error);
-    });
+    return;
+  }
+  try {
+    await archiveChatSession(session.sessionCode);
+    await chatAdapter.deleteSession(session.sessionCode);
+  } catch (error) {
+    console.warn("Terminal chat session cleanup failed", error);
   }
 }

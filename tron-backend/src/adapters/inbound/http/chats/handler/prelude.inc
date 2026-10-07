@@ -1,4 +1,10 @@
-use std::{collections::BTreeSet, convert::Infallible, io::Seek, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::Infallible,
+    io::Seek,
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
@@ -6,16 +12,17 @@ use crate::{
     application::{
         agent::{AgentInvocationService, generate_agent_run_code},
         chat::{
-            ChatSendError, ChatSessionAttachmentUploadCommand, ChatSessionQuery,
-            CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
-            UpdateChatSessionCommand,
+            ArchivedChatSessionPage, ArchivedChatSessionQuery, BatchDeleteArchivedSessionItem,
+            BatchDeleteArchivedSessionsCommand, BatchDeleteArchivedSessionsResult, ChatSendError,
+            ChatSessionAttachmentUploadCommand, ChatSessionQuery, CreateChatSessionCommand,
+            SendChatMessageCommand, SteerChatMessageCommand, UpdateChatSessionCommand,
         },
     },
     domain::{
         agent::{AgentRuntimeType, ModelStreamEvent},
         chat::ChatError,
     },
-    response::ApiResponse,
+    response::{ApiResponse, EmptyData},
     shared::auth_holder::AuthHolder,
 };
 use axum::{
@@ -35,6 +42,7 @@ use axum::{
     },
 };
 use serde_json::{Value, json};
+use tokio::task::JoinSet;
 
 use super::error_mapper::{
     chat_error_response, chat_send_error_response, chat_steer_error_response,
@@ -51,3 +59,5 @@ pub(crate) use shared::{
 };
 
 const CHAT_STREAM_POLL_INTERVAL_MS: u64 = 25;
+const MAX_ARCHIVED_SESSION_DELETE_BATCH: usize = 100;
+const ARCHIVED_SESSION_DELETE_WORKERS: usize = 4;

@@ -38,6 +38,7 @@ export const shell = {
     project: {
       archiveChats: "Archive chats",
       archiveFailed: "Failed to archive project chats",
+      archivePartial: "Archived {{succeeded}} chat(s); {{failed}} could not be archived because they are still running.",
       archived: "Project chats archived",
       cancel: "Cancel",
       edit: "Edit",
@@ -101,6 +102,7 @@ export const shell = {
       users: "Users",
       variables: "Variables",
       workspaceAdmin: "Workspace",
+      archivedChats: "Archived chats",
     },
     sections: {
       administration: "Administration",

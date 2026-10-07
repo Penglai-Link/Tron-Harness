@@ -38,6 +38,7 @@ export const shell = {
     project: {
       archiveChats: "归档聊天",
       archiveFailed: "归档项目会话失败",
+      archivePartial: "已归档 {{succeeded}} 个会话；{{failed}} 个仍在运行，未能归档。",
       archived: "项目会话已归档",
       cancel: "取消",
       edit: "编辑",
@@ -101,6 +102,7 @@ export const shell = {
       users: "用户",
       variables: "变量",
       workspaceAdmin: "工作区",
+      archivedChats: "已归档会话",
     },
     sections: {
       administration: "管理",

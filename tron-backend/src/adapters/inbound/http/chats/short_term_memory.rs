@@ -18,6 +18,7 @@ use crate::{
 };
 
 use super::super::auth::RequestAuthContext;
+use super::error_mapper::chat_error_response;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,6 +116,9 @@ pub async fn create_compaction(
         Ok(command) => command,
         Err(response) => return response,
     };
+    if let Err(error) = state.chats.ensure_session_writable(&command.session_code) {
+        return chat_error_response(error);
+    }
     let model_code = command.model_code.clone();
     let workspace_code = match state
         .short_term_memory
@@ -231,6 +235,9 @@ pub async fn set_goal(
         Ok(command) => command,
         Err(response) => return response,
     };
+    if let Err(error) = state.chats.ensure_session_writable(&command.session_code) {
+        return chat_error_response(error);
+    }
     match state
         .short_term_memory
         .set_goal_with_operator(command, Some(auth.user().user_code.clone()))
@@ -249,6 +256,9 @@ pub async fn pause_goal(
         Ok(command) => command,
         Err(response) => return response,
     };
+    if let Err(error) = state.chats.ensure_session_writable(&command.session_code) {
+        return chat_error_response(error);
+    }
     match state.short_term_memory.pause_goal(command) {
         Ok(goal) => Json(ApiResponse::success(goal)).into_response(),
         Err(error) => short_term_memory_error_response(error),
@@ -264,6 +274,9 @@ pub async fn resume_goal(
         Ok(command) => command,
         Err(response) => return response,
     };
+    if let Err(error) = state.chats.ensure_session_writable(&command.session_code) {
+        return chat_error_response(error);
+    }
     match state.short_term_memory.resume_goal(command) {
         Ok(goal) => Json(ApiResponse::success(goal)).into_response(),
         Err(error) => short_term_memory_error_response(error),
@@ -279,6 +292,9 @@ pub async fn cancel_goal(
         Ok(command) => command,
         Err(response) => return response,
     };
+    if let Err(error) = state.chats.ensure_session_writable(&command.session_code) {
+        return chat_error_response(error);
+    }
     match state.short_term_memory.cancel_goal(command) {
         Ok(goal) => Json(ApiResponse::success(goal)).into_response(),
         Err(error) => short_term_memory_error_response(error),
@@ -294,6 +310,9 @@ pub async fn clear_goal(
         Ok(command) => command,
         Err(response) => return response,
     };
+    if let Err(error) = state.chats.ensure_session_writable(&command.session_code) {
+        return chat_error_response(error);
+    }
     match state.short_term_memory.clear_goal(command) {
         Ok(goal) => Json(ApiResponse::success(goal)).into_response(),
         Err(error) => short_term_memory_error_response(error),
@@ -309,6 +328,9 @@ pub async fn update_goal(
         Ok(command) => command,
         Err(response) => return response,
     };
+    if let Err(error) = state.chats.ensure_session_writable(&command.session_code) {
+        return chat_error_response(error);
+    }
     match state.short_term_memory.update_goal(command) {
         Ok(goal) => Json(ApiResponse::success(goal)).into_response(),
         Err(error) => short_term_memory_error_response(error),

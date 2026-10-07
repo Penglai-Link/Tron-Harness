@@ -3,6 +3,11 @@ import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 type RoutePageComponent = LazyExoticComponent<ComponentType>;
 
 export const routePages: Record<string, RoutePageComponent> = {
+  "admin.archivedChats": lazy(() =>
+    import("@/domain/admin/pages/ArchivedChatsPage").then((module) => ({
+      default: module.ArchivedChatsPage,
+    })),
+  ),
   "admin.auditLogs": lazy(() =>
     import("@/domain/admin/pages/AuditLogsPage").then((module) => ({
       default: module.AuditLogsPage,

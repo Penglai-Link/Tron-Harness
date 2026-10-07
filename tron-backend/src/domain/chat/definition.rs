@@ -181,6 +181,9 @@ pub enum ChatError {
     AttachmentNotFound,
     MessageRequired,
     SessionNotFound,
+    SessionMustBeArchived,
+    SessionArchived,
+    SessionRunActive,
     SessionTitleRequired,
     StorageFailure,
     WorkspaceForbidden,
@@ -200,6 +203,13 @@ impl Display for ChatError {
             Self::AttachmentNotFound => f.write_str("chat attachment was not found"),
             Self::MessageRequired => f.write_str("chat message content is required"),
             Self::SessionNotFound => f.write_str("chat session was not found"),
+            Self::SessionMustBeArchived => {
+                f.write_str("only archived chat sessions can be permanently deleted")
+            }
+            Self::SessionArchived => {
+                f.write_str("archived chat sessions cannot be changed or resumed")
+            }
+            Self::SessionRunActive => f.write_str("running chat sessions cannot be archived"),
             Self::SessionTitleRequired => f.write_str("chat session title is required"),
             Self::StorageFailure => f.write_str("chat storage failure"),
             Self::WorkspaceForbidden => f.write_str("workspace access is forbidden"),

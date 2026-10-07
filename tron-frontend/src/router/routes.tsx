@@ -33,6 +33,16 @@ export interface AppRoute {
 
 export const appRoutes: AppRoute[] = [
   {
+    pageId: "admin.archivedChats",
+    route: "/settings/archived-chats",
+    activeNav: "Settings",
+    title: "Archived Chats",
+    titleTranslationKey: "pages:archivedChats.title",
+    archetype: "data-table",
+    layout: "settings",
+    settingsNav: "Archived Chats",
+  },
+  {
     pageId: "agents.index",
     route: "/agents",
     activeNav: "Agents",
