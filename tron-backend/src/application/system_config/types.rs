@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone)]
 pub struct SystemConfigService {
     pub(super) store: Arc<dyn SystemConfigStore>,
+    pub(super) runtime_config: Option<super::BackendRuntimeConfig>,
 }
 
 #[derive(Debug)]
@@ -45,6 +46,7 @@ pub struct SystemConfigItem {
     pub value: Option<serde_json::Value>,
     pub value_type: &'static str,
     pub effect: &'static str,
+    pub effect_reason: &'static str,
     pub sensitive: bool,
     pub overridden_by_environment: bool,
 }

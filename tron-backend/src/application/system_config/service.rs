@@ -14,7 +14,15 @@ use super::{
 
 impl SystemConfigService {
     pub fn new(store: Arc<dyn SystemConfigStore>) -> Self {
-        Self { store }
+        Self {
+            store,
+            runtime_config: None,
+        }
+    }
+
+    pub fn with_runtime_config(mut self, runtime: super::BackendRuntimeConfig) -> Self {
+        self.runtime_config = Some(runtime);
+        self
     }
 
     pub fn get(&self) -> Result<SystemConfigDocument, SystemConfigError> {
@@ -23,7 +31,7 @@ impl SystemConfigService {
         Ok(SystemConfigDocument {
             revision: stored.revision,
             path: stored.path,
-            items: config_items(&effective),
+            items: config_items(&effective, self.runtime_config.is_some()),
         })
     }
 
@@ -46,7 +54,10 @@ impl SystemConfigService {
         }
         let path = Path::new(&stored.path);
         let effective = effective_context_value(&stored.content, path, next_value.clone())?;
-        let available_paths = leaf_paths(&effective);
+        let available_paths = leaf_paths(&effective)
+            .into_iter()
+            .filter(|path| !super::helpers::is_removed_config_path(path))
+            .collect::<Vec<_>>();
         let mut selected_paths = std::collections::BTreeSet::new();
         for change in changes {
             if !selected_paths.insert(change.path.clone())
@@ -69,7 +80,7 @@ impl SystemConfigService {
         let current_value = parse_yaml(&stored.content, path)?;
         let changed_paths = changed_leaf_paths(&current_value, &next_value);
         let (hot_update_paths, restart_paths, migration_paths) =
-            classify_paths(changed_paths.clone());
+            classify_paths(changed_paths.clone(), self.runtime_config.is_some());
         if !confirm_migration && !migration_paths.is_empty() {
             return Err(SystemConfigError::MigrationConfirmationRequired(
                 migration_paths,
@@ -85,10 +96,27 @@ impl SystemConfigService {
             });
         }
 
-        let persisted = self
-            .store
-            .replace(expected_revision, &next_yaml)
-            .map_err(SystemConfigError::from_store)?;
+        let persisted = if let Some(runtime) = &self.runtime_config {
+            let next = crate::config::AppConfig::effective_config(&next_yaml, path)
+                .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
+            // Serialize persistence and publication so concurrent saves cannot
+            // publish an older revision after a newer one. Failed writes leave
+            // the runtime untouched. Boot-time resources stay at their active values.
+            let mut current = runtime
+                .0
+                .lock()
+                .map_err(|_| SystemConfigError::WriteFailed)?;
+            let persisted = self
+                .store
+                .replace(expected_revision, &next_yaml)
+                .map_err(SystemConfigError::from_store)?;
+            super::runtime::apply_hot_settings(&mut current, next, &hot_update_paths);
+            persisted
+        } else {
+            self.store
+                .replace(expected_revision, &next_yaml)
+                .map_err(SystemConfigError::from_store)?
+        };
         Ok(SystemConfigUpdateResult {
             revision: persisted.revision,
             changed_paths,

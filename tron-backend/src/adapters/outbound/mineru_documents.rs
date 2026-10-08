@@ -21,6 +21,8 @@ use std::{
 };
 use tokio::time::{Instant, sleep};
 mod routing;
+mod runtime;
+pub use runtime::RuntimeMineruDocumentParser;
 
 #[derive(Clone)]
 pub struct MineruKnowledgeDocumentParser {
@@ -162,11 +164,38 @@ impl MineruKnowledgeDocumentParser {
 }
 #[async_trait]
 impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
-    fn profile_identity(&self) -> Value { json!({"ocrMode":self.config.ocr_mode,"parserProfile":self.config.parser_profile,"expectedParserVersion":self.config.expected_parser_version,"baseUrl":self.config.base_url,"nodes":self.config.nodes}) }
-    fn endpoint_ids(&self) -> Vec<String> { self.nodes().unwrap_or_default().into_iter().map(|n| n.id).collect() }
-    async fn healthy_endpoints(&self) -> Result<Vec<crate::application::knowledge_base::ingestion::ParseEndpointCapacity>, KnowledgeBaseError> { self.routing_capacities().await }
-    async fn routing_status(&self) -> crate::application::knowledge_base::parsing::ParserRoutingStatus { self.routing_status_with_reasons().await }
-    async fn parse_durable(&self, filename: &str, bytes: &[u8], tier: Option<ParsingTier>, checkpoint: std::sync::Arc<dyn crate::application::knowledge_base::parsing::ParseCheckpoint>) -> Result<StructuredParse, KnowledgeBaseError> {
+    fn profile_identity(&self) -> Value {
+        json!({"ocrMode":self.config.ocr_mode,"parserProfile":self.config.parser_profile,"expectedParserVersion":self.config.expected_parser_version,"baseUrl":self.config.base_url,"nodes":self.config.nodes,"runtimeConfig":self.config})
+    }
+    fn endpoint_ids(&self) -> Vec<String> {
+        self.nodes()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|n| n.id)
+            .collect()
+    }
+    async fn healthy_endpoints(
+        &self,
+    ) -> Result<
+        Vec<crate::application::knowledge_base::ingestion::ParseEndpointCapacity>,
+        KnowledgeBaseError,
+    > {
+        self.routing_capacities().await
+    }
+    async fn routing_status(
+        &self,
+    ) -> crate::application::knowledge_base::parsing::ParserRoutingStatus {
+        self.routing_status_with_reasons().await
+    }
+    async fn parse_durable(
+        &self,
+        filename: &str,
+        bytes: &[u8],
+        tier: Option<ParsingTier>,
+        checkpoint: std::sync::Arc<
+            dyn crate::application::knowledge_base::parsing::ParseCheckpoint,
+        >,
+    ) -> Result<StructuredParse, KnowledgeBaseError> {
         let task = checkpoint.task()?;
         let parser = self.on_endpoint(task.endpoint_id.as_deref().ok_or_else(|| invalid("解析节点未认领"))?)?;
         parser.parse_internal(filename, bytes, tier, Some(checkpoint)).await

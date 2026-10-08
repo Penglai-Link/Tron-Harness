@@ -14,6 +14,7 @@ export type MineruNodeConfig = {
 
 export interface SystemConfigItem {
   effect: SystemConfigEffect;
+  effectReason?: string;
   overriddenByEnvironment: boolean;
   path: string;
   sensitive: boolean;

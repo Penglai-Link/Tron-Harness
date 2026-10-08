@@ -53,6 +53,7 @@ pub struct ResourceService {
     workspaces: WorkspaceService,
     variables: VariableService,
     config: ResourceConfig,
+    runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
     storage: Arc<StorageRouter>,
     event_bus: EventBusHandle,
     connection_verifier: Arc<dyn ResourceConnectionVerifier>,
@@ -77,6 +78,7 @@ impl ResourceService {
             workspaces,
             variables,
             config,
+            runtime_config: None,
             storage: Arc::new(storage),
             event_bus: EventBusHandle::disabled(),
             connection_verifier,
@@ -106,6 +108,21 @@ impl ResourceService {
         )?;
         service.event_bus = event_bus;
         Ok(service)
+    }
+
+    pub fn with_runtime_config(
+        mut self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) -> Self {
+        self.runtime_config = Some(runtime);
+        self
+    }
+
+    fn effective_config(&self) -> ResourceConfig {
+        self.runtime_config
+            .as_ref()
+            .map(|runtime| runtime.snapshot().resource)
+            .unwrap_or_else(|| self.config.clone())
     }
 
     pub fn with_profile_scope(mut self) -> Self {
@@ -199,15 +216,15 @@ impl ResourceService {
     }
 
     pub fn max_binary_bytes(&self) -> u64 {
-        self.config.limits.max_binary_bytes
+        self.effective_config().limits.max_binary_bytes
     }
 
     pub fn max_commit_bytes(&self) -> u64 {
-        self.config.limits.max_commit_bytes
+        self.effective_config().limits.max_commit_bytes
     }
 
     pub fn max_commit_control_bytes(&self) -> usize {
-        self.config.limits.attributes_max_bytes
+        self.effective_config().limits.attributes_max_bytes
     }
 
     fn repository<T>(

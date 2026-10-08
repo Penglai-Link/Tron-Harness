@@ -21,7 +21,7 @@ const MAX_CHAT_SESSION_ATTACHMENT_CONTENT_TYPE_CHARS: usize = 255;
 
 impl ResourceService {
     pub fn max_chat_session_attachment_bytes(&self) -> u64 {
-        self.config
+        self.effective_config()
             .limits
             .max_binary_bytes
             .min(MAX_CHAT_SESSION_ATTACHMENT_BYTES)
@@ -37,7 +37,7 @@ impl ResourceService {
         validate_resource_code(&command.attachment_code)?;
         validate_binary_name(
             &command.file_name,
-            self.config.limits.max_binary_name_length,
+            self.effective_config().limits.max_binary_name_length,
         )?;
         let content_type = normalize_content_type(&command.content_type)?;
         let (temporary, byte_size) =

@@ -81,7 +81,8 @@ test("system configuration exposes omitted defaults and persists context order a
   const response = await saved;
   expect(response.ok()).toBeTruthy();
   const result = (await response.json()).data;
-  expect(result.restartPaths).toContain("shortTermMemory.context.providers.order");
+  expect(result.hotUpdatePaths).toContain("shortTermMemory.context.providers.order");
+  expect(result.restartPaths).toEqual([]);
   const yaml = parse(await readFile(filename, "utf8"));
   expect(yaml.shortTermMemory.context.providers.order).toEqual(entries);
   expect(yaml.shortTermMemory.context.providers.working.strategy).toBe("semantic");

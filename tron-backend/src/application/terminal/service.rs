@@ -30,6 +30,7 @@ const TERMINAL_TICKET_TTL_MILLIS: i64 = 60_000;
 pub struct TerminalService {
     apps: AppService,
     terminal_working_directory: String,
+    runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
     tickets: Arc<Mutex<HashMap<String, StoredTerminalSocketTicket>>>,
     workspaces: WorkspaceService,
 }
@@ -49,9 +50,18 @@ impl TerminalService {
         Self {
             apps,
             terminal_working_directory,
+            runtime_config: None,
             tickets: Arc::new(Mutex::new(HashMap::new())),
             workspaces,
         }
+    }
+
+    pub fn with_runtime_config(
+        mut self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) -> Self {
+        self.runtime_config = Some(runtime);
+        self
     }
 
     pub fn issue_socket_ticket(
@@ -100,7 +110,10 @@ impl TerminalService {
     ) -> Result<(Option<String>, String), TerminalError> {
         let Some(app_code) = optional(app_code) else {
             let directory = required(
-                self.terminal_working_directory.clone(),
+                self.runtime_config
+                    .as_ref()
+                    .map(|runtime| runtime.snapshot().terminal_working_directory)
+                    .unwrap_or_else(|| self.terminal_working_directory.clone()),
                 TerminalError::WorkingDirectoryUnavailable,
             )?;
             if !Path::new(&directory).is_dir() {

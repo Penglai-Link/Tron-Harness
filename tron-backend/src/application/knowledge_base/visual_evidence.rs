@@ -60,7 +60,7 @@ impl KnowledgeBaseService {
         hits: &[KnowledgeBaseHit],
     ) -> Result<KnowledgeBaseVisualContext, KnowledgeBaseError> {
         let allowed = self.validate_visual_hits(user, workspace, agent, hits)?;
-        if !self.visual_context_enabled {
+        if !self.visual_context_enabled() {
             return Ok(KnowledgeBaseVisualContext {
                 evidence: vec![],
                 warnings: if hits.iter().any(|h| {

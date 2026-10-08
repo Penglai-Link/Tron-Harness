@@ -190,7 +190,7 @@ impl KnowledgeBaseService {
         self.workers.stop.cancel();
     }
     pub fn start_ingestion_workers(&self) -> Result<(), KnowledgeBaseError> {
-        self.ingestion_config
+        self.active_ingestion_config()
             .validate()
             .map_err(KnowledgeBaseError::Invalid)?;
         let runtime = tokio::runtime::Handle::try_current()
@@ -213,7 +213,7 @@ impl KnowledgeBaseService {
                 }
                 tokio::select! {
                     _ = maintenance.workers.stop.cancelled() => break,
-                    _ = tokio::time::sleep(Duration::from_millis(maintenance.ingestion_config.poll_ms.max(1000))) => {}
+                    _ = tokio::time::sleep(Duration::from_millis(maintenance.active_ingestion_config().poll_ms.max(1000))) => {}
                 }
             }
         });
@@ -231,18 +231,18 @@ impl KnowledgeBaseService {
                 }
                 tokio::select! {
                     _ = cancellations.workers.stop.cancelled() => break,
-                    _ = tokio::time::sleep(Duration::from_millis(cancellations.ingestion_config.poll_ms.max(250))) => {}
+                    _ = tokio::time::sleep(Duration::from_millis(cancellations.active_ingestion_config().poll_ms.max(250))) => {}
                 }
             }
         });
         for (stage, capacity) in [
             (
                 IngestionStage::Parsing,
-                self.ingestion_config.parse_capacity,
+                self.active_ingestion_config().parse_capacity,
             ),
             (
                 IngestionStage::Embedding,
-                self.ingestion_config.embedding_capacity,
+                self.active_ingestion_config().embedding_capacity,
             ),
         ] {
             for _ in 0..capacity {
@@ -256,7 +256,7 @@ impl KnowledgeBaseService {
                         }
                         tokio::select! {
                             _ = service.workers.stop.cancelled() => break,
-                            _ = tokio::time::sleep(Duration::from_millis(service.ingestion_config.poll_ms)) => {}
+                            _ = tokio::time::sleep(Duration::from_millis(service.active_ingestion_config().poll_ms)) => {}
                         }
                     }
                 });
@@ -371,8 +371,11 @@ impl KnowledgeBaseService {
                 .embedding_space_fingerprint(workspace, Some(m), TRON_VECTOR_INDEX_DIMENSION)
                 .ok()
         });
-        let parser_identity = self
+        let parser = self
             .parser
+            .as_ref()
+            .map(|parser| parser.snapshot().unwrap_or_else(|| parser.clone()));
+        let parser_identity = parser
             .as_ref()
             .map(|p| p.profile_identity())
             .unwrap_or(json!({}));
@@ -393,7 +396,7 @@ impl KnowledgeBaseService {
         let endpoint_ids = if doc.file_name.to_ascii_lowercase().ends_with(".md") {
             vec!["local-markdown".into()]
         } else {
-            self.parser
+            parser
                 .as_ref()
                 .map(|p| p.endpoint_ids())
                 .unwrap_or_default()
@@ -404,9 +407,9 @@ impl KnowledgeBaseService {
             Some(ParsingTier::Flash)
         } else {
             doc.parsing_tier
-                .or_else(|| self.parser.as_ref().map(|p| p.default_tier()))
+                .or_else(|| parser.as_ref().map(|p| p.default_tier()))
         };
-        let config = json!({"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": self.image_description});
+        let config = json!({"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": self.image_description_config()});
         let identity = hash(&format!(
             "{}:{}:{config}",
             doc.resource_code, doc.resource_revision
@@ -435,26 +438,26 @@ impl KnowledgeBaseService {
             return Ok(None);
         }
         let endpoints = if stage == IngestionStage::Parsing { self.refresh_parser_waits().await? } else { vec![] };
+        let config = self.active_ingestion_config();
         self.queue
             .claim(IngestionClaim {
                 task_id,
                 stage,
                 owner: owner.into(),
                 now_ms: now_ms(),
-                lease_ms: self.ingestion_config.lease_ms,
+                lease_ms: config.lease_ms,
                 global_capacity: if stage == IngestionStage::Parsing {
-                    self.ingestion_config.parse_capacity
+                    config.parse_capacity
                 } else {
-                    self.ingestion_config.embedding_capacity
+                    config.embedding_capacity
                 },
-                embedding_resource_group: self
-                    .ingestion_config
+                embedding_resource_group: config
                     .embedding_resource_group
                     .as_ref()
                     .map(|g| {
                         (
                             g.clone(),
-                            self.ingestion_config.embedding_resource_group_capacity,
+                            config.embedding_resource_group_capacity,
                         )
                     }),
                 parse_endpoints: endpoints,
@@ -465,9 +468,9 @@ impl KnowledgeBaseService {
         let mut endpoints = vec![ParseEndpointCapacity {
             supported_tiers: vec![],
             endpoint_id: "local-markdown".into(),
-            capacity: self.ingestion_config.parse_capacity,
+            capacity: self.active_ingestion_config().parse_capacity,
             resource_group: "local-markdown".into(),
-            resource_group_capacity: self.ingestion_config.parse_capacity,
+            resource_group_capacity: self.active_ingestion_config().parse_capacity,
             weight: 1,
         }];
         if self.queue.pending(IngestionStage::Parsing, now_ms()).map_err(queue_error)? {
@@ -497,13 +500,15 @@ impl KnowledgeBaseService {
         Ok(())
     }
     async fn execute_claimed(&self, task: IngestionTask, automatic_retry: bool) {
+        let config = self.active_ingestion_config();
         let owned = lease(&task);
         let work = self.process_task(task.clone());
         tokio::pin!(work);
         let mut check = tokio::time::interval(Duration::from_millis(
-            (self.ingestion_config.lease_ms / 3).min(100).max(1) as u64,
+            (config.lease_ms / 3).min(100).max(1) as u64,
         ));
         let mut renewed_at = now_ms();
+        let mut lease_until = task.lease_until_ms;
         let result = loop {
             tokio::select! {
                 _ = self.workers.stop.cancelled() => return,
@@ -513,9 +518,10 @@ impl KnowledgeBaseService {
                         Ok(current) if current.state == "RUNNING" && current.attempt == owned.attempt && current.lease_owner.as_deref() == Some(&owned.owner) => {},
                         _ => return,
                     }
-                    if now_ms() - renewed_at >= self.ingestion_config.lease_ms / 3 {
-                        if self.queue.heartbeat(&owned, now_ms(), self.ingestion_config.lease_ms).is_err() { return; }
+                    if now_ms() - renewed_at >= config.lease_ms / 3 || now_ms() >= lease_until - config.lease_ms / 3 {
+                        if self.queue.heartbeat(&owned, now_ms(), config.lease_ms).is_err() { return; }
                         renewed_at = now_ms();
+                        lease_until = renewed_at.saturating_add(config.lease_ms);
                     }
                 }
             }
@@ -523,10 +529,10 @@ impl KnowledgeBaseService {
         if let Err(error) = result {
             let retry = automatic_retry
                 && matches!(error, KnowledgeBaseError::Storage(_))
-                && task.failures.saturating_add(1) < self.ingestion_config.max_attempts;
+                && task.failures.saturating_add(1) < config.max_attempts;
             let after = retry.then(|| {
                 now_ms().saturating_add(
-                    self.ingestion_config
+                    config
                         .retry_backoff_ms
                         .saturating_mul(1i64 << task.failures.min(10)),
                 )

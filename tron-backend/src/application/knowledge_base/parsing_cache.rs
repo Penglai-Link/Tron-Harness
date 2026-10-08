@@ -77,6 +77,8 @@ impl KnowledgeBaseService {
         let parser = self.parser.as_ref().ok_or_else(|| {
             KnowledgeBaseError::Invalid("文档解析服务未配置；不会自动降级为纯文本解析".into())
         })?;
+        let snapshot = parser.snapshot();
+        let parser = snapshot.as_ref().unwrap_or(parser);
         let office = doc.file_name.to_ascii_lowercase().ends_with(".docx")
             || doc.file_name.to_ascii_lowercase().ends_with(".xlsx");
         let tier = if office {
@@ -117,8 +119,13 @@ impl KnowledgeBaseService {
             Some(version) => version.to_owned(),
             None => parser.capabilities().await?.parser_version,
         };
+        // Operational snapshots must not invalidate reusable parse output.
+        let mut cache_identity = identity.clone();
+        if let Some(identity) = cache_identity.as_object_mut() {
+            identity.remove("runtimeConfig");
+        }
         let signature = hash(&format!(
-            "{}:{}:{}:{}:{schema}:{parser_version}:{identity}",
+            "{}:{}:{}:{}:{schema}:{parser_version}:{cache_identity}",
             doc.resource_code,
             doc.resource_revision,
             tier.as_str(),

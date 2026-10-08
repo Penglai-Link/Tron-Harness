@@ -6,6 +6,16 @@ use serde_yaml::Value;
 use super::{SystemConfigError, SystemConfigItem};
 
 const REMOVED_CONFIG_SECTIONS: &[&str] = &["auth"];
+// Retained in YAML for compatibility; no runtime consumes these legacy limits.
+const INACTIVE_CONFIG_PATHS: &[&str] = &[
+    "resource.limits.schemaMaxBytes",
+    "resource.limits.maxDepth",
+    "resource.limits.maxValidationErrors",
+    "resource.limits.maxBinaries",
+    "shortTermMemory.context.familyContextMaxChars",
+    "shortTermMemory.context.familyContextMaxRatioBps",
+    "shortTermMemory.context.familyContextHardCapTokens",
+];
 
 pub(super) fn parse_yaml(content: &str, path: &Path) -> Result<Value, SystemConfigError> {
     AppConfig::validate_yaml(content, path)
@@ -21,7 +31,7 @@ pub(super) fn leaf_paths(value: &Value) -> Vec<String> {
     paths
 }
 
-pub(super) fn config_items(value: &Value) -> Vec<SystemConfigItem> {
+pub(super) fn config_items(value: &Value, runtime_bound: bool) -> Vec<SystemConfigItem> {
     leaf_paths(value)
         .into_iter()
         .filter(|path| !is_removed_config_path(path))
@@ -39,7 +49,8 @@ pub(super) fn config_items(value: &Value) -> Vec<SystemConfigItem> {
                 } else {
                     value_type(yaml_value)
                 },
-                effect: effect(&path),
+                effect: effect(&path, runtime_bound),
+                effect_reason: effect_reason(&path, runtime_bound),
                 overridden_by_environment: is_environment_overridden(&path),
                 path,
                 sensitive,
@@ -62,10 +73,11 @@ pub(super) fn remove_removed_config_sections(value: &mut Value) -> bool {
     removed
 }
 
-fn is_removed_config_path(path: &str) -> bool {
-    REMOVED_CONFIG_SECTIONS
-        .iter()
-        .any(|section| path == *section || path.starts_with(&format!("{section}.")))
+pub(super) fn is_removed_config_path(path: &str) -> bool {
+    INACTIVE_CONFIG_PATHS.contains(&path)
+        || REMOVED_CONFIG_SECTIONS
+            .iter()
+            .any(|section| path == *section || path.starts_with(&format!("{section}.")))
 }
 
 fn value_type(value: &Value) -> &'static str {
@@ -77,15 +89,43 @@ fn value_type(value: &Value) -> &'static str {
     }
 }
 
-fn effect(path: &str) -> &'static str {
+fn effect(path: &str, runtime_bound: bool) -> &'static str {
     if is_migration(path) {
         "migration"
+    } else if runtime_bound && super::runtime::supports_hot_update(path) {
+        "hotUpdate"
     } else {
         "restart"
     }
 }
 
+fn effect_reason(path: &str, runtime_bound: bool) -> &'static str {
+    match effect(path, runtime_bound) {
+        "hotUpdate" if path.starts_with("shortTermMemory.") => "nextMemoryOperation",
+        "hotUpdate" if path.starts_with("mineru.") => "newParsingTask",
+        "hotUpdate" if path == "terminalWorkingDirectory" => "newTerminal",
+        "hotUpdate" => "nextOperation",
+        "migration" if path == "variableCrypto.keyBase64" => "encryptedData",
+        "migration" => "storedData",
+        _ if path.starts_with("httpClients.") => "httpPool",
+        _ if path.starts_with("eventBus.") => "eventQueues",
+        _ if path.starts_with("mineru.ingestion.") => "workerCount",
+        _ if path.starts_with("systemAgents.") => "agentRegistry",
+        _ if matches!(path, "bindAddress" | "port") => "listener",
+        _ if path.starts_with("resource.storage.") => "storageClients",
+        _ => "startupResource",
+    }
+}
+
 fn is_migration(path: &str) -> bool {
+    if path.starts_with("resource.storage.profiles.")
+        && matches!(
+            path.rsplit('.').next(),
+            Some("root" | "bucket" | "prefix" | "endpoint" | "type")
+        )
+    {
+        return true;
+    }
     matches!(
         path,
         "databaseUrl" | "graphStoragePath" | "variableCrypto.keyBase64"
@@ -102,10 +142,12 @@ fn is_sensitive(path: &str) -> bool {
 fn is_environment_overridden(path: &str) -> bool {
     let variable = match path {
         "port" => Some("TRON_BACKEND_PORT"),
+        "bindAddress" => Some("TRON_BACKEND_BIND_ADDRESS"),
         "databaseUrl" => Some("TRON_BACKEND_DATABASE_URL"),
         "graphStoragePath" => Some("TRON_BACKEND_GRAPH_STORAGE_PATH"),
         "frontendDistDir" => Some("TRON_BACKEND_FRONTEND_DIST_DIR"),
         "projectDocRoot" => Some("TRON_PROJECT_DOC_ROOT"),
+        "terminalWorkingDirectory" => Some("TRON_TERMINAL_WORKING_DIRECTORY"),
         _ => None,
     };
     variable.is_some_and(|name| std::env::var_os(name).is_some())
@@ -324,15 +366,21 @@ pub(super) fn effective_context_value(
     Ok(value)
 }
 
-pub(super) fn classify_paths(paths: Vec<String>) -> (Vec<String>, Vec<String>, Vec<String>) {
+pub(super) fn classify_paths(
+    paths: Vec<String>,
+    runtime_bound: bool,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut hot = Vec::new();
     let mut migration = Vec::new();
     let mut restart = Vec::new();
     for path in paths {
         if is_migration(&path) {
             migration.push(path);
+        } else if runtime_bound && super::runtime::supports_hot_update(&path) {
+            hot.push(path);
         } else {
             restart.push(path);
         }
     }
-    (Vec::new(), restart, migration)
+    (hot, restart, migration)
 }

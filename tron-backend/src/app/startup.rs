@@ -17,7 +17,6 @@ use crate::{
         rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
         workspace::WorkspaceService,
     },
-    config::MineruConfig,
     domain::rag::RagError,
     shared::event_bus::EventBusHandle,
 };
@@ -147,7 +146,7 @@ pub(super) fn build_rag_service(
     llm_router: LlmModelRouter,
     prompt_service: PromptService,
     project_doc_root: &str,
-    mineru: MineruConfig,
+    mineru: crate::application::system_config::BackendRuntimeConfig,
     document_parsing_client: reqwest::Client,
     event_bus: EventBusHandle,
 ) -> Result<AppRagService, AppBootstrapError> {
@@ -166,7 +165,8 @@ pub(super) fn build_rag_service(
         Arc::new(Mutex::new(repository)),
         DefaultRagStrategyRegistry::default(),
         DefaultRagRuntime::new(llm_runtime, llm_router, project_doc_root)
-            .with_document_parser(mineru, document_parsing_client),
+            .with_document_parser(mineru.snapshot().mineru, document_parsing_client)
+            .with_runtime_config(mineru),
     )
     .with_event_bus(event_bus)
     .with_prompt_service(prompt_service))

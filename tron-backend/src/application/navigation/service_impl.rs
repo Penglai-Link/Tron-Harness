@@ -2,6 +2,7 @@
 pub struct NavigationService {
     repository: Arc<Mutex<Box<dyn NavigationRepository>>>,
     max_depth: usize,
+    runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
 }
 
 impl NavigationService {
@@ -9,11 +10,23 @@ impl NavigationService {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             max_depth: max_depth.max(1),
+            runtime_config: None,
         }
     }
 
     pub fn max_depth(&self) -> usize {
-        self.max_depth
+        self.runtime_config
+            .as_ref()
+            .map(|runtime| runtime.snapshot().navigation.max_depth)
+            .unwrap_or(self.max_depth)
+    }
+
+    pub fn with_runtime_config(
+        mut self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) -> Self {
+        self.runtime_config = Some(runtime);
+        self
     }
 
     pub fn list_visible_domains(
@@ -256,7 +269,7 @@ impl NavigationService {
         let mut repository = self.lock_repository();
         repository.get_menu_tree(domain_code)?;
         let items = repository.list_items(domain_code)?;
-        validate_flat_tree(&items, self.max_depth)?;
+        validate_flat_tree(&items, self.max_depth())?;
         Ok(build_tree(items))
     }
 
@@ -271,7 +284,7 @@ impl NavigationService {
             return Err(NavigationError::DomainAccessDenied);
         }
         let items = repository.list_items(domain_code)?;
-        validate_flat_tree(&items, self.max_depth)?;
+        validate_flat_tree(&items, self.max_depth())?;
         let visible = build_tree(items)
             .into_iter()
             .filter_map(|item| visible_item(item, locale))
@@ -279,7 +292,7 @@ impl NavigationService {
         Ok(RuntimeNavigationTree {
             domain_code: domain.domain_code,
             locale: locale.to_string(),
-            max_depth: self.max_depth,
+            max_depth: self.max_depth(),
             menus: visible,
         })
     }
@@ -294,7 +307,7 @@ impl NavigationService {
             return Err(NavigationError::DomainAccessDenied);
         }
         let items = repository.list_items(CHAT_PANEL_MENU_TREE_CODE)?;
-        validate_flat_tree(&items, self.max_depth)?;
+        validate_flat_tree(&items, self.max_depth())?;
         let visible = build_tree(items)
             .into_iter()
             .filter_map(|item| visible_item(item, locale))
@@ -302,7 +315,7 @@ impl NavigationService {
         Ok(RuntimeNavigationTree {
             domain_code: tree.tree_code,
             locale: locale.to_string(),
-            max_depth: self.max_depth,
+            max_depth: self.max_depth(),
             menus: visible,
         })
     }
@@ -320,7 +333,7 @@ impl NavigationService {
         repository.get_menu_tree(domain_code)?;
         let menu = repository.get_menu(&command.menu_code)?;
         let items = repository.list_items(domain_code)?;
-        validate_flat_tree(&items, self.max_depth)?;
+        validate_flat_tree(&items, self.max_depth())?;
         if items
             .iter()
             .any(|item| item.menu.menu_code == menu.menu_code)
@@ -329,7 +342,7 @@ impl NavigationService {
         }
         validate_parent(&items, command.parent_menu_code.as_deref(), menu.menu_type)?;
         let depth = proposed_depth(&items, &menu.menu_code, command.parent_menu_code.as_deref())?;
-        if depth > self.max_depth {
+        if depth > self.max_depth() {
             return Err(NavigationError::MaxDepthExceeded);
         }
         let item = NavigationTreeItem {
@@ -342,7 +355,7 @@ impl NavigationService {
         };
         repository.add_item(domain_code, &item)?;
         let next = repository.list_items(domain_code)?;
-        validate_flat_tree(&next, self.max_depth)?;
+        validate_flat_tree(&next, self.max_depth())?;
         Ok(build_tree(next))
     }
 
@@ -379,7 +392,7 @@ impl NavigationService {
         {
             candidate_item.parent_menu_code = command.parent_menu_code.clone();
         }
-        validate_flat_tree(&candidate, self.max_depth)?;
+        validate_flat_tree(&candidate, self.max_depth())?;
         repository.update_item(domain_code, menu_code, &command)?;
         let next = repository.list_items(domain_code)?;
         Ok(build_tree(next))
@@ -420,8 +433,8 @@ impl NavigationService {
         repository.get_menu_tree(&command.source_domain_code)?;
         let source = repository.list_items(&command.source_domain_code)?;
         let target = repository.list_items(target_domain_code)?;
-        validate_flat_tree(&source, self.max_depth)?;
-        validate_flat_tree(&target, self.max_depth)?;
+        validate_flat_tree(&source, self.max_depth())?;
+        validate_flat_tree(&target, self.max_depth())?;
         let selected_codes = selected_subtree(&source, command.source_menu_code.as_deref())?;
         let conflicts = selected_codes
             .iter()
@@ -447,7 +460,7 @@ impl NavigationService {
             .map(|item| subtree_height(&source, &item.menu.menu_code))
             .max()
             .unwrap_or(0);
-        if root_depth + source_height.saturating_sub(1) > self.max_depth {
+        if root_depth + source_height.saturating_sub(1) > self.max_depth() {
             return Err(NavigationError::MaxDepthExceeded);
         }
         repository.copy_tree(target_domain_code, &command)?;
@@ -467,7 +480,7 @@ impl NavigationService {
         let restored_item_count =
             repository.restore_default_menu_trees(DEFAULT_NAVIGATION_MENU_TREE_ITEMS)?;
         for domain_code in DEFAULT_NAVIGATION_MENU_TREE_CODES {
-            validate_flat_tree(&repository.list_items(domain_code)?, self.max_depth)?;
+            validate_flat_tree(&repository.list_items(domain_code)?, self.max_depth())?;
         }
         Ok(RestoreDefaultMenuTreesResult {
             restored_domain_codes: DEFAULT_NAVIGATION_MENU_TREE_CODES

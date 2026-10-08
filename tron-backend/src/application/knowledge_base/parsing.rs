@@ -56,11 +56,35 @@ pub struct StructuredParse {
 }
 #[async_trait]
 pub trait KnowledgeDocumentParser: Send + Sync {
+    /// Pin a consistent configuration for a multi-step operation.
+    fn snapshot(&self) -> Option<std::sync::Arc<dyn KnowledgeDocumentParser>> {
+        None
+    }
+    /// Durable jobs retain the configuration authorized at enqueue time.
+    fn task_snapshot(
+        &self,
+        _identity: &Value,
+    ) -> Result<Option<std::sync::Arc<dyn KnowledgeDocumentParser>>, KnowledgeBaseError> {
+        Ok(None)
+    }
     fn default_tier(&self) -> ParsingTier;
-    fn profile_identity(&self) -> Value { serde_json::json!({}) }
-    fn endpoint_ids(&self) -> Vec<String> { vec!["default".into()] }
-    async fn healthy_endpoints(&self) -> Result<Vec<super::ingestion::ParseEndpointCapacity>, KnowledgeBaseError> {
-        Ok(vec![super::ingestion::ParseEndpointCapacity { supported_tiers: vec![], endpoint_id: "default".into(), capacity: 32, resource_group: "default-parser".into(), resource_group_capacity: 32, weight: 1 }])
+    fn profile_identity(&self) -> Value {
+        serde_json::json!({})
+    }
+    fn endpoint_ids(&self) -> Vec<String> {
+        vec!["default".into()]
+    }
+    async fn healthy_endpoints(
+        &self,
+    ) -> Result<Vec<super::ingestion::ParseEndpointCapacity>, KnowledgeBaseError> {
+        Ok(vec![super::ingestion::ParseEndpointCapacity {
+            supported_tiers: vec![],
+            endpoint_id: "default".into(),
+            capacity: 32,
+            resource_group: "default-parser".into(),
+            resource_group_capacity: 32,
+            weight: 1,
+        }])
     }
     async fn routing_status(&self) -> ParserRoutingStatus {
         match self.healthy_endpoints().await {

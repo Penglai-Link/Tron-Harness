@@ -30,7 +30,14 @@ impl KnowledgeBaseService {
             task.stage,
             IngestionStage::Parsing | IngestionStage::Chunking
         ) {
+            let task_parser = self
+                .parser
+                .as_ref()
+                .map(|parser| parser.task_snapshot(&task.configuration["parser"]))
+                .transpose()?
+                .flatten();
             if !doc.file_name.to_ascii_lowercase().ends_with(".md")
+                && task_parser.is_none()
                 && self.parser.as_ref().map(|p| p.profile_identity())
                     != Some(task.configuration["parser"].clone())
             {
@@ -44,6 +51,10 @@ impl KnowledgeBaseService {
                 task: Mutex::new(task.clone()),
             });
             let mut service = self.clone();
+            if let Some(parser) = task_parser {
+                service.parser = Some(parser);
+            }
+            service.runtime_config = None;
             service.parse_checkpoint = Some(checkpoint);
             service.image_description =
                 serde_json::from_value(task.configuration["imageDescription"].clone())

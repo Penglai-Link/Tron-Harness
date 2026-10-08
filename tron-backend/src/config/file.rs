@@ -61,6 +61,11 @@ impl AppConfig {
         Ok(config.mineru)
     }
     pub fn validate_yaml(content: &str, path: impl AsRef<Path>) -> Result<(), ConfigError> {
+        Self::effective_config(content, path.as_ref()).map(|_| ())
+    }
+
+    /// Parse without provisioning keys or writing configuration files.
+    pub(crate) fn effective_config(content: &str, path: &Path) -> Result<Self, ConfigError> {
         let path = path.as_ref();
         let file_config = AppConfigFile::from_content(content, path)?;
         let mut config = Self::runtime_defaults();
@@ -68,7 +73,7 @@ impl AppConfig {
         config.apply_file_overrides(file_config)?;
         config.apply_env_overrides()?;
         config.socket_addr()?;
-        Ok(())
+        Ok(config)
     }
 
     fn apply_file_overrides(&mut self, overrides: AppConfigFile) -> Result<(), ConfigError> {

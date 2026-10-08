@@ -42,7 +42,7 @@ impl ResourceService {
             .metadata()
             .map_err(|_| ResourceError::PathDenied)?
             .len()
-            > self.config.limits.max_binary_bytes
+            > self.effective_config().limits.max_binary_bytes
         {
             return Err(ResourceError::InvalidInput);
         }
@@ -163,7 +163,7 @@ impl ResourceService {
             .metadata()
             .map_err(|_| ResourceError::PathDenied)?
             .len()
-            > self.config.limits.max_binary_bytes
+            > self.effective_config().limits.max_binary_bytes
         {
             return Err(ResourceError::InvalidInput);
         }
@@ -242,9 +242,12 @@ impl ResourceService {
         file_name: &str,
         source: &mut dyn Read,
     ) -> Result<ResourceFileRecord, ResourceError> {
-        validate_binary_name(file_name, self.config.limits.max_binary_name_length)?;
+        validate_binary_name(
+            file_name,
+            self.effective_config().limits.max_binary_name_length,
+        )?;
         let (temporary, byte_size) =
-            spool_limited_binary(source, self.config.limits.max_binary_bytes)?;
+            spool_limited_binary(source, self.effective_config().limits.max_binary_bytes)?;
         let object_key = self.next_object_key(workspace_code, resource_code);
         let (locator, stored_byte_size) = self.storage.put_file(
             DEFAULT_BINARY_STORAGE_PROFILE,
@@ -285,9 +288,12 @@ impl ResourceService {
         file_name: &str,
         source: &mut dyn Read,
     ) -> Result<ResourceFileRecord, ResourceError> {
-        validate_binary_name(file_name, self.config.limits.max_binary_name_length)?;
+        validate_binary_name(
+            file_name,
+            self.effective_config().limits.max_binary_name_length,
+        )?;
         let (temporary, byte_size) =
-            spool_limited_binary(source, self.config.limits.max_binary_bytes)?;
+            spool_limited_binary(source, self.effective_config().limits.max_binary_bytes)?;
         let object_key = self.next_object_key(&record.workspace_code, &record.resource_code);
         let (locator, stored_byte_size) = self.storage.put_file(
             DEFAULT_BINARY_STORAGE_PROFILE,

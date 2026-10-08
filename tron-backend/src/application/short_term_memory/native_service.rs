@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 pub struct ShortTermMemoryService {
     pub(crate) host: FrameworkHost,
     config: ShortTermMemoryConfig,
+    runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
 }
 fn error(e: fw::StateError) -> ShortTermMemoryError {
     match e {
@@ -28,10 +29,24 @@ fn error(e: fw::StateError) -> ShortTermMemoryError {
 }
 impl ShortTermMemoryService {
     pub fn with_host(host: FrameworkHost, config: ShortTermMemoryConfig) -> Self {
-        Self { host, config }
+        Self {
+            host,
+            config,
+            runtime_config: None,
+        }
     }
-    pub(crate) fn framework_context_config(&self) -> &ShortTermMemoryConfig {
-        &self.config
+    pub fn with_runtime_config(
+        mut self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) -> Self {
+        self.runtime_config = Some(runtime);
+        self
+    }
+    pub(crate) fn framework_context_config(&self) -> ShortTermMemoryConfig {
+        self.runtime_config
+            .as_ref()
+            .map(|runtime| runtime.snapshot().short_term_memory)
+            .unwrap_or_else(|| self.config.clone())
     }
     pub(crate) async fn framework(
         &self,
@@ -404,7 +419,9 @@ impl ShortTermMemoryService {
                 .map_err(|_| ShortTermMemoryError::StorageFailure)?;
             let db = self.host.shared_database().await.map_err(error)?;
             let mut goal = fw::GoalRecord::new(&command.session_code, command.objective.trim());
-            goal.max_runs = command.max_runs.unwrap_or(self.config.goal_loop.max_runs);
+            goal.max_runs = command
+                .max_runs
+                .unwrap_or(self.framework_context_config().goal_loop.max_runs);
             let goal = db
                 .transaction(async {
                     let goal = goals.set(goal).await?;
@@ -538,7 +555,7 @@ impl ShortTermMemoryService {
         &self,
         model: &AgentModelConfig,
     ) -> ModelContextBudgetPlan {
-        self.config
+        self.framework_context_config()
             .model_context_budget_plan(model.context_window_tokens, model.max_tokens)
     }
     pub fn overflow_retry_limit(&self) -> u32 {
@@ -584,7 +601,7 @@ impl ShortTermMemoryService {
         context: &AgentRunContext,
         tools: u32,
     ) -> Result<PreparedModelContext, ShortTermMemoryError> {
-        let plan = self.config.model_context_budget_plan(
+        let plan = self.framework_context_config().model_context_budget_plan(
             context.model.context_window_tokens,
             context.model.max_tokens,
         );
@@ -855,7 +872,12 @@ impl ShortTermMemoryService {
                         summary.to_string(),
                     ));
                 }
-                if result.len() >= self.config.family_load.default_max_sessions as usize {
+                if result.len()
+                    >= self
+                        .framework_context_config()
+                        .family_load
+                        .default_max_sessions as usize
+                {
                     break;
                 }
             }

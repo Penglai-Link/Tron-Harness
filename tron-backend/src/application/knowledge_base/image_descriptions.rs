@@ -80,20 +80,21 @@ impl KnowledgeBaseService {
         mut parsed: ParsedDocument,
         generate: bool,
     ) -> Result<(ParsedDocument, KnowledgeBaseDocument), KnowledgeBaseError> {
+        let config = self.image_description_config();
         let mut cached_doc = doc.clone();
         if parsed.image_analysis.is_none() {
             return Ok((parsed, cached_doc));
         }
-        if !self.image_description.enabled {
+        if !config.enabled {
             if let Some(summary) = &mut parsed.image_analysis {
                 summary.supplement_status = Some("disabled".into());
             }
             return Ok((parsed, cached_doc));
         }
-        if self.image_description.max_images_per_document == 0
-            || self.image_description.max_images_per_document > 256
-            || self.image_description.timeout_seconds == 0
-            || self.image_description.timeout_seconds > 30
+        if config.max_images_per_document == 0
+            || config.max_images_per_document > 256
+            || config.timeout_seconds == 0
+            || config.timeout_seconds > 30
         {
             return Err(KnowledgeBaseError::Invalid("图片描述限制配置无效".into()));
         }
@@ -110,7 +111,7 @@ impl KnowledgeBaseService {
             })
             .flat_map(|s| s.location.image_resource_codes.iter().cloned())
             .collect();
-        if images.len() > self.image_description.max_images_per_document {
+        if images.len() > config.max_images_per_document {
             return Err(KnowledgeBaseError::Invalid(
                 "图片数量超过描述处理上限，请调整限制或拆分文档".into(),
             ));
@@ -123,7 +124,7 @@ impl KnowledgeBaseService {
         }
         let binding = self
             .llm
-            .vision_model_binding(workspace, &self.image_description.model_code)
+            .vision_model_binding(workspace, &config.model_code)
             .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
         let mut pending = false;
         for image in images {
@@ -197,7 +198,7 @@ impl KnowledgeBaseService {
                 (stored.content, artifact)
             } else if generate {
                 let output = tokio::time::timeout(
-                    Duration::from_secs(self.image_description.timeout_seconds),
+                    Duration::from_secs(config.timeout_seconds),
                     self.llm
                         .vision_generation_call(&binding, PROMPT, mime, &bytes),
                 )

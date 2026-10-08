@@ -189,6 +189,8 @@ impl AppState {
         } else {
             None
         };
+        let runtime_config =
+            crate::application::system_config::BackendRuntimeConfig::new(config.clone());
         let agui_events = Arc::new(AguiEventSink::new(&config.event_bus));
         let agui_replay_store = Arc::new(
             SqliteAgentEventReplayStore::new().expect("agent event replay store should initialize"),
@@ -208,7 +210,8 @@ impl AppState {
         let document_parsing_client = http_client_pool.document_parsing_client();
         let workspaces = build_workspace_service(&config.database_url, event_bus.clone());
         let navigation =
-            build_navigation_service(&config.database_url, config.navigation.max_depth);
+            build_navigation_service(&config.database_url, config.navigation.max_depth)
+                .with_runtime_config(runtime_config.clone());
         let apps = build_app_service(&config.database_url, workspaces.clone());
         let projects =
             build_project_service(&config.database_url, workspaces.clone(), apps.clone());
@@ -222,7 +225,8 @@ impl AppState {
             apps.clone(),
             workspaces.clone(),
             config.terminal_working_directory.clone(),
-        );
+        )
+        .with_runtime_config(runtime_config.clone());
         let variables = build_variable_service(&config.database_url, workspaces.clone(), &config);
         let resources = build_resource_service(
             &config.database_url,
@@ -239,7 +243,15 @@ impl AppState {
                 database_url: config.database_url.clone(),
                 source: crate::domain::rag::RagError::StorageFailure,
             })?;
-        let resources = resources.with_privacy_policy(Arc::new(knowledge_base_repository.clone()));
+        let connection_verifier =
+            crate::adapters::outbound::resource_connectivity::ProtocolResourceConnectionVerifier::new(
+                std::time::Duration::from_millis(config.resource.connection_verification_timeout_ms),
+            )
+            .with_runtime_config(runtime_config.clone());
+        let resources = resources
+            .with_connection_verifier(Arc::new(connection_verifier))
+            .with_runtime_config(runtime_config.clone())
+            .with_privacy_policy(Arc::new(knowledge_base_repository.clone()));
         let mcp = build_mcp_service(
             &config.database_url,
             workspaces.clone(),
@@ -311,7 +323,7 @@ impl AppState {
             llm_router.clone(),
             prompts.clone(),
             &config.project_doc_root,
-            config.mineru.clone(),
+            runtime_config.clone(),
             document_parsing_client,
             event_bus.clone(),
         )?;
@@ -325,8 +337,8 @@ impl AppState {
             llm_runtime.clone(),
         )
         .with_document_parser(Arc::new(
-            crate::adapters::outbound::mineru_documents::MineruKnowledgeDocumentParser::new(
-                config.mineru.clone(),
+            crate::adapters::outbound::mineru_documents::RuntimeMineruDocumentParser::new(
+                runtime_config.clone(),
             ),
         ))
         .with_image_descriptions(config.mineru.image_description.clone())
@@ -334,7 +346,8 @@ impl AppState {
         .with_office_renderer(Arc::new(
             crate::adapters::outbound::office_visuals::LocalOfficeChartRenderer,
         ))
-        .with_ingestion_config(config.mineru.ingestion.clone());
+        .with_ingestion_config(config.mineru.ingestion.clone())
+        .with_runtime_config(runtime_config.clone());
         if tokio::runtime::Handle::try_current().is_ok() {
             knowledge_bases.start_ingestion_workers().map_err(|_| {
                 AppBootstrapError::RagInitFailed {
@@ -365,7 +378,8 @@ impl AppState {
         let short_term_memory = ShortTermMemoryService::with_host(
             agent_framework.clone(),
             config.short_term_memory.clone(),
-        );
+        )
+        .with_runtime_config(runtime_config.clone());
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         let agent_terminal: Arc<dyn crate::application::agent::AgentTerminal> = Arc::new(
             crate::adapters::outbound::agent_terminal::LocalAgentTerminal::new(
@@ -452,7 +466,8 @@ impl AppState {
         let readiness = AppReadiness::validated_ready();
         let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
             config.application_config_path.clone(),
-        )));
+        )))
+        .with_runtime_config(runtime_config);
         let skin_root = std::path::Path::new(&config.application_config_path)
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."))

@@ -81,7 +81,10 @@ export function SystemConfigTable() {
       }), confirmMigration);
       setChanges({});
       setConfirmMigration(false);
-      toast.success(t(`settingsGeneral.systemConfig.messages.${result?.restartPaths.length ? "savedRestart" : "saved"}`));
+      const message = result?.migrationPaths.length ? "savedMigration" : result?.hotUpdatePaths.length
+        ? result.restartPaths.length ? "savedMixed" : "savedHot"
+        : result?.restartPaths.length ? "savedRestart" : "saved";
+      toast.success(t(`settingsGeneral.systemConfig.messages.${message}`));
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : t("settingsGeneral.systemConfig.messages.saveFailed"));
     }
@@ -147,7 +150,7 @@ export function SystemConfigTable() {
                           </Badge>
                           {item.overriddenByEnvironment && <Badge variant="outline">{t("settingsGeneral.systemConfig.environmentOverride")}</Badge>}
                           <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: item.path })}>
-                            {fieldDescription(item)}
+                            {`${fieldDescription(item)}${item.effectReason ? ` ${t(`settingsGeneral.systemConfig.effectReasons.${item.effectReason}`, { defaultValue: "" })}` : ""}`}
                           </InfoTooltip>
                         </div>
                       </div>

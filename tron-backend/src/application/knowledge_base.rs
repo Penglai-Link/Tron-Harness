@@ -177,6 +177,7 @@ pub struct KnowledgeBaseService {
     office_renderer: Option<Arc<dyn parsing::KnowledgeOfficeRenderer>>,
     image_description: crate::config::ImageDescriptionConfig,
     visual_context_enabled: bool,
+    runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
 }
 impl KnowledgeBaseService {
     pub fn new(
@@ -204,15 +205,62 @@ impl KnowledgeBaseService {
             office_renderer: None,
             image_description: Default::default(),
             visual_context_enabled: false,
+            runtime_config: None,
         }
     }
     /// Disabled by default; enabling allows authorized KB image bytes to reach the answer model.
-    pub fn with_visual_context(mut self, enabled: bool) -> Self { self.visual_context_enabled=enabled; self }
-    pub fn visual_context_enabled(&self) -> bool { self.visual_context_enabled }
-    pub fn with_image_descriptions(mut self, config: crate::config::ImageDescriptionConfig) -> Self { self.image_description = config; self }
-    pub fn with_office_renderer(mut self, renderer: Arc<dyn parsing::KnowledgeOfficeRenderer>) -> Self { self.office_renderer=Some(renderer); self }
-    pub fn with_document_parser(mut self, parser: Arc<dyn KnowledgeDocumentParser>) -> Self { self.parser = Some(parser); self }
-    pub async fn parsing_capabilities(&self, user: &str, workspace: &str) -> Result<ParsingCapabilities, KnowledgeBaseError> {
+    pub fn with_visual_context(mut self, enabled: bool) -> Self {
+        self.visual_context_enabled = enabled;
+        self
+    }
+    pub fn visual_context_enabled(&self) -> bool {
+        self.runtime_config
+            .as_ref()
+            .map(|runtime| runtime.snapshot().mineru.visual_context_enabled)
+            .unwrap_or(self.visual_context_enabled)
+    }
+    pub fn with_runtime_config(
+        mut self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) -> Self {
+        self.runtime_config = Some(runtime);
+        self
+    }
+    fn image_description_config(&self) -> crate::config::ImageDescriptionConfig {
+        self.runtime_config
+            .as_ref()
+            .map(|runtime| runtime.snapshot().mineru.image_description)
+            .unwrap_or_else(|| self.image_description.clone())
+    }
+    fn active_ingestion_config(&self) -> crate::config::KnowledgeIngestionConfig {
+        self.runtime_config
+            .as_ref()
+            .map(|runtime| runtime.snapshot().mineru.ingestion)
+            .unwrap_or_else(|| self.ingestion_config.clone())
+    }
+    pub fn with_image_descriptions(
+        mut self,
+        config: crate::config::ImageDescriptionConfig,
+    ) -> Self {
+        self.image_description = config;
+        self
+    }
+    pub fn with_office_renderer(
+        mut self,
+        renderer: Arc<dyn parsing::KnowledgeOfficeRenderer>,
+    ) -> Self {
+        self.office_renderer = Some(renderer);
+        self
+    }
+    pub fn with_document_parser(mut self, parser: Arc<dyn KnowledgeDocumentParser>) -> Self {
+        self.parser = Some(parser);
+        self
+    }
+    pub async fn parsing_capabilities(
+        &self,
+        user: &str,
+        workspace: &str,
+    ) -> Result<ParsingCapabilities, KnowledgeBaseError> {
         self.workspace(user, workspace)?;
         self.parser.as_ref().ok_or_else(||KnowledgeBaseError::Invalid("文档解析服务未配置".into()))?.capabilities().await
     }

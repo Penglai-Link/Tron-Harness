@@ -39,7 +39,9 @@ impl KnowledgeBaseService {
                     &format!("创建入库任务失败：{error}"),
                     &reason,
                     retry.then(|| {
-                        now_ms().saturating_add(self.ingestion_config.retry_backoff_ms.max(1000))
+                        now_ms().saturating_add(
+                            self.active_ingestion_config().retry_backoff_ms.max(1000),
+                        )
                     }),
                 )?;
             }

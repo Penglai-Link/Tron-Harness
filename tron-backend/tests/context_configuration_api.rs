@@ -118,9 +118,9 @@ async fn saves_defaulted_order_and_policies_to_yaml_then_reloads_runtime_values(
         {"path":"shortTermMemory.context.blocks.currentSessionCheckpoint.maxTokens", "value":700}
     ])).await;
     assert_eq!(status, StatusCode::OK, "{result}");
-    assert_eq!(result["data"]["hotUpdatePaths"], json!([]));
+    assert_eq!(result["data"]["restartPaths"], json!([]));
     assert!(
-        result["data"]["restartPaths"]
+        result["data"]["hotUpdatePaths"]
             .as_array()
             .unwrap()
             .contains(&json!("shortTermMemory.context.providers.order"))

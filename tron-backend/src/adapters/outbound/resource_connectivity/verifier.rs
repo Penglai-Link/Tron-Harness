@@ -12,17 +12,41 @@ use super::{kafka, mysql, postgresql, redis, ssh};
 #[derive(Clone)]
 pub struct ProtocolResourceConnectionVerifier {
     timeout: Duration,
+    runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
 }
 
 impl ProtocolResourceConnectionVerifier {
     pub fn new(timeout: Duration) -> Self {
-        Self { timeout }
+        Self {
+            timeout,
+            runtime_config: None,
+        }
+    }
+
+    pub fn with_runtime_config(
+        mut self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) -> Self {
+        self.runtime_config = Some(runtime);
+        self
     }
 }
 
 impl ResourceConnectionVerifier for ProtocolResourceConnectionVerifier {
     fn verify(&self, target: ResourceConnectionTarget) -> ResourceConnectionVerificationFuture<'_> {
         Box::pin(async move {
+            let timeout = self
+                .runtime_config
+                .as_ref()
+                .map(|runtime| {
+                    Duration::from_millis(
+                        runtime
+                            .snapshot()
+                            .resource
+                            .connection_verification_timeout_ms,
+                    )
+                })
+                .unwrap_or(self.timeout);
             let kind = match &target {
                 ResourceConnectionTarget::Mysql(_) => "MySQL",
                 ResourceConnectionTarget::Postgresql(_) => "PostgreSQL",
@@ -30,7 +54,7 @@ impl ResourceConnectionVerifier for ProtocolResourceConnectionVerifier {
                 ResourceConnectionTarget::Kafka(_) => "Kafka",
                 ResourceConnectionTarget::Ssh(_) => "SSH",
             };
-            let probe = tokio::time::timeout(self.timeout, verify_target(target, self.timeout))
+            let probe = tokio::time::timeout(timeout, verify_target(target, timeout))
                 .await
                 .unwrap_or(Err(()));
             match probe {

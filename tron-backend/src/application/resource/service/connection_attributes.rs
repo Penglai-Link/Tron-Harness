@@ -156,13 +156,13 @@ impl ResourceService {
                 reason: "must be a valid JSON value".to_string(),
             })?
             .len()
-            > self.config.limits.attributes_max_bytes
+            > self.effective_config().limits.attributes_max_bytes
         {
             return Err(ResourceError::InvalidField {
                 field: "attributes".to_string(),
                 reason: format!(
                     "must not exceed {} bytes",
-                    self.config.limits.attributes_max_bytes
+                    self.effective_config().limits.attributes_max_bytes
                 ),
             });
         }
