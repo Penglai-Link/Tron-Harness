@@ -43,15 +43,9 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "CHATS",
-        parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 0,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
         menu_code: "AGENTS",
         parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 1,
+        position: 0,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
@@ -69,25 +63,25 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         domain_code: "ADVANCED",
         menu_code: "MCP_SERVERS",
         parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 2,
+        position: 1,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
         menu_code: "PROMPTS",
         parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 3,
+        position: 2,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
         menu_code: "MODELS",
         parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 4,
+        position: 3,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
         menu_code: "SKILLS",
         parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 5,
+        position: 4,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",

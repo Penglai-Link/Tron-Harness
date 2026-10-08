@@ -3,6 +3,46 @@ use crate::application::knowledge_base::{deletion::DeletionCleanupPlan, ingestio
 use rusqlite::TransactionBehavior;
 
 impl SqliteKnowledgeBaseRepositorySql<'_> {
+    pub fn delete_empty_library(
+        &self,
+        user: &str,
+        workspace: &str,
+        id: &str,
+    ) -> Result<(), KnowledgeBaseError> {
+        let tx = super::super::framework_storage::business_transaction(
+            self.connection,
+            TransactionBehavior::Immediate,
+        )
+        .map_err(storage)?;
+        let owned: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2 AND workspace_code=?3)",
+            params![id, user, workspace], |row| row.get(0),
+        ).map_err(storage)?;
+        if !owned {
+            return Err(KnowledgeBaseError::NotFound);
+        }
+        let nonempty: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM knowledge_base_documents WHERE knowledge_base_id=?1)",
+            [id], |row| row.get(0),
+        ).map_err(storage)?;
+        if nonempty {
+            return Err(KnowledgeBaseError::NotEmpty);
+        }
+        // Reuse RAG's table-family cleanup; its savepoint remains inside this transaction.
+        super::super::rag_repository::delete_managed_corpus_on_connection(&tx, id)
+            .map_err(storage)?;
+        for table in [
+            "knowledge_base_grants",
+            "knowledge_base_ingestion_tasks",
+            "knowledge_base_ingestion_intents",
+            "knowledge_base_upload_requests",
+        ] {
+            tx.execute(&format!("DELETE FROM {table} WHERE knowledge_base_id=?1"), [id]).map_err(storage)?;
+        }
+        tx.execute("DELETE FROM knowledge_bases WHERE id=?1", [id]).map_err(storage)?;
+        tx.commit().map_err(storage)
+    }
+
     pub fn register_derived_resource(
         &self,
         document: &KnowledgeBaseDocument,
@@ -142,7 +182,7 @@ fn table_exists(
 /// Detach only exclusive derived metadata and capture its locator for best-effort cleanup.
 /// This runs in the same transaction as the document fence and all index removal.
 /// No storage I/O or external HTTP occurs here.
-fn plan_derived_cleanup(
+pub(crate) fn plan_derived_cleanup(
     tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     job: &DeletionCleanupPlan,
     code: &str,
@@ -223,6 +263,14 @@ fn plan_derived_cleanup(
 }
 
 impl SqliteKnowledgeBaseRepository {
+    pub fn delete_empty_library(&self, user: &str, workspace: &str, id: &str) -> Result<(), KnowledgeBaseError> {
+        let (user, workspace, id) = (user.to_owned(), workspace.to_owned(), id.to_owned());
+        self.connection.call(
+            move |connection| SqliteKnowledgeBaseRepositorySql { connection }.delete_empty_library(&user, &workspace, &id),
+            || storage("database worker stopped"),
+        )
+    }
+
     pub fn register_derived_resource(
         &self,
         document: &KnowledgeBaseDocument,

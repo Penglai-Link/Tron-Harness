@@ -1,36 +1,7 @@
 use std::collections::HashMap;
 
+use super::internal_definitions::InternalAgentDefinition;
 use super::*;
-
-#[derive(Debug, Clone)]
-struct InternalAgentDefinition {
-    agent_code: String,
-    name: String,
-    description: String,
-    tool_assignment_mode: ToolAssignmentMode,
-    mcp_access_mode: McpAccessMode,
-    tool_exposure_mode: ToolExposureMode,
-    expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
-    max_steps: u32,
-    max_tool_calls: u32,
-    max_parallel_tool_calls: u32,
-}
-
-fn internal_agents() -> Vec<InternalAgentDefinition> {
-    vec![InternalAgentDefinition {
-        agent_code: MAIN_AGENT_CODE.to_string(),
-        name: "Main Agent".to_string(),
-        description: "Primary workspace internal agent with access to platform business tools."
-            .to_string(),
-        tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
-        mcp_access_mode: McpAccessMode::AllEnabledServers,
-        tool_exposure_mode: ToolExposureMode::DomainDiscovery,
-        expanded_domain_persistence_mode: ExpandedDomainPersistenceMode::StickyExpanded,
-        max_steps: 100,
-        max_tool_calls: 100,
-        max_parallel_tool_calls: 4,
-    }]
-}
 
 impl AgentManagementService {
     pub fn list_workspace_internal_agents(
@@ -44,20 +15,12 @@ impl AgentManagementService {
             .into_iter()
             .map(|policy| (policy.agent_code.clone(), policy))
             .collect::<HashMap<_, _>>();
-        let assignments = self
-            .repository()
-            .list_workspace_internal_agent_tool_assignments(Some(workspace_code), None)?;
         let mcp_assignments = self
             .repository()
             .list_workspace_internal_agent_mcp_server_assignments(Some(workspace_code), None)?;
-        let mut assigned_map = HashMap::<String, usize>::new();
+
         let mut selected_server_codes_by_agent = HashMap::<String, Vec<String>>::new();
-        let registered = BusinessToolCatalog::tool_codes();
-        for assignment in assignments {
-            if registered.iter().any(|code| code == &assignment.tool_code) {
-                *assigned_map.entry(assignment.agent_code).or_insert(0) += 1;
-            }
-        }
+
         for assignment in mcp_assignments {
             selected_server_codes_by_agent
                 .entry(assignment.agent_code)
@@ -65,31 +28,32 @@ impl AgentManagementService {
                 .push(assignment.server_code);
         }
         let mut policies = Vec::new();
-        for definition in internal_agents() {
+        for definition in self.internal_agent_definitions(workspace_code)? {
             let agent_code = definition.agent_code.clone();
             let override_policy = overrides.get(&definition.agent_code);
             let default_policy = to_internal_policy_record(workspace_code, &definition);
-            let policy = override_policy
-                .cloned()
-                .unwrap_or_else(|| default_policy.clone());
+            let policy = merge_policy(default_policy, override_policy);
             let mode = policy.tool_assignment_mode;
             let selected_tool_codes =
                 self.resolve_internal_agent_tool_codes(workspace_code, &agent_code)?;
             let effective_tool_count = selected_tool_codes.len();
-            let assigned_tool_count = if mode == ToolAssignmentMode::AllPlatformTools {
-                registered.len()
-            } else {
-                *assigned_map.get(&agent_code).unwrap_or(&0)
-            };
+            let assigned_tool_count = effective_tool_count;
             policies.push(InternalAgentToolPolicy {
                 workspace_code: workspace_code.to_string(),
                 agent_code: agent_code.clone(),
                 name: definition.name,
                 description: definition.description,
-                source: override_policy
-                    .is_some()
-                    .then_some(InternalAgentPolicySource::WorkspaceOverride)
-                    .unwrap_or(InternalAgentPolicySource::PlatformDefault),
+                role_prompt: definition.role_prompt,
+                platform_defined: definition.platform_defined,
+                source: (override_policy.is_some()
+                    || !definition.platform_defined
+                    || self
+                        .repository()
+                        .list_workspace_internal_agent_definitions(workspace_code)?
+                        .iter()
+                        .any(|record| record.agent_code == agent_code))
+                .then_some(InternalAgentPolicySource::WorkspaceOverride)
+                .unwrap_or(InternalAgentPolicySource::PlatformDefault),
                 tool_assignment_mode: mode,
                 mcp_access_mode: policy.mcp_access_mode,
                 tool_exposure_mode: policy.tool_exposure_mode,
@@ -99,9 +63,17 @@ impl AgentManagementService {
                 max_parallel_tool_calls: policy.max_parallel_tool_calls,
                 selected_tool_codes,
                 selected_server_codes: normalize_string_codes(
-                    selected_server_codes_by_agent
-                        .remove(&agent_code)
-                        .unwrap_or_default(),
+                    if policy
+                        .overridden_fields
+                        .iter()
+                        .any(|field| field == "selectedServerCodes")
+                    {
+                        selected_server_codes_by_agent
+                            .remove(&agent_code)
+                            .unwrap_or_default()
+                    } else {
+                        definition.selected_server_codes
+                    },
                 ),
                 assigned_tool_count,
                 effective_tool_count,
@@ -130,9 +102,29 @@ impl AgentManagementService {
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.active_workspace_detail(workspace_code)?;
         let definition = self
-            .resolve_internal_agent_default(agent_code)
+            .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
+        let agent_code = definition.agent_code.as_str();
         let current = self.workspace_internal_agent_policy(workspace_code, agent_code)?;
+        let mut overridden_fields = self.saved_override_fields(workspace_code, agent_code)?;
+        for (field, changed) in [
+            ("toolAssignmentMode", command.tool_assignment_mode.is_some()),
+            ("toolExposureMode", command.tool_exposure_mode.is_some()),
+            (
+                "expandedDomainPersistenceMode",
+                command.expanded_domain_persistence_mode.is_some(),
+            ),
+            ("maxSteps", command.max_steps.is_some()),
+            ("maxToolCalls", command.max_tool_calls.is_some()),
+            (
+                "maxParallelToolCalls",
+                command.max_parallel_tool_calls.is_some(),
+            ),
+        ] {
+            if changed && !overridden_fields.iter().any(|existing| existing == field) {
+                overridden_fields.push(field.into());
+            }
+        }
         let now = current_timestamp();
         let updated = WorkspaceInternalAgentPolicy {
             workspace_code: workspace_code.to_string(),
@@ -152,6 +144,7 @@ impl AgentManagementService {
             max_parallel_tool_calls: command
                 .max_parallel_tool_calls
                 .unwrap_or(current.max_parallel_tool_calls),
+            overridden_fields,
             created_at: current_timestamp(),
             updated_at: now,
         };
@@ -179,9 +172,18 @@ impl AgentManagementService {
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.active_workspace_detail(workspace_code)?;
         let definition = self
-            .resolve_internal_agent_default(agent_code)
+            .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
+        let agent_code = definition.agent_code.as_str();
         let current = self.workspace_internal_agent_policy(workspace_code, agent_code)?;
+        let mut overridden_fields = self.saved_override_fields(workspace_code, agent_code)?;
+        if command.mcp_access_mode.is_some()
+            && !overridden_fields
+                .iter()
+                .any(|field| field == "mcpAccessMode")
+        {
+            overridden_fields.push("mcpAccessMode".into());
+        }
         let previous_created_at = self
             .repository()
             .list_workspace_internal_agent_policies(Some(workspace_code))?
@@ -199,6 +201,7 @@ impl AgentManagementService {
             max_steps: current.max_steps,
             max_tool_calls: current.max_tool_calls,
             max_parallel_tool_calls: current.max_parallel_tool_calls,
+            overridden_fields,
             created_at: previous_created_at,
             updated_at: current_timestamp(),
         };
@@ -214,9 +217,10 @@ impl AgentManagementService {
         mut tool_codes: Vec<String>,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.active_workspace_detail(workspace_code)?;
-        let _ = self
-            .resolve_internal_agent_default(agent_code)
+        let definition = self
+            .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
+        let agent_code = definition.agent_code.as_str();
         let now = current_timestamp();
         let mut normalized = Vec::new();
         for tool_code in tool_codes.drain(..) {
@@ -247,6 +251,7 @@ impl AgentManagementService {
                     },
                 )?;
         }
+        self.mark_assignment_override(workspace_code, agent_code, "selectedToolCodes")?;
         self.workspace_internal_agent_policy(workspace_code, agent_code)
     }
 
@@ -256,9 +261,14 @@ impl AgentManagementService {
         agent_code: &str,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.active_workspace_detail(workspace_code)?;
-        let _ = self
-            .resolve_internal_agent_default(agent_code)
+        let definition = self
+            .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
+        let agent_code = definition.agent_code.as_str();
+        if definition.platform_defined {
+            self.repository()
+                .delete_workspace_internal_agent_definition(workspace_code, agent_code)?;
+        }
         let _ = self
             .repository()
             .delete_workspace_internal_agent_policy(workspace_code, agent_code)?;
@@ -276,9 +286,10 @@ impl AgentManagementService {
         mut server_codes: Vec<String>,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.active_workspace_detail(workspace_code)?;
-        let _ = self
-            .resolve_internal_agent_default(agent_code)
+        let definition = self
+            .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
+        let agent_code = definition.agent_code.as_str();
         let now = current_timestamp();
         let normalized = normalize_string_codes(server_codes.drain(..).collect());
         self.repository()
@@ -295,6 +306,7 @@ impl AgentManagementService {
                     },
                 )?;
         }
+        self.mark_assignment_override(workspace_code, agent_code, "selectedServerCodes")?;
         self.workspace_internal_agent_policy(workspace_code, agent_code)
     }
 
@@ -318,9 +330,10 @@ impl AgentManagementService {
         agent_code: &str,
     ) -> Result<Vec<String>, AgentManagementError> {
         let definition = self
-            .resolve_internal_agent_default(agent_code)
+            .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
-        let mode = self
+        let agent_code = definition.agent_code.as_str();
+        let override_policy = self
             .repository()
             .list_workspace_internal_agent_policies(Some(workspace_code))?
             .into_iter()
@@ -328,21 +341,31 @@ impl AgentManagementService {
                 policy
                     .agent_code
                     .eq_ignore_ascii_case(&definition.agent_code)
-            })
-            .map(|policy| policy.tool_assignment_mode)
-            .unwrap_or(definition.tool_assignment_mode);
+            });
+        let policy = merge_policy(
+            to_internal_policy_record(workspace_code, &definition),
+            override_policy.as_ref(),
+        );
+        let mode = policy.tool_assignment_mode;
 
         let selected = match mode {
             ToolAssignmentMode::AllPlatformTools => BusinessToolCatalog::tool_codes(),
-            ToolAssignmentMode::SelectedTools => self
-                .repository()
-                .list_workspace_internal_agent_tool_assignments(
-                    Some(workspace_code),
-                    Some(agent_code),
-                )?
-                .into_iter()
-                .map(|assignment| assignment.tool_code)
-                .collect(),
+            ToolAssignmentMode::SelectedTools
+                if policy
+                    .overridden_fields
+                    .iter()
+                    .any(|field| field == "selectedToolCodes") =>
+            {
+                self.repository()
+                    .list_workspace_internal_agent_tool_assignments(
+                        Some(workspace_code),
+                        Some(agent_code),
+                    )?
+                    .into_iter()
+                    .map(|assignment| assignment.tool_code)
+                    .collect()
+            }
+            ToolAssignmentMode::SelectedTools => definition.selected_tool_codes,
         };
         let registered = BusinessToolCatalog::tool_codes();
         let mut filtered = selected
@@ -356,15 +379,81 @@ impl AgentManagementService {
         Ok(filtered)
     }
 
-    fn resolve_internal_agent_default(&self, agent_code: &str) -> Option<InternalAgentDefinition> {
-        internal_agents_by_code(agent_code)
+    pub(super) fn resolve_internal_agent_default(
+        &self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<Option<InternalAgentDefinition>, AgentManagementError> {
+        Ok(self
+            .internal_agent_definitions(workspace_code)?
+            .into_iter()
+            .find(|definition| definition.agent_code.eq_ignore_ascii_case(agent_code)))
+    }
+    fn saved_override_fields(
+        &self,
+        workspace: &str,
+        agent: &str,
+    ) -> Result<Vec<String>, AgentManagementError> {
+        Ok(self
+            .repository()
+            .list_workspace_internal_agent_policies(Some(workspace))?
+            .into_iter()
+            .find(|record| record.agent_code == agent)
+            .map(|record| record.overridden_fields)
+            .unwrap_or_default())
+    }
+
+    fn mark_assignment_override(
+        &self,
+        workspace: &str,
+        agent: &str,
+        field: &str,
+    ) -> Result<(), AgentManagementError> {
+        let definition = self
+            .resolve_internal_agent_default(workspace, agent)?
+            .ok_or(AgentManagementError::InternalAgentNotFound)?;
+        let mut record = self
+            .repository()
+            .list_workspace_internal_agent_policies(Some(workspace))?
+            .into_iter()
+            .find(|record| record.agent_code == agent)
+            .unwrap_or_else(|| to_internal_policy_record(workspace, &definition));
+        if !record
+            .overridden_fields
+            .iter()
+            .any(|existing| existing == field)
+        {
+            record.overridden_fields.push(field.into());
+        }
+        self.repository()
+            .upsert_workspace_internal_agent_policy(&record)
     }
 }
 
-fn internal_agents_by_code(agent_code: &str) -> Option<InternalAgentDefinition> {
-    internal_agents()
-        .into_iter()
-        .find(|definition| definition.agent_code.eq_ignore_ascii_case(agent_code))
+fn merge_policy(
+    mut base: WorkspaceInternalAgentPolicy,
+    saved: Option<&WorkspaceInternalAgentPolicy>,
+) -> WorkspaceInternalAgentPolicy {
+    if let Some(saved) = saved {
+        for field in &saved.overridden_fields {
+            match field.as_str() {
+                "toolAssignmentMode" => base.tool_assignment_mode = saved.tool_assignment_mode,
+                "mcpAccessMode" => base.mcp_access_mode = saved.mcp_access_mode,
+                "toolExposureMode" => base.tool_exposure_mode = saved.tool_exposure_mode,
+                "expandedDomainPersistenceMode" => {
+                    base.expanded_domain_persistence_mode = saved.expanded_domain_persistence_mode
+                }
+                "maxSteps" => base.max_steps = saved.max_steps,
+                "maxToolCalls" => base.max_tool_calls = saved.max_tool_calls,
+                "maxParallelToolCalls" => {
+                    base.max_parallel_tool_calls = saved.max_parallel_tool_calls
+                }
+                _ => {}
+            }
+        }
+        base.overridden_fields = saved.overridden_fields.clone();
+    }
+    base
 }
 
 fn to_internal_policy_record(
@@ -381,12 +470,13 @@ fn to_internal_policy_record(
         max_steps: definition.max_steps,
         max_tool_calls: definition.max_tool_calls,
         max_parallel_tool_calls: definition.max_parallel_tool_calls,
+        overridden_fields: vec![],
         created_at: current_timestamp(),
         updated_at: current_timestamp(),
     }
 }
 
-fn normalize_string_codes(values: Vec<String>) -> Vec<String> {
+pub(super) fn normalize_string_codes(values: Vec<String>) -> Vec<String> {
     let mut normalized = values
         .into_iter()
         .map(|value| value.trim().to_string())

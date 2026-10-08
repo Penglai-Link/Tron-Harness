@@ -10,6 +10,10 @@ impl<'a> SqliteAgentManagementRepositorySql<'a> {
         let repository = Self { connection };
         repository
             .connection
+            .execute_batch(super::super::migrations::INTERNAL_AGENT_DEFINITIONS_MIGRATION)
+            .map_err(storage_error)?;
+        repository
+            .connection
             .execute_batch(AGENT_MANAGEMENT_MIGRATION)
             .map_err(storage_error)?;
         if !column_exists(
@@ -55,6 +59,16 @@ impl<'a> SqliteAgentManagementRepositorySql<'a> {
                 .connection
                 .execute_batch(AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION)
                 .map_err(storage_error)?;
+        }
+        if !column_exists(
+            &repository.connection,
+            "workspace_internal_agent_policies",
+            "overridden_fields",
+        )? {
+            repository.connection.execute_batch(
+                "ALTER TABLE workspace_internal_agent_policies ADD COLUMN overridden_fields TEXT NOT NULL
+                 DEFAULT '[\"toolAssignmentMode\",\"mcpAccessMode\",\"toolExposureMode\",\"expandedDomainPersistenceMode\",\"maxSteps\",\"maxToolCalls\",\"maxParallelToolCalls\",\"selectedToolCodes\",\"selectedServerCodes\"]';"
+            ).map_err(storage_error)?;
         }
         Ok(repository)
     }

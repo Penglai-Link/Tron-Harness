@@ -3,6 +3,14 @@ use self::{
     sql_plan::quote_identifier,
 };
 
+/// Join the caller's transaction on the same host connection.
+pub(super) fn delete_managed_corpus_on_connection(
+    connection: &Connection,
+    corpus_id: &str,
+) -> Result<bool, RagError> {
+    SqliteRagRepositorySql { connection }.delete_managed_corpus(corpus_id)
+}
+
 impl<'a> SqliteRagRepositorySql<'a> {
     fn unshared_sqlite_runtime_tables(
         &self,

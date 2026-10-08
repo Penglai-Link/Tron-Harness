@@ -31,7 +31,7 @@ use super::migrations::{
 };
 
 struct SqliteRagRepositorySql<'a> {
-    connection: &'a mut Connection,
+    connection: &'a Connection,
 }
 pub struct SqliteRagRepository {
     connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,

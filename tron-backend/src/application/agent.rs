@@ -58,8 +58,9 @@ pub(crate) use invocation::{
     user_prompt_message,
 };
 pub use management::{
+    CreateWorkspaceInternalAgentCommand, UpdateWorkspaceInternalAgentDefinitionCommand,
     AgentManagementRepository, AgentManagementService, ResolvedAgentRuntime,
-    UpdatePlatformMainAgentCommand, UpdateWorkspaceInternalAgentMcpPolicyCommand,
+    UpdateWorkspaceInternalAgentMcpPolicyCommand,
     UpdateWorkspaceInternalAgentPolicyCommand,
 };
 pub use orchestrator::AgentOrchestrator;

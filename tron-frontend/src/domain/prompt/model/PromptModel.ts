@@ -1,4 +1,4 @@
-export type PromptCategory = "SYSTEM" | "PERSONA" | "TOOL" | "TEMPLATE" | "ACTION";
+export type PromptCategory = "SYSTEM" | "PERSONA" | "AGENT_ROLE" | "TOOL" | "TEMPLATE" | "ACTION";
 export type PromptScopeKind = "PLATFORM" | "WORKSPACE";
 export type PromptSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
 export type PromptVariableType = "STRING" | "NUMBER" | "BOOLEAN" | "JSON";

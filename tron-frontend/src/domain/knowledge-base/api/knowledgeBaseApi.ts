@@ -1,12 +1,15 @@
 import { requestApi } from "@/shared/api/httpClient";
-import type { PublishedChunkPage, ChunkConfig, ChunkPreview, KnowledgeDocument, KnowledgeLibrary, KnowledgeLibraryDetail, ParsingTier, ParsingCapabilities } from "../model/KnowledgeLibraryModel";
+import type { PublishedChunkPage, ChunkConfig, ChunkPreview, KnowledgeDocument, KnowledgeLibrary, KnowledgeLibrarySummary, KnowledgeLibraryDetail, ParsingTier, OcrMode, ParsingCapabilities } from "../model/KnowledgeLibraryModel";
 
 const root = "/api/v1/knowledge-bases";
 const libraryPath = `${root}/{id}`;
 const documentPath = `${libraryPath}/documents/{documentId}`;
 
 export function listKnowledgeLibraries(workspaceCode: string, signal?: AbortSignal) {
-  return requestApi<KnowledgeLibrary[]>(`GET ${root}`, { queryParams: { workspaceCode }, signal });
+  return requestApi<KnowledgeLibrarySummary[]>(`GET ${root}`, { queryParams: { workspaceCode }, signal });
+}
+export function deleteKnowledgeLibrary(workspaceCode: string, id: string) {
+  return requestApi<Record<string, never>>(`DELETE ${libraryPath}`, { pathParams: { id }, queryParams: { workspaceCode } });
 }
 export function createKnowledgeLibrary(workspaceCode: string, name: string, description: string) {
   return requestApi<KnowledgeLibrary>(`POST ${root}`, { body: { workspaceCode, name, description } });
@@ -22,8 +25,8 @@ export function uploadKnowledgeDocument(workspaceCode: string, id: string, file:
   body.set("file", file, file.name);
   return requestApi<KnowledgeDocument>(`POST ${libraryPath}/documents`, { pathParams: { id }, body });
 }
-export function updateKnowledgeDocument(workspaceCode: string, id: string, documentId: string, chunkConfig: ChunkConfig | null, parsingTier?: ParsingTier | null) {
-  return requestApi<KnowledgeDocument>(`PATCH ${documentPath}`, { pathParams: { id, documentId }, body: { workspaceCode, chunkConfig, ...(parsingTier !== undefined ? { parsingTier } : {}) } });
+export function updateKnowledgeDocument(workspaceCode: string, id: string, documentId: string, chunkConfig: ChunkConfig | null, parsingTier?: ParsingTier | null, ocrMode?: OcrMode | null) {
+  return requestApi<KnowledgeDocument>(`PATCH ${documentPath}`, { pathParams: { id, documentId }, body: { workspaceCode, chunkConfig, ...(parsingTier !== undefined ? { parsingTier } : {}), ...(ocrMode !== undefined ? { ocrMode } : {}) } });
 }
 export function previewKnowledgeDocument(workspaceCode: string, id: string, documentId: string) {
   return requestApi<ChunkPreview>(`POST ${documentPath}/preview`, { pathParams: { id, documentId }, body: { workspaceCode } });
@@ -36,6 +39,20 @@ export function cancelKnowledgeDocument(workspaceCode: string, id: string, docum
 }
 export function setKnowledgeLibraryGrants(workspaceCode: string, id: string, agentCodes: string[]) {
   return requestApi<unknown>(`PUT ${libraryPath}/grants`, { pathParams: { id }, body: { workspaceCode, agentCodes } });
+}
+
+export interface AgentKnowledgeLibrary {
+  id: string;
+  name: string;
+  description: string;
+  documentCount: number;
+  granted: boolean;
+}
+export function listAgentKnowledgeLibraries(workspaceCode: string, agentCode: string, signal?: AbortSignal) {
+  return requestApi<AgentKnowledgeLibrary[]>(`GET ${root}/agent-grants/{agentCode}`, { pathParams: { agentCode }, queryParams: { workspaceCode }, signal });
+}
+export function setAgentKnowledgeLibraries(workspaceCode: string, agentCode: string, libraryIds: string[]) {
+  return requestApi<Record<string, never>>(`PUT ${root}/agent-grants/{agentCode}`, { pathParams: { agentCode }, body: { workspaceCode, libraryIds } });
 }
 
 export function getParsingCapabilities(workspaceCode: string, signal?: AbortSignal) {

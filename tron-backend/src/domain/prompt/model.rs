@@ -7,6 +7,7 @@ use crate::shared::id::SnowflakeId;
 pub enum PromptCategory {
     System,
     Persona,
+    AgentRole,
     Tool,
     Template,
     Action,

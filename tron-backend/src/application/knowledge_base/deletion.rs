@@ -23,7 +23,37 @@ pub struct DocumentDeletion {
     pub mineru_cache_retained: bool,
 }
 
+pub struct ApplicationErrorDescriptor {
+    pub code: &'static str,
+    pub message_key: &'static str,
+}
+
+impl KnowledgeBaseError {
+    pub fn library_deletion_descriptor(&self) -> ApplicationErrorDescriptor {
+        let (code, message_key) = match self {
+            Self::NotEmpty => ("101027001", "tron.knowledge_base.not_empty"),
+            Self::NotFound => ("101027002", "tron.knowledge_base.not_found"),
+            Self::Forbidden => ("101027003", "tron.knowledge_base.forbidden"),
+            Self::Conflict => ("101027004", "tron.knowledge_base.conflict"),
+            Self::Invalid(_) => ("101027005", "tron.knowledge_base.invalid"),
+            Self::Storage(_) => ("101027006", "tron.knowledge_base.storage_failed"),
+        };
+        ApplicationErrorDescriptor { code, message_key }
+    }
+}
+
 impl KnowledgeBaseService {
+    pub fn remove_library(
+        &self,
+        user: &str,
+        workspace: &str,
+        id: &str,
+    ) -> Result<(), KnowledgeBaseError> {
+        self.workspace(user, workspace)?;
+        let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
+        self.repository.delete_empty_library(user, workspace, id)
+    }
+
     pub(super) fn request_document_deletion(
         &self,
         user: &str,
@@ -133,7 +163,7 @@ impl KnowledgeBaseService {
         })
     }
 
-    async fn clean_document_deletion(&self, job: DeletionCleanupPlan) {
+    pub(super) async fn clean_document_deletion(&self, job: DeletionCleanupPlan) {
         // Task snapshots survive only in this best-effort call, not in database history.
         for task in &job.cancellations {
             let Some(parser) = self.parser.as_ref() else {
@@ -170,7 +200,7 @@ impl KnowledgeBaseService {
     }
 }
 
-fn collect_codes(value: &Value, codes: &mut BTreeSet<String>) {
+pub(crate) fn collect_codes(value: &Value, codes: &mut BTreeSet<String>) {
     match value {
         Value::String(s)
             if s.strip_prefix("KB_")

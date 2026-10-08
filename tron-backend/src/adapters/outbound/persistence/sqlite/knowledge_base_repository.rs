@@ -3,8 +3,9 @@ use crate::application::knowledge_base::{
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Serialize, de::DeserializeOwned};
-mod deletion;
+pub(super) mod deletion;
 mod intake;
+mod agent_grants;
 struct SqliteKnowledgeBaseRepositorySql<'a> {
     connection: &'a mut Connection,
 }

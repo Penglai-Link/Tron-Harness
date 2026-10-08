@@ -8,6 +8,7 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   Download,
+  Eye,
   FileUp,
   Pencil,
   Save,
@@ -50,6 +51,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Badge } from "@/components/ui/badge";
+import { ResourceFilePreviewDialog } from "../components/ResourceFilePreviewDialog";
 
 const fileKinds: ResourceKind[] = ["FILE", "IMAGE", "PDF"];
 const dataSourceKinds: ResourceKind[] = [
@@ -174,8 +176,14 @@ export function ResourceEditorPage() {
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(searchParams.get("preview") === "1");
+  const [previewRevision, setPreviewRevision] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initializedFromRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setPreviewOpen(searchParams.get("preview") === "1");
+  }, [requestedResourceCode, workspaceCode, searchParams]);
 
   useEffect(() => {
     if (isNew) return;
@@ -242,7 +250,7 @@ export function ResourceEditorPage() {
   const isFileKind = fileKinds.includes(kind);
   const isDataSource = dataSourceKinds.includes(kind);
   const isServerKind = kind === "SERVER_CONNECTION";
-  const loadedResource = isNew ? null : record;
+  const loadedResource = !isNew && record?.workspaceCode === workspaceCode && record?.resourceCode === requestedResourceCode ? record : null;
   const inherited = loadedResource?.sourceKind === "INHERITED";
   const saveDisabled = saving || inherited || !name.trim() || (isNew && (!resourceCode.trim() || !stagedFile));
 
@@ -362,6 +370,7 @@ export function ResourceEditorPage() {
             fileName: result.fileName,
           },
         });
+        setPreviewRevision(value => value + 1);
         toast.success(editorT("messages.replaced", "{{name}} replaced with {{file}}", { file: result.fileName, name: loadedResource.name }));
       } catch (cause) {
         toast.error(requestErrorMessage(cause));
@@ -375,6 +384,7 @@ export function ResourceEditorPage() {
     }
     setRecord(updated);
     toast.success(editorT("messages.replaced", "{{name}} replaced with {{file}}", { file: file.name, name: loadedResource.name }));
+    setPreviewRevision(value => value + 1);
   }
 
   async function downloadCurrentFile() {
@@ -757,6 +767,10 @@ export function ResourceEditorPage() {
                 <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-2.5">
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{loadedResource.file.fileName}</span>
                   <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">{formatByteSize(loadedResource.file.byteSize)}</span>
+                  <Button size="sm" type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
+                    <Eye aria-hidden="true" size={14} />
+                    {editorT("file.preview", "Preview")}
+                  </Button>
                   <Button size="sm" type="button" variant="outline" onClick={() => { void downloadCurrentFile(); }}>
                     <Download aria-hidden="true" size={14} />
                     {editorT("file.download", "Download")}
@@ -803,6 +817,13 @@ export function ResourceEditorPage() {
           )}
         </section>
       </SurfaceCard>
+
+      {loadedResource?.file && isFileKind && previewOpen ? <ResourceFilePreviewDialog
+        key={`${workspaceCode}:${loadedResource.resourceCode}:${previewRevision}`}
+        workspaceCode={workspaceCode} resourceCode={loadedResource.resourceCode}
+        fileName={loadedResource.file.fileName} kind={loadedResource.kind}
+        revision={`${loadedResource.updatedAt}:${previewRevision}`} onClose={() => setPreviewOpen(false)}
+      /> : null}
 
       <ConfirmDialog
         cancelText={editorT("actions.cancel", "Cancel")}

@@ -1,3 +1,5 @@
+import { systemConfigDescriptions } from "./systemConfigDescriptions";
+
 export const pages = {
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "Chat not found.", "CHAT_SESSION_MUST_BE_ARCHIVED": "Archive the chat first.", "CHAT_SESSION_RUN_ACTIVE": "The chat is running. Try again later.", "CHAT_SESSION_ARCHIVED": "The chat is archived.", "CHAT_SESSION_DELETE_FAILED": "Deletion failed. Retry this item."},
@@ -44,6 +46,26 @@ export const pages = {
     attachmentFailed: "Could not download this attachment.",
   },
   knowledgeLibrary: {
+    batchUploaded_one: "Uploaded {{count}} file.",
+    batchUploaded_other: "Uploaded {{count}} files.",
+    batchUploadFailed_one: "{{count}} file could not be uploaded.",
+    batchUploadFailed_other: "{{count}} files could not be uploaded.",
+    uploadFailed: "Upload failed. Please retry.",
+
+    "chunkParameters": "Adjust chunk parameters",
+    "modeHelpLabel": "Chunking mode options",
+    "modeHelp": {"AUTO": "Automatic: groups content using detected headings, page or sheet boundaries; long content prefers line-break boundaries. Uses the existing size and overlap settings, which usually need no adjustment. Expand chunk parameters to fine-tune them.", "HEADING": "By heading: uses the same structural splitting rules as Automatic, with an editable heading depth. Long sections still respect the character cap; page and sheet boundaries are preserved.", "FIXED": "Fixed length: ignores headings and splits by the maximum chunk length, with optional overlap between chunks. Page and sheet boundaries are preserved for source locations."},
+    "maxCharsHelpLabel": "Maximum chunk length help",
+    "maxCharsHelp": "Maximum characters per chunk, from 200 to 8000; not bytes or tokens. Automatic mode also needs a size cap so a long section does not become one oversized chunk.",
+    "overlapCharsHelpLabel": "Chunk overlap help",
+    "overlapCharsHelp": "Characters repeated between neighboring chunks within the same content group to preserve context. 0 means no overlap; at most 25% of the maximum chunk length.",
+
+    authorizedAgents: "Authorized agents",
+    libraryActions: "Actions for {{name}}",
+    libraryDeleteRequiresEmpty: "Delete all resources in the knowledge base first.",
+    libraryDeleteTitle: "Delete knowledge base?",
+    libraryDeleteDescription: "Delete {{name}} and its agent authorizations?",
+    libraryDeleted: "Knowledge base deleted.",
     chunkItems: "chunks",
     downloadAction: "Download",
     deleteAction: "Delete",
@@ -95,10 +117,21 @@ export const pages = {
     },
     markdownImageNotice: "Markdown image links are preserved. Only existing authorized resource references can be read; external images are not downloaded automatically.",
 
+    ocrMode: "Text recognition",
+    ocrModeHelpLabel: "Text recognition options",
+    inheritOcrMode: "Use platform default ({{mode}})",
+    ocrModes: { Auto: "Automatic detection", Ocr: "Force OCR", Text: "Extract existing text" },
+    ocrModeHelp: {
+      inherit: "Use platform default: follow the configured platform OCR mode.",
+      Auto: "Automatic detection: MinerU decides whether the PDF needs OCR.",
+      Ocr: "Force OCR: recognize text again from page images, even when a PDF has a text layer. This usually takes longer.",
+      Text: "Extract existing text: prefer the PDF text layer without forcing full-page OCR. Scans may have missing body text; image and table regions may still require recognition.",
+    },
     parsingQuality: "Parsing quality",
     inheritParsing: "Use platform default ({{tier}})",
     actualParsing: "Parsed: {{tier}} · MinerU {{version}} · {{count}} image resources",
     parsingTiers: { flash: "Native text", basic: "Basic", standard: "Standard", advanced: "Advanced" },
+  "documentWarnings": "Warnings for {{name}}",
   "parseWarnings": "Parsing notices",
   "queueReasons": {
     "UNKNOWN": "Waiting for scheduling. Check the service status.",
@@ -136,12 +169,9 @@ export const pages = {
   "documentHelp": "Document upload and deletion help",
   "documentActions": "Actions for {{name}}",
   "parsingQualityHelp": "Parsing quality options",
-  "parsingTierHelp": {"inherit": "Default: use the platform setting; Word and Excel use Native text.", "flash": "Native text: fast local text extraction.", "basic": "Basic: lightweight models for layout and text.", "standard": "Standard: suitable for most documents, including scanned PDFs.", "advanced": "Advanced: for complex layouts and difficult documents; takes longer."},
-  "processingStatus": "Processing",
+  "parsingTierHelp": {"inherit": "Default: use the platform setting; Word and Excel use Native text.", "flash": "Native text: read native text for Word and Excel. PDFs follow the selected text recognition mode, prioritizing speed.", "basic": "Basic: lightweight models for layout and text.", "standard": "Standard: suitable for most documents, including scanned PDFs.", "advanced": "Advanced: for complex layouts and difficult documents; takes longer."},
   "indexFailed": "Indexing failed. See the document error and retry.",
   "location": {"renderedPage": "Converted preview {{value}} (not an original page number)", "page": "Page {{value}}", "sheet": "Sheet {{value}}", "rows": "Rows {{value}}", "paragraphs": "Paragraphs {{value}}", "lines": "Lines {{value}}", "chars": "Characters {{value}}"},
-  "advanced": "Advanced settings",
-  "advancedRag": "RAG administration",
   "title": "Knowledge Base",
   "create": "Create",
   "refresh": "Refresh",
@@ -177,7 +207,7 @@ export const pages = {
   "noAgents": "No internal Agents are available.",
   "unavailableAgent": "Unavailable; revoke to remove access",
   "upload": "Upload",
-  "uploading": "Processing…",
+  "uploading": "Uploading…",
   "uploaded": "Document processed.",
   "formats": "Supports Markdown, Word (.docx), Excel (.xlsx), and PDFs including scanned pages. Standard parsing preserves structure and embedded images. Originals and images are stored in Resources. Convert legacy .doc / .xls files first.",
   "unsupported": "Upload .md, .docx, .xlsx, or a PDF.",
@@ -200,29 +230,25 @@ export const pages = {
   },
   "statuses": {
     "QUEUED": "Queued",
-    "CHUNKING": "Splitting",
-    "EMBEDDING": "Embedding",
-    "PUBLISHING": "Publishing",
+    "CHUNKING": "Chunking document",
+    "EMBEDDING": "Generating vectors",
+    "PUBLISHING": "Publishing index",
     "CANCELLED": "Cancelled",
     "REVIEW_REQUIRED": "Source review required",
     "UPLOADED": "Uploaded",
     "PENDING": "Pending index",
-    "PARSING": "Parsing",
+    "PARSING": "Parsing document",
     "READY": "Available",
     "PARTIAL_FAILED": "Partially failed",
     "FAILED": "Failed",
     "NEEDS_REBUILD": "Needs rebuild",
     "STALE": "Needs rebuild"
   },
-  "stages": {
-    "Parsing": "Parsing",
-    "Chunking": "Splitting",
-    "Embedding": "Embedding",
-    "Publishing": "Publishing",
-    "parse": "Parsing",
-    "split": "Splitting",
-    "fulltextIndex": "Full-text index",
-    "vectorIndex": "Vector index"
+  "queuedStages": {
+    "Parsing": "Waiting for document parsing",
+    "Chunking": "Waiting for chunking",
+    "Embedding": "Waiting for vector generation",
+    "Publishing": "Waiting for index publication"
   }
 },
   agentTerminal: {
@@ -662,6 +688,14 @@ export const pages = {
     },
   },
   resourceEditor: {
+    preview: {
+      loading: "Loading preview…",
+      retry: "Retry preview",
+      unsupported: "Preview is unavailable for this file format. Download it to view.",
+      close: "Close preview",
+      fullscreen: "Fullscreen preview",
+      exitFullscreen: "Exit fullscreen",
+    },
     actions: {
       cancel: "Cancel",
       create: "Create",
@@ -683,6 +717,7 @@ export const pages = {
       type: "Resource type",
     },
     file: {
+      preview: "Preview",
       chooseFile: "Choose a file",
       download: "Download",
       empty: "No file uploaded yet.",
@@ -2407,35 +2442,19 @@ export const pages = {
   },
   settingsAgents: {
     actions: {
-      save: "Save",
-      saving: "Saving...",
       scan: "Scan",
       scanning: "Scanning...",
     },
     errors: {
       load: "Agent management data could not be loaded",
-      save: "Main Agent could not be saved",
       scan: "System-agent scan failed",
       toggle: "System-agent policy update failed",
-    },
-    mainAgent: {
-      description:
-        "Platform-level guidance used by the runtime main-agent path.",
-      hint: "Only personality and instructions are editable in v1.",
-      instructions: "Instructions",
-      instructionsPlaceholder:
-        "Persistent instructions injected into the runtime main-agent path.",
-      personality: "Personality",
-      personalityPlaceholder: "How should the platform main agent behave?",
-      title: "Main Agent",
-      updated: "Updated {{value}}",
     },
     messages: {
       disabled: "{{name}} disabled",
       enabled: "{{name}} enabled",
       found: "Scan complete. Found {{count}} available system agents.",
       noneFound: "Scan complete. No available system agents found.",
-      saved: "Main Agent saved",
     },
     pagination: {
       itemLabel: "system agents",
@@ -2524,6 +2543,34 @@ export const pages = {
     },
     title: "Agents",
     internal: {
+      inheritance: {
+        title: "Global internal agents",
+        platform: "Platform definition",
+        local: "Workspace definition",
+        override: "Workspace override",
+        inherited: "Inherited from platform",
+        restore: "Restore inheritance",
+        restoreFailed: "Could not restore inheritance",
+        platformHelp: "Platform agents are available in all workspaces. Workspaces can override individual fields; remaining fields follow platform updates.",
+        workspaceHelp: "Platform agents are inherited by default. Changes override only the edited fields. You can also create agents for this workspace.",
+      },
+      definition: {
+        create: "New",
+        title: "New internal agent",
+        description: "Define its role, then select this agent when starting a conversation.",
+        name: "Name",
+        code: "Code",
+        codeHelp: "Use 1–64 characters, starting with a lowercase letter. Lowercase letters, numbers, hyphens and underscores are allowed. The code cannot be changed after creation.",
+        codeHelpAria: "Agent code help",
+        codeInvalid: "Use 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter.",
+        rolePrompt: "Instructions",
+        roleHelp: "Sets this agent's role and instructions. Changes apply to its next run.",
+        roleHelpAria: "Role prompt help",
+        createFailed: "Could not create agent",
+        cancel: "Cancel",
+        close: "Close",
+        saving: "Saving...",
+      },
       actions: {
         reset: "Reset",
         resetting: "Resetting...",
@@ -2635,6 +2682,37 @@ export const pages = {
         selectedServers: "Selected servers",
         stickyExpanded: "Sticky expanded",
       },
+      assignmentDialog: {
+        mcpTitle: "Choose MCP servers",
+        toolsTitle: "Choose tools",
+        editServers: "Choose servers ({{count}})",
+        editTools: "Choose tools ({{count}})",
+        selectedCount: "{{count}} selected",
+        cancel: "Cancel",
+        confirm: "Confirm",
+        close: "Close",
+      },
+      knowledge: {
+        label: "Knowledge bases",
+        helpLabel: "About knowledge base assignments",
+        help: "Choose the knowledge bases this agent can search in the current workspace. Assignments stay in sync with agent authorization in knowledge base management.",
+        choose: "Choose knowledge bases ({{count}})",
+        title: "Choose knowledge bases",
+        selected: "{{count}} selected",
+        loading: "Loading...",
+        retry: "Retry",
+        none: "No knowledge bases assigned",
+        search: "Search knowledge bases",
+        documents: "{{count}} documents",
+        noMatches: "No matching knowledge bases",
+        empty: "No knowledge bases in this workspace",
+        saved: "Knowledge base assignments saved",
+        cancel: "Cancel",
+        confirm: "Confirm",
+        saving: "Saving...",
+        close: "Close",
+      },
+      advancedSettings: "Advanced settings",
       mcpSelection: {
         clearVisible: "Clear visible",
         disabledHint:
@@ -2779,6 +2857,7 @@ export const pages = {
         description: "Configure addresses, concurrency and shared hardware groups. Remote nodes require explicit document transfer consent. Saving applies to new tasks; existing tasks keep their original configuration. An empty list uses baseUrl.",
       },
       categories: {
+        navigation: { label: "Menu navigation" },
         eventBus: { label: "Event bus" },
         httpClients: { label: "HTTP clients" },
         mineru: { label: "MinerU parsing" },
@@ -2789,121 +2868,7 @@ export const pages = {
         systemAgents: { label: "System agents" },
         variableCrypto: { label: "Variable encryption" },
       },
-      descriptions: {
-        fields: {
-          aguiGlobalReplayBytes:
-            "Limits replay memory used by all AG-UI streams combined.",
-          aguiReplayBytesPerStream:
-            "Limits replay memory retained for one AG-UI stream.",
-          aguiReplayEventsPerStream:
-            "Limits the number of replay events retained for one AG-UI stream.",
-          aguiStreamIdleTtlSeconds:
-            "Sets how long an inactive AG-UI stream remains cached.",
-          backend: "Selects the parsing backend implementation.",
-          baseUrl: "Sets the upstream service base URL.",
-          bindAddress: "Sets the network address on which the backend listens.",
-          cleanupBatchSize:
-            "Sets the number of event-log rows processed in each cleanup batch.",
-          cleanupMaxRowsPerStartup:
-            "Caps the event-log rows removed during one startup.",
-          cleanupOnStartup:
-            "Determines whether expired event-log data is cleaned during startup.",
-          codexCommand:
-            "Sets the command used to launch the Codex system agent.",
-          connectTimeoutMs:
-            "Sets the maximum time allowed to establish a connection.",
-          criticalIngressCapacity:
-            "Sets the queue capacity reserved for critical events.",
-          defaultContextWindowTokens:
-            "Sets the default model context-window size used for budgeting.",
-          defaultMaxSessions:
-            "Limits related sessions loaded into family context by default.",
-          defaultSinkCapacity:
-            "Sets the default queue capacity for each event sink.",
-          defaultSnapshotMaxChars:
-            "Limits characters loaded from each related snapshot.",
-          defaultTtlHours:
-            "Sets how long family-context records remain eligible for loading.",
-          enabled:
-            "Determines whether this subsystem or integration is enabled.",
-          externalizeAboveBytes:
-            "Stores tool results externally when their payload exceeds this size.",
-          familyContextMaxChars:
-            "Caps the total characters loaded as session-family context.",
-          familyContextMaxRatio:
-            "Caps the session-family context share, for example 10%.",
-          frontendDistDir:
-            "Sets the directory containing frontend static assets.",
-          judgeInputMaxChars: "Caps the input supplied to the goal-loop judge.",
-          judgeOutputMaxTokens: "Caps tokens generated by the goal-loop judge.",
-          keyBase64:
-            "Sets the Base64 encryption key; changing it requires migrating existing encrypted values.",
-          maxActorUserCodeBytes:
-            "Limits the encoded actor user-code length in an event.",
-          maxActorUsernameBytes:
-            "Limits the encoded actor username length in an event.",
-          maxAttrKeyBytes:
-            "Limits the encoded length of one event attribute key.",
-          maxAttrs: "Limits the number of attributes attached to one event.",
-          maxAttrValueBytes:
-            "Limits the encoded length of one event attribute value.",
-          maxBytes: "Caps the accepted document size in bytes.",
-          maxConsecutiveJudgeFailures:
-            "Limits consecutive judge failures before the goal loop pauses.",
-          maxNameBytes: "Limits the encoded event-name length.",
-          maxPayloadBytes: "Limits the total encoded event payload size.",
-          maxPayloadFields: "Limits the number of fields in an event payload.",
-          maxProducerBytes: "Limits the encoded event-producer name length.",
-          maxRatio:
-            "Caps this context block as a percentage of the available input budget, for example 20%.",
-          maxRequestFieldBytes: "Limits encoded request metadata field length.",
-          maxRuns: "Limits the number of automated runs in one goal loop.",
-          maxSubjectCodeBytes: "Limits the encoded event subject-code length.",
-          maxSubjectTypeBytes: "Limits the encoded event subject-type length.",
-          maxSummaryBytes: "Limits the encoded event summary length.",
-          maxTokens: "Caps tokens allocated to this context block.",
-          mode: "Selects the event-log storage detail level.",
-          name: "Sets the user-facing provider name.",
-          opencodeCommand:
-            "Sets the command used to launch the OpenCode system agent.",
-          otherWeight:
-            "Sets the relative weight for other family-context records, for example 5%.",
-          parseEndpoint:
-            "Sets the document parsing endpoint relative to the base URL.",
-          parseMethod: "Selects the document parsing method.",
-          poolIdleTimeoutMs:
-            "Sets how long an idle pooled connection is retained.",
-          poolMaxIdlePerHost:
-            "Limits idle pooled connections retained per host.",
-          port: "Sets the TCP port on which the backend listens.",
-          projectDocRoot:
-            "Sets the root directory available to project-document references.",
-          reasoningSummaryReplayEnabled:
-            "Determines whether reasoning summaries are replayed into conversation context.",
-          requirementWeight:
-            "Sets the relative weight for requirement-related family context, for example 25%.",
-          retainedHistoryRatio:
-            "Sets the history share retained after compaction, for example 20%.",
-          retentionDays: "Sets how many days event-log records are retained.",
-          returnContentList:
-            "Determines whether parsing returns the structured content list.",
-          root: "Sets the directory used for externalized tool-result artifacts.",
-          standardIngressCapacity:
-            "Sets the queue capacity for standard events.",
-          taskWeight:
-            "Sets the relative weight for task-related family context, for example 65%.",
-          tcpKeepaliveMs:
-            "Sets the TCP keepalive interval for pooled connections.",
-          timeoutSeconds: "Sets the maximum duration of one parsing request.",
-          triggerRatio:
-            "Sets the context-usage threshold that triggers compaction, for example 80%.",
-          workspaceChatWeight:
-            "Sets the relative weight for workspace chat context, for example 10%.",
-          workspaceHeartbeatWeight:
-            "Sets the relative weight for workspace heartbeat context, for example 10%.",
-        },
-        unknownField: "Sets this backend configuration value.",
-      },
+      descriptions: systemConfigDescriptions,
       fieldHelp: "Show help for {{path}}",
       help: "Show backend configuration help",
       itemCount_one: "{{count}} setting",
@@ -3096,7 +3061,25 @@ export const pages = {
     },
   },
   promptManagement: {
+    roleTemplates: {
+      open: "Choose template",
+      title: "Choose a role template",
+      description: "Preview a role template and copy it into the role prompt. You can edit it after applying.",
+      search: "Search role templates",
+      searchPlaceholder: "Search names, codes, or descriptions...",
+      loading: "Loading templates...",
+      empty: "No role templates match your search.",
+      preview: "Template preview",
+      select: "Select a template to preview its role prompt.",
+      unavailable: "This template is no longer available.",
+      itemLabel: "templates",
+      apply: "Apply",
+      confirmTitle: "Replace role prompt?",
+      confirmDescription: "Applying this template will replace the entire existing role prompt.",
+      confirmApply: "Replace and apply",
+    },
     actions: {
+      close: "Close",
       back: "Back",
       bulkExport: "Bulk Export",
       cancel: "Cancel",
@@ -3131,6 +3114,7 @@ export const pages = {
       variableType: "Type {{name}}",
     },
     categories: {
+      AGENT_ROLE: "Agent role",
       ACTION: "Action",
       PERSONA: "Persona",
       SYSTEM: "System",

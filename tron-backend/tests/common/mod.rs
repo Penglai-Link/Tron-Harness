@@ -53,6 +53,10 @@ pub fn app_with_config(config: AppConfig) -> Router {
 }
 
 fn build_router_with_test_ids(config: AppConfig) -> Router {
+    app_with_state_setup(config, |_| {})
+}
+
+pub fn app_with_state_setup(config: AppConfig, setup: impl FnOnce(&AppState)) -> Router {
     let profiles = tron_backend::application::profile::ProfileRegistryService::new(":memory:")
         .expect("isolated profiles");
     profiles
@@ -64,6 +68,7 @@ fn build_router_with_test_ids(config: AppConfig) -> Router {
         profiles,
     )
     .expect("test state");
+    setup(&state);
     build_router_with_state(state).expect("test router should build")
 }
 

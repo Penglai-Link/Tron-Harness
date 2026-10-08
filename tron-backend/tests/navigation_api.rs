@@ -106,6 +106,14 @@ async fn runtime_navigation_requires_profile_and_is_localized_and_separate_from_
     assert_eq!(tree_payload["code"], "0");
     assert_eq!(tree_payload["data"]["domainCode"], "ADVANCED");
     assert_eq!(tree_payload["data"]["locale"], "zh-CN");
+    assert!(!tree_payload["data"].to_string().contains("\"CHATS\""));
+    let menu_definitions = request_json(
+        &router, Method::POST, "/api/v1/admin/navigation/menus/query",
+        Some(json!({ "current": 1, "size": 200, "keyword": "" })), Some(&token), None,
+    ).await;
+    assert_eq!(menu_definitions.status(), StatusCode::OK);
+    let definitions = response_json(menu_definitions).await;
+    assert!(!definitions["data"].to_string().contains("\"CHATS\""));
     assert_eq!(tree_payload["data"]["maxDepth"], 3);
     assert_eq!(tree_payload["data"]["menus"][0]["menuCode"], "CORE");
     assert_eq!(tree_payload["data"]["menus"][0]["label"], "核心");
@@ -428,7 +436,6 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         "TASKS",
         "AUTOMATIONS",
         "CORE",
-        "CHATS",
         "INTERNAL_AGENTS",
         "SYSTEM_AGENTS",
         "AGENTS",
@@ -488,7 +495,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         restore_payload["data"]["restoredDomainCodes"],
         json!(["ADVANCED", "CHAT_PANEL"])
     );
-    assert_eq!(restore_payload["data"]["restoredItemCount"], 24);
+    assert_eq!(restore_payload["data"]["restoredItemCount"], 23);
 
     let restored_tree = request_json(
         &router,
@@ -505,11 +512,11 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     assert_eq!(restored_payload["data"][0]["childDisplay"], "Flyout");
     assert_eq!(restored_payload["data"][1]["menuCode"], "AGENT_OPERATIONS");
     assert_eq!(
-        restored_payload["data"][1]["children"][1]["children"][0]["menuCode"],
+        restored_payload["data"][1]["children"][0]["children"][0]["menuCode"],
         "INTERNAL_AGENTS"
     );
     assert_eq!(
-        restored_payload["data"][1]["children"][1]["children"][1]["menuCode"],
+        restored_payload["data"][1]["children"][0]["children"][1]["menuCode"],
         "SYSTEM_AGENTS"
     );
 
@@ -618,7 +625,7 @@ async fn chat_panel_is_a_menu_tree_not_a_navigation_domain() {
         Method::POST,
         "/api/v1/admin/navigation/menu-trees/CHAT_PANEL/menu-items",
         Some(json!({
-            "menuCode": "CHATS",
+            "menuCode": "APPS",
             "parentMenuCode": "CHAT_PROJECTS",
             "position": 0,
         })),
@@ -627,4 +634,45 @@ async fn chat_panel_is_a_menu_tree_not_a_navigation_domain() {
     )
     .await;
     assert_ne!(add_child.status(), StatusCode::OK);
+}
+
+#[test]
+fn existing_chat_menu_and_assignments_are_removed_on_repository_startup() {
+    use tron_backend::adapters::outbound::persistence::sqlite::SqliteNavigationRepository;
+
+    let directory = tempfile::tempdir().expect("temporary navigation database");
+    let path = directory.path().join("navigation.sqlite3");
+    let database_url = path.to_str().expect("database path");
+    drop(SqliteNavigationRepository::connect(database_url).expect("initialize navigation"));
+    let connection = rusqlite::Connection::open(&path).expect("open existing database");
+    connection.execute_batch(
+        "PRAGMA foreign_keys = ON;
+         INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, icon, enabled, created_at, updated_at)
+         VALUES (734510000000000006, 'CHATS', 'BuiltIn', 'Internal', 'chats.index', 'MessageSquareText', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z');
+         INSERT INTO navigation_menu_translations (id, menu_id, locale, label)
+         VALUES (734530000000000011, 734510000000000006, 'zh-CN', '会话');
+         INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position)
+         VALUES (734520000000000006, 734500000000000001, 734510000000000006, 734520000000000005, 99);
+         INSERT INTO navigation_domain_menu_items (id, domain_id, menu_id, parent_item_id, position)
+         VALUES (734520000000000006, 734500000000000001, 734510000000000006, NULL, 99);"
+    ).expect("seed previous chat menu and both assignment tables");
+    drop(connection);
+    for _ in 0..2 {
+        drop(SqliteNavigationRepository::connect(database_url).expect("reopen navigation"));
+        let connection = rusqlite::Connection::open(&path).expect("inspect migrated database");
+        for table in ["navigation_menus", "navigation_menu_translations", "navigation_menu_tree_items", "navigation_domain_menu_items"] {
+            let column = if table == "navigation_menus" { "id" } else { "menu_id" };
+            let count: i64 = connection.query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE {column} = 734510000000000006"),
+                [], |row| row.get(0),
+            ).expect("count obsolete chat menu rows");
+            assert_eq!(count, 0, "{table} must not retain the deleted menu");
+        }
+        let panel_count: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM navigation_menus WHERE menu_code IN ('CHAT_SESSIONS', 'CHAT_NEW_SESSION', 'CHAT_PROJECTS', 'CHAT_RECENTS')",
+            [], |row| row.get(0),
+        ).expect("chat panel menus remain usable");
+        assert_eq!(panel_count, 4);
+        assert!(connection.prepare("PRAGMA foreign_key_check").unwrap().query([]).unwrap().next().unwrap().is_none());
+    }
 }

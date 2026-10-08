@@ -1,8 +1,7 @@
-import type { MainAgentConfigPayload } from "@/domain/agent/api/agentManagementApi";
 import type {
+  CreateInternalAgentPayload,
   ExpandedDomainPersistenceMode,
   ListToolsQuery,
-  MainAgentConfig,
   McpAccessMode,
   PlatformSystemAgentRecord,
   PlatformSystemAgentRescanResult,
@@ -15,16 +14,11 @@ import type {
   WorkspaceInternalAgentRecord,
   WorkspaceSystemAgentRecord,
 } from "@/domain/agent/model";
-import { listEffectiveEnabledWorkspaceMcpServerCodesMock } from "@/domain/mcp/mock";
+import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
+import { listPlatformMcpServersMock, listEffectiveEnabledWorkspaceMcpServerCodesMock } from "@/domain/mcp/mock";
 
 const scanBaseMs = Date.parse("2026-05-29T09:30:00Z");
 let scanSequence = 0;
-
-let mainAgentConfig: MainAgentConfig = {
-  instructions: "Coordinate coding tasks with clear ownership boundaries, keep outputs concise, and require validation before close-out.",
-  personality: "Direct, accountable, and precise. Push for concrete next steps and expose tradeoffs plainly.",
-  updatedAt: "2026-05-29T09:30:00Z",
-};
 
 type SystemAgentSeed = {
   agentCode: string;
@@ -223,6 +217,7 @@ const toolSeed: ToolSeed[] = [
 ];
 
 type WorkspaceInternalAgentSeed = {
+  rolePrompt: string;
   agentCode: string;
   description: string;
   expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
@@ -239,6 +234,7 @@ type WorkspaceInternalAgentSeed = {
 
 const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
   {
+    rolePrompt: "",
     agentCode: "main-agent",
     description: "Primary platform internal agent used for workspace chat runtime policy.",
     expandedDomainPersistenceMode: "sticky_expanded",
@@ -254,21 +250,15 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
   },
 ];
 
-let workspaceOverrides: Record<string, WorkspaceInternalAgentSeed[]> = {};
+type InternalAgentOverride = Pick<WorkspaceInternalAgentSeed, "agentCode"> & Partial<WorkspaceInternalAgentSeed>;
+let workspaceOverrides: Record<string, InternalAgentOverride[]> = {};
+const workspaceInternalAgentDefinitions: Record<string, WorkspaceInternalAgentSeed[]> = {};
 let workspaceSystemAgentOverrides: Record<string, string[]> = {};
 
 function nextScanTimestamp() {
   const timestamp = new Date(scanBaseMs + scanSequence * 60_000).toISOString();
   scanSequence += 1;
   return timestamp;
-}
-
-function cloneMainAgentConfig(config: MainAgentConfig): MainAgentConfig {
-  return {
-    instructions: config.instructions,
-    personality: config.personality,
-    updatedAt: config.updatedAt,
-  };
 }
 
 function cloneSystemAgentRecord(record: PlatformSystemAgentRecord | WorkspaceSystemAgentRecord) {
@@ -379,7 +369,7 @@ function getWorkspaceInternalAgentOverride(workspaceCode: string, agentCode: str
   return getWorkspaceInternalAgentOverrides(workspaceCode).find((item) => item.agentCode === agentCode) ?? null;
 }
 
-function upsertWorkspaceInternalAgentOverride(workspaceCode: string, next: WorkspaceInternalAgentSeed) {
+function upsertWorkspaceInternalAgentOverride(workspaceCode: string, next: InternalAgentOverride) {
   const overrides = getWorkspaceInternalAgentOverrides(workspaceCode)
     .filter((item) => item.agentCode !== next.agentCode);
   workspaceOverrides = {
@@ -394,15 +384,19 @@ function normalizeWorkspaceInternalAgentSelectedTools(toolCodes: string[] = []) 
 }
 
 function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: string): WorkspaceInternalAgentRecord {
-  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
-  if (!base) {
-    throw new Error(`Internal agent ${agentCode} was not found.`);
-  }
-
-  const override = getWorkspaceInternalAgentOverride(workspaceCode, agentCode);
-  const effective = override ? { ...base, ...override } : { ...base };
-  const source = override ? "workspace_override" : "platform_default";
-  const effectiveEnabledServerCodeSet = new Set(listEffectiveEnabledWorkspaceMcpServerCodesMock(workspaceCode));
+  const platformDefinitions = [...workspaceInternalAgentSeed, ...(workspaceInternalAgentDefinitions[PLATFORM_INTERNAL_AGENT_SCOPE] ?? [])];
+  const platformBase = platformDefinitions.find((item) => item.agentCode === agentCode);
+  const localBase = (workspaceInternalAgentDefinitions[workspaceCode] ?? []).find((item) => item.agentCode === agentCode);
+  const base = platformBase ?? localBase;
+  if (!base) throw new Error(`Internal agent ${agentCode} was not found.`);
+  const platformOverride = getWorkspaceInternalAgentOverride(PLATFORM_INTERNAL_AGENT_SCOPE, agentCode);
+  const override = workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE ? null : getWorkspaceInternalAgentOverride(workspaceCode, agentCode);
+  const effective = { ...base, ...platformOverride, ...override };
+  const platformDefined = Boolean(platformBase);
+  const source = workspaceCode !== PLATFORM_INTERNAL_AGENT_SCOPE && (override || !platformDefined) ? "workspace_override" : "platform_default";
+  const effectiveEnabledServerCodeSet = new Set(workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE
+    ? listPlatformMcpServersMock().filter((server) => server.enabled).map((server) => server.serverCode)
+    : listEffectiveEnabledWorkspaceMcpServerCodesMock(workspaceCode));
 
   const selectedToolCodes = effective.toolAssignmentMode === "all_platform_tools"
     ? []
@@ -414,6 +408,8 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
   return {
     agentCode: effective.agentCode,
     description: effective.description,
+    rolePrompt: effective.rolePrompt,
+    platformDefined,
     expandedDomainPersistenceMode: effective.expandedDomainPersistenceMode,
     maxSteps: effective.maxSteps,
     maxToolCalls: effective.maxToolCalls,
@@ -429,7 +425,7 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
 }
 
 function listWorkspaceInternalAgentRecords(workspaceCode: string) {
-  return workspaceInternalAgentSeed
+  return [...workspaceInternalAgentSeed, ...(workspaceInternalAgentDefinitions[PLATFORM_INTERNAL_AGENT_SCOPE] ?? []), ...(workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE ? [] : workspaceInternalAgentDefinitions[workspaceCode] ?? [])]
     .map((agent) => buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode));
 }
 
@@ -454,21 +450,30 @@ function validateInternalAgentPatch(payload: WorkspaceInternalAgentPolicyPayload
   }
 }
 
-export function getMainAgentConfigMock() {
-  return cloneMainAgentConfig(mainAgentConfig);
-}
-
-export function updateMainAgentConfigMock(payload: MainAgentConfigPayload) {
-  mainAgentConfig = {
-    instructions: payload.instructions,
-    personality: payload.personality,
-    updatedAt: nextScanTimestamp(),
-  };
-  return cloneMainAgentConfig(mainAgentConfig);
-}
-
 export function listWorkspaceInternalAgentsMock(workspaceCode: string) {
   return listWorkspaceInternalAgentRecords(workspaceCode);
+}
+
+export function createWorkspaceInternalAgentMock(workspaceCode: string, payload: CreateInternalAgentPayload) {
+  const agentCode = payload.agentCode.trim();
+  if (!/^[a-z][a-z0-9_-]{0,63}$/.test(agentCode)) throw new Error("Invalid agent code");
+  const scopes = workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE
+    ? Object.keys(workspaceInternalAgentDefinitions)
+    : [workspaceCode];
+  if (agentCode === "main-agent" || systemAgentRegistry.some((agent) => agent.agentCode === agentCode)
+    || listWorkspaceInternalAgentRecords(workspaceCode).some((agent) => agent.agentCode === agentCode)
+    || scopes.some((scope) => workspaceInternalAgentDefinitions[scope]?.some((agent) => agent.agentCode === agentCode))) {
+    throw new Error("Agent code is already in use; choose another code");
+  }
+  const agent = { ...workspaceInternalAgentSeed[0], ...payload, agentCode, name: payload.name.trim(), description: "Workspace internal agent." };
+  workspaceInternalAgentDefinitions[workspaceCode] = [...(workspaceInternalAgentDefinitions[workspaceCode] ?? []), agent];
+  return buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode);
+}
+
+export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string }) {
+  buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
+  upsertWorkspaceInternalAgentOverride(workspaceCode, { ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode), ...payload, agentCode });
+  return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
 }
 
 export function fetchWorkspaceInternalAgentMock(workspaceCode: string, agentCode: string) {
@@ -481,18 +486,12 @@ export function patchWorkspaceInternalAgentPolicyMock(
   payload: WorkspaceInternalAgentPolicyPayload,
 ) {
   validateInternalAgentPatch(payload);
-  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
-  if (!base) {
-    throw new Error(`Internal agent ${agentCode} was not found.`);
-  }
+  buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
 
-  const next: WorkspaceInternalAgentSeed = {
-    ...base,
+  const next: InternalAgentOverride = {
     ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode),
     ...payload,
     agentCode,
-    description: base.description,
-    name: base.name,
   };
 
   upsertWorkspaceInternalAgentOverride(workspaceCode, next);
@@ -504,18 +503,12 @@ export function patchWorkspaceInternalAgentMcpPolicyMock(
   agentCode: string,
   payload: WorkspaceInternalAgentMcpPolicyPayload,
 ) {
-  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
-  if (!base) {
-    throw new Error(`Internal agent ${agentCode} was not found.`);
-  }
+  buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
 
-  const next: WorkspaceInternalAgentSeed = {
-    ...base,
+  const next: InternalAgentOverride = {
     ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode),
     ...payload,
     agentCode,
-    description: base.description,
-    name: base.name,
   };
 
   upsertWorkspaceInternalAgentOverride(workspaceCode, next);
@@ -527,13 +520,9 @@ export function updateWorkspaceInternalAgentToolAssignmentsMock(
   agentCode: string,
   toolCodes: string[],
 ) {
-  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
-  if (!base) {
-    throw new Error(`Internal agent ${agentCode} was not found.`);
-  }
+  buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
 
-  const next: WorkspaceInternalAgentSeed = {
-    ...base,
+  const next: InternalAgentOverride = {
     ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode),
     agentCode,
     selectedToolCodes: normalizeWorkspaceInternalAgentSelectedTools(toolCodes),
@@ -549,19 +538,17 @@ export function updateWorkspaceInternalAgentMcpServerAssignmentsMock(
   agentCode: string,
   serverCodes: string[],
 ) {
-  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
-  if (!base) {
-    throw new Error(`Internal agent ${agentCode} was not found.`);
-  }
+  buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
 
-  const allowedServerCodes = new Set(listEffectiveEnabledWorkspaceMcpServerCodesMock(workspaceCode));
+  const allowedServerCodes = new Set(workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE
+    ? listPlatformMcpServersMock().filter((server) => server.enabled).map((server) => server.serverCode)
+    : listEffectiveEnabledWorkspaceMcpServerCodesMock(workspaceCode));
   const normalizedServerCodes = [...new Set(serverCodes)].filter((serverCode) => allowedServerCodes.has(serverCode));
   if (normalizedServerCodes.length !== [...new Set(serverCodes)].length) {
     throw new Error("One or more selected MCP servers are no longer effective in this workspace.");
   }
 
-  const next: WorkspaceInternalAgentSeed = {
-    ...base,
+  const next: InternalAgentOverride = {
     ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode),
     agentCode,
     mcpAccessMode: "selected_servers",

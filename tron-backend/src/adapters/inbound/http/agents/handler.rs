@@ -31,7 +31,7 @@ use super::error_mapper::{
 use super::request::{
     ListToolsQuery, ReplaceInternalAgentMcpServerAssignmentsRequest,
     ReplaceInternalAgentToolAssignmentsRequest, UpdateInternalAgentMcpPolicyRequest,
-    UpdateInternalAgentPolicyRequest, UpdateMainAgentConfigRequest,
+    UpdateInternalAgentPolicyRequest,
 };
 
 pub async fn create_agent_run(
@@ -119,27 +119,6 @@ pub async fn activate_agui_stream(
     match service.activate(&stream_key) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_agui_error_response(error, &auth.locale),
-    }
-}
-
-pub async fn get_main_agent_config(
-    State(agent_management): State<AgentManagementService>,
-    _auth: RequestAuthContext,
-) -> Response {
-    match agent_management.get_main_agent_config() {
-        Ok(config) => Json(ApiResponse::success(config)).into_response(),
-        Err(error) => agent_management_error_response(error),
-    }
-}
-
-pub async fn update_main_agent_config(
-    State(agent_management): State<AgentManagementService>,
-    _auth: RequestAuthContext,
-    Json(request): Json<UpdateMainAgentConfigRequest>,
-) -> Response {
-    match agent_management.update_main_agent_config(request.into()) {
-        Ok(config) => Json(ApiResponse::success(config)).into_response(),
-        Err(error) => agent_management_error_response(error),
     }
 }
 
@@ -415,7 +394,7 @@ pub async fn deactivate_agui_stream(
     }
 }
 
-fn to_internal_agent_policy_command(
+pub(super) fn to_internal_agent_policy_command(
     request: UpdateInternalAgentPolicyRequest,
 ) -> Result<UpdateWorkspaceInternalAgentPolicyCommand, (&'static str, &'static str)> {
     let tool_assignment_mode = match request.tool_assignment_mode {
@@ -441,7 +420,7 @@ fn to_internal_agent_policy_command(
     })
 }
 
-fn to_internal_agent_mcp_policy_command(
+pub(super) fn to_internal_agent_mcp_policy_command(
     request: UpdateInternalAgentMcpPolicyRequest,
 ) -> Result<UpdateWorkspaceInternalAgentMcpPolicyCommand, (&'static str, &'static str)> {
     let mcp_access_mode = match request.mcp_access_mode {

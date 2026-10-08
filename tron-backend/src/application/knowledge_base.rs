@@ -1,9 +1,11 @@
 pub mod ingestion;
 pub mod deletion;
+mod agent_grants;
 mod ingestion_worker;
 pub mod local_documents;
 pub mod parsing;
 mod parsing_cache;
+mod publication_resources;
 pub mod fidelity; // Retained diagnostic evidence; never invoked by normal ingestion.
 pub mod pdf_visual_source;
 pub mod office_visuals;
@@ -28,7 +30,7 @@ use crate::{
     shared::sqlite_extensions::TRON_VECTOR_INDEX_DIMENSION,
 };
 use local_documents::{ChunkConfig, ImageAnalysisSummary, LocatedChunk, parse_local_document, split_document};
-use parsing::{KnowledgeDocumentParser, ParsingArtifact, ParsingCapabilities, ParsingTier};
+use parsing::{KnowledgeDocumentParser, ParsingArtifact, ParsingCapabilities, ParsingTier, OcrMode};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -39,6 +41,7 @@ pub enum KnowledgeBaseError {
     NotFound,
     Forbidden,
     Conflict,
+    NotEmpty,
     Invalid(String),
     Storage(String),
 }
@@ -48,6 +51,7 @@ impl std::fmt::Display for KnowledgeBaseError {
             Self::NotFound => f.write_str("知识库或文档不存在"),
             Self::Forbidden => f.write_str("无知识库权限"),
             Self::Conflict => f.write_str("文档正在索引或状态已改变，请刷新后重试"),
+            Self::NotEmpty => f.write_str("请先删除知识库内的所有资源"),
             Self::Invalid(s) | Self::Storage(s) => f.write_str(s),
         }
     }
@@ -122,6 +126,8 @@ pub struct KnowledgeBaseDocument {
     pub image_analysis: Option<ImageAnalysisSummary>,
     #[serde(default)]
     pub parsing_tier: Option<ParsingTier>,
+    #[serde(default)]
+    pub ocr_mode: Option<OcrMode>,
     #[serde(default)]
     pub parsing_artifact: Option<ParsingArtifact>,
     #[serde(default)]
@@ -297,6 +303,7 @@ impl KnowledgeBaseService {
         let mut list = self.repository.list(user, workspace)?;
         for kb in &mut list {
             kb.document_count = self.repository.documents(&kb.id)?.len();
+            kb.agent_codes = self.repository.grants(&kb.id)?;
         }
         Ok(list)
     }
@@ -548,6 +555,7 @@ impl KnowledgeBaseService {
             warnings: vec![],
             image_analysis: None,
             parsing_tier: None,
+            ocr_mode: None,
             parsing_artifact: None,
             derived_resource_codes: vec![],
             visual_source: None,
@@ -562,9 +570,17 @@ impl KnowledgeBaseService {
         self.index(user,workspace,kb,&doc.id).await
     }
     /// Saving document settings automatically rebuilds only that document.
-    pub async fn configure_and_index(&self,user:&str,workspace:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
-        self.configure_parsing(user,workspace,kb,doc,config,tier).await?;
-        self.index(user,workspace,kb,doc).await
+    pub async fn configure_and_index(&self,user:&str,workspace:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
+        let task = self.enqueue_configured_index(user, workspace, kb, doc, config, tier, ocr).await?;
+        self.run_task_inline(&task.id).await?;
+        self.document_with_task(user, workspace, kb, doc)
+    }
+    fn document_parser(&self, doc: &KnowledgeBaseDocument) -> Result<Option<Arc<dyn KnowledgeDocumentParser>>, KnowledgeBaseError> {
+        match (&self.parser, doc.ocr_mode) {
+            (Some(parser), Some(mode)) => parser.with_ocr_mode(mode).map(Some),
+            (_, None) => Ok(self.parser.clone()),
+            (None, Some(_)) => Err(KnowledgeBaseError::Invalid("文档解析服务未配置".into())),
+        }
     }
     async fn chunks(
         &self,
@@ -623,7 +639,14 @@ impl KnowledgeBaseService {
             image_analysis: parsed_doc.image_analysis,
         })
     }
-    pub async fn configure_parsing(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+    pub async fn configure_parsing(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        let mut document = self.prepare_parsing_configuration(user, workspace, kb, doc, config, tier, ocr).await?;
+        let revision = document.revision;
+        document.revision += 1;
+        self.repository.save_document(kb, &document, revision)?;
+        Ok(document)
+    }
+    async fn prepare_parsing_configuration(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
         self.owned(user,workspace,kb)?;
         if let Some(Some(selected)) = tier {
             let filename = self.repository.document(kb,doc)?.file_name.to_ascii_lowercase();
@@ -632,7 +655,14 @@ impl KnowledgeBaseService {
             let capabilities=self.parsing_capabilities(user,workspace).await?;
             if !capabilities.available_tiers.contains(&selected) {return Err(KnowledgeBaseError::Invalid("选定解析质量不可用".into()));}
         }
-        self.configure_document(user,workspace,kb,doc,config,tier)
+        if let Some(Some(mode)) = ocr {
+            let document = self.repository.document(kb, doc)?;
+            if !document.file_name.to_ascii_lowercase().ends_with(".pdf") {
+                return Err(KnowledgeBaseError::Invalid("文字识别方式仅适用于PDF".into()));
+            }
+            self.parser.as_ref().ok_or_else(|| KnowledgeBaseError::Invalid("文档解析服务未配置".into()))?.with_ocr_mode(mode)?;
+        }
+        self.prepare_document_configuration(user,workspace,kb,doc,config,tier,ocr)
     }
     pub fn configure(
         &self,
@@ -642,9 +672,16 @@ impl KnowledgeBaseService {
         doc: &str,
         config: Option<ChunkConfig>,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.configure_document(user,workspace,kb,doc,config,None)
+        self.configure_document(user,workspace,kb,doc,config,None,None)
     }
-    fn configure_document(&self,user:&str,workspace:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
+    fn configure_document(&self,user:&str,workspace:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
+        let mut document = self.prepare_document_configuration(user, workspace, kb, doc, config, tier, ocr)?;
+        let revision = document.revision;
+        document.revision += 1;
+        self.repository.save_document(kb, &document, revision)?;
+        Ok(document)
+    }
+    fn prepare_document_configuration(&self,user:&str,workspace:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
         self.owned(user, workspace, kb)?;
         if let Some(c) = &config {
             c.validate()
@@ -654,10 +691,9 @@ impl KnowledgeBaseService {
         if ingestion_worker::in_progress(&doc.status) {
             return Err(KnowledgeBaseError::Conflict);
         }
-        let revision = doc.revision;
-        doc.revision += 1;
         doc.chunk_config = config;
         if let Some(tier)=tier { doc.parsing_tier=tier; }
+        if let Some(ocr)=ocr { doc.ocr_mode=ocr; }
         doc.status = if fidelity::blocked(&doc) {
             "REVIEW_REQUIRED"
         } else if doc.active_source_code.is_some() {
@@ -667,7 +703,6 @@ impl KnowledgeBaseService {
         }
         .into();
         doc.error = fidelity::blocked(&doc).then(|| "数据保真核验发现未解决字形或符号，禁止发布索引；请核对原件及图片".into());
-        self.repository.save_document(kb, &doc, revision)?;
         Ok(doc)
     }
     pub fn set_grants(
@@ -709,9 +744,16 @@ impl KnowledgeBaseService {
         self.start_ingestion_workers()?;
         self.document_with_task(user, workspace, kb, &doc.id)
     }
-    pub async fn configure_and_start_index(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.configure_parsing(user, workspace, kb, doc, config, tier).await?;
-        self.start_index(user, workspace, kb, doc)
+    pub async fn configure_and_start_index(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        self.enqueue_configured_index(user, workspace, kb, doc, config, tier, ocr).await?;
+        self.start_ingestion_workers()?;
+        self.document_with_task(user, workspace, kb, doc)
+    }
+    async fn enqueue_configured_index(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<ingestion::IngestionTask, KnowledgeBaseError> {
+        let document = self.prepare_parsing_configuration(user, workspace, kb, doc, config, tier, ocr).await?;
+        let library = self.owned(user, workspace, kb)?;
+        let task = self.prepare_index_task(user, workspace, &library, &document)?;
+        self.queue.enqueue_configured(task, document).map_err(ingestion_worker::queue_error)
     }
     /// Awaited entrypoint uses exactly the same durable stages as background work.
     pub async fn index(&self, user: &str, workspace: &str, kb: &str, doc: &str) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {

@@ -7,7 +7,7 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         lease: &IngestionLease,
         now: i64,
         ready: &Value,
-    ) -> Result<(), IngestionQueueError> {
+    ) -> Result<PublicationCleanup, IngestionQueueError> {
         let conn = &*self.connection;
         let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&conn, TransactionBehavior::Immediate)
             .map_err(storage)?;
@@ -47,18 +47,7 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
             return Err(IngestionQueueError::Conflict);
         }
         publication_indexes::validate_vectors(&tx, &task.knowledge_base_id, source, count)?;
-        publication_indexes::retire_indexes(
-            &tx,
-            &task.knowledge_base_id,
-            current["activeSourceCode"].as_str().unwrap_or(""),
-        )?;
-        tx.execute(
-            &format!(
-                "UPDATE {table} SET source_status='INACTIVE',status='INACTIVE' WHERE source_code=?1"
-            ),
-            [current["activeSourceCode"].as_str().unwrap_or("")],
-        )
-        .map_err(storage)?;
+        publication_cleanup::remove_old_generations(&tx, &task, &current, source)?;
         tx.execute(&format!("UPDATE {table} SET source_status='ACTIVE',status='ACTIVE' WHERE source_code=?1 AND source_status='STAGING'"), [source]).map_err(storage)?;
         let mut ready = ready.clone();
         ready["status"] = "READY".into();
@@ -71,8 +60,15 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         }
         task.state = "READY".into();
         clear_lease(&mut task);
+        task.parsed_resource_code = None;
+        task.chunks_resource_code = None;
+        task.embedding_resource_code = None;
+        task.error = None;
+        task.wait_reason = None;
         write(&tx, &task)?;
-        tx.commit().map_err(storage)
+        let cleanup = publication_cleanup::detach_obsolete_resources(&tx, &task, &ready)?;
+        tx.commit().map_err(storage)?;
+        Ok(cleanup)
     }
 }
 
@@ -82,7 +78,7 @@ impl SqliteKnowledgeIngestionQueue {
         lease: &IngestionLease,
         now: i64,
         ready: &Value,
-    ) -> Result<(), IngestionQueueError> {
+    ) -> Result<PublicationCleanup, IngestionQueueError> {
         let lease = lease.to_owned();
         let ready = ready.to_owned();
         self.connection.call(

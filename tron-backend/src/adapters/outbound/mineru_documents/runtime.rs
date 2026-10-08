@@ -70,6 +70,9 @@ impl RuntimeMineruDocumentParser {
 
 #[async_trait]
 impl KnowledgeDocumentParser for RuntimeMineruDocumentParser {
+    fn with_ocr_mode(&self, mode: OcrMode) -> Result<Arc<dyn KnowledgeDocumentParser>, KnowledgeBaseError> {
+        self.current().with_ocr_mode(mode)
+    }
     fn snapshot(&self) -> Option<Arc<dyn KnowledgeDocumentParser>> {
         Some(Arc::new(self.current()))
     }

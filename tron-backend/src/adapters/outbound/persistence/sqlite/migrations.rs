@@ -1,3 +1,5 @@
+pub(super) const REMOVE_CHATS_NAVIGATION_MIGRATION: &str =
+    include_str!("../../../../../migrations/20261008_0001_remove_chats_navigation.sql");
 pub(super) const NAVIGATION_MIGRATION: &str =
     include_str!("../../../../../migrations/20260829_0002_create_navigation_management.sql");
 pub(super) const NAVIGATION_AGENTS_SPLIT_MIGRATION: &str =
@@ -43,6 +45,8 @@ pub(super) const PROMPT_ACTION_CATEGORY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260824_0001_add_action_prompt_category.sql");
 pub(super) const PROMPT_VARIABLE_BINDINGS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260824_0002_add_prompt_variable_bindings.sql");
+pub(super) const PROMPT_AGENT_ROLE_CATEGORY_MIGRATION: &str =
+    include_str!("../../../../../migrations/20261008_0003_add_agent_role_prompt_category.sql");
 pub(super) const MODEL_CAPABILITIES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260522_0013_add_model_capabilities_to_models.sql");
 pub(super) const MODEL_REMOVE_EXPLICIT_PLATFORM_RESTORE_MIGRATION: &str = include_str!(
@@ -64,6 +68,8 @@ pub(super) const SKILL_REGISTRY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");
 pub(super) const AGENT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260529_0022_create_agent_management.sql");
+pub(super) const INTERNAL_AGENT_DEFINITIONS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20261008_0002_create_internal_agent_definitions.sql");
 pub(super) const RAG_FOUNDATION_MIGRATION: &str =
     include_str!("../../../../../migrations/20260530_0022_create_rag_foundation.sql");
 pub(super) const RAG_DOMAIN_FIELDS_MIGRATION: &str =

@@ -23,15 +23,26 @@ use tron_backend::{
         persistence::sqlite::SqliteKnowledgeBaseRepository,
     },
     application::{
-        knowledge_base::{KnowledgeBaseService, parsing::KnowledgeDocumentParser},
+        knowledge_base::{KnowledgeBaseService, parsing::{KnowledgeDocumentParser, OcrMode}},
         llm::LlmRuntimeService,
     },
     config::{KnowledgeIngestionConfig, MineruConfig, MineruNode},
 };
-const ARCHIVE: &[u8] = include_bytes!("fixtures/mineru-v1/synthetic.pdf.zip");
+// Transport/lifecycle fixture only; this does not validate OCR recognition quality.
+fn synthetic_archive() -> Vec<u8> {
+    use std::io::{Cursor, Write};
+    let middle = json!({"schema":"docvortex.middle","schema_version":"2.0","metadata":{"file_suffix":"pdf"},"extensions":{"mineru":{"tier":"standard"}},"pages":[{"page_idx":0,"blocks":[{"index":0,"type":"text","content":"Synthetic routing evidence"}]}]});
+    let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for (name, bytes) in [("middle_json.json", serde_json::to_vec(&middle).unwrap()), ("structured_content.json", b"{}".to_vec()), ("markdown.md", b"Synthetic routing evidence".to_vec())] {
+        archive.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+        archive.write_all(&bytes).unwrap();
+    }
+    archive.finish().unwrap().into_inner()
+}
 #[derive(Clone)]
 struct NodeState {
     id: String,
+    expected_ocr: Arc<Mutex<String>>,
     healthy: Arc<AtomicBool>,
     complete: Arc<AtomicBool>,
     lose_post_response: Arc<AtomicBool>,
@@ -49,6 +60,7 @@ impl NodeState {
     fn new(id: &str) -> Self {
         Self {
             id: id.into(),
+            expected_ocr: Arc::new(Mutex::new("ocr".into())),
             healthy: Arc::new(AtomicBool::new(true)),
             complete: Default::default(),
             lose_post_response: Default::default(),
@@ -84,12 +96,12 @@ async fn upload(State(s): State<NodeState>, Json(body): Json<Value>) -> Json<Val
     Json(json!({"status":"completed","file":{"id":file}}))
 }
 async fn start(State(s): State<NodeState>, Json(body): Json<Value>) -> axum::response::Response {
-    assert_eq!(body["ocr_mode"], "ocr");
+    assert_eq!(body["ocr_mode"].as_str().unwrap(), s.expected_ocr.lock().unwrap().as_str());
     let file = body["files"][0]["source"]["file_id"].as_str().unwrap();
     assert!(file.starts_with(&s.id), "file must stay on its node");
     let n = s.posts.fetch_add(1, Ordering::SeqCst) + 1;
     let id = format!("{}_job_{n}", s.id);
-    let job = json!({"job_id":id,"status":"running","tier":"standard","files":[{"file_id":file,"name":s.names.lock().unwrap().get(file).unwrap()}]});
+    let job = json!({"job_id":id,"status":"running","tier":"standard","ocr_mode":body["ocr_mode"],"files":[{"file_id":file,"name":s.names.lock().unwrap().get(file).unwrap()}]});
     s.jobs.lock().unwrap().insert(id, job.clone());
     if s.malformed_post_response.swap(false, Ordering::SeqCst) {
         return (axum::http::StatusCode::ACCEPTED, "{broken JSON").into_response();
@@ -130,9 +142,9 @@ async fn cancel(State(s): State<NodeState>, Path(id): Path<String>) -> axum::res
     s.jobs.lock().unwrap().get_mut(&id).unwrap()["status"] = "canceled".into();
     Json(json!({"job_id":id,"status":"canceled"})).into_response()
 }
-async fn zip(State(s): State<NodeState>, Path(id): Path<String>) -> &'static [u8] {
+async fn zip(State(s): State<NodeState>, Path(id): Path<String>) -> Vec<u8> {
     assert_eq!(id, format!("{}_zip", s.id));
-    ARCHIVE
+    synthetic_archive()
 }
 async fn node(id: &str) -> (NodeState, MineruNode, tokio::task::JoinHandle<()>) {
     let state = NodeState::new(id);
@@ -266,8 +278,10 @@ async fn restart_resumes_recorded_remote_job_on_same_node_without_upload_post_or
         .create(USER, WORKSPACE, "Restart affinity", "")
         .unwrap();
     let doc = first
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "one.pdf", &pdf())
+        .upload(USER, WORKSPACE, &kb.id, "one.pdf", &pdf())
         .unwrap();
+    first.configure_parsing(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr))).await.unwrap();
+    first.start_index(USER, WORKSPACE, &kb.id, &doc.id).unwrap();
     until(|| a.polls.load(Ordering::SeqCst) > 0).await;
     let before = first
         .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
@@ -276,7 +290,9 @@ async fn restart_resumes_recorded_remote_job_on_same_node_without_upload_post_or
     assert!(before.remote_job_id.is_some());
     first.stop_ingestion_workers();
     a.complete.store(true, Ordering::SeqCst);
-    let resumed = service(&f, &cfg);
+    let mut changed = cfg.clone();
+    changed.ocr_mode = "txt".into();
+    let resumed = service(&f, &changed);
     resumed.start_ingestion_workers().unwrap();
     until(|| resumed.detail(USER, WORKSPACE, &kb.id).unwrap().documents[0].status == "READY").await;
     let after = resumed
@@ -416,6 +432,7 @@ async fn ambiguous_post_cancellation_recovers_after_restart_even_when_node_is_di
     first.stop_ingestion_workers();
     let mut disabled = cfg.clone();
     disabled.nodes[0].enabled = false;
+    disabled.ocr_mode = "txt".into();
     let resumed = service(&f, &disabled);
     resumed.start_ingestion_workers().unwrap();
     // Retry remains queued until the original upstream has acknowledged cancel.
@@ -451,5 +468,45 @@ async fn ambiguous_post_cancellation_recovers_after_restart_even_when_node_is_di
     assert_eq!(a.posts.load(Ordering::SeqCst), 2);
     assert_eq!(a.uploads.load(Ordering::SeqCst), 1);
     enabled.stop_ingestion_workers();
+    server.abort();
+}
+
+#[tokio::test]
+async fn document_ocr_override_changes_request_cache_and_task_snapshot() {
+    let (node, endpoint, server) = node("ocr_modes").await;
+    node.complete.store(true, Ordering::SeqCst);
+    let fixture = Fixture::new();
+    let config = config(vec![endpoint]);
+    let service = service(&fixture, &config);
+    let kb = service.create(USER, WORKSPACE, "OCR modes", "").unwrap();
+    let doc = service.upload(USER, WORKSPACE, &kb.id, "modes.pdf", &pdf()).unwrap();
+    assert_eq!(service.parsing_capabilities(USER, WORKSPACE).await.unwrap().default_ocr_mode, OcrMode::Ocr);
+    *node.expected_ocr.lock().unwrap() = "txt".into();
+    let selected = service.configure_parsing(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Text))).await.unwrap();
+    assert_eq!(selected.ocr_mode, Some(OcrMode::Text));
+    service.preview(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let ready = service.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    assert_eq!(ready.status, "READY");
+    assert_eq!(ready.ocr_mode, Some(OcrMode::Text));
+    assert_eq!(node.posts.load(Ordering::SeqCst), 1, "same-mode preview and indexing reuse the cache");
+    let text_signature = ready.parsing_artifact.as_ref().unwrap().signature.clone();
+    *node.expected_ocr.lock().unwrap() = "ocr".into();
+    let forced = service.configure_and_index(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr))).await.unwrap();
+    assert_eq!(forced.status, "READY");
+    assert_eq!(node.posts.load(Ordering::SeqCst), 2, "changing OCR must reparse");
+    assert_ne!(forced.parsing_artifact.as_ref().unwrap().signature, text_signature);
+    let tasks = service.ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id).unwrap();
+    assert!(tasks.iter().any(|task| task.configuration["ocrMode"] == "Ocr" && task.configuration["parser"]["ocrMode"] == "ocr"));
+    let inherited = service.configure_parsing(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(None)).await.unwrap();
+    assert_eq!(inherited.ocr_mode, None);
+    *node.expected_ocr.lock().unwrap() = "auto".into();
+    let automatic = service.configure_and_index(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Auto))).await.unwrap();
+    assert_eq!(automatic.status, "READY");
+    assert_eq!(automatic.ocr_mode, Some(OcrMode::Auto));
+    assert_eq!(node.posts.load(Ordering::SeqCst), 3);
+    assert_eq!(node.lists.load(Ordering::SeqCst), 0, "upstream history cannot prove the requested OCR mode");
+    let markdown = service.upload(USER, WORKSPACE, &kb.id, "readme.md", b"readme").unwrap();
+    assert!(service.configure_parsing(USER, WORKSPACE, &kb.id, &markdown.id, None, None, Some(Some(OcrMode::Ocr))).await.is_err());
+    service.stop_ingestion_workers();
     server.abort();
 }

@@ -74,7 +74,7 @@ impl KnowledgeBaseService {
             }
             return Ok((parsed, doc.clone()));
         }
-        let parser = self.parser.as_ref().ok_or_else(|| {
+        let parser = self.document_parser(doc)?.ok_or_else(|| {
             KnowledgeBaseError::Invalid("文档解析服务未配置；不会自动降级为纯文本解析".into())
         })?;
         let snapshot = parser.snapshot();
@@ -287,6 +287,13 @@ impl KnowledgeBaseService {
             &data,
         )?;
         let mut cached = doc.clone();
+        cached.derived_resource_codes.clear();
+        cached.image_description_artifacts.clear();
+        if let Some(visual) = &cached.visual_source {
+            let mut retained = std::collections::BTreeSet::new();
+            super::deletion::collect_codes(&serde_json::to_value(visual).map_err(invalid_storage)?, &mut retained);
+            cached.derived_resource_codes.extend(retained);
+        }
         cached.parsing_artifact = Some(ParsingArtifact {
             signature,
             resource_code,
@@ -294,6 +301,7 @@ impl KnowledgeBaseService {
             parser_version: result.parser_version,
             vendor_job_id: result.vendor_job_id,
             image_resource_codes: image_resources.into_values().collect(),
+            preview_resource_code: rendered_pdf_resource.clone(),
             fidelity_checked: false,
             fidelity_resolution: None,
             fidelity_issues: vec![],

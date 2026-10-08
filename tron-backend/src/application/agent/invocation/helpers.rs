@@ -6,16 +6,10 @@ use crate::{
     },
 };
 
-const MAIN_AGENT_CODE: &str = "main-agent";
-
 pub(super) fn normalize_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-}
-
-pub(super) fn is_main_agent(agent_code: &str) -> bool {
-    agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE)
 }
 
 pub(super) fn agent_kind_for_runtime(runtime_type: AgentRuntimeType) -> AgentKind {
@@ -68,6 +62,12 @@ pub(super) fn map_agent_error(
         AgentManagementError::InvalidWorkspace => AgentInvocationError::WorkspaceInvalid,
         AgentManagementError::InternalAgentNotFound => AgentInvocationError::RuntimeFailed(
             format!("internal agent `{agent_code}` was not found"),
+        ),
+        AgentManagementError::InternalAgentCodeInvalid
+        | AgentManagementError::InternalAgentCodeConflict
+        | AgentManagementError::InternalAgentDefinitionInvalid
+        | AgentManagementError::InternalAgentPolicyInvalid => AgentInvocationError::RuntimeFailed(
+            "internal agent name or role prompt is invalid".into(),
         ),
         AgentManagementError::InternalToolAssignmentStale(message)
         | AgentManagementError::InternalMcpServerAssignmentStale(message)

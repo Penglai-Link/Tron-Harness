@@ -10,8 +10,10 @@ import { Field } from "@/components/forms";
 import { SearchField } from "@/components/search-field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/shared/lib/utils";
 
 interface InternalAgentMcpServerSelectorProps {
+  className?: string;
   busy?: boolean;
   onSetServersChecked: (serverCodes: string[], checked: boolean) => void;
   onToggleServer: (serverCode: string, checked: boolean) => void;
@@ -35,6 +37,7 @@ function healthTone(status: WorkspaceMcpServerRecord["lastHealthStatus"]) {
 }
 
 export function InternalAgentMcpServerSelector({
+  className,
   busy = false,
   onSetServersChecked,
   onToggleServer,
@@ -81,7 +84,7 @@ export function InternalAgentMcpServerSelector({
   const hasAnyVisibleSelected = assignableVisibleServers.some((server) => selectedServerSet.has(server.serverCode));
 
   return (
-    <div className="mt-5 space-y-3">
+    <div className={cn("mt-5 space-y-3", className)}>
       <Field label={internalPageT("title", "Selected MCP servers")}>
         <SearchField
           ariaLabel={internalPageT("searchAria", "Search MCP servers")}

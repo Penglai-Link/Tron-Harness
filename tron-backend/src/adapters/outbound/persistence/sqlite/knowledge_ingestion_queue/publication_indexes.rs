@@ -1,6 +1,6 @@
 use super::*;
 
-fn exists(
+pub(super) fn exists(
     tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     name: &str,
 ) -> Result<bool, IngestionQueueError> {

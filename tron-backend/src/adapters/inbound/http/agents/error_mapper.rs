@@ -138,6 +138,21 @@ pub fn agent_agui_error_response(error: AgentAguiStreamError, locale: &str) -> R
 
 pub fn agent_management_error_response(error: AgentManagementError) -> Response {
     let (status, code, message) = match error {
+        AgentManagementError::InternalAgentDefinitionInvalid | AgentManagementError::InternalAgentPolicyInvalid => (
+            StatusCode::BAD_REQUEST,
+            "101028001",
+            "internal agent name or role prompt is invalid".to_string(),
+        ),
+        AgentManagementError::InternalAgentCodeInvalid => (
+            StatusCode::BAD_REQUEST,
+            "101028009",
+            "internal agent code is invalid".to_string(),
+        ),
+        AgentManagementError::InternalAgentCodeConflict => (
+            StatusCode::CONFLICT,
+            "101028010",
+            "internal agent code is already in use".to_string(),
+        ),
         AgentManagementError::InvalidWorkspace => (
             StatusCode::BAD_REQUEST,
             "AGENT_WORKSPACE_INVALID",

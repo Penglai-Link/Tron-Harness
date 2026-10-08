@@ -8,7 +8,6 @@ import {
   Folder,
   FolderGit2,
   KeyRound,
-  MessageSquareText,
   Network,
   ListTodo,
   PlugZap,
@@ -35,7 +34,6 @@ export const tronNavigation: TronNavSection[] = [
     label: "Agent Operations",
     translationKey: "shell:nav.sections.agentOperations",
     items: [
-      { label: "Chats", href: "/chats", icon: MessageSquareText, translationKey: "shell:nav.items.chats" },
       {
         label: "Agents",
         href: "/agents/internal",

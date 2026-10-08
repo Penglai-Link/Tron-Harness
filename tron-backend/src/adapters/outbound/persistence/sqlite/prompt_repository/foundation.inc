@@ -16,7 +16,8 @@ use crate::{
 };
 
 use super::migrations::{
-    PROMPT_ACTION_CATEGORY_MIGRATION, PROMPT_CATALOG_MIGRATION, PROMPT_VARIABLE_BINDINGS_MIGRATION,
+    PROMPT_ACTION_CATEGORY_MIGRATION, PROMPT_AGENT_ROLE_CATEGORY_MIGRATION,
+    PROMPT_CATALOG_MIGRATION, PROMPT_VARIABLE_BINDINGS_MIGRATION,
     PROMPT_VARIABLE_METADATA_MIGRATION, PROMPTS_MIGRATION,
 };
 
@@ -44,6 +45,7 @@ impl<'a> SqlitePromptRepositorySql<'a> {
         migrate_prompt_catalog(&mut connection)?;
         migrate_prompt_category(&mut connection)?;
         migrate_prompt_variable_bindings(&mut connection)?;
+        migrate_prompt_agent_role_category(&mut connection)?;
         Ok(Self { connection })
     }
 }

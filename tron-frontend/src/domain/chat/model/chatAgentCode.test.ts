@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { inferChatAgentCodeFromModel } from "./chatAgentCode";
 
 describe("inferChatAgentCodeFromModel", () => {
+  it("keeps the selected custom internal agent when choosing a platform model", () => {
+    expect(inferChatAgentCodeFromModel({ optionCode: "main:qwen-3", source: "internal-agent" }, "agent-reviewer")).toBe("agent-reviewer");
+  });
   it("returns main-agent for main-agent models", () => {
     expect(inferChatAgentCodeFromModel({ optionCode: "main:qwen-3", source: "main-agent" }, "codex")).toBe("main-agent");
   });

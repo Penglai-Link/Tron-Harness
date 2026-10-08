@@ -696,7 +696,7 @@ async fn automatic_ingestion_preserves_recorded_parser_failure_without_a_review_
     let f=Fixture::new();let kb=f.service.create(USER,WORKSPACE,"Automatic lifecycle","").unwrap();
     let ready=f.service.upload_and_index(USER,WORKSPACE,&kb.id,"clean.md",b"orchid automatic evidence").await.unwrap();
     assert_eq!(ready.status,"READY");assert_eq!(ready.index_revision,1);
-    let rebuilt=f.service.configure_and_index(USER,WORKSPACE,&kb.id,&ready.id,Some(ChunkConfig{mode:ChunkMode::Fixed,max_chars:200,overlap_chars:0,heading_depth:2}),None).await.unwrap();
+    let rebuilt=f.service.configure_and_index(USER,WORKSPACE,&kb.id,&ready.id,Some(ChunkConfig{mode:ChunkMode::Fixed,max_chars:200,overlap_chars:0,heading_depth:2}),None,None).await.unwrap();
     assert_eq!(rebuilt.status,"READY");assert_eq!(rebuilt.index_revision,2);
     let original=pdf();let bad=f.service.upload(USER,WORKSPACE,&kb.id,"known-failure.pdf",&original).unwrap();
     f.service.preview(USER,WORKSPACE,&kb.id,&bad.id).await.unwrap();
@@ -708,7 +708,7 @@ async fn automatic_ingestion_preserves_recorded_parser_failure_without_a_review_
     let result=f.service.index(USER,WORKSPACE,&kb.id,&bad.id).await.unwrap();
     assert_eq!(result.status,"FAILED");assert!(result.error.as_ref().unwrap().contains("source comparator"));assert!(result.active_source_code.is_none());
     assert_eq!(before,f.client.calls.load(Ordering::SeqCst));
-    let configured=f.service.configure_and_index(USER,WORKSPACE,&kb.id,&bad.id,None,None).await.unwrap();assert_eq!(configured.status,"FAILED");
+    let configured=f.service.configure_and_index(USER,WORKSPACE,&kb.id,&bad.id,None,None,None).await.unwrap();assert_eq!(configured.status,"FAILED");
     assert_eq!(before,f.client.calls.load(Ordering::SeqCst));
     f.service.set_grants(USER,WORKSPACE,&kb.id,vec![f.agent.clone()]).unwrap();
     let hits=f.service.search_for_agent(USER,WORKSPACE,&f.agent,"orchid",1200).await.unwrap().hits;

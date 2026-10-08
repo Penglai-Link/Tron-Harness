@@ -30,7 +30,7 @@ impl KnowledgeBaseService {
                     KnowledgeBaseError::Storage(_) => WaitReasonCode::IntakeStorage,
                     KnowledgeBaseError::Invalid(_) => WaitReasonCode::IntakeInvalid,
                     KnowledgeBaseError::Forbidden => WaitReasonCode::IntakeForbidden,
-                    KnowledgeBaseError::Conflict => WaitReasonCode::IntakeConflict,
+                    KnowledgeBaseError::Conflict | KnowledgeBaseError::NotEmpty => WaitReasonCode::IntakeConflict,
                     KnowledgeBaseError::NotFound => WaitReasonCode::IntakeMissing,
                 });
                 self.repository.fail_ingestion_intent(

@@ -19,6 +19,7 @@ import {
   normalizePromptVariables,
   reconcilePromptVariables,
 } from "@/domain/prompt/model";
+import { agentRolePromptSeeds } from "./agentRolePromptSeeds";
 
 const seedTimestamp = "2026-07-13T02:00:00.000Z";
 let nextPromptSequence = 1000;
@@ -215,6 +216,21 @@ function initialPlatformPrompts() {
   ];
   return [
     ...prompts,
+    ...agentRolePromptSeeds.map((seed) => {
+      const original = seed.translations["en-US"];
+      return {
+        ...platformPrompt(seed.promptCode, original.displayName, "AGENT_ROLE", original.promptBody, true, false),
+        description: original.description,
+        catalogKey: seed.catalogKey,
+        translations: Object.entries(seed.translations).map(([locale, translation]) => ({
+          ...translation,
+          locale: locale as "en-US" | "zh-CN",
+          status: "PUBLISHED" as const,
+          sourceVersion: seed.version,
+          updatedAt: seedTimestamp,
+        })),
+      };
+    }),
     ...builtinSeeds.map(([code, name, category, body, runtimeRequired]) => {
       const prompt = platformPrompt(code, name, category, body, true, runtimeRequired);
       if (code === "SYS_MEMORY_SESSION_SUMMARY") {
@@ -330,7 +346,8 @@ function filterAndPage(records: PromptRecord[], query: PromptPageQuery): PromptP
     if (query.sourceKind && record.sourceKind !== query.sourceKind) return false;
     if (query.enabled !== undefined && record.enabled !== query.enabled) return false;
     if (!normalizedSearch) return true;
-    return [record.promptCode, record.displayName, record.description ?? "", record.sourceLabel]
+    return [record.promptCode, record.displayName, record.description ?? "", record.sourceLabel,
+      ...(record.translations ?? []).flatMap((translation) => [translation.displayName, translation.description ?? ""])]
       .some((value) => value.toLowerCase().includes(normalizedSearch));
   });
   const current = Math.max(1, query.current || 1);

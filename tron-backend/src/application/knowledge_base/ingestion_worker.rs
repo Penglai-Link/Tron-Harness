@@ -363,6 +363,12 @@ impl KnowledgeBaseService {
         {
             return Ok(active);
         }
+        let task = self.prepare_index_task(user, workspace, &kb, &doc)?;
+        self.queue.enqueue(task).map_err(queue_error)
+    }
+    pub(super) fn prepare_index_task(
+        &self, user: &str, workspace: &str, kb: &KnowledgeBase, doc: &KnowledgeBaseDocument,
+    ) -> Result<IngestionTask, KnowledgeBaseError> {
         let model = self
             .llm
             .resolve_embedding_index_model_code(workspace, doc.embedding_model_code.as_deref());
@@ -371,8 +377,7 @@ impl KnowledgeBaseService {
                 .embedding_space_fingerprint(workspace, Some(m), TRON_VECTOR_INDEX_DIMENSION)
                 .ok()
         });
-        let parser = self
-            .parser
+        let parser = self.document_parser(&doc)?
             .as_ref()
             .map(|parser| parser.snapshot().unwrap_or_else(|| parser.clone()));
         let parser_identity = parser
@@ -409,16 +414,15 @@ impl KnowledgeBaseService {
             doc.parsing_tier
                 .or_else(|| parser.as_ref().map(|p| p.default_tier()))
         };
-        let config = json!({"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": self.image_description_config()});
+        let config = json!({"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": self.image_description_config()});
         let identity = hash(&format!(
             "{}:{}:{config}",
             doc.resource_code, doc.resource_revision
         ));
-        self.queue
-            .enqueue(IngestionTask::queued(
+        Ok(IngestionTask::queued(
                 format!("ingest_{}", new_id()),
-                kb_id.into(),
-                doc_id.into(),
+                kb.id.clone(),
+                doc.id.clone(),
                 user.into(),
                 workspace.into(),
                 doc.revision,
@@ -426,7 +430,6 @@ impl KnowledgeBaseService {
                 identity,
                 config,
             ))
-            .map_err(queue_error)
     }
     async fn claim_task(
         &self,

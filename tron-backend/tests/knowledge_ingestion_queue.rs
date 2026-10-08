@@ -10,11 +10,11 @@ fn fixture() -> (tempfile::TempDir, SqliteKnowledgeIngestionQueue) {
     let db = dir.path().join("queue.sqlite");
     let conn = Connection::open(&db).unwrap();
     conn.execute_batch("CREATE TABLE knowledge_base_documents(id TEXT PRIMARY KEY,knowledge_base_id TEXT,payload_json TEXT,revision INTEGER NOT NULL);").unwrap();
-    conn.execute_batch("CREATE TABLE rag_kb_units(source_code TEXT, source_status TEXT,status TEXT,embedding_status TEXT,embedding_dimension INTEGER);").unwrap();
+    conn.execute_batch("CREATE TABLE rag_kb_units(source_code TEXT, source_status TEXT,status TEXT,embedding_status TEXT,embedding_dimension INTEGER,metadata TEXT,scope_code TEXT);").unwrap();
     for source in ["fully-staged", "complete"] {
         for _ in 0..12 {
             conn.execute(
-                "INSERT INTO rag_kb_units VALUES(?1,'STAGING','ACTIVE','INDEXED',1024)",
+                "INSERT INTO rag_kb_units VALUES(?1,'STAGING','ACTIVE','INDEXED',1024,'{}','workspace')",
                 [source],
             )
             .unwrap();
@@ -34,6 +34,12 @@ fn fixture() -> (tempfile::TempDir, SqliteKnowledgeIngestionQueue) {
     )
 }
 fn queued(id: &str, hash: &str) -> IngestionTask {
+    use sha2::{Digest, Sha256};
+    let configuration = json!({"tier":"standard","ocrMode":"ocr","parserVersion":"4.0.10","embeddingRevision":"fixed","profile":hash});
+    let identity = format!(
+        "{:x}",
+        Sha256::digest(format!("resource-{id}:1:{configuration}").as_bytes())
+    );
     IngestionTask::queued(
         format!("task-{id}-{hash}"),
         "kb".into(),
@@ -42,8 +48,8 @@ fn queued(id: &str, hash: &str) -> IngestionTask {
         "workspace".into(),
         0,
         1,
-        hash.into(),
-        json!({"tier":"standard","ocrMode":"ocr","parserVersion":"4.0.10","embeddingRevision":"fixed"}),
+        identity,
+        configuration,
     )
 }
 fn nodes() -> Vec<ParseEndpointCapacity> {

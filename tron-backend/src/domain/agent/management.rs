@@ -2,15 +2,6 @@ use serde_json::Value;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct PlatformMainAgentConfig {
-    pub personality: String,
-    pub instructions: String,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ManagedAgentType {
@@ -65,8 +56,37 @@ pub struct WorkspaceInternalAgentPolicy {
     pub max_steps: u32,
     pub max_tool_calls: u32,
     pub max_parallel_tool_calls: u32,
+    pub overridden_fields: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceInternalAgentDefinition {
+    pub workspace_code: String,
+    pub agent_code: String,
+    pub name: Option<String>,
+    pub role_prompt: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformInternalAgentConfig {
+    pub agent_code: String,
+    pub name: String,
+    pub role_prompt: String,
+    pub tool_assignment_mode: ToolAssignmentMode,
+    pub mcp_access_mode: McpAccessMode,
+    pub tool_exposure_mode: ToolExposureMode,
+    pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
+    pub max_steps: u32,
+    pub max_tool_calls: u32,
+    pub max_parallel_tool_calls: u32,
+    pub selected_tool_codes: Vec<String>,
+    pub selected_server_codes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,6 +116,8 @@ pub struct InternalAgentToolPolicy {
     pub agent_code: String,
     pub name: String,
     pub description: String,
+    pub role_prompt: String,
+    pub platform_defined: bool,
     pub source: InternalAgentPolicySource,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
@@ -221,6 +243,10 @@ pub struct RuntimeAdapterCapabilityRecord {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentManagementError {
     InvalidWorkspace,
+    InternalAgentDefinitionInvalid,
+    InternalAgentCodeInvalid,
+    InternalAgentCodeConflict,
+    InternalAgentPolicyInvalid,
     InternalAgentNotFound,
     SystemAgentNotFound,
     InternalToolAssignmentStale(String),

@@ -12,7 +12,7 @@ pub enum IngestionStage {
     Publishing,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestionTask {
     pub id: String,
@@ -140,6 +140,13 @@ pub enum IngestionQueueError {
     Storage(String),
 }
 
+/// Database detachment is atomic; physical object removal happens after commit.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PublicationCleanup {
+    pub objects: Vec<String>,
+    pub cancellations: Vec<IngestionTask>,
+}
+
 /// Storage operations fence every mutation by lease owner and attempt.
 /// Clocks are supplied by the application so expiry/backoff can be tested.
 pub trait KnowledgeIngestionQueue: Send + Sync {
@@ -152,6 +159,12 @@ pub trait KnowledgeIngestionQueue: Send + Sync {
         job_id: Option<String>,
     ) -> Result<(), IngestionQueueError>;
     fn enqueue(&self, task: IngestionTask) -> Result<IngestionTask, IngestionQueueError>;
+    /// Persist the proposed configuration and enqueue its immutable snapshot atomically.
+    fn enqueue_configured(
+        &self,
+        task: IngestionTask,
+        document: super::KnowledgeBaseDocument,
+    ) -> Result<IngestionTask, IngestionQueueError>;
     fn get(&self, id: &str) -> Result<IngestionTask, IngestionQueueError>;
     fn claim(&self, claim: IngestionClaim) -> Result<Option<IngestionTask>, IngestionQueueError>;
     fn report_parser_availability(
@@ -159,7 +172,10 @@ pub trait KnowledgeIngestionQueue: Send + Sync {
         now_ms: i64,
         endpoints: &[ParseEndpointCapacity],
         unavailable: &[(Option<String>, IngestionWaitReason)],
-    ) -> Result<(), IngestionQueueError> { let _ = (now_ms, endpoints, unavailable); Ok(()) }
+    ) -> Result<(), IngestionQueueError> {
+        let _ = (now_ms, endpoints, unavailable);
+        Ok(())
+    }
     fn checkpoint(
         &self,
         task: &IngestionTask,
@@ -194,5 +210,5 @@ pub trait KnowledgeIngestionQueue: Send + Sync {
         lease: &IngestionLease,
         now_ms: i64,
         ready_document: &serde_json::Value,
-    ) -> Result<(), IngestionQueueError>;
+    ) -> Result<PublicationCleanup, IngestionQueueError>;
 }

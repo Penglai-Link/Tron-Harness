@@ -79,7 +79,6 @@ export const shell = {
       apps: "Apps",
       auditLogs: "Audit Logs",
       automations: "Automations",
-      chats: "Chats",
       internalAgents: "Internal Agents",
       desktopTest: "Desktop Test",
       knowledgeBase: "KnowledgeBase",

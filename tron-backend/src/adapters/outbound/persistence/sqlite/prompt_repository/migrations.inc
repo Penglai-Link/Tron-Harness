@@ -126,6 +126,24 @@ fn migrate_prompt_variable_bindings(connection: &mut Connection) -> Result<(), P
     transaction.commit().map_err(storage_error)
 }
 
+fn migrate_prompt_agent_role_category(connection: &mut Connection) -> Result<(), PromptError> {
+    let schema: String = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'prompts'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage_error)?;
+    if schema.contains("'AGENT_ROLE'") {
+        return Ok(());
+    }
+    if let Err(error) = connection.execute_batch(PROMPT_AGENT_ROLE_CATEGORY_MIGRATION) {
+        let _ = connection.execute_batch("ROLLBACK; PRAGMA foreign_keys = ON;");
+        return Err(storage_error(error));
+    }
+    Ok(())
+}
+
 fn repair_prompt_variable_bindings(
     transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
 ) -> Result<(), PromptError> {

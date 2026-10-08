@@ -34,8 +34,8 @@ use super::{
     attachments::user_prompt_message,
     build_system_runtime_model_config, generate_agent_run_code,
     helpers::{
-        agent_kind_for_runtime, is_main_agent, map_agent_error, normalize_optional,
-        required_runtime_command_name, runtime_type_label,
+        agent_kind_for_runtime, map_agent_error, normalize_optional, required_runtime_command_name,
+        runtime_type_label,
     },
     short_term_memory::activate_short_term_memory,
 };
@@ -309,17 +309,24 @@ impl AgentRunContextBuilder {
         let mut messages = Vec::new();
         let mut prompt_prefix_sources = Vec::new();
         let empty_runtime_prompt_values = HashMap::new();
-        if requested_task_code.is_none() && is_main_agent(&resolved_agent.agent_code) {
+        if matches!(resolved_agent.runtime_type, AgentRuntimeType::React) {
             if let Some(guidance) = self
                 .management
-                .current_main_agent_guidance(&locale)
+                .current_internal_agent_guidance(
+                    &workspace.workspace_code,
+                    &resolved_agent.agent_code,
+                )
                 .map_err(|_| {
-                    AgentInvocationError::RuntimeFailed("main agent config load failed".into())
+                    AgentInvocationError::RuntimeFailed("internal agent config load failed".into())
                 })?
             {
                 messages.push(AgentMessage::system(guidance));
                 prompt_prefix_sources.push(None);
             }
+        }
+        if requested_task_code.is_none()
+            && matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
+        {
             messages.push(AgentMessage::system(managed_system_prompt(
                 self.prompt_service.as_ref(),
                 &workspace.workspace_code,

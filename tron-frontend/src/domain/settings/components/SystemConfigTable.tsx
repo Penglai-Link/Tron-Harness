@@ -13,6 +13,7 @@ import { useSystemConfig } from "@/domain/settings/hooks/useSystemConfig";
 import type { MineruNodeConfig, SystemConfigItem, SystemConfigValue } from "@/domain/settings/model/SystemConfig";
 import { MineruNodeEditor } from "./MineruNodeEditor";
 import { validateMineruNodes } from "../model/mineruNodeValidation";
+import { systemConfigHelp } from "../model/systemConfigHelp";
 
 function displayGroup(path: string) {
   return path.includes(".") ? path.slice(0, path.indexOf(".")) : "server";
@@ -51,18 +52,6 @@ export function SystemConfigTable() {
       if (next.has(group)) next.delete(group);
       else next.add(group);
       return next;
-    });
-  }
-
-  function fieldDescription(item: SystemConfigItem) {
-    if (item.path === "mineru.nodes") return t("settingsGeneral.systemConfig.mineruNodes.description");
-    if (item.path === "mineru.visualContextEnabled") return t("knowledgeLibrary.visualContextSettings");
-    if (item.path.startsWith("mineru.imageDescription.")) {
-      return t(`knowledgeLibrary.imageDescriptionSettings.${displayField(item.path)}`);
-    }
-    const field = displayField(item.path);
-    return t(`settingsGeneral.systemConfig.descriptions.fields.${field}`, {
-      defaultValue: t("settingsGeneral.systemConfig.descriptions.unknownField"),
     });
   }
 
@@ -139,6 +128,7 @@ export function SystemConfigTable() {
               {expandedGroups.has(group) && <div className="divide-y divide-[var(--color-outline-variant)]" id={`system-config-group-${group}`}>
                 {items.map((item) => {
                   const value = Object.hasOwn(changes, item.path) ? changes[item.path] : item.value;
+                  const description = systemConfigHelp(item.path, t);
                   return (
                     <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(300px,1fr)_minmax(260px,1.5fr)] lg:items-center" key={item.path}>
                       <div className="min-w-0">
@@ -149,9 +139,9 @@ export function SystemConfigTable() {
                             {t(`settingsGeneral.systemConfig.effects.${item.effect}`)}
                           </Badge>
                           {item.overriddenByEnvironment && <Badge variant="outline">{t("settingsGeneral.systemConfig.environmentOverride")}</Badge>}
-                          <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: item.path })}>
-                            {`${fieldDescription(item)}${item.effectReason ? ` ${t(`settingsGeneral.systemConfig.effectReasons.${item.effectReason}`, { defaultValue: "" })}` : ""}`}
-                          </InfoTooltip>
+                          {description && <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: item.path })}>
+                            {`${description}${item.effectReason ? ` ${t(`settingsGeneral.systemConfig.effectReasons.${item.effectReason}`, { defaultValue: "" })}` : ""}`}
+                          </InfoTooltip>}
                         </div>
                       </div>
                       {item.path === "mineru.nodes" ? <MineruNodeEditor value={value} disabled={saving} onChange={(nodes) => update(item.path, nodes)} /> : item.path === "mineru.defaultTier" ? (<SelectInput value={String(value)} onValueChange={(next) => update(item.path, next)}>{(["flash", "basic", "standard", "advanced"] as const).map((tier) => <SelectItem key={tier} value={tier}>{t(`knowledgeLibrary.parsingTiers.${tier}`)}</SelectItem>)}</SelectInput>) : item.valueType === "array" ? (

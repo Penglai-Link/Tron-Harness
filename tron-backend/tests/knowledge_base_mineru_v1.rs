@@ -28,7 +28,7 @@ impl KnowledgeDocumentParser for Replay {
         ParsingTier::Standard
     }
     async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
-        Ok(ParsingCapabilities {
+        Ok(ParsingCapabilities { default_ocr_mode: tron_backend::application::knowledge_base::parsing::OcrMode::Auto,
             default_tier: ParsingTier::Standard,
             available_tiers: vec![ParsingTier::Flash, ParsingTier::Standard],
             parser_version: "4.0.10".into(),
@@ -368,7 +368,7 @@ async fn independent_clean_ocr_cannot_clear_original_risks_or_publish_vectors() 
     impl KnowledgeDocumentParser for TwoExtractions {
         fn default_tier(&self)->ParsingTier { ParsingTier::Standard }
         fn supports_local_visual_reparse(&self)->bool { true }
-        async fn capabilities(&self)->Result<ParsingCapabilities,KnowledgeBaseError> { Ok(ParsingCapabilities {default_tier:ParsingTier::Standard, available_tiers:vec![ParsingTier::Standard],parser_version:"4.0.10".into(),office_tier:ParsingTier::Flash}) }
+        async fn capabilities(&self)->Result<ParsingCapabilities,KnowledgeBaseError> { Ok(ParsingCapabilities { default_ocr_mode: tron_backend::application::knowledge_base::parsing::OcrMode::Auto,default_tier:ParsingTier::Standard, available_tiers:vec![ParsingTier::Standard],parser_version:"4.0.10".into(),office_tier:ParsingTier::Flash}) }
         async fn parse(&self,_:&str,_:&[u8],_:Option<ParsingTier>)->Result<StructuredParse,KnowledgeBaseError> {
             let mut result=decode_archive(PDF,ParsingTier::Standard,"4.0.10","independent-replay-no-job")?;
             if self.calls.fetch_add(1,Ordering::SeqCst)==0 {

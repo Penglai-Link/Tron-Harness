@@ -15,7 +15,7 @@ const systemAgentCatalogKeyByCode: Record<string, string> = {
 };
 
 export function translateInternalAgentName(t: TFunction, agent: WorkspaceInternalAgentRecord) {
-  const key = internalAgentCatalogKeyByCode[agent.agentCode];
+  const key = agent.name === "Main Agent" ? internalAgentCatalogKeyByCode[agent.agentCode] : undefined;
   return key
     ? t(`pages:workspaceAgents.internal.catalog.${key}.name`, { defaultValue: agent.name })
     : agent.name;

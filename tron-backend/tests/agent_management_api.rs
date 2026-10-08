@@ -21,9 +21,18 @@ use tokio::{net::TcpListener, task::JoinHandle};
 use tower::ServiceExt;
 use tron_backend::config::{AppConfig, SystemAgentConfig};
 
-use common::{
-    app, app_with_config, authenticated_bearer_token, request_with_headers, response_json,
-};
+use common::{authenticated_bearer_token, request_with_headers, response_json};
+
+// Agent tests have no ingestion jobs. Stop unrelated background workers before
+// they can block a single-thread test runtime on the shared SQLite transaction.
+fn app() -> Router {
+    app_with_config(AppConfig::default())
+}
+fn app_with_config(config: AppConfig) -> Router {
+    common::app_with_state_setup(common::prepared_config(config), |state| {
+        state.knowledge_bases.stop_ingestion_workers()
+    })
+}
 
 // Associate native provider results with their exact assistant call, rather than
 // treating tool output as a synthetic user message containing a tool-name prefix.
@@ -372,6 +381,12 @@ async fn request_with_locale(
         .uri(uri)
         .header(header::AUTHORIZATION, authorization_header)
         .header(header::ACCEPT_LANGUAGE, locale);
+    if let Some(workspace) = body
+        .as_ref()
+        .and_then(|body| body["workspaceCode"].as_str())
+    {
+        builder = builder.header("x-workspace-code", workspace);
+    }
     let request_body = if let Some(json_body) = body {
         builder = builder.header(header::CONTENT_TYPE, "application/json");
         Body::from(json_body.to_string())
@@ -695,7 +710,7 @@ async fn startup_scan_loads_system_agent_models_and_rescan_refreshes_models() {
 }
 
 #[tokio::test]
-async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidance() {
+async fn main_agent_definition_guides_main_and_task_runs_without_legacy_defaults() {
     let codex_command = temp_command_path("codex-main");
     let opencode_command = temp_command_path("opencode-main");
     write_fake_command(&codex_command);
@@ -706,40 +721,35 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
 
-    let update_response = request_with_headers(
+    let removed = request_with_headers(
         &app,
         Method::PATCH,
         "/api/v1/agents/registry/main-agent",
-        Some(json!({
-            "personality": "Calm, terse, and surgical.",
-            "instructions": "Summarize the workspace problem before acting."
-        })),
+        Some(json!({"personality":"Legacy personality","instructions":"Legacy instructions"})),
         None,
         Some(&authorization),
     )
     .await;
-    assert_eq!(update_response.status(), StatusCode::OK);
-    let update_body = response_json(update_response).await;
-    assert_eq!(
-        update_body["data"]["personality"],
-        json!("Calm, terse, and surgical.")
-    );
-
-    let get_response = request_with_headers(
+    assert_eq!(removed.status(), StatusCode::NOT_FOUND);
+    let guidance = "Calm, terse, and surgical. Summarize the workspace problem before acting.";
+    let updated = internal_agent_api(
         &app,
-        Method::GET,
-        "/api/v1/agents/registry/main-agent",
-        None,
-        None,
-        Some(&authorization),
+        &authorization,
+        Method::PATCH,
+        "/api/v1/agents/registry/internal/main-agent/definition",
+        Some(json!({"rolePrompt":guidance})),
     )
     .await;
-    assert_eq!(get_response.status(), StatusCode::OK);
-    let get_body = response_json(get_response).await;
-    assert_eq!(
-        get_body["data"]["instructions"],
-        json!("Summarize the workspace problem before acting.")
-    );
+    assert_eq!(updated["rolePrompt"], guidance);
+    let saved = internal_agent_api(
+        &app,
+        &authorization,
+        Method::GET,
+        "/api/v1/agents/registry/internal/main-agent",
+        None,
+    )
+    .await;
+    assert_eq!(saved["rolePrompt"], guidance);
 
     let main_run = request_with_locale(
         &app,
@@ -816,9 +826,9 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
     let task_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("task-agent messages should be an array");
-    assert_eq!(task_messages.len(), 2);
+    assert_eq!(task_messages.len(), 3);
     assert!(
-        !serde_json::to_string(task_messages)
+        serde_json::to_string(task_messages)
             .unwrap()
             .contains("Calm, terse, and surgical.")
     );
@@ -827,6 +837,29 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
         task_messages.last().unwrap()["content"],
         json!("Investigate latency for task.")
     );
+
+    internal_agent_api(
+        &app,
+        &authorization,
+        Method::PATCH,
+        "/api/v1/agents/registry/internal/main-agent/definition",
+        Some(json!({"rolePrompt":""})),
+    )
+    .await;
+    let cleared = request_with_locale(
+        &app, Method::POST, "/api/v1/agents/runs",
+        Some(json!({"prompt":"Check blank instructions.","workspaceCode":"TRON_CORE",
+            "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":model_server.base_url,
+            "apiKey":"sk-test-api","modelName":"gpt-test"}})),
+        &authorization, "en-US",
+    ).await;
+    assert_eq!(cleared.status(), StatusCode::OK);
+    let requests = model_server.requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 3);
+    let messages = serde_json::to_string(&requests[2]["messages"]).unwrap();
+    assert!(!messages.contains(guidance));
+    assert!(!messages.contains("Legacy personality"));
+    assert!(!messages.contains("Legacy instructions"));
 }
 
 #[tokio::test]
@@ -2825,4 +2858,503 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
     );
     assert_eq!(task_detail_body["data"]["status"], json!("NOT_STARTED"));
     assert_eq!(task_detail_body["data"]["progress"], json!(0));
+}
+
+async fn internal_agent_api(
+    router: &Router,
+    authorization: &str,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> Value {
+    let response = request_with_locale(router, method, uri, body, authorization, "zh-CN").await;
+    let status = response.status();
+    let body = response_json(response).await;
+    assert_eq!(status, StatusCode::OK, "{uri}: {body}");
+    body["data"].clone()
+}
+
+#[tokio::test]
+async fn internal_agent_platform_fields_inherit_override_restore_and_persist() {
+    let config = AppConfig {
+        database_url: temp_database_url("internal-agent-inheritance"),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config.clone());
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let created = internal_agent_api(
+        &router,
+        &authorization,
+        Method::POST,
+        "/api/v1/agents/registry/internal",
+        Some(json!({"agentCode":"global-reviewer","name":"Global reviewer", "rolePrompt":"Global role v1"})),
+    )
+    .await;
+    let code = created["agentCode"].as_str().unwrap();
+    let platform = format!("/api/v1/agents/registry/internal/{code}");
+    let workspace = format!("/api/v1/agents/workspaces/TRON_CORE/internal/{code}");
+    let other = format!("/api/v1/agents/workspaces/ENTERPRISE/internal/{code}");
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PATCH,
+        &format!("{platform}/policy"),
+        Some(json!({"maxSteps":50,"maxToolCalls":70,"toolAssignmentMode":"selected_tools"})),
+    )
+    .await;
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PUT,
+        &format!("{platform}/tool-assignments"),
+        Some(json!({"toolCodes":["workspace.page"]})),
+    )
+    .await;
+    let inherited =
+        internal_agent_api(&router, &authorization, Method::GET, &workspace, None).await;
+    assert_eq!(inherited["platformDefined"], true);
+    assert_eq!(inherited["source"], "PLATFORM_DEFAULT");
+    assert_eq!(inherited["name"], "Global reviewer");
+    assert_eq!(inherited["rolePrompt"], "Global role v1");
+    assert_eq!(inherited["maxSteps"], 50);
+    assert_eq!(inherited["selectedToolCodes"], json!(["workspace.page"]));
+    assert_eq!(inherited["assignedToolCount"], 1);
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PATCH,
+        &format!("{workspace}/definition"),
+        Some(json!({"rolePrompt":"Workspace role"})),
+    )
+    .await;
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PATCH,
+        &format!("{workspace}/policy"),
+        Some(json!({"maxSteps":12})),
+    )
+    .await;
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PUT,
+        &format!("{workspace}/tool-assignments"),
+        Some(json!({"toolCodes":[]})),
+    )
+    .await;
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PATCH,
+        &format!("{platform}/definition"),
+        Some(json!({"name":"Updated global reviewer","rolePrompt":"Global role v2"})),
+    )
+    .await;
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PATCH,
+        &format!("{platform}/policy"),
+        Some(json!({"maxSteps":60,"maxToolCalls":90})),
+    )
+    .await;
+    let overridden =
+        internal_agent_api(&router, &authorization, Method::GET, &workspace, None).await;
+    assert_eq!(overridden["source"], "WORKSPACE_OVERRIDE");
+    assert_eq!(
+        overridden["name"], "Updated global reviewer",
+        "untouched names must follow platform edits"
+    );
+    assert_eq!(overridden["rolePrompt"], "Workspace role");
+    assert_eq!(overridden["maxSteps"], 12);
+    assert_eq!(
+        overridden["maxToolCalls"], 90,
+        "untouched limits must follow platform edits"
+    );
+    assert_eq!(
+        overridden["selectedToolCodes"],
+        json!([]),
+        "an explicit empty override must not restore inherited tools"
+    );
+    let other_record = internal_agent_api(&router, &authorization, Method::GET, &other, None).await;
+    assert_eq!(other_record["rolePrompt"], "Global role v2");
+    assert_eq!(other_record["maxSteps"], 60);
+    // Reloading storage must preserve both the definition and the field override mask.
+    let reopened = app_with_config(config);
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&reopened).await);
+    let persisted =
+        internal_agent_api(&reopened, &authorization, Method::GET, &workspace, None).await;
+    assert_eq!(persisted["rolePrompt"], "Workspace role");
+    assert_eq!(persisted["maxSteps"], 12);
+    assert_eq!(persisted["maxToolCalls"], 90);
+    let restored = internal_agent_api(
+        &reopened,
+        &authorization,
+        Method::POST,
+        &format!("{workspace}/reset-policy"),
+        None,
+    )
+    .await;
+    assert_eq!(restored["source"], "PLATFORM_DEFAULT");
+    assert_eq!(restored["name"], "Updated global reviewer");
+    assert_eq!(restored["rolePrompt"], "Global role v2");
+    assert_eq!(restored["maxSteps"], 60);
+    assert_eq!(restored["selectedToolCodes"], json!(["workspace.page"]));
+}
+
+#[tokio::test]
+async fn internal_agent_workspace_definitions_are_local_and_validate_names() {
+    let router = app();
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let created = internal_agent_api(
+        &router,
+        &authorization,
+        Method::POST,
+        "/api/v1/agents/workspaces/TRON_CORE/internal",
+        Some(json!({"agentCode":"local-analyst","name":"Local analyst", "rolePrompt":"Explain evidence and uncertainty."})),
+    )
+    .await;
+    let code = created["agentCode"].as_str().unwrap();
+    let workspace = format!("/api/v1/agents/workspaces/TRON_CORE/internal/{code}");
+    let local = internal_agent_api(&router, &authorization, Method::GET, &workspace, None).await;
+    assert_eq!(local["platformDefined"], false);
+    let created_session = request_with_headers(
+        &router,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({"workspaceCode":"TRON_CORE", "title":"Local analyst chat", "agentCode":code})),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created_session.status(), StatusCode::CREATED);
+    let session = response_json(created_session).await["data"].clone();
+    assert_eq!(session["agentCode"], code);
+    let groups = internal_agent_api(
+        &router,
+        &authorization,
+        Method::GET,
+        "/api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+        None,
+    )
+    .await;
+    assert!(
+        groups
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|group| group["sessions"].as_array().unwrap())
+            .any(|saved| saved["sessionCode"] == session["sessionCode"]
+                && saved["agentCode"] == code)
+    );
+
+    let other = internal_agent_api(
+        &router,
+        &authorization,
+        Method::GET,
+        "/api/v1/agents/workspaces/ENTERPRISE/internal",
+        None,
+    )
+    .await;
+    assert!(
+        !other
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|agent| agent["agentCode"] == code)
+    );
+    // Resetting a local policy must retain its locally owned definition.
+    let reset = internal_agent_api(
+        &router,
+        &authorization,
+        Method::POST,
+        &format!("{workspace}/reset-policy"),
+        None,
+    )
+    .await;
+    assert_eq!(reset["name"], "Local analyst");
+    assert_eq!(reset["rolePrompt"], "Explain evidence and uncertainty.");
+    for path in [
+        "/api/v1/agents/registry/internal",
+        "/api/v1/agents/workspaces/TRON_CORE/internal",
+    ] {
+        let response = request_with_locale(
+            &router,
+            Method::POST,
+            path,
+            Some(json!({"agentCode":"empty-name","name":"  ","rolePrompt":""})),
+            &authorization,
+            "zh-CN",
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["code"], "101028001");
+        assert!(body["message"].as_str().unwrap().contains("名称"));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn internal_agent_runs_use_selected_role_and_follow_next_run_configuration() {
+    let server = recording_model_server().await;
+    let router = app();
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let first = internal_agent_api(
+        &router,
+        &authorization,
+        Method::POST,
+        "/api/v1/agents/registry/internal",
+        Some(json!({"agentCode":"reviewer","name":"Reviewer","rolePrompt":"Unique reviewer instructions"})),
+    )
+    .await;
+    let second = internal_agent_api(
+        &router,
+        &authorization,
+        Method::POST,
+        "/api/v1/agents/workspaces/TRON_CORE/internal",
+        Some(json!({"agentCode":"analyst","name":"Analyst","rolePrompt":"Unique analyst instructions"})),
+    )
+    .await;
+    for agent in [&first, &second] {
+        let result = internal_agent_api(&router, &authorization, Method::POST, "/api/v1/agents/runs", Some(json!({
+            "prompt":"Check the proposal.","workspaceCode":"TRON_CORE","agentCode":agent["agentCode"],
+            "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
+        }))).await;
+        assert_eq!(result["workspaceCode"], "TRON_CORE");
+    }
+    let code = first["agentCode"].as_str().unwrap();
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PATCH,
+        &format!("/api/v1/agents/registry/internal/{code}/definition"),
+        Some(json!({"rolePrompt":"Updated reviewer instructions"})),
+    )
+    .await;
+    internal_agent_api(&router, &authorization, Method::POST, "/api/v1/agents/runs", Some(json!({
+        "prompt":"Check again.","workspaceCode":"TRON_CORE","agentCode":code,
+        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
+    }))).await;
+    let requests = server.requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 3);
+    for (request, expected, absent) in [
+        (
+            &requests[0],
+            "Unique reviewer instructions",
+            "Unique analyst instructions",
+        ),
+        (
+            &requests[1],
+            "Unique analyst instructions",
+            "Unique reviewer instructions",
+        ),
+        (
+            &requests[2],
+            "Updated reviewer instructions",
+            "Unique reviewer instructions",
+        ),
+    ] {
+        let prompt = request["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|message| message["role"] == "system")
+            .map(|message| message["content"].as_str().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(prompt.contains(expected), "{prompt}");
+        assert!(
+            !prompt.contains(absent),
+            "roles must not leak across agent instances: {prompt}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn internal_agent_codes_validate_and_reject_conflicts_without_overwriting() {
+    let router = app();
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let platform = "/api/v1/agents/registry/internal";
+    let workspace = "/api/v1/agents/workspaces/TRON_CORE/internal";
+    for path in [platform, workspace] {
+        for invalid in [
+            "",
+            "1agent",
+            "UPPER",
+            "has space",
+            "中文",
+            "path/agent",
+            &"a".repeat(65),
+        ] {
+            let response = request_with_locale(
+                &router,
+                Method::POST,
+                path,
+                Some(json!({"agentCode":invalid,"name":"Valid name","rolePrompt":"Original"})),
+                &authorization,
+                "zh-CN",
+            )
+            .await;
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{path}: {invalid}"
+            );
+            let body = response_json(response).await;
+            assert_eq!(body["code"], "101028009");
+            assert!(body["message"].as_str().unwrap().contains("编码"));
+        }
+        for reserved in ["main-agent", "codex", "opencode"] {
+            let response = request_with_locale(
+                &router,
+                Method::POST,
+                path,
+                Some(json!({"agentCode":reserved,"name":"Override","rolePrompt":"Replacement"})),
+                &authorization,
+                "en-US",
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            let body = response_json(response).await;
+            assert_eq!(body["code"], "101028010");
+            assert!(body["message"].as_str().unwrap().contains("already in use"));
+        }
+    }
+    let created = internal_agent_api(&router, &authorization, Method::POST, platform,
+        Some(json!({"agentCode":" global-reviewer_1 ","name":"Global reviewer","rolePrompt":"Original"}))).await;
+    assert_eq!(created["agentCode"], "global-reviewer_1");
+    let local = internal_agent_api(&router, &authorization, Method::POST, workspace,
+        Some(json!({"agentCode":"local-reviewer","name":"Local reviewer","rolePrompt":"Local original"}))).await;
+    assert_eq!(local["agentCode"], "local-reviewer");
+    for (path, code) in [
+        (platform, "global-reviewer_1"),
+        (workspace, "global-reviewer_1"),
+        (workspace, "local-reviewer"),
+        (platform, "local-reviewer"),
+    ] {
+        let response = request_with_locale(
+            &router,
+            Method::POST,
+            path,
+            Some(json!({"agentCode":code,"name":"Replacement","rolePrompt":"Replaced"})),
+            &authorization,
+            "zh-CN",
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(response_json(response).await["code"], "101028010");
+    }
+    let saved = internal_agent_api(
+        &router,
+        &authorization,
+        Method::GET,
+        &format!("{platform}/global-reviewer_1"),
+        None,
+    )
+    .await;
+    assert_eq!(saved["name"], "Global reviewer");
+    assert_eq!(saved["rolePrompt"], "Original");
+    let saved = internal_agent_api(
+        &router,
+        &authorization,
+        Method::GET,
+        &format!("{workspace}/local-reviewer"),
+        None,
+    )
+    .await;
+    assert_eq!(saved["rolePrompt"], "Local original");
+    // Local identities are scoped to a workspace and may be reused in another one.
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::POST,
+        "/api/v1/agents/workspaces/ENTERPRISE/internal",
+        Some(
+            json!({"agentCode":"local-reviewer","name":"Other reviewer","rolePrompt":"Other role"}),
+        ),
+    )
+    .await;
+    for path in [
+        format!("{platform}/global-reviewer_1/definition"),
+        format!("{workspace}/local-reviewer/definition"),
+    ] {
+        let response = request_with_headers(
+            &router,
+            Method::PATCH,
+            &path,
+            Some(json!({"agentCode":"renamed","name":"Replacement"})),
+            None,
+            Some(&authorization),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+}
+
+#[tokio::test]
+async fn concurrent_internal_agent_creation_preserves_the_first_definition() {
+    let router = app();
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    for path in [
+        "/api/v1/agents/registry/internal",
+        "/api/v1/agents/workspaces/TRON_CORE/internal",
+    ] {
+        let code = if path.contains("workspaces") {
+            "local-race"
+        } else {
+            "global-race"
+        };
+        let first_body = json!({"agentCode":code,"name":"First","rolePrompt":"First role"});
+        let second_body = json!({"agentCode":code,"name":"Second","rolePrompt":"Second role"});
+        let (first, second) = tokio::join!(
+            request_with_headers(
+                &router,
+                Method::POST,
+                path,
+                Some(first_body),
+                None,
+                Some(&authorization)
+            ),
+            request_with_headers(
+                &router,
+                Method::POST,
+                path,
+                Some(second_body),
+                None,
+                Some(&authorization)
+            ),
+        );
+        let statuses = [first.status(), second.status()];
+        assert_eq!(
+            statuses
+                .iter()
+                .filter(|status| **status == StatusCode::OK)
+                .count(),
+            1
+        );
+        assert_eq!(
+            statuses
+                .iter()
+                .filter(|status| **status == StatusCode::CONFLICT)
+                .count(),
+            1
+        );
+        let winner = response_json(if first.status() == StatusCode::OK {
+            first
+        } else {
+            second
+        })
+        .await;
+        let saved = internal_agent_api(
+            &router,
+            &authorization,
+            Method::GET,
+            &format!("{path}/{code}"),
+            None,
+        )
+        .await;
+        assert_eq!(saved["name"], winner["data"]["name"]);
+        assert_eq!(saved["rolePrompt"], winner["data"]["rolePrompt"]);
+    }
 }

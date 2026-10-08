@@ -11,6 +11,7 @@ import { SearchField } from "@/components/search-field";
 import { Button } from "@/components/ui/button";
 
 interface InternalAgentToolSelectorProps {
+  className?: string;
   busy?: boolean;
   onSetToolsChecked: (toolCodes: string[], checked: boolean) => void;
   onToggleTool: (toolCode: string, checked: boolean) => void;
@@ -30,6 +31,7 @@ function normalizeSearchText(value: string) {
 }
 
 export function InternalAgentToolSelector({
+  className,
   busy = false,
   onSetToolsChecked,
   onToggleTool,
@@ -140,22 +142,25 @@ export function InternalAgentToolSelector({
   const hasAnyActiveToolSelected = activeDomainTools.some((tool) => selectedToolSet.has(tool.toolCode));
 
   return (
-    <div className="mt-5 space-y-3">
-      <Field label={internalPageT("toolSelection.title", "Selected tools")}>
-        <SearchField
-          ariaLabel={internalPageT("toolSelection.searchAria", "Search tools")}
-          placeholder={internalPageT("toolSelection.searchPlaceholder", "Search tools...")}
-          value={toolSearch}
-          onChange={setToolSearch}
-        />
-      </Field>
+    <div className={cn("mt-5 space-y-3", className)}>
+      <div className="grid gap-4 md:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
+        <Field className="w-full min-w-0 pr-1" label={internalPageT("toolSelection.title", "Selected tools")}>
+          <SearchField
+            className="w-full"
+            ariaLabel={internalPageT("toolSelection.searchAria", "Search tools")}
+            placeholder={internalPageT("toolSelection.searchPlaceholder", "Search tools...")}
+            value={toolSearch}
+            onChange={setToolSearch}
+          />
+        </Field>
+      </div>
 
       {domainEntries.length === 0 ? (
         <p className="text-sm text-[var(--color-on-surface-variant)]">
           {internalPageT("toolSelection.empty", "No tools match the search query.")}
         </p>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(288px,336px)_minmax(0,1fr)]">
+        <div className="grid gap-4 md:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
           <div>
             <div className="tron-scrollbar max-h-[36rem] space-y-2 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1">
               {domainEntries.map((entry) => {
@@ -179,9 +184,6 @@ export function InternalAgentToolSelector({
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-[var(--color-on-surface)]">
                           {entry.domain.name}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-[var(--color-on-surface-variant)]">
-                          {entry.domain.domainCode}
                         </p>
                       </div>
                       <span className="rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">
@@ -211,7 +213,7 @@ export function InternalAgentToolSelector({
             </div>
           </div>
 
-          <div className="self-start xl:sticky xl:top-6">
+          <div className="self-start md:sticky md:top-0">
             <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
               {activeEntry ? (
                 <>
@@ -220,19 +222,6 @@ export function InternalAgentToolSelector({
                       <p className="text-base font-semibold text-[var(--color-on-surface)]">
                         {activeEntry.domain.name}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--color-on-surface-variant)]">
-                        <span>{activeEntry.domain.domainCode}</span>
-                        <span className="rounded-full bg-[var(--color-surface-container-high)] px-2.5 py-1">
-                          {internalPageT("toolSelection.selectedCount", "{{count}} selected", {
-                            count: activeEntry.selectedCount,
-                          })}
-                        </span>
-                        <span className="rounded-full bg-[var(--color-surface-container-high)] px-2.5 py-1">
-                          {activeEntry.domain.hasMutationTools
-                            ? internalPageT("toolSelection.hasMutation", "Contains mutation tools")
-                            : internalPageT("toolSelection.noMutation", "Read-only only")}
-                        </span>
-                      </div>
                       <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
                         {activeEntry.domain.description
                           || internalPageT("toolSelection.noDescription", "No description available.")}

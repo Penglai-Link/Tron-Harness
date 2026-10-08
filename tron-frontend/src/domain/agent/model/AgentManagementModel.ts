@@ -5,17 +5,13 @@ export type ToolExposureMode = "direct_list" | "domain_discovery";
 export type ExpandedDomainPersistenceMode = "sticky_expanded" | "ephemeral_expanded";
 export type WorkspaceInternalAgentPolicySource = "platform_default" | "workspace_override";
 export type McpAccessMode = "disabled" | "all_enabled_servers" | "selected_servers";
+// Client configuration scope; never sent as a workspace identifier to the backend.
+export const PLATFORM_INTERNAL_AGENT_SCOPE = "$platform";
 
 export interface SystemAgentModelRecord {
   modelId: string;
   displayName: string;
   contextWindowTokens?: number | null;
-}
-
-export interface MainAgentConfig {
-  personality: string;
-  instructions: string;
-  updatedAt: string;
 }
 
 interface SystemAgentBaseRecord {
@@ -67,6 +63,8 @@ export interface WorkspaceInternalAgentRecord {
   agentCode: string;
   name: string;
   description: string;
+  rolePrompt: string;
+  platformDefined: boolean;
   mcpAccessMode: McpAccessMode;
   toolAssignmentMode: ToolAssignmentMode;
   toolExposureMode: ToolExposureMode;
@@ -77,6 +75,17 @@ export interface WorkspaceInternalAgentRecord {
   selectedServerCodes: string[];
   selectedToolCodes: string[];
   source: WorkspaceInternalAgentPolicySource;
+}
+
+export interface CreateInternalAgentPayload {
+  agentCode: string;
+  name: string;
+  rolePrompt: string;
+}
+
+export interface UpdateInternalAgentDefinitionPayload {
+  name?: string;
+  rolePrompt?: string;
 }
 
 export interface WorkspaceInternalAgentPolicyPayload {

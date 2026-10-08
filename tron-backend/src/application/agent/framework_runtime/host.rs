@@ -59,6 +59,7 @@ struct Host {
     pty: eliteforge_agent_capability_tools::PtyService,
     framework: OnceCell<Framework>,
     agent: OnceCell<Agent>,
+    internal_agents: std::sync::RwLock<BTreeMap<(String, String), Arc<OnceCell<Agent>>>>,
     skills: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     installed_packs: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     tools_enabled: Arc<std::sync::atomic::AtomicBool>,
@@ -119,7 +120,7 @@ impl FrameworkHost {
             self.main_selection(framework, &packs, &extensions)?;
         }
         persist_capability_state(&self.0.state_path, &packs, &extensions)?;
-        if let Some(agent) = self.0.agent.get() {
+        for agent in self.initialized_internal_agents() {
             let selection = match self.main_selection(&agent.framework(), &packs, &extensions) {
                 Ok(selection) => selection,
                 Err(error) => {
@@ -148,7 +149,7 @@ impl FrameworkHost {
         let previous = extensions.clone();
         extensions.insert(point.to_owned(), enabled);
         persist_capability_state(&self.0.state_path, &packs, &extensions)?;
-        if let Some(agent) = self.0.agent.get() {
+        for agent in self.initialized_internal_agents() {
             let selection = match self.main_selection(&agent.framework(), &packs, &extensions) {
                 Ok(selection) => selection,
                 Err(error) => {
@@ -176,6 +177,15 @@ impl FrameworkHost {
 
     fn ensure_external_idle(&self) -> Result<(), String> {
         self.ensure_open()?;
+        for agent in self.initialized_internal_agents() {
+            if !agent
+                .reconfiguration_blockers()
+                .map_err(|error| error.to_string())?
+                .is_empty()
+            {
+                return Err("internal agent is busy".into());
+            }
+        }
         if let Some(agent) = self.0.continuation_agent.get() {
             if !agent
                 .reconfiguration_blockers()
@@ -236,6 +246,7 @@ impl FrameworkHost {
             config_lock: tokio::sync::Mutex::new(()),
             framework: OnceCell::new(),
             agent: OnceCell::new(),
+            internal_agents: Default::default(),
             skills: Default::default(),
             installed_packs: Default::default(),
             tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -270,6 +281,7 @@ impl FrameworkHost {
             config_lock: tokio::sync::Mutex::new(()),
             framework: OnceCell::new(),
             agent: OnceCell::new(),
+            internal_agents: Default::default(),
             skills: Default::default(),
             installed_packs: Default::default(),
             tools_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -315,6 +327,47 @@ impl FrameworkHost {
                 framework.agent(selection).build().await
             })
             .await
+    }
+
+    fn initialized_internal_agents(&self) -> Vec<Agent> {
+        self.0
+            .agent
+            .get()
+            .cloned()
+            .into_iter()
+            .chain(
+                self.0
+                    .internal_agents
+                    .read()
+                    .unwrap()
+                    .values()
+                    .filter_map(|cell| cell.get().cloned()),
+            )
+            .collect()
+    }
+
+    async fn internal_agent(&self, workspace: &str, code: &str) -> Result<Agent, fw::AgentError> {
+        let key = (workspace.to_owned(), code.to_ascii_lowercase());
+        let cell = self
+            .0
+            .internal_agents
+            .write()
+            .unwrap()
+            .entry(key)
+            .or_insert_with(|| Arc::new(OnceCell::new()))
+            .clone();
+        cell.get_or_try_init(|| async {
+            self.ensure_open()
+                .map_err(fw::AgentError::InvalidConfiguration)?;
+            let framework = self.framework().await?;
+            let (packs, extensions) = self.capability_state();
+            let selection = self
+                .main_selection(framework, &packs, &extensions)
+                .map_err(fw::AgentError::InvalidConfiguration)?;
+            framework.agent(selection).build().await
+        })
+        .await
+        .cloned()
     }
 }
 struct HostSteering {

@@ -1,6 +1,50 @@
 use super::*;
 
 #[tokio::test]
+async fn internal_agents_reuse_identity_and_close_independently_per_workspace() {
+    let host = FrameworkHost::temporary(None).unwrap();
+    let first = host
+        .internal_agent("workspace-a", "reviewer")
+        .await
+        .unwrap();
+    let reused = host
+        .internal_agent("workspace-a", "reviewer")
+        .await
+        .unwrap();
+    let second = host.internal_agent("workspace-a", "writer").await.unwrap();
+    let other_workspace = host
+        .internal_agent("workspace-b", "reviewer")
+        .await
+        .unwrap();
+    assert_eq!(host.initialized_internal_agents().len(), 3);
+    host.set_extension_enabled("tool", false).await.unwrap();
+    host.set_extension_enabled("tool", true).await.unwrap();
+    assert!(first.close().await.is_success());
+    let (packs, extensions) = host.capability_state();
+    let framework = second.framework();
+    let selection = host
+        .main_selection(&framework, &packs, &extensions)
+        .unwrap();
+    assert!(
+        reused
+            .reconfigure(framework.agent(selection.clone()))
+            .await
+            .is_err()
+    );
+    second
+        .reconfigure(framework.agent(selection.clone()))
+        .await
+        .unwrap();
+    other_workspace
+        .reconfigure(framework.agent(selection))
+        .await
+        .unwrap();
+    assert!(!framework.is_closed());
+    assert!(host.close().await.is_success());
+    assert!(framework.is_closed());
+}
+
+#[tokio::test]
 async fn main_and_continuation_share_storage_and_agent_close_keeps_framework_alive() {
     let host = FrameworkHost::temporary(None).unwrap();
     let main = {

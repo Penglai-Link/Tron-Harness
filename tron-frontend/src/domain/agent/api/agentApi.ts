@@ -2,8 +2,6 @@ export const agentApiEndpoints = {
   getToolDomains: "GET /api/v1/tools/domains",
   getTools: "GET /api/v1/tools",
   listMainAgentMessages: "GET /api/v1/agent/main/messages",
-  getMainAgentConfig: "GET /api/v1/agents/registry/main-agent",
-  updateMainAgentConfig: "PATCH /api/v1/agents/registry/main-agent",
   listPlatformSystemAgents: "GET /api/v1/agents/registry/system",
   rescanPlatformSystemAgents: "POST /api/v1/agents/registry/system/rescan",
   enablePlatformSystemAgent: "POST /api/v1/agents/registry/system/{agentCode}/enable",

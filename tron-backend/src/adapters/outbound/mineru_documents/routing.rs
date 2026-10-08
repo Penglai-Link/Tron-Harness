@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use super::*;
 use crate::{application::knowledge_base::ingestion::{ParseEndpointCapacity, IngestionWaitReason, WaitReasonCode}, config::MineruNode};
 
@@ -132,6 +133,7 @@ impl MineruKnowledgeDocumentParser {
             .collect();
         Ok(ParsingCapabilities {
             default_tier: self.config.default_tier,
+            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode).ok_or_else(|| IngestionWaitReason::new(WaitReasonCode::NoTiers))?,
             available_tiers: available,
             parser_version: self.config.expected_parser_version.clone(),
             office_tier: ParsingTier::Flash,
@@ -192,6 +194,7 @@ impl MineruKnowledgeDocumentParser {
         }
         Ok(ParsingCapabilities {
             default_tier: self.config.default_tier,
+            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode).ok_or_else(|| invalid("MinerU OCR模式无效"))?,
             available_tiers: tiers
                 .into_iter()
                 .filter_map(|t| serde_json::from_value(json!(t)).ok())

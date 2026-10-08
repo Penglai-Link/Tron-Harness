@@ -297,6 +297,17 @@ fn filter_platform_records(records: &mut Vec<PromptView>, query: &PromptPageQuer
             && search.as_ref().is_none_or(|value| {
                 record.display_name.to_lowercase().contains(value)
                     || record.prompt_code.to_lowercase().contains(value)
+                    || record
+                        .description
+                        .as_ref()
+                        .is_some_and(|text| text.to_lowercase().contains(value))
+                    || record.translations.iter().any(|translation| {
+                        translation.display_name.to_lowercase().contains(value)
+                            || translation
+                                .description
+                                .as_ref()
+                                .is_some_and(|text| text.to_lowercase().contains(value))
+                    })
             })
     });
 }

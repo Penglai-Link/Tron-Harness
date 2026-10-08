@@ -4,7 +4,7 @@ use crate::{
         KnowledgeBaseError,
         local_documents::MAX_EXPANDED_BYTES,
         parsing::{
-            KnowledgeDocumentParser, ParsedAsset, ParsingCapabilities, ParsingTier,
+            KnowledgeDocumentParser, OcrMode, ParsedAsset, ParsingCapabilities, ParsingTier,
             StructuredParse, normalize_middle,
         },
     },
@@ -13,7 +13,6 @@ use crate::{
 use async_trait::async_trait;
 use reqwest::{Client, Url};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     io::{Cursor, Read},
@@ -113,40 +112,6 @@ impl MineruKnowledgeDocumentParser {
         Self::id(&job, "job_id").map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
         Ok(job)
     }
-    /// Reuse an in-flight or completed same-tier job bound to the exact authorized
-    /// Resource SHA256. Completed output must match the current parser version.
-    async fn reusable_job(
-        &self,
-        filename: &str,
-        sha: &str,
-        tier: ParsingTier,
-        version: &str,
-    ) -> Result<Option<Value>, KnowledgeBaseError> {
-        let list = self.get("/v1/parse/jobs?limit=20").await?;
-        let Some(items) = list["data"].as_array() else {
-            return Ok(None);
-        };
-        for brief in items.iter().take(20) {
-            let id = Self::id(brief, "job_id")?;
-            let job = self.get(&format!("/v1/parse/jobs/{id}")).await?;
-            if !matches!(job["status"].as_str(), Some("completed" | "queued" | "running")) || job["tier"] != tier.as_str() {
-                continue;
-            }
-            let Some(files) = job["files"].as_array().filter(|f| f.len() == 1) else {
-                continue;
-            };
-            let file = &files[0];
-            if file["name"] != filename || (job["status"] == "completed" && file["parse"]["parser_version"] != version) {
-                continue;
-            }
-            let source_id = Self::id(file, "file_id")?;
-            let metadata = self.get(&format!("/v1/files/{source_id}")).await?;
-            if metadata["sha256sum"] == sha {
-                return Ok(Some(job));
-            }
-        }
-        Ok(None)
-    }
     fn id<'a>(v: &'a Value, key: &str) -> Result<&'a str, KnowledgeBaseError> {
         let id = v
             .get(key)
@@ -164,6 +129,11 @@ impl MineruKnowledgeDocumentParser {
 }
 #[async_trait]
 impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
+    fn with_ocr_mode(&self, mode: OcrMode) -> Result<std::sync::Arc<dyn KnowledgeDocumentParser>, KnowledgeBaseError> {
+        let mut parser = self.clone();
+        parser.config.ocr_mode = mode.as_str().into();
+        Ok(std::sync::Arc::new(parser))
+    }
     fn profile_identity(&self) -> Value {
         json!({"ocrMode":self.config.ocr_mode,"parserProfile":self.config.parser_profile,"expectedParserVersion":self.config.expected_parser_version,"baseUrl":self.config.base_url,"nodes":self.config.nodes,"runtimeConfig":self.config})
     }
@@ -210,6 +180,9 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
         // Use the authorized snapshot even if the node is disabled later.
         // Cancellation never uploads a new source or moves to another node.
         let mut snapshot = self.clone();
+        if let Some(mode) = task.configuration["parser"]["ocrMode"].as_str() {
+            snapshot.config.ocr_mode = OcrMode::from_wire(mode).ok_or_else(|| invalid("解析任务OCR模式无效"))?.as_str().into();
+        }
         if let Some(base) = task.configuration["parser"]["baseUrl"].as_str() { snapshot.config.base_url = base.into(); }
         if let Some(nodes) = task.configuration["parser"].get("nodes") { snapshot.config.nodes = serde_json::from_value(nodes.clone()).map_err(invalid)?; }
         let endpoint = task.endpoint_id.as_deref().ok_or_else(|| invalid("原解析节点身份缺失"))?;
@@ -253,6 +226,7 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
         }
         Ok(ParsingCapabilities {
             default_tier: self.config.default_tier,
+            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode).ok_or_else(|| invalid("MinerU OCR模式无效"))?,
             available_tiers: available,
             parser_version: version.into(),
             office_tier: ParsingTier::Flash,
@@ -302,7 +276,6 @@ impl MineruKnowledgeDocumentParser {
         if !capabilities.available_tiers.contains(&selected) {
             return Err(invalid("MinerU当前不支持选定解析质量，不会自动降级"));
         }
-        let sha = format!("{:x}", Sha256::digest(bytes));
         let saved = checkpoint.as_ref().map(|c| c.task()).transpose()?;
         let reusable = if let Some(task) = &saved {
             if let Some(id) = &task.remote_job_id {
@@ -320,8 +293,8 @@ impl MineruKnowledgeDocumentParser {
             } else if task.reconciling {
                 Some(self.reconcile_job(task.remote_file_id.as_deref().ok_or_else(|| invalid("MinerU对账文件身份缺失"))?, selected).await?)
             } else { None }
-        } else if self.config.ocr_mode == "auto" {
-            tokio::time::timeout(Duration::from_secs(5), self.reusable_job(filename, &sha, selected, &capabilities.parser_version)).await.ok().and_then(Result::ok).flatten()
+        // Only the durable Tron task can prove which OCR mode created a job.
+        // MinerU's job response does not include the requested OCR mode.
         } else { None };
         let resumed = reusable.is_some();
         let mut job = if let Some(job) = reusable {

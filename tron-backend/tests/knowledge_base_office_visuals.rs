@@ -27,7 +27,7 @@ struct Parse(Arc<AtomicUsize>);
 #[async_trait::async_trait]
 impl KnowledgeDocumentParser for Parse {
  fn default_tier(&self)->ParsingTier { ParsingTier::Flash }
- async fn capabilities(&self)->Result<ParsingCapabilities,KnowledgeBaseError> { Ok(ParsingCapabilities {default_tier:ParsingTier::Flash,available_tiers:vec![ParsingTier::Flash],parser_version:"synthetic-chart-native".into(),office_tier:ParsingTier::Flash}) }
+ async fn capabilities(&self)->Result<ParsingCapabilities,KnowledgeBaseError> { Ok(ParsingCapabilities { default_ocr_mode: tron_backend::application::knowledge_base::parsing::OcrMode::Auto,default_tier:ParsingTier::Flash,available_tiers:vec![ParsingTier::Flash],parser_version:"synthetic-chart-native".into(),office_tier:ParsingTier::Flash}) }
  async fn parse(&self,name:&str,_bytes:&[u8],_tier:Option<ParsingTier>)->Result<StructuredParse,KnowledgeBaseError> {
   self.0.fetch_add(1,Ordering::SeqCst);
   let format=if name.ends_with(".xlsx"){"xlsx"}else{"docx"};

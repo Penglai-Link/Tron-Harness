@@ -98,20 +98,26 @@ impl FrameworkHost {
             .unwrap_or_else(|e| e.into_inner())
             .take();
         drop(admission);
-        let initialized = [
-            self.0.agent.get().is_some(),
-            self.0.external_agent.get().is_some(),
-            self.0.continuation_agent.get().is_some(),
-        ];
-        for agent in [
-            self.0.agent.get(),
-            self.0.external_agent.get(),
-            self.0.continuation_agent.get(),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            let agent = agent.clone();
+        let initialized_default = self.0.agent.get().is_some();
+        let initialized_external = self.0.external_agent.get().is_some();
+        let initialized_continuation = self.0.continuation_agent.get().is_some();
+        let initialized_internal_keys = self
+            .0
+            .internal_agents
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(_, cell)| cell.get().is_some())
+            .map(|(key, _)| key.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+        for agent in self.initialized_internal_agents().into_iter().chain(
+            [
+                self.0.external_agent.get().cloned(),
+                self.0.continuation_agent.get().cloned(),
+            ]
+            .into_iter()
+            .flatten(),
+        ) {
             poll_owner(
                 "SDK agent",
                 tokio::spawn(async move { agent.close().await }),
@@ -177,21 +183,36 @@ impl FrameworkHost {
             if !stores_started {
                 let admission = host.0.config_lock.lock().await;
                 drop(admission);
-                for (was_initialized, agent) in initialized.into_iter().zip([
-                    host.0.agent.get(),
-                    host.0.external_agent.get(),
-                    host.0.continuation_agent.get(),
-                ]) {
-                    if !was_initialized {
-                        if let Some(agent) = agent {
-                            let agent = agent.clone();
-                            merge_join(
-                                "late initialized SDK",
-                                tokio::spawn(async move { agent.close().await }).await,
-                                &mut final_report,
-                            );
-                        }
-                    }
+                let late_internal = host
+                    .0
+                    .internal_agents
+                    .read()
+                    .unwrap()
+                    .iter()
+                    .filter(|(key, _)| !initialized_internal_keys.contains(*key))
+                    .filter_map(|(_, cell)| cell.get().cloned())
+                    .collect::<Vec<_>>();
+                for agent in late_internal.into_iter().chain(
+                    [
+                        (!initialized_default)
+                            .then(|| host.0.agent.get().cloned())
+                            .flatten(),
+                        (!initialized_external)
+                            .then(|| host.0.external_agent.get().cloned())
+                            .flatten(),
+                        (!initialized_continuation)
+                            .then(|| host.0.continuation_agent.get().cloned())
+                            .flatten(),
+                    ]
+                    .into_iter()
+                    .flatten(),
+                ) {
+                    // Include lazy builds that finished after the admission deadline.
+                    merge_join(
+                        "late initialized SDK",
+                        tokio::spawn(async move { agent.close().await }).await,
+                        &mut final_report,
+                    );
                 }
                 host.drain_native().await;
                 let closing = host.clone();

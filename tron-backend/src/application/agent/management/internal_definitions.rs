@@ -1,0 +1,199 @@
+//! Named definitions and per-field platform inheritance.
+use super::*;
+
+#[derive(Debug, Clone)]
+pub(super) struct InternalAgentDefinition {
+    pub(super) agent_code: String,
+    pub(super) name: String,
+    pub(super) description: String,
+    pub(super) role_prompt: String,
+    pub(super) tool_assignment_mode: ToolAssignmentMode,
+    pub(super) mcp_access_mode: McpAccessMode,
+    pub(super) tool_exposure_mode: ToolExposureMode,
+    pub(super) expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
+    pub(super) max_steps: u32,
+    pub(super) max_tool_calls: u32,
+    pub(super) max_parallel_tool_calls: u32,
+    pub(super) selected_tool_codes: Vec<String>,
+    pub(super) selected_server_codes: Vec<String>,
+    pub(super) platform_defined: bool,
+}
+
+pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
+    vec![InternalAgentDefinition {
+        agent_code: MAIN_AGENT_CODE.to_string(),
+        name: "Main Agent".to_string(),
+        description: "Primary workspace internal agent with access to platform business tools."
+            .to_string(),
+        role_prompt: String::new(),
+        tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
+        mcp_access_mode: McpAccessMode::AllEnabledServers,
+        tool_exposure_mode: ToolExposureMode::DomainDiscovery,
+        expanded_domain_persistence_mode: ExpandedDomainPersistenceMode::StickyExpanded,
+        max_steps: 100,
+        max_tool_calls: 100,
+        max_parallel_tool_calls: 4,
+        selected_tool_codes: vec![],
+        selected_server_codes: vec![],
+        platform_defined: true,
+    }]
+}
+
+impl AgentManagementService {
+    pub(super) fn validate_new_agent_code(
+        &self,
+        code: &str,
+    ) -> Result<String, AgentManagementError> {
+        let code = code.trim();
+        let valid = !code.is_empty()
+            && code.len() <= 64
+            && code.as_bytes()[0].is_ascii_lowercase()
+            && code.bytes().all(|ch| {
+                ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == b'-' || ch == b'_'
+            });
+        if !valid {
+            return Err(AgentManagementError::InternalAgentCodeInvalid);
+        }
+        if code == MAIN_AGENT_CODE
+            || self
+                .supported_agents
+                .iter()
+                .any(|agent| agent.agent_code.eq_ignore_ascii_case(code))
+        {
+            return Err(AgentManagementError::InternalAgentCodeConflict);
+        }
+        Ok(code.to_owned())
+    }
+
+    pub(super) fn internal_agent_definitions(
+        &self,
+        workspace_code: &str,
+    ) -> Result<Vec<InternalAgentDefinition>, AgentManagementError> {
+        let saved = self
+            .repository()
+            .list_workspace_internal_agent_definitions(workspace_code)?;
+        let mut definitions = self
+            .platform_internal_agent_configs()?
+            .into_iter()
+            .map(|config| InternalAgentDefinition {
+                agent_code: config.agent_code,
+                name: config.name,
+                description: "Platform internal agent.".into(),
+                role_prompt: config.role_prompt,
+                tool_assignment_mode: config.tool_assignment_mode,
+                mcp_access_mode: config.mcp_access_mode,
+                tool_exposure_mode: config.tool_exposure_mode,
+                expanded_domain_persistence_mode: config.expanded_domain_persistence_mode,
+                max_steps: config.max_steps,
+                max_tool_calls: config.max_tool_calls,
+                max_parallel_tool_calls: config.max_parallel_tool_calls,
+                selected_tool_codes: config.selected_tool_codes,
+                selected_server_codes: config.selected_server_codes,
+                platform_defined: true,
+            })
+            .collect::<Vec<_>>();
+        for record in saved {
+            if let Some(definition) = definitions
+                .iter_mut()
+                .find(|definition| definition.agent_code == record.agent_code)
+            {
+                if let Some(name) = record.name {
+                    definition.name = name;
+                }
+                if let Some(prompt) = record.role_prompt {
+                    definition.role_prompt = prompt;
+                }
+            } else {
+                let mut definition = internal_agents().remove(0);
+                definition.agent_code = record.agent_code;
+                definition.name = record.name.unwrap_or_default();
+                definition.description = "Workspace internal agent.".into();
+                definition.role_prompt = record.role_prompt.unwrap_or_default();
+                definition.platform_defined = false;
+                definitions.push(definition);
+            }
+        }
+        Ok(definitions)
+    }
+
+    pub fn create_internal_agent(
+        &self,
+        workspace_code: &str,
+        command: CreateWorkspaceInternalAgentCommand,
+    ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        self.active_workspace_detail(workspace_code)?;
+        validate_definition(&command.name, &command.role_prompt)?;
+        let agent_code = self.validate_new_agent_code(&command.agent_code)?;
+        let now = current_timestamp();
+        let definition = WorkspaceInternalAgentDefinition {
+            workspace_code: workspace_code.to_owned(),
+            agent_code,
+            name: Some(command.name.trim().to_owned()),
+            role_prompt: Some(command.role_prompt),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        self.repository()
+            .insert_workspace_internal_agent_definition(&definition)?;
+        self.workspace_internal_agent_policy(workspace_code, &definition.agent_code)
+    }
+
+    pub fn update_internal_agent_definition(
+        &self,
+        workspace_code: &str,
+        agent_code: &str,
+        command: UpdateWorkspaceInternalAgentDefinitionCommand,
+    ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        let current = self.workspace_internal_agent_policy(workspace_code, agent_code)?;
+        let name = command.name.clone().unwrap_or(current.name);
+        let role_prompt = command.role_prompt.clone().unwrap_or(current.role_prompt);
+        validate_definition(&name, &role_prompt)?;
+        let now = current_timestamp();
+        let saved = self
+            .repository()
+            .list_workspace_internal_agent_definitions(workspace_code)?
+            .into_iter()
+            .find(|record| record.agent_code == current.agent_code);
+        let created_at = saved
+            .as_ref()
+            .map(|record| record.created_at.clone())
+            .unwrap_or_else(|| now.clone());
+        self.repository()
+            .upsert_workspace_internal_agent_definition(&WorkspaceInternalAgentDefinition {
+                workspace_code: workspace_code.to_owned(),
+                agent_code: current.agent_code.clone(),
+                name: command
+                    .name
+                    .map(|name| name.trim().to_owned())
+                    .or_else(|| saved.as_ref().and_then(|record| record.name.clone())),
+                role_prompt: command
+                    .role_prompt
+                    .or_else(|| saved.as_ref().and_then(|record| record.role_prompt.clone())),
+                created_at,
+                updated_at: now,
+            })?;
+        self.workspace_internal_agent_policy(workspace_code, &current.agent_code)
+    }
+
+    pub fn current_internal_agent_guidance(
+        &self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<Option<String>, AgentManagementError> {
+        let policy = self.workspace_internal_agent_policy(workspace_code, agent_code)?;
+        if !policy.role_prompt.trim().is_empty() {
+            return Ok(Some(policy.role_prompt));
+        }
+        Ok(None)
+    }
+}
+
+pub(super) fn validate_definition(
+    name: &str,
+    role_prompt: &str,
+) -> Result<(), AgentManagementError> {
+    if name.trim().is_empty() || name.chars().count() > 100 || role_prompt.len() > 65_536 {
+        return Err(AgentManagementError::InternalAgentDefinitionInvalid);
+    }
+    Ok(())
+}

@@ -97,6 +97,7 @@ import {
 import { useAuthSession } from "@/domain/auth";
 import { useTranslation } from "react-i18next";
 import { useTabStore } from "@/store/tabStore";
+import { INTERNAL_AGENT_REGISTRY_CHANGED_EVENT } from "@/domain/agent/model";
 import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api";
 import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import type { SystemAgentModelRecord, WorkspaceInternalAgentRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
@@ -4626,6 +4627,7 @@ export function ChatManagementPage() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [chatAgents, setChatAgents] = useState<ChatAgentOption[]>(() => [mainChatAgentOption]);
   const [selectedAgentCode, setSelectedAgentCode] = useState(mainChatAgentOption.agentCode);
+  const agentSelectionSessionRef = useRef("");
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [runningSessionCode, setRunningSessionCode] = useState("");
   const [compactingSessionCode, setCompactingSessionCode] = useState("");
@@ -5203,24 +5205,26 @@ export function ChatManagementPage() {
       }
     }
 
-    void loadAgents();
+    const refreshAgents = () => { void loadAgents(); };
+    refreshAgents();
+    window.addEventListener(INTERNAL_AGENT_REGISTRY_CHANGED_EVENT, refreshAgents);
 
     return () => {
       active = false;
+      window.removeEventListener(INTERNAL_AGENT_REGISTRY_CHANGED_EVENT, refreshAgents);
     };
   }, [activeWorkspaceCode, toast]);
 
   useEffect(() => {
     const sessionAgentCode = activeSession?.agentCode ?? mainChatAgentOption.agentCode;
-    setSelectedAgentCode((current) => {
-      if (!chatAgents.some((agent) => agent.agentCode === sessionAgentCode)) {
-        return current && chatAgents.some((agent) => agent.agentCode === current)
-          ? current
-          : mainChatAgentOption.agentCode;
-      }
-      return sessionAgentCode;
-    });
-  }, [activeSession?.agentCode, activeSession?.sessionCode, chatAgents]);
+    const identity = `${activeWorkspaceCode}:${activeSession?.sessionCode ?? ""}:${sessionAgentCode}`;
+    const shouldSync = agentSelectionSessionRef.current !== identity
+      && chatAgents.some((agent) => agent.agentCode === sessionAgentCode);
+    if (shouldSync) agentSelectionSessionRef.current = identity;
+    setSelectedAgentCode((current) => shouldSync ? sessionAgentCode
+      : current && chatAgents.some((agent) => agent.agentCode === current)
+        ? current : mainChatAgentOption.agentCode);
+  }, [activeWorkspaceCode, activeSession?.agentCode, activeSession?.sessionCode, chatAgents]);
 
   useEffect(() => {
     const sessionCode = activeSession?.sessionCode ?? "";

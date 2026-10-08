@@ -79,7 +79,6 @@ export const shell = {
       apps: "应用",
       auditLogs: "审计日志",
       automations: "自动化",
-      chats: "会话",
       internalAgents: "内部智能体",
       desktopTest: "桌面测试",
       knowledgeBase: "知识库",

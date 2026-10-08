@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Field as FieldPrimitive, FieldLabel, FieldError } from "@/components/ui/field";
 
 interface FieldProps {
+  actions?: ReactNode;
   className?: string;
   children: ReactNode;
   error?: string;
@@ -28,15 +29,16 @@ interface FieldProps {
 const disabledControlClasses =
   "disabled:cursor-not-allowed disabled:border-[var(--tron-input-disabled-border,var(--color-outline-variant))] disabled:bg-[var(--tron-input-disabled-bg,var(--color-surface-container))] disabled:text-[var(--tron-input-disabled-fg,var(--color-on-surface-variant))] disabled:opacity-[var(--tron-input-disabled-opacity,1)] disabled:placeholder:text-[var(--tron-input-placeholder,var(--color-outline))] disabled:focus:border-[var(--color-outline-variant)] disabled:focus:ring-0";
 
-export function Field({ children, className, error, hint, hintAriaLabel = "打开字段说明", label, required = false }: FieldProps) {
+export function Field({ actions, children, className, error, hint, hintAriaLabel = "打开字段说明", label, required = false }: FieldProps) {
   return (
     <FieldPrimitive className={className}>
-      <div className="flex items-center gap-1">
+      <div className={cn("flex items-center gap-1", actions && "w-full")}>
         <FieldLabel>
           {label}
           {required && <span className="text-destructive-foreground" aria-hidden="true">*</span>}
         </FieldLabel>
         {hint && <InfoTooltip ariaLabel={hintAriaLabel}>{hint}</InfoTooltip>}
+        {actions && <div className="ml-auto shrink-0">{actions}</div>}
       </div>
       {children}
       {error && <FieldError match>{error}</FieldError>}

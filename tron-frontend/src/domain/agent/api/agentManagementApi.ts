@@ -1,7 +1,6 @@
 import { requestApi } from "@/shared/api/httpClient";
 
 import type {
-  MainAgentConfig,
   PlatformToolRecord,
   ToolCatalogDomainRecord,
   SystemAgentModelRecord,
@@ -12,14 +11,19 @@ import type {
   WorkspaceInternalAgentPolicyPayload,
   WorkspaceInternalAgentRecord,
   ListToolsQuery,
+  CreateInternalAgentPayload,
+  UpdateInternalAgentDefinitionPayload,
 } from "@/domain/agent/model";
 
 import { agentApiEndpoints } from "./agentApi";
+import { PLATFORM_INTERNAL_AGENT_SCOPE } from "../model";
 
-export interface MainAgentConfigPayload {
-  personality: string;
-  instructions: string;
+function internalAgentEndpoint(endpoint: string, workspaceCode: string) {
+  return workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE
+    ? endpoint.replace("/workspaces/{workspaceCode}", "/registry")
+    : endpoint;
 }
+
 
 export interface ToolListPayload {
   domainCode?: string;
@@ -72,6 +76,8 @@ interface WorkspaceInternalAgentRecordApi {
   agentCode: string;
   name: string;
   description: string;
+  rolePrompt: string;
+  platformDefined: boolean;
   source?: WorkspaceInternalAgentSourceApi;
   mcpAccessMode?: McpAccessModeApi;
   toolAssignmentMode: ToolAssignmentModeApi;
@@ -215,6 +221,8 @@ function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRec
   return {
     agentCode: record.agentCode,
     description: record.description,
+    rolePrompt: record.rolePrompt ?? "",
+    platformDefined: record.platformDefined ?? record.agentCode === "main-agent",
     expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(record.expandedDomainPersistenceMode),
     mcpAccessMode: normalizeMcpAccessMode(record.mcpAccessMode),
     name: record.name,
@@ -288,16 +296,6 @@ function normalizeWorkspaceSystemAgentRecord(
   };
 }
 
-export function fetchMainAgentConfig(signal?: AbortSignal) {
-  return requestApi<MainAgentConfig>(agentApiEndpoints.getMainAgentConfig, { signal });
-}
-
-export function updateMainAgentConfig(payload: MainAgentConfigPayload) {
-  return requestApi<MainAgentConfig>(agentApiEndpoints.updateMainAgentConfig, {
-    body: payload,
-  });
-}
-
 export function fetchPlatformSystemAgents(signal?: AbortSignal) {
   return requestApi<ManagedSystemAgentRecordApi[]>(
     agentApiEndpoints.listPlatformSystemAgents,
@@ -365,10 +363,24 @@ export function listTools(payload: ListToolsQuery = {}, signal?: AbortSignal) {
 }
 
 export function fetchWorkspaceInternalAgents(workspaceCode: string, signal?: AbortSignal) {
-  return requestApi<WorkspaceInternalAgentRecordApi[]>(agentApiEndpoints.listWorkspaceInternalAgents, {
+  return requestApi<WorkspaceInternalAgentRecordApi[]>(internalAgentEndpoint(agentApiEndpoints.listWorkspaceInternalAgents, workspaceCode), {
     pathParams: { workspaceCode },
     signal,
   }).then((records) => records.map(normalizeWorkspaceInternalAgentRecord));
+}
+
+export function createWorkspaceInternalAgent(workspaceCode: string, payload: CreateInternalAgentPayload) {
+  return requestApi<{ agentCode: string; name: string; rolePrompt: string }>(
+    internalAgentEndpoint("POST /api/v1/agents/workspaces/{workspaceCode}/internal", workspaceCode),
+    { pathParams: { workspaceCode }, body: payload },
+  );
+}
+
+export function patchWorkspaceInternalAgentDefinition(workspaceCode: string, agentCode: string, payload: UpdateInternalAgentDefinitionPayload) {
+  return requestApi<{ agentCode: string; name: string; rolePrompt: string }>(
+    internalAgentEndpoint("PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/definition", workspaceCode),
+    { pathParams: { workspaceCode, agentCode }, body: payload },
+  );
 }
 
 export function fetchWorkspaceInternalAgent(
@@ -376,7 +388,7 @@ export function fetchWorkspaceInternalAgent(
   agentCode: string,
   signal?: AbortSignal,
 ) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.getWorkspaceInternalAgent, {
+  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.getWorkspaceInternalAgent, workspaceCode), {
     pathParams: { workspaceCode, agentCode },
     signal,
   }).then(normalizeWorkspaceInternalAgentRecord);
@@ -387,14 +399,14 @@ export function patchWorkspaceInternalAgentPolicy(
   agentCode: string,
   payload: WorkspaceInternalAgentPolicyPayload,
 ) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.patchWorkspaceInternalAgentPolicy, {
+  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.patchWorkspaceInternalAgentPolicy, workspaceCode), {
     pathParams: { workspaceCode, agentCode },
     body: payload,
   }).then(normalizeWorkspaceInternalAgentRecord);
 }
 
 export function updateWorkspaceInternalAgentToolAssignments(workspaceCode: string, agentCode: string, toolCodes: string[]) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.updateWorkspaceInternalAgentToolAssignments, {
+  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.updateWorkspaceInternalAgentToolAssignments, workspaceCode), {
     pathParams: { workspaceCode, agentCode },
     body: { toolCodes },
   }).then(normalizeWorkspaceInternalAgentRecord);
@@ -405,7 +417,7 @@ export function patchWorkspaceInternalAgentMcpPolicy(
   agentCode: string,
   payload: WorkspaceInternalAgentMcpPolicyPayload,
 ) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.patchWorkspaceInternalAgentMcpPolicy, {
+  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.patchWorkspaceInternalAgentMcpPolicy, workspaceCode), {
     pathParams: { workspaceCode, agentCode },
     body: payload,
   }).then(normalizeWorkspaceInternalAgentRecord);
@@ -416,7 +428,7 @@ export function updateWorkspaceInternalAgentMcpServerAssignments(
   agentCode: string,
   serverCodes: string[],
 ) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.updateWorkspaceInternalAgentMcpServerAssignments, {
+  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.updateWorkspaceInternalAgentMcpServerAssignments, workspaceCode), {
     pathParams: { workspaceCode, agentCode },
     body: { serverCodes },
   }).then(normalizeWorkspaceInternalAgentRecord);

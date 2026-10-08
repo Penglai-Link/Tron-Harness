@@ -160,7 +160,7 @@ impl KnowledgeDocumentParser for Replay {
         ParsingTier::Standard
     }
     async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
-        Ok(ParsingCapabilities {
+        Ok(ParsingCapabilities { default_ocr_mode: tron_backend::application::knowledge_base::parsing::OcrMode::Auto,
             default_tier: ParsingTier::Standard,
             available_tiers: vec![ParsingTier::Flash, ParsingTier::Standard],
             parser_version: "4.0.10".into(),

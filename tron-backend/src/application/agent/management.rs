@@ -1,4 +1,7 @@
 mod internal_agents;
+mod internal_definition_error;
+mod internal_definitions;
+mod platform_internal_agents;
 mod system_agents;
 
 use std::{
@@ -21,23 +24,17 @@ use crate::{
         agent::{
             AgentManagementError, AgentRuntimeType, ExpandedDomainPersistenceMode,
             InternalAgentPolicySource, InternalAgentToolPolicy, ManagedAgentSource,
-            ManagedAgentType, ManagedSystemAgentRecord, McpAccessMode, PlatformMainAgentConfig,
+            ManagedAgentType, ManagedSystemAgentRecord, McpAccessMode, PlatformInternalAgentConfig,
             RuntimeAdapterCapabilityRecord, SystemAgentModelRecord, SystemAgentRegistryEntry,
             SystemAgentStatus, SystemAgentSyncResult, ToolAssignmentMode, ToolCatalogRecord,
-            ToolDomainRecord, ToolExposureMode, WorkspaceInternalAgentMcpServerAssignment,
-            WorkspaceInternalAgentPolicy, WorkspaceInternalAgentToolAssignment,
-            WorkspaceSystemAgentPolicy,
+            ToolDomainRecord, ToolExposureMode, WorkspaceInternalAgentDefinition,
+            WorkspaceInternalAgentMcpServerAssignment, WorkspaceInternalAgentPolicy,
+            WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
     shared::time::current_timestamp,
 };
-
-#[derive(Debug, Clone, Default)]
-pub struct UpdatePlatformMainAgentCommand {
-    pub personality: Option<String>,
-    pub instructions: Option<String>,
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct UpdateWorkspaceInternalAgentPolicyCommand {
@@ -47,6 +44,19 @@ pub struct UpdateWorkspaceInternalAgentPolicyCommand {
     pub max_steps: Option<u32>,
     pub max_tool_calls: Option<u32>,
     pub max_parallel_tool_calls: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateWorkspaceInternalAgentCommand {
+    pub agent_code: String,
+    pub name: String,
+    pub role_prompt: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UpdateWorkspaceInternalAgentDefinitionCommand {
+    pub name: Option<String>,
+    pub role_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -65,12 +75,33 @@ pub struct ResolvedAgentRuntime {
 const MAIN_AGENT_CODE: &str = "main-agent";
 
 pub trait AgentManagementRepository: Send {
-    fn get_main_agent_config(
+    fn insert_platform_internal_agent_config(
         &mut self,
-    ) -> Result<Option<PlatformMainAgentConfig>, AgentManagementError>;
-    fn upsert_main_agent_config(
+        config: &PlatformInternalAgentConfig,
+    ) -> Result<(), AgentManagementError>;
+    fn insert_workspace_internal_agent_definition(
         &mut self,
-        config: &PlatformMainAgentConfig,
+        definition: &WorkspaceInternalAgentDefinition,
+    ) -> Result<(), AgentManagementError>;
+    fn list_platform_internal_agent_configs(
+        &mut self,
+    ) -> Result<Vec<PlatformInternalAgentConfig>, AgentManagementError>;
+    fn upsert_platform_internal_agent_config(
+        &mut self,
+        config: &PlatformInternalAgentConfig,
+    ) -> Result<(), AgentManagementError>;
+    fn delete_workspace_internal_agent_definition(
+        &mut self,
+        workspace: &str,
+        agent: &str,
+    ) -> Result<(), AgentManagementError>;
+    fn list_workspace_internal_agent_definitions(
+        &mut self,
+        workspace_code: &str,
+    ) -> Result<Vec<WorkspaceInternalAgentDefinition>, AgentManagementError>;
+    fn upsert_workspace_internal_agent_definition(
+        &mut self,
+        definition: &WorkspaceInternalAgentDefinition,
     ) -> Result<(), AgentManagementError>;
     fn list_system_agents(&mut self)
     -> Result<Vec<SystemAgentRegistryEntry>, AgentManagementError>;
@@ -186,45 +217,6 @@ impl AgentManagementService {
         self.rescan_system_agents()
     }
 
-    pub fn get_main_agent_config(&self) -> Result<PlatformMainAgentConfig, AgentManagementError> {
-        Ok(self
-            .repository()
-            .get_main_agent_config()?
-            .unwrap_or_default())
-    }
-
-    pub fn update_main_agent_config(
-        &self,
-        command: UpdatePlatformMainAgentCommand,
-    ) -> Result<PlatformMainAgentConfig, AgentManagementError> {
-        let current = self.get_main_agent_config()?;
-        let now = current_timestamp();
-        let config = PlatformMainAgentConfig {
-            personality: command
-                .personality
-                .unwrap_or(current.personality)
-                .trim()
-                .to_string(),
-            instructions: command
-                .instructions
-                .unwrap_or(current.instructions)
-                .trim()
-                .to_string(),
-            created_at: current.created_at.or_else(|| Some(now.clone())),
-            updated_at: Some(now),
-        };
-        self.repository().upsert_main_agent_config(&config)?;
-        Ok(config)
-    }
-
-    pub fn current_main_agent_guidance(
-        &self,
-        locale: &str,
-    ) -> Result<Option<String>, AgentManagementError> {
-        let config = self.get_main_agent_config()?;
-        Ok(main_agent_guidance(&config, locale))
-    }
-
     pub fn list_tool_domains(&self, locale: &str) -> Vec<ToolDomainRecord> {
         BusinessToolCatalog::domains(locale)
     }
@@ -276,55 +268,6 @@ impl AgentManagementService {
             .lock()
             .expect("agent management model catalog mutex poisoned")
             .insert(agent_code.to_string(), models);
-    }
-}
-
-fn main_agent_guidance(config: &PlatformMainAgentConfig, locale: &str) -> Option<String> {
-    let chinese = locale.trim().to_ascii_lowercase().starts_with("zh");
-    let separator = if chinese { "：" } else { ":" };
-    let mut sections = Vec::new();
-    if !config.personality.trim().is_empty() {
-        let label = if chinese { "人格" } else { "Personality" };
-        sections.push(format!("{label}{separator}\n{}", config.personality.trim()));
-    }
-    if !config.instructions.trim().is_empty() {
-        let label = if chinese { "指令" } else { "Instructions" };
-        sections.push(format!(
-            "{label}{separator}\n{}",
-            config.instructions.trim()
-        ));
-    }
-    if sections.is_empty() {
-        return None;
-    }
-    let header = if chinese {
-        "你是 Tron 主智能体。所有面向用户的回复和对用户可见的推理摘要必须使用简体中文，除非用户明确要求其他语言。"
-    } else {
-        "You are Tron Main Agent. Use English for user-facing replies and visible reasoning summaries unless the user explicitly requests another language."
-    };
-    Some(format!("{header}\n\n{}", sections.join("\n\n")))
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::domain::agent::PlatformMainAgentConfig;
-
-    use super::main_agent_guidance;
-
-    #[test]
-    fn main_agent_guidance_uses_the_requested_locale() {
-        let config = PlatformMainAgentConfig {
-            personality: "谨慎且直接".into(),
-            instructions: "先给结论".into(),
-            created_at: None,
-            updated_at: None,
-        };
-
-        let guidance = main_agent_guidance(&config, "zh-CN").expect("guidance should exist");
-
-        assert!(guidance.starts_with("你是 Tron 主智能体"));
-        assert!(guidance.contains("人格："));
-        assert!(guidance.contains("指令："));
     }
 }
 

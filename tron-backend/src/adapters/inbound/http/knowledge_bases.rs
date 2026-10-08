@@ -14,6 +14,8 @@ use axum::{
     routing::get,
 };
 use serde::Deserialize;
+mod library;
+mod agent_grants;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Scope {
@@ -34,6 +36,8 @@ struct Configure {
     chunk_config: Option<ChunkConfig>,
     #[serde(default, deserialize_with = "present_nullable")]
     parsing_tier: Option<Option<crate::application::knowledge_base::parsing::ParsingTier>>,
+    #[serde(default, deserialize_with = "present_nullable")]
+    ocr_mode: Option<Option<crate::application::knowledge_base::parsing::OcrMode>>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,9 +45,9 @@ struct Grants {
     workspace_code: String,
     agent_codes: Vec<String>,
 }
-fn present_nullable<'de, D: serde::Deserializer<'de>>(
+fn present_nullable<'de, T: Deserialize<'de>, D: serde::Deserializer<'de>>(
     deserializer: D,
-) -> Result<Option<Option<crate::application::knowledge_base::parsing::ParsingTier>>, D::Error> {
+) -> Result<Option<Option<T>>, D::Error> {
     Option::deserialize(deserializer).map(Some)
 }
 async fn parsing(
@@ -60,7 +64,8 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/knowledge-bases", get(list).post(create))
         .route("/api/v1/knowledge-bases/parsing-capabilities", get(parsing))
-        .route("/api/v1/knowledge-bases/{id}", get(detail))
+        .route("/api/v1/knowledge-bases/agent-grants/{agentCode}", get(agent_grants::list).put(agent_grants::replace))
+        .route("/api/v1/knowledge-bases/{id}", get(detail).delete(library::remove))
         .route(
             "/api/v1/knowledge-bases/{id}/documents",
             get(documents).post(upload),
@@ -98,6 +103,7 @@ fn response<T: serde::Serialize>(result: Result<T, KnowledgeBaseError>) -> Respo
                 KnowledgeBaseError::NotFound => (StatusCode::NOT_FOUND, "KB_NOT_FOUND"),
                 KnowledgeBaseError::Forbidden => (StatusCode::FORBIDDEN, "KB_FORBIDDEN"),
                 KnowledgeBaseError::Conflict => (StatusCode::CONFLICT, "KB_CONFLICT"),
+                KnowledgeBaseError::NotEmpty => (StatusCode::CONFLICT, "101027001"),
                 KnowledgeBaseError::Invalid(_) => (StatusCode::BAD_REQUEST, "KB_INVALID"),
                 KnowledgeBaseError::Storage(_) => (StatusCode::INTERNAL_SERVER_ERROR, "KB_STORAGE"),
             };
@@ -110,7 +116,12 @@ async fn list(
     auth: RequestAuthContext,
     Query(q): Query<Scope>,
 ) -> Response {
-    response(kb.list(&auth.user().user_code, &q.workspace_code))
+    match kb.list(&auth.user().user_code, &q.workspace_code) {
+        Ok(items) => Json(ApiResponse::protocol_success(
+            items.into_iter().map(library::KnowledgeLibraryListVo::from).collect::<Vec<_>>(),
+        )).into_response(),
+        Err(error) => response::<()>(Err(error)),
+    }
 }
 async fn create(
     State(kb): State<KnowledgeBaseService>,
@@ -209,6 +220,7 @@ async fn configure(
             &doc,
             q.chunk_config,
             q.parsing_tier,
+            q.ocr_mode,
         )
         .await,
     )
@@ -313,4 +325,22 @@ async fn chunks(
         q.page,
         q.page_size,
     ))
+}
+
+#[cfg(test)]
+mod ocr_contract_tests {
+    use super::*;
+    use crate::application::knowledge_base::parsing::OcrMode;
+    #[test]
+    fn ocr_patch_distinguishes_omitted_inherited_and_selected_modes() {
+        let omitted: Configure = serde_json::from_value(serde_json::json!({"workspaceCode":"space","chunkConfig":null})).unwrap();
+        assert_eq!(omitted.ocr_mode, None);
+        let inherited: Configure = serde_json::from_value(serde_json::json!({"workspaceCode":"space","ocrMode":null})).unwrap();
+        assert_eq!(inherited.ocr_mode, Some(None));
+        for mode in [OcrMode::Auto, OcrMode::Text, OcrMode::Ocr] {
+            let selected: Configure = serde_json::from_value(serde_json::json!({"workspaceCode":"space","ocrMode":mode})).unwrap();
+            assert_eq!(selected.ocr_mode, Some(Some(mode)));
+        }
+        assert!(serde_json::from_value::<Configure>(serde_json::json!({"workspaceCode":"space","ocrMode":"invalid"})).is_err());
+    }
 }

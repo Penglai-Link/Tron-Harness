@@ -26,6 +26,7 @@ impl KnowledgeBaseService {
         doc.chunk_config = Some(kb.default_chunk_config.clone());
         doc.parsing_tier = serde_json::from_value(task.configuration["parsingTier"].clone())
             .map_err(invalid_storage)?;
+        doc.ocr_mode = serde_json::from_value(task.configuration["ocrMode"].clone()).map_err(invalid_storage)?;
         if matches!(
             task.stage,
             IngestionStage::Parsing | IngestionStage::Chunking
@@ -38,7 +39,7 @@ impl KnowledgeBaseService {
                 .flatten();
             if !doc.file_name.to_ascii_lowercase().ends_with(".md")
                 && task_parser.is_none()
-                && self.parser.as_ref().map(|p| p.profile_identity())
+                && self.document_parser(&doc)?.as_ref().map(|p| p.profile_identity())
                     != Some(task.configuration["parser"].clone())
             {
                 return Err(KnowledgeBaseError::Invalid(
@@ -211,27 +212,41 @@ impl KnowledgeBaseService {
             .map_err(queue_error)?;
         // Synchronize the final staging write/publication with deletion fencing.
         // No await occurs while this synchronous gate is held.
-        let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
-        let current_task = self.queue.get(&task.id).map_err(queue_error)?;
-        if current_task.state != "RUNNING" || current_task.attempt != owned.attempt || current_task.lease_owner.as_deref() != Some(&owned.owner) { return Err(KnowledgeBaseError::Conflict); }
-        self.rag.repository_handle().persist_ingest(RagPersistIngestCommand { corpus_id: kb.id.clone(), profile_id: format!("{}_local", kb.id), source_code: source.clone(), source_version: "v1".into(), scope: RagIngestScope { scope_type: "SPACE".into(), scope_code: task.workspace_code.clone() }, source_status: "STAGING".into(), title: Some(doc.name.clone()), content_hash: hash(&source), body_hash: None, metadata: json!({"documentId":doc.id,"resourceCode":doc.resource_code,"resourceRevision":doc.resource_revision}), domain_fields: BTreeMap::new(), related_graph: None, graph_write_policy: json!({}), text_units: units, tree_nodes: vec![], warnings: vec![], workspace_code: task.workspace_code.clone(), user_code: task.user_code.clone(), agent_code: String::new() })?;
-        self.verify_embedding_space(&task.workspace_code, model, expected)?;
         let mut ready = stored.document;
-        ready.active_source_code = Some(source);
-        ready.index_revision = doc.index_revision + 1;
-        ready.chunk_count = stored.chunks.len();
-        ready.embedding_model_code = Some(model.into());
-        ready.embedding_dimension = Some(TRON_VECTOR_INDEX_DIMENSION);
-        ready.embedding_provider_model = embedded.provider_model;
-        ready.embedding_space_fingerprint = Some(expected.into());
-        ready.warnings = stored.warnings;
-        self.queue
-            .publish(
-                &owned,
-                now_ms(),
-                &serde_json::to_value(ready).map_err(invalid_storage)?,
-            )
-            .map_err(queue_error)
+        self.retain_publication_resources(&task.user_code, &task.workspace_code, &mut ready, &stored.chunks)?;
+        let cleanup = {
+            let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
+            let current_task = self.queue.get(&task.id).map_err(queue_error)?;
+            if current_task.state != "RUNNING" || current_task.attempt != owned.attempt || current_task.lease_owner.as_deref() != Some(&owned.owner) { return Err(KnowledgeBaseError::Conflict); }
+            self.rag.repository_handle().persist_ingest(RagPersistIngestCommand { corpus_id: kb.id.clone(), profile_id: format!("{}_local", kb.id), source_code: source.clone(), source_version: "v1".into(), scope: RagIngestScope { scope_type: "SPACE".into(), scope_code: task.workspace_code.clone() }, source_status: "STAGING".into(), title: Some(doc.name.clone()), content_hash: hash(&source), body_hash: None, metadata: json!({"documentId":doc.id,"resourceCode":doc.resource_code,"resourceRevision":doc.resource_revision}), domain_fields: BTreeMap::new(), related_graph: None, graph_write_policy: json!({}), text_units: units, tree_nodes: vec![], warnings: vec![], workspace_code: task.workspace_code.clone(), user_code: task.user_code.clone(), agent_code: String::new() })?;
+            self.verify_embedding_space(&task.workspace_code, model, expected)?;
+            ready.active_source_code = Some(source);
+            ready.index_revision = doc.index_revision + 1;
+            ready.chunk_count = stored.chunks.len();
+            ready.embedding_model_code = Some(model.into());
+            ready.embedding_dimension = Some(TRON_VECTOR_INDEX_DIMENSION);
+            ready.embedding_provider_model = embedded.provider_model;
+            ready.embedding_space_fingerprint = Some(expected.into());
+            ready.warnings = stored.warnings;
+            self.queue
+                .publish(
+                    &owned,
+                    now_ms(),
+                    &serde_json::to_value(ready).map_err(invalid_storage)?,
+                )
+                .map_err(queue_error)?
+        };
+        let plan = super::super::deletion::DeletionCleanupPlan {
+            document_id: task.document_id, knowledge_base_id: task.knowledge_base_id,
+            workspace_code: task.workspace_code, document_revision: task.document_revision,
+            original_resource_code: doc.resource_code, resources: vec![],
+            objects: cleanup.objects, cancellations: cleanup.cancellations,
+        };
+        // Publication clears the lease. Cleanup must outlive the ingestion lease
+        // monitor, which may stop polling this now-completed attempt at any time.
+        let service = self.clone();
+        tokio::spawn(async move { service.clean_document_deletion(plan).await; });
+        Ok(())
     }
     fn verify_embedding_space(
         &self,

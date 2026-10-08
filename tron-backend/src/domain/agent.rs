@@ -39,11 +39,13 @@ pub use kind::{AgentKind, AgentModelProtocol, AgentRuntimeKind};
 pub use management::{
     AgentManagementError, AgentRuntimeType, ExpandedDomainPersistenceMode,
     InternalAgentPolicySource, InternalAgentToolPolicy, ManagedAgentSource, ManagedAgentType,
-    ManagedSystemAgentRecord, McpAccessMode, PlatformMainAgentConfig,
+    ManagedSystemAgentRecord, McpAccessMode,
     RuntimeAdapterCapabilityRecord, SystemAgentModelRecord, SystemAgentRegistryEntry,
     SystemAgentStatus, SystemAgentSyncResult, ToolAssignmentMode, ToolAvailabilityState,
     ToolCatalogRecord, ToolDomainRecord, ToolExposureMode, ToolOperationKind,
     WorkspaceInternalAgentMcpServerAssignment, WorkspaceInternalAgentPolicy,
+    WorkspaceInternalAgentDefinition,
+    PlatformInternalAgentConfig,
     WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
 };
 pub use message::{AgentMessage, AgentMessagePart};

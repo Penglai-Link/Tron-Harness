@@ -1,39 +1,19 @@
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { downloadResourceBinary } from "@/domain/resource/api/resourceApi";
-import { useKnowledgeUser } from "../hooks/useKnowledgeLibraries";
+import { ResourceFilePreview } from "@/domain/resource/components/ResourceFilePreview";
 import type { KnowledgeDocument } from "../model/KnowledgeLibraryModel";
 
 function ResourcePreview({ workspace, resourceCode, label, alt, onOpenResource, pdf = false }: {
   workspace: string; resourceCode: string; label: string; alt: string; onOpenResource: (code: string) => void; pdf?: boolean;
 }) {
   const { t } = useTranslation("pages");
-  const user = useKnowledgeUser();
-  const resource = useQuery({
-    queryKey: ["knowledge-document-resource", user, workspace, resourceCode], gcTime: 0, retry: false,
-    queryFn: ({ signal }) => downloadResourceBinary({ workspaceCode: workspace, resourceCode }, signal),
-    enabled: Boolean(user && workspace && resourceCode),
-  });
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    setUrl("");
-    if (!resource.data) return;
-    const blob = pdf ? new Blob([resource.data.blob], { type: "application/pdf" }) : resource.data.blob;
-    const current = URL.createObjectURL(blob);
-    setUrl(current);
-    return () => URL.revokeObjectURL(current);
-  }, [resource.data, pdf]);
   return <figure className="space-y-2 rounded-lg border border-[var(--color-card-border)] p-3">
     <figcaption className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">{label}</span>
       <Button size="sm" variant="link" onClick={() => onOpenResource(resourceCode)}>{t("knowledgeLibrary.openResource")}</Button>
     </figcaption>
-    {resource.isLoading ? <p role="status">{t("knowledgeLibrary.loading")}</p> : null}
-    {resource.error ? <p role="alert" className="text-[var(--color-error)]">{resource.error.message}<Button variant="outline" size="sm" onClick={() => void resource.refetch()}>{t("knowledgeLibrary.retry")}</Button></p> : null}
-    {url ? pdf ? <iframe title={alt} src={url} className="h-80 w-full rounded border-0" /> : <img alt={alt} src={url} className="max-h-72 w-full object-contain" /> : null}
+    <ResourceFilePreview workspaceCode={workspace} resourceCode={resourceCode} fileName={alt} kind={pdf ? "PDF" : "IMAGE"} format={pdf ? "pdf" : "image"} compact />
   </figure>;
 }
 
@@ -45,7 +25,7 @@ export function KnowledgeDocumentResourcesDialog({ workspace, document, onClose 
   const images = document.parsingArtifact?.imageResourceCodes ?? [];
   function openResource(code: string) {
     onClose();
-    navigate(`/resource-management/files/detail?resourceCode=${encodeURIComponent(code)}`);
+    navigate(`/resource-management/files/detail?resourceCode=${encodeURIComponent(code)}&preview=1`);
   }
   return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
     <DialogContent closeLabel={t("knowledgeLibrary.close")} className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">

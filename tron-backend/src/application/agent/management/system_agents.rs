@@ -205,12 +205,14 @@ impl AgentManagementService {
         if normalized_agent_code.is_empty() {
             return Err(AgentManagementError::SystemAgentNotFound);
         }
-        if normalized_agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE) {
+        if let Some(definition) =
+            self.resolve_internal_agent_default(workspace_code, normalized_agent_code)?
+        {
             return Ok(ResolvedAgentRuntime {
-                agent_code: MAIN_AGENT_CODE.to_string(),
+                agent_code: definition.agent_code,
                 runtime_type: AgentRuntimeType::React,
                 command_name: None,
-                name: "Main Agent".to_string(),
+                name: definition.name,
             });
         }
         let entry = self.required_system_agent(normalized_agent_code)?;

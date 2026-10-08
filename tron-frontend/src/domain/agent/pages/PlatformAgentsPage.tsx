@@ -6,30 +6,24 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   RefreshCcw,
-  Save,
 } from "lucide-react";
 
 import {
   disablePlatformSystemAgent,
   enablePlatformSystemAgent,
-  fetchMainAgentConfig,
   fetchPlatformSystemAgents,
   rescanPlatformSystemAgents,
-  updateMainAgentConfig,
 } from "@/domain/agent/api";
 import {
   AgentPolicySwitch,
   AgentStatusBadge,
 } from "@/domain/agent/components";
 import {
-  getMainAgentConfigMock,
   listPlatformSystemAgentsMock,
   rescanPlatformSystemAgentsMock,
   setPlatformSystemAgentEnabledMock,
-  updateMainAgentConfigMock,
 } from "@/domain/agent/mock";
 import type {
-  MainAgentConfig,
   PlatformSystemAgentRecord,
 } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -38,18 +32,12 @@ import { SearchField } from "@/components/search-field";
 import { TablePagination } from "@/components/table-pagination";
 import {
   PageHeader,
-  SurfaceCard,
   useLocaleFormatters,
   useTablePagination,
 } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  TextArea,
-  TextInput,
-} from "@/components/forms";
-
+import { WorkspaceAgentsPage } from "./WorkspaceAgentsPage";
 function formatLastScanned(lastScannedAt: string | null, formatDateTime: (value: string | number | Date) => string) {
   if (!lastScannedAt) {
     return "Not scanned";
@@ -63,12 +51,8 @@ export function PlatformAgentsPage() {
   const toast = useToast();
   const { formatDateTime, formatNumber } = useLocaleFormatters();
   const dataSource = getServiceDataSource("agent");
-  const [mainAgentConfig, setMainAgentConfig] = useState<MainAgentConfig | null>(null);
-  const [draft, setDraft] = useState({ personality: "", instructions: "" });
   const [systemAgents, setSystemAgents] = useState<PlatformSystemAgentRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [rowBusyCode, setRowBusyCode] = useState("");
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
@@ -92,33 +76,11 @@ export function PlatformAgentsPage() {
     ));
   }, [searchQuery, systemAgents]);
   const pagination = useTablePagination(filteredAgents);
-  const hasDraftChanges = mainAgentConfig !== null && (
-    mainAgentConfig.personality !== draft.personality
-    || mainAgentConfig.instructions !== draft.instructions
-  );
-
   async function loadPage() {
-    setLoading(true);
     try {
-      const [config, records] = dataSource === "api"
-        ? await Promise.all([
-          fetchMainAgentConfig(),
-          fetchPlatformSystemAgents(),
-        ])
-        : await Promise.all([
-          Promise.resolve(getMainAgentConfigMock()),
-          Promise.resolve(listPlatformSystemAgentsMock()),
-        ]);
-      setMainAgentConfig(config);
-      setDraft({
-        instructions: config.instructions,
-        personality: config.personality,
-      });
-      setSystemAgents(records);
+      await refreshSystemAgents();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : pageT("errors.load", "Agent management data could not be loaded"));
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -132,29 +94,6 @@ export function PlatformAgentsPage() {
   useEffect(() => {
     void loadPage();
   }, [dataSource]);
-
-  async function handleSave() {
-    if (!hasDraftChanges || saving) {
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const updated = dataSource === "api"
-        ? await updateMainAgentConfig(draft)
-        : updateMainAgentConfigMock(draft);
-      setMainAgentConfig(updated);
-      setDraft({
-        instructions: updated.instructions,
-        personality: updated.personality,
-      });
-      toast.success(pageT("messages.saved", "Main Agent saved"));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : pageT("errors.save", "Main Agent could not be saved"));
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleScan() {
     if (scanning) {
@@ -210,47 +149,7 @@ export function PlatformAgentsPage() {
     <div className="space-y-6">
       <PageHeader title={pageT("title", "Agent Management")} />
 
-      <SurfaceCard className="space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">
-              {pageT("mainAgent.title", "Main Agent")}
-            </h2>
-          </div>
-          <div className="flex flex-col items-end gap-3">
-            <Button
-              disabled={!hasDraftChanges || saving || loading}
-              aria-busy={saving}
-              onClick={() => void handleSave()}
-            >
-              <Save size={16} aria-hidden="true" />
-              {saving ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Field label={pageT("mainAgent.personality", "Personality")}>
-            <TextInput
-              aria-label={pageT("mainAgent.personality", "Personality")}
-              placeholder={pageT("mainAgent.personalityPlaceholder", "How should the platform main agent behave?")}
-              value={draft.personality}
-              onChange={(event) => setDraft((current) => ({ ...current, personality: event.target.value }))}
-            />
-          </Field>
-          <div className="hidden lg:block" />
-          <Field label={pageT("mainAgent.instructions", "Instructions")}>
-            <TextArea
-              aria-label={pageT("mainAgent.instructions", "Instructions")}
-              className="min-h-36"
-              placeholder={pageT("mainAgent.instructionsPlaceholder", "Persistent instructions injected into the runtime main-agent path.")}
-              value={draft.instructions}
-              onChange={(event) => setDraft((current) => ({ ...current, instructions: event.target.value }))}
-            />
-          </Field>
-        </div>
-
-      </SurfaceCard>
+      <WorkspaceAgentsPage category="internal" scope="platform" />
 
       <DataTable<PlatformSystemAgentRecord>
         title={pageT("table.title", "System Agents")}

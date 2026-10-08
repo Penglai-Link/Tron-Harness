@@ -91,6 +91,165 @@ async fn workspace_create_page_and_detail_return_consensus_envelopes() {
 }
 
 #[tokio::test]
+async fn agent_role_templates_support_search_inheritance_overrides_and_disabled_filters() {
+    let (router, _) = prompt_app_with_builtins("agent-role-templates");
+    let page_path = "/api/v1/admin/platform/prompts/page";
+    let page = post_json(
+        &router,
+        page_path,
+        json!({
+            "current": 1, "size": 15, "category": "AGENT_ROLE", "enabled": true
+        }),
+    )
+    .await;
+    let records = page["data"]["records"].as_array().unwrap();
+    assert_eq!(page["data"]["total"], json!(6));
+    let expected = [
+        "ROLE_MAIN_AGENT",
+        "ROLE_EXPLORER",
+        "ROLE_PROJECT_MANAGER",
+        "ROLE_PRODUCT_MANAGER",
+        "ROLE_FULL_STACK_DEVELOPER",
+        "ROLE_TESTER",
+    ];
+    for code in expected {
+        let record = records
+            .iter()
+            .find(|record| record["promptCode"] == code)
+            .unwrap();
+        assert_eq!(record["builtIn"], true);
+        assert_eq!(record["runtimeRequired"], false);
+        assert_eq!(record["variables"], json!([]));
+        assert_eq!(record["translations"].as_array().unwrap().len(), 2);
+    }
+    for path in [page_path, "/api/v1/prompts/workspace-page"] {
+        let mut search_query = json!({
+            "current": 1, "size": 1,
+            "category": "AGENT_ROLE", "enabled": true, "search": "探索智能体"
+        });
+        if path != page_path {
+            search_query["workspaceCode"] = json!("TRON_CORE");
+        }
+        let filtered = post_json(&router, path, search_query.clone()).await;
+        assert_eq!(filtered["data"]["total"], 1);
+        assert_eq!(
+            filtered["data"]["records"][0]["promptCode"],
+            "ROLE_EXPLORER"
+        );
+        search_query["size"] = json!(15);
+        search_query["search"] = json!("持续跟进");
+        let description_search = post_json(&router, path, search_query).await;
+        assert_eq!(description_search["data"]["total"], 1);
+        assert_eq!(
+            description_search["data"]["records"][0]["promptCode"],
+            "ROLE_PROJECT_MANAGER"
+        );
+    }
+    let inherited = workspace_detail(&router, "TRON_CORE", "ROLE_EXPLORER").await;
+    assert_eq!(inherited["data"]["sourceKind"], "INHERITED");
+    let overridden = post_json(&router, "/api/v1/prompts/workspace-update", json!({
+        "workspaceCode": "TRON_CORE", "promptCode": "ROLE_EXPLORER",
+        "expectedVersion": inherited["data"]["version"], "displayName": "Workspace Explorer",
+        "promptBody": "Inspect workspace documentation.", "description": "Local exploration rules",
+        "enabled": true, "variables": []
+    })).await;
+    assert_eq!(overridden["data"]["sourceKind"], "OVERRIDE");
+    assert_eq!(overridden["data"]["category"], "AGENT_ROLE");
+    assert_eq!(
+        overridden["data"]["promptBody"],
+        "Inspect workspace documentation."
+    );
+    let platform = post_json(
+        &router,
+        "/api/v1/admin/platform/prompts/detail",
+        json!({"promptCode": "ROLE_EXPLORER"}),
+    )
+    .await;
+    assert_ne!(
+        platform["data"]["promptBody"],
+        overridden["data"]["promptBody"]
+    );
+    post_json(
+        &router,
+        "/api/v1/prompts/workspace-set-enabled",
+        json!({
+            "workspaceCode": "TRON_CORE", "promptCode": "ROLE_EXPLORER",
+            "expectedVersion": overridden["data"]["version"], "enabled": false
+        }),
+    )
+    .await;
+    let disabled = post_json(
+        &router,
+        "/api/v1/prompts/workspace-page",
+        json!({
+            "workspaceCode": "TRON_CORE", "current": 1, "size": 15,
+            "category": "AGENT_ROLE", "enabled": true
+        }),
+    )
+    .await;
+    assert_eq!(disabled["data"]["total"], 5);
+    assert!(
+        disabled["data"]["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|record| record["promptCode"] != "ROLE_EXPLORER")
+    );
+    assert_eq!(
+        post_json(
+            &router,
+            page_path,
+            json!({"current": 1, "size": 15, "category": "AGENT_ROLE", "enabled": true})
+        )
+        .await["data"]["total"],
+        6
+    );
+}
+
+#[tokio::test]
+async fn agent_role_catalog_restart_preserves_edited_and_disabled_templates() {
+    let (router, database_url) = prompt_app_with_builtins("agent-role-restart");
+    let current = post_json(
+        &router,
+        "/api/v1/admin/platform/prompts/detail",
+        json!({"promptCode": "ROLE_MAIN_AGENT"}),
+    )
+    .await;
+    post_json(
+        &router,
+        "/api/v1/admin/platform/prompts/update",
+        json!({
+            "promptCode": "ROLE_MAIN_AGENT", "expectedVersion": current["data"]["version"],
+            "displayName": "Custom Main", "promptBody": "Custom dispatch instructions.",
+            "description": "Custom main role", "enabled": false, "variables": []
+        }),
+    )
+    .await;
+    let restarted = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let detail = post_json(
+        &restarted,
+        "/api/v1/admin/platform/prompts/detail",
+        json!({"promptCode": "ROLE_MAIN_AGENT"}),
+    )
+    .await;
+    assert_eq!(
+        detail["data"]["promptBody"],
+        "Custom dispatch instructions."
+    );
+    assert_eq!(detail["data"]["enabled"], false);
+    let page = post_json(
+        &restarted,
+        "/api/v1/admin/platform/prompts/page",
+        json!({"current": 1, "size": 15, "category": "AGENT_ROLE"}),
+    )
+    .await;
+    assert_eq!(page["data"]["total"], 6);
+}
+
+#[tokio::test]
 async fn prompt_variables_require_matching_descriptions_and_supported_types() {
     let (router, _) = prompt_app("prompt-variable-metadata-contract");
     let typed_variables = Value::Array(vec![

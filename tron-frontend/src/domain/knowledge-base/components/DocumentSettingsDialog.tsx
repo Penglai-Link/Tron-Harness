@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatKnowledgeDocumentError } from "../model/knowledgeDocumentError";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import type { ChunkConfig, ChunkPreview, KnowledgeDocument, ParsingTier } from "../model/KnowledgeLibraryModel";
+import type { ChunkConfig, ChunkPreview, KnowledgeDocument, ParsingTier, OcrMode } from "../model/KnowledgeLibraryModel";
 import { previewKnowledgeDocument, updateKnowledgeDocument, getParsingCapabilities } from "../api/knowledgeBaseApi";
 import { formatDocumentLocation } from "../model/documentLocation";
 import { ImageAnalysisStatus } from "./ImageAnalysisStatus";
@@ -21,22 +21,26 @@ export function DocumentSettingsDialog({ workspace, libraryId, document, default
   const { t, i18n } = useTranslation("pages");
   const text = (key: string) => t(`knowledgeLibrary.${key}`);
   const toast = useToast();
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const active = useKnowledgeViewActive();
   const [inherit, setInherit] = useState(document.chunkConfig === null);
   const [config, setConfig] = useState(document.chunkConfig ?? defaults);
   const markdown = document.fileName.toLowerCase().endsWith(".md");
+  const pdf = /\.pdf$/i.test(document.fileName);
+  const [ocrMode, setOcrMode] = useState<OcrMode | "inherit">(document.ocrMode ?? "inherit");
   const office = /\.(docx|xlsx)$/i.test(document.fileName);
   const [tier, setTier] = useState<ParsingTier | "inherit">(document.parsingTier ?? "inherit");
   const capabilities = useQuery({ queryKey: ["kb-parsing-capabilities", workspace], queryFn: ({ signal }) => getParsingCapabilities(workspace, signal), enabled: !markdown, retry: false });
   const [preview, setPreview] = useState<ChunkPreview | null>(null);
-  const [persisted, setPersisted] = useState({ config: document.chunkConfig, tier: document.parsingTier ?? null });
+  const [persisted, setPersisted] = useState({ config: document.chunkConfig, tier: document.parsingTier ?? null, ocrMode: document.ocrMode ?? null });
   const nextConfig = inherit ? null : config;
+  const nextOcrMode = ocrMode === "inherit" ? null : ocrMode;
   const nextTier = tier === "inherit" ? null : tier;
   const configEqual = nextConfig === null || persisted.config === null
     ? nextConfig === persisted.config
     : nextConfig.mode === persisted.config.mode && nextConfig.maxChars === persisted.config.maxChars
       && nextConfig.overlapChars === persisted.config.overlapChars && nextConfig.headingDepth === persisted.config.headingDepth;
-  const dirty = !configEqual || (!markdown && nextTier !== persisted.tier);
+  const dirty = !configEqual || (!markdown && nextTier !== persisted.tier) || (pdf && nextOcrMode !== persisted.ocrMode);
   const valid = Number.isInteger(config.maxChars) && config.maxChars >= 200 && config.maxChars <= 8000
     && Number.isInteger(config.overlapChars) && config.overlapChars >= 0 && config.overlapChars <= config.maxChars / 4
     && Number.isInteger(config.headingDepth) && config.headingDepth >= 1 && config.headingDepth <= 6;
@@ -45,10 +49,10 @@ export function DocumentSettingsDialog({ workspace, libraryId, document, default
     mutationFn: async (withPreview: boolean) => {
       const changed = dirty;
       if (changed) {
-        const result = markdown ? await updateKnowledgeDocument(workspace, libraryId, document.id, nextConfig) : await updateKnowledgeDocument(workspace, libraryId, document.id, nextConfig, nextTier);
+        const result = markdown ? await updateKnowledgeDocument(workspace, libraryId, document.id, nextConfig) : await updateKnowledgeDocument(workspace, libraryId, document.id, nextConfig, nextTier, pdf ? nextOcrMode : undefined);
         if (result.error || result.status?.includes("FAILED")) { await onChanged(); throw new Error(result.error || text("indexFailed")); }
         if (!active.current) return null;
-        setPersisted({ config: nextConfig, tier: nextTier });
+        setPersisted({ config: nextConfig, tier: nextTier, ocrMode: nextOcrMode });
         await onChanged();
         if (["QUEUED", "PARSING", "CHUNKING", "EMBEDDING", "PUBLISHING"].includes(result.status)) return { preview: null, changed, processing: true };
       }
@@ -60,9 +64,14 @@ export function DocumentSettingsDialog({ workspace, libraryId, document, default
   });
 
 
+  const parameters = <div className="grid gap-4 sm:grid-cols-2">
+    <Field label={text("maxChars")} hintAriaLabel={text("maxCharsHelpLabel")} hint={text("maxCharsHelp")}><TextInput disabled={inherit || save.isPending} type="number" min={200} max={8000} step={1} value={config.maxChars} onChange={(event) => change({ maxChars: Number(event.target.value) })} /></Field>
+    <Field label={text("overlapChars")} hintAriaLabel={text("overlapCharsHelpLabel")} hint={text("overlapCharsHelp")}><TextInput disabled={inherit || save.isPending} type="number" min={0} max={Math.floor(config.maxChars / 4)} step={1} value={config.overlapChars} onChange={(event) => change({ overlapChars: Number(event.target.value) })} /></Field>
+  </div>;
+
   return <Dialog open onOpenChange={(open) => { if (!open && !save.isPending) onClose(); }}>
-    <DialogContent closeLabel={text("close")} aria-describedby={undefined} className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader><DialogTitle>{document.fileName}</DialogTitle></DialogHeader>
+    <DialogContent initialFocus={titleRef} closeLabel={text("close")} aria-describedby={undefined} className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader><DialogTitle ref={titleRef} tabIndex={-1} className="outline-none">{document.fileName}</DialogTitle></DialogHeader>
       {!markdown ? <Field label={text("parsingQuality")} hintAriaLabel={text("parsingQualityHelp")} hint={<div className="max-w-sm space-y-2 text-left">{["inherit", "flash", "basic", "standard", "advanced"].map((value) => <p key={value}>{text(`parsingTierHelp.${value}`)}</p>)}</div>}><SelectInput aria-label={text("parsingQuality")} value={tier} disabled={save.isPending || !capabilities.data} onValueChange={(value) => { setTier(value as ParsingTier | "inherit"); setPreview(null); }}>
         <SelectItem value="inherit">{t("knowledgeLibrary.inheritParsing", { tier: text(`parsingTiers.${office ? "flash" : capabilities.data?.defaultTier ?? "standard"}`) })}</SelectItem>
         {(capabilities.data?.availableTiers ?? []).filter((value) => !office || value === "flash").map((value) => <SelectItem key={value} value={value}>{text(`parsingTiers.${value}`)}</SelectItem>)}
@@ -70,14 +79,20 @@ export function DocumentSettingsDialog({ workspace, libraryId, document, default
       {capabilities.error ? <p role="alert" className="text-[var(--color-error)]">{capabilities.error.message}</p> : null}
       {document.parsingArtifact ? <p className="text-xs">{t("knowledgeLibrary.actualParsing", { tier: text(`parsingTiers.${document.parsingArtifact.effectiveTier}`), version: document.parsingArtifact.parserVersion, count: document.parsingArtifact.imageResourceCodes.length })}</p> : null}
       </Field> : null}
+      {pdf ? <Field label={text("ocrMode")} hintAriaLabel={text("ocrModeHelpLabel")} hint={<div className="max-w-sm space-y-2 text-left">{["inherit", "Auto", "Ocr", "Text"].map((value) => <p key={value}>{text(`ocrModeHelp.${value}`)}</p>)}</div>}>
+        <SelectInput aria-label={text("ocrMode")} value={ocrMode} disabled={save.isPending || !capabilities.data} onValueChange={(value) => { setOcrMode(value as OcrMode | "inherit"); setPreview(null); }}>
+          <SelectItem value="inherit">{t("knowledgeLibrary.inheritOcrMode", { mode: capabilities.data ? text(`ocrModes.${capabilities.data.defaultOcrMode}`) : "—" })}</SelectItem>
+          {(["Auto", "Ocr", "Text"] as const).map((value) => <SelectItem key={value} value={value}>{text(`ocrModes.${value}`)}</SelectItem>)}
+        </SelectInput>
+      </Field> : null}
       <label className="flex items-center justify-between gap-4"><span>{text("inherit")}</span><Switch checked={inherit} disabled={save.isPending} onCheckedChange={(value) => { setInherit(value); setPreview(null); }} /></label>
-      <fieldset disabled={inherit || save.isPending} className="grid gap-4 disabled:opacity-60">
-        <Field label={text("mode")}><SelectInput value={config.mode} onValueChange={(value) => change({ mode: value as ChunkConfig["mode"] })}>{(["AUTO", "HEADING", "FIXED"] as const).map((mode) => <SelectItem key={mode} value={mode}>{text(`modes.${mode}`)}</SelectItem>)}</SelectInput></Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={text("maxChars")}><TextInput type="number" min={200} max={8000} step={1} value={config.maxChars} onChange={(event) => change({ maxChars: Number(event.target.value) })} /></Field>
-          <Field label={text("overlapChars")}><TextInput type="number" min={0} max={Math.floor(config.maxChars / 4)} step={1} value={config.overlapChars} onChange={(event) => change({ overlapChars: Number(event.target.value) })} /></Field>
-        </div>
-        {config.mode === "HEADING" ? <Field label={text("headingDepth")}><TextInput type="number" min={1} max={6} step={1} value={config.headingDepth} onChange={(event) => change({ headingDepth: Number(event.target.value) })} /></Field> : null}
+      <fieldset className="grid gap-4">
+        <Field label={text("mode")} hintAriaLabel={text("modeHelpLabel")} hint={<div className="max-w-sm space-y-2 text-left">{["AUTO", "HEADING", "FIXED"].map((mode) => <p key={mode}>{text(`modeHelp.${mode}`)}</p>)}</div>}><SelectInput disabled={inherit || save.isPending} aria-label={text("mode")} value={config.mode} onValueChange={(value) => change({ mode: value as ChunkConfig["mode"] })}>{(["AUTO", "HEADING", "FIXED"] as const).map((mode) => <SelectItem key={mode} value={mode}>{text(`modes.${mode}`)}</SelectItem>)}</SelectInput></Field>
+        {config.mode === "AUTO" ? <details className="text-sm">
+          <summary className="cursor-pointer text-[var(--color-on-surface-variant)]">{text("chunkParameters")}</summary>
+          <div className="mt-4">{parameters}</div>
+        </details> : parameters}
+        {config.mode === "HEADING" ? <Field label={text("headingDepth")}><TextInput disabled={inherit || save.isPending} type="number" min={1} max={6} step={1} value={config.headingDepth} onChange={(event) => change({ headingDepth: Number(event.target.value) })} /></Field> : null}
       </fieldset>
       {inherit ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("knowledgeLibrary.defaults", { max: defaults.maxChars, overlap: defaults.overlapChars })}</p> : null}
       {!inherit && !valid ? <p role="alert" className="text-[var(--color-error)]">{text("invalidConfig")}</p> : null}
@@ -90,7 +105,7 @@ export function DocumentSettingsDialog({ workspace, libraryId, document, default
       <DialogFooter>
         <Button variant="outline" disabled={save.isPending} onClick={onClose}>{text("close")}</Button>
         <Button variant="outline" disabled={save.isPending || (!inherit && !valid) || (!markdown && !capabilities.data)} onClick={() => save.mutate(true)}>{text(dirty ? "savePreview" : "previewAction")}</Button>
-        <Button disabled={!dirty || save.isPending || (!inherit && !valid)} onClick={() => save.mutate(false)}>{text(save.isPending ? "saving" : "save")}</Button>
+        <Button disabled={!dirty || save.isPending || (!inherit && !valid) || (!markdown && !capabilities.data)} onClick={() => save.mutate(false)}>{text(save.isPending ? "saving" : "save")}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>;

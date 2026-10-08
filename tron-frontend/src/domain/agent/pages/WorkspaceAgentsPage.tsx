@@ -4,6 +4,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronDown } from "lucide-react";
 
 import {
   fetchToolDomains,
@@ -12,14 +13,14 @@ import {
   listTools,
   patchWorkspaceInternalAgentMcpPolicy,
   patchWorkspaceInternalAgentPolicy,
+  patchWorkspaceInternalAgentDefinition,
+  resetWorkspaceInternalAgentPolicy,
   updateWorkspaceInternalAgentMcpServerAssignments,
   updateWorkspaceInternalAgentToolAssignments,
 } from "@/domain/agent/api";
 import {
   AgentPolicySwitch,
   AgentStatusBadge,
-  InternalAgentMcpServerSelector,
-  InternalAgentToolSelector,
 } from "@/domain/agent/components";
 import {
   translateInheritedFrom,
@@ -33,6 +34,8 @@ import {
   listWorkspaceInternalAgentsMock,
   patchWorkspaceInternalAgentMcpPolicyMock,
   patchWorkspaceInternalAgentPolicyMock,
+  patchWorkspaceInternalAgentDefinitionMock,
+  resetWorkspaceInternalAgentPolicyMock,
   updateWorkspaceInternalAgentMcpServerAssignmentsMock,
   updateWorkspaceInternalAgentToolAssignmentsMock,
   listWorkspaceSystemAgentsMock,
@@ -52,12 +55,20 @@ import type {
 } from "@/domain/agent/model";
 import {
   fetchWorkspaceMcpServers,
+  fetchPlatformMcpServers,
+  listPlatformMcpServersMock,
   listWorkspaceMcpServersMock,
 } from "@/domain/mcp";
 import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { DataTable } from "@/components/data-table";
 import { Field, SelectInput, TextInput } from "@/components/forms";
+import { CreateInternalAgentDialog } from "../components/CreateInternalAgentDialog";
+import { InternalAgentKnowledgeField } from "../components/InternalAgentKnowledgeField";
+import { AgentRolePromptField } from "../components/AgentRolePromptField";
+import { InternalAgentAssignmentDialog, type InternalAgentAssignmentKind } from "../components/InternalAgentAssignmentDialog";
+import { PLATFORM_INTERNAL_AGENT_SCOPE, notifyInternalAgentRegistryChanged } from "../model";
+import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { SearchField } from "@/components/search-field";
 import { TablePagination } from "@/components/table-pagination";
@@ -71,6 +82,8 @@ import { useToast } from "@/components/ui/toast";
 import { SelectItem } from "@/components/ui/select";
 
 interface InternalAgentDraft {
+  name: string;
+  rolePrompt: string;
   expandedDomainPersistenceMode: WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"];
   maxSteps: number;
   maxToolCalls: number;
@@ -122,6 +135,8 @@ function hasSameServerCodes(left: string[], right: string[]) {
 
 function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDraft {
   return {
+    name: record.name,
+    rolePrompt: record.rolePrompt,
     expandedDomainPersistenceMode: record.expandedDomainPersistenceMode,
     maxSteps: record.maxSteps,
     maxToolCalls: record.maxToolCalls,
@@ -136,6 +151,9 @@ function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDra
 
 function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAgentDraft) {
   return (
+    record.name !== draft.name
+    || record.rolePrompt !== draft.rolePrompt
+    ||
     record.toolAssignmentMode !== draft.toolAssignmentMode
     || record.toolExposureMode !== draft.toolExposureMode
     || record.expandedDomainPersistenceMode !== draft.expandedDomainPersistenceMode
@@ -169,16 +187,17 @@ export type WorkspaceAgentCategory = "internal" | "system";
 
 interface WorkspaceAgentsPageProps {
   category: WorkspaceAgentCategory;
+  scope?: "platform" | "workspace";
 }
 
-export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
+export function WorkspaceAgentsPage({ category, scope = "workspace" }: WorkspaceAgentsPageProps) {
   const { t } = useTranslation(["pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("agent");
   const mcpDataSource = getServiceDataSource("mcp");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode =
-    selectedSecondarySpace?.workspaceCode
+    scope === "platform" ? PLATFORM_INTERNAL_AGENT_SCOPE : selectedSecondarySpace?.workspaceCode
     ?? selectedPrimarySpace?.workspaceCode
     ?? "";
   const activeWorkspaceLabel =
@@ -186,6 +205,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     ?? selectedPrimarySpace?.name
     ?? t("pages:workspaceAgents.workspace.unselected", { defaultValue: "No workspace selected" });
 
+  const [assignmentDialog, setAssignmentDialog] = useState<{ agentCode: string; workspaceCode: string; kind: InternalAgentAssignmentKind } | null>(null);
   const [internalAgents, setInternalAgents] = useState<WorkspaceInternalAgentRecord[]>([]);
   const [toolDomains, setToolDomains] = useState<ToolCatalogDomainRecord[]>([]);
   const [tools, setTools] = useState<PlatformToolRecord[]>([]);
@@ -212,7 +232,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     t(`pages:workspaceAgents.table.${key}`, { defaultValue, ...options })
   );
   const internalAgentsPage = category === "internal";
-  const pageTitle = internalAgentsPage
+  const pageTitle = scope === "platform" ? internalPageT("inheritance.title", "Global internal agents") : internalAgentsPage
     ? internalPageT("title", "Internal Agents")
     : systemTableT("title", "Inherited System Agents");
 
@@ -321,7 +341,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
 
   useEffect(() => {
     void refreshWorkspaceData();
-  }, [activeWorkspaceCode, category, dataSource, mcpDataSource]);
+  }, [activeWorkspaceCode, category, dataSource, mcpDataSource, scope]);
 
   useEffect(() => (
     () => {
@@ -442,76 +462,8 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     } as Partial<InternalAgentDraft>);
   }
 
-  function handleToolSelection(agentCode: string, toolCode: string, checked: boolean) {
-    const draft = internalDraftsRef.current[agentCode];
-    if (!draft) return;
-
-    const next = new Set(draft.selectedToolCodes);
-    if (checked) {
-      next.add(toolCode);
-    } else {
-      next.delete(toolCode);
-    }
-
-    setInternalDraft(agentCode, {
-      selectedToolCodes: [...next],
-      toolAssignmentMode: "selected_tools",
-    });
-  }
-
-  function handleBulkToolSelection(agentCode: string, toolCodes: string[], checked: boolean) {
-    const draft = internalDraftsRef.current[agentCode];
-    if (!draft || toolCodes.length === 0) return;
-
-    const next = new Set(draft.selectedToolCodes);
-    toolCodes.forEach((toolCode) => {
-      if (checked) {
-        next.add(toolCode);
-      } else {
-        next.delete(toolCode);
-      }
-    });
-
-    setInternalDraft(agentCode, {
-      selectedToolCodes: [...next],
-      toolAssignmentMode: "selected_tools",
-    });
-  }
-
-  function handleServerSelection(agentCode: string, serverCode: string, checked: boolean) {
-    const draft = internalDraftsRef.current[agentCode];
-    if (!draft) return;
-
-    const next = new Set(draft.selectedServerCodes);
-    if (checked) {
-      next.add(serverCode);
-    } else {
-      next.delete(serverCode);
-    }
-
-    setInternalDraft(agentCode, {
-      mcpAccessMode: "selected_servers",
-      selectedServerCodes: [...next],
-    });
-  }
-
-  function handleBulkServerSelection(agentCode: string, serverCodes: string[], checked: boolean) {
-    const draft = internalDraftsRef.current[agentCode];
-    if (!draft || serverCodes.length === 0) return;
-
-    const next = new Set(draft.selectedServerCodes);
-    serverCodes.forEach((serverCode) => {
-      if (checked) {
-        next.add(serverCode);
-      } else {
-        next.delete(serverCode);
-      }
-    });
-
-    setInternalDraft(agentCode, {
-      mcpAccessMode: "selected_servers",
-      selectedServerCodes: [...next],
-    });
+  function openAssignmentDialog(agentCode: string, kind: InternalAgentAssignmentKind) {
+    setAssignmentDialog({ agentCode, kind, workspaceCode: activeWorkspaceCode });
   }
 
   async function refreshWorkspaceData() {
@@ -543,9 +495,15 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
           dataSource === "api"
             ? listTools()
             : Promise.resolve(listToolsMock()),
-          mcpDataSource === "api"
-            ? fetchWorkspaceMcpServers(activeWorkspaceCode)
-            : Promise.resolve(listWorkspaceMcpServersMock(activeWorkspaceCode)),
+          scope === "platform"
+            ? (mcpDataSource === "api" ? fetchPlatformMcpServers() : Promise.resolve(listPlatformMcpServersMock()))
+              .then((servers) => servers.map((server): WorkspaceMcpServerRecord => ({ ...server,
+                platformEnabled: server.enabled, effectiveEnabled: server.enabled,
+                source: "platform", workspaceOverrideDisabled: false,
+              })))
+            : mcpDataSource === "api"
+              ? fetchWorkspaceMcpServers(activeWorkspaceCode)
+              : Promise.resolve(listWorkspaceMcpServersMock(activeWorkspaceCode)),
         ]);
 
         setInternalAgents(nextInternalAgents);
@@ -565,6 +523,16 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function refreshCreatedAgent() {
+    const records = dataSource === "api"
+      ? await fetchWorkspaceInternalAgents(activeWorkspaceCode)
+      : listWorkspaceInternalAgentsMock(activeWorkspaceCode);
+    setInternalAgents(records);
+    setInternalDrafts((current) => Object.fromEntries(records.map((record) => [record.agentCode,
+      current[record.agentCode] ?? draftFromRecord(record),
+    ])));
   }
 
   async function refreshInternalAgent(agentCode: string) {
@@ -631,6 +599,17 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     setBusy(`internal-save:${agentCode}`, true);
     setInternalSaveState(agentCode, "saving");
     try {
+      if (row.name !== draft.name || row.rolePrompt !== draft.rolePrompt) {
+        const definition = {
+          ...(row.name !== draft.name ? { name: draft.name } : {}),
+          ...(row.rolePrompt !== draft.rolePrompt ? { rolePrompt: draft.rolePrompt } : {}),
+        };
+        if (dataSource === "api") {
+          await patchWorkspaceInternalAgentDefinition(activeWorkspaceCode, agentCode, definition);
+        } else {
+          patchWorkspaceInternalAgentDefinitionMock(activeWorkspaceCode, agentCode, definition);
+        }
+      }
       // Persist the visible selection before changing its policy mode. The all-tools
       // response is an effective list, so it may differ from stored assignments.
       if (shouldSaveTools) {
@@ -662,6 +641,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
         }
       }
       await refreshInternalAgent(agentCode);
+      notifyInternalAgentRegistryChanged();
       setInternalSaveState(agentCode, "saved");
       internalSaveFlashTimersRef.current[agentCode] = window.setTimeout(() => {
         setInternalSaveState(agentCode, "idle");
@@ -673,6 +653,23 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     } finally {
       setBusy(`internal-save:${agentCode}`, false);
     }
+  }
+
+  async function handleRestoreInheritance(agentCode: string) {
+    clearInternalSaveTimer(agentCode);
+    setBusy(`internal-save:${agentCode}`, true);
+    try {
+      if (dataSource === "api") {
+        await resetWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode);
+      } else {
+        resetWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode);
+      }
+      await refreshInternalAgent(agentCode);
+      notifyInternalAgentRegistryChanged();
+      setInternalSaveState(agentCode, "idle");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : internalPageT("errors.reset", "Internal policy reset failed"));
+    } finally { setBusy(`internal-save:${agentCode}`, false); }
   }
 
   async function handleToggleSystemAgent(row: WorkspaceSystemAgentRecord) {
@@ -724,7 +721,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={pageTitle} />
+      <PageHeader title={pageTitle} actions={internalAgentsPage ? <CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} onCreated={refreshCreatedAgent} /> : undefined} />
 
       {internalAgentsPage ? (
         <SurfaceCard className="space-y-3 p-4">
@@ -765,6 +762,12 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
                   </p>
                 </div>
                 <div className="min-h-5 text-right text-xs">
+                  <p className="text-[var(--color-on-surface-variant)]">{scope === "platform"
+                    ? internalPageT("inheritance.platform", "Platform definition")
+                    : !agent.platformDefined ? internalPageT("inheritance.local", "Workspace definition")
+                      : agent.source === "workspace_override" ? internalPageT("inheritance.override", "Workspace override")
+                        : internalPageT("inheritance.inherited", "Inherited from platform")}</p>
+                  {scope !== "platform" && agent.platformDefined && agent.source === "workspace_override" ? <Button variant="outline" size="sm" disabled={internalBusy} onClick={() => void handleRestoreInheritance(agent.agentCode)}>{internalPageT("inheritance.restore", "Restore inheritance")}</Button> : null}
                   {statusLabel ? (
                     <p className={statusClassName}>
                       {statusLabel}
@@ -773,13 +776,27 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
                 </div>
               </div>
 
+              <div className="mt-3 space-y-3">
+                <Field label={internalPageT("definition.name", "Name")}>
+                  <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={internalBusy} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
+                </Field>
+                <AgentRolePromptField key={`${activeWorkspaceCode}:${agent.agentCode}`} workspaceCode={activeWorkspaceCode} disabled={internalBusy} value={draft.rolePrompt} onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })} />
+              </div>
+
               <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                <Field label={fieldLabel("mcpAccessMode", "MCP access mode")}>
+                <Field className="w-full" label={fieldLabel("mcpAccessMode", "MCP access mode")}
+                  actions={draft.mcpAccessMode === "selected_servers" ? (
+                    <Button type="button" size="sm" variant="outline" disabled={internalBusy} onClick={() => openAssignmentDialog(agent.agentCode, "mcp")}>
+                      {internalPageT("assignmentDialog.editServers", "Choose servers ({{count}})", { count: draft.selectedServerCodes.length })}
+                    </Button>
+                  ) : undefined}>
+
                   <SelectInput
                     disabled={internalBusy}
                     value={draft.mcpAccessMode}
                     onValueChange={(event) => {
-                      setInternalDraft(agent.agentCode, {
+                      if (event === "selected_servers") openAssignmentDialog(agent.agentCode, "mcp");
+                      else setInternalDraft(agent.agentCode, {
                         mcpAccessMode: event as WorkspaceInternalAgentRecord["mcpAccessMode"],
                       });
                     }}
@@ -795,12 +812,19 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
                     </SelectItem>
                   </SelectInput>
                 </Field>
-                <Field label={fieldLabel("toolAssignmentMode", "Tool assignment mode")}>
+                <Field className="w-full" label={fieldLabel("toolAssignmentMode", "Tool assignment mode")}
+                  actions={draft.toolAssignmentMode === "selected_tools" ? (
+                    <Button type="button" size="sm" variant="outline" disabled={internalBusy} onClick={() => openAssignmentDialog(agent.agentCode, "tools")}>
+                      {internalPageT("assignmentDialog.editTools", "Choose tools ({{count}})", { count: draft.selectedToolCodes.length })}
+                    </Button>
+                  ) : undefined}>
+
                   <SelectInput
                     disabled={internalBusy}
                     value={draft.toolAssignmentMode}
                     onValueChange={(event) => {
-                      setInternalDraft(agent.agentCode, {
+                      if (event === "selected_tools") openAssignmentDialog(agent.agentCode, "tools");
+                      else setInternalDraft(agent.agentCode, {
                         toolAssignmentMode: event as WorkspaceInternalAgentRecord["toolAssignmentMode"],
                       });
                     }}
@@ -813,109 +837,110 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
                     </SelectItem>
                   </SelectInput>
                 </Field>
-                <Field label={fieldLabel("toolExposureMode", "Tool exposure mode", "end")}>
-                  <SelectInput
-                    disabled={internalBusy}
-                    value={draft.toolExposureMode}
-                    onValueChange={(event) => {
-                      setInternalDraft(agent.agentCode, {
-                        toolExposureMode: event as WorkspaceInternalAgentRecord["toolExposureMode"],
-                      });
-                    }}
-                  >
-                    <SelectItem value="direct_list">
-                      {internalPageT("modes.directList", "Direct list")}
-                    </SelectItem>
-                    <SelectItem value="domain_discovery">
-                      {internalPageT("modes.domainDiscovery", "Domain discovery")}
-                    </SelectItem>
-                  </SelectInput>
-                </Field>
-                <Field label={fieldLabel("expandedDomainPersistenceMode", "Expanded domain persistence mode")}>
-                  <SelectInput
-                    disabled={internalBusy}
-                    value={draft.expandedDomainPersistenceMode}
-                    onValueChange={(event) => {
-                      setInternalDraft(agent.agentCode, {
-                        expandedDomainPersistenceMode:
-                          event as WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"],
-                      });
-                    }}
-                  >
-                    <SelectItem value="sticky_expanded">
-                      {internalPageT("modes.stickyExpanded", "Sticky expanded")}
-                    </SelectItem>
-                    <SelectItem value="ephemeral_expanded">
-                      {internalPageT("modes.ephemeralExpanded", "Ephemeral expanded")}
-                    </SelectItem>
-                  </SelectInput>
-                </Field>
-                <Field label={fieldLabel("maxSteps", "Max steps")}>
-                  <TextInput
-                    aria-label={internalPageT("labels.maxSteps", "Max steps")}
-                    disabled={internalBusy}
-                    min={1}
-                    step={1}
-                    type="number"
-                    value={draft.maxSteps}
-                    onChange={(event) => {
-                      updateLimitDraft(agent.agentCode, "maxSteps", event.currentTarget.valueAsNumber);
-                    }}
-                  />
-                </Field>
-                <Field label={fieldLabel("maxToolCalls", "Max tool calls")}>
-                  <TextInput
-                    aria-label={internalPageT("labels.maxToolCalls", "Max total tool calls")}
-                    disabled={internalBusy}
-                    min={1}
-                    step={1}
-                    type="number"
-                    value={draft.maxToolCalls}
-                    onChange={(event) => {
-                      updateLimitDraft(agent.agentCode, "maxToolCalls", event.currentTarget.valueAsNumber);
-                    }}
-                  />
-                </Field>
-                <Field label={fieldLabel("maxParallelToolCalls", "Max parallel tool calls", "end")}>
-                  <TextInput
-                    aria-label={internalPageT("labels.maxParallelToolCalls", "Max parallel tool calls")}
-                    disabled={internalBusy}
-                    min={1}
-                    step={1}
-                    type="number"
-                    value={draft.maxParallelToolCalls}
-                    onChange={(event) => {
-                      updateLimitDraft(agent.agentCode, "maxParallelToolCalls", event.currentTarget.valueAsNumber);
-                    }}
-                  />
-                </Field>
+                {scope === "workspace" ? <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} workspaceCode={activeWorkspaceCode} agentCode={agent.agentCode} agentName={draft.name} disabled={internalBusy} /> : null}
               </div>
 
-              {draft.mcpAccessMode === "selected_servers" ? (
-                <InternalAgentMcpServerSelector
-                  busy={internalBusy}
-                  selectedServerCodes={draft.selectedServerCodes}
-                  servers={workspaceMcpServers}
-                  onSetServersChecked={(serverCodes, checked) => {
-                    handleBulkServerSelection(agent.agentCode, serverCodes, checked);
-                  }}
-                  onToggleServer={(serverCode, checked) => {
-                    handleServerSelection(agent.agentCode, serverCode, checked);
-                  }}
-                />
-              ) : null}
+              <details className="group mt-3 border-t border-[var(--color-outline-variant)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-medium marker:hidden [&::-webkit-details-marker]:hidden">
+                  {internalPageT("advancedSettings", "Advanced settings")}
+                  <ChevronDown aria-hidden="true" size={16} className="shrink-0 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <Field label={fieldLabel("toolExposureMode", "Tool exposure mode", "end")}>
+                    <SelectInput
+                      disabled={internalBusy}
+                      value={draft.toolExposureMode}
+                      onValueChange={(event) => {
+                        setInternalDraft(agent.agentCode, {
+                          toolExposureMode: event as WorkspaceInternalAgentRecord["toolExposureMode"],
+                        });
+                      }}
+                    >
+                      <SelectItem value="direct_list">
+                        {internalPageT("modes.directList", "Direct list")}
+                      </SelectItem>
+                      <SelectItem value="domain_discovery">
+                        {internalPageT("modes.domainDiscovery", "Domain discovery")}
+                      </SelectItem>
+                    </SelectInput>
+                  </Field>
+                  <Field label={fieldLabel("expandedDomainPersistenceMode", "Expanded domain persistence mode")}>
+                    <SelectInput
+                      disabled={internalBusy}
+                      value={draft.expandedDomainPersistenceMode}
+                      onValueChange={(event) => {
+                        setInternalDraft(agent.agentCode, {
+                          expandedDomainPersistenceMode:
+                            event as WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"],
+                        });
+                      }}
+                    >
+                      <SelectItem value="sticky_expanded">
+                        {internalPageT("modes.stickyExpanded", "Sticky expanded")}
+                      </SelectItem>
+                      <SelectItem value="ephemeral_expanded">
+                        {internalPageT("modes.ephemeralExpanded", "Ephemeral expanded")}
+                      </SelectItem>
+                    </SelectInput>
+                  </Field>
+                  <Field label={fieldLabel("maxSteps", "Max steps")}>
+                    <TextInput
+                      aria-label={internalPageT("labels.maxSteps", "Max steps")}
+                      disabled={internalBusy}
+                      min={1}
+                      step={1}
+                      type="number"
+                      value={draft.maxSteps}
+                      onChange={(event) => {
+                        updateLimitDraft(agent.agentCode, "maxSteps", event.currentTarget.valueAsNumber);
+                      }}
+                    />
+                  </Field>
+                  <Field label={fieldLabel("maxToolCalls", "Max tool calls")}>
+                    <TextInput
+                      aria-label={internalPageT("labels.maxToolCalls", "Max total tool calls")}
+                      disabled={internalBusy}
+                      min={1}
+                      step={1}
+                      type="number"
+                      value={draft.maxToolCalls}
+                      onChange={(event) => {
+                        updateLimitDraft(agent.agentCode, "maxToolCalls", event.currentTarget.valueAsNumber);
+                      }}
+                    />
+                  </Field>
+                  <Field label={fieldLabel("maxParallelToolCalls", "Max parallel tool calls", "end")}>
+                    <TextInput
+                      aria-label={internalPageT("labels.maxParallelToolCalls", "Max parallel tool calls")}
+                      disabled={internalBusy}
+                      min={1}
+                      step={1}
+                      type="number"
+                      value={draft.maxParallelToolCalls}
+                      onChange={(event) => {
+                        updateLimitDraft(agent.agentCode, "maxParallelToolCalls", event.currentTarget.valueAsNumber);
+                      }}
+                    />
+                  </Field>
+                </div>
+              </details>
 
-              {draft.toolAssignmentMode === "selected_tools" ? (
-                <InternalAgentToolSelector
+              {assignmentDialog?.workspaceCode === activeWorkspaceCode && assignmentDialog.agentCode === agent.agentCode ? (
+                <InternalAgentAssignmentDialog
+                  key={`${activeWorkspaceCode}:${agent.agentCode}:${assignmentDialog.kind}`}
+                  kind={assignmentDialog.kind}
+                  agentName={draft.name}
                   busy={internalBusy}
-                  selectedToolCodes={draft.selectedToolCodes}
-                  toolDomains={toolDomains}
+                  initialSelectedCodes={assignmentDialog.kind === "mcp" ? draft.selectedServerCodes : draft.selectedToolCodes}
+                  servers={workspaceMcpServers}
                   tools={tools}
-                  onSetToolsChecked={(toolCodes, checked) => {
-                    handleBulkToolSelection(agent.agentCode, toolCodes, checked);
-                  }}
-                  onToggleTool={(toolCode, checked) => {
-                    handleToolSelection(agent.agentCode, toolCode, checked);
+                  toolDomains={toolDomains}
+                  onClose={() => setAssignmentDialog(null)}
+                  onConfirm={(codes) => {
+                    setInternalDraft(agent.agentCode, assignmentDialog.kind === "mcp"
+                      ? { mcpAccessMode: "selected_servers", selectedServerCodes: codes }
+                      : { toolAssignmentMode: "selected_tools", selectedToolCodes: codes });
+                    setAssignmentDialog(null);
                   }}
                 />
               ) : null}

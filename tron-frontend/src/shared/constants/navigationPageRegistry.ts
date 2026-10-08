@@ -4,7 +4,6 @@ export const navigationPageRegistry: Record<string, string> = {
   "agents.system": "/agents/system",
   "apps.index": "/apps",
   "automations.index": "/automations",
-  "chats.index": "/chats",
   "knowledgeBase.index": "/knowledge-base",
   "knowledgeGraph.index": "/knowledge-graph",
   "mcpServers.index": "/mcp-servers",

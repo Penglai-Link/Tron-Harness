@@ -25,10 +25,22 @@ impl ParsingTier {
         }
     }
 }
+/// Document-level PDF text recognition; wire names belong to the transport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OcrMode { Auto, Text, Ocr }
+impl OcrMode {
+    pub fn as_str(self) -> &'static str {
+        match self { Self::Auto => "auto", Self::Text => "txt", Self::Ocr => "ocr" }
+    }
+    pub fn from_wire(value: &str) -> Option<Self> {
+        match value { "auto" => Some(Self::Auto), "txt" => Some(Self::Text), "ocr" => Some(Self::Ocr), _ => None }
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsingCapabilities {
     pub default_tier: ParsingTier,
+    pub default_ocr_mode: OcrMode,
     pub available_tiers: Vec<ParsingTier>,
     pub parser_version: String,
     pub office_tier: ParsingTier,
@@ -68,6 +80,9 @@ pub trait KnowledgeDocumentParser: Send + Sync {
         Ok(None)
     }
     fn default_tier(&self) -> ParsingTier;
+    fn with_ocr_mode(&self, _mode: OcrMode) -> Result<std::sync::Arc<dyn KnowledgeDocumentParser>, KnowledgeBaseError> {
+        Err(KnowledgeBaseError::Invalid("解析服务不支持文档文字识别方式覆盖".into()))
+    }
     fn profile_identity(&self) -> Value {
         serde_json::json!({})
     }
@@ -128,6 +143,9 @@ pub struct ParsingArtifact {
     pub parser_version: String,
     pub vendor_job_id: String,
     pub image_resource_codes: Vec<String>,
+    /// Current Office-rendered preview, retained with this parse generation.
+    #[serde(default)]
+    pub preview_resource_code: Option<String>,
     #[serde(default)]
     pub fidelity_checked: bool,
     #[serde(default)]

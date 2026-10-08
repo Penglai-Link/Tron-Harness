@@ -19,7 +19,13 @@ impl FrameworkHost {
         .await
         .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?;
         let mut lifecycle = host_run::ProductLifecycle::start(&harness, &context)?;
-        let agent = self.agent().await.map_err(map_error)?;
+        let agent = if let Some(code) = context.agent_code.as_deref() {
+            self.internal_agent(&context.workspace_code, code)
+                .await
+                .map_err(map_error)?
+        } else {
+            self.agent().await.map_err(map_error)?.clone()
+        };
         let session = context
             .conversation_code
             .clone()
@@ -89,7 +95,7 @@ impl FrameworkHost {
             .await
             .map_err(|e| map_error(e.into()))?
             .transaction(async {
-                host_interactions::apply_answers(agent, &session, &answers, &mut request)
+                host_interactions::apply_answers(&agent, &session, &answers, &mut request)
                     .await
                     .map_err(|e| fw::StateError::Backend(e.to_string()))
             })
@@ -155,10 +161,12 @@ impl FrameworkHost {
             run_code: context.run_code.clone(),
             app_code: context.execution_scope.app_code.clone(),
             task_code: context.execution_scope.task_code.clone(),
-            agent_code: context
-                .short_term_memory
-                .as_ref()
-                .and_then(|memory| memory.agent_code.clone()),
+            agent_code: context.agent_code.clone().or_else(|| {
+                context
+                    .short_term_memory
+                    .as_ref()
+                    .and_then(|memory| memory.agent_code.clone())
+            }),
         }
         .attach(&mut request)
         .map_err(map_error)?;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -14,11 +14,12 @@ export function KnowledgeGrantsDialog({ workspace, libraryId, grantedCodes, onCl
   const { t } = useTranslation("pages");
   const text = (key: string) => t(`knowledgeLibrary.${key}`);
   const toast = useToast();
+  const queryClient = useQueryClient();
   const active = useKnowledgeViewActive();
   const agents = useKnowledgeAgents(workspace, true);
   const [selected, setSelected] = useState([...grantedCodes]);
   const save = useMutation({ mutationFn: () => setKnowledgeLibraryGrants(workspace, libraryId, selected),
-    onSuccess: async () => { if (!active.current) return; await onChanged(); if (!active.current) return; toast.success(text("saved")); onClose(); },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["knowledge-agent-libraries"] }); if (!active.current) return; await onChanged(); if (!active.current) return; toast.success(text("saved")); onClose(); },
     onError: (error) => { if (active.current) toast.error(error.message); },
   });
   const missing = selected.filter((code) => !agents.data?.some((agent) => agent.agentCode === code));

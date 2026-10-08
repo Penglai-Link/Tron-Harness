@@ -234,6 +234,10 @@ pub(crate) fn resolve_chat_agent_runtime(
                 )))
             }
             crate::domain::agent::AgentManagementError::InternalAgentNotFound
+            | crate::domain::agent::AgentManagementError::InternalAgentCodeInvalid
+            | crate::domain::agent::AgentManagementError::InternalAgentCodeConflict
+            | crate::domain::agent::AgentManagementError::InternalAgentDefinitionInvalid
+            | crate::domain::agent::AgentManagementError::InternalAgentPolicyInvalid
             | crate::domain::agent::AgentManagementError::InternalMcpServerAssignmentStale(_)
             | crate::domain::agent::AgentManagementError::InternalToolAssignmentStale(_)
             | crate::domain::agent::AgentManagementError::InternalToolUnknown(_) => {

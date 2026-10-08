@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 mod availability;
 mod publication;
 mod publication_indexes;
+mod publication_cleanup;
 
 struct SqliteKnowledgeIngestionQueueSql<'a> {
     connection: &'a mut Connection,
@@ -160,7 +161,10 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         write(&tx, &task)?;
         tx.commit().map_err(storage)
     }
-    fn enqueue(&self, mut task: IngestionTask) -> Result<IngestionTask, IngestionQueueError> {
+    fn enqueue(&self, task: IngestionTask) -> Result<IngestionTask, IngestionQueueError> {
+        self.enqueue_document(task, None)
+    }
+    fn enqueue_document(&self, mut task: IngestionTask, configured: Option<crate::application::knowledge_base::KnowledgeBaseDocument>) -> Result<IngestionTask, IngestionQueueError> {
         if task.id.is_empty() || task.input_config_hash.is_empty() {
             return Err(IngestionQueueError::Invalid(
                 "Missing task/config identity".into(),
@@ -180,6 +184,7 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
             .optional()
             .map_err(storage)?;
         if let Some(id) = existing {
+            if configured.is_some() { return Err(IngestionQueueError::Conflict); }
             let prior = read(&tx, &id)?;
             if prior.document_id != task.document_id
                 || prior.knowledge_base_id != task.knowledge_base_id
@@ -193,6 +198,7 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         }
         let active: Option<String> = tx.query_row("SELECT id FROM knowledge_base_ingestion_tasks WHERE document_id=?1 AND state IN ('QUEUED','RUNNING')",[&task.document_id],|r|r.get(0)).optional().map_err(storage)?;
         if let Some(id) = active {
+            if configured.is_some() { return Err(IngestionQueueError::Conflict); }
             let prior = read(&tx, &id)?;
             if prior.input_config_hash == task.input_config_hash
                 && prior.user_code == task.user_code
@@ -204,6 +210,16 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
             return Err(IngestionQueueError::Conflict);
         }
         let mut doc = document(&tx, &task)?;
+        if let Some(configured) = configured {
+            let owned: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2 AND workspace_code=?3)", params![task.knowledge_base_id,task.user_code,task.workspace_code], |r|r.get(0)).map_err(storage)?;
+            if !owned || configured.id != task.document_id || configured.revision != task.document_revision
+                || configured.resource_code != doc["resourceCode"].as_str().unwrap_or("")
+                || configured.resource_revision != task.resource_revision {
+                return Err(IngestionQueueError::Conflict);
+            }
+            // No intermediate configuration write: this payload and task become visible together.
+            doc = serde_json::to_value(configured).map_err(storage)?;
+        }
         if doc["resourceRevision"].as_u64() != Some(task.resource_revision) {
             return Err(IngestionQueueError::Conflict);
         }
@@ -220,7 +236,8 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         doc["status"] = "QUEUED".into();
         doc["error"] = Value::Null;
         doc["waitReason"] = Value::Null;
-        tx.execute("UPDATE knowledge_base_documents SET payload_json=?1,revision=revision+1 WHERE id=?2 AND revision=?3",params![doc.to_string(),task.document_id,task.document_revision-1]).map_err(storage)?;
+        let changed = tx.execute("UPDATE knowledge_base_documents SET payload_json=?1,revision=revision+1 WHERE id=?2 AND revision=?3",params![doc.to_string(),task.document_id,task.document_revision-1]).map_err(storage)?;
+        if changed != 1 { return Err(IngestionQueueError::Conflict); }
         tx.execute("INSERT INTO knowledge_base_ingestion_tasks(id,document_id,knowledge_base_id,input_config_hash,state,stage,attempt,lease_until_ms,retry_after_ms,payload_json) VALUES(?1,?2,?3,?4,'QUEUED','Parsing',0,0,0,?5)",
             params![task.id,task.document_id,task.knowledge_base_id,task.input_config_hash,encode(&task)?]).map_err(storage)?;
         tx.execute("DELETE FROM knowledge_base_ingestion_intents WHERE document_id=?1 AND document_revision=?2", params![task.document_id,task.document_revision-1]).map_err(storage)?;
@@ -572,7 +589,7 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         lease: &IngestionLease,
         now: i64,
         ready: &Value,
-    ) -> Result<(), IngestionQueueError> {
+    ) -> Result<PublicationCleanup, IngestionQueueError> {
         self.publish_generation(lease, now, ready)
     }
 }
@@ -618,6 +635,12 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
     fn enqueue(&self, task: IngestionTask) -> Result<IngestionTask, IngestionQueueError> {
         self.connection.call(
             move |connection| SqliteKnowledgeIngestionQueueSql { connection }.enqueue(task),
+            || storage("database worker stopped"),
+        )
+    }
+    fn enqueue_configured(&self, task: IngestionTask, document: crate::application::knowledge_base::KnowledgeBaseDocument) -> Result<IngestionTask, IngestionQueueError> {
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.enqueue_document(task, Some(document)),
             || storage("database worker stopped"),
         )
     }
@@ -738,7 +761,7 @@ impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
         lease: &IngestionLease,
         now: i64,
         ready: &Value,
-    ) -> Result<(), IngestionQueueError> {
+    ) -> Result<PublicationCleanup, IngestionQueueError> {
         let lease = lease.to_owned();
         let ready = ready.to_owned();
         self.connection.call(

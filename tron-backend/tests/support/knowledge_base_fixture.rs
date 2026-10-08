@@ -74,7 +74,8 @@ impl Fixture {
             state.workspaces.clone(),
             state.agent_management.clone(),
             llm,
-        ).with_document_parser(Arc::new(FixtureDocumentParser));
+        )
+        .with_document_parser(Arc::new(FixtureDocumentParser));
         Self {
             directory,
             state,
@@ -133,7 +134,12 @@ impl LlmRuntimeClient for FakeEmbedding {
         _: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(Vec<f32>, Option<String>), String>> + Send + 'a>> {
         Box::pin(async move {
-            if self.blocking.load(Ordering::SeqCst) || self.calls.load(Ordering::SeqCst) >= self.block_after_calls.load(Ordering::SeqCst) { std::future::pending::<()>().await; }
+            if self.blocking.load(Ordering::SeqCst)
+                || self.calls.load(Ordering::SeqCst)
+                    >= self.block_after_calls.load(Ordering::SeqCst)
+            {
+                std::future::pending::<()>().await;
+            }
             self.vector()
                 .map(|vector| (vector, self.provider_model.lock().unwrap().clone()))
         })
@@ -272,22 +278,66 @@ pub fn pdf() -> Vec<u8> {
 // explicitly uses MinerU; real MinerU structured outputs are covered separately.
 struct FixtureDocumentParser;
 #[async_trait::async_trait]
-impl tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser for FixtureDocumentParser {
-    fn default_tier(&self)->tron_backend::application::knowledge_base::parsing::ParsingTier {Default::default()}
-    async fn capabilities(&self)->Result<tron_backend::application::knowledge_base::parsing::ParsingCapabilities,tron_backend::application::knowledge_base::KnowledgeBaseError> {
-        use tron_backend::application::knowledge_base::parsing::*;
-        Ok(ParsingCapabilities{default_tier:ParsingTier::Standard,available_tiers:vec![ParsingTier::Flash,ParsingTier::Basic,ParsingTier::Standard],parser_version:"4.0.10-fixture".into(),office_tier:ParsingTier::Flash})
+impl tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser
+    for FixtureDocumentParser
+{
+    fn default_tier(&self) -> tron_backend::application::knowledge_base::parsing::ParsingTier {
+        Default::default()
     }
-    async fn parse(&self,filename:&str,bytes:&[u8],tier:Option<tron_backend::application::knowledge_base::parsing::ParsingTier>)->Result<tron_backend::application::knowledge_base::parsing::StructuredParse,tron_backend::application::knowledge_base::KnowledgeBaseError> {
-        use tron_backend::application::knowledge_base::{local_documents::parse_local_document,parsing::*};
-        let document=parse_local_document(filename,bytes).map_err(|e|tron_backend::application::knowledge_base::KnowledgeBaseError::Invalid(e.to_string()))?;
+    async fn capabilities(
+        &self,
+    ) -> Result<
+        tron_backend::application::knowledge_base::parsing::ParsingCapabilities,
+        tron_backend::application::knowledge_base::KnowledgeBaseError,
+    > {
+        use tron_backend::application::knowledge_base::parsing::*;
+        Ok(ParsingCapabilities {
+            default_ocr_mode: OcrMode::Auto,
+            default_tier: ParsingTier::Standard,
+            available_tiers: vec![
+                ParsingTier::Flash,
+                ParsingTier::Basic,
+                ParsingTier::Standard,
+            ],
+            parser_version: "4.0.10-fixture".into(),
+            office_tier: ParsingTier::Flash,
+        })
+    }
+    async fn parse(
+        &self,
+        filename: &str,
+        bytes: &[u8],
+        tier: Option<tron_backend::application::knowledge_base::parsing::ParsingTier>,
+    ) -> Result<
+        tron_backend::application::knowledge_base::parsing::StructuredParse,
+        tron_backend::application::knowledge_base::KnowledgeBaseError,
+    > {
+        use tron_backend::application::knowledge_base::{
+            local_documents::parse_local_document, parsing::*,
+        };
+        let document = parse_local_document(filename, bytes).map_err(|e| {
+            tron_backend::application::knowledge_base::KnowledgeBaseError::Invalid(e.to_string())
+        })?;
         // The cache reloads the raw structured parse, so fixtures must obey the same
         // middle-v2 contract as the production parser rather than supply an empty object.
-        let mut pages=std::collections::BTreeMap::<u32,Vec<serde_json::Value>>::new();
-        for (index,section) in document.sections.iter().enumerate() {
+        let mut pages = std::collections::BTreeMap::<u32, Vec<serde_json::Value>>::new();
+        for (index, section) in document.sections.iter().enumerate() {
             pages.entry(section.location.page.map(|p|p.saturating_sub(1)).unwrap_or(0)).or_default().push(serde_json::json!({"index":index,"type":if section.heading_level.is_some(){"paragraph_title"}else{"text"},"level":section.heading_level,"content":section.text}));
         }
-        let middle=serde_json::json!({"metadata":{"file_suffix":document.format},"pages":pages.into_iter().map(|(page,blocks)|serde_json::json!({"page_idx":page,"blocks":blocks})).collect::<Vec<_>>()});
-        Ok(StructuredParse{document,middle,structured:serde_json::json!({}),markdown:String::new(),assets:vec![],effective_tier:if filename.ends_with(".pdf"){tier.unwrap_or_default()}else{ParsingTier::Flash},parser_version:"4.0.10-fixture".into(),vendor_job_id:"fixture".into()})
+        let middle = serde_json::json!({"metadata":{"file_suffix":document.format},"pages":pages.into_iter().map(|(page,blocks)|serde_json::json!({"page_idx":page,"blocks":blocks})).collect::<Vec<_>>()});
+        Ok(StructuredParse {
+            document,
+            middle,
+            structured: serde_json::json!({}),
+            markdown: String::new(),
+            assets: vec![],
+            effective_tier: if filename.ends_with(".pdf") {
+                tier.unwrap_or_default()
+            } else {
+                ParsingTier::Flash
+            },
+            parser_version: "4.0.10-fixture".into(),
+            vendor_job_id: "fixture".into(),
+        })
     }
 }
