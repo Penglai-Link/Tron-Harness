@@ -121,7 +121,6 @@ fn classifies_all_setting_groups_and_omits_unused_legacy_limits() {
         ("resource.limits.maxBinaryBytes", "hotUpdate"),
         ("resource.connectionVerificationTimeoutMs", "hotUpdate"),
         ("navigation.maxDepth", "hotUpdate"),
-        ("projectDocRoot", "hotUpdate"),
         ("terminalWorkingDirectory", "hotUpdate"),
         ("httpClients.default.connectTimeoutMs", "restart"),
         ("eventBus.standardIngressCapacity", "restart"),
@@ -513,4 +512,179 @@ impl Drop for ConfigFixture {
             let _ = fs::remove_dir_all(directory);
         }
     }
+}
+
+#[test]
+fn model_invocation_defaults_are_visible_and_partial_saves_are_hot_and_atomic() {
+    let fixture = ConfigFixture::new("invocation");
+    // Old installation without the new YAML section still exposes editable defaults.
+    let old = fs::read_to_string(&fixture.path).unwrap();
+    let mut yaml: serde_yaml::Value = serde_yaml::from_str(&old).unwrap();
+    yaml.as_mapping_mut()
+        .unwrap()
+        .remove(serde_yaml::Value::String("modelInvocation".into()));
+    yaml.as_mapping_mut()
+        .unwrap()
+        .remove(serde_yaml::Value::String("auth".into()));
+    let sparse = serde_yaml::to_string(&yaml).unwrap();
+    fs::write(&fixture.path, &sparse).unwrap();
+    let doc = fixture.service.get().unwrap();
+    assert_eq!(
+        doc.items
+            .iter()
+            .find(|item| item.path == "modelInvocation.embedding.maxBatchInputs")
+            .unwrap()
+            .value,
+        Some(32.into())
+    );
+    assert_eq!(fs::read_to_string(&fixture.path).unwrap(), sparse);
+    let saved = fixture
+        .service
+        .update(
+            &doc.revision,
+            vec![
+                change("modelInvocation.embedding.maxBatchInputs", 8.into()),
+                change("modelInvocation.embedding.maxBatchTokens", 8192.into()),
+                change("modelInvocation.embedding.callTimeoutSeconds", 240.into()),
+            ],
+            false,
+        )
+        .unwrap();
+    assert_eq!(saved.hot_update_paths.len(), 3);
+    assert!(saved.restart_paths.is_empty());
+    let config = fixture.runtime.snapshot().model_invocation;
+    assert_eq!(config.embedding.max_batch_inputs, 8);
+    assert_eq!(config.embedding.max_batch_tokens, 8192);
+    assert_eq!(config.embedding.call_timeout_seconds, 240);
+    assert_eq!(config.embedding.operation_timeout_seconds, 600);
+    let before = fixture.runtime.snapshot();
+    let before_yaml = fs::read_to_string(&fixture.path).unwrap();
+    for (path, value) in [
+        ("modelInvocation.embedding.maxBatchInputs", 0),
+        ("modelInvocation.embedding.maxBatchTokens", 0),
+        ("modelInvocation.embedding.callTimeoutSeconds", 0),
+        ("modelInvocation.embedding.operationTimeoutSeconds", 100),
+    ] {
+        assert!(
+            fixture
+                .service
+                .update(&saved.revision, vec![change(path, value.into())], false)
+                .is_err()
+        );
+        assert_eq!(fixture.runtime.snapshot(), before);
+        assert_eq!(fs::read_to_string(&fixture.path).unwrap(), before_yaml);
+    }
+}
+
+#[tokio::test]
+async fn embedding_timeout_changes_apply_to_the_next_http_call_without_rebuilding_client() {
+    use axum::{Json, Router, routing::post};
+    use tron_backend::{
+        adapters::outbound::model::{
+            HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient,
+        },
+        application::{llm::LlmRuntimeClient, model::RuntimeModelConfig},
+        domain::model::{ModelProtocol, ModelType},
+    };
+    let fixture = ConfigFixture::new("embedding-timeout");
+    let doc = fixture.service.get().unwrap();
+    let saved = fixture
+        .service
+        .update(
+            &doc.revision,
+            vec![
+                change("modelInvocation.embedding.callTimeoutSeconds", 1.into()),
+                change(
+                    "modelInvocation.embedding.operationTimeoutSeconds",
+                    3.into(),
+                ),
+            ],
+            false,
+        )
+        .unwrap();
+    let router = Router::new().route(
+        "/embeddings",
+        post(|Json(body): Json<serde_json::Value>| async move {
+            tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+            let count = body["input"].as_array().map(Vec::len).unwrap_or(1);
+            let vectors = (0..count)
+                .map(|index| serde_json::json!({"index":index,"embedding":[1.0,2.0]}))
+                .collect::<Vec<_>>();
+            Json(serde_json::json!({"model":"fixture","data":vectors}))
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    let client = HttpLlmRuntimeClient::with_model_client(Arc::new(
+        HttpModelClient::new(Arc::new(HttpModelProviderClient::new(
+            eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
+        )))
+        .with_runtime_config(fixture.runtime.clone()),
+    ));
+    let config = RuntimeModelConfig {
+        model_code: "fixture".into(),
+        protocol: ModelProtocol::OpenAiCompatibleEmbedding,
+        model_type: ModelType::Embedding,
+        base_url: url,
+        api_path: None,
+        api_key: "fixture".into(),
+        model_name: "fixture".into(),
+        thinking_enabled: false,
+        reasoning_effort: None,
+        responses_stateful_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: None,
+        top_p: None,
+        max_retries: Some(0),
+    };
+    let inputs = vec!["fixture".into()];
+    let failed = client
+        .embed_batch_with_model(&config, &inputs, 2)
+        .await
+        .unwrap_err();
+    assert!(failed.contains("timed out"), "{failed}");
+    let saved = fixture
+        .service
+        .update(
+            &saved.revision,
+            vec![
+                change("modelInvocation.embedding.callTimeoutSeconds", 2.into()),
+                change("modelInvocation.embedding.maxBatchInputs", 1.into()),
+            ],
+            false,
+        )
+        .unwrap();
+    let result = client
+        .embed_batch_with_model(&config, &inputs, 2)
+        .await
+        .unwrap();
+    assert_eq!(result.0.len(), 1);
+    let inputs = vec!["first".into(), "second".into()];
+    let error = client
+        .embed_batch_with_model(&config, &inputs, 2)
+        .await
+        .unwrap_err();
+    assert!(error.contains("batch size"), "{error}");
+    fixture
+        .service
+        .update(
+            &saved.revision,
+            vec![change("modelInvocation.embedding.maxBatchInputs", 2.into())],
+            false,
+        )
+        .unwrap();
+    assert_eq!(
+        client
+            .embed_batch_with_model(&config, &inputs, 2)
+            .await
+            .unwrap()
+            .0
+            .len(),
+        2
+    );
+    server.abort();
 }

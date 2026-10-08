@@ -12,7 +12,6 @@ use crate::{
 
 pub(super) const SKILL_SOURCE_VERSION: &str = "v1";
 
-const SKILL_SOURCE_TYPE: &str = "SKILL";
 const INDEX_USER_CODE: &str = "SYSTEM";
 const INDEX_AGENT_CODE: &str = "AGENT_CODEX";
 
@@ -20,12 +19,10 @@ pub(super) fn skill_ingest_request(
     workspace_code: &str,
     skill_name: &str,
     corpus_id: &str,
-    ingest_profile_id: &str,
     payload: Value,
 ) -> RagIngestRequest {
     RagIngestRequest {
         corpus_id: corpus_id.into(),
-        ingest_profile_id: ingest_profile_id.into(),
         workspace_code: workspace_code.into(),
         access_context: RagIngestAccessContext {
             user_code: INDEX_USER_CODE.into(),
@@ -39,7 +36,6 @@ pub(super) fn skill_ingest_request(
         source: RagIngestSource {
             code: source_code(workspace_code, skill_name),
             version: SKILL_SOURCE_VERSION.into(),
-            source_type: SKILL_SOURCE_TYPE.into(),
         },
         payload,
     }
@@ -55,8 +51,7 @@ pub(super) fn skill_payload(
     let mut payload = json!({
         "source": {
             "code": source_code(workspace_code, skill_name),
-            "version": SKILL_SOURCE_VERSION,
-            "type": SKILL_SOURCE_TYPE
+            "version": SKILL_SOURCE_VERSION
         },
         "title": skill_name,
         "text": text,
@@ -83,7 +78,7 @@ pub(super) fn related_graph_payload(
     skill_name: &str,
     files: &[RegistrySkillFile],
 ) -> Value {
-    let nodes = files
+    let mut nodes = files
         .iter()
         .map(|file| {
             let kind = file_kind(&file.path);
@@ -95,6 +90,7 @@ pub(super) fn related_graph_payload(
                 "code": file_code(workspace_code, skill_name, &file.path),
                 "title": file.path,
                 "text": file.path,
+                "evidence":file.path,
                 "properties": {
                     "path": file.path,
                     "kind": kind,
@@ -103,6 +99,7 @@ pub(super) fn related_graph_payload(
             })
         })
         .collect::<Vec<_>>();
+    nodes.push(json!({"ref":"$skill","name":skill_name,"evidence":skill_name}));
     let edges = files
         .iter()
         .map(|file| {
@@ -111,6 +108,7 @@ pub(super) fn related_graph_payload(
                 "from": "$skill",
                 "to": file_ref(&file.path),
                 "relationship": "CONTAINS",
+                "evidence":file.path,
                 "properties": {
                     "path": file.path,
                     "kind": kind

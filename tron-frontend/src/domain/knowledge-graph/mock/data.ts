@@ -53,7 +53,7 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       fullText: "Skill: rag-reviewer\nDescription: Reviews RAG retrieval changes before release.",
       embeddingText: "Reviews RAG retrieval changes before release.",
       properties: {
-        corpusId: "skill-graph",
+        corpusId: "skill",
         embeddingJson: "indexed",
         skillDescription: "Reviews RAG retrieval changes before release.",
         skillName: "rag-reviewer",
@@ -157,7 +157,7 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       labels: ["RagSkill"],
       score: 0.68,
       properties: {
-        corpusId: "skill-graph",
+        corpusId: "skill",
         skillName: "rag-mapper",
         sourceVersion: "v1",
       },
@@ -168,7 +168,7 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       score: 0.66,
       originUserCode: "U-TRON-001",
       properties: {
-        corpusId: "skill-graph",
+        corpusId: "skill",
         skillName: "rag-prompter",
         sourceVersion: "v1",
       },

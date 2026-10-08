@@ -4,7 +4,7 @@ use rusqlite::Connection;
 
 use crate::domain::rag::RagError;
 
-use super::{dynamic_columns_sql, ensure_missing_text_columns, quote_identifier, storage_error};
+use super::{dynamic_columns_sql, quote_identifier, storage_error, validate_storage_columns};
 
 pub(super) fn ensure_tree_storage_table(
     connection: &Connection,
@@ -35,7 +35,7 @@ pub(super) fn ensure_tree_storage_table(
                 ON {table} (source_code, source_version, scope_type, scope_code, path_key);"
         ))
         .map_err(storage_error)?;
-    ensure_missing_text_columns(connection, table_name, &columns)
+    validate_storage_columns(connection, table_name, &columns)
 }
 
 fn tree_columns() -> BTreeSet<String> {

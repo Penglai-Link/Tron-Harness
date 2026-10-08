@@ -3,6 +3,8 @@ mod coding_tools;
 mod discovery;
 mod file_access;
 mod memory_tools;
+mod rag_tools;
+pub use rag_tools::rag_search_tool;
 mod platform_tools;
 mod productivity_tools;
 mod short_term_memory_tools;
@@ -17,9 +19,8 @@ use crate::{
         model::ModelService,
         prompt::PromptService,
         rag::{
-            RagDiagnosticsRepository, RagDocumentSourceRuntime, RagEmbeddingRuntime,
-            RagIngestRepository, RagRetryIndexRepository, RagSearchRepository, RagSearchRuntime,
-            RagStrategyRegistry,
+            RagDiagnosticsRepository, RagEmbeddingRuntime, RagIngestRepository,
+            RagSearchRepository, RagSearchRuntime,
         },
         resource::ResourceService,
         short_term_memory::ShortTermMemoryService,
@@ -48,7 +49,7 @@ pub fn tool_record_to_effective_tool(record: ToolCatalogRecord) -> EffectiveTool
     }
 }
 
-pub fn register_default_agent_tools<R, S, E>(
+pub fn register_default_agent_tools<R, E>(
     registry: &ToolRegistry,
     workspaces: WorkspaceService,
     apps: AppService,
@@ -60,20 +61,23 @@ pub fn register_default_agent_tools<R, S, E>(
     resources: ResourceService,
     prompts: PromptService,
     mcp: McpService,
-    memory: MemoryService<R, S, E>,
+    memory: MemoryService<R, E>,
     short_term_memory: ShortTermMemoryService,
 ) -> Result<(), ToolError>
 where
     R: RagIngestRepository
         + RagSearchRepository
         + RagDiagnosticsRepository
-        + RagRetryIndexRepository
         + Clone
         + Send
         + Sync
         + 'static,
-    S: RagStrategyRegistry + Send + Sync + 'static,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
+    E: RagEmbeddingRuntime
+        + crate::application::rag::RagGraphRuntime
+        + RagSearchRuntime
+        + Send
+        + Sync
+        + 'static,
 {
     let mut tools: Vec<std::sync::Arc<dyn Tool>> = platform_tools::platform_business_tools(
         workspaces,

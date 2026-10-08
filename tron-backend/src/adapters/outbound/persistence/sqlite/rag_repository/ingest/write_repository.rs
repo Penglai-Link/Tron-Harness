@@ -116,6 +116,16 @@ impl RagIngestRepository for SqliteRagRepositorySql<'_> {
         let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
             .connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(storage_error)?;
+        if let Some(task_id) = command
+            .metadata
+            .get("indexTaskId")
+            .and_then(serde_json::Value::as_str)
+        {
+            let running: i64 = tx.query_row("SELECT COUNT(*) FROM rag_record_tasks current WHERE id=?1 AND state='RUNNING' AND user_code=?2 AND NOT EXISTS (SELECT 1 FROM rag_record_tasks newer WHERE newer.corpus_id=current.corpus_id AND newer.rowid>current.rowid AND json_extract(newer.payload_json,'$.sourceCode')=json_extract(current.payload_json,'$.sourceCode') AND json_extract(newer.payload_json,'$.scopeType')=json_extract(current.payload_json,'$.scopeType') AND json_extract(newer.payload_json,'$.scopeCode')=json_extract(current.payload_json,'$.scopeCode'))",params![task_id,command.user_code],|row|row.get(0)).map_err(storage_error)?;
+            if running != 1 {
+                return Err(RagError::IngestRequestInvalid);
+            }
+        }
         delete_text_unit_indexes_for_source(
             &tx,
             &plan,
@@ -131,6 +141,29 @@ impl RagIngestRepository for SqliteRagRepositorySql<'_> {
         sync_text_unit_indexes_for_units(&tx, &plan, &command.text_units)?;
         persist_tree_nodes(&tx, &plan, &command)?;
         persist_warnings(&tx, &plan, &command)?;
+        tx.execute("DELETE FROM rag_graph_evidence WHERE corpus_id=?1 AND source_code=?2 AND source_version=?3 AND scope_type=?4 AND scope_code=?5", params![command.corpus_id,command.source_code,command.source_version,command.scope.scope_type,command.scope.scope_code]).map_err(storage_error)?;
+        if let Some(graph) = &command.related_graph {
+            // Every derived entity/relation is bound to its original chunk identity.
+            for unit in &command.text_units {
+                let Some(evidence) = graph.get(&unit.text_unit_code) else {
+                    continue;
+                };
+                let graph_text =
+                    serde_json::to_string(evidence).map_err(|_| RagError::StorageFailure)?;
+                tx.execute("INSERT INTO rag_graph_evidence(corpus_id,source_code,source_version,scope_type,scope_code,target_code,text,metadata) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",params![command.corpus_id,command.source_code,command.source_version,command.scope.scope_type,command.scope.scope_code,unit.text_unit_code,graph_text,graph_text]).map_err(storage_error)?;
+            }
+        }
+        if let Some(task_id) = command
+            .metadata
+            .get("indexTaskId")
+            .and_then(serde_json::Value::as_str)
+        {
+            tx.execute(
+                "UPDATE rag_record_tasks SET state='COMPLETED' WHERE id=?1 AND state='RUNNING'",
+                [task_id],
+            )
+            .map_err(storage_error)?;
+        }
         tx.commit().map_err(storage_error)
     }
 }
@@ -402,6 +435,13 @@ fn persist_text_unit(
         &unit.unit_type,
     );
     push_text(&mut values, &plan.text_unit_columns, "text", &unit.text);
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "search_text",
+        &unit.search_text,
+    );
+    push_index_values(&mut values, &plan.text_unit_columns, unit);
     push_text(
         &mut values,
         &plan.text_unit_columns,

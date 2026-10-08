@@ -1,7 +1,4 @@
-use self::{
-    indexes::{fts_table_name, supported_vector_dimensions, vec_table_name},
-    sql_plan::quote_identifier,
-};
+use self::{indexes::fts_table_name, sql_plan::quote_identifier};
 
 /// Join the caller's transaction on the same host connection.
 pub(super) fn delete_managed_corpus_on_connection(
@@ -46,27 +43,9 @@ fn drop_sqlite_runtime_table_family(
     table_name: &str,
 ) -> Result<(), RagError> {
     let fts_table = fts_table_name(table_name);
-    let mut candidates = vec![fts_table.clone()];
-    for dimension in supported_vector_dimensions() {
-        candidates.push(vec_table_name(table_name, *dimension));
-    }
+    let mut candidates = vec![fts_table];
+    candidates.extend(indexes::vector_index_tables(connection, table_name)?);
     candidates.push(table_name.to_string());
-    candidates.extend([
-        format!("{fts_table}_config"),
-        format!("{fts_table}_content"),
-        format!("{fts_table}_data"),
-        format!("{fts_table}_docsize"),
-        format!("{fts_table}_idx"),
-    ]);
-    for dimension in supported_vector_dimensions() {
-        let vector_table = vec_table_name(table_name, *dimension);
-        candidates.extend([
-            format!("{vector_table}_chunks"),
-            format!("{vector_table}_info"),
-            format!("{vector_table}_rowids"),
-            format!("{vector_table}_vector_chunks00"),
-        ]);
-    }
 
     for candidate in candidates {
         let table = quote_identifier(&candidate)?;

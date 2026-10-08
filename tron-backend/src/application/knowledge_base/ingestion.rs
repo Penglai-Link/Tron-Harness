@@ -15,6 +15,16 @@ pub enum IngestionStage {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestionTask {
+    #[serde(default)]
+    pub index_stage: Option<String>,
+    #[serde(default)]
+    pub completed_units: usize,
+    #[serde(default)]
+    pub total_units: usize,
+    #[serde(default)]
+    pub created_at: i64,
+    #[serde(default)]
+    pub updated_at: i64,
     pub id: String,
     pub knowledge_base_id: String,
     pub document_id: String,
@@ -69,6 +79,11 @@ impl IngestionTask {
         configuration: serde_json::Value,
     ) -> Self {
         Self {
+            index_stage: None,
+            completed_units: 0,
+            total_units: 0,
+            created_at: chrono::Utc::now().timestamp_millis(),
+            updated_at: chrono::Utc::now().timestamp_millis(),
             id,
             knowledge_base_id,
             document_id,

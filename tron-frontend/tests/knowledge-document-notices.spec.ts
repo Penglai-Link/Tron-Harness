@@ -25,13 +25,13 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     } } }));
     await page.goto(`${frontend!.baseUrl}/knowledge-base/kb-notices`);
     const row = page.getByRole("row").filter({ hasText: "guideline.pdf" });
-    const nameCell = row.locator("td").first();
+    const nameCell = row.locator("td").nth(1);
     const notice = nameCell.getByRole("button", { name: zh ? "guideline.pdf 的告警详情" : "Warnings for guideline.pdf" });
     const tooltip = page.locator('[role="tooltip"][data-open]');
     await expect(nameCell).toHaveText("guideline.pdf");
     await expect(tooltip).toHaveCount(0);
-    await expect(page.getByRole("row").filter({ hasText: "clean.pdf" }).locator("td").first().getByRole("button")).toHaveCount(0);
-    await expect(page.getByRole("row").filter({ hasText: "empty-notice.pdf" }).locator("td").first().getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("row").filter({ hasText: "clean.pdf" }).locator("td").nth(1).getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("row").filter({ hasText: "empty-notice.pdf" }).locator("td").nth(1).getByRole("button")).toHaveCount(0);
     await notice.hover();
     await expect(tooltip).toContainText(zh ? "1 张图片含原文图注或脚注" : "1 image(s) have original captions or footnotes");
     await expect(tooltip).toContainText(zh ? "当前解析质量不生成图片描述" : "The current parsing quality does not generate image descriptions");
@@ -46,7 +46,7 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     await expect(tooltip).toContainText(zh ? "当前解析质量" : "The current parsing quality");
     await notice.press("Escape");
     await expect(tooltip).toHaveCount(0);
-    const errorCell = page.getByRole("row").filter({ hasText: "failed.pdf" }).locator("td").first();
+    const errorCell = page.getByRole("row").filter({ hasText: "failed.pdf" }).locator("td").nth(1);
     await expect(errorCell).toHaveText("failed.pdf");
     await errorCell.getByRole("button").hover();
     await expect(tooltip).toContainText("Parser unavailable");

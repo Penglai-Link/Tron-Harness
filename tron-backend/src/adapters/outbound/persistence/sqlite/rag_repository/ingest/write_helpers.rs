@@ -48,6 +48,7 @@ fn push_carrier_text_unit_values(
     push_text(values, columns, "unit_type", &unit.unit_type);
     push_text(values, columns, "text", &unit.text);
     push_text(values, columns, "search_text", &unit.search_text);
+    push_index_values(values, columns, unit);
     push_text(values, columns, "heading_path", &unit.heading_path);
     push_integer(values, columns, "ordinal", unit.ordinal as i64);
     push_integer(values, columns, "token_count", unit.token_count);
@@ -58,6 +59,43 @@ fn push_carrier_text_unit_values(
     push_integer(values, columns, "updated_at", now);
     push_available_domain_values(values, columns, &plan.text_unit_field_mapping, command)?;
     Ok(())
+}
+
+fn push_index_values(
+    values: &mut Vec<(String, rusqlite::types::Value)>,
+    columns: &std::collections::BTreeSet<String>,
+    unit: &RagTextUnitWrite,
+) {
+    push_text(values, columns, "fulltext_status", &unit.fulltext_status);
+    push_text(values, columns, "embedding_status", &unit.embedding_status);
+    push_optional_text(
+        values,
+        columns,
+        "embedding_model_code",
+        unit.embedding_model_code.as_deref(),
+    );
+    push_optional_text(
+        values,
+        columns,
+        "embedding_version",
+        unit.embedding_version.as_deref(),
+    );
+    push_optional_text(
+        values,
+        columns,
+        "embedding_text_hash",
+        unit.embedding_text_hash.as_deref(),
+    );
+    if columns.contains("embedding_dimension") {
+        values.push((
+            "embedding_dimension".into(),
+            unit.embedding_dimension.map_or(
+                rusqlite::types::Value::Null,
+                rusqlite::types::Value::Integer,
+            ),
+        ));
+    }
+    push_optional_blob(values, columns, "embedding", unit.embedding.as_deref());
 }
 
 fn persist_warnings(
@@ -95,7 +133,7 @@ fn persist_modern_warning(
     let record_code = format!(
         "{}:{}:{}:{}:{}:{}",
         command.corpus_id,
-        command.profile_id,
+        command.task_id,
         command.source_code,
         command.source_version,
         command.scope.scope_type,
@@ -103,7 +141,7 @@ fn persist_modern_warning(
     );
     let sql = format!(
         "INSERT INTO {diagnostics_table} (
-                record_type, record_code, corpus_id, profile_id, source_code, source_version,
+                record_type, record_code, corpus_id, task_id, source_code, source_version,
                 scope_type, scope_code, workspace_code, user_code, agent_code, stage_id,
                 message, payload_json, created_at
             )
@@ -118,7 +156,7 @@ fn persist_modern_warning(
         params![
             record_code,
             command.corpus_id,
-            command.profile_id,
+            command.task_id,
             command.source_code,
             command.source_version,
             command.scope.scope_type,

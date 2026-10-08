@@ -73,7 +73,8 @@ fn append_single_filter_clause(
         "in" => {
             let values = raw_value.as_array().ok_or(RagError::SearchFilterInvalid)?;
             if values.is_empty() {
-                return Err(RagError::SearchFilterInvalid);
+                clauses.push("0".into());
+                return Ok(());
             }
             clauses.push(format!(
                 "{column} IN ({})",
@@ -82,6 +83,10 @@ fn append_single_filter_clause(
             for value in values {
                 params.push(sql_value(value, value_type)?);
             }
+        }
+        "gtOrNull" => {
+            clauses.push(format!("({column} IS NULL OR {column} > ?)"));
+            params.push(sql_value(raw_value, value_type)?);
         }
         "gt" | "gte" | "lt" | "lte" => {
             clauses.push(format!("{column} {} ?", sql_comparator(operator)?));

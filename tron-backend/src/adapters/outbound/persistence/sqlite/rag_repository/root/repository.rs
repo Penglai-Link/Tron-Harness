@@ -9,26 +9,15 @@ use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 
 use crate::{
-    application::rag::{
-        RagConfigRepository, RagCorpusManagementRecord, RagManagementRepository,
-        RagProfileListQuery,
-    },
+    application::rag::{RagConfigRepository, RagCorpusManagementRecord, RagManagementRepository},
     domain::rag::{
-        RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBackend,
-        RagStorageBinding, RagStorageSegmentTarget,
+        RagCorpusRecord, RagError, RagStatus, RagStorageBackend, RagStorageBinding,
+        RagStorageSegmentTarget,
     },
     shared::sqlite_extensions::default_sqlite_extension_context,
 };
 
 use self::field_mapping::parse_field_mapping;
-use super::migrations::{
-    RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
-    RAG_MEMORY_INGEST_VECTOR_DEGRADE_MIGRATION, RAG_MEMORY_QUERY_PROFILE_MIGRATION,
-    RAG_MEMORY_TARGETED_STORAGE_MIGRATION, RAG_MEMORY_TIMESTAMP_RETURN_FIELDS_MIGRATION,
-    RAG_OPTIONAL_MODEL_CODES_MIGRATION, RAG_PROJECT_DOC_MINERU_INGEST_PROFILE_MIGRATION,
-    RAG_SEARCH_PROFILES_MIGRATION, RAG_SKILL_CORPUS_MIGRATION, RAG_SKILL_GRAPH_CORPUS_MIGRATION,
-    RAG_STORAGE_BACKEND_FUSION_MIGRATION, RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
-};
 
 struct SqliteRagRepositorySql<'a> {
     connection: &'a Connection,
@@ -48,121 +37,33 @@ impl<'a> SqliteRagRepositorySql<'a> {
             .prepare_connection(&connection)
             .map_err(storage_error)?;
         let repository = Self { connection };
-        repository.apply_rag_migrations()?;
-        Ok(repository)
-    }
-
-    pub fn apply_rag_migrations(&self) -> Result<(), RagError> {
-        self.apply_rag_foundation_migration()?;
-        self.apply_rag_domain_fields_migration()?;
-        self.apply_rag_ingest_profiles_migration()?;
-        self.apply_rag_search_profiles_migration()?;
-        self.apply_rag_optional_model_codes_migration()?;
-        self.apply_rag_storage_binding_layout_migration()?;
-        self.apply_rag_memory_targeted_storage_migration()?;
-        self.apply_rag_skill_corpus_migration()?;
-        self.apply_rag_skill_graph_corpus_migration()?;
-        self.apply_rag_storage_backend_fusion_migration()?;
-        self.apply_rag_memory_query_profile_migration()?;
-        self.apply_rag_memory_timestamp_return_fields_migration()?;
-        self.apply_rag_memory_ingest_vector_degrade_migration()?;
-        self.apply_rag_project_doc_mineru_ingest_profile_migration()?;
-        self.apply_rag_source_type_removal_migration()?;
-        self.apply_rag_sqlite_extension_index_migration()
-    }
-
-    pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_FOUNDATION_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_domain_fields_migration(&self) -> Result<(), RagError> {
-        ensure_legacy_memory_source_domain_columns(&self.connection)?;
-        self.connection
-            .execute_batch(RAG_DOMAIN_FIELDS_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_ingest_profiles_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_INGEST_PROFILES_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_search_profiles_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_SEARCH_PROFILES_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_optional_model_codes_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_OPTIONAL_MODEL_CODES_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_storage_binding_layout_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_STORAGE_BINDING_LAYOUT_MIGRATION)
+        let legacy:bool=connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='rag_corpora')",[],|row|row.get(0)).map_err(storage_error)?;
+        let versioned:bool=connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='rag_schema_version')",[],|row|row.get(0)).map_err(storage_error)?;
+        if legacy && !versioned {
+            return Err(RagError::SchemaIncompatible);
+        }
+        if versioned {
+            let version: i64 = connection
+                .query_row("SELECT version FROM rag_schema_version", [], |row| {
+                    row.get(0)
+                })
+                .map_err(storage_error)?;
+            if version != 2 {
+                return Err(RagError::SchemaIncompatible);
+            }
+        } else {
+            let tx=crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(connection,rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
+            tx.execute_batch(include_str!(
+                "../../../../../../../migrations/20261008_unified_rag.sql"
+            ))
             .map_err(storage_error)?;
-        backfill_storage_binding_from_storage_topology(&self.connection)
-    }
-
-    pub fn apply_rag_memory_targeted_storage_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_MEMORY_TARGETED_STORAGE_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_skill_corpus_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_SKILL_CORPUS_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_skill_graph_corpus_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_SKILL_GRAPH_CORPUS_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_storage_backend_fusion_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_STORAGE_BACKEND_FUSION_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_memory_query_profile_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_MEMORY_QUERY_PROFILE_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_memory_timestamp_return_fields_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_MEMORY_TIMESTAMP_RETURN_FIELDS_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_memory_ingest_vector_degrade_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_MEMORY_INGEST_VECTOR_DEGRADE_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_project_doc_mineru_ingest_profile_migration(&self) -> Result<(), RagError> {
-        self.connection
-            .execute_batch(RAG_PROJECT_DOC_MINERU_INGEST_PROFILE_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    pub fn apply_rag_source_type_removal_migration(&self) -> Result<(), RagError> {
-        source_type_removal::apply(&self.connection)
-    }
-
-    pub fn apply_rag_sqlite_extension_index_migration(&self) -> Result<(), RagError> {
-        indexes::apply_extension_index_migration(self)
+            tx.commit().map_err(storage_error)?;
+        }
+        operations::initialize_operations(connection)?;
+        for corpus in repository.list_corpora()? {
+            repository.ensure_sqlite_runtime_storage_for_corpus(&corpus)?;
+        }
+        Ok(repository)
     }
 
     pub(crate) fn ensure_sqlite_runtime_storage_for_corpus(
@@ -283,69 +184,6 @@ impl RagConfigRepository for SqliteRagRepositorySql<'_> {
             Err(error) => Err(storage_error(error)),
         }
     }
-
-    fn list_profiles(&self, query: RagProfileListQuery) -> Result<Vec<RagProfileRecord>, RagError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT profile_id,
-                        profile_type,
-                        status,
-                        primary_corpus_id,
-                        corpus_ids_json,
-                        required_source_version,
-                        config_json,
-                        filters_json,
-                        degrade_policy
-                 FROM rag_profiles
-                 ORDER BY profile_id",
-            )
-            .map_err(storage_error)?;
-        let rows = statement
-            .query_map([], map_profile_row)
-            .map_err(storage_error)?;
-        Ok(collect_rows(rows)?
-            .into_iter()
-            .filter(|profile: &RagProfileRecord| {
-                query
-                    .profile_type
-                    .as_ref()
-                    .is_none_or(|profile_type| profile.profile_type == *profile_type)
-                    && query
-                        .status
-                        .as_ref()
-                        .is_none_or(|status| profile.status == *status)
-                    && query.corpus_id.as_ref().is_none_or(|corpus_id| {
-                        profile.primary_corpus_id.as_ref() == Some(corpus_id)
-                            || profile.corpus_ids.contains(corpus_id)
-                    })
-            })
-            .collect())
-    }
-
-    fn get_profile(&self, profile_id: &str) -> Result<Option<RagProfileRecord>, RagError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT profile_id,
-                        profile_type,
-                        status,
-                        primary_corpus_id,
-                        corpus_ids_json,
-                        required_source_version,
-                        config_json,
-                        filters_json,
-                        degrade_policy
-                 FROM rag_profiles
-                 WHERE profile_id = ?1",
-            )
-            .map_err(storage_error)?;
-        match statement.query_row([profile_id], map_profile_row) {
-            Ok(record) => Ok(Some(record)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(error) => Err(storage_error(error)),
-        }
-    }
 }
 
 impl RagManagementRepository for SqliteRagRepositorySql<'_> {
@@ -431,6 +269,18 @@ impl RagManagementRepository for SqliteRagRepositorySql<'_> {
             if deleted_rows == 0 {
                 return Ok(false);
             }
+            self.connection
+                .execute(
+                    "DELETE FROM rag_graph_evidence WHERE corpus_id=?1",
+                    [corpus_id],
+                )
+                .map_err(storage_error)?;
+            self.connection
+                .execute(
+                    "DELETE FROM rag_record_tasks WHERE corpus_id=?1",
+                    [corpus_id],
+                )
+                .map_err(storage_error)?;
             for table in &runtime_tables {
                 drop_sqlite_runtime_table_family(&self.connection, table)?;
             }
@@ -447,111 +297,12 @@ impl RagManagementRepository for SqliteRagRepositorySql<'_> {
             }
         }
     }
-
-    fn save_profile(&self, record: &RagProfileRecord) -> Result<(), RagError> {
-        let now = current_timestamp_millis();
-        self.connection
-            .execute(
-                "INSERT INTO rag_profiles (
-                    profile_id,
-                    profile_type,
-                    status,
-                    primary_corpus_id,
-                    corpus_ids_json,
-                    required_source_version,
-                    config_json,
-                    filters_json,
-                    degrade_policy,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
-                ON CONFLICT (profile_id) DO UPDATE SET
-                    profile_type = excluded.profile_type,
-                    status = excluded.status,
-                    primary_corpus_id = excluded.primary_corpus_id,
-                    corpus_ids_json = excluded.corpus_ids_json,
-                    required_source_version = excluded.required_source_version,
-                    config_json = excluded.config_json,
-                    filters_json = excluded.filters_json,
-                    degrade_policy = excluded.degrade_policy,
-                    updated_at = excluded.updated_at",
-                params![
-                    record.profile_id,
-                    record.profile_type.as_str(),
-                    record.status.as_str(),
-                    record.primary_corpus_id,
-                    serialize_json_value(&record.corpus_ids)?,
-                    record.required_source_version,
-                    serialize_json_value(&record.config)?,
-                    serialize_json_value(&record.filters)?,
-                    record.degrade_policy,
-                    now,
-                ],
-            )
-            .map_err(storage_error)?;
-        Ok(())
-    }
-
-    fn delete_profile(&self, profile_id: &str) -> Result<bool, RagError> {
-        let deleted_rows = self
-            .connection
-            .execute(
-                "DELETE FROM rag_profiles WHERE profile_id = ?1",
-                [profile_id],
-            )
-            .map_err(storage_error)?;
-        Ok(deleted_rows > 0)
-    }
 }
 
 fn collect_rows<T>(
     rows: rusqlite::MappedRows<'_, impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>>,
 ) -> Result<Vec<T>, RagError> {
     rows.collect::<Result<Vec<_>, _>>().map_err(storage_error)
-}
-
-fn backfill_storage_binding_from_storage_topology(connection: &Connection) -> Result<(), RagError> {
-    if !rag_corpora_has_column(connection, "storage_topology_json")? {
-        return Ok(());
-    }
-    let mut statement = connection
-        .prepare(
-            "SELECT corpus_id, storage_binding_json, storage_topology_json
-             FROM rag_corpora
-             WHERE storage_topology_json IS NOT NULL
-               AND trim(storage_topology_json) <> ''",
-        )
-        .map_err(storage_error)?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    drop(statement);
-
-    for (corpus_id, storage_binding_json, storage_topology_json) in rows {
-        if parse_storage_binding(&storage_binding_json).is_ok()
-            || parse_storage_binding(&storage_topology_json).is_err()
-        {
-            continue;
-        }
-        connection
-            .execute(
-                "UPDATE rag_corpora
-                 SET storage_binding_json = ?1
-                 WHERE corpus_id = ?2",
-                params![storage_topology_json, corpus_id],
-            )
-            .map_err(storage_error)?;
-    }
-    Ok(())
 }
 
 fn rag_corpora_has_column(connection: &Connection, column_name: &str) -> Result<bool, RagError> {
@@ -580,143 +331,6 @@ impl SqliteRagRepository {
     }
 }
 impl SqliteRagRepository {
-    pub fn apply_rag_migrations(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| SqliteRagRepositorySql { connection }.apply_rag_migrations(),
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_foundation_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_domain_fields_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_domain_fields_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_ingest_profiles_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_ingest_profiles_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_search_profiles_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_search_profiles_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_optional_model_codes_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_optional_model_codes_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_storage_binding_layout_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_storage_binding_layout_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_memory_targeted_storage_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_memory_targeted_storage_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_skill_corpus_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_skill_corpus_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_skill_graph_corpus_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_skill_graph_corpus_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_storage_backend_fusion_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_storage_backend_fusion_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_memory_query_profile_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_memory_query_profile_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_memory_timestamp_return_fields_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }
-                    .apply_rag_memory_timestamp_return_fields_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_memory_ingest_vector_degrade_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }
-                    .apply_rag_memory_ingest_vector_degrade_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_project_doc_mineru_ingest_profile_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }
-                    .apply_rag_project_doc_mineru_ingest_profile_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_source_type_removal_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_source_type_removal_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    pub fn apply_rag_sqlite_extension_index_migration(&self) -> Result<(), RagError> {
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.apply_rag_sqlite_extension_index_migration()
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
     pub(crate) fn ensure_sqlite_runtime_storage_for_corpus(
         &self,
         corpus: &RagCorpusRecord,
@@ -751,6 +365,71 @@ impl SqliteRagRepository {
     }
 }
 impl RagConfigRepository for SqliteRagRepository {
+    fn record_task_is_latest(
+        &self,
+        task: &crate::application::rag::RagRecordTask,
+    ) -> Result<bool, RagError> {
+        let task = task.clone();
+        self.connection.call(move |connection| {
+            connection.query_row("SELECT NOT EXISTS (SELECT 1 FROM rag_record_tasks newer WHERE newer.user_code=?1 AND newer.corpus_id=?2 AND json_extract(newer.payload_json,'$.sourceCode')=?3 AND json_extract(newer.payload_json,'$.sourceVersion')=?4 AND json_extract(newer.payload_json,'$.scopeType')=?5 AND json_extract(newer.payload_json,'$.scopeCode')=?6 AND newer.rowid>(SELECT rowid FROM rag_record_tasks WHERE id=?7))",
+            rusqlite::params![task.user_code,task.corpus_id,task.source_code,task.source_version,task.scope_type,task.scope_code,task.id], |row| row.get(0)).map_err(storage_error)
+        }, || RagError::StorageFailure)
+    }
+    fn claim_record_task(&self, user: &str, id: &str) -> Result<bool, RagError> {
+        let user = user.to_owned();
+        let id = id.to_owned();
+        self.connection.call(move|connection| {
+            let count=connection.execute("UPDATE rag_record_tasks SET state='RUNNING',payload_json=json_set(payload_json,'$.state','RUNNING') WHERE user_code=?1 AND id=?2 AND state='QUEUED'",rusqlite::params![user,id]).map_err(storage_error)?;
+            Ok(count==1)
+        },||RagError::StorageFailure)
+    }
+    fn recover_record_tasks(&self) -> Result<(), RagError> {
+        self.connection.call(move|connection| {
+            connection.execute("UPDATE rag_record_tasks SET state='FAILED',payload_json=json_set(payload_json,'$.state','FAILED','$.error','服务重启中断入库，可重试并复用检查点') WHERE state IN ('RUNNING','QUEUED')",[]).map_err(storage_error)?;Ok(())
+        },||RagError::StorageFailure)
+    }
+    fn save_record_task(
+        &self,
+        task: &crate::application::rag::RagRecordTask,
+    ) -> Result<(), RagError> {
+        let task = task.clone();
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.save_record_task(&task),
+            || RagError::StorageFailure,
+        )
+    }
+    fn record_tasks(
+        &self,
+        user: &str,
+    ) -> Result<Vec<crate::application::rag::RagRecordTask>, RagError> {
+        let user = user.to_owned();
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.record_tasks(&user),
+            || RagError::StorageFailure,
+        )
+    }
+    fn record_task(
+        &self,
+        user: &str,
+        id: &str,
+    ) -> Result<Option<crate::application::rag::RagRecordTask>, RagError> {
+        let user = user.to_owned();
+        let id = id.to_owned();
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.record_task(&user, &id),
+            || RagError::StorageFailure,
+        )
+    }
+    fn index_counts(
+        &self,
+        corpus: &str,
+    ) -> Result<crate::application::rag::RagIndexCounts, RagError> {
+        let corpus = corpus.to_owned();
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.index_counts(&corpus),
+            || RagError::StorageFailure,
+        )
+    }
     fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
         self.connection.call(
             move |connection| SqliteRagRepositorySql { connection }.list_corpora(),
@@ -761,19 +440,6 @@ impl RagConfigRepository for SqliteRagRepository {
         let corpus_id = corpus_id.to_owned();
         self.connection.call(
             move |connection| SqliteRagRepositorySql { connection }.get_corpus(&corpus_id),
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    fn list_profiles(&self, query: RagProfileListQuery) -> Result<Vec<RagProfileRecord>, RagError> {
-        self.connection.call(
-            move |connection| SqliteRagRepositorySql { connection }.list_profiles(query),
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    fn get_profile(&self, profile_id: &str) -> Result<Option<RagProfileRecord>, RagError> {
-        let profile_id = profile_id.to_owned();
-        self.connection.call(
-            move |connection| SqliteRagRepositorySql { connection }.get_profile(&profile_id),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }
@@ -802,20 +468,6 @@ impl RagManagementRepository for SqliteRagRepository {
             move |connection| {
                 SqliteRagRepositorySql { connection }.delete_managed_corpus(&corpus_id)
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    fn save_profile(&self, record: &RagProfileRecord) -> Result<(), RagError> {
-        let record = record.to_owned();
-        self.connection.call(
-            move |connection| SqliteRagRepositorySql { connection }.save_profile(&record),
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-    fn delete_profile(&self, profile_id: &str) -> Result<bool, RagError> {
-        let profile_id = profile_id.to_owned();
-        self.connection.call(
-            move |connection| SqliteRagRepositorySql { connection }.delete_profile(&profile_id),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }

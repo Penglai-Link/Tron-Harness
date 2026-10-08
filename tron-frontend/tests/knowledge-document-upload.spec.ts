@@ -17,6 +17,8 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     let parsed = false;
     let status = "QUEUED";
     let stage = "Parsing";
+    let releaseLastUpload!: () => void;
+    const lastUploadGate = new Promise<void>(resolve => { releaseLastUpload = resolve; });
     await page.route("**/api/v1/knowledge-bases**", async route => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
@@ -32,12 +34,14 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       } else if (request.method() === "POST" && path.endsWith("/documents")) {
         expect(request.headers()["accept-language"]).toBe(locale);
         const body = request.postDataBuffer()!.toString();
-        expect(body).toContain('name="workspaceCode"\r\n\r\nTRON_CORE');
+        expect(body).toContain('name="idempotencyKey"');
+        expect(body).not.toContain('name="workspaceCode"');
         const name = /filename="([^"]+)"/.exec(body)![1];
         requests.push(name);
         if (name === "failed.pdf") {
           return route.fulfill({ status: 400, json: { code: "INVALID_ARGUMENT", message: "Upload refused", data: null } });
         }
+        if (name === "last.pdf") await lastUploadGate;
         uploaded.push(name); data = document(name);
       }
       await route.fulfill({ json: { code: "SUCCESS", message: "ok", data } });
@@ -52,6 +56,15 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       { name: "last.pdf", mimeType: "application/pdf", buffer: Buffer.from("synthetic last PDF") },
     ]);
     await expect.poll(() => requests).toEqual(["first.pdf", "failed.pdf", "last.pdf"]);
+    // The batch is still pending: the first saved document must already be visible.
+    await expect(page.getByRole("row").filter({ hasText: "first.pdf" })).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "last.pdf" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: zh ? "上传中…" : "Uploading…", exact: true })).toBeDisabled();
+    status = "PARSING";
+    await expect(page.getByRole("row").filter({ hasText: "first.pdf" }).getByRole("cell", { name: zh ? "文档解析中" : "Parsing document", exact: true })).toBeVisible();
+    await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`batch-upload-in-progress-${locale}.png`) });
+    status = "QUEUED";
+    releaseLastUpload();
     await expect(page.getByText(zh ? "已上传 2 个文件。" : "Uploaded 2 files.", { exact: true })).toBeVisible();
     await expect(page.getByText(/failed\.pdf:.*Upload refused/)).toBeVisible();
     await expect(page.getByRole("columnheader", { name: zh ? "解析质量" : "Parsing quality", exact: true })).toBeVisible();

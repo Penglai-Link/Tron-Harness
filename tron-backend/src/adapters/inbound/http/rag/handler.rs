@@ -1,436 +1,358 @@
+use super::error_mapper::rag_error_response;
+use crate::{
+    adapters::inbound::http::auth::RequestAuthContext, app::AppState, application::rag::*,
+    response::ApiResponse,
+};
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
+use serde_json::{Value, json};
 
-use crate::{
-    adapters::inbound::http::auth::RequestAuthContext,
-    app::AppRagService,
-    application::rag::{
-        RagCorpusManagementInput, RagFilterValidateInput, RagProfileManagementInput,
-    },
-    application::workspace::WorkspaceService,
-    response::ApiResponse,
-};
-
-use super::{
-    error_mapper::rag_error_response,
-    request::{
-        RagDebugProfileHttpQuery, RagDebugSourceHttpQuery, RagIngestHttpRequest,
-        RagRetryIndexHttpRequest, RagSearchHttpRequest,
-    },
-    response::{
-        RagDebugProfileResponse, RagDebugSourceResponse, RagIngestResponse, RagRetryIndexResponse,
-        RagSearchResponse,
-    },
-};
-
-pub async fn ingest(
-    State(workspaces): State<WorkspaceService>,
-    State(rag): State<AppRagService>,
+fn failure(error: impl std::fmt::Display) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ApiResponse::error(
+            "RAG_OPERATION_FAILED",
+            error.to_string(),
+        )),
+    )
+        .into_response()
+}
+fn corpus_ids(
+    state: &AppState,
+    user: &str,
+) -> Result<
+    std::collections::BTreeSet<String>,
+    crate::application::knowledge_base::KnowledgeBaseError,
+> {
+    Ok(state
+        .knowledge_bases
+        .platform_libraries(user)?
+        .into_iter()
+        .map(|kb| kb.id)
+        .collect())
+}
+fn managed(state: &AppState, user: &str, id: &str) -> bool {
+    matches!(id, "memory-card" | "skill")
+        || corpus_ids(state, user).is_ok_and(|ids| ids.contains(id))
+}
+pub async fn corpora(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
+    let ids = match corpus_ids(&state, &auth.user().user_code) {
+        Ok(ids) => ids,
+        Err(error) => return failure(error),
+    };
+    match state.rag.corpus_summaries(&ids) {
+        Ok(rows) => Json(ApiResponse::success(rows)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+pub async fn configure(
+    State(state): State<AppState>,
     auth: RequestAuthContext,
-    Json(request): Json<RagIngestHttpRequest>,
+    Path(id): Path<String>,
+    Json(settings): Json<RagSettings>,
 ) -> Response {
-    let request = request.into_application();
-    if !has_required_request_fields(&request) {
-        return rag_error_response(crate::domain::rag::RagError::IngestRequestInvalid);
+    if !managed(&state, &auth.user().user_code, &id) {
+        return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
     }
-    if request.access_context.user_code != auth.user().user_code {
-        return rag_error_response(crate::domain::rag::RagError::IngestScopeInvalid);
+    if settings.graph && id != "skill" && settings.graph_model_code.is_none() {
+        return failure("开启图谱索引需要选择抽取模型");
     }
-    if !workspace_is_active(&workspaces, &request.workspace_code) {
-        return rag_error_response(crate::domain::rag::RagError::IngestScopeInvalid);
-    }
-
-    match rag.ingest(request).await {
-        Ok(result) => Json(ApiResponse::success(RagIngestResponse::from(result))).into_response(),
+    match state.rag.configure_corpus(&id, settings) {
+        Ok(settings) => Json(ApiResponse::success(settings)).into_response(),
         Err(error) => rag_error_response(error),
     }
 }
-
-pub async fn list_corpora_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-) -> Response {
-    match rag.list_corpora_management() {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchInput {
+    pub workspace_code: String,
+    pub agent_code: String,
+    pub query: String,
+    #[serde(default)]
+    pub corpus_ids: Vec<String>,
+    #[serde(default = "filters")]
+    pub filters: Value,
+    #[serde(default = "limit")]
+    pub limit: usize,
 }
-
-pub async fn get_corpus_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Path(corpus_id): Path<String>,
-) -> Response {
-    match rag.get_corpus_management(&corpus_id) {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
+fn filters() -> Value {
+    json!({})
 }
-
-pub async fn corpus_catalog(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-) -> Response {
-    Json(ApiResponse::success(rag.corpus_catalog())).into_response()
+fn limit() -> usize {
+    8
 }
-
-pub async fn verify_corpus_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Json(request): Json<RagCorpusManagementInput>,
-) -> Response {
-    match rag.verify_corpus_management(request) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn create_corpus_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Json(request): Json<RagCorpusManagementInput>,
-) -> Response {
-    match rag.create_corpus_management(request) {
-        Ok(result) => (StatusCode::CREATED, Json(ApiResponse::success(result))).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn update_corpus_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Path(corpus_id): Path<String>,
-    Json(request): Json<RagCorpusManagementInput>,
-) -> Response {
-    match rag.update_corpus_management(&corpus_id, request) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn delete_corpus_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Path(corpus_id): Path<String>,
-) -> Response {
-    match rag.delete_corpus_management(&corpus_id) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
 pub async fn search(
-    State(workspaces): State<WorkspaceService>,
-    State(rag): State<AppRagService>,
+    State(state): State<AppState>,
     auth: RequestAuthContext,
-    Json(request): Json<RagSearchHttpRequest>,
+    Json(input): Json<SearchInput>,
 ) -> Response {
-    let request = request.into_application();
-    if !has_required_search_request_fields(&request) {
-        return rag_error_response(crate::domain::rag::RagError::SearchRequestInvalid);
-    }
-    if request.access_context.user_code != auth.user().user_code
-        || !workspace_is_active(&workspaces, &request.workspace_code)
+    if !state
+        .workspaces
+        .workspace_is_active(&input.workspace_code)
+        .unwrap_or(false)
     {
         return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
     }
-
-    match rag.search(request).await {
-        Ok(result) => Json(ApiResponse::success(RagSearchResponse::from(result))).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn list_profiles_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Query(query): Query<RagProfileManagementQuery>,
-) -> Response {
-    match rag.list_profiles_management(query.profile_type.as_deref()) {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn get_profile_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Path(profile_id): Path<String>,
-) -> Response {
-    match rag.get_profile_management(&profile_id) {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn profile_catalog(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-) -> Response {
-    match rag.profile_catalog() {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn pipeline_catalog(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Query(query): Query<RagPipelineCatalogQuery>,
-) -> Response {
-    let Some(profile_type) = query.profile_type.as_deref() else {
-        return rag_error_response(crate::domain::rag::RagError::ManagementRequestInvalid);
+    let identity = RagIdentity {
+        user_code: auth.user().user_code.clone(),
+        workspace_code: input.workspace_code,
+        agent_code: input.agent_code,
     };
-    match rag.pipeline_catalog(profile_type) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn verify_profile_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Json(request): Json<RagProfileManagementInput>,
-) -> Response {
-    match rag.verify_profile_management(request) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn create_profile_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Json(request): Json<RagProfileManagementInput>,
-) -> Response {
-    match rag.create_profile_management(request) {
-        Ok(result) => (StatusCode::CREATED, Json(ApiResponse::success(result))).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn update_profile_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Path(profile_id): Path<String>,
-    Json(request): Json<RagProfileManagementInput>,
-) -> Response {
-    match rag.update_profile_management(&profile_id, request) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn delete_profile_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Path(profile_id): Path<String>,
-) -> Response {
-    match rag.delete_profile_management(&profile_id) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn update_profile_management_post(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Json(request): Json<RagProfileManagementInput>,
-) -> Response {
-    let profile_id = request.profile_id.clone();
-    if profile_id.trim().is_empty() {
-        return rag_error_response(crate::domain::rag::RagError::ManagementRequestInvalid);
-    }
-    match rag.update_profile_management(&profile_id, request) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn validate_filters_management(
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Json(request): Json<RagFilterValidateInput>,
-) -> Response {
-    match rag.validate_filters_management(request) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn debug_profile(
-    State(workspaces): State<WorkspaceService>,
-    State(rag): State<AppRagService>,
-    _auth: RequestAuthContext,
-    Query(query): Query<RagDebugProfileHttpQuery>,
-) -> Response {
-    let workspace_code = query.workspace_code.unwrap_or_default();
-    let profile_id = query.profile_id.unwrap_or_default();
-    if workspace_code.trim().is_empty() || profile_id.trim().is_empty() {
-        return rag_error_response(crate::domain::rag::RagError::DebugRequestInvalid);
-    }
-    if !workspace_is_active(&workspaces, &workspace_code) {
-        return rag_error_response(crate::domain::rag::RagError::DebugScopeInvalid);
-    }
-    match rag.debug_profile(&workspace_code, &profile_id) {
-        Ok(result) => {
-            Json(ApiResponse::success(RagDebugProfileResponse::from(result))).into_response()
-        }
-        Err(error) => rag_error_response(error),
-    }
-}
-
-pub async fn debug_source(
-    State(workspaces): State<WorkspaceService>,
-    State(rag): State<AppRagService>,
-    auth: RequestAuthContext,
-    Query(query): Query<RagDebugSourceHttpQuery>,
-) -> Response {
-    let request = query.into_application();
-    if !debug_source_required(&request) {
-        return rag_error_response(crate::domain::rag::RagError::DebugRequestInvalid);
-    }
-    if !workspace_is_active(&workspaces, &request.workspace_code)
-        || !scope_allowed_for_http(
-            &request.scope_type,
-            &request.scope_code,
-            &request.workspace_code,
-            &auth.user().user_code,
+    match state
+        .rag
+        .search(
+            &state.knowledge_bases,
+            &identity,
+            RagQueryInput {
+                query: input.query,
+                corpus_ids: input.corpus_ids,
+                filters: input.filters,
+                limit: input.limit,
+            },
+            None,
         )
+        .await
     {
-        return rag_error_response(crate::domain::rag::RagError::DebugScopeInvalid);
-    }
-    match rag.debug_source(request) {
-        Ok(result) => {
-            Json(ApiResponse::success(RagDebugSourceResponse::from(result))).into_response()
-        }
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => rag_error_response(error),
     }
 }
-
-pub async fn retry_index(
-    State(workspaces): State<WorkspaceService>,
-    State(rag): State<AppRagService>,
+/// Management recall derives its entire scope from the authenticated user.
+pub async fn recall(
+    State(state): State<AppState>,
     auth: RequestAuthContext,
-    Json(request): Json<RagRetryIndexHttpRequest>,
+    Json(input): Json<RagQueryInput>,
 ) -> Response {
-    let request = request.into_application(auth.user().user_code.clone(), "AGENT_CODEX".into());
-    if !retry_required(&request) {
-        return rag_error_response(crate::domain::rag::RagError::RetryRequestInvalid);
-    }
-    if !workspace_is_active(&workspaces, &request.workspace_code)
-        || !scope_allowed_for_http(
-            &request.scope_type,
-            &request.scope_code,
-            &request.workspace_code,
-            &auth.user().user_code,
-        )
+    match state
+        .knowledge_bases
+        .recall_for_user(&auth.user().user_code, input)
+        .await
     {
-        return rag_error_response(crate::domain::rag::RagError::RetryScopeInvalid);
-    }
-    match rag.retry_index(request).await {
-        Ok(result) => {
-            Json(ApiResponse::success(RagRetryIndexResponse::from(result))).into_response()
-        }
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => rag_error_response(error),
     }
 }
-
-fn workspace_is_active(workspaces: &WorkspaceService, workspace_code: &str) -> bool {
-    workspaces
-        .workspace_is_active(workspace_code)
-        .unwrap_or(false)
-}
-
-fn has_required_request_fields(request: &crate::application::rag::RagIngestRequest) -> bool {
-    [
-        request.corpus_id.as_str(),
-        request.ingest_profile_id.as_str(),
-        request.workspace_code.as_str(),
-        request.access_context.user_code.as_str(),
-        request.access_context.agent_code.as_str(),
-        request.access_context.workspace_code.as_str(),
-        request.target_scope.scope_type.as_str(),
-        request.target_scope.scope_code.as_str(),
-        request.source.code.as_str(),
-        request.source.version.as_str(),
-    ]
-    .into_iter()
-    .all(|value| !value.trim().is_empty())
-        && request.payload.as_object().is_some()
-}
-
-fn has_required_search_request_fields(request: &crate::application::rag::RagSearchRequest) -> bool {
-    [
-        request.profile_id.as_str(),
-        request.workspace_code.as_str(),
-        request.access_context.user_code.as_str(),
-        request.access_context.agent_code.as_str(),
-        request.access_context.workspace_code.as_str(),
-        request.context.strategy.as_str(),
-    ]
-    .into_iter()
-    .all(|value| !value.trim().is_empty())
-        && request.filters.as_object().is_some()
-        && request.limit > 0
-}
-
-fn debug_source_required(request: &crate::application::rag::RagDebugSourceRequest) -> bool {
-    [
-        request.workspace_code.as_str(),
-        request.corpus_id.as_str(),
-        request.source_code.as_str(),
-        request.source_version.as_str(),
-        request.scope_type.as_str(),
-        request.scope_code.as_str(),
-    ]
-    .into_iter()
-    .all(|value| !value.trim().is_empty())
-}
-
-fn retry_required(request: &crate::application::rag::RagRetryIndexRequest) -> bool {
-    [
-        request.workspace_code.as_str(),
-        request.corpus_id.as_str(),
-        request.source_code.as_str(),
-        request.source_version.as_str(),
-        request.scope_type.as_str(),
-        request.scope_code.as_str(),
-    ]
-    .into_iter()
-    .all(|value| !value.trim().is_empty())
-        && !request.stages.is_empty()
-}
-
-fn scope_allowed_for_http(
-    scope_type: &str,
-    scope_code: &str,
-    workspace_code: &str,
-    user_code: &str,
-) -> bool {
-    match scope_type {
-        "USER" => scope_code == user_code,
-        "SPACE" => scope_code == workspace_code,
-        "AGENT" => false,
-        _ => false,
+pub async fn tasks(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
+    let user = &auth.user().user_code;
+    let mut tasks = match state.rag.record_task_views(user) {
+        Ok(tasks) => tasks,
+        Err(error) => return rag_error_response(error),
+    };
+    match state.knowledge_bases.rag_task_views(user) {
+        Ok(knowledge) => tasks.extend(knowledge),
+        Err(error) => return failure(error),
     }
+    Json(ApiResponse::success(tasks)).into_response()
 }
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RagProfileManagementQuery {
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubmitInput {
+    pub corpus_id: String,
     #[serde(default)]
-    pub profile_type: Option<String>,
+    pub document_id: Option<String>,
 }
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RagPipelineCatalogQuery {
-    #[serde(default)]
-    pub profile_type: Option<String>,
+pub async fn submit(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Json(input): Json<SubmitInput>,
+) -> Response {
+    let user = &auth.user().user_code;
+    if !managed(&state, user, &input.corpus_id) {
+        return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
+    }
+    if input.corpus_id == "skill" {
+        let indexer = crate::application::skill::SkillRagIndexService::new(
+            state.skills.clone(),
+            state.rag.clone(),
+        );
+        tokio::spawn(async move {
+            let _ = indexer.index_all_active_workspaces().await;
+        });
+    } else if input.corpus_id == "memory-card" {
+        let records = match state.rag.record_task_views(user) {
+            Ok(records) => records,
+            Err(error) => return rag_error_response(error),
+        };
+        let mut sources = std::collections::BTreeSet::new();
+        for task in records
+            .into_iter()
+            .filter(|task| task.corpus_id == input.corpus_id)
+        {
+            if !sources.insert(task.source_code.clone())
+                || matches!(task.state.as_str(), "RUNNING" | "QUEUED")
+            {
+                continue;
+            }
+            let queued = match state.rag.prepare_retry_record_task(user, &task.id, true) {
+                Ok(task) => task,
+                Err(error) => return rag_error_response(error),
+            };
+            let rag = state.rag.clone();
+            tokio::spawn(async move {
+                let _ = rag.execute_record_task(queued).await;
+            });
+        }
+    } else {
+        let kb = match state.knowledge_bases.detail(user, &input.corpus_id) {
+            Ok(kb) => kb,
+            Err(error) => return failure(error),
+        };
+        if input
+            .document_id
+            .as_ref()
+            .is_some_and(|id| !kb.documents.iter().any(|doc| doc.id == *id))
+        {
+            return failure("文档不存在");
+        }
+        for doc in kb
+            .documents
+            .iter()
+            .filter(|doc| input.document_id.as_ref().is_none_or(|id| *id == doc.id))
+        {
+            if let Err(error) = state.knowledge_bases.start_index(user, &kb.id, &doc.id) {
+                return failure(error);
+            }
+        }
+    }
+    (
+        StatusCode::ACCEPTED,
+        Json(ApiResponse::success(json!({"accepted":true}))),
+    )
+        .into_response()
+}
+pub async fn cancel(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Path(id): Path<String>,
+) -> Response {
+    control(state, auth, id, TaskControl::Cancel).await
+}
+pub async fn retry(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Path(id): Path<String>,
+) -> Response {
+    control(state, auth, id, TaskControl::Retry).await
+}
+pub async fn rebuild(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Path(id): Path<String>,
+) -> Response {
+    control(state, auth, id, TaskControl::Rebuild).await
+}
+#[derive(Clone, Copy)]
+enum TaskControl {
+    Cancel,
+    Retry,
+    Rebuild,
+}
+async fn control(
+    state: AppState,
+    auth: RequestAuthContext,
+    id: String,
+    action: TaskControl,
+) -> Response {
+    let user = &auth.user().user_code;
+    let tasks = match state.knowledge_bases.rag_task_views(user) {
+        Ok(tasks) => tasks,
+        Err(error) => return failure(error),
+    };
+    if let Some(task) = tasks.into_iter().find(|task| task.id == id) {
+        let doc = task.document_id.unwrap();
+        // Reject an obsolete task action instead of cancelling a newer attempt.
+        let current = match state
+            .knowledge_bases
+            .ingestion_tasks(user, &task.corpus_id, &doc)
+        {
+            Ok(tasks) => tasks,
+            Err(error) => return failure(error),
+        };
+        if current.first().is_none_or(|task| task.id != id) {
+            return failure("任务状态已改变，请刷新列表");
+        }
+        let result = match action {
+            TaskControl::Retry => state
+                .knowledge_bases
+                .retry_index(user, &task.corpus_id, &doc),
+            TaskControl::Rebuild => state
+                .knowledge_bases
+                .start_index(user, &task.corpus_id, &doc),
+            TaskControl::Cancel => {
+                state
+                    .knowledge_bases
+                    .cancel_index(user, &task.corpus_id, &doc)
+                    .await
+            }
+        };
+        return match result {
+            Ok(result) => Json(ApiResponse::success(result)).into_response(),
+            Err(error) => failure(error),
+        };
+    }
+    let system_task = state
+        .rag
+        .repository_handle()
+        .record_task("SYSTEM", &id)
+        .ok()
+        .flatten()
+        .filter(|task| task.corpus_id == "skill");
+    let owner = if system_task.is_some() {
+        "SYSTEM"
+    } else {
+        user
+    };
+    if matches!(action, TaskControl::Retry | TaskControl::Rebuild) {
+        if let Some(task) = system_task {
+            if matches!(task.state.as_str(), "RUNNING" | "QUEUED") {
+                return failure("任务仍在运行");
+            }
+            let name = task.payload["domainFields"]["skillName"]
+                .as_str()
+                .unwrap_or("")
+                .to_owned();
+            let indexer = crate::application::skill::SkillRagIndexService::new(
+                state.skills.clone(),
+                state.rag.clone(),
+            );
+            // Reload the registry and current workspace binding before recreating evidence.
+            return match indexer
+                .index_workspace_skill(&task.workspace_code, &name)
+                .await
+            {
+                Ok(_) => Json(ApiResponse::success(json!({"accepted":true}))).into_response(),
+                Err(error) => failure(error),
+            };
+        }
+        let task = match state.rag.prepare_retry_record_task(
+            owner,
+            &id,
+            matches!(action, TaskControl::Rebuild),
+        ) {
+            Ok(task) => task,
+            Err(error) => return rag_error_response(error),
+        };
+        let task_id = task.id.clone();
+        let rag = state.rag.clone();
+        tokio::spawn(async move {
+            let _ = rag.execute_record_task(task).await;
+        });
+        (
+            StatusCode::ACCEPTED,
+            Json(ApiResponse::success(
+                json!({"accepted":true,"taskId":task_id}),
+            )),
+        )
+            .into_response()
+    } else {
+        match state.rag.cancel_record_task(owner, &id) {
+            Ok(task) => Json(ApiResponse::success(task)).into_response(),
+            Err(error) => rag_error_response(error),
+        }
+    }
 }

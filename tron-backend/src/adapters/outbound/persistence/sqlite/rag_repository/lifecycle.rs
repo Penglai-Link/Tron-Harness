@@ -24,6 +24,7 @@ impl RagSourceLifecycleRepository for SqliteRagRepositorySql<'_> {
         let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
             .connection, rusqlite::TransactionBehavior::Immediate)
             .map_err(storage_error)?;
+        tx.execute("UPDATE rag_record_tasks SET state='CANCELLED' WHERE corpus_id=?1 AND state IN ('RUNNING','QUEUED') AND json_extract(payload_json,'$.sourceCode')=?2 AND json_extract(payload_json,'$.sourceVersion')=?3 AND json_extract(payload_json,'$.scopeType')=?4 AND json_extract(payload_json,'$.scopeCode')=?5",params![command.corpus_id,command.source_code,command.source_version,command.scope.scope_type,command.scope.scope_code]).map_err(storage_error)?;
         mark_source_disabled(&tx, &plan, &command)?;
         delete_text_unit_indexes_for_source(
             &tx,
@@ -33,6 +34,7 @@ impl RagSourceLifecycleRepository for SqliteRagRepositorySql<'_> {
             &command.scope.scope_type,
             &command.scope.scope_code,
         )?;
+        tx.execute("DELETE FROM rag_graph_evidence WHERE corpus_id=?1 AND source_code=?2 AND source_version=?3 AND scope_type=?4 AND scope_code=?5", params![command.corpus_id,command.source_code,command.source_version,command.scope.scope_type,command.scope.scope_code]).map_err(storage_error)?;
         tx.commit().map_err(storage_error)
     }
 }

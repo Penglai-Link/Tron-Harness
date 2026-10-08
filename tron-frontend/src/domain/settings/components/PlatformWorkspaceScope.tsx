@@ -13,7 +13,7 @@ export function usePlatformWorkspaces() {
   return useQuery({ queryKey: ["platform-data-workspaces", user], queryFn: ({ signal }) => fetchWorkspaceOptions({}, signal) });
 }
 
-export function PlatformWorkspaceScope({ children }: { children: ReactNode }) {
+export function PlatformWorkspaceScope({ children, renderWithoutWorkspace = false }: { children: ReactNode; renderWithoutWorkspace?: boolean }) {
   const { t } = useTranslation("pages");
   const query = usePlatformWorkspaces();
   const [params, setParams] = useSearchParams();
@@ -29,6 +29,7 @@ export function PlatformWorkspaceScope({ children }: { children: ReactNode }) {
   return <div className="flex h-full min-h-0 flex-col gap-4">
     <div className="shrink-0">
       <SelectInput aria-label={t("platformData.workspace")} className="w-full sm:w-72" value={workspace || "__none__"} disabled={query.isLoading} onValueChange={(value) => {
+        if (!options.some((option) => option.workspaceCode === value)) return;
         const next = new URLSearchParams(params); next.set("workspaceCode", String(value)); setParams(next);
       }}>
         {!workspace ? <SelectItem value="__none__">{t("platformData.selectWorkspace")}</SelectItem> : null}
@@ -36,7 +37,7 @@ export function PlatformWorkspaceScope({ children }: { children: ReactNode }) {
       </SelectInput>
     </div>
     {query.error ? <p role="alert">{query.error.message}</p> : null}
-    {selected ? <WorkspaceSpacesContext.Provider value={context}><div key={workspace} className="min-h-0 flex-1">{children}</div></WorkspaceSpacesContext.Provider> : <p role="status">{t("platformData.selectWorkspace")}</p>}
+    {selected || renderWithoutWorkspace ? <WorkspaceSpacesContext.Provider value={context}><div key={workspace} className="min-h-0 flex-1">{children}</div></WorkspaceSpacesContext.Provider> : <p role="status">{t("platformData.selectWorkspace")}</p>}
   </div>;
 }
 

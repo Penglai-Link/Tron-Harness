@@ -2,6 +2,18 @@ use super::*;
 
 pub(super) fn translate_en_us(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.rag.name" => "RAG",
+        "agent.toolCatalog.domains.rag.description" => {
+            "Search authorized knowledge, memory and skills for original evidence."
+        }
+        "agent.toolCatalog.tools.rag.search.name" => "Search evidence",
+        "agent.toolCatalog.tools.rag.search.description" => {
+            "Retrieve original evidence from authorized and published corpora. Identity is resolved by the server; filters only narrow the permitted range."
+        }
+        "agent.toolCatalog.tools.rag.search.summary" => {
+            "Evidence text with source locations and retrieval channels."
+        }
+
         "agent.toolCatalog.domains.automation.name" => "Automation Tools",
         "agent.toolCatalog.domains.automation.description" => {
             "Manage scheduled automations and manual runs."
@@ -291,6 +303,14 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
 
 pub(super) fn translate_zh_cn(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.rag.name" => "RAG",
+        "agent.toolCatalog.domains.rag.description" => "检索已授权知识库、记忆和技能的原文证据。",
+        "agent.toolCatalog.tools.rag.search.name" => "检索证据",
+        "agent.toolCatalog.tools.rag.search.description" => {
+            "从已授权、已发布语料中检索原文证据。身份由服务端确定，过滤条件只能缩小范围。"
+        }
+        "agent.toolCatalog.tools.rag.search.summary" => "返回证据正文、来源定位和召回渠道。",
+
         "agent.toolCatalog.domains.automation.name" => "自动化工具",
         "agent.toolCatalog.domains.automation.description" => "管理定时自动化和手动执行。",
         "agent.toolCatalog.domains.app.name" => "应用工具",

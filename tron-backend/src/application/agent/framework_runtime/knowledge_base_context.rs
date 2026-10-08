@@ -36,9 +36,7 @@ impl fw::ContextContributor for KnowledgeBaseContributor {
         }
         let mut run = input.run.clone();
         run.extensions.insert(self.allowance.clone());
-        // ACL is checked in the service on every read. Retrieval failures omit this
-        // optional source; no stale source or unrestricted fallback is reused.
-        if let Ok(context) = service
+        let context = match service
             .search_for_agent_in_run(
                 user,
                 &self.workspace,
@@ -49,12 +47,28 @@ impl fw::ContextContributor for KnowledgeBaseContributor {
             )
             .await
         {
-            // The service's explicit default-off gate precedes all image IO.
-            // A revoked source also invalidates the previously retrieved text.
-            let Ok(visual) =
-                service.visual_evidence_for_agent(user, &self.workspace, agent, &context.hits)
-            else {
+            Ok(context) => context,
+            Err(error) => {
+                block.messages.push(fw::Message::user(format!(
+                    "[知识库检索失败：{error}。当前没有可用证据，不得声称已经核对资料。]"
+                )));
                 return Ok(block);
+            }
+        };
+        {
+            let visual = match service.visual_evidence_for_agent(
+                user,
+                &self.workspace,
+                agent,
+                &context.hits,
+            ) {
+                Ok(visual) => visual,
+                Err(error) => {
+                    block.messages.push(fw::Message::user(format!(
+                        "[知识库原文或图片授权校验失败：{error}。相关证据不可使用。]"
+                    )));
+                    return Ok(block);
+                }
             };
             block.source_version = Some(context.source_version);
             let mut warnings = visual.warnings;

@@ -69,7 +69,10 @@ impl Fixture {
         let llm = LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(client.clone()));
         let service = KnowledgeBaseService::new(
             SqliteKnowledgeBaseRepository::connect(&state.config.database_url).unwrap(),
-            state.rag.clone(),
+            tron_backend::application::rag::RagService::new(
+                Arc::new(Mutex::new(tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(&state.config.database_url).unwrap())),
+                tron_backend::application::rag::DefaultRagRuntime::new(llm.clone(),state.llm_router.clone()),
+            ),
             state.resources.clone(),
             state.agent_management.clone(),
             llm,
@@ -110,6 +113,9 @@ impl Default for FakeEmbedding {
 impl FakeEmbedding {
     fn vector(&self) -> Result<Vec<f32>, String> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        self.vector_value()
+    }
+    fn vector_value(&self) -> Result<Vec<f32>, String> {
         if self.failing.load(Ordering::SeqCst) {
             return Err("synthetic embedding outage".into());
         }
@@ -127,6 +133,44 @@ impl FakeEmbedding {
     }
 }
 impl LlmRuntimeClient for FakeEmbedding {
+    fn embed_batch_with_model<'a>(
+        &'a self,
+        _: &'a RuntimeModelConfig,
+        inputs: &'a [String],
+        _: usize,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        (
+                            Vec<eliteforge_agent_framework::EmbeddingVector>,
+                            Option<String>,
+                        ),
+                        String,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            if self.blocking.load(Ordering::SeqCst)
+                || self.calls.load(Ordering::SeqCst)
+                    >= self.block_after_calls.load(Ordering::SeqCst)
+            {
+                std::future::pending::<()>().await;
+            }
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            let vectors = inputs
+                .iter()
+                .enumerate()
+                .map(|(index, _)| {
+                    self.vector_value()
+                        .map(|values| eliteforge_agent_framework::EmbeddingVector { index, values })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((vectors, self.provider_model.lock().unwrap().clone()))
+        })
+    }
     fn embed_with_model<'a>(
         &'a self,
         _: &'a RuntimeModelConfig,

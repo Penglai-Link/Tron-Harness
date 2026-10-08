@@ -102,7 +102,7 @@ pub(super) fn sync_text_unit_indexes_for_units(
     for unit in units {
         let text_rowid =
             rowid_for_text_unit_code(connection, &plan.text_unit_table, &unit.text_unit_code)?;
-        if plan.has_sqlite_fulltext() {
+        if plan.has_sqlite_fulltext() && unit.fulltext_status == "INDEXED" {
             let fulltext_rowid = if plan.has_distinct_fulltext_table() {
                 rowid_for_text_unit_code(
                     connection,
@@ -171,7 +171,7 @@ pub(super) fn rebuild_fulltext_indexes_for_source(
                         FROM {table}
                      WHERE source_code = ?1 AND source_version = ?2
                        AND scope_type = ?3 AND scope_code = ?4
-                       AND {} != 'ACTIVE'
+                       AND ({} != 'ACTIVE' OR fulltext_status != 'INDEXED')
                      )",
                     quote_identifier(status_column)?
                 ),
@@ -187,7 +187,7 @@ pub(super) fn rebuild_fulltext_indexes_for_source(
                      LEFT JOIN {fts_table} existing_fts ON existing_fts.rowid = source.id
                      WHERE source_code = ?1 AND source_version = ?2
                        AND scope_type = ?3 AND scope_code = ?4
-                       AND {} = 'ACTIVE'",
+                       AND {} = 'ACTIVE' AND fulltext_status = 'INDEXED'",
                     quote_identifier(status_column)?
                 ),
                 params![source_code, source_version, scope_type, scope_code],
@@ -243,7 +243,7 @@ fn upsert_fulltext_row(
     }
     let fts_table_name = fts_table_name(plan.fulltext_storage_table());
     if !table_exists(connection, &fts_table_name)? {
-        return Ok(());
+        return Err(RagError::StorageFailure);
     }
     let fts_table = quote_identifier(&fts_table_name)?;
     connection
@@ -262,18 +262,16 @@ fn upsert_vector_row(
     dimension: i64,
     embedding: &[u8],
 ) -> Result<(), RagError> {
-    if !VECTOR_INDEX_DIMENSIONS.contains(&dimension) {
-        return Ok(());
+    if !(1..=8192).contains(&dimension) {
+        return Err(RagError::EmbeddingFailed);
     }
-    let Some(values) = decode_embedding(embedding) else {
-        return Ok(());
-    };
-    if values.len() != dimension as usize {
-        return Ok(());
+    let values = decode_embedding(embedding).ok_or(RagError::EmbeddingFailed)?;
+    if values.len() != dimension as usize || values.iter().any(|value| !value.is_finite()) {
+        return Err(RagError::EmbeddingFailed);
     }
     let vec_table_name = vec_table_name(table_name, dimension);
     if !table_exists(connection, &vec_table_name)? {
-        return Ok(());
+        connection.execute_batch(&format!("CREATE VIRTUAL TABLE {} USING vec0(embedding float[{dimension}] distance_metric=cosine)",quote_identifier(&vec_table_name)?)).map_err(storage_error)?;
     }
     let vec_table = quote_identifier(&vec_table_name)?;
     let embedding_json = serde_json::to_string(&values).map_err(|_| RagError::StorageFailure)?;
@@ -309,8 +307,7 @@ fn delete_vector_indexes_for_rowids(
     if !plan.has_sqlite_vector() || !sqlite_vec_available(connection) || rowids.is_empty() {
         return Ok(());
     }
-    for dimension in VECTOR_INDEX_DIMENSIONS {
-        let table_name = vec_table_name(plan.vector_storage_table(), *dimension);
+    for table_name in vector_index_tables(connection, plan.vector_storage_table())? {
         if table_exists(connection, &table_name)? {
             delete_rowids_from_table(connection, &table_name, rowids)?;
         }
@@ -572,4 +569,26 @@ pub(super) fn decode_embedding(raw: &[u8]) -> Option<Vec<f32>> {
             .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
             .collect(),
     )
+}
+
+pub(super) fn vector_index_tables(
+    connection: &Connection,
+    table: &str,
+) -> Result<Vec<String>, RagError> {
+    let mut statement = connection
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE ?1")
+        .map_err(storage_error)?;
+    let prefix = format!("{table}_vec_d");
+    let tables = statement
+        .query_map([format!("{prefix}%")], |row| row.get::<_, String>(0))
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)?;
+    Ok(tables
+        .into_iter()
+        .filter(|name| {
+            name.strip_prefix(&prefix)
+                .is_some_and(|suffix| suffix.parse::<usize>().is_ok())
+        })
+        .collect())
 }

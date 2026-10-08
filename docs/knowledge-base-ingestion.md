@@ -1,5 +1,7 @@
 # 知识库持久化入库与 MinerU 路由
 
+入库与检索已归统一 RAG 服务，使用方式和接口见 [统一 RAG](unified-rag.md)。本文说明文档任务的持久化、MinerU 调度与资源生命周期。
+
 上传接口保存原件、文档和入库任务后返回。文档与入库意图在同一个 SQLite 事务中保存，任务创建事务同时消费意图。解析和向量化由两组后台 worker 执行，HTTP 请求结束不会停止任务。任务、节点身份、租约、重试时间和检查点保存在当前 Tron SQLite 数据库中；模型调用仍通过现有 Framework 适配器。
 
 ```mermaid
@@ -31,7 +33,7 @@ flowchart LR
 
 全部块完成且模型、空间指纹、维度和数值有效后，才写入 `STAGING` generation。发布事务核对整份块数和存在的向量索引，然后同时激活新 generation、禁用旧 generation、清理旧全文与向量索引、更新文档指针和任务状态。首次入库失败不会开放部分内容；重建失败或取消时，已发布的旧 generation 继续提供检索。
 
-上传请求可带 multipart `idempotencyKey`，按用户、工作空间和知识库隔离。同一 key 的不同文件内容被拒绝；相同文件名和 SHA256 在同一知识库复用文档。重复上传和重复点击复用已有在途任务。SQLite 唯一索引保证一份文档只有一个 `QUEUED/RUNNING` 任务；两个数据库连接不能认领同一 attempt。已完成后显式重新索引会创建新任务。
+上传请求可带 multipart `idempotencyKey`，按用户和知识库隔离。同一 key 的不同文件内容被拒绝；相同文件名和 SHA256 在同一知识库复用文档。重复上传和重复点击复用已有在途任务。SQLite 唯一索引保证一份文档只有一个 `QUEUED/RUNNING` 任务；两个数据库连接不能认领同一 attempt。已完成后显式重新索引会创建新任务。
 
 ## MinerU 配置
 
@@ -91,11 +93,11 @@ mineru:
 
 | 接口 | 输入 | 返回 |
 | --- | --- | --- |
-| `POST /api/v1/knowledge-bases/{id}/documents/{doc}/cancel` | JSON `workspaceCode` | 当前文档 |
-| `POST /api/v1/knowledge-bases/{id}/documents/{doc}/retry` | JSON `workspaceCode` | 当前文档 |
-| `GET /api/v1/knowledge-bases/{id}/documents/{doc}/tasks` | query `workspaceCode` | 任务列表，含阶段、attempt、failures、退避时间、节点和取消待确认标记 |
+| `POST /api/v1/knowledge-bases/{id}/documents/{doc}/cancel` | 无额外空间参数 | 当前文档 |
+| `POST /api/v1/knowledge-bases/{id}/documents/{doc}/retry` | 无额外空间参数 | 当前文档 |
+| `GET /api/v1/knowledge-bases/{id}/documents/{doc}/tasks` | 无额外空间参数 | 任务列表，含阶段、attempt、failures、退避时间、节点和取消待确认标记 |
 
-接口先检查知识库所有者和工作空间权限，不返回内部配置快照或租约 owner。中英文详情页显示各阶段，处理中禁用配置修改，提供取消和重试，并每两秒刷新任务状态。
+接口先检查知识库所有者，不返回内部配置快照或租约 owner。中英文详情页显示各阶段，处理中禁用配置修改，提供取消和重试，并每两秒刷新任务状态。
 
 ## 验证
 

@@ -46,6 +46,26 @@ impl HttpLlmRuntimeClient {
         config: &RuntimeModelConfig,
         input: &str,
     ) -> ObservedModelResult<(Vec<f32>, Option<String>)> {
+        self.observed_embed_batch(config, &[input.to_owned()], None)
+            .await
+            .map(|response| {
+                (
+                    response
+                        .vectors
+                        .into_iter()
+                        .next()
+                        .expect("validated nonempty batch")
+                        .values,
+                    response.provider_model,
+                )
+            })
+    }
+    pub(super) async fn observed_embed_batch(
+        &self,
+        config: &RuntimeModelConfig,
+        inputs: &[String],
+        dimensions: Option<usize>,
+    ) -> ObservedModelResult<fw::EmbeddingResponse> {
         if config.model_type != ModelType::Embedding {
             return failure("embedding requires EMBEDDING model");
         }
@@ -72,7 +92,8 @@ impl HttpLlmRuntimeClient {
                 factory,
             }),
         );
-        let mut request = fw::EmbeddingRequest::texts([input]);
+        let mut request = fw::EmbeddingRequest::texts(inputs.iter().cloned());
+        request.dimensions = dimensions;
         request.choice = fw::ModelChoice::model(reference);
         let mut update =
             eliteforge_agent_framework::ModelRuntimeUpdate::new("http-embedding", 0, vec![]);
@@ -86,21 +107,24 @@ impl HttpLlmRuntimeClient {
                 };
             }
         };
+        let config = self.models.invocation_config().embedding;
+        let effective = limits(&model, &config.timeouts());
+        let mut options = match fw::ModelInvocationOptions::for_call(&effective) {
+            Ok(options) => options,
+            Err(error) => return failure(error.to_string()),
+        };
+        options.max_batch_size = config.max_batch_inputs;
         let observed = self
             .models
             .executor
             .with_runtime(runtime)
-            .embed_observed(request, &limits(&model))
+            .with_options(options)
+            .embed_observed(request, &effective)
             .await;
         ObservedModelResult {
             result: observed.result.and_then(|response| {
-                let provider_model = response.provider_model;
-                response
-                    .vectors
-                    .into_iter()
-                    .next()
-                    .map(|vector| (vector.values, provider_model))
-                    .ok_or_else(|| fw::AgentError::Run("embedding response empty".into()))
+                response.validate(inputs.len(), dimensions)?;
+                Ok(response)
             }),
             report: observed.report,
         }
@@ -166,10 +190,16 @@ impl HttpLlmRuntimeClient {
                 };
             }
         };
+        let effective = limits(&model, &self.models.invocation_config().rerank);
+        let options = match fw::ModelInvocationOptions::for_call(&effective) {
+            Ok(options) => options,
+            Err(error) => return failure(error.to_string()),
+        };
         self.models
             .executor
             .with_runtime(runtime)
-            .rerank_observed(request, &limits(&model))
+            .with_options(options)
+            .rerank_observed(request, &effective)
             .await
             .map(|response| {
                 response

@@ -7,7 +7,7 @@ use std::sync::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio_util::sync::CancellationToken;
-mod pipeline;
+pub(crate) mod pipeline;
 mod recovery;
 
 #[derive(Default)]
@@ -15,7 +15,7 @@ pub(super) struct IngestionWorkers {
     started: AtomicBool,
     stop: CancellationToken,
 }
-pub(super) fn queue_error(error: IngestionQueueError) -> KnowledgeBaseError {
+pub(crate) fn queue_error(error: IngestionQueueError) -> KnowledgeBaseError {
     match error {
         IngestionQueueError::NotFound => KnowledgeBaseError::NotFound,
         IngestionQueueError::Conflict => KnowledgeBaseError::Conflict,
@@ -23,7 +23,7 @@ pub(super) fn queue_error(error: IngestionQueueError) -> KnowledgeBaseError {
         IngestionQueueError::Storage(s) => KnowledgeBaseError::Storage(s),
     }
 }
-pub(super) fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -36,17 +36,17 @@ pub(super) fn in_progress(status: &str) -> bool {
         "QUEUED" | "PARSING" | "CHUNKING" | "EMBEDDING" | "PUBLISHING"
     )
 }
-fn lease(task: &IngestionTask) -> IngestionLease {
+pub(crate) fn lease(task: &IngestionTask) -> IngestionLease {
     IngestionLease {
         task_id: task.id.clone(),
         attempt: task.attempt,
         owner: task.lease_owner.clone().unwrap_or_default(),
     }
 }
-struct RemoteCheckpoint {
-    queue: Arc<dyn KnowledgeIngestionQueue>,
-    lease: IngestionLease,
-    task: Mutex<IngestionTask>,
+pub(crate) struct RemoteCheckpoint {
+    pub(crate) queue: Arc<dyn KnowledgeIngestionQueue>,
+    pub(crate) lease: IngestionLease,
+    pub(crate) task: Mutex<IngestionTask>,
 }
 impl parsing::ParseCheckpoint for RemoteCheckpoint {
     fn task(&self) -> Result<IngestionTask, KnowledgeBaseError> {
@@ -82,18 +82,18 @@ impl parsing::ParseCheckpoint for RemoteCheckpoint {
     }
 }
 #[derive(Serialize, Deserialize)]
-struct StoredChunks {
-    document: KnowledgeBaseDocument,
-    chunks: Vec<LocatedChunk>,
-    warnings: Vec<String>,
+pub(crate) struct StoredChunks {
+    pub(crate) document: KnowledgeBaseDocument,
+    pub(crate) chunks: Vec<LocatedChunk>,
+    pub(crate) warnings: Vec<String>,
 }
 #[derive(Default, Serialize, Deserialize)]
-struct StoredEmbeddings {
+pub(crate) struct StoredEmbeddings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    vectors: Vec<Vec<f32>>,
+    pub(crate) vectors: Vec<Vec<f32>>,
     #[serde(default)]
-    vector_resources: Vec<String>,
-    provider_model: Option<String>,
+    pub(crate) vector_resources: Vec<String>,
+    pub(crate) provider_model: Option<String>,
 }
 struct InlineAttempt {
     queue: Arc<dyn KnowledgeIngestionQueue>,
@@ -363,14 +363,20 @@ impl KnowledgeBaseService {
         self.queue.enqueue(task).map_err(queue_error)
     }
     pub(super) fn prepare_index_task(
-        &self, user: &str, workspace: &str, kb: &KnowledgeBase, doc: &KnowledgeBaseDocument,
+        &self,
+        user: &str,
+        workspace: &str,
+        kb: &KnowledgeBase,
+        doc: &KnowledgeBaseDocument,
     ) -> Result<IngestionTask, KnowledgeBaseError> {
-        let model = self
-            .llm
-            .resolve_embedding_index_model_code(workspace, doc.embedding_model_code.as_deref());
+        let settings = self.rag.settings_for_corpus(&kb.id)?;
+        let model = self.llm.resolve_embedding_index_model_code(
+            workspace,
+            settings.embedding_model_code.as_deref(),
+        );
         let fingerprint = model.as_ref().ok().and_then(|m| {
             self.llm
-                .embedding_space_fingerprint(workspace, Some(m), TRON_VECTOR_INDEX_DIMENSION)
+                .embedding_space_fingerprint(workspace, Some(m), settings.embedding_dimension)
                 .ok()
         });
         let parser = self.document_parser(&doc)?
@@ -410,22 +416,22 @@ impl KnowledgeBaseService {
             doc.parsing_tier
                 .or_else(|| parser.as_ref().map(|p| p.default_tier()))
         };
-        let config = json!({"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": self.image_description_config()});
+        let config = json!({"ragSettings":settings,"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": self.image_description_config()});
         let identity = hash(&format!(
             "{}:{}:{config}",
             doc.resource_code, doc.resource_revision
         ));
         Ok(IngestionTask::queued(
-                format!("ingest_{}", new_id()),
-                kb.id.clone(),
-                doc.id.clone(),
-                user.into(),
-                workspace.into(),
-                doc.revision,
-                doc.resource_revision,
-                identity,
-                config,
-            ))
+            format!("ingest_{}", new_id()),
+            kb.id.clone(),
+            doc.id.clone(),
+            user.into(),
+            workspace.into(),
+            doc.revision,
+            doc.resource_revision,
+            identity,
+            config,
+        ))
     }
     async fn claim_task(
         &self,
@@ -463,7 +469,9 @@ impl KnowledgeBaseService {
             })
             .map_err(queue_error)
     }
-    pub(super) async fn refresh_parser_waits(&self) -> Result<Vec<ParseEndpointCapacity>, KnowledgeBaseError> {
+    pub(super) async fn refresh_parser_waits(
+        &self,
+    ) -> Result<Vec<ParseEndpointCapacity>, KnowledgeBaseError> {
         let mut endpoints = vec![ParseEndpointCapacity {
             supported_tiers: vec![],
             endpoint_id: "local-markdown".into(),
@@ -472,13 +480,25 @@ impl KnowledgeBaseService {
             resource_group_capacity: self.active_ingestion_config().parse_capacity,
             weight: 1,
         }];
-        if self.queue.pending(IngestionStage::Parsing, now_ms()).map_err(queue_error)? {
+        if self
+            .queue
+            .pending(IngestionStage::Parsing, now_ms())
+            .map_err(queue_error)?
+        {
             let status = match &self.parser {
                 Some(parser) => parser.routing_status().await,
-                None => parsing::ParserRoutingStatus { endpoints: vec![], unavailable: vec![(None, IngestionWaitReason::new(WaitReasonCode::ParserMissing))] },
+                None => parsing::ParserRoutingStatus {
+                    endpoints: vec![],
+                    unavailable: vec![(
+                        None,
+                        IngestionWaitReason::new(WaitReasonCode::ParserMissing),
+                    )],
+                },
             };
             endpoints.extend(status.endpoints);
-            self.queue.report_parser_availability(now_ms(), &endpoints, &status.unavailable).map_err(queue_error)?;
+            self.queue
+                .report_parser_availability(now_ms(), &endpoints, &status.unavailable)
+                .map_err(queue_error)?;
         }
         Ok(endpoints)
     }

@@ -1,10 +1,7 @@
 use super::*;
 
 impl KnowledgeBaseService {
-    pub fn platform_libraries(
-        &self,
-        user: &str,
-    ) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
+    pub fn platform_libraries(&self, user: &str) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
         if user.trim().is_empty() {
             return Err(KnowledgeBaseError::Forbidden);
         }
@@ -47,5 +44,39 @@ impl KnowledgeBaseService {
         }
         self.repository
             .replace_library_agent_grants(user, id, agents)
+    }
+}
+
+impl KnowledgeBaseService {
+    pub fn rag_task_views(&self, user: &str) -> Result<Vec<RagTaskView>, KnowledgeBaseError> {
+        let mut views = vec![];
+        for kb in self.platform_libraries(user)? {
+            for doc in self.repository.documents(&kb.id)? {
+                for task in self.ingestion_tasks(user, &kb.id, &doc.id)? {
+                    views.push(RagTaskView {
+                        id: task.id,
+                        document_id: Some(doc.id.clone()),
+                        corpus_id: kb.id.clone(),
+                        source_code: doc.id.clone(),
+                        title: doc.name.clone(),
+                        state: match task.state.as_str() {
+                            "READY" => "COMPLETED",
+                            "WAITING_EMBEDDING" | "WAITING_RETRY" => "QUEUED",
+                            other => other,
+                        }
+                        .into(),
+                        stage: task
+                            .index_stage
+                            .unwrap_or_else(|| format!("{:?}", task.stage).to_ascii_uppercase()),
+                        completed_units: task.completed_units,
+                        total_units: task.total_units,
+                        error: task.error,
+                        created_at: task.created_at,
+                        updated_at: task.updated_at,
+                    });
+                }
+            }
+        }
+        Ok(views)
     }
 }

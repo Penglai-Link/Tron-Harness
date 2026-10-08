@@ -1,190 +1,63 @@
-import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  useSearchParams,
-} from "react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-
-import {
-  PageHeader,
-  useTabPanelConfig,
-  useTablePagination,
-} from "@/shared";
+import { useSearchParams } from "react-router";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { listRagCorpora, listRagTasks } from "../api/ragApi";
+import { RagDefinitionTab } from "../components/RagDefinitionTab";
+import { RagIngestionTab } from "../components/RagIngestionTab";
+import { RagRetrievalTab } from "../components/RagRetrievalTab";
+import { useAuthStore } from "@/store/authStore";
 import { useToast } from "@/components/ui/toast";
-
-import {
-  deleteRagCorpus,
-  deleteRagProfile,
-} from "@/domain/rag/api/ragManagementApi";
-import { RagCorporaTab } from "@/domain/rag/components/RagCorporaTab";
-import { RagProfilesTab } from "@/domain/rag/components/RagProfilesTab";
-import {
-  deleteRagMockCorpus,
-  deleteRagMockProfile,
-} from "@/domain/rag/mock/data";
-import { useRagCorpora } from "@/domain/rag/hooks/useRagCorpora";
-import { useRagProfiles } from "@/domain/rag/hooks/useRagProfiles";
-import {
-  type CorpusRecord,
-  type IngestProfileRecord,
-  type RetrievalProfileRecord,
-} from "@/domain/rag/model/RagModel";
-import { resolveCorpusIngestProfiles } from "@/domain/rag/model/ragProfileBindings";
-import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { useRagErrorToast } from "../hooks/useRagErrorToast";
 
 export function RagPage() {
-  const navigate = usePlatformDataNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation("pages");
   const toast = useToast();
-  const dataSource = getServiceDataSource("rag");
-  const retrievalSectionRef = useRef<HTMLDivElement | null>(null);
-  const { corpora: corpusRecords, refresh: refreshCorpora } = useRagCorpora();
-  const { profiles: profileRecords, refresh: refreshProfiles } = useRagProfiles();
-  const ingestProfileRecords = useMemo(
-    () => profileRecords.filter((profile): profile is IngestProfileRecord => profile.type === "Ingest"),
-    [profileRecords],
-  );
-  const corpusRecordsWithProfileBindings = useMemo(
-    () => resolveCorpusIngestProfiles(corpusRecords, ingestProfileRecords),
-    [corpusRecords, ingestProfileRecords],
-  );
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`rag.${key}`, { defaultValue, ...options })
-  );
-
-  function retrievalProfileReferencesCorpus(profile: RetrievalProfileRecord, corpusCode: string) {
-    return profile.primaryCorpusId === corpusCode
-      || profile.corpus === corpusCode
-      || profile.corpusIds.includes(corpusCode)
-      || profile.config.routesConfig.some((route) => route.corpusId === corpusCode);
-  }
-
-  async function handleDeleteIngestProfile(corpus: CorpusRecord) {
-    const profileId = corpus.ingestProfile.trim();
-    if (!profileId) return;
-    try {
-      if (dataSource === "api") {
-        await deleteRagProfile(profileId);
-      } else {
-        deleteRagMockProfile(profileId);
-      }
-      toast.success(pageT("messages.ingestProfileDeleted", "Ingest profile {{id}} deleted.", { id: profileId }));
-      refreshProfiles();
-      refreshCorpora();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : pageT("errors.deleteIngestProfile", "Ingest profile could not be deleted."));
-    }
-  }
-
-  async function handleDeleteCorpus(corpus: CorpusRecord) {
-    const retrievalBindings = profileRecords.filter((profile): profile is RetrievalProfileRecord => (
-      profile.type === "Retrieval" && retrievalProfileReferencesCorpus(profile, corpus.code)
-    ));
-    if (retrievalBindings.length > 0) {
-      toast.error(pageT(
-        "errors.deleteCorpusRetrievalBinding",
-        "This corpus is bound to retrieval profile {{id}}. Remove the retrieval binding before deleting it.",
-        { id: retrievalBindings[0].id },
-      ));
-      return;
-    }
-    try {
-      const result = dataSource === "api"
-        ? await deleteRagCorpus(corpus.code)
-        : deleteRagMockCorpus(corpus.code);
-      const deletedIngestCount = result.deletedIngestProfileIds?.length ?? 0;
-      toast.success(pageT(
-        "messages.corpusDeleted",
-        "Corpus {{id}} deleted. {{count}} ingest profile(s) removed.",
-        { count: deletedIngestCount, id: corpus.code },
-      ));
-      refreshProfiles();
-      refreshCorpora();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : pageT("errors.deleteCorpus", "Corpus could not be deleted."));
-    }
-  }
-
-  async function handleDeleteRetrievalProfile(profile: RetrievalProfileRecord) {
-    try {
-      if (dataSource === "api") {
-        await deleteRagProfile(profile.id);
-      } else {
-        deleteRagMockProfile(profile.id);
-      }
-      toast.success(pageT("messages.retrievalProfileDeleted", "Retrieval profile {{id}} deleted.", { id: profile.id }));
-      refreshProfiles();
-      refreshCorpora();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : pageT("errors.deleteRetrievalProfile", "Retrieval profile could not be deleted."));
-    }
-  }
-
-  useEffect(() => {
-    const requestedTab = searchParams.get("tab");
-    if (requestedTab) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete("tab");
-      if (requestedTab === "profiles") {
-        nextParams.set("section", "retrieval");
-      }
-      setSearchParams(nextParams, { replace: true });
-      return;
-    }
-    if (searchParams.get("section") === "retrieval") {
-      window.requestAnimationFrame(() => {
-        retrievalSectionRef.current?.scrollIntoView({ block: "start" });
-      });
-    }
-  }, [searchParams, setSearchParams]);
-
-  const filteredCorpora = useMemo(() => corpusRecordsWithProfileBindings.filter((corpus) => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const matchesQuery = !normalizedQuery
-      || corpus.name.toLowerCase().includes(normalizedQuery)
-      || corpus.code.toLowerCase().includes(normalizedQuery)
-      || corpus.description.toLowerCase().includes(normalizedQuery);
-    const matchesStatus = statusFilter === "All" || corpus.status === statusFilter;
-    return matchesQuery && matchesStatus;
-  }), [corpusRecordsWithProfileBindings, query, statusFilter]);
-
-  const corpusPagination = useTablePagination(filteredCorpora, 10);
-
-  useTabPanelConfig({ searchPlaceholder: pageT("search.placeholder", "Search RAG corpora and retrieval profiles...") });
-
-  return (
-    <>
-      <div className="grid gap-6">
-        <RagCorporaTab
-          corpusPagination={corpusPagination}
-          query={query}
-          statusFilter={statusFilter}
-          onCreateCorpus={() => navigate("/rag/corpora/new")}
-          onDeleteCorpus={handleDeleteCorpus}
-          onDeleteIngestProfile={handleDeleteIngestProfile}
-          onEditCorpus={(corpus) => navigate(`/rag/corpora/${encodeURIComponent(corpus.code)}/edit`)}
-          onTestIngest={(corpus) => navigate(`/rag/corpora/${encodeURIComponent(corpus.code)}/ingest-test`)}
-          onQueryChange={setQuery}
-          onStatusFilterChange={setStatusFilter}
-        />
-
-        <div ref={retrievalSectionRef} id="rag-retrieval-profiles">
-          <RagProfilesTab
-            profiles={profileRecords}
-            onDeleteProfile={handleDeleteRetrievalProfile}
-            onTestProfile={(profile) => navigate(`/rag/profiles/retrieval/${encodeURIComponent(profile.id)}/test`)}
-          />
-        </div>
-      </div>
-
-    </>
-  );
+  const [params, setParams] = useSearchParams();
+  const tab = ["definition", "ingestion", "retrieval"].includes(params.get("tab") ?? "") ? params.get("tab")! : "definition";
+  const selected = params.get("corpus") ?? "";
+  const stateFilter = params.get("state") ?? "";
+  const user = useAuthStore((state) => state.session?.user.userCode ?? "");
+  const client = useQueryClient();
+  const corpora = useQuery({ queryKey: ["rag-corpora", user], queryFn: ({ signal }) => listRagCorpora(signal) });
+  useRagErrorToast(corpora.error?.message);
+  const tasks = useQuery({ queryKey: ["rag-tasks", user], queryFn: ({ signal }) => listRagTasks(signal), refetchInterval: tab === "ingestion" ? 3000 : false });
+  const refresh = () => { void client.invalidateQueries({ queryKey: ["rag-corpora", user] }); void client.invalidateQueries({ queryKey: ["rag-tasks", user] }); };
+  const switchTab = (value: string) => { const next = new URLSearchParams(params); next.set("tab", value); setParams(next); };
+  const selectCorpus = (id: string) => setParams((current) => {
+    const next = new URLSearchParams(current);
+    if (id) next.set("corpus", id); else next.delete("corpus");
+    return next;
+  });
+  const openIngestion = (id: string) => {
+    const count = corpora.data?.find((corpus) => corpus.id === id)?.counts.rebuildSourceCount ?? 0;
+    if (count > 0) toast.info(t("ragUnified.rebuildSelectionHelp", { count }));
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("tab", "ingestion");
+      next.set("corpus", id);
+      next.delete("state");
+      return next;
+    });
+  };
+  const selectState = (state: string) => setParams((current) => {
+    const next = new URLSearchParams(current);
+    if (state) next.set("state", state); else next.delete("state");
+    return next;
+  });
+  return <Tabs value={tab} onValueChange={(value) => switchTab(String(value))}>
+    <div className="flex items-center justify-between gap-4">
+      <TabsList aria-label={t("ragUnified.tabsLabel")}>
+        <TabsTrigger value="definition">{t("ragUnified.definition")}</TabsTrigger>
+        <TabsTrigger value="ingestion">{t("ragUnified.ingestion")}</TabsTrigger>
+        <TabsTrigger value="retrieval">{t("ragUnified.retrieval")}</TabsTrigger>
+      </TabsList>
+      {tab !== "ingestion" ? <Button variant="outline" onClick={refresh} disabled={corpora.isFetching}>{t("ragUnified.refresh")}</Button> : null}
+    </div>
+    {corpora.isPending ? <p role="status">{t("ragUnified.loading")}</p> : null}
+    <TabsContent value="definition"><RagDefinitionTab corpora={corpora.data ?? []} onSaved={refresh} onIngestion={openIngestion} /></TabsContent>
+    <TabsContent value="ingestion"><RagIngestionTab key={user} corpora={corpora.data ?? []} tasks={tasks.data ?? []} selected={selected} onSelect={selectCorpus} stateFilter={stateFilter} onSelectState={selectState} onChanged={refresh} onRefresh={refresh} refreshing={corpora.isFetching || tasks.isFetching} error={tasks.error?.message} /></TabsContent>
+    <TabsContent value="retrieval"><RagRetrievalTab key={user} corpora={corpora.data ?? []} selected={selected} onSelect={selectCorpus} /></TabsContent>
+  </Tabs>;
 }

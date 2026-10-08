@@ -54,6 +54,35 @@ impl CappedClient {
     }
 }
 impl LlmRuntimeClient for CappedClient {
+    fn embed_batch_with_model<'a>(
+        &'a self,
+        c: &'a RuntimeModelConfig,
+        inputs: &'a [String],
+        dimensions: usize,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<(Vec<fw::EmbeddingVector>, Option<String>), String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            self.admit()?;
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(45),
+                self.inner.embed_batch_with_model(c, inputs, dimensions),
+            )
+            .await
+            .map_err(|_| "synthetic embedding timeout".to_owned())?;
+            if let Ok((vectors, provider)) = &result {
+                self.observed
+                    .lock()
+                    .unwrap()
+                    .extend(vectors.iter().map(|v| (v.values.len(), provider.clone())));
+            }
+            result
+        })
+    }
     fn embed_with_model<'a>(
         &'a self,
         c: &'a RuntimeModelConfig,
@@ -296,10 +325,7 @@ async fn authorized_singleton_route_real_vectors_reach_native_contributor_with_a
             b"SYNTHETIC_VECTOR_PROOF imaginary archive cooling uses violet frost.",
         )
         .unwrap();
-    let indexed = service
-        .index(USER, &kb.id, &doc.id)
-        .await
-        .unwrap();
+    let indexed = service.index(USER, &kb.id, &doc.id).await.unwrap();
     let measurements = observed.lock().unwrap().clone();
     println!(
         "synthetic live indexing: status={}, calls={}, observed={}",
@@ -405,39 +431,188 @@ async fn authorized_singleton_route_real_vectors_reach_native_contributor_with_a
 /// Verify real HTTP-created MinerU docs through a native SDK loop on a copied DB.
 /// Only one synthetic query embedding; model generation is captured locally.
 #[tokio::test]
-#[ignore="requires TRON_KB_REAL_MINERU_CONTRIBUTOR=1 after synthetic HTTP ingestion"]
+#[ignore = "requires TRON_KB_REAL_MINERU_CONTRIBUTOR=1 after synthetic HTTP ingestion"]
 async fn real_http_mineru_resources_reach_native_contributor_with_revocation() {
-    assert_eq!(std::env::var("TRON_KB_REAL_MINERU_CONTRIBUTOR").as_deref(),Ok("1"));
-    use tron_backend::{app::AppState,config::AppConfig,application::profile::ProfileRegistryService,shared::id::FixedSnowflakeIdProvider};
-    let evidence=std::path::Path::new("/Users/clouds3n/Documents/Codex/2026-10-03/task/knowledge-base-implementation-evidence");
-    let report:serde_json::Value=serde_json::from_slice(&std::fs::read(evidence.join("kb-local-http-results.json")).unwrap()).unwrap();
-    assert_eq!(report["finalGrantsRevoked"],true);
-    let kb_id=report["knowledgeBaseId"].as_str().unwrap();let workspace=report["workspace"].as_str().unwrap();let agent=report["syntheticGrantAgent"].as_str().unwrap();
-    let isolated=tempfile::tempdir().unwrap();let database=isolated.path().join("native.sqlite3");
+    assert_eq!(
+        std::env::var("TRON_KB_REAL_MINERU_CONTRIBUTOR").as_deref(),
+        Ok("1")
+    );
+    use tron_backend::{
+        app::AppState, application::profile::ProfileRegistryService, config::AppConfig,
+        shared::id::FixedSnowflakeIdProvider,
+    };
+    let evidence = std::path::Path::new(
+        "/Users/clouds3n/Documents/Codex/2026-10-03/task/knowledge-base-implementation-evidence",
+    );
+    let report: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(evidence.join("kb-local-http-results.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(report["finalGrantsRevoked"], true);
+    let kb_id = report["knowledgeBaseId"].as_str().unwrap();
+    let workspace = report["workspace"].as_str().unwrap();
+    let agent = report["syntheticGrantAgent"].as_str().unwrap();
+    let isolated = tempfile::tempdir().unwrap();
+    let database = isolated.path().join("native.sqlite3");
     assert!(std::process::Command::new("python3").arg("-c").arg("import sqlite3,sys,os; a=sqlite3.connect('file:/Users/clouds3n/.tron/tron.sqlite3?mode=ro',uri=True); b=sqlite3.connect(sys.argv[1]); a.backup(b); b.close(); a.close(); os.chmod(sys.argv[1],0o600)").arg(&database).status().unwrap().success());
-    let owner:String=Connection::open(&database).unwrap().query_row("SELECT owner_user_code FROM knowledge_bases WHERE id=?1",[kb_id],|r|r.get(0)).unwrap();
-    let config_path=isolated.path().join("application.yaml");std::fs::copy("/Users/clouds3n/.tron/application.yaml",&config_path).unwrap();
-    let mut config=AppConfig::from_yaml_file(&config_path).unwrap();config.database_url=database.display().to_string();config.graph_storage_path=":memory:".into();config.skills_registry_root=isolated.path().join("skills").display().to_string();
-    let profiles=ProfileRegistryService::new(":memory:").unwrap();profiles.register_or_update(&owner,"synthetic-validation").unwrap();let profile=profiles.list().unwrap().remove(0);profiles.activate(&profile.profile_id).unwrap();
-    let state=AppState::new_with_profiles(config,Arc::new(FixedSnowflakeIdProvider::new(791000000000000000)),profiles).unwrap();
-    let providers=state.model_providers.clone();
-    let models=Arc::new(HttpModelClient::new(Arc::new(PersonAiModelProviderClient::new(HttpModelProviderClient::new(eliteforge_agent_official_plugin_model_http::ModelHttpClient::new()),providers.clone()))).with_model_executor(providers.model_executor()));
-    let calls=Arc::new(AtomicUsize::new(0));let observed=Arc::new(Mutex::new(vec![]));
-    let llm=LlmRuntimeService::new(Arc::new(ProviderAwareLlmRuntimeResolver::new(state.models.clone(),providers)),Arc::new(CappedClient{inner:HttpLlmRuntimeClient::with_model_client(models.clone()),calls:calls.clone(),observed:observed.clone()}));
-    let service=KnowledgeBaseService::new(SqliteKnowledgeBaseRepository::connect(&state.config.database_url).unwrap(),state.rag.clone(),state.resources.clone(),state.agent_management.clone(),llm);
-    let host=FrameworkHost::temporary(Some(state.resources.clone())).unwrap();host.bind_knowledge_bases(service.clone()).unwrap();let capture=Arc::new(Capture::default());host.bind_model_client(capture.clone()).unwrap();
-    let harness=ReactAgentBuilder::new(capture.clone(),Arc::new(ToolRegistry::default()),EventBusHandle::disabled()).with_framework_host(Some(host.clone())).build().unwrap();
-    let context=|run:&str,identity:bool|serde_json::from_value(serde_json::json!({"agentCode":if identity{Some(agent)}else{None},"conversationCode":run,"runCode":run,"workspaceCode":workspace,"userCode":owner,"locale":"en-US","agentKind":"REACT","model":{"modelCode":"fixture-chat","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"synthetic","modelName":"fixture","maxTokens":128,"contextWindowTokens":8000},"variables":[],"skills":[],"tools":[],"executionScope":{},"limits":{"maxSteps":2,"maxToolCalls":2,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":"diagram pipeline before search"}]}],"observations":[],"startedAt":"synthetic"})).unwrap();
-    harness.run(context("real-mineru-no-grant",true)).await.unwrap();assert_eq!(calls.load(Ordering::SeqCst),0);
-    service.set_grants(&owner,kb_id,vec![agent.into()]).unwrap();
-    let details=service.detail(&owner,kb_id).unwrap();let images=details.documents.iter().filter_map(|d|d.parsing_artifact.as_ref()).flat_map(|p|p.image_resource_codes.iter().cloned()).collect::<Vec<_>>();assert!(!images.is_empty());
-    for code in &images {assert!(state.resources.for_agent(Some(agent)).download_binary_to_file(&owner,tron_backend::application::resource::ResourceBinaryDownloadCommand{workspace_code:workspace.into(),resource_code:code.clone()}).is_ok());}
-    harness.run(context("real-mineru-granted",true)).await.unwrap();assert_eq!(calls.load(Ordering::SeqCst),1);
-    service.set_grants(&owner,kb_id,vec![]).unwrap();
-    for code in &images {assert!(state.resources.for_agent(Some(agent)).download_binary_to_file(&owner,tron_backend::application::resource::ResourceBinaryDownloadCommand{workspace_code:workspace.into(),resource_code:code.clone()}).is_err());}
-    harness.run(context("real-mineru-revoked",true)).await.unwrap();service.set_grants(&owner,kb_id,vec![agent.into()]).unwrap();harness.run(context("real-mineru-missing-identity",false)).await.unwrap();assert_eq!(calls.load(Ordering::SeqCst),1);
-    let texts=capture.0.lock().unwrap().iter().map(|r|r.messages.iter().map(|m|m.content.text()).collect::<Vec<_>>().join("\n")).collect::<Vec<_>>();assert_eq!(texts.len(),4);
-    assert!(!texts[0].contains("ORBIT REPORT"));assert!(texts[1].contains("Alpha") && texts[1].contains("resource:KB_"),"real structured/image evidence did not reach native model request");assert!(!texts[2].contains("ORBIT REPORT"));assert!(!texts[3].contains("ORBIT REPORT"));
+    let owner: String = Connection::open(&database)
+        .unwrap()
+        .query_row(
+            "SELECT owner_user_code FROM knowledge_bases WHERE id=?1",
+            [kb_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let config_path = isolated.path().join("application.yaml");
+    std::fs::copy("/Users/clouds3n/.tron/application.yaml", &config_path).unwrap();
+    let mut config = AppConfig::from_yaml_file(&config_path).unwrap();
+    config.database_url = database.display().to_string();
+    config.graph_storage_path = ":memory:".into();
+    config.skills_registry_root = isolated.path().join("skills").display().to_string();
+    let profiles = ProfileRegistryService::new(":memory:").unwrap();
+    profiles
+        .register_or_update(&owner, "synthetic-validation")
+        .unwrap();
+    let profile = profiles.list().unwrap().remove(0);
+    profiles.activate(&profile.profile_id).unwrap();
+    let state = AppState::new_with_profiles(
+        config,
+        Arc::new(FixedSnowflakeIdProvider::new(791000000000000000)),
+        profiles,
+    )
+    .unwrap();
+    let providers = state.model_providers.clone();
+    let models = Arc::new(
+        HttpModelClient::new(Arc::new(PersonAiModelProviderClient::new(
+            HttpModelProviderClient::new(
+                eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
+            ),
+            providers.clone(),
+        )))
+        .with_model_executor(providers.model_executor()),
+    );
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::new(Mutex::new(vec![]));
+    let llm = LlmRuntimeService::new(
+        Arc::new(ProviderAwareLlmRuntimeResolver::new(
+            state.models.clone(),
+            providers,
+        )),
+        Arc::new(CappedClient {
+            inner: HttpLlmRuntimeClient::with_model_client(models.clone()),
+            calls: calls.clone(),
+            observed: observed.clone(),
+        }),
+    );
+    let service = KnowledgeBaseService::new(
+        SqliteKnowledgeBaseRepository::connect(&state.config.database_url).unwrap(),
+        state.rag.clone(),
+        state.resources.clone(),
+        state.agent_management.clone(),
+        llm,
+    );
+    let host = FrameworkHost::temporary(Some(state.resources.clone())).unwrap();
+    host.bind_knowledge_bases(service.clone()).unwrap();
+    let capture = Arc::new(Capture::default());
+    host.bind_model_client(capture.clone()).unwrap();
+    let harness = ReactAgentBuilder::new(
+        capture.clone(),
+        Arc::new(ToolRegistry::default()),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let context = |run: &str, identity: bool| {
+        serde_json::from_value(serde_json::json!({"agentCode":if identity{Some(agent)}else{None},"conversationCode":run,"runCode":run,"workspaceCode":workspace,"userCode":owner,"locale":"en-US","agentKind":"REACT","model":{"modelCode":"fixture-chat","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"synthetic","modelName":"fixture","maxTokens":128,"contextWindowTokens":8000},"variables":[],"skills":[],"tools":[],"executionScope":{},"limits":{"maxSteps":2,"maxToolCalls":2,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":"diagram pipeline before search"}]}],"observations":[],"startedAt":"synthetic"})).unwrap()
+    };
+    harness
+        .run(context("real-mineru-no-grant", true))
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    service
+        .set_grants(&owner, kb_id, vec![agent.into()])
+        .unwrap();
+    let details = service.detail(&owner, kb_id).unwrap();
+    let images = details
+        .documents
+        .iter()
+        .filter_map(|d| d.parsing_artifact.as_ref())
+        .flat_map(|p| p.image_resource_codes.iter().cloned())
+        .collect::<Vec<_>>();
+    assert!(!images.is_empty());
+    for code in &images {
+        assert!(
+            state
+                .resources
+                .for_agent(Some(agent))
+                .download_binary_to_file(
+                    &owner,
+                    tron_backend::application::resource::ResourceBinaryDownloadCommand {
+                        workspace_code: workspace.into(),
+                        resource_code: code.clone()
+                    }
+                )
+                .is_ok()
+        );
+    }
+    harness
+        .run(context("real-mineru-granted", true))
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    service.set_grants(&owner, kb_id, vec![]).unwrap();
+    for code in &images {
+        assert!(
+            state
+                .resources
+                .for_agent(Some(agent))
+                .download_binary_to_file(
+                    &owner,
+                    tron_backend::application::resource::ResourceBinaryDownloadCommand {
+                        workspace_code: workspace.into(),
+                        resource_code: code.clone()
+                    }
+                )
+                .is_err()
+        );
+    }
+    harness
+        .run(context("real-mineru-revoked", true))
+        .await
+        .unwrap();
+    service
+        .set_grants(&owner, kb_id, vec![agent.into()])
+        .unwrap();
+    harness
+        .run(context("real-mineru-missing-identity", false))
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let texts = capture
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            r.messages
+                .iter()
+                .map(|m| m.content.text())
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(texts.len(), 4);
+    assert!(!texts[0].contains("ORBIT REPORT"));
+    assert!(
+        texts[1].contains("Alpha") && texts[1].contains("resource:KB_"),
+        "real structured/image evidence did not reach native model request"
+    );
+    assert!(!texts[2].contains("ORBIT REPORT"));
+    assert!(!texts[3].contains("ORBIT REPORT"));
     std::fs::write(evidence.join("kb-real-native-contributor.json"),serde_json::to_vec_pretty(&serde_json::json!({"source":"actual HTTP-created synthetic MinerU KB, isolated online copy for grants/runtime","queryEmbeddingCalls":calls.load(Ordering::SeqCst),"observedEmbedding":*observed.lock().unwrap(),"nativeCaptureRequests":texts.len(),"grantedStructuredTextAndImageReferences":true,"revokedNoContext":true,"missingIdentityNoContext":true,"derivedImageAclGrantAndRevoke":true,"imagesChecked":images.len(),"defaultKbFinalGrants":"revoked; isolated grant tests do not mutate default DB"})).unwrap()).unwrap();
-    assert!(host.close().await.is_success());state.agent_framework.close().await;models.close().await;
+    assert!(host.close().await.is_success());
+    state.agent_framework.close().await;
+    models.close().await;
 }

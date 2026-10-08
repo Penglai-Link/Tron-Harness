@@ -20,13 +20,13 @@ impl BackendRuntimeConfig {
 }
 
 pub(super) fn supports_hot_update(path: &str) -> bool {
-    path.starts_with("shortTermMemory.")
+    path.starts_with("modelInvocation.")
+        || path.starts_with("shortTermMemory.")
         || path.starts_with("mineru.imageDescription.")
         || matches!(
             path,
             "mineru.visualContextEnabled"
                 | "navigation.maxDepth"
-                | "projectDocRoot"
                 | "terminalWorkingDirectory"
                 | "resource.connectionVerificationTimeoutMs"
                 | "resource.limits.attributesMaxBytes"
@@ -67,6 +67,9 @@ pub(super) fn apply_hot_settings(current: &mut AppConfig, next: AppConfig, paths
         current.mineru.ingestion.parse_capacity = parse_capacity;
         current.mineru.ingestion.embedding_capacity = embedding_capacity;
     }
+    if changed("modelInvocation.") {
+        current.model_invocation = next.model_invocation;
+    }
     if changed("shortTermMemory.") {
         current.short_term_memory = next.short_term_memory;
     }
@@ -83,9 +86,6 @@ pub(super) fn apply_hot_settings(current: &mut AppConfig, next: AppConfig, paths
     }
     if changed("navigation.") {
         current.navigation = next.navigation;
-    }
-    if changed("projectDocRoot") {
-        current.project_doc_root = next.project_doc_root;
     }
     if changed("terminalWorkingDirectory") {
         current.terminal_working_directory = next.terminal_working_directory;

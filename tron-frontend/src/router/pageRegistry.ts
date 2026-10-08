@@ -179,49 +179,9 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.PromptEditPage,
     })),
   ),
-  "rag.corpora.edit": lazy(() =>
-    import("@/domain/rag/pages/RagCorpusFormPage").then((module) => ({
-      default: module.RagCorpusFormPage,
-    })),
-  ),
-  "rag.corpora.ingestTest": lazy(() =>
-    import("@/domain/rag/pages/RagWorkbenchPage").then((module) => ({
-      default: module.RagIngestTestPage,
-    })),
-  ),
-  "rag.corpora.new": lazy(() =>
-    import("@/domain/rag/pages/RagCorpusFormPage").then((module) => ({
-      default: module.RagCorpusFormPage,
-    })),
-  ),
   "rag.index": lazy(() =>
     import("@/domain/rag/pages/RagPage").then((module) => ({
       default: module.RagPage,
-    })),
-  ),
-  "rag.profiles.ingest.edit": lazy(() =>
-    import("@/domain/rag/pages/RagProfileFormPage").then((module) => ({
-      default: module.RagIngestProfileFormPage,
-    })),
-  ),
-  "rag.profiles.ingest.new": lazy(() =>
-    import("@/domain/rag/pages/RagProfileFormPage").then((module) => ({
-      default: module.RagIngestProfileFormPage,
-    })),
-  ),
-  "rag.profiles.retrieval.edit": lazy(() =>
-    import("@/domain/rag/pages/RagProfileFormPage").then((module) => ({
-      default: module.RagRetrievalProfileFormPage,
-    })),
-  ),
-  "rag.profiles.retrieval.new": lazy(() =>
-    import("@/domain/rag/pages/RagProfileFormPage").then((module) => ({
-      default: module.RagRetrievalProfileFormPage,
-    })),
-  ),
-  "rag.profiles.retrieval.test": lazy(() =>
-    import("@/domain/rag/pages/RagWorkbenchPage").then((module) => ({
-      default: module.RagRetrievalTestPage,
     })),
   ),
   "resources.index": lazy(() =>

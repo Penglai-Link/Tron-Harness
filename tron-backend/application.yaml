@@ -3,7 +3,6 @@ navigation:
   maxDepth: 3
 port: 8080
 frontendDistDir: tron-backend/resources/frontend
-projectDocRoot: .
 terminalWorkingDirectory: .
 
 resource:
@@ -39,6 +38,28 @@ resource:
 systemAgents:
   codexCommand: codex
   opencodeCommand: opencode
+
+# Model budgets are read at the next invocation; batch limits at the next embedding batch.
+modelInvocation:
+  text:
+    callTimeoutSeconds: 300
+    operationTimeoutSeconds: 900
+  embedding:
+    callTimeoutSeconds: 180
+    operationTimeoutSeconds: 600
+    maxBatchInputs: 32
+    maxBatchTokens: 32768
+  rerank:
+    callTimeoutSeconds: 60
+    operationTimeoutSeconds: 180
+  verification:
+    callTimeoutSeconds: 60
+    operationTimeoutSeconds: 180
+  agentModelTimeoutSeconds: 300
+  agentStepTimeoutSeconds: 300
+  externalAgent:
+    callTimeoutSeconds: 3600
+    operationTimeoutSeconds: 3600
 
 httpClients:
   default:

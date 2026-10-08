@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     SqliteRagRepository,
-    indexes::{fts_table_name, supported_vector_dimensions, table_exists, vec_table_name},
+    indexes::{fts_table_name, table_exists, vec_table_name},
     sql_plan::{
         SqliteRagCorpusPlan, SqliteRagProjectionColumn, SqliteRagTableAlias, SqliteRagValueType,
         compile_sql_corpus_plan, quote_identifier,
@@ -28,6 +28,36 @@ use filters::append_filter_clauses;
 use terms::{fts_query, search_terms};
 
 impl RagSearchRepository for SqliteRagRepositorySql<'_> {
+    fn embedding_partitions(
+        &self,
+        query: RagRouteSearchQuery,
+    ) -> Result<Vec<crate::application::rag::RagEmbeddingPartition>, RagError> {
+        let corpus = self
+            .get_corpus(&query.corpus_id)?
+            .ok_or(RagError::CorpusNotFound)?;
+        let plan = compile_sql_corpus_plan(self, &corpus)?;
+        let retriever = sqlite_retriever_strategy("STRUCTURED_FILTER_SQLITE_V1")?;
+        let from = from_sql(&plan, &query, retriever)?;
+        let (conditions, params) = where_sql(self.connection, &plan, &query, retriever)?;
+        let metadata = source_metadata_expr(&plan)?;
+        let sql = format!(
+            "SELECT DISTINCT tu.source_code,tu.embedding_model_code,tu.embedding_dimension,json_extract({metadata},'$.embeddingProviderModel'),json_extract({metadata},'$.embeddingFingerprint') {from} {conditions} AND tu.embedding_status='INDEXED' AND tu.embedding_model_code IS NOT NULL AND tu.embedding_dimension IS NOT NULL"
+        );
+        let mut statement = self.connection.prepare(&sql).map_err(storage_error)?;
+        statement
+            .query_map(params_from_iter(params), |row| {
+                Ok(crate::application::rag::RagEmbeddingPartition {
+                    source_code: row.get(0)?,
+                    model_code: row.get(1)?,
+                    dimension: row.get(2)?,
+                    provider_model: row.get(3)?,
+                    fingerprint: row.get(4)?,
+                })
+            })
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
+    }
     fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError> {
         let corpus = self
             .get_corpus(&query.corpus_id)?
@@ -41,7 +71,7 @@ impl RagSearchRepository for SqliteRagRepositorySql<'_> {
         self.connection
             .execute(
                 "INSERT INTO rag_diagnostics (
-                    record_type, record_code, profile_id, workspace_code, user_code, agent_code,
+                    record_type, record_code, task_id, workspace_code, user_code, agent_code,
                     query_text, payload_json, created_at, expires_at
                 )
                 VALUES ('SEARCH_TRACE', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -51,7 +81,7 @@ impl RagSearchRepository for SqliteRagRepositorySql<'_> {
                     expires_at = excluded.expires_at",
                 params![
                     trace.record_code,
-                    trace.profile_id,
+                    trace.task_id,
                     trace.workspace_code,
                     trace.user_code,
                     trace.agent_code,
@@ -94,7 +124,7 @@ fn search_route(
     validate_retriever_available(repository, plan, query, retriever)?;
     let select = select_projection(plan, query, retriever)?;
     let from_sql = from_sql(plan, query, retriever)?;
-    let (where_sql, where_params) = where_sql(plan, query, retriever)?;
+    let (where_sql, where_params) = where_sql(repository.connection, plan, query, retriever)?;
     let limit_sql = " LIMIT ?";
     let order_sql = order_sql(plan, query, retriever)?;
     let sql = format!(
@@ -363,7 +393,7 @@ fn validate_retriever_available(
                 return Err(RagError::SearchRouteUnavailable);
             }
             let dimension = query_embedding_dimension(query)?;
-            if !supported_vector_dimensions().contains(&dimension) {
+            if !(1..=8192).contains(&dimension) {
                 return Err(RagError::SearchRouteUnavailable);
             }
             if sqlite_vec_available(&repository.connection)
@@ -397,7 +427,7 @@ fn validate_retriever_available(
                 return Err(RagError::SearchRouteUnavailable);
             }
             let dimension = query_embedding_dimension(query)?;
-            if !supported_vector_dimensions().contains(&dimension) {
+            if !(1..=8192).contains(&dimension) {
                 return Err(RagError::SearchRouteUnavailable);
             }
             if sqlite_vec_available(&repository.connection)
@@ -416,6 +446,7 @@ fn validate_retriever_available(
 }
 
 fn where_sql(
+    connection: &rusqlite::Connection,
     plan: &SqliteRagCorpusPlan,
     query: &RagRouteSearchQuery,
     retriever: SqliteRetrieverStrategy,
@@ -469,15 +500,36 @@ fn where_sql(
             }
         }
         SqliteRetrieverKind::FulltextFts5 => {
-            let fts_query = fts_query(&query.query);
+            let fts_query = query.query.trim();
             if !fts_query.is_empty() {
                 let fts_table = quote_identifier(&fts_table_name(plan.fulltext_storage_table()))?;
-                clauses.push(format!("{fts_table} MATCH ?"));
-                params.push(SqlValue::Text(fts_query));
+                clauses.push(format!(
+                    "{fts_table} MATCH REPLACE(jieba_query(?,0),' AND ',' OR ')"
+                ));
+                params.push(SqlValue::Text(fts_query.to_owned()));
             }
         }
         SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
             query_embedding_dimension(query)?;
+            if let Some(model) = &query.query_embedding_model_code {
+                let alias = if plan.has_distinct_vector_table() {
+                    "vt"
+                } else {
+                    "tu"
+                };
+                clauses.push(format!("{alias}.embedding_model_code = ?"));
+                params.push(SqlValue::Text(model.clone()));
+            }
+            let metadata = source_metadata_expr(plan)?;
+            for (key, path) in [
+                ("providerModel", "embeddingProviderModel"),
+                ("fingerprint", "embeddingFingerprint"),
+            ] {
+                if let Some(value) = query.policy.get(key).and_then(Value::as_str) {
+                    clauses.push(format!("json_extract({metadata},'$.{path}') = ?"));
+                    params.push(SqlValue::Text(value.into()));
+                }
+            }
         }
         SqliteRetrieverKind::StructuredFilter
         | SqliteRetrieverKind::TreeFulltext
@@ -500,6 +552,48 @@ fn where_sql(
         }
     }
 
+    if query.retriever == "GRAPH_EVIDENCE_V1" {
+        let segmented: String = connection
+            .query_row("SELECT jieba_query(?1,0)", [&query.query], |row| row.get(0))
+            .map_err(storage_error)?;
+        let terms = search_terms(&segmented.replace(" AND ", " ").replace(" OR ", " "));
+        if terms.is_empty() {
+            return Ok(("WHERE 0".into(), vec![]));
+        }
+        let matching = terms
+            .iter()
+            .map(|_| "LOWER(g.text) LIKE ? ESCAPE '\\'")
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        clauses.push(format!("EXISTS (SELECT 1 FROM rag_graph_evidence g WHERE g.corpus_id=? AND g.source_code=tu.source_code AND g.source_version=tu.source_version AND g.scope_type=tu.scope_type AND g.scope_code=tu.scope_code AND g.target_code=tu.text_unit_code AND ({matching}))"));
+        params.push(SqlValue::Text(query.corpus_id.clone()));
+        params.extend(terms.into_iter().map(|term| {
+            SqlValue::Text(format!(
+                "%{}%",
+                term.replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_")
+            ))
+        }));
+    }
+    if let Some(targets) = query.policy.get("targetCodes").and_then(Value::as_array) {
+        if targets.is_empty() {
+            clauses.push("0".into());
+        } else {
+            clauses.push(format!(
+                "tu.text_unit_code IN ({})",
+                vec!["?"; targets.len()].join(",")
+            ));
+            for target in targets {
+                params.push(SqlValue::Text(
+                    target
+                        .as_str()
+                        .ok_or(RagError::SearchRequestInvalid)?
+                        .into(),
+                ));
+            }
+        }
+    }
     append_filter_clauses(plan, &query.filters, &mut clauses, &mut params)?;
     Ok((format!("WHERE {}", clauses.join(" AND ")), params))
 }
@@ -534,7 +628,7 @@ fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrateg
         "VECTOR_SQLITE_VEC0_COSINE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::VectorVec0,
         }),
-        "STRUCTURED_FILTER_SQLITE_V1" => Ok(SqliteRetrieverStrategy {
+        "STRUCTURED_FILTER_SQLITE_V1" | "GRAPH_EVIDENCE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::StructuredFilter,
         }),
         "TREE_FULLTEXT_V1" => Ok(SqliteRetrieverStrategy {
@@ -548,6 +642,15 @@ fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrateg
 }
 
 impl RagSearchRepository for SqliteRagRepository {
+    fn embedding_partitions(
+        &self,
+        query: RagRouteSearchQuery,
+    ) -> Result<Vec<crate::application::rag::RagEmbeddingPartition>, RagError> {
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.embedding_partitions(query),
+            || RagError::StorageFailure,
+        )
+    }
     fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError> {
         self.connection.call(
             move |connection| SqliteRagRepositorySql { connection }.search_route(query),

@@ -43,11 +43,7 @@ impl KnowledgeBaseError {
 }
 
 impl KnowledgeBaseService {
-    pub fn remove_library(
-        &self,
-        user: &str,
-        id: &str,
-    ) -> Result<(), KnowledgeBaseError> {
+    pub fn remove_library(&self, user: &str, id: &str) -> Result<(), KnowledgeBaseError> {
         self.require_user(user)?;
         let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
         self.repository.delete_empty_library(user, id)
@@ -162,7 +158,7 @@ impl KnowledgeBaseService {
         })
     }
 
-    pub(super) async fn clean_document_deletion(&self, job: DeletionCleanupPlan) {
+    pub(crate) async fn clean_document_deletion(&self, job: DeletionCleanupPlan) {
         // Task snapshots survive only in this best-effort call, not in database history.
         for task in &job.cancellations {
             let Some(parser) = self.parser.as_ref() else {

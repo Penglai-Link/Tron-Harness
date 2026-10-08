@@ -280,8 +280,8 @@ export default function AppRoutePage() {
         items={settingsNavigation}
       >
         <Routes>
-          <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute>{ /^(memory|knowledgeGraph|rag)\./.test(route.pageId)
-            ? <PlatformWorkspaceScope><resolved.Component key={routeRenderKey} /></PlatformWorkspaceScope>
+          <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute>{ /^(memory|knowledgeGraph)\./.test(route.pageId)
+            ? <PlatformWorkspaceScope renderWithoutWorkspace={route.pageId === "memory.index" || route.pageId === "knowledgeGraph.index"}><resolved.Component key={routeRenderKey} /></PlatformWorkspaceScope>
             : <resolved.Component key={routeRenderKey} /> }</SuspendedRoute>} />
         </Routes>
       </SettingsShell>

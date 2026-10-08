@@ -2,6 +2,7 @@ mod defaults;
 mod error;
 mod file;
 mod mineru;
+mod model_invocation;
 mod parsing;
 mod paths;
 mod percentage;
@@ -15,7 +16,9 @@ use crate::{
 };
 
 pub use self::error::ConfigError;
-pub use self::mineru::{MineruConfig, MineruNode, KnowledgeIngestionConfig, ImageDescriptionConfig};
+pub use self::mineru::{
+    ImageDescriptionConfig, KnowledgeIngestionConfig, MineruConfig, MineruNode,
+};
 use self::parsing::env_port_override;
 use self::paths::{
     default_application_config_path_from_home, default_database_url_from_home,
@@ -27,12 +30,15 @@ pub use self::resource::{
     LocalResourceStorageProfile, ResourceConfig, ResourceLimits, ResourceStorageConfig,
     ResourceStorageProfile, S3ResourceStorageProfile,
 };
+pub use model_invocation::{
+    EmbeddingInvocationConfig, ModelInvocationConfig, ModelInvocationTimeouts,
+};
 pub use variable_crypto::VariableCryptoConfig;
 
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_FRONTEND_DIST_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/frontend");
-const DEFAULT_PROJECT_DOC_ROOT: &str = ".";
+const DEFAULT_TERMINAL_DIRECTORY: &str = ".";
 const TEST_DATABASE_URL: &str = ":memory:";
 const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
 const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
@@ -50,7 +56,6 @@ pub struct AppConfig {
     pub database_url: String,
     pub graph_storage_path: String,
     pub frontend_dist_dir: String,
-    pub project_doc_root: String,
     pub terminal_working_directory: String,
     pub skills_registry_root: String,
     pub resource: ResourceConfig,
@@ -58,6 +63,7 @@ pub struct AppConfig {
     pub variable_crypto: VariableCryptoConfig,
     pub http_clients: HttpClientProfilesConfig,
     pub mineru: MineruConfig,
+    pub model_invocation: ModelInvocationConfig,
     pub short_term_memory: ShortTermMemoryConfig,
     pub event_bus: EventBusConfig,
     pub navigation: NavigationConfig,
@@ -116,8 +122,7 @@ impl AppConfig {
             database_url: default_database_url_from_home(),
             graph_storage_path: default_graph_storage_path_from_home(),
             frontend_dist_dir: DEFAULT_FRONTEND_DIST_DIR.into(),
-            project_doc_root: DEFAULT_PROJECT_DOC_ROOT.into(),
-            terminal_working_directory: DEFAULT_PROJECT_DOC_ROOT.into(),
+            terminal_working_directory: DEFAULT_TERMINAL_DIRECTORY.into(),
             skills_registry_root: default_skills_registry_root_from_home(),
             resource: ResourceConfig::with_default_root(default_resource_storage_root_from_home()),
             system_agents: SystemAgentConfig {
@@ -127,6 +132,7 @@ impl AppConfig {
             variable_crypto: VariableCryptoConfig::default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
             mineru: MineruConfig::default(),
+            model_invocation: ModelInvocationConfig::default(),
             short_term_memory: ShortTermMemoryConfig::default(),
             event_bus: EventBusConfig::default(),
             navigation: NavigationConfig { max_depth: 3 },
@@ -152,11 +158,6 @@ impl AppConfig {
             && !value.trim().is_empty()
         {
             self.frontend_dist_dir = normalize_storage_path(value);
-        }
-        if let Ok(value) = std::env::var("TRON_PROJECT_DOC_ROOT")
-            && !value.trim().is_empty()
-        {
-            self.project_doc_root = normalize_storage_path(value);
         }
         if let Ok(value) = std::env::var("TRON_TERMINAL_WORKING_DIRECTORY")
             && !value.trim().is_empty()

@@ -50,16 +50,24 @@ impl ModelService {
                 ..Default::default()
             },
         };
+        let timeouts = self
+            .runtime_config
+            .as_ref()
+            .map(|runtime| runtime.snapshot().model_invocation.verification)
+            .unwrap_or_else(|| crate::config::ModelInvocationConfig::default().verification);
         let limits = fw::RunLimits {
             max_model_output_tokens: MIN_VERIFY_OUTPUT_TOKENS,
             max_model_retries: model.max_retries.unwrap_or(0) as usize,
             max_model_calls_per_step: Some(model.max_retries.unwrap_or(0) as usize + 1),
-            model_timeout: std::time::Duration::from_secs(30),
-            run_timeout: std::time::Duration::from_secs(30),
+            model_timeout: std::time::Duration::from_secs(timeouts.call_timeout_seconds),
+            run_timeout: std::time::Duration::from_secs(timeouts.operation_timeout_seconds),
             ..Default::default()
         };
+        let options = fw::ModelInvocationOptions::for_call(&limits)
+            .map_err(|error| ModelError::VerificationFailed(error.to_string()))?;
         self.model_executor
             .with_runtime(runtime)
+            .with_options(options)
             .chat(
                 &fw::ModelRef::new("probe", "probe"),
                 request,

@@ -1,28 +1,14 @@
+use super::RagConfigRepository;
+use crate::{
+    application::llm::{LlmEmbeddingBatchCallCommand, LlmEmbeddingCallCommand, LlmRuntimeService},
+    domain::rag::RagError,
+};
+use serde_json::Value;
 use std::{
-    any::Any,
     collections::BTreeMap,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
-};
-
-use serde_json::{Value, json};
-
-mod executor;
-
-use crate::{
-    application::{
-        llm::{LlmEmbeddingCallCommand, LlmRuntimeService},
-        prompt::PromptService,
-    },
-    domain::rag::{RagError, RagStatus},
-    shared::event_bus::{BusOutcome, EventBusHandle},
-};
-
-use super::{
-    RagConfigRepository, RagDocumentSourceRuntime, RagStageExecutionResult, RagStrategyRegistry,
-    ingest_artifact::ArtifactBundle, ingest_profile::compile_ingest_profile, publish_rag_event,
-    runtime::DefaultRagRuntime,
 };
 
 pub trait RagIngestRepository: RagConfigRepository {
@@ -43,7 +29,7 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub struct RagPersistIngestCommand {
     pub corpus_id: String,
-    pub profile_id: String,
+    pub task_id: String,
     pub source_code: String,
     pub source_version: String,
     pub scope: RagIngestScope,
@@ -123,38 +109,86 @@ pub struct RagEmbeddingCall {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RagEmbeddingResult {
+    pub provider_model: Option<String>,
     pub model_code: String,
     pub embedding: Vec<f32>,
 }
 
+#[derive(Debug, Clone)]
+pub struct RagEmbeddingBatchCall {
+    pub workspace_code: String,
+    pub model_code: Option<String>,
+    pub inputs: Vec<String>,
+    pub dimensions: usize,
+}
+
+pub use crate::application::llm::LlmEmbeddingBatchCallResult as RagEmbeddingBatchResult;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RagTreeSummaryCall {
+pub struct RagGraphCall {
     pub workspace_code: String,
     pub model_code: Option<String>,
     pub prompt: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RagTreeSummaryResult {
+pub struct RagGraphResult {
     pub model_code: String,
-    pub summary_text: String,
+    pub graph_json: String,
 }
 
 pub trait RagEmbeddingRuntime: Clone + Send + Sync + 'static {
+    fn embedding_fingerprint(
+        &self,
+        _workspace: &str,
+        _model: Option<&str>,
+        _dimension: usize,
+    ) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    fn embed_batch<'a>(
+        &'a self,
+        call: RagEmbeddingBatchCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingBatchResult, String>> + Send + 'a>>;
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>>;
 }
 
-pub trait RagTreeSummaryRuntime: Send + Sync + 'static {
-    fn summarize_tree<'a>(
+pub trait RagGraphRuntime: Send + Sync + 'static {
+    fn extract_graph<'a>(
         &'a self,
-        call: RagTreeSummaryCall,
-    ) -> Pin<Box<dyn Future<Output = Result<RagTreeSummaryResult, String>> + Send + 'a>>;
+        call: RagGraphCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagGraphResult, String>> + Send + 'a>>;
 }
 
 impl RagEmbeddingRuntime for LlmRuntimeService {
+    fn embedding_fingerprint(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+        dimension: usize,
+    ) -> Result<Option<String>, String> {
+        self.embedding_space_fingerprint(workspace, model, dimension)
+            .map(Some)
+            .map_err(|error| error.to_string())
+    }
+    fn embed_batch<'a>(
+        &'a self,
+        call: RagEmbeddingBatchCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingBatchResult, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.embedding_batch_call(LlmEmbeddingBatchCallCommand {
+                workspace_code: call.workspace_code,
+                model_code: call.model_code,
+                inputs: call.inputs,
+                dimensions: call.dimensions,
+            })
+            .await
+            .map_err(|error| error.to_string())
+        })
+    }
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
@@ -167,6 +201,7 @@ impl RagEmbeddingRuntime for LlmRuntimeService {
             })
             .await
             .map(|result| RagEmbeddingResult {
+                provider_model: result.provider_model,
                 model_code: result.model_code,
                 embedding: result.embedding,
             })
@@ -178,7 +213,6 @@ impl RagEmbeddingRuntime for LlmRuntimeService {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RagIngestRequest {
     pub corpus_id: String,
-    pub ingest_profile_id: String,
     pub workspace_code: String,
     pub access_context: RagIngestAccessContext,
     pub target_scope: RagIngestScope,
@@ -190,8 +224,6 @@ pub struct RagIngestRequest {
 pub struct RagIngestSource {
     pub code: String,
     pub version: String,
-    /// Legacy inbound compatibility only; RAG no longer consumes source type.
-    pub source_type: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,7 +242,6 @@ pub struct RagIngestScope {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RagIngestResult {
     pub corpus_id: String,
-    pub profile_id: String,
     pub source_code: String,
     pub source_version: String,
     pub status: String,
@@ -218,7 +249,6 @@ pub struct RagIngestResult {
     pub fulltext_status: String,
     pub embedding_status: String,
     pub warnings: Vec<Value>,
-    pub stage_results: Vec<RagStageExecutionResult>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -226,267 +256,6 @@ pub struct RagIngestWarning {
     pub stage_id: String,
     pub code: String,
     pub message: String,
-}
-
-pub struct RagIngestService<R, S, E> {
-    repository: R,
-    strategy_registry: S,
-    embedding_runtime: E,
-    tree_summary_runtime: Option<Arc<dyn RagTreeSummaryRuntime>>,
-    event_bus: EventBusHandle,
-    prompt_service: Option<PromptService>,
-}
-
-impl<R, S, E> RagIngestService<R, S, E>
-where
-    R: RagIngestRepository,
-    S: RagStrategyRegistry,
-    E: RagEmbeddingRuntime + RagDocumentSourceRuntime + Any,
-{
-    pub fn new(repository: R, strategy_registry: S, embedding_runtime: E) -> Self {
-        let tree_summary_runtime = default_tree_summary_runtime(&embedding_runtime);
-        Self {
-            repository,
-            strategy_registry,
-            embedding_runtime,
-            tree_summary_runtime,
-            event_bus: EventBusHandle::disabled(),
-            prompt_service: None,
-        }
-    }
-
-    pub fn with_tree_summary_runtime<T>(mut self, runtime: T) -> Self
-    where
-        T: RagTreeSummaryRuntime,
-    {
-        self.tree_summary_runtime = Some(Arc::new(runtime));
-        self
-    }
-
-    pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
-        self.event_bus = event_bus;
-        self
-    }
-
-    pub fn with_prompt_service(mut self, prompt_service: PromptService) -> Self {
-        self.prompt_service = Some(prompt_service);
-        self
-    }
-
-    pub async fn ingest(&self, request: RagIngestRequest) -> Result<RagIngestResult, RagError> {
-        validate_ingest_request(&request)?;
-        validate_direct_scope(&request.access_context, &request.target_scope)?;
-        publish_ingest_event(
-            &self.event_bus,
-            "rag.ingest.started",
-            BusOutcome::Started,
-            &request,
-            "started",
-        );
-        let result = self.ingest_after_started(&request).await;
-        if let Err(error) = &result {
-            publish_ingest_failed_event(&self.event_bus, &request, error);
-        }
-        result
-    }
-
-    async fn ingest_after_started(
-        &self,
-        request: &RagIngestRequest,
-    ) -> Result<RagIngestResult, RagError> {
-        let corpus = self
-            .repository
-            .get_corpus(&request.corpus_id)?
-            .ok_or(RagError::CorpusNotFound)?;
-        if corpus.status == RagStatus::Reserved {
-            return Err(RagError::CorpusReserved);
-        }
-        let profile = self
-            .repository
-            .get_profile(&request.ingest_profile_id)?
-            .ok_or(RagError::ProfileNotFound)?;
-        let compiled = compile_ingest_profile(&profile, &corpus, &self.strategy_registry)?;
-
-        let mut bundle = ArtifactBundle::from_request(request);
-        let (persisted, stage_results) = self
-            .execute_ingest_stages(request, &compiled, &mut bundle)
-            .await?;
-        if let Some(error) = persisted.fatal_error.clone() {
-            return Err(error);
-        }
-        publish_ingest_event(
-            &self.event_bus,
-            "rag.ingest.completed",
-            BusOutcome::Completed,
-            request,
-            if !persisted.warnings.is_empty() {
-                "partial_warning"
-            } else {
-                "success"
-            },
-        );
-
-        Ok(RagIngestResult {
-            corpus_id: request.corpus_id.clone(),
-            profile_id: compiled.profile_id,
-            source_code: request.source.code.clone(),
-            source_version: request.source.version.clone(),
-            status: persisted.source_status,
-            text_unit_count: persisted.text_unit_count,
-            fulltext_status: persisted.fulltext_status,
-            embedding_status: persisted.embedding_status,
-            warnings: persisted
-                .warnings
-                .into_iter()
-                .map(|warning| {
-                    json!({
-                        "stageId": warning.stage_id,
-                        "code": warning.code,
-                        "message": warning.message
-                    })
-                })
-                .collect(),
-            stage_results,
-        })
-    }
-}
-
-fn default_tree_summary_runtime<E>(runtime: &E) -> Option<Arc<dyn RagTreeSummaryRuntime>>
-where
-    E: Any,
-{
-    (runtime as &dyn Any)
-        .downcast_ref::<DefaultRagRuntime>()
-        .map(|runtime| Arc::new(runtime.clone()) as Arc<dyn RagTreeSummaryRuntime>)
-}
-
-fn publish_ingest_event(
-    event_bus: &EventBusHandle,
-    event_name: &'static str,
-    outcome: BusOutcome,
-    request: &RagIngestRequest,
-    status: &str,
-) {
-    publish_rag_event(
-        event_bus,
-        event_name,
-        outcome,
-        &[
-            ("workspace_code", request.workspace_code.clone()),
-            ("corpus_id", request.corpus_id.clone()),
-            ("profile_id", request.ingest_profile_id.clone()),
-            ("source_code", request.source.code.clone()),
-            ("source_version", request.source.version.clone()),
-            ("scope_type", request.target_scope.scope_type.clone()),
-            ("scope_code", request.target_scope.scope_code.clone()),
-            ("status", status.to_string()),
-        ],
-    );
-}
-
-fn publish_ingest_failed_event(
-    event_bus: &EventBusHandle,
-    request: &RagIngestRequest,
-    error: &RagError,
-) {
-    publish_rag_event(
-        event_bus,
-        "rag.ingest.failed",
-        BusOutcome::Failure,
-        &[
-            ("workspace_code", request.workspace_code.clone()),
-            ("corpus_id", request.corpus_id.clone()),
-            ("profile_id", request.ingest_profile_id.clone()),
-            ("source_code", request.source.code.clone()),
-            ("source_version", request.source.version.clone()),
-            ("status", "failed".to_string()),
-            ("error_code", format!("{error:?}")),
-        ],
-    );
-}
-
-fn publish_ingest_stage_event(
-    event_bus: &EventBusHandle,
-    stage_id: &str,
-    outcome: BusOutcome,
-    count: usize,
-    request: &RagIngestRequest,
-) {
-    if !matches!(
-        stage_id,
-        "fulltextIndex" | "vectorIndex" | "persistTree" | "persistSource"
-    ) {
-        return;
-    }
-    let (event_name, status) = if outcome == BusOutcome::Failure {
-        ("rag.ingest.stage.failed", "failed")
-    } else {
-        ("rag.ingest.stage.completed", "completed")
-    };
-    publish_rag_event(
-        event_bus,
-        event_name,
-        outcome,
-        &[
-            ("workspace_code", request.workspace_code.clone()),
-            ("corpus_id", request.corpus_id.clone()),
-            ("source_code", request.source.code.clone()),
-            ("source_version", request.source.version.clone()),
-            ("stage_id", stage_id.to_string()),
-            ("status", status.to_string()),
-            ("count", count.to_string()),
-        ],
-    );
-}
-
-fn validate_ingest_request(request: &RagIngestRequest) -> Result<(), RagError> {
-    for value in [
-        request.corpus_id.as_str(),
-        request.ingest_profile_id.as_str(),
-        request.workspace_code.as_str(),
-        request.access_context.user_code.as_str(),
-        request.access_context.agent_code.as_str(),
-        request.access_context.workspace_code.as_str(),
-        request.target_scope.scope_type.as_str(),
-        request.target_scope.scope_code.as_str(),
-        request.source.code.as_str(),
-        request.source.version.as_str(),
-    ] {
-        if value.trim().is_empty() {
-            return Err(RagError::IngestRequestInvalid);
-        }
-    }
-    if request.payload.as_object().is_none() {
-        return Err(RagError::IngestRequestInvalid);
-    }
-    validate_payload_source(request)?;
-    Ok(())
-}
-
-fn validate_payload_source(request: &RagIngestRequest) -> Result<(), RagError> {
-    let source = request
-        .payload
-        .get("source")
-        .and_then(Value::as_object)
-        .ok_or(RagError::IngestRequestInvalid)?;
-    let source_code = source_string(source, "code")?;
-    let source_version = source_string(source, "version")?;
-    if source_code != request.source.code || source_version != request.source.version {
-        return Err(RagError::IngestRequestInvalid);
-    }
-    Ok(())
-}
-
-fn source_string<'a>(
-    source: &'a serde_json::Map<String, Value>,
-    field: &str,
-) -> Result<&'a str, RagError> {
-    source
-        .get(field)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or(RagError::IngestRequestInvalid)
 }
 
 pub fn validate_direct_scope(

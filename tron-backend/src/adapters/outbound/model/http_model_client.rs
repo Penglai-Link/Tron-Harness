@@ -28,13 +28,16 @@ pub(crate) fn error(error: fw::AgentError) -> String {
         _ => error.to_string(),
     }
 }
-pub(crate) fn limits(config: &AgentModelConfig) -> fw::RunLimits {
+pub(crate) fn limits(
+    config: &AgentModelConfig,
+    timeouts: &crate::config::ModelInvocationTimeouts,
+) -> fw::RunLimits {
     fw::RunLimits {
         max_model_retries: config.max_retries.unwrap_or(0) as usize,
         max_model_calls_per_step: Some(config.max_retries.unwrap_or(0) as usize + 2),
         max_model_output_tokens: config.max_tokens.filter(|v| *v > 0).unwrap_or(4096),
-        model_timeout: std::time::Duration::from_secs(30),
-        run_timeout: std::time::Duration::from_secs(30),
+        model_timeout: std::time::Duration::from_secs(timeouts.call_timeout_seconds),
+        run_timeout: std::time::Duration::from_secs(timeouts.operation_timeout_seconds),
         max_context_tokens: config.context_window_tokens.unwrap_or(128_000) as usize,
         ..Default::default()
     }
@@ -44,13 +47,28 @@ pub(crate) fn limits(config: &AgentModelConfig) -> fw::RunLimits {
 pub struct HttpModelClient {
     pub(crate) factory: Arc<dyn sdk::ModelTransportFactory>,
     pub(crate) executor: Arc<eliteforge_agent_framework::ModelClient>,
+    runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
 }
 impl HttpModelClient {
     pub fn new(factory: Arc<dyn sdk::ModelTransportFactory>) -> Self {
         Self {
             factory,
             executor: Arc::default(),
+            runtime_config: None,
         }
+    }
+    pub fn with_runtime_config(
+        mut self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) -> Self {
+        self.runtime_config = Some(runtime);
+        self
+    }
+    pub(crate) fn invocation_config(&self) -> crate::config::ModelInvocationConfig {
+        self.runtime_config
+            .as_ref()
+            .map(|runtime| runtime.snapshot().model_invocation)
+            .unwrap_or_default()
     }
     pub fn with_model_executor(
         mut self,
@@ -104,13 +122,13 @@ impl HttpModelClient {
             input.options.temperature = config.temperature;
             input.options.top_p = config.top_p;
             input.options.max_output_tokens = config.max_tokens.filter(|v| *v > 0);
-            let mut effective = limits(config);
+            let mut effective = limits(config, &self.invocation_config().text);
             effective.max_model_calls_per_step = Some(max_calls);
             let client = match parent {
                 Some(parent) => {
                     client.with_options(fw::ModelInvocationOptions::for_run(parent, &effective))
                 }
-                None => client,
+                None => client.with_options(fw::ModelInvocationOptions::for_call(&effective)?),
             };
             Ok((client, reference, input, effective))
         });
@@ -218,6 +236,7 @@ impl ModelClient for HttpModelClient {
                     .map_err(|e| sdk::encode_model_error(&e))?,
             ),
             executor: self.executor.clone(),
+            runtime_config: self.runtime_config.clone(),
         })))
     }
     fn authorization_scope(&self, config: &AgentModelConfig) -> Result<Option<String>, String> {

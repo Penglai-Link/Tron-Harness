@@ -87,6 +87,28 @@ impl LlmRuntimeClient for Vision {
             Ok(r#"{"description":"Synthetic cobalt-orbit diagram shows UPLOAD leading to INDEX","visibleText":"UPLOAD INDEX","relations":["UPLOAD -> INDEX"]}"#.into())
         })
     }
+    fn embed_batch_with_model<'a>(
+        &'a self,
+        c: &'a RuntimeModelConfig,
+        inputs: &'a [String],
+        dimensions: usize,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        (
+                            Vec<eliteforge_agent_framework::EmbeddingVector>,
+                            Option<String>,
+                        ),
+                        String,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        self.inputs.lock().unwrap().extend(inputs.iter().cloned());
+        self.embed.embed_batch_with_model(c, inputs, dimensions)
+    }
     fn embed_with_model<'a>(
         &'a self,
         c: &'a RuntimeModelConfig,
@@ -160,7 +182,8 @@ impl KnowledgeDocumentParser for Replay {
         ParsingTier::Standard
     }
     async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
-        Ok(ParsingCapabilities { default_ocr_mode: tron_backend::application::knowledge_base::parsing::OcrMode::Auto,
+        Ok(ParsingCapabilities {
+            default_ocr_mode: tron_backend::application::knowledge_base::parsing::OcrMode::Auto,
             default_tier: ParsingTier::Standard,
             available_tiers: vec![ParsingTier::Flash, ParsingTier::Standard],
             parser_version: "4.0.10".into(),
@@ -191,7 +214,10 @@ fn service(
     let calls = Arc::new(AtomicUsize::new(0));
     let s = KnowledgeBaseService::new(
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
-        f.state.rag.clone(),
+        tron_backend::application::rag::RagService::new(
+            Arc::new(std::sync::Mutex::new(tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(&f.state.config.database_url).unwrap())),
+            tron_backend::application::rag::DefaultRagRuntime::new(LlmRuntimeService::new(Arc::new(Resolver), Arc::new(v.clone())), f.state.llm_router.clone()),
+        ),
         f.state.resources.clone(),
         f.state.agent_management.clone(),
         LlmRuntimeService::new(Arc::new(Resolver), Arc::new(v.clone())),
@@ -256,9 +282,7 @@ async fn default_off_preview_never_calls_vision_and_enabled_index_is_acl_scoped(
     let f = Fixture::new();
     let v = Vision::new(f.client.clone());
     let (s, parses) = service(&f, &v, false, DOCX.to_vec());
-    let kb = s
-        .create(USER, "Images", "synthetic only")
-        .unwrap();
+    let kb = s.create(USER, "Images", "synthetic only").unwrap();
     let doc = s
         .upload(
             USER,
@@ -314,8 +338,7 @@ async fn default_off_preview_never_calls_vision_and_enabled_index_is_acl_scoped(
             .hits
             .is_empty()
     );
-    s.set_grants(USER, &kb.id, vec![f.agent.clone()])
-        .unwrap();
+    s.set_grants(USER, &kb.id, vec![f.agent.clone()]).unwrap();
     let hits = s
         .search_for_agent(USER, WORKSPACE, &f.agent, "cobalt-orbit", 1200)
         .await
@@ -385,7 +408,12 @@ async fn provider_failure_and_invalid_json_are_retryable_without_reparsing() {
     let (s, parses) = service(&f, &v, true, DOCX.to_vec());
     let kb = s.create(USER, "Retry", "synthetic").unwrap();
     let d = s
-        .upload(USER, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
+        .upload(
+            USER,
+            &kb.id,
+            "synthetic.docx",
+            include_bytes!("fixtures/mineru-v1/synthetic.docx"),
+        )
         .unwrap();
     v.fail.store(true, Ordering::SeqCst);
     let failed = s.index(USER, &kb.id, &d.id).await.unwrap();
@@ -394,13 +422,7 @@ async fn provider_failure_and_invalid_json_are_retryable_without_reparsing() {
     assert!(failed.image_description_artifacts.is_empty());
     v.fail.store(false, Ordering::SeqCst);
     v.bad_json.store(true, Ordering::SeqCst);
-    assert_eq!(
-        s.index(USER, &kb.id, &d.id)
-            .await
-            .unwrap()
-            .status,
-        "FAILED"
-    );
+    assert_eq!(s.index(USER, &kb.id, &d.id).await.unwrap().status, "FAILED");
     v.bad_json.store(false, Ordering::SeqCst);
     let ready = s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(ready.status, "READY");
@@ -412,13 +434,7 @@ async fn provider_failure_and_invalid_json_are_retryable_without_reparsing() {
     assert_eq!(failed.active_source_code, ready.active_source_code);
     assert_eq!(v.calls.load(Ordering::SeqCst), 3);
     f.client.failing.store(false, Ordering::SeqCst);
-    assert_eq!(
-        s.index(USER, &kb.id, &d.id)
-            .await
-            .unwrap()
-            .status,
-        "READY"
-    );
+    assert_eq!(s.index(USER, &kb.id, &d.id).await.unwrap().status, "READY");
     assert_eq!(v.calls.load(Ordering::SeqCst), 3);
 }
 #[tokio::test]
@@ -429,7 +445,12 @@ async fn cancellation_keeps_successful_private_cache_and_retry_finishes_remainin
     let (s, parses) = service(&f, &v, true, two_images());
     let kb = s.create(USER, "Cancel", "synthetic").unwrap();
     let d = s
-        .upload(USER, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
+        .upload(
+            USER,
+            &kb.id,
+            "synthetic.docx",
+            include_bytes!("fixtures/mineru-v1/synthetic.docx"),
+        )
         .unwrap();
     {
         let pending = s.index(USER, &kb.id, &d.id);
@@ -445,11 +466,7 @@ async fn cancellation_keeps_successful_private_cache_and_retry_finishes_remainin
             }) => result.unwrap(),
         }
     }
-    let d = s
-        .detail(USER, &kb.id)
-        .unwrap()
-        .documents
-        .remove(0);
+    let d = s.detail(USER, &kb.id).unwrap().documents.remove(0);
     assert_eq!(d.status, "FAILED");
     assert_eq!(d.image_description_artifacts.len(), 1);
     assert_eq!(v.calls.load(Ordering::SeqCst), 2);
@@ -474,7 +491,12 @@ async fn account_change_during_response_is_rejected_and_cache_is_not_published()
     let (s, _) = service(&f, &v, true, DOCX.to_vec());
     let kb = s.create(USER, "Identity", "synthetic").unwrap();
     let d = s
-        .upload(USER, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
+        .upload(
+            USER,
+            &kb.id,
+            "synthetic.docx",
+            include_bytes!("fixtures/mineru-v1/synthetic.docx"),
+        )
         .unwrap();
     let failed = s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(failed.status, "FAILED");

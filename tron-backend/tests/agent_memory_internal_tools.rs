@@ -94,7 +94,7 @@ async fn mock_embedding(
     Json(_payload): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
     let _ = uri;
-    let mut embedding = vec![0.0; 4096];
+    let mut embedding = vec![0.0; 1024];
     embedding[0] = 1.0;
     embedding[1] = 0.25;
     (
@@ -252,6 +252,7 @@ async fn main_agent_default_all_platform_tools_injects_memory_tools() {
     assert!(tool_names.contains(&"memory_save".to_string()));
     assert!(tool_names.contains(&"memory_delete".to_string()));
     assert!(tool_names.contains(&"automation_create".to_string()));
+    assert!(tool_names.contains(&"rag_search".to_string()));
 }
 
 #[tokio::test]
@@ -431,7 +432,6 @@ fn memory_current_lookup_uses_standard_rag_search_boundary() {
         );
     }
     assert!(memory_service.contains("RagSearchRequest"));
-    assert!(memory_service.contains("MEMORY_SEARCH_PROFILE_ID"));
     assert!(memory_service.contains("\"RESULT_LIST\""));
 }
 

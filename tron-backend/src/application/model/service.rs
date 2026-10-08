@@ -133,6 +133,7 @@ pub struct ModelService {
     verification_factory:
         Arc<dyn eliteforge_agent_official_plugin_model_http::ModelTransportFactory>,
     cipher: Arc<dyn VariableCipher>,
+    runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -195,6 +196,14 @@ struct ResolvedWorkspaceCatalog {
 }
 
 impl ModelService {
+    pub fn with_runtime_config(
+        mut self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) -> Self {
+        self.runtime_config = Some(runtime);
+        self
+    }
+
     pub fn with_model_transport(
         mut self,
         client: eliteforge_agent_official_plugin_model_http::ModelHttpClient,
@@ -228,6 +237,7 @@ impl ModelService {
                 ),
             ),
             cipher,
+            runtime_config: None,
         }
     }
 

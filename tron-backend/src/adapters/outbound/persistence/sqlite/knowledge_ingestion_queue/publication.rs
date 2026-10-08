@@ -46,7 +46,15 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         if count == 0 || ready["chunkCount"].as_u64() != Some(count as u64) {
             return Err(IngestionQueueError::Conflict);
         }
-        publication_indexes::validate_vectors(&tx, &task.knowledge_base_id, source, count)?;
+        if let Some(dimension) = ready["embeddingDimension"].as_u64() {
+            publication_indexes::validate_vectors(
+                &tx,
+                &task.knowledge_base_id,
+                source,
+                count,
+                dimension as usize,
+            )?;
+        }
         publication_cleanup::remove_old_generations(&tx, &task, &current, source)?;
         tx.execute(&format!("UPDATE {table} SET source_status='ACTIVE',status='ACTIVE' WHERE source_code=?1 AND source_status='STAGING'"), [source]).map_err(storage)?;
         let mut ready = ready.clone();
@@ -59,6 +67,9 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
             return Err(IngestionQueueError::Conflict);
         }
         task.state = "READY".into();
+        task.completed_units = count;
+        task.total_units = count;
+        task.updated_at = now;
         clear_lease(&mut task);
         task.parsed_resource_code = None;
         task.chunks_resource_code = None;

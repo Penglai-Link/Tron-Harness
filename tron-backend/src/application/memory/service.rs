@@ -3,10 +3,9 @@ mod search;
 use serde_json::{Map, Value, json};
 
 use crate::application::rag::{
-    RagDiagnosticsRepository, RagDocumentSourceRuntime, RagEmbeddingRuntime, RagIngestRepository,
-    RagIngestRequest, RagIngestScope, RagIngestSource, RagRetryIndexRepository,
-    RagSearchContextRequest, RagSearchGraphExpansionRequest, RagSearchRepository, RagSearchRequest,
-    RagSearchRuntime, RagSearchTraceRequest, RagService, RagStrategyRegistry,
+    RagDiagnosticsRepository, RagEmbeddingRuntime, RagIngestRepository, RagIngestRequest,
+    RagIngestScope, RagIngestSource, RagSearchContextRequest, RagSearchGraphExpansionRequest,
+    RagSearchRepository, RagSearchRequest, RagSearchRuntime, RagSearchTraceRequest, RagService,
 };
 
 use super::{
@@ -26,10 +25,6 @@ use super::{
 };
 
 const MEMORY_CORPUS_ID: &str = "memory-card";
-const MEMORY_INGEST_PROFILE_ID: &str = "memory-card-ingest-v1";
-const MEMORY_SEARCH_PROFILE_ID: &str = "memory-related-v1";
-const MEMORY_QUERY_PROFILE_ID: &str = "memory-query-v1";
-const MEMORY_SOURCE_TYPE: &str = "MEMORY_CARD";
 const DEFAULT_CONTEXT_TOKEN_BUDGET: usize = 1200;
 const MEMORY_RETURN_FIELDS: &[&str] = &[
     "memoryType",
@@ -46,21 +41,16 @@ const MEMORY_RETURN_FIELDS: &[&str] = &[
 ];
 
 #[derive(Clone)]
-pub struct MemoryService<R, S, E> {
-    rag: RagService<R, S, E>,
+pub struct MemoryService<R, E> {
+    rag: RagService<R, E>,
 }
 
-impl<R, S, E> MemoryService<R, S, E>
+impl<R, E> MemoryService<R, E>
 where
-    R: RagIngestRepository
-        + RagSearchRepository
-        + RagDiagnosticsRepository
-        + RagRetryIndexRepository
-        + Clone,
-    S: RagStrategyRegistry,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime,
+    R: Send + Sync + RagIngestRepository + RagSearchRepository + RagDiagnosticsRepository + Clone,
+    E: RagEmbeddingRuntime + crate::application::rag::RagGraphRuntime + RagSearchRuntime,
 {
-    pub fn new(rag: RagService<R, S, E>) -> Self {
+    pub fn new(rag: RagService<R, E>) -> Self {
         Self { rag }
     }
 
@@ -210,7 +200,6 @@ where
             .rag
             .ingest(RagIngestRequest {
                 corpus_id: MEMORY_CORPUS_ID.into(),
-                ingest_profile_id: MEMORY_INGEST_PROFILE_ID.into(),
                 workspace_code: context.workspace_code.clone(),
                 access_context: access_context(context),
                 target_scope: RagIngestScope {
@@ -220,7 +209,6 @@ where
                 source: RagIngestSource {
                     code: locator.source_code.clone(),
                     version: locator.source_version.clone(),
-                    source_type: MEMORY_SOURCE_TYPE.into(),
                 },
                 payload: payload.clone(),
             })
@@ -255,8 +243,7 @@ where
             "source".into(),
             json!({
                 "code": current.locator.source_code,
-                "version": current.locator.source_version,
-                "type": MEMORY_SOURCE_TYPE
+                "version": current.locator.source_version
             }),
         );
         insert_optional_string(
@@ -369,8 +356,7 @@ where
     ) -> Result<Option<CurrentMemory>, MemoryError> {
         let result = self
             .rag
-            .search(RagSearchRequest {
-                profile_id: MEMORY_SEARCH_PROFILE_ID.into(),
+            .search_memory(RagSearchRequest {
                 workspace_code: context.workspace_code.clone(),
                 query: String::new(),
                 access_context: access_context(context),

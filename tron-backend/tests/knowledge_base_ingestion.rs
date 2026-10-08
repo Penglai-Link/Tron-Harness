@@ -28,12 +28,16 @@ fn fast() -> KnowledgeIngestionConfig {
     }
 }
 fn reopen(f: &Fixture) -> KnowledgeBaseService {
+    let llm = LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone()));
     KnowledgeBaseService::new(
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
-        f.state.rag.clone(),
+        tron_backend::application::rag::RagService::new(
+            Arc::new(std::sync::Mutex::new(tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(&f.state.config.database_url).unwrap())),
+            tron_backend::application::rag::DefaultRagRuntime::new(llm.clone(), f.state.llm_router.clone()),
+        ),
         f.state.resources.clone(),
         f.state.agent_management.clone(),
-        LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())),
+        llm,
     )
     .with_ingestion_config(fast())
 }
@@ -66,9 +70,7 @@ async fn wait_document(
 async fn repeated_upload_and_clicks_have_one_document_and_live_task_with_scoped_request_replay() {
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service
-        .create(USER, "Duplicate protection", "")
-        .unwrap();
+    let kb = service.create(USER, "Duplicate protection", "").unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
     let first = service
         .upload_with_request(
@@ -105,18 +107,9 @@ async fn repeated_upload_and_clicks_have_one_document_and_live_task_with_scoped_
             .is_err()
     );
     for _ in 0..5 {
-        service
-            .start_index(USER, &kb.id, &first.id)
-            .unwrap();
+        service.start_index(USER, &kb.id, &first.id).unwrap();
     }
-    assert_eq!(
-        service
-            .detail(USER, &kb.id)
-            .unwrap()
-            .documents
-            .len(),
-        1
-    );
+    assert_eq!(service.detail(USER, &kb.id).unwrap().documents.len(), 1);
     assert_eq!(
         service
             .ingestion_tasks(USER, &kb.id, &first.id)
@@ -136,20 +129,13 @@ async fn completed_parses_release_capacity_while_embedding_is_blocked_and_cancel
  {
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service
-        .create(USER, "Independent capacities", "")
-        .unwrap();
+    let kb = service.create(USER, "Independent capacities", "").unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
     let mut documents = Vec::new();
     for n in 0..3 {
         documents.push(
             service
-                .upload_and_start_index(
-                    USER,
-                    &kb.id,
-                    &format!("guide-{n}.md"),
-                    b"orchid staged",
-                )
+                .upload_and_start_index(USER, &kb.id, &format!("guide-{n}.md"), b"orchid staged")
                 .unwrap(),
         );
     }
@@ -177,10 +163,7 @@ async fn completed_parses_release_capacity_while_embedding_is_blocked_and_cancel
     .await
     .unwrap();
     for doc in &documents {
-        let cancelled = service
-            .cancel_index(USER, &kb.id, &doc.id)
-            .await
-            .unwrap();
+        let cancelled = service.cancel_index(USER, &kb.id, &doc.id).await.unwrap();
         assert_eq!(cancelled.status, "CANCELLED");
         assert!(cancelled.active_source_code.is_none());
     }
@@ -208,14 +191,9 @@ async fn cancelled_rebuild_keeps_old_whole_index_and_manual_retry_uses_saved_chu
         .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
-    service
-        .start_index(USER, &kb.id, &doc.id)
-        .unwrap();
+    service.start_index(USER, &kb.id, &doc.id).unwrap();
     wait_document(&service, &kb.id, &doc.id, "EMBEDDING").await;
-    let cancelled = service
-        .cancel_index(USER, &kb.id, &doc.id)
-        .await
-        .unwrap();
+    let cancelled = service.cancel_index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(cancelled.active_source_code, doc.active_source_code);
     // Full-text remains available without letting the blocked query embed stall this test.
     f.client.blocking.store(false, Ordering::SeqCst);
@@ -231,9 +209,7 @@ async fn cancelled_rebuild_keeps_old_whole_index_and_manual_retry_uses_saved_chu
         .unwrap()
         .remove(0);
     let checkpoint = task.chunks_resource_code.clone();
-    service
-        .retry_index(USER, &kb.id, &doc.id)
-        .unwrap();
+    service.retry_index(USER, &kb.id, &doc.id).unwrap();
     let ready = wait_document(&service, &kb.id, &doc.id, "READY").await;
     assert_eq!(ready.index_revision, 2);
     assert_ne!(ready.active_source_code, doc.active_source_code);
@@ -315,17 +291,11 @@ async fn automatic_retry_backoff_is_bounded_and_partial_embedding_never_publishe
     })
     .await
     .unwrap();
-    let doc = service
-        .detail(USER, &kb.id)
-        .unwrap()
-        .documents
-        .remove(0);
+    let doc = service.detail(USER, &kb.id).unwrap().documents.remove(0);
     assert!(doc.active_source_code.is_none());
     assert_eq!(doc.index_revision, 0);
     f.client.failing.store(false, Ordering::SeqCst);
-    service
-        .retry_index(USER, &kb.id, &doc.id)
-        .unwrap();
+    service.retry_index(USER, &kb.id, &doc.id).unwrap();
     wait_document(&service, &kb.id, &doc.id, "READY").await;
     service.stop_ingestion_workers();
 }
@@ -339,14 +309,12 @@ fn queue_and_upload_migration_are_additive_and_reconnect_is_idempotent() {
 }
 
 #[tokio::test]
-async fn restart_reuses_each_completed_vector_checkpoint() {
+async fn embedding_batch_restart_reuses_each_completed_batch_checkpoint() {
     use tron_backend::application::knowledge_base::local_documents::{ChunkConfig, ChunkMode};
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service
-        .create(USER, "Vector checkpoints", "")
-        .unwrap();
-    let content = format!("# Guide\n{}", "orchid durable fact. ".repeat(80));
+    let kb = service.create(USER, "Vector checkpoints", "").unwrap();
+    let content = format!("# Guide\n{}", "orchid durable fact. ".repeat(400));
     let doc = service
         .upload(USER, &kb.id, "guide.md", content.as_bytes())
         .unwrap();
@@ -364,13 +332,9 @@ async fn restart_reuses_each_completed_vector_checkpoint() {
         )
         .unwrap();
     f.client.block_after_calls.store(1, Ordering::SeqCst);
-    service
-        .start_index(USER, &kb.id, &doc.id)
-        .unwrap();
+    service.start_index(USER, &kb.id, &doc.id).unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
-        while service
-            .ingestion_tasks(USER, &kb.id, &doc.id)
-            .unwrap()[0]
+        while service.ingestion_tasks(USER, &kb.id, &doc.id).unwrap()[0]
             .embedding_resource_code
             .is_none()
         {
@@ -380,6 +344,10 @@ async fn restart_reuses_each_completed_vector_checkpoint() {
     .await
     .unwrap();
     assert_eq!(f.client.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        service.ingestion_tasks(USER, &kb.id, &doc.id).unwrap()[0].completed_units,
+        32
+    );
     service.stop_ingestion_workers();
     f.client
         .block_after_calls
@@ -387,8 +355,11 @@ async fn restart_reuses_each_completed_vector_checkpoint() {
     let resumed = reopen(&f);
     resumed.start_ingestion_workers().unwrap();
     let ready = wait_document(&resumed, &kb.id, &doc.id, "READY").await;
-    assert!(ready.chunk_count > 1);
-    assert_eq!(f.client.calls.load(Ordering::SeqCst), ready.chunk_count);
+    assert!(ready.chunk_count > 32);
+    assert_eq!(
+        f.client.calls.load(Ordering::SeqCst),
+        ready.chunk_count.div_ceil(32)
+    );
     resumed.stop_ingestion_workers();
 }
 
@@ -397,16 +368,9 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
     use serde_json::json;
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service
-        .create(USER, "Publish recovery", "")
-        .unwrap();
+    let kb = service.create(USER, "Publish recovery", "").unwrap();
     let doc = service
-        .upload_and_index(
-            USER,
-            &kb.id,
-            "guide.md",
-            b"orchid complete publication",
-        )
+        .upload_and_index(USER, &kb.id, "guide.md", b"orchid complete publication")
         .await
         .unwrap();
     let initial = service
@@ -456,10 +420,7 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
     // pre-publication snapshot that a crashed rebuild would have written.
     let repository = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
     let current = repository.document(&kb.id, &doc.id).unwrap();
-    let preview = service
-        .preview(USER, &kb.id, &doc.id)
-        .await
-        .unwrap();
+    let preview = service.preview(USER, &kb.id, &doc.id).await.unwrap();
     let chunks = checkpoint_resource(
         &f,
         &current,
@@ -555,9 +516,9 @@ fn checkpoint_resource(
     use tron_backend::domain::resource::ResourceKind;
     let code = format!("KB_{}", format!("{:032x}", rand::random::<u128>()));
     let repo = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
-    repo.register_derived_resource(doc, WORKSPACE, &code)
+    repo.register_derived_resource(doc, "PLATFORM", &code)
         .unwrap();
-    repo.mark_private(USER, WORKSPACE, &code).unwrap();
+    repo.mark_private(USER, "PLATFORM", &code).unwrap();
     let mut file = tempfile::NamedTempFile::new().unwrap();
     file.write_all(&serde_json::to_vec(value).unwrap()).unwrap();
     f.state
@@ -565,7 +526,7 @@ fn checkpoint_resource(
         .create_file_resource(
             USER,
             ResourceCreateCommand {
-                workspace_code: WORKSPACE.into(),
+                workspace_code: "PLATFORM".into(),
                 resource_code: code.clone(),
                 kind: ResourceKind::File,
                 name: name.into(),
@@ -587,16 +548,9 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
     use tron_backend::application::knowledge_base::local_documents::{ChunkConfig, ChunkMode};
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service
-        .create(USER, "Atomic settings", "")
-        .unwrap();
+    let kb = service.create(USER, "Atomic settings", "").unwrap();
     let before = service
-        .upload_and_index(
-            USER,
-            &kb.id,
-            "guide.md",
-            b"orchid atomic settings",
-        )
+        .upload_and_index(USER, &kb.id, "guide.md", b"orchid atomic settings")
         .await
         .unwrap();
     let repo = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
@@ -611,14 +565,7 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
     };
     assert!(
         service
-            .configure_and_start_index(
-                USER,
-                &kb.id,
-                &before.id,
-                Some(config.clone()),
-                None,
-                None
-            )
+            .configure_and_start_index(USER, &kb.id, &before.id, Some(config.clone()), None, None)
             .await
             .is_err()
     );
@@ -637,14 +584,7 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
         .unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
     service
-        .configure_and_start_index(
-            USER,
-            &kb.id,
-            &before.id,
-            Some(config.clone()),
-            None,
-            None,
-        )
+        .configure_and_start_index(USER, &kb.id, &before.id, Some(config.clone()), None, None)
         .await
         .unwrap();
     let queued = repo.document(&kb.id, &before.id).unwrap();
@@ -718,9 +658,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         .clone()
         .with_document_parser(Arc::new(CleanupImageParser))
         .with_ingestion_config(fast());
-    let kb = service
-        .create(USER, "Rebuild cleanup", "")
-        .unwrap();
+    let kb = service.create(USER, "Rebuild cleanup", "").unwrap();
     let first = service
         .upload_and_index(USER, &kb.id, "guide.pdf", &pdf())
         .await
@@ -737,7 +675,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         .download_binary_to_file(
             USER,
             ResourceBinaryDownloadCommand {
-                workspace_code: WORKSPACE.into(),
+                workspace_code: "PLATFORM".into(),
                 resource_code: obsolete.clone(),
             },
         )
@@ -747,7 +685,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         .await
         .unwrap();
     let shared = checkpoint_resource(&f, &old, "shared-cache.json", &serde_json::json!({}));
-    repo.register_derived_resource(&other, WORKSPACE, &shared)
+    repo.register_derived_resource(&other, "PLATFORM", &shared)
         .unwrap();
     service
         .configure_and_start_index(
@@ -768,9 +706,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         .resource_code
         .clone();
     assert_ne!(new_cache, old_cache);
-    let tasks = service
-        .ingestion_tasks(USER, &kb.id, &first.id)
-        .unwrap();
+    let tasks = service.ingestion_tasks(USER, &kb.id, &first.id).unwrap();
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].state, "READY");
     assert!(
@@ -812,7 +748,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         assert_eq!(
             conn.query_row(
                 "SELECT count(*) FROM resource_files WHERE workspace_code=?1 AND resource_code=?2",
-                rusqlite::params![WORKSPACE, code],
+                rusqlite::params!["PLATFORM", code],
                 |r| r.get::<_, usize>(0)
             )
             .unwrap(),
@@ -824,7 +760,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
                     &format!(
                         "SELECT count(*) FROM {table} WHERE workspace_code=?1 AND resource_code=?2"
                     ),
-                    rusqlite::params![WORKSPACE, code],
+                    rusqlite::params!["PLATFORM", code],
                     |r| r.get::<_, usize>(0)
                 )
                 .unwrap(),
@@ -857,16 +793,13 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
             .download_binary_to_file(
                 USER,
                 ResourceBinaryDownloadCommand {
-                    workspace_code: WORKSPACE.into(),
+                    workspace_code: "PLATFORM".into(),
                     resource_code: code.clone(),
                 },
             )
             .unwrap();
     }
-    service
-        .preview(USER, &kb.id, &ready.id)
-        .await
-        .unwrap();
+    service.preview(USER, &kb.id, &ready.id).await.unwrap();
     assert_eq!(
         repo.document(&kb.id, &ready.id)
             .unwrap()
@@ -881,7 +814,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         .download_binary_to_file(
             USER,
             ResourceBinaryDownloadCommand {
-                workspace_code: WORKSPACE.into(),
+                workspace_code: "PLATFORM".into(),
                 resource_code: shared,
             },
         )
@@ -893,9 +826,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
 async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service
-        .create(USER, "Publication rollback", "")
-        .unwrap();
+    let kb = service.create(USER, "Publication rollback", "").unwrap();
     let first = service
         .upload_and_index(USER, &kb.id, "guide.md", b"orchid keep active")
         .await
@@ -905,10 +836,7 @@ async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
     let obsolete = checkpoint_resource(&f, &before, "unused.json", &serde_json::json!({}));
     let conn = rusqlite::Connection::open(&f.state.config.database_url).unwrap();
     conn.execute_batch(&format!("CREATE TRIGGER reject_resource_cleanup BEFORE DELETE ON resource_files WHEN OLD.resource_code='{obsolete}' BEGIN SELECT RAISE(ABORT,'test cleanup failure'); END;")).unwrap();
-    let failed = service
-        .index(USER, &kb.id, &first.id)
-        .await
-        .unwrap();
+    let failed = service.index(USER, &kb.id, &first.id).await.unwrap();
     assert_eq!(failed.status, "FAILED");
     assert_eq!(failed.active_source_code, before.active_source_code);
     assert_eq!(failed.index_revision, before.index_revision);
@@ -931,9 +859,7 @@ async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
     );
     conn.execute_batch("DROP TRIGGER reject_resource_cleanup;")
         .unwrap();
-    service
-        .retry_index(USER, &kb.id, &first.id)
-        .unwrap();
+    service.retry_index(USER, &kb.id, &first.id).unwrap();
     let ready = wait_document(&service, &kb.id, &first.id, "READY").await;
     assert_eq!(ready.index_revision, before.index_revision + 1);
     assert_eq!(

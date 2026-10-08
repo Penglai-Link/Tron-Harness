@@ -1,5 +1,4 @@
 pub mod grafeo;
-mod rag_graph_repository;
 pub mod sqlite;
 
 pub use grafeo::GrafeoAdapterConfig;
@@ -9,7 +8,6 @@ pub use grafeo::GrafeoOntologyStore;
 pub use grafeo::GrafeoStoreCore;
 pub use grafeo::encode_graph_name;
 pub use grafeo::encode_schema_name;
-pub use rag_graph_repository::GraphBackedRagRepository;
 pub use sqlite::SqliteAgentEventReplayStore;
 pub use sqlite::SqliteAgentManagementRepository;
 pub use sqlite::SqliteAgentRunRepository;
@@ -22,6 +20,7 @@ pub use sqlite::SqliteModelRepository;
 pub use sqlite::SqliteNavigationRepository;
 pub use sqlite::SqliteProjectRepository;
 pub use sqlite::SqlitePromptRepository;
+pub use sqlite::SqliteRagRepository;
 pub use sqlite::SqliteResourceRepository;
 pub use sqlite::SqliteSkillRegistryRepository;
 pub use sqlite::SqliteTaskRepository;

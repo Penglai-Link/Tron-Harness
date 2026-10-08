@@ -17,13 +17,16 @@ pub(super) fn validate_vectors(
     kb: &str,
     source: &str,
     count: usize,
+    dimension: usize,
 ) -> Result<(), IngestionQueueError> {
-    let vector = format!("rag_{kb}_units_vec_d1024");
+    let vector = format!("rag_{kb}_units_vec_d{dimension}");
     if exists(tx, &vector)? {
         let actual: usize = tx.query_row(&format!("SELECT count(*) FROM \"rag_{kb}_units\" u JOIN \"{vector}\" v ON v.rowid=u.id WHERE u.source_code=?1 AND u.source_status='STAGING'"), [source], |r| r.get(0)).map_err(storage)?;
         if actual != count {
             return Err(IngestionQueueError::Conflict);
         }
+    } else {
+        return Err(IngestionQueueError::Conflict);
     }
     Ok(())
 }
@@ -48,10 +51,9 @@ pub(super) fn retire_indexes(
         .map_err(storage)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(storage)?;
-    for name in [
-        format!("rag_{kb}_units_fts"),
-        format!("rag_{kb}_units_vec_d1024"),
-    ] {
+    let mut names=crate::adapters::outbound::persistence::sqlite::rag_repository::vector_index_tables_for_cleanup(tx,&format!("rag_{kb}_units")).map_err(storage)?;
+    names.push(format!("rag_{kb}_units_fts"));
+    for name in names {
         if exists(tx, &name)? {
             for id in &ids {
                 tx.execute(&format!("DELETE FROM \"{name}\" WHERE rowid=?1"), [id])
@@ -59,5 +61,11 @@ pub(super) fn retire_indexes(
             }
         }
     }
+    tx.execute(
+        "DELETE FROM rag_graph_evidence WHERE corpus_id=?1 AND source_code=?2",
+        params![kb, source],
+    )
+    .map_err(storage)?;
+
     Ok(())
 }

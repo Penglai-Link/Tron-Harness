@@ -57,20 +57,54 @@ mod in_run;
 #[path = "http_llm_observed.rs"]
 mod observed;
 impl LlmRuntimeClient for HttpLlmRuntimeClient {
-    fn model_authorization_scope(&self, config: &RuntimeModelConfig) -> Result<Option<String>, String> {
-        self.models.authorization_scope(&runtime_to_agent_model_config(config))
+    fn model_authorization_scope(
+        &self,
+        config: &RuntimeModelConfig,
+    ) -> Result<Option<String>, String> {
+        self.models
+            .authorization_scope(&runtime_to_agent_model_config(config))
     }
-    fn generate_vision<'a>(&'a self, config: &'a RuntimeModelConfig, prompt: &'a str, mime: &'a str, bytes: &'a [u8]) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+    fn generate_vision<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        prompt: &'a str,
+        mime: &'a str,
+        bytes: &'a [u8],
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(async move {
-            use base64::Engine;
             use crate::domain::agent::AgentMessagePart;
-            if config.model_type != ModelType::Text { return Err("vision requires a text model".into()); }
+            use base64::Engine;
+            if config.model_type != ModelType::Text {
+                return Err("vision requires a text model".into());
+            }
             let request = ModelRequest {
-                messages: vec![AgentMessage::new("user", vec![AgentMessagePart::Text { text: prompt.into() }, AgentMessagePart::Image { mime_type: mime.into(), data: base64::engine::general_purpose::STANDARD.encode(bytes) }])],
-                tools: vec![], prepared_tool_schema: None, system_agent_session_id: None, response_input_items: None, previous_response_id: None,
+                messages: vec![AgentMessage::new(
+                    "user",
+                    vec![
+                        AgentMessagePart::Text {
+                            text: prompt.into(),
+                        },
+                        AgentMessagePart::Image {
+                            mime_type: mime.into(),
+                            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+                        },
+                    ],
+                )],
+                tools: vec![],
+                prepared_tool_schema: None,
+                system_agent_session_id: None,
+                response_input_items: None,
+                previous_response_id: None,
             };
-            let response = self.models.generate_observed(&runtime_to_agent_model_config(config), &request).await.into_result().map_err(error)?;
-            if response.finish != ModelFinish::Final { return Err("image description requested tools".into()); }
+            let response = self
+                .models
+                .generate_observed(&runtime_to_agent_model_config(config), &request)
+                .await
+                .into_result()
+                .map_err(error)?;
+            if response.finish != ModelFinish::Final {
+                return Err("image description requested tools".into());
+            }
             Ok(response.output_text())
         })
     }
@@ -86,6 +120,34 @@ impl LlmRuntimeClient for HttpLlmRuntimeClient {
                 .into_result()
                 .map_err(error)
         })
+    }
+    fn embed_batch_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        inputs: &'a [String],
+        dimensions: usize,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<(Vec<fw::EmbeddingVector>, Option<String>), String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            self.observed_embed_batch(config, inputs, Some(dimensions))
+                .await
+                .into_result()
+                .map(|response| (response.vectors, response.provider_model))
+                .map_err(error)
+        })
+    }
+    fn embed_query_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+        dimensions: usize,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<f32>, Option<String>), String>> + Send + 'a>> {
+        Box::pin(self.query_embedding(config, input, dimensions, None))
     }
     fn embed_query_with_model_in_run<'a>(
         &'a self,
@@ -208,6 +270,116 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test]
+    async fn embedding_batch_dispatches_one_http_array_and_rejects_invalid_indices() {
+        use crate::application::llm::{
+            LlmEmbeddingBatchCallCommand, LlmRuntimeModelResolver, LlmRuntimeService,
+        };
+        use crate::domain::model::ModelError;
+        struct Resolver(RuntimeModelConfig);
+        impl LlmRuntimeModelResolver for Resolver {
+            fn embedding_runtime_model_config(
+                &self,
+                _: &str,
+                _: Option<&str>,
+            ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+                Ok(Some(self.0.clone()))
+            }
+            fn rerank_runtime_model_config(
+                &self,
+                _: &str,
+                _: Option<&str>,
+            ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+                Ok(None)
+            }
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let app = Router::new().route("/embeddings", post(move |Json(body): Json<Value>| {
+            let observed = observed.clone();
+            async move {
+                let attempt = observed.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(body["input"], json!(["first", "second", "third"]));
+                assert_eq!(body["dimensions"], 2);
+                let last_index = if attempt == 0 { 0 } else { 1 };
+                Json(json!({"model":"provider-embedding", "data":[{"index":2,"embedding":[3.0,3.0]}, {"index":1,"embedding":[2.0,2.0]}, {"index":last_index,"embedding":[1.0,1.0]}], "usage":{"prompt_tokens":3,"total_tokens":3}}))
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let (shutdown, stopped) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = stopped.await;
+                })
+                .await
+                .unwrap();
+        });
+        let config = RuntimeModelConfig {
+            model_code: "fixture".into(),
+            protocol: ModelProtocol::OpenAiCompatibleEmbedding,
+            model_type: ModelType::Embedding,
+            base_url: url,
+            api_path: None,
+            api_key: "fixture".into(),
+            model_name: "fixture".into(),
+            thinking_enabled: false,
+            reasoning_effort: None,
+            responses_stateful_enabled: false,
+            temperature: None,
+            max_tokens: None,
+            context_window_tokens: None,
+            top_p: None,
+            max_retries: Some(0),
+        };
+        let client = HttpLlmRuntimeClient::new(sdk::ModelHttpClient::new());
+        let llm = LlmRuntimeService::new(Arc::new(Resolver(config)), Arc::new(client.clone()));
+        let command = LlmEmbeddingBatchCallCommand {
+            workspace_code: "PLATFORM".into(),
+            model_code: Some("fixture".into()),
+            inputs: vec!["first".into(), "second".into(), "third".into()],
+            dimensions: 2,
+        };
+        let result = llm.embedding_batch_call(command.clone()).await.unwrap();
+        assert_eq!(result.model_code, "fixture");
+        assert_eq!(result.provider_model.as_deref(), Some("provider-embedding"));
+        assert_eq!(
+            result
+                .vectors
+                .iter()
+                .map(|vector| vector.index)
+                .collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        assert_eq!(
+            result
+                .vectors
+                .iter()
+                .map(|vector| vector.values[0])
+                .collect::<Vec<_>>(),
+            [1.0, 2.0, 3.0]
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(llm.embedding_batch_call(command.clone()).await.is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        let mut invalid = command.clone();
+        invalid.inputs.clear();
+        assert!(llm.embedding_batch_call(invalid).await.is_err());
+        let mut invalid = command;
+        invalid.inputs[1] = " ".into();
+        assert!(llm.embedding_batch_call(invalid).await.is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        client.models.close().await;
+        drop(llm);
+        drop(client);
+        shutdown.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn native_rerank_limits_search_size_to_candidates_and_skips_empty_dispatch() {
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = calls.clone();
@@ -294,15 +466,53 @@ mod tests {
             }
         }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("http://{}",listener.local_addr().unwrap());
+        let url = format!("http://{}", listener.local_addr().unwrap());
         let (stop, stopped) = tokio::sync::oneshot::channel();
-        let server = tokio::spawn(async move { axum::serve(listener,app).with_graceful_shutdown(async { let _=stopped.await; }).await.unwrap(); });
-        let config = RuntimeModelConfig { model_code:"synthetic-local".into(), protocol:ModelProtocol::OpenAiCompatible, model_type:ModelType::Text, base_url:url, api_path:Some("chat/completions".into()), api_key:"synthetic".into(), model_name:"synthetic-vision".into(), thinking_enabled:false, reasoning_effort:None, responses_stateful_enabled:false, temperature:Some(0.0), max_tokens:Some(2048), context_window_tokens:None, top_p:None, max_retries:Some(0) };
-        let client=HttpLlmRuntimeClient::new(sdk::ModelHttpClient::new());
-        assert_eq!(client.generate_vision(&config,"synthetic prompt","image/jpeg",&[0xff,0xd8,0xff]).await.unwrap(),"synthetic description");
-        assert_eq!(calls.load(Ordering::SeqCst),1);
-        client.models.close().await;drop(client);stop.send(()).unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(2),server).await.unwrap().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = stopped.await;
+                })
+                .await
+                .unwrap();
+        });
+        let config = RuntimeModelConfig {
+            model_code: "synthetic-local".into(),
+            protocol: ModelProtocol::OpenAiCompatible,
+            model_type: ModelType::Text,
+            base_url: url,
+            api_path: Some("chat/completions".into()),
+            api_key: "synthetic".into(),
+            model_name: "synthetic-vision".into(),
+            thinking_enabled: false,
+            reasoning_effort: None,
+            responses_stateful_enabled: false,
+            temperature: Some(0.0),
+            max_tokens: Some(2048),
+            context_window_tokens: None,
+            top_p: None,
+            max_retries: Some(0),
+        };
+        let client = HttpLlmRuntimeClient::new(sdk::ModelHttpClient::new());
+        assert_eq!(
+            client
+                .generate_vision(
+                    &config,
+                    "synthetic prompt",
+                    "image/jpeg",
+                    &[0xff, 0xd8, 0xff]
+                )
+                .await
+                .unwrap(),
+            "synthetic description"
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        client.models.close().await;
+        drop(client);
+        stop.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), server)
+            .await
+            .unwrap()
+            .unwrap();
     }
-
 }

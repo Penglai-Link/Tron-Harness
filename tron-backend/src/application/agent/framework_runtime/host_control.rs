@@ -160,6 +160,24 @@ impl FrameworkHost {
         }
         Ok(())
     }
+    /// Stop new work and cancel every retained native run before process teardown.
+    pub fn cancel_all_runs(&self) {
+        self.0
+            .closed
+            .store(true, std::sync::atomic::Ordering::Release);
+        let keys: Vec<_> = self
+            .0
+            .control
+            .entries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .keys()
+            .cloned()
+            .collect();
+        for key in keys {
+            let _ = self.cancel_run(&key);
+        }
+    }
     pub(super) async fn wait_native(
         &self,
         agent: Agent,

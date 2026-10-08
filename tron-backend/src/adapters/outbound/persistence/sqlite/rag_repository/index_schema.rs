@@ -173,7 +173,7 @@ fn rebuild_table_indexes(connection: &Connection, table_name: &str) -> Result<()
                     "INSERT INTO {fts_table}(rowid, search_text)
                      SELECT id, {search_column}
                      FROM {source_table}
-                     WHERE {status_column} = 'ACTIVE'"
+                     WHERE {status_column} = 'ACTIVE' AND fulltext_status = 'INDEXED'"
                 ),
                 [],
             )
@@ -183,14 +183,10 @@ fn rebuild_table_indexes(connection: &Connection, table_name: &str) -> Result<()
 }
 
 fn ensure_fts_table(connection: &Connection, table_name: &str) -> Result<(), RagError> {
-    if !sqlite_fts5_available(connection) {
-        return Ok(());
+    if !sqlite_fts5_available(connection) || !sqlite_simple_tokenizer_available(connection) {
+        return Err(RagError::SearchRouteUnavailable);
     }
-    let tokenizer = if sqlite_simple_tokenizer_available(connection) {
-        "simple"
-    } else {
-        "unicode61"
-    };
+    let tokenizer = "simple";
     let fts_table = quote_identifier(&fts_table_name(table_name))?;
     connection
         .execute_batch(&format!(
@@ -238,7 +234,7 @@ fn ensure_vector_storage_table(
                 ON {table} (source_code, source_version, scope_type, scope_code, ordinal);"
         ))
         .map_err(storage_error)?;
-    ensure_missing_text_columns(connection, table_name, &columns)
+    validate_storage_columns(connection, table_name, &columns)
 }
 
 fn ensure_source_table(
@@ -279,7 +275,7 @@ fn ensure_source_table(
                 ON {table} (source_code, source_version, scope_type, scope_code);"
         ))
         .map_err(storage_error)?;
-    ensure_missing_text_columns(connection, table_name, &columns)
+    validate_storage_columns(connection, table_name, &columns)
 }
 
 fn ensure_text_unit_table(
@@ -295,6 +291,14 @@ fn ensure_text_unit_table(
         "scope_code".to_string(),
         "unit_type".to_string(),
         "text".to_string(),
+        "search_text".to_string(),
+        "fulltext_status".to_string(),
+        "embedding_model_code".to_string(),
+        "embedding_version".to_string(),
+        "embedding_text_hash".to_string(),
+        "embedding_dimension".to_string(),
+        "embedding".to_string(),
+        "embedding_status".to_string(),
         "heading_path".to_string(),
         "ordinal".to_string(),
         "token_count".to_string(),
@@ -331,7 +335,7 @@ fn ensure_text_unit_table(
                 ON {table} (source_code, source_version, scope_type, scope_code, ordinal);"
         ))
         .map_err(storage_error)?;
-    ensure_missing_text_columns(connection, table_name, &columns)
+    validate_storage_columns(connection, table_name, &columns)
 }
 
 fn has_embedded_sqlite_source(corpus: &RagCorpusRecord) -> bool {
@@ -361,7 +365,7 @@ fn ensure_diagnostics_storage_table(
             );"
         ))
         .map_err(storage_error)?;
-    ensure_missing_text_columns(
+    validate_storage_columns(
         connection,
         table_name,
         &BTreeSet::from([
@@ -392,7 +396,13 @@ fn dynamic_columns_sql(columns: &BTreeSet<String>) -> String {
         .map(|column| {
             let column_type = if matches!(
                 column.as_str(),
+                "embedding_dimension" | "summary_embedding_dimension"
+            ) {
+                "INTEGER"
+            } else if matches!(
+                column.as_str(),
                 "ordinal"
+                    | "embedding_dimension"
                     | "token_count"
                     | "created_at"
                     | "updated_at"
@@ -404,6 +414,8 @@ fn dynamic_columns_sql(columns: &BTreeSet<String>) -> String {
                     | "child_end_ordinal"
             ) {
                 "INTEGER NOT NULL DEFAULT 0"
+            } else if column == "embedding" {
+                "BLOB"
             } else if column == "text" {
                 "TEXT NOT NULL"
             } else {
@@ -415,21 +427,15 @@ fn dynamic_columns_sql(columns: &BTreeSet<String>) -> String {
         .join(",\n                ")
 }
 
-fn ensure_missing_text_columns(
+fn validate_storage_columns(
     connection: &Connection,
     table_name: &str,
     columns: &BTreeSet<String>,
 ) -> Result<(), RagError> {
     let existing = table_columns(connection, table_name)?;
-    let table = quote_identifier(table_name)?;
-    for column in columns.iter().filter(|column| !existing.contains(*column)) {
-        let quoted_column = quote_identifier(column)?;
-        connection
-            .execute(
-                &format!("ALTER TABLE {table} ADD COLUMN {quoted_column} TEXT"),
-                [],
-            )
-            .map_err(storage_error)?;
+    // Schema v2 has a fixed shape. Never convert old storage in place.
+    if columns.iter().any(|column| !existing.contains(column)) {
+        return Err(RagError::SchemaIncompatible);
     }
     Ok(())
 }
@@ -487,7 +493,7 @@ fn ensure_fulltext_storage_table(
                 ON {table} (source_code, source_version, scope_type, scope_code, ordinal);"
         ))
         .map_err(storage_error)?;
-    ensure_missing_text_columns(connection, table_name, &columns)
+    validate_storage_columns(connection, table_name, &columns)
 }
 
 fn carrier_text_unit_columns(corpus: &RagCorpusRecord) -> Result<BTreeSet<String>, RagError> {
@@ -500,6 +506,13 @@ fn carrier_text_unit_columns(corpus: &RagCorpusRecord) -> Result<BTreeSet<String
         "unit_type".to_string(),
         "text".to_string(),
         "search_text".to_string(),
+        "fulltext_status".to_string(),
+        "embedding_model_code".to_string(),
+        "embedding_version".to_string(),
+        "embedding_text_hash".to_string(),
+        "embedding_dimension".to_string(),
+        "embedding".to_string(),
+        "embedding_status".to_string(),
         "heading_path".to_string(),
         "ordinal".to_string(),
         "token_count".to_string(),

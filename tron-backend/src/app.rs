@@ -27,13 +27,13 @@ use crate::{
                 PersonAiModelProviderClient,
             },
             persistence::{
-                GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
-                SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
-                SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
-                SqliteMemoryWorkDomainRepository, SqliteModelRepository,
-                SqliteNavigationRepository, SqliteProjectRepository, SqlitePromptRepository,
-                SqliteResourceRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
-                SqliteVariableRepository, SqliteWorkspaceRepository,
+                GrafeoStoreCore, SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
+                SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
+                SqliteChatRepository, SqliteMcpRepository, SqliteMemoryWorkDomainRepository,
+                SqliteModelRepository, SqliteNavigationRepository, SqliteProjectRepository,
+                SqlitePromptRepository, SqliteRagRepository, SqliteResourceRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteVariableRepository,
+                SqliteWorkspaceRepository,
             },
             resource_connectivity::ProtocolResourceConnectionVerifier,
             resource_storage::LocalObjectStorage,
@@ -58,7 +58,7 @@ use crate::{
     application::profile::ProfileRegistryService,
     application::project::ProjectService,
     application::prompt::PromptService,
-    application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
+    application::rag::{DefaultRagRuntime, RagService},
     application::resource::{ObjectStorage, ResourceService},
     application::short_term_memory::ShortTermMemoryService,
     application::skill::SkillRegistryService,
@@ -89,14 +89,9 @@ static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService, GraphExplorerService)> =
     OnceLock::new();
 
-pub type AppRagService =
-    RagService<Arc<Mutex<GraphBackedRagRepository>>, DefaultRagStrategyRegistry, DefaultRagRuntime>;
+pub type AppRagService = RagService<Arc<Mutex<SqliteRagRepository>>, DefaultRagRuntime>;
 
-pub type AppMemoryService = MemoryService<
-    Arc<Mutex<GraphBackedRagRepository>>,
-    DefaultRagStrategyRegistry,
-    DefaultRagRuntime,
->;
+pub type AppMemoryService = MemoryService<Arc<Mutex<SqliteRagRepository>>, DefaultRagRuntime>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -207,7 +202,6 @@ impl AppState {
             .expect("http client pool should initialize");
         let model_inference_client = http_client_pool.model_inference_client();
         let runtime_http_client = http_client_pool.runtime_control_client();
-        let document_parsing_client = http_client_pool.document_parsing_client();
         let workspaces = build_workspace_service(&config.database_url, event_bus.clone());
         let navigation =
             build_navigation_service(&config.database_url, config.navigation.max_depth)
@@ -277,6 +271,7 @@ impl AppState {
             build_model_service(&config.database_url, workspaces.clone(), variables.clone());
         let model_providers = build_model_provider_service(&config.database_url, variables.clone());
         let models = models
+            .with_runtime_config(runtime_config.clone())
             .with_model_executor(model_providers.model_executor())
             .with_model_transport(model_inference_client.clone());
         let agent_model_client = Arc::new(
@@ -284,7 +279,8 @@ impl AppState {
                 HttpModelProviderClient::new(model_inference_client.clone()),
                 model_providers.clone(),
             )))
-            .with_model_executor(model_providers.model_executor()),
+            .with_model_executor(model_providers.model_executor())
+            .with_runtime_config(runtime_config.clone()),
         );
         let prompts = build_prompt_service(
             &config.database_url,
@@ -317,17 +313,17 @@ impl AppState {
         };
         let rag = build_rag_service(
             &config.database_url,
-            graph_core.clone(),
-            workspaces.clone(),
             llm_runtime.clone(),
             llm_router.clone(),
-            prompts.clone(),
-            &config.project_doc_root,
-            runtime_config.clone(),
-            document_parsing_client,
-            event_bus.clone(),
-        )?;
-        let rag = rag.with_product_guard(Arc::new(knowledge_base_repository.clone()));
+        )?
+        .with_runtime_config(runtime_config.clone());
+        crate::application::rag::RagConfigRepository::recover_record_tasks(
+            &rag.repository_handle(),
+        )
+        .map_err(|source| AppBootstrapError::RagInitFailed {
+            database_url: config.database_url.clone(),
+            source,
+        })?;
         let knowledge_bases = crate::application::knowledge_base::KnowledgeBaseService::new(
             knowledge_base_repository,
             rag.clone(),
@@ -362,6 +358,7 @@ impl AppState {
             resources.clone(),
         )
         .expect("initialize Framework storage configuration");
+        agent_framework.bind_runtime_config(runtime_config.clone());
         agui_replay_store
             .bind_framework(&agent_framework)
             .expect("Framework replay storage");
@@ -401,6 +398,12 @@ impl AppState {
             short_term_memory.clone(),
         )
         .expect("default agent tools should register");
+        agent_tool_registry
+            .register(crate::application::agent::rag_search_tool(
+                rag.clone(),
+                knowledge_bases.clone(),
+            ))
+            .expect("RAG search tool should register");
         let (graphs, ontologies, graph_explorer) = if config.graph_storage_path == ":memory:" {
             if let Some(services) = GLOBAL_GRAPH_SERVICES.get() {
                 services.clone()

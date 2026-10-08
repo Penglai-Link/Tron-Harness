@@ -146,7 +146,6 @@ fn is_environment_overridden(path: &str) -> bool {
         "databaseUrl" => Some("TRON_BACKEND_DATABASE_URL"),
         "graphStoragePath" => Some("TRON_BACKEND_GRAPH_STORAGE_PATH"),
         "frontendDistDir" => Some("TRON_BACKEND_FRONTEND_DIST_DIR"),
-        "projectDocRoot" => Some("TRON_PROJECT_DOC_ROOT"),
         "terminalWorkingDirectory" => Some("TRON_TERMINAL_WORKING_DIRECTORY"),
         _ => None,
     };
@@ -277,6 +276,10 @@ pub(super) fn effective_context_value(
 ) -> Result<Value, SystemConfigError> {
     use crate::application::short_term_memory::{ContextBlockBudgetConfig, ContextProviderPolicy};
     use serde_json::json;
+    let invocation = AppConfig::effective_config(content, path)
+        .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?
+        .model_invocation;
+    set_value_at_path(&mut value, "modelInvocation", json!(invocation))?;
     let config = AppConfig::effective_short_term_memory(content, path)
         .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
     let ratio = |bps: u32| format!("{}%", f64::from(bps) / 100.0);

@@ -25,9 +25,9 @@ function Probe() {
     <button onClick={() => navigate("/rag?section=retrieval")}>RAG workbench</button>
   </>;
 }
-function mount(path: string) {
+function mount(path: string, renderWithoutWorkspace = false) {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    <MemoryRouter initialEntries={[path]}><PlatformWorkspaceScope><Probe /></PlatformWorkspaceScope></MemoryRouter>
+    <MemoryRouter initialEntries={[path]}><PlatformWorkspaceScope renderWithoutWorkspace={renderWithoutWorkspace}><Probe /></PlatformWorkspaceScope></MemoryRouter>
   </QueryClientProvider>);
 }
 afterEach(cleanup);
@@ -50,4 +50,11 @@ it("does not silently fall back to another space for a stale explicit code", asy
   await screen.findByRole("status");
   expect(screen.queryByText("scope:alpha")).toBeNull();
   expect(screen.queryByText("Memory home")).toBeNull();
+});
+it("renders the empty page with an empty scope rather than another space", async () => {
+  mount("/settings/memory?workspaceCode=deleted", true);
+  await screen.findByText("scope:");
+  expect(screen.queryByText("scope:alpha")).toBeNull();
+  expect(screen.getByText("Memory home")).toBeTruthy();
+  expect(screen.queryByText("platformData.selectWorkspace", { selector: "p" })).toBeNull();
 });

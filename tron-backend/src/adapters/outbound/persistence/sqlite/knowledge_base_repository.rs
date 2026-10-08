@@ -3,9 +3,9 @@ use crate::application::knowledge_base::{
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Serialize, de::DeserializeOwned};
+mod agent_grants;
 pub(super) mod deletion;
 mod intake;
-mod agent_grants;
 mod platform_catalog;
 struct SqliteKnowledgeBaseRepositorySql<'a> {
     connection: &'a mut Connection,
@@ -28,7 +28,12 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
         decode(&raw.ok_or(KnowledgeBaseError::NotFound)?)
     }
     pub fn insert(&self, kb: &KnowledgeBase, user: &str) -> Result<(), KnowledgeBaseError> {
-        self.connection.execute("INSERT INTO knowledge_bases(id,owner_user_code,payload_json) VALUES(?1,?2,?3)",params![kb.id,user,encode(kb)?]).map_err(storage)?;
+        self.connection
+            .execute(
+                "INSERT INTO knowledge_bases(id,owner_user_code,payload_json) VALUES(?1,?2,?3)",
+                params![kb.id, user, encode(kb)?],
+            )
+            .map_err(storage)?;
         Ok(())
     }
     pub fn documents(&self, id: &str) -> Result<Vec<KnowledgeBaseDocument>, KnowledgeBaseError> {
@@ -159,7 +164,13 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
         Ok(())
     }
     pub fn owns(&self, user: &str, id: &str) -> bool {
-        self.connection.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2 )",params![id,user],|r|r.get::<_,bool>(0)).unwrap_or(false)
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2 )",
+                params![id, user],
+                |r| r.get::<_, bool>(0),
+            )
+            .unwrap_or(false)
     }
     pub fn grants(&self, id: &str) -> Result<Vec<String>, KnowledgeBaseError> {
         let conn = &*self.connection;
@@ -427,10 +438,7 @@ impl SqliteKnowledgeBaseRepository {
         self.connection
             .call(
                 move |connection| {
-                    Ok::<_, ()>(
-                        SqliteKnowledgeBaseRepositorySql { connection }
-                            .owns(&user, &id),
-                    )
+                    Ok::<_, ()>(SqliteKnowledgeBaseRepositorySql { connection }.owns(&user, &id))
                 },
                 || (),
             )
@@ -523,10 +531,18 @@ impl crate::application::resource::ResourcePrivacyPolicy for SqliteKnowledgeBase
             .unwrap_or(false)
     }
     fn can_read_agent_in_workspace(
-        &self, user: &str, storage_scope: &str, resource: &str,
-        agent: Option<&str>, run_workspace: Option<&str>,
+        &self,
+        user: &str,
+        storage_scope: &str,
+        resource: &str,
+        agent: Option<&str>,
+        run_workspace: Option<&str>,
     ) -> bool {
-        let (user, scope, resource) = (user.to_owned(), storage_scope.to_owned(), resource.to_owned());
+        let (user, scope, resource) = (
+            user.to_owned(),
+            storage_scope.to_owned(),
+            resource.to_owned(),
+        );
         let agent = agent.map(str::to_owned);
         let run_workspace = run_workspace.map(str::to_owned);
         self.connection.call(move |connection| {
@@ -549,21 +565,6 @@ impl crate::application::resource::ResourcePrivacyPolicy for SqliteKnowledgeBase
                     Ok::<_, ()>(
                         SqliteKnowledgeBaseRepositorySql { connection }
                             .is_protected(&workspace, &resource),
-                    )
-                },
-                || (),
-            )
-            .unwrap_or(false)
-    }
-}
-impl crate::application::rag::RagProductGuard for SqliteKnowledgeBaseRepository {
-    fn is_product_corpus(&self, id: &str) -> bool {
-        let id = id.to_owned();
-        self.connection
-            .call(
-                move |connection| {
-                    Ok::<_, ()>(
-                        SqliteKnowledgeBaseRepositorySql { connection }.is_product_corpus(&id),
                     )
                 },
                 || (),
@@ -594,8 +595,18 @@ impl SqliteKnowledgeBaseRepository {
             },
             || storage("database worker stopped"),
         )?;
-        connection.call(|c| c.execute_batch(include_str!("../../../../../migrations/20261005_0001_knowledge_ingestion.sql")).map_err(storage), || storage("database worker stopped"))?;
-        connection.call(migrate_platform_ownership, || storage("database worker stopped"))?;
+        connection.call(
+            |c| {
+                c.execute_batch(include_str!(
+                    "../../../../../migrations/20261005_0001_knowledge_ingestion.sql"
+                ))
+                .map_err(storage)
+            },
+            || storage("database worker stopped"),
+        )?;
+        connection.call(migrate_platform_ownership, || {
+            storage("database worker stopped")
+        })?;
         let repository = Self { connection };
         repository
             .ingestion_queue()
@@ -606,9 +617,19 @@ impl SqliteKnowledgeBaseRepository {
 
 /// Transactional, idempotent upgrade: preserve storage addresses and Agent grants, remove space ownership.
 fn migrate_platform_ownership(connection: &mut Connection) -> Result<(), KnowledgeBaseError> {
-    let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(connection, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+    let tx =
+        crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+            connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(storage)?;
     let exists = |name: &str| -> Result<bool, KnowledgeBaseError> {
-        tx.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)", [name], |row| row.get(0)).map_err(storage)
+        tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+            [name],
+            |row| row.get(0),
+        )
+        .map_err(storage)
     };
     if exists("knowledge_base_scoped_agent_grants")? {
         tx.execute_batch("INSERT OR IGNORE INTO knowledge_base_grants(knowledge_base_id,agent_code) SELECT knowledge_base_id,agent_code FROM knowledge_base_scoped_agent_grants; UPDATE knowledge_bases SET acl_revision=acl_revision+1 WHERE id IN (SELECT knowledge_base_id FROM knowledge_base_scoped_agent_grants);").map_err(storage)?;
@@ -616,11 +637,23 @@ fn migrate_platform_ownership(connection: &mut Connection) -> Result<(), Knowled
     // Move only product-owned resources; collisions abort the complete transaction.
     let addresses = {
         let mut stmt = tx.prepare("SELECT workspace_code,resource_code FROM knowledge_base_resource_privacy UNION SELECT workspace_code,resource_code FROM knowledge_base_derived_resources").map_err(storage)?;
-        stmt.query_map([], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?))).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?
+        stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(storage)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage)?
     };
     for (old, code) in addresses {
-        if old == "PLATFORM" { continue; }
-        for table in ["resource_files", "resource_code_registry", "knowledge_base_resource_privacy", "knowledge_base_derived_resources"] {
+        if old == "PLATFORM" {
+            continue;
+        }
+        for table in [
+            "resource_files",
+            "resource_code_registry",
+            "knowledge_base_resource_privacy",
+            "knowledge_base_derived_resources",
+        ] {
             if exists(table)? {
                 tx.execute(&format!("UPDATE {table} SET workspace_code='PLATFORM' WHERE workspace_code=?1 AND resource_code=?2"), params![old,code]).map_err(storage)?;
             }
@@ -628,28 +661,65 @@ fn migrate_platform_ownership(connection: &mut Connection) -> Result<(), Knowled
     }
     // Preserve source/unit identities and vectors while changing their scope in place.
     let libraries = {
-        let mut stmt = tx.prepare("SELECT id FROM knowledge_bases").map_err(storage)?;
-        stmt.query_map([], |row| row.get::<_,String>(0)).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?
+        let mut stmt = tx
+            .prepare("SELECT id FROM knowledge_bases")
+            .map_err(storage)?;
+        stmt.query_map([], |row| row.get::<_, String>(0))
+            .map_err(storage)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage)?
     };
     for id in libraries {
         let tables = {
             let mut stmt = tx.prepare("SELECT name FROM sqlite_master WHERE type='table' AND substr(name,1,length(?1))=?1 AND sql NOT LIKE 'CREATE VIRTUAL TABLE%'").map_err(storage)?;
             let prefix = format!("rag_{id}_units");
-            stmt.query_map([prefix], |row| row.get::<_,String>(0)).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?
+            stmt.query_map([prefix], |row| row.get::<_, String>(0))
+                .map_err(storage)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(storage)?
         };
         for table in tables {
             let quoted = format!("\"{}\"", table.replace('"', "\"\""));
-            let scope: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name='scope_code')", [&table], |row| row.get(0)).map_err(storage)?;
-            if scope { tx.execute(&format!("UPDATE {quoted} SET scope_code='PLATFORM' WHERE scope_code <> 'PLATFORM'"), []).map_err(storage)?; }
+            let scope: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name='scope_code')",
+                    [&table],
+                    |row| row.get(0),
+                )
+                .map_err(storage)?;
+            if scope {
+                tx.execute(
+                    &format!(
+                        "UPDATE {quoted} SET scope_code='PLATFORM' WHERE scope_code <> 'PLATFORM'"
+                    ),
+                    [],
+                )
+                .map_err(storage)?;
+            }
         }
     }
     tx.execute("UPDATE knowledge_base_ingestion_tasks SET payload_json=json_set(payload_json,'$.workspaceCode','PLATFORM') WHERE json_extract(payload_json,'$.workspaceCode') <> 'PLATFORM'", []).map_err(storage)?;
     // Remove the business-space field rather than retaining it as a storage alias.
-    tx.execute_batch("DROP INDEX IF EXISTS idx_knowledge_bases_owner;").map_err(storage)?;
+    tx.execute_batch("DROP INDEX IF EXISTS idx_knowledge_bases_owner;")
+        .map_err(storage)?;
     for column in ["workspace_code", "resource_namespace"] {
-        let present: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('knowledge_bases') WHERE name=?1)", [column], |row| row.get(0)).map_err(storage)?;
-        if present { tx.execute_batch(&format!("ALTER TABLE knowledge_bases DROP COLUMN {column};")).map_err(storage)?; }
+        let present: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('knowledge_bases') WHERE name=?1)",
+                [column],
+                |row| row.get(0),
+            )
+            .map_err(storage)?;
+        if present {
+            tx.execute_batch(&format!(
+                "ALTER TABLE knowledge_bases DROP COLUMN {column};"
+            ))
+            .map_err(storage)?;
+        }
     }
-    tx.execute_batch(include_str!("../../../../../migrations/20261008_0005_platform_knowledge_ownership.sql")).map_err(storage)?;
+    tx.execute_batch(include_str!(
+        "../../../../../migrations/20261008_0005_platform_knowledge_ownership.sql"
+    ))
+    .map_err(storage)?;
     tx.commit().map_err(storage)
 }

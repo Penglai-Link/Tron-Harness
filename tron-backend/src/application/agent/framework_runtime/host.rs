@@ -49,6 +49,8 @@ use capability_state::{load_capability_state, persist_capability_state};
 #[derive(Clone)]
 pub struct FrameworkHost(Arc<Host>);
 struct Host {
+    runtime_config:
+        std::sync::RwLock<Option<crate::application::system_config::BackendRuntimeConfig>>,
     model_client: std::sync::RwLock<Option<Arc<dyn crate::application::agent::ModelClient>>>,
     path: PathBuf,
     state_path: PathBuf,
@@ -78,6 +80,26 @@ struct Host {
     _temporary: Option<tempfile::TempDir>,
 }
 impl FrameworkHost {
+    pub fn bind_runtime_config(
+        &self,
+        runtime: crate::application::system_config::BackendRuntimeConfig,
+    ) {
+        *self
+            .0
+            .runtime_config
+            .write()
+            .unwrap_or_else(|error| error.into_inner()) = Some(runtime);
+    }
+    fn invocation_config(&self) -> crate::config::ModelInvocationConfig {
+        self.0
+            .runtime_config
+            .read()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+            .map(|runtime| runtime.snapshot().model_invocation)
+            .unwrap_or_default()
+    }
+
     /// Drain owned runs and command processes before shutting down a profile.
     pub fn pty(&self) -> eliteforge_agent_capability_tools::PtyService {
         self.0.pty.clone()
@@ -237,6 +259,7 @@ impl FrameworkHost {
         let pack_root = path.with_extension("capability-packs");
         let (packs, extensions) = load_capability_state(&state_path);
         Self(Arc::new(Host {
+            runtime_config: Default::default(),
             model_client: Default::default(),
             path,
             state_path,
@@ -272,6 +295,7 @@ impl FrameworkHost {
             .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
         let path = directory.path().join("framework.sqlite3");
         Ok(Self(Arc::new(Host {
+            runtime_config: Default::default(),
             model_client: Default::default(),
             state_path: path.with_extension("capabilities.json"),
             pack_root: path.with_extension("capability-packs"),

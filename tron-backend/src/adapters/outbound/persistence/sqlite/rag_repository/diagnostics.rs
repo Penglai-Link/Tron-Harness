@@ -35,7 +35,7 @@ impl RagDiagnosticsRepository for SqliteRagRepositorySql<'_> {
         self.connection
             .execute(
                 "INSERT INTO rag_diagnostics (
-                    record_type, record_code, profile_id, workspace_code, user_code, agent_code,
+                    record_type, record_code, task_id, workspace_code, user_code, agent_code,
                     query_text, payload_json, created_at, expires_at
                 )
                 VALUES ('SEARCH_TRACE', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -45,7 +45,7 @@ impl RagDiagnosticsRepository for SqliteRagRepositorySql<'_> {
                     expires_at = excluded.expires_at",
                 params![
                     trace.record_code,
-                    trace.profile_id,
+                    trace.task_id,
                     trace.workspace_code,
                     trace.user_code,
                     trace.agent_code,

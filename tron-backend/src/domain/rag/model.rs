@@ -38,33 +38,6 @@ impl TryFrom<&str> for RagStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RagProfileType {
-    Ingest,
-    Retrieval,
-}
-
-impl RagProfileType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Ingest => "INGEST",
-            Self::Retrieval => "RETRIEVAL",
-        }
-    }
-}
-
-impl TryFrom<&str> for RagProfileType {
-    type Error = RagError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "INGEST" => Ok(Self::Ingest),
-            "RETRIEVAL" => Ok(Self::Retrieval),
-            _ => Err(RagError::StorageFailure),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RagStorageBackend {
     Sqlite,
@@ -171,58 +144,20 @@ pub struct RagCorpusRecord {
     pub storage_binding: RagStorageBinding,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct RagProfileRecord {
-    pub profile_id: String,
-    pub profile_type: RagProfileType,
-    pub status: RagStatus,
-    pub primary_corpus_id: Option<String>,
-    pub corpus_ids: Vec<String>,
-    pub required_source_version: Option<String>,
-    pub config: Value,
-    pub filters: Value,
-    pub degrade_policy: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RagError {
+    SchemaIncompatible,
     CorpusNotFound,
     SourceNotFound,
-    ProfileNotFound,
-    RetrievalProfileNotFound,
-    ManagementRequestInvalid,
-    StorageTopologyUnsupported,
-    StorageGraphBindingRequired,
-    FilterFieldInvalid,
-    FilterOperatorUnsupported,
-    ProfileStrategyInvalid,
-    ProfileCorpusInvalid,
-    CorpusBoundToRetrievalProfile,
     IngestRequestInvalid,
-    IngestProfileInvalid,
     IngestScopeInvalid,
-    IngestStageFailed,
-    SourceResolveFailed,
-    DocumentFormatUnsupported,
-    DocumentParseFailed,
-    DocumentTooLarge,
     EmbeddingFailed,
     SearchRequestInvalid,
-    RetrievalProfileInvalid,
     SearchFilterInvalid,
     SearchScopeInvalid,
     SearchRouteUnavailable,
-    HydrateSourceInactive,
-    RerankFailed,
     DebugRequestInvalid,
-    DebugScopeInvalid,
-    RetryRequestInvalid,
-    RetryScopeInvalid,
-    RetryStageUnsupported,
-    RetryTextUnitsMissing,
     TracePayloadInvalid,
-    EventPayloadInvalid,
-    CorpusReserved,
     StorageBindingInvalid,
     StorageFailure,
 }
@@ -230,55 +165,19 @@ pub enum RagError {
 impl fmt::Display for RagError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::SchemaIncompatible => formatter
+                .write_str("旧 RAG 数据结构与统一入库版本不兼容；请使用新数据库。现有数据未删除。"),
             Self::CorpusNotFound => formatter.write_str("RAG corpus not found"),
             Self::SourceNotFound => formatter.write_str("RAG source not found"),
-            Self::ProfileNotFound => formatter.write_str("RAG profile not found"),
-            Self::RetrievalProfileNotFound => {
-                formatter.write_str("RAG retrieval profile not found")
-            }
-            Self::ManagementRequestInvalid => formatter.write_str("RAG management request invalid"),
-            Self::StorageTopologyUnsupported => {
-                formatter.write_str("RAG storage topology unsupported")
-            }
-            Self::StorageGraphBindingRequired => {
-                formatter.write_str("RAG graph storage binding is required")
-            }
-            Self::FilterFieldInvalid => formatter.write_str("RAG filter field invalid"),
-            Self::FilterOperatorUnsupported => {
-                formatter.write_str("RAG filter operator unsupported")
-            }
-            Self::ProfileStrategyInvalid => formatter.write_str("RAG profile strategy invalid"),
-            Self::ProfileCorpusInvalid => formatter.write_str("RAG profile corpus invalid"),
-            Self::CorpusBoundToRetrievalProfile => {
-                formatter.write_str("RAG corpus is bound to a retrieval profile")
-            }
             Self::IngestRequestInvalid => formatter.write_str("RAG ingest request invalid"),
-            Self::IngestProfileInvalid => formatter.write_str("RAG ingest profile invalid"),
             Self::IngestScopeInvalid => formatter.write_str("RAG ingest scope invalid"),
-            Self::IngestStageFailed => formatter.write_str("RAG ingest stage failed"),
-            Self::SourceResolveFailed => formatter.write_str("RAG source resolve failed"),
-            Self::DocumentFormatUnsupported => {
-                formatter.write_str("RAG document format unsupported")
-            }
-            Self::DocumentParseFailed => formatter.write_str("RAG document parse failed"),
-            Self::DocumentTooLarge => formatter.write_str("RAG document too large"),
             Self::EmbeddingFailed => formatter.write_str("RAG embedding failed"),
             Self::SearchRequestInvalid => formatter.write_str("RAG search request invalid"),
-            Self::RetrievalProfileInvalid => formatter.write_str("RAG retrieval profile invalid"),
             Self::SearchFilterInvalid => formatter.write_str("RAG search filter invalid"),
             Self::SearchScopeInvalid => formatter.write_str("RAG search scope invalid"),
             Self::SearchRouteUnavailable => formatter.write_str("RAG search route unavailable"),
-            Self::HydrateSourceInactive => formatter.write_str("RAG hydrate source inactive"),
-            Self::RerankFailed => formatter.write_str("RAG rerank failed"),
             Self::DebugRequestInvalid => formatter.write_str("RAG debug request invalid"),
-            Self::DebugScopeInvalid => formatter.write_str("RAG debug scope invalid"),
-            Self::RetryRequestInvalid => formatter.write_str("RAG retry request invalid"),
-            Self::RetryScopeInvalid => formatter.write_str("RAG retry scope invalid"),
-            Self::RetryStageUnsupported => formatter.write_str("RAG retry stage unsupported"),
-            Self::RetryTextUnitsMissing => formatter.write_str("RAG retry text units missing"),
             Self::TracePayloadInvalid => formatter.write_str("RAG trace payload invalid"),
-            Self::EventPayloadInvalid => formatter.write_str("RAG event payload invalid"),
-            Self::CorpusReserved => formatter.write_str("RAG corpus reserved"),
             Self::StorageBindingInvalid => formatter.write_str("RAG storage binding invalid"),
             Self::StorageFailure => formatter.write_str("RAG storage failure"),
         }

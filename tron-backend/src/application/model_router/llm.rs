@@ -5,6 +5,7 @@ use crate::{
         model::ModelProtocol,
         model_provider::{
             ModelSelection, ModelSelectionKind, ProviderCatalogModelStatus, ProviderModelQuality,
+            ProviderRouteCode,
         },
     },
 };
@@ -34,8 +35,11 @@ impl LlmModelRouter {
         model_code: Option<&str>,
     ) -> Result<RuntimeModelConfig, String> {
         if let Some(model_code) = model_code.map(str::trim).filter(|value| !value.is_empty()) {
-            if model_code.starts_with("PERSON_AI:") {
-                return self.route_person_ai(workspace_code, model_code);
+            if model_code == "PERSON_AI:ROUTE:ChatAuto" {
+                return self.route_selection(
+                    workspace_code,
+                    &ModelSelection::person_ai_route(ProviderRouteCode::ChatAuto),
+                );
             }
             return self.route_person_ai(workspace_code, model_code);
         }

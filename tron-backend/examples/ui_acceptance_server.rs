@@ -20,7 +20,6 @@ async fn main() {
         database_url: root.join("tron.sqlite3").display().to_string(),
         graph_storage_path: root.join("graph.grafeo").display().to_string(),
         terminal_working_directory: root.display().to_string(),
-        project_doc_root: root.join("docs").display().to_string(),
         skills_registry_root: root.join("skills").display().to_string(),
         ..base
     };

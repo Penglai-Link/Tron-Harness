@@ -107,21 +107,21 @@ export function useKnowledgeGraphNamespaces(workspaceCode: string) {
   const dataSource = getServiceDataSource("knowledge-graph");
   const mockNamespaces = useMemo(() => getKnowledgeGraphMock().namespaces, []);
   const [namespaces, setNamespaces] = useState<string[]>(() => (
-    dataSource === "mock" ? mockNamespaces : []
+    dataSource === "mock" && workspaceCode.trim() ? mockNamespaces : []
   ));
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (dataSource === "mock") {
-      setNamespaces(mockNamespaces);
+    if (!workspaceCode.trim()) {
+      setNamespaces([]);
       setError(null);
       setLoading(false);
       return undefined;
     }
 
-    if (!workspaceCode.trim()) {
-      setNamespaces([]);
+    if (dataSource === "mock") {
+      setNamespaces(mockNamespaces);
       setError(null);
       setLoading(false);
       return undefined;
@@ -276,8 +276,9 @@ export function useKnowledgeGraphExplorer(
     && filters.workspaceCode.trim().length > 0;
   const apiGraph = useApiKnowledgeGraph(filters, apiEnabled, refreshToken);
   const mockGraph = useMemo(() => getKnowledgeGraphMock(), []);
-  const graph = dataSource === "api" ? apiGraph.graph : mockGraph;
-  const filterOptionGraph = dataSource === "api" ? apiGraph.filterOptionGraph : mockGraph;
+  const emptyGraph = useMemo(() => emptyKnowledgeGraph(filters.workspaceCode, filters.namespace), [filters.workspaceCode, filters.namespace]);
+  const graph = !filters.workspaceCode.trim() ? emptyGraph : dataSource === "api" ? apiGraph.graph : mockGraph;
+  const filterOptionGraph = !filters.workspaceCode.trim() ? emptyGraph : dataSource === "api" ? apiGraph.filterOptionGraph : mockGraph;
   const mockExpandNode = useCallback(async () => undefined, []);
   const expandNode = dataSource === "api"
     ? apiGraph.expandNode

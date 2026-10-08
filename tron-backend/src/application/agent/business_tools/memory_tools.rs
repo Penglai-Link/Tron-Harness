@@ -9,9 +9,8 @@ use crate::{
             MemoryService,
         },
         rag::{
-            RagDiagnosticsRepository, RagDocumentSourceRuntime, RagEmbeddingRuntime,
-            RagIngestRepository, RagRetryIndexRepository, RagSearchRepository, RagSearchRuntime,
-            RagStrategyRegistry,
+            RagDiagnosticsRepository, RagEmbeddingRuntime, RagIngestRepository,
+            RagSearchRepository, RagSearchRuntime,
         },
     },
     domain::agent::{
@@ -19,18 +18,21 @@ use crate::{
     },
 };
 
-pub(super) fn memory_business_tools<R, S, E>(memory: MemoryService<R, S, E>) -> Vec<Arc<dyn Tool>>
+pub(super) fn memory_business_tools<R, E>(memory: MemoryService<R, E>) -> Vec<Arc<dyn Tool>>
 where
     R: RagIngestRepository
         + RagSearchRepository
         + RagDiagnosticsRepository
-        + RagRetryIndexRepository
         + Clone
         + Send
         + Sync
         + 'static,
-    S: RagStrategyRegistry + Send + Sync + 'static,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
+    E: RagEmbeddingRuntime
+        + crate::application::rag::RagGraphRuntime
+        + RagSearchRuntime
+        + Send
+        + Sync
+        + 'static,
 {
     vec![
         Arc::new(MemorySearchTool {
@@ -44,18 +46,18 @@ where
 }
 
 #[derive(Clone)]
-struct MemorySearchTool<R, S, E> {
-    memory: MemoryService<R, S, E>,
+struct MemorySearchTool<R, E> {
+    memory: MemoryService<R, E>,
 }
 
 #[derive(Clone)]
-struct MemorySaveTool<R, S, E> {
-    memory: MemoryService<R, S, E>,
+struct MemorySaveTool<R, E> {
+    memory: MemoryService<R, E>,
 }
 
 #[derive(Clone)]
-struct MemoryDeleteTool<R, S, E> {
-    memory: MemoryService<R, S, E>,
+struct MemoryDeleteTool<R, E> {
+    memory: MemoryService<R, E>,
 }
 
 #[derive(Deserialize)]
@@ -108,18 +110,21 @@ struct MemoryDeleteInput {
     metadata: Option<serde_json::Value>,
 }
 
-impl<R, S, E> Tool for MemorySearchTool<R, S, E>
+impl<R, E> Tool for MemorySearchTool<R, E>
 where
     R: RagIngestRepository
         + RagSearchRepository
         + RagDiagnosticsRepository
-        + RagRetryIndexRepository
         + Clone
         + Send
         + Sync
         + 'static,
-    S: RagStrategyRegistry + Send + Sync + 'static,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
+    E: RagEmbeddingRuntime
+        + crate::application::rag::RagGraphRuntime
+        + RagSearchRuntime
+        + Send
+        + Sync
+        + 'static,
 {
     fn name(&self) -> &str {
         "memory_search"
@@ -158,18 +163,21 @@ where
     }
 }
 
-impl<R, S, E> Tool for MemorySaveTool<R, S, E>
+impl<R, E> Tool for MemorySaveTool<R, E>
 where
     R: RagIngestRepository
         + RagSearchRepository
         + RagDiagnosticsRepository
-        + RagRetryIndexRepository
         + Clone
         + Send
         + Sync
         + 'static,
-    S: RagStrategyRegistry + Send + Sync + 'static,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
+    E: RagEmbeddingRuntime
+        + crate::application::rag::RagGraphRuntime
+        + RagSearchRuntime
+        + Send
+        + Sync
+        + 'static,
 {
     fn name(&self) -> &str {
         "memory_save"
@@ -214,18 +222,21 @@ where
     }
 }
 
-impl<R, S, E> Tool for MemoryDeleteTool<R, S, E>
+impl<R, E> Tool for MemoryDeleteTool<R, E>
 where
     R: RagIngestRepository
         + RagSearchRepository
         + RagDiagnosticsRepository
-        + RagRetryIndexRepository
         + Clone
         + Send
         + Sync
         + 'static,
-    S: RagStrategyRegistry + Send + Sync + 'static,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
+    E: RagEmbeddingRuntime
+        + crate::application::rag::RagGraphRuntime
+        + RagSearchRuntime
+        + Send
+        + Sync
+        + 'static,
 {
     fn name(&self) -> &str {
         "memory_delete"

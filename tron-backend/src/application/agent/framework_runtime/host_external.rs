@@ -159,8 +159,9 @@ impl FrameworkHost {
             .max_tokens
             .filter(|value| *value > 0)
             .unwrap_or(4096);
-        request.limits.model_timeout = Duration::from_secs(3600);
-        request.limits.run_timeout = Duration::from_secs(3600);
+        let invocation = self.invocation_config().external_agent;
+        request.limits.model_timeout = Duration::from_secs(invocation.call_timeout_seconds);
+        request.limits.run_timeout = Duration::from_secs(invocation.operation_timeout_seconds);
         request
             .extensions
             .insert(super::super::external::ExternalExecution {

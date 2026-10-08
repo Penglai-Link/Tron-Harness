@@ -435,7 +435,14 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         if !allowed {
             return Err(IngestionQueueError::Conflict);
         }
+        if update.completed_units > update.total_units {
+            return Err(IngestionQueueError::Conflict);
+        }
         task.stage = update.stage;
+        task.index_stage = update.index_stage.clone();
+        task.completed_units = update.completed_units;
+        task.total_units = update.total_units;
+        task.updated_at = now;
         task.remote_file_id = update.remote_file_id.clone();
         task.remote_job_id = update.remote_job_id.clone();
         task.reconciling = update.reconciling;

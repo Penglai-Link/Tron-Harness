@@ -45,7 +45,8 @@ pub use agui_stream::{
 pub use business_tools::{
     CHAT_ASK_USER_TOOL, DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, ask_user_definition,
     build_domain_discovery_guidance, discovery_expand_tool_definition,
-    domain_discovery_runtime_values, register_default_agent_tools, tool_record_to_effective_tool,
+    domain_discovery_runtime_values, rag_search_tool, register_default_agent_tools,
+    tool_record_to_effective_tool,
 };
 pub use canonical_event::CanonicalRuntimeEvent;
 pub(crate) use dto::AgentPageContext;
@@ -58,10 +59,9 @@ pub(crate) use invocation::{
     user_prompt_message,
 };
 pub use management::{
-    CreateWorkspaceInternalAgentCommand, UpdateWorkspaceInternalAgentDefinitionCommand,
-    AgentManagementRepository, AgentManagementService, ResolvedAgentRuntime,
-    UpdateWorkspaceInternalAgentMcpPolicyCommand,
-    UpdateWorkspaceInternalAgentPolicyCommand,
+    AgentManagementRepository, AgentManagementService, CreateWorkspaceInternalAgentCommand,
+    ResolvedAgentRuntime, UpdateWorkspaceInternalAgentDefinitionCommand,
+    UpdateWorkspaceInternalAgentMcpPolicyCommand, UpdateWorkspaceInternalAgentPolicyCommand,
 };
 pub use orchestrator::AgentOrchestrator;
 pub(crate) use orchestrator::{AgentOrchestrationRun, AgentRunExecutionMetadata};

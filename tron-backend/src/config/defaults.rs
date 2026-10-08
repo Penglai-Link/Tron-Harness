@@ -23,7 +23,6 @@ impl Default for AppConfig {
                 .join("tron-frontend-test")
                 .display()
                 .to_string(),
-            project_doc_root: std::env::temp_dir().display().to_string(),
             terminal_working_directory: std::env::temp_dir().display().to_string(),
             skills_registry_root: std::env::temp_dir()
                 .join("tron-skills-registry-test")
@@ -37,6 +36,7 @@ impl Default for AppConfig {
             variable_crypto: VariableCryptoConfig::test_default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
             mineru: MineruConfig::default(),
+            model_invocation: super::ModelInvocationConfig::default(),
             short_term_memory: ShortTermMemoryConfig::default(),
             event_bus: EventBusConfig::default(),
             navigation: NavigationConfig { max_depth: 3 },

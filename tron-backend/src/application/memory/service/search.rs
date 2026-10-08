@@ -1,16 +1,12 @@
 use serde_json::{Map, Value, json};
 
 use crate::application::rag::{
-    RagDiagnosticsRepository, RagDocumentSourceRuntime, RagEmbeddingRuntime, RagIngestRepository,
-    RagRetryIndexRepository, RagSearchContextRequest, RagSearchGraphExpansionRequest,
-    RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRuntime,
-    RagSearchTraceRequest, RagStrategyRegistry,
+    RagDiagnosticsRepository, RagEmbeddingRuntime, RagIngestRepository, RagSearchContextRequest,
+    RagSearchGraphExpansionRequest, RagSearchRepository, RagSearchRequest, RagSearchResult,
+    RagSearchRuntime, RagSearchTraceRequest,
 };
 
-use super::{
-    DEFAULT_CONTEXT_TOKEN_BUDGET, MEMORY_QUERY_PROFILE_ID, MEMORY_RETURN_FIELDS,
-    MEMORY_SEARCH_PROFILE_ID, MemoryService,
-};
+use super::{DEFAULT_CONTEXT_TOKEN_BUDGET, MEMORY_RETURN_FIELDS, MemoryService};
 use crate::application::memory::{
     code::{
         MEMORY_SOURCE_VERSION, MemoryLocator, MemoryScope, SearchMode, access_context,
@@ -28,15 +24,10 @@ use crate::application::memory::{
     },
 };
 
-impl<R, S, E> MemoryService<R, S, E>
+impl<R, E> MemoryService<R, E>
 where
-    R: RagIngestRepository
-        + RagSearchRepository
-        + RagDiagnosticsRepository
-        + RagRetryIndexRepository
-        + Clone,
-    S: RagStrategyRegistry,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime,
+    R: Send + Sync + RagIngestRepository + RagSearchRepository + RagDiagnosticsRepository + Clone,
+    E: RagEmbeddingRuntime + crate::application::rag::RagGraphRuntime + RagSearchRuntime,
 {
     pub async fn search(
         &self,
@@ -73,7 +64,6 @@ where
                 .execute_search(
                     &context,
                     &command,
-                    MEMORY_SEARCH_PROFILE_ID,
                     query.unwrap_or_default(),
                     locator.as_ref(),
                     "RESULT_LIST",
@@ -88,7 +78,6 @@ where
             .execute_search(
                 &context,
                 &command,
-                MEMORY_SEARCH_PROFILE_ID,
                 String::new(),
                 locator.as_ref(),
                 "MEMORY_CONTEXT_PACK",
@@ -102,7 +91,6 @@ where
                 self.execute_search(
                     &context,
                     &command,
-                    MEMORY_QUERY_PROFILE_ID,
                     query,
                     locator.as_ref(),
                     "RESULT_LIST",
@@ -164,7 +152,6 @@ where
         &self,
         context: &MemoryRunContext,
         command: &MemorySearchCommand,
-        profile_id: &str,
         query: String,
         locator: Option<&MemoryLocator>,
         strategy: &str,
@@ -175,8 +162,7 @@ where
         let filters = self.search_filters(context, command, locator, injectable)?;
         let result = self
             .rag
-            .search(RagSearchRequest {
-                profile_id: profile_id.into(),
+            .search_memory(RagSearchRequest {
                 workspace_code: context.workspace_code.clone(),
                 query,
                 access_context: access_context(context),

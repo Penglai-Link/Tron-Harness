@@ -45,8 +45,16 @@ pub struct LlmRuntimeRerankHit {
 }
 
 pub trait LlmRuntimeModelResolver: Send + Sync {
-    fn vision_cache_identity(&self) -> Result<Option<String>, ModelError> { Ok(None) }
-    fn vision_runtime_model_config(&self, _: &str, _: &str) -> Result<Option<RuntimeModelConfig>, ModelError> { Ok(None) }
+    fn vision_cache_identity(&self) -> Result<Option<String>, ModelError> {
+        Ok(None)
+    }
+    fn vision_runtime_model_config(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        Ok(None)
+    }
 
     fn embedding_runtime_model_config(
         &self,
@@ -62,8 +70,16 @@ pub trait LlmRuntimeModelResolver: Send + Sync {
 }
 
 pub trait LlmRuntimeClient: Send + Sync {
-    fn model_authorization_scope(&self, _: &RuntimeModelConfig) -> Result<Option<String>, String> { Ok(None) }
-    fn generate_vision<'a>(&'a self, _: &'a RuntimeModelConfig, _: &'a str, _: &'a str, _: &'a [u8]) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+    fn model_authorization_scope(&self, _: &RuntimeModelConfig) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    fn generate_vision<'a>(
+        &'a self,
+        _: &'a RuntimeModelConfig,
+        _: &'a str,
+        _: &'a str,
+        _: &'a [u8],
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(async { Err("vision generation is unavailable".into()) })
     }
 
@@ -74,6 +90,35 @@ pub trait LlmRuntimeClient: Send + Sync {
         input: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(Vec<f32>, Option<String>), String>> + Send + 'a>> {
         Box::pin(async move { self.embed(config, input).await.map(|vector| (vector, None)) })
+    }
+    fn embed_batch_with_model<'a>(
+        &'a self,
+        _: &'a RuntimeModelConfig,
+        _: &'a [String],
+        _: usize,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        (
+                            Vec<eliteforge_agent_framework::EmbeddingVector>,
+                            Option<String>,
+                        ),
+                        String,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Err("batch embedding is unavailable".into()) })
+    }
+    fn embed_query_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+        _dimensions: usize,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<f32>, Option<String>), String>> + Send + 'a>> {
+        self.embed_with_model(config, input)
     }
     fn embed_query_with_model_in_run<'a>(
         &'a self,

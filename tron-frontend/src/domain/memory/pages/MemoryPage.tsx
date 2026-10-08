@@ -603,6 +603,7 @@ function MemoryRepository() {
               <Button
                 size="lg"
                 variant="outline"
+                disabled={!workspaceCode}
                 onClick={() => {
                   setRefreshKey((value) => value + 1);
                   setNotice(t("pages:memory.messages.refreshed", "Memory refreshed."));
@@ -610,7 +611,7 @@ function MemoryRepository() {
               >
                 {t("pages:memory.actions.refresh", "Refresh")}
               </Button>
-              <Button size="lg" onClick={() => navigate("/memory/new")}>
+              <Button size="lg" disabled={!workspaceCode} onClick={() => navigate("/memory/new")}>
                 {t("pages:memory.actions.new", "New")}
               </Button>
             </div>

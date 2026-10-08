@@ -20,7 +20,7 @@ struct StoredParse {
     rendered_sections: Vec<super::local_documents::LocatedSection>,
 }
 impl KnowledgeBaseService {
-    pub(super) fn derived_resource(
+    pub(crate) fn derived_resource(
         &self,
         user: &str,
         workspace: &str,
@@ -31,7 +31,8 @@ impl KnowledgeBaseService {
     ) -> Result<String, KnowledgeBaseError> {
         let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
         let code = format!("KB_{}", new_id());
-        self.repository.register_derived_resource(document, workspace, &code)?;
+        self.repository
+            .register_derived_resource(document, workspace, &code)?;
         // Register privacy before publication. Unlinked failed-generation assets remain private.
         self.repository.mark_private(user, workspace, &code)?;
         let mut temporary = tempfile::NamedTempFile::new().map_err(invalid_storage)?;
@@ -61,7 +62,23 @@ impl KnowledgeBaseService {
         doc: &KnowledgeBaseDocument,
         bytes: &[u8],
     ) -> Result<(ParsedDocument, KnowledgeBaseDocument), KnowledgeBaseError> {
-        if super::fidelity::blocked(doc) { return Err(KnowledgeBaseError::Invalid("数据保真核验发现未解决字形或符号，禁止发布索引；请核对原件及图片".into())); }
+        if super::fidelity::blocked(doc) {
+            let reason = doc
+                .parsing_artifact
+                .as_ref()
+                .map(|artifact| {
+                    artifact
+                        .fidelity_issues
+                        .iter()
+                        .map(|issue| issue.source_excerpt.as_str())
+                        .collect::<Vec<_>>()
+                        .join("；")
+                })
+                .unwrap_or_default();
+            return Err(KnowledgeBaseError::Invalid(format!(
+                "解析质量校验失败，索引未发布：{reason}；请核对原件及图片"
+            )));
+        }
         if doc.file_name.to_ascii_lowercase().ends_with(".md") {
             let mut parsed = parse_local_document(&doc.file_name, bytes)
                 .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
@@ -78,7 +95,7 @@ impl KnowledgeBaseService {
             KnowledgeBaseError::Invalid("文档解析服务未配置；不会自动降级为纯文本解析".into())
         })?;
         let snapshot = parser.snapshot();
-        let parser = snapshot.as_ref().unwrap_or(parser);
+        let parser = snapshot.as_ref().unwrap_or(&parser);
         let office = doc.file_name.to_ascii_lowercase().ends_with(".docx")
             || doc.file_name.to_ascii_lowercase().ends_with(".xlsx");
         let tier = if office {
@@ -157,11 +174,17 @@ impl KnowledgeBaseService {
                 &mut document,
                 parsed.rendered_sections,
             )?;
-            return Ok((document,doc.clone()));
+            return Ok((document, doc.clone()));
         }
         let mut result = if let Some(checkpoint) = &self.parse_checkpoint {
-            parser.parse_durable(&doc.file_name, bytes, doc.parsing_tier, checkpoint.clone()).await?
-        } else { parser.parse(&doc.file_name, bytes, doc.parsing_tier).await? };
+            parser
+                .parse_durable(&doc.file_name, bytes, doc.parsing_tier, checkpoint.clone())
+                .await?
+        } else {
+            parser
+                .parse(&doc.file_name, bytes, doc.parsing_tier)
+                .await?
+        };
         super::source_locations::apply(&mut result.document, bytes, &result.middle)?;
         let mut rendered_sections = Vec::new();
         let mut rendered_pdf_resource = None;
@@ -245,8 +268,14 @@ impl KnowledgeBaseService {
                 .file_name()
                 .and_then(|s| s.to_str())
                 .ok_or_else(|| KnowledgeBaseError::Invalid("解析图片名称无效".into()))?;
-            let code =
-                self.derived_resource(user, workspace, doc, name, ResourceKind::Image, &asset.bytes)?;
+            let code = self.derived_resource(
+                user,
+                workspace,
+                doc,
+                name,
+                ResourceKind::Image,
+                &asset.bytes,
+            )?;
             image_resources.insert(asset.path.clone(), code);
         }
         map_image_resources(&mut result.document, &image_resources)?;
@@ -291,7 +320,10 @@ impl KnowledgeBaseService {
         cached.image_description_artifacts.clear();
         if let Some(visual) = &cached.visual_source {
             let mut retained = std::collections::BTreeSet::new();
-            super::deletion::collect_codes(&serde_json::to_value(visual).map_err(invalid_storage)?, &mut retained);
+            super::deletion::collect_codes(
+                &serde_json::to_value(visual).map_err(invalid_storage)?,
+                &mut retained,
+            );
             cached.derived_resource_codes.extend(retained);
         }
         cached.parsing_artifact = Some(ParsingArtifact {
@@ -348,6 +380,9 @@ fn map_image_resources(
     Ok(())
 }
 
-pub(super) fn cached_document_for_fidelity(bytes:&[u8])->Result<ParsedDocument,KnowledgeBaseError>{
-    let cached:StoredParse=serde_json::from_slice(bytes).map_err(invalid_storage)?;Ok(cached.document)
+pub(super) fn cached_document_for_fidelity(
+    bytes: &[u8],
+) -> Result<ParsedDocument, KnowledgeBaseError> {
+    let cached: StoredParse = serde_json::from_slice(bytes).map_err(invalid_storage)?;
+    Ok(cached.document)
 }

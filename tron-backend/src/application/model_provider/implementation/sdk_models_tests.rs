@@ -194,6 +194,79 @@ async fn poll(
 }
 
 #[tokio::test]
+async fn rag_graph_auto_route_uses_chat_provider_transport_and_requires_connection() {
+    use crate::{
+        adapters::outbound::model::{
+            HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient,
+            PersonAiModelProviderClient,
+        },
+        application::{llm::LlmRuntimeClient, model_router::LlmModelRouter},
+    };
+    let (service, state, server) = fixture().await;
+    let router = LlmModelRouter::new(service.clone());
+    assert!(
+        router
+            .route_text("", Some("PERSON_AI:ROUTE:ChatAuto"))
+            .is_err()
+    );
+    let row = service
+        .connection
+        .call(
+            |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )
+        .unwrap()
+        .unwrap();
+    let mut credentials = service
+        .decrypt_credentials(row.credentials_encrypted.as_deref().unwrap())
+        .unwrap();
+    credentials.authorization_expires_at = Some(now_millis() + 30 * 24 * 60 * 60 * 1000);
+    let encrypted = service.encrypt_credentials(&credentials).unwrap();
+    service.connection.call(move |connection| {
+        connection.execute("UPDATE provider_connections SET status='Connected', credentials_encrypted=?1 WHERE provider_code='PersonAi'", [encrypted]).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    let config = router
+        .route_text("", Some("PERSON_AI:ROUTE:ChatAuto"))
+        .unwrap();
+    assert_eq!(config.model_code, "PERSON_AI:ROUTE:ChatAuto");
+    assert!(config.model_name.is_empty());
+    state.lock().unwrap().steps = VecDeque::from([Step {
+        method: "POST",
+        path: "/chat/completions",
+        status: StatusCode::OK,
+        body: json!({"choices":[{"message":{"role":"assistant","content":"{\"nodes\":[],\"edges\":[]}"},"finish_reason":"stop"}]}),
+    }]);
+    let models = HttpModelClient::new(Arc::new(PersonAiModelProviderClient::new(
+        HttpModelProviderClient::new(
+            eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
+        ),
+        service,
+    )));
+    let runtime = HttpLlmRuntimeClient::with_model_client(Arc::new(models));
+    assert_eq!(
+        runtime
+            .generate(
+                &config,
+                "Extract entities and relations from the supplied text."
+            )
+            .await
+            .unwrap(),
+        "{\"nodes\":[],\"edges\":[]}"
+    );
+    {
+        let state = state.lock().unwrap();
+        assert!(state.steps.is_empty());
+        assert!(state.errors.is_empty(), "{:?}", state.errors);
+        assert_eq!(
+            state.observed,
+            ["POST /person-ai-index/api/v1/chat/completions"]
+        );
+    }
+    server.abort();
+}
+
+#[tokio::test]
 async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selection() {
     let (service, state, server) = fixture().await;
     let row = service

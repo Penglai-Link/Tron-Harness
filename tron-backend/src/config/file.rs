@@ -53,9 +53,12 @@ impl AppConfig {
         Ok(config.short_term_memory)
     }
 
-    pub(crate) fn effective_mineru(content:&str,path:&Path) -> Result<super::MineruConfig,ConfigError> {
-        let file_config=AppConfigFile::from_content(content,path)?;
-        let mut config=Self::runtime_defaults();
+    pub(crate) fn effective_mineru(
+        content: &str,
+        path: &Path,
+    ) -> Result<super::MineruConfig, ConfigError> {
+        let file_config = AppConfigFile::from_content(content, path)?;
+        let mut config = Self::runtime_defaults();
         config.apply_file_overrides(file_config)?;
         config.apply_env_overrides()?;
         Ok(config.mineru)
@@ -92,9 +95,6 @@ impl AppConfig {
         if let Some(value) = overrides.frontend_dist_dir {
             self.frontend_dist_dir = normalize_storage_path(value);
         }
-        if let Some(value) = overrides.project_doc_root {
-            self.project_doc_root = normalize_storage_path(value);
-        }
         if let Some(value) = overrides.terminal_working_directory {
             self.terminal_working_directory = normalize_storage_path(value);
         }
@@ -113,10 +113,24 @@ impl AppConfig {
         if let Some(value) = overrides.http_clients {
             self.http_clients.apply_overrides(value);
         }
+        if let Some(value) = overrides.model_invocation {
+            self.model_invocation.apply_overrides(value);
+        }
+        self.model_invocation
+            .validate()
+            .map_err(|value| ConfigError::InvalidConfigValue {
+                key: "modelInvocation".into(),
+                value,
+            })?;
         if let Some(value) = overrides.mineru {
             self.mineru.apply_overrides(value);
         }
-        self.mineru.validate().map_err(|value| ConfigError::InvalidConfigValue { key: "mineru".into(), value })?;
+        self.mineru
+            .validate()
+            .map_err(|value| ConfigError::InvalidConfigValue {
+                key: "mineru".into(),
+                value,
+            })?;
         if let Some(value) = overrides.short_term_memory {
             self.short_term_memory.apply_overrides(value);
         }
@@ -233,7 +247,6 @@ struct AppConfigFile {
     database_url: Option<String>,
     graph_storage_path: Option<String>,
     frontend_dist_dir: Option<String>,
-    project_doc_root: Option<String>,
     terminal_working_directory: Option<String>,
     skills_registry_root: Option<String>,
     resource: Option<ResourceFileConfig>,
@@ -241,6 +254,7 @@ struct AppConfigFile {
     variable_crypto: Option<variable_crypto::VariableCryptoFileConfig>,
     http_clients: Option<HttpClientProfilesFileConfig>,
     mineru: Option<MineruFileConfig>,
+    model_invocation: Option<super::model_invocation::ModelInvocationFileConfig>,
     short_term_memory: Option<ShortTermMemoryFileConfig>,
     event_bus: Option<EventBusFileConfig>,
     navigation: Option<NavigationFileConfig>,

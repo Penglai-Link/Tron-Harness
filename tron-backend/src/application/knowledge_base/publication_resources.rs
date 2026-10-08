@@ -3,7 +3,7 @@ use super::*;
 use std::collections::BTreeSet;
 
 impl KnowledgeBaseService {
-    pub(super) fn retain_publication_resources(
+    pub(crate) fn retain_publication_resources(
         &self,
         user: &str,
         workspace: &str,

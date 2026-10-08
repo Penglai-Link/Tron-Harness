@@ -1,6 +1,164 @@
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
+  ragUnified: {
+    taskStatistics: "Ingestion task statistics",
+    totalTasks: "Total tasks",
+    processingTasks: "In progress",
+    failedTasks: "Failed",
+    indexStatus: "Index status",
+    indexEmpty: "Not indexed",
+    indexReady: "Published",
+    indexRebuild: "Rebuild required",
+    indexRebuildCount: "Rebuild required ({{count}})",
+    viewRebuildTasks: "View ingestion jobs for {{name}} ({{count}} to rebuild)",
+    viewIngestion: "View ingestion jobs",
+    configSaved: "Index settings saved",
+    rebuildSubmitted: "Rebuild jobs submitted: {{count}}",
+    stageFailureHelp: "Failure details for {{channel}}",
+    savedRebuildHelp: "New jobs use these settings. Rebuild existing sources to apply index changes.",
+    rebuildSelectionHelp: "Published sources to rebuild: {{count}}. Select sources below, then click Rebuild indexes. Queued, running, or waiting jobs cannot be submitted again.",
+
+    "embeddingDimension": "Embedding dimensions",
+    "dimensionHelp": "Currently fixed at 1024 dimensions. Choose an Embedding model that outputs 1024 dimensions.",
+    "tabsLabel": "RAG management",
+    "definition": "Definition",
+    "ingestion": "Ingestion",
+    "retrieval": "Retrieval",
+    "refresh": "Refresh",
+    "loading": "Loading…",
+    "corpus": "Corpus",
+    "source": "Source",
+    "sources": "Sources",
+    "chunks": "Chunks",
+    "vectors": "Vectors",
+    "graph": "Graph",
+    "actions": "Actions",
+    "corpusActions": "Actions for {{name}}",
+    "taskActions": "Actions for {{name}}",
+    "fieldHelp": "Help for {{field}}",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "knowledgeBase": "Knowledge base",
+    "builtin": "Built in",
+    "configure": "Configure indexes",
+    "manageMemory": "Manage memory",
+    "manageSkills": "Manage skills",
+    "manageKnowledgeBase": "Manage knowledge base",
+    "emptyCorpora": "No corpora. Creating a knowledge base creates its corpus.",
+    "configHelp": "Saved settings apply to new jobs. Rebuild existing sources to apply changes; the published version remains available.",
+    "fulltext": "Full text",
+    "vector": "Vector",
+    "fulltextHelp": "Search a tokenized full text index.",
+    "vectorHelp": "Recall by meaning using an Embedding model.",
+    "graphHelp": "Search original evidence by entities and relations. A model extracts these from documents; for skills, the system records which instructions, scripts and reference files each skill contains.",
+    "embeddingModelCode": "Embedding model",
+    "embeddingModelCodeHelp": "Embeds content during ingestion and questions during retrieval using the same model. If unspecified, uses the platform default Embedding model.",
+    "graphModelCode": "Graph extraction model",
+    "graphModelCodeHelp": "When graph indexing is enabled, this model extracts entities and relations from the text during ingestion and keeps the original evidence. Choose the same Auto route as Agent conversations or a specific model. Skill-to-file links come directly from the skill directory and do not require a model call. Disabled graph indexing does not call it.",
+    "autoRoute": "Automatic routing (Auto)",
+    "rerankModelCode": "Reranking model",
+    "rerankModelCodeHelp": "Rescores fused candidate evidence to prioritize content relevant to the question. With reranking off, uses the fused ranking directly.",
+    "rerankOff": "Reranking off",
+    "defaultModel": "Platform default model",
+    "chooseModel": "Select model",
+    "close": "Close",
+    "save": "Save",
+    "ingestionFlow": "Unified ingestion flow",
+    "allCorpora": "All corpora",
+    "allStates": "All states",
+    "rebuild": "Rebuild indexes",
+    "rebuilding": "Rebuilding…",
+    "selectAllTasks": "Select rebuildable tasks in this list",
+    "selectTask": "Select {{name}}",
+    "document": "Source",
+    "state": "State",
+    "stage": "Current stage",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "viewSource": "View chunks and original",
+    "viewChunks": "View chunks",
+    "viewOriginal": "View original",
+    "documentUnavailable": "This document has been deleted or is not accessible.",
+    "emptyTasks": "No ingestion jobs. Upload documents in a knowledge base or manage memory and skills at their source.",
+    "emptyFilteredTasks": "No ingestion jobs match these filters.",
+    "retrievalFlow": "Unified retrieval flow",
+    "workspace": "Workspace",
+    "agent": "Agent",
+    "selectWorkspace": "Select workspace",
+    "selectAgent": "Select assigned agent",
+    "selectWorkspaceFirst": "Select a workspace first",
+    "loadingAgents": "Loading agents…",
+    "agentsUnavailable": "Failed to load agents",
+    "noAssignedAgents": "No agents assigned to this workspace",
+    "allAuthorized": "All accessible corpora",
+    "question": "Question",
+    "limit": "Result count",
+    "search": "Search",
+    "searching": "Searching…",
+    "authorizedRange": "Search range",
+    "channel": "Channel",
+    "hits": "Hits",
+    "duration": "Duration",
+    "builtins": {
+      "memory-card": "Memory",
+      "skill": "Skills"
+    },
+    "states": {
+      "RUNNING": "Running",
+      "QUEUED": "Queued",
+      "COMPLETED": "Completed",
+      "FAILED": "Failed",
+      "CANCELLED": "Cancelled",
+      "WAITING": "Waiting for resources"
+    },
+    "stages": {
+      "PARSING": "Parsing",
+      "CHUNKING": "Chunking",
+      "EMBEDDING": "Vector indexing",
+      "PUBLISHING": "Validation and publication",
+      "GRAPH": "Graph indexing",
+      "FULLTEXT": "Full text indexing"
+    },
+    "channels": {
+      "fulltext": "Full text",
+      "vector": "Vector",
+      "graph": "Graph",
+      "fusion": "Fusion and deduplication",
+      "rerank": "Reranking"
+    },
+    "flow": {
+      "read": "Read and parse",
+      "readHelp": "MinerU for PDF, Word and Excel; direct Markdown reads and structured memory and skills.",
+      "chunk": "Unified chunking",
+      "chunkHelp": "Keep images and page, paragraph and cell source locations.",
+      "index": "Build indexes",
+      "indexHelp": "Run configured full text, vector and graph indexing.",
+      "publish": "Validate and publish",
+      "publishHelp": "Switch atomically to a complete index generation.",
+      "authorize": "Authorized scope",
+      "authorizeHelp": "Resolve searchable content from the current user’s access and published versions.",
+      "recall": "Multi-channel recall",
+      "recallHelp": "Run full text, vector and graph recall as configured for each corpus.",
+      "fusion": "Fusion and reranking",
+      "fusionHelp": "Fuse and deduplicate results, then rerank when configured.",
+      "evidence": "Evidence and locations",
+      "evidenceHelp": "Return evidence text, source versions and original locations."
+    },
+    "locations": {
+      "page": "Page",
+      "renderedPage": "Rendered preview page",
+      "paragraph": "Paragraph",
+      "paragraphEnd": "End paragraph",
+      "lineStart": "Start line",
+      "lineEnd": "End line",
+      "sheet": "Sheet",
+      "rowStart": "Start row",
+      "rowEnd": "End row",
+      "heading": "Heading",
+      "sourceCode": "Source"
+    }
+  },
   platformData: {"agentDefinitions": "Agent definitions", "agentDefinitionHelp": "Define agents and configure their instructions, tools and knowledge libraries, then authorize workspaces below.", "agentAuthorization": "Workspace authorization", "agentAuthorizationHelp": "Assign existing agents to workspaces. Knowledge library access follows the agent authorization.", "noAgentDefinitions": "Create an agent definition first.", "workspace": "Workspace", "selectWorkspace": "Select a workspace", "allWorkspaces": "All workspaces", "assign": "Assign workspaces", "assignTitle": "Assign {{name}} to workspaces", "searchWorkspaces": "Search workspaces", "assignmentHelp": "Only selected workspaces can use this item. Clearing a selection and saving revokes access immediately.", "save": "Save", "cancel": "Cancel", "assignedWorkspaces": "Assigned workspaces", "platformCatalog": "Platform catalog", "spaceAssignments": "Workspace configuration", "unassigned": "Unassigned", "builtinAgent": "Built-in main agent, available in all workspaces"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "Chat not found.", "CHAT_SESSION_MUST_BE_ARCHIVED": "Archive the chat first.", "CHAT_SESSION_RUN_ACTIVE": "The chat is running. Try again later.", "CHAT_SESSION_ARCHIVED": "The chat is archived.", "CHAT_SESSION_DELETE_FAILED": "Deletion failed. Retry this item."},
@@ -47,6 +205,14 @@ export const pages = {
     attachmentFailed: "Could not download this attachment.",
   },
   knowledgeLibrary: {
+    batchRetry: "Retry selected",
+    batchRetrying: "Submitting…",
+    batchRetried_one: "Submitted a retry task for {{count}} document.",
+    batchRetried_other: "Submitted retry tasks for {{count}} documents.",
+    batchRetryFailed_one: "Could not submit retry for {{count}} document.",
+    batchRetryFailed_other: "Could not submit retries for {{count}} documents.",
+    selectAllRetryableDocuments: "Select all retryable documents",
+    selectDocument: "Select {{name}}",
     batchUploaded_one: "Uploaded {{count}} file.",
     batchUploaded_other: "Uploaded {{count}} files.",
     batchUploadFailed_one: "{{count}} file could not be uploaded.",
@@ -1346,954 +1512,6 @@ export const pages = {
       },
     },
   },
-  rag: {
-    common: {
-      none: "None",
-      preview: "Preview",
-    },
-    status: {
-      active: "Active",
-      completed: "Completed",
-      disabled: "Disabled",
-      draft: "Draft",
-      failed: "Failed",
-      high: "High",
-      indexed: "Indexed",
-      indexing: "Indexing",
-      low: "Low",
-      medium: "Medium",
-      needsreview: "Needs Review",
-      notstarted: "Not started",
-      pending: "Pending",
-      ready: "Ready",
-      reserved: "Reserved",
-      running: "Running",
-      skipped: "Skipped",
-      success: "Success",
-      unknown: "Unknown",
-      warning: "Warning",
-    },
-    model: {
-      segments: {
-        diagnostics: "Diagnostics",
-        fulltext: "Fulltext",
-        source: "Source",
-        textUnit: "Text unit",
-        tree: "Summary tree",
-        vector: "Vector",
-      },
-      targets: {
-        node: "node",
-        unbound: "Unbound",
-        unboundValue: "unbound",
-      },
-    },
-    title: "RAG Management",
-    search: {
-      placeholder: "Search RAG corpora and retrieval profiles...",
-    },
-    actions: {
-      backToList: "Back to list",
-    },
-    messages: {
-      corpusDeleted:
-        "Corpus {{id}} deleted. {{count}} ingest profile(s) removed.",
-      ingestProfileDeleted: "Ingest profile {{id}} deleted.",
-      retrievalProfileDeleted: "Retrieval profile {{id}} deleted.",
-    },
-    errors: {
-      deleteCorpus: "Corpus could not be deleted.",
-      deleteCorpusRetrievalBinding:
-        "This corpus is bound to retrieval profile {{id}}. Remove the retrieval binding before deleting it.",
-      deleteIngestProfile: "Ingest profile could not be deleted.",
-      deleteRetrievalProfile: "Retrieval profile could not be deleted.",
-    },
-    corpora: {
-      actions: {
-        createIngestProfile: "Create ingest profile",
-        deleteCorpus: "Delete corpus",
-        deleteIngestProfile: "Delete ingest profile",
-        editIngestProfile: "Edit ingest profile",
-        newCorpus: "New corpus",
-        openRowActions: "Open actions for {{name}}",
-        rowMenuAria: "Actions for {{name}}",
-        testIngest: "Ingest test",
-      },
-      filters: {
-        allStatuses: "All statuses",
-      },
-      pagination: {
-        itemLabel: "corpora",
-      },
-      searchPlaceholder: "Search corpora, codes, descriptions...",
-      table: {
-        columns: {
-          actions: "Actions",
-          corpus: "Corpus",
-          description: "Description",
-          ingestProfile: "Ingest profile",
-          status: "Status",
-        },
-        noDescription: "No description",
-        noIngestProfile: "Unbound",
-        title: "Corpus",
-        visible: "{{count}} corpora visible",
-      },
-    },
-    profiles: {
-      actions: {
-        deleteRetrievalProfile: "Delete retrieval profile",
-        editRetrievalProfile: "Edit retrieval profile",
-        newIngest: "New ingest profile",
-        newRetrieval: "New retrieval profile",
-        openRowActions: "Open actions for {{id}}",
-        rowMenuAria: "Actions for {{id}}",
-        testRetrievalProfile: "Retrieval test",
-      },
-      empty: {
-        ingest: "No ingest profiles.",
-        retrieval: "No retrieval profiles.",
-      },
-      pagination: {
-        itemLabel: "retrieval profiles",
-      },
-      row: {
-        contextStrategyCount: "{{count}} context strategies",
-        corpusCount: "{{count}} corpora",
-        editAria: "Edit {{id}}",
-        enabledRoutes: "{{count}} routes",
-        noFusionPolicy: "No fusion policy",
-        noPrimaryCorpus: "No primary corpus",
-        noRouteCorpora: "No route corpora",
-        notSet: "Not set",
-        sourceVersion: "Source version",
-        stageEdgeCount: "{{stages}} stages / {{edges}} edges",
-      },
-      table: {
-        columns: {
-          actions: "Actions",
-          corpus: "Corpus",
-          inputContract: "Input contract",
-          pipeline: "Pipeline",
-          profile: "Profile",
-          routes: "Routes",
-          status: "Status",
-        },
-        visible: "{{count}} retrieval profiles visible",
-      },
-      searchPlaceholder: "Search retrieval profiles, corpora, routes...",
-      tabs: {
-        Ingest: "Ingest profiles",
-        Retrieval: "Retrieval profiles",
-      },
-      title: "Retrieval profiles",
-    },
-    workbench: {
-      actions: {
-        remove: "Remove",
-        runSearch: "Run retrieval",
-        searching: "Searching...",
-        submitIngest: "Submit ingest",
-        submittingIngest: "Submitting ingest...",
-      },
-      businessAttributes: {
-        add: "Add business attribute",
-        fieldAria: "Business attribute {{index}} field",
-        fieldLabel: "Field",
-        removeAria: "Remove business attribute {{index}}",
-        title: "Business attributes",
-        valueAria: "Business attribute {{index}} value",
-        valueLabel: "Value",
-      },
-      contextItems: {
-        itemFallback: "Context item {{index}}",
-        title: "Context pack items",
-        tokens: "{{count}} tokens",
-      },
-      defaults: {
-        query: "How should the RAG context pack respect tokenBudget?",
-        sampleText: "{{corpusId}} workbench ingest sample.",
-      },
-      errors: {
-        booleanField: "Filter field {{field}} must be true or false.",
-        businessAttributeRequired:
-          "Business attribute {{index}} must include both field and value.",
-        documentRequired: "Document URI and format are required.",
-        filterRequired:
-          "Filter {{index}} must include field, operator, and value.",
-        filterValueRequired: "Filter {{index}} needs at least one value.",
-        integerField: "Filter field {{field}} must be an integer.",
-        requestFailed: "RAG workbench request failed.",
-        sourceIdentityRequired: "Source code and version are required.",
-        sourceTextRequired: "Source text is required.",
-      },
-      fields: {
-        contextStrategy: "Context strategy",
-        corpus: "Corpus",
-        documentFormat: "Document format",
-        documentUri: "Document URI",
-        ingestProfile: "Ingest profile",
-        language: "Language",
-        limit: "Limit",
-        metadataSourcePath: "Metadata source path",
-        query: "Query",
-        retrievalProfile: "Retrieval profile",
-        scopeType: "Scope type",
-        selectField: "Select field",
-        sourceCode: "Source code",
-        sourceText: "Source text",
-        sourceVersion: "Source version",
-        tokenBudget: "Token budget",
-        traceEnabled: "Enable tracing",
-      },
-      filters: {
-        add: "Add filter",
-        fieldAria: "Filter {{index}} field",
-        fieldLabel: "Field",
-        operatorAria: "Filter {{index}} condition",
-        operatorLabel: "Condition",
-        removeAria: "Remove filter {{index}}",
-        title: "Filters",
-        valueAria: "Filter {{index}} value",
-        valueLabel: "Value",
-      },
-      hints: {
-        businessField:
-          "Business field written to payload.domainFields, sourced from the current corpus field mapping.",
-        businessValue:
-          "Value for the business field. It is converted with the corpus filter schema type.",
-        contextStrategy:
-          "Strategy used to assemble the context pack from retrieval results.",
-        corpus: "Target corpus for this ingest request.",
-        documentFormat:
-          "Document parse format, such as PDF, DOCX, or MARKDOWN. It must match the ingest parse strategy.",
-        documentUri:
-          "Document source URI. Project documents usually start with project-doc://.",
-        filterField:
-          "Additional filter field for this retrieval request, sourced from the profile-bound corpus filter schema.",
-        filterOperator:
-          "Filter comparison operator, such as eq for equals or in for list membership.",
-        filterValue:
-          "Filter query value. Use comma-separated values for the in operator.",
-        ingestProfile:
-          "Profile used for this ingest request. It controls source contract, parsing, splitting, and indexing.",
-        language:
-          "Language tag written to metadata.language. Defaults to zh-CN.",
-        limit: "Maximum hits returned by this retrieval request.",
-        metadataSourcePath:
-          "Path written to metadata.sourcePath so the document can be traced in the project.",
-        query: "Natural-language query for this retrieval test.",
-        retrievalProfile:
-          "Profile used for this retrieval request. It controls routes, fusion, deduplication, and context strategy.",
-        returnField:
-          "Extra field requested in retrieval results, sourced from corpus field mapping.",
-        scopeType:
-          "Target request scope. The scope code is filled automatically from the selected type.",
-        sourceCode:
-          "Unique source code for this ingest request. The same code and version support idempotent updates.",
-        sourceText:
-          "Body text for direct text ingest. Document reference ingest uses document URI and format instead.",
-        sourceVersion:
-          "Source version, usually v1. It cannot be edited when the ingest profile requires a fixed version.",
-        tokenBudget:
-          "Maximum token budget for the context pack returned to the model.",
-      },
-      ingest: {
-        resultTitle: "Ingest result",
-        title: "Ingest request",
-      },
-      preview: {
-        contextPack: "Context pack",
-        disabled: "Disabled",
-        enabled: "Enabled",
-        firstHit: "First hit",
-        traceCode: "Trace code",
-        waiting: "Waiting",
-      },
-      result: {
-        fulltextIndex: "Fulltext index",
-        sourceCode: "Source code",
-        status: "Status",
-        textUnits: "Text units",
-        vectorIndex: "Vector index",
-      },
-      results: {
-        hitFallback: "Hit {{index}}",
-        score: "Score {{score}}",
-        title: "Retrieval results",
-      },
-      retrieval: {
-        title: "Retrieval test",
-      },
-      returnFields: {
-        add: "Add return field",
-        empty: "No return fields available.",
-        label: "Return field {{index}}",
-        removeAria: "Remove return field {{index}}",
-        searchEmpty: "No matching return fields.",
-        searchPlaceholder: "Search return fields...",
-        select: "Select return fields",
-        title: "Return fields",
-      },
-      scope: {
-        AGENT: "Agent",
-        SPACE: "Workspace",
-        USER: "User",
-        resolvedCode: "Scope code is resolved automatically:",
-      },
-      stageResults: {
-        expand: "Expand",
-        ingestTitle: "Ingest stage results",
-        inputArtifacts: "Input artifacts",
-        outputArtifacts: "Output artifacts",
-        retrievalTitle: "Retrieval stage results",
-        stageDuration: "{{count}} stages / {{duration}}ms",
-        warningCount: "{{count}} warnings",
-        warnings: "Warnings: {{warnings}}",
-      },
-      tabs: {
-        ariaLabel: "Workbench mode",
-        ingest: {
-          label: "Ingest request",
-          summary: "Write a source payload into the selected corpus.",
-        },
-        retrieval: {
-          label: "Retrieval test",
-          summary: "Run a retrieval profile with query fields and filters.",
-        },
-      },
-      testPages: {
-        ingestTitle: "Ingest test",
-        retrievalTitle: "Retrieval test",
-      },
-    },
-    corpusForm: {
-      actions: {
-        advancedStorageSettings: "Advanced storage settings",
-        addFilterField: "Add filter field",
-        addStorageTarget: "Add custom storage",
-        backToList: "Back to list",
-        cancel: "Cancel",
-        save: "Save",
-        saving: "Saving...",
-      },
-      capabilities: {
-        fulltext: "Enable fulltext index",
-        graph: "Enable graph capability",
-        tree: "Enable summary tree",
-        vector: "Enable vector index",
-      },
-      fields: {
-        backend: "Backend",
-        codeStrategy: "Code strategy",
-        column: "Column",
-        corpusCode: "Corpus code",
-        corpusName: "Corpus name",
-        description: "Description",
-        graphNamespace: "Graph namespace",
-        logicalName: "Logical name",
-        name: "Name",
-        nodeLabel: "Node label",
-        operators: "Operators",
-        table: "Table",
-        type: "Type",
-      },
-      filters: {
-        missingMapping: "{{name}} (missing mapping)",
-        nameAria: "Filter field {{index}} name",
-        noMappedFields: "No mapped fields available",
-        operatorsAria: "Filter field {{index}} operators",
-        removeAria: "Remove filter field {{index}}",
-        selectMappedField: "Select mapped field",
-        typeAria: "Filter field {{index}} type",
-      },
-      filterTypes: {
-        boolean: "Boolean",
-        integer: "Integer",
-        string: "String",
-      },
-      fieldConfig: {
-        addSourceField: "Add source field",
-        addTextUnitField: "Add text unit field",
-        configure: "Configure fields",
-        customCount: "Custom fields {{count}}",
-        customFields: "Custom fields",
-        filterCount: "Filter fields {{count}}",
-        filterPanelCount: "{{count}} filter fields",
-        filtersTab: "Filter fields",
-        hide: "Hide field configuration",
-        mappingCounts: "{{custom}} custom fields · {{system}} system fields",
-        noCustomFields: "No custom fields.",
-        noFilterFields: "No filter fields.",
-        sourceSystemCount: "Source system fields {{count}}",
-        sourceTab: "Source fields",
-        systemFields: "System fields",
-        tabsAria: "Field configuration tabs",
-        textUnitSystemCount: "Text unit system fields {{count}}",
-        textUnitTab: "Text unit fields",
-      },
-      hints: {
-        code: "Stable corpus code used in API parameters and profile references. It cannot be changed after creation.",
-        description:
-          "Purpose description used to identify this corpus in lists and profile pages.",
-        filterName:
-          "Business field allowed for retrieval profiles and workbench filters. It must come from field mappings.",
-        filterOperators:
-          "Supported filter operators for this field. Separate multiple operators with commas, such as eq, in.",
-        filterType:
-          "Filter value type used when saving configuration and validating workbench test input.",
-        mappingColumn:
-          "Column or property name used when writing this field to the underlying storage.",
-        mappingLogicalName:
-          "Business-facing field name used by filter schema, workbench attributes, and return fields.",
-        name: "Display name shown to users.",
-        segmentBinding:
-          "Storage target used by this data segment. Empty means the segment is not bound.",
-        storageBackend:
-          "Choose local table storage or graph storage for this target. Each backend requires different fields.",
-        storageCodeStrategy:
-          "Graph node code generation strategy that keeps node codes stable for the same source version and scope.",
-        storageNamespace:
-          "Graph storage namespace used to isolate corpora or business domains.",
-        storageNodeLabel:
-          "Graph node label used to identify text-unit or document nodes.",
-        storageTable:
-          "Table name used by local table storage. Auto-generated values can be overridden.",
-      },
-      loading: {
-        breadcrumb: "Loading corpus",
-        description: "Loading corpus management record...",
-        title: "Loading corpus",
-      },
-      mapping: {
-        addSource: "Add source mapping",
-        addTextUnit: "Add text unit mapping",
-        columnAria: "{{prefix}} {{index}} column",
-        contract: "Contract",
-        contractFields: "Contract fields",
-        customMappings: "Custom mappings",
-        hideSourceContract: "Hide source contract fields",
-        hideTextUnitContract: "Hide text unit contract fields",
-        logicalNameAria: "{{prefix}} {{index}} logical name",
-        noCustomMappings: "No custom mappings.",
-        removeAria: "Remove {{prefix}} {{index}}",
-        showSourceContract: "Show source contract fields",
-        showTextUnitContract: "Show text unit contract fields",
-        sourceContractField: "Source contract field",
-        sourceMapping: "Source mapping",
-        textUnitContractField: "Text unit contract field",
-        textUnitMapping: "Text unit mapping",
-      },
-      messages: {
-        catalogLoadFailed: "Corpus catalog could not be loaded.",
-        created: "{{name}} created",
-        fixErrors: "Resolve corpus form errors before saving.",
-        saveFailed: "Corpus could not be saved.",
-        saved: "{{name}} saved",
-      },
-      model: {
-        errors: {
-          codeRequired: "Corpus code is required.",
-          codeUnique: "Corpus code must be unique.",
-          fieldMappingConflict:
-            "Field mapping logical names must resolve to the same physical column across source and text unit mappings.",
-          filterFieldColumnBound:
-            "Filter fields must resolve to columns in a bound storage target.",
-          filterFieldMapped: "Filter field names must reference mapped fields.",
-          filterFieldRequired: "At least one filter schema field is required.",
-          nameRequired: "Corpus name is required.",
-          segmentBindingsRequired:
-            "Every business segment must be bound to a storage target.",
-          sourceColumnsExist:
-            "Source mapping columns must exist in the bound source storage target.",
-          sourceContractFields:
-            "Source mappings must retain contract fields: {{fields}}.",
-          sourceLogicalNamesUnique:
-            "Source mapping logical names must be unique.",
-          storageTargetRequired: "At least one storage target is required.",
-          textUnitColumnsExist:
-            "Text unit mapping columns must exist in the bound text unit storage target.",
-          textUnitContractFields:
-            "Text unit mappings must retain contract fields: {{fields}}.",
-          textUnitLogicalNamesUnique:
-            "Text unit mapping logical names must be unique.",
-        },
-        graphCapabilityRequiresTarget:
-          "Graph capability requires at least one non-diagnostic business segment bound to a GRAPH storage target.",
-        labels: {
-          node: "Node",
-          unbound: "Unbound",
-        },
-        mock: {
-          browserLocal: "Browser local",
-          description: "Browser-local mock corpus record.",
-          healthy: "Healthy",
-          workspace: "Workspace",
-        },
-        segmentBinding: {
-          targetExisting:
-            "{{segment}} storage target must reference an existing storage target.",
-          targetRequired: "{{segment}} storage target is required.",
-        },
-        segments: {
-          fulltext: "Full-text index",
-          source: "Source",
-          textUnit: "Text unit",
-          tree: "Summary tree",
-          vector: "Vector",
-        },
-        storageTarget: {
-          label: "Storage target {{index}}",
-          namespaceRequired: "{{label}} graph namespace is required.",
-          nodeLabelRequired: "{{label}} node label is required.",
-          tableInvalid:
-            "{{label}} table name must start with rag_ and use only lowercase letters, numbers, or underscores.",
-          tableRequired: "{{label}} SQLite table name is required.",
-        },
-      },
-      notFound: {
-        api: "The requested corpus could not be loaded from the RAG management API.",
-        breadcrumb: "Corpus not found",
-        mock: "The selected corpus does not exist in the browser-local mock registry.",
-        title: "Corpus not found",
-      },
-      sections: {
-        basicInfo: "Basic information",
-        capabilities: "Capabilities",
-        fieldConfig: "Field configuration",
-        fieldMapping: "Field mapping",
-        filterSchema: "Filter schema",
-        segmentBindings: "Segment bindings",
-        status: "Status",
-        storageBinding: "Storage binding",
-        storageTargets: "Storage targets",
-      },
-      segmentBindings: {
-        fulltext: "{{label}} target",
-        source: "{{label}} target",
-        textUnit: "{{label}} target",
-        tree: "{{label}} target",
-        vector: "{{label}} target",
-      },
-      segments: {
-        fulltext: "Fulltext index",
-        source: "Source",
-        textUnit: "Text unit",
-        tree: "Summary tree",
-        vector: "Vector",
-      },
-      storageTargets: {
-        backendAria: "Storage target {{index}} backend",
-        codeStrategyAria: "Storage target {{index}} code strategy",
-        graph: "Graph storage",
-        namespaceAria: "Storage target {{index}} graph namespace",
-        nodeLabelAria: "Storage target {{index}} node label",
-        removeAria: "Remove storage target {{index}}",
-        select: "Select storage target",
-        sqlite: "Local table storage",
-        tableAria: "Storage target {{index}} table",
-      },
-      storageSummary: {
-        customTitle: "Custom storage configured",
-        defaultTitle: "Default storage is ready",
-        targetCount: "{{count}} targets",
-      },
-      title: {
-        create: "New corpus",
-        edit: "Edit corpus",
-      },
-    },
-    profileForm: {
-      actions: {
-        cancel: "Cancel",
-        saveProfile: "Save profile",
-        saving: "Saving...",
-      },
-      capabilities: {
-        fulltext: "Fulltext",
-        graph: "Graph",
-        tree: "Summary tree",
-        vector: "Vector",
-      },
-      fields: {
-        allowedUriSchemes: "Allowed URI schemes",
-        contextStrategy: "Context strategy",
-        corpus: "Corpus",
-        dedupPolicy: "Dedup policy",
-        description: "Description",
-        documentFormat: "Document format",
-        embeddingModelCode: "Embedding model code",
-        embeddingVersion: "Embedding version",
-        enableRerank: "Enable rerank",
-        field: "Field",
-        fusionPolicy: "Fusion policy",
-        graphExpansionPolicy: "Graph expansion policy",
-        graphWritePolicy: "Graph write policy",
-        headingDepth: "Heading depth",
-        maxBytes: "Max bytes",
-        maxTokens: "Max tokens",
-        noCorpusContext: "No corpus selected",
-        operator: "Operator",
-        overlapTokens: "Overlap tokens",
-        primaryCorpus: "Primary corpus",
-        profileId: "Profile ID",
-        rerankModelCode: "Rerank model code",
-        rerankStrategy: "Rerank strategy",
-        rerankStrategyHint: "No rerank keeps the vector ranking. Native uses a configured rerank model. LLM fallback asks the active text model to order candidate documents and keeps the original order if it fails.",
-        requiredSourceVersion: "Required source version",
-        retrievalStrategy: "Retrieval strategy",
-        selectCorpus: "Select corpus",
-        selectMappedField: "Select mapped field",
-        splitterType: "Splitter type",
-        status: "Status",
-        strategy: "Strategy",
-        supportedFormats: "Supported formats",
-        treeSummaryModelCode: "Tree summary model code",
-        topicPolicy: "Topic policy",
-        unsupportedFormatPolicy: "Unsupported format policy",
-        value: "Value",
-      },
-      filters: {
-        add: "Add filter",
-        count: "{{count}} filters",
-        empty:
-          "No profile filters. Add one only when every request should include the same fixed condition.",
-        fieldAria: "Filter {{index}} field",
-        operatorAria: "Filter {{index}} operator",
-        removeAria: "Remove filter {{index}}",
-        title: "Profile filters",
-        valueAria: "Filter {{index}} value",
-      },
-      rerankStrategy: {
-        disabled: "No rerank",
-        native: "Native rerank",
-        llmFallback: "LLM rerank fallback",
-      },
-      hints: {
-        ingest: {
-          description:
-            "Readable description shown in profile lists and details.",
-          embeddingModelCode:
-            "Optional model code used for vector embeddings. Leave empty to use the workspace default embedding model.",
-          embeddingVersion:
-            "Version tag written to vector index entries. Defaults to v1.",
-          graphWritePolicy:
-            "Graph write policy JSON for graph-backed corpora. Leave empty when not writing graph data.",
-          parseDocumentFormat:
-            "Document formats accepted by the parser. Markdown parsers use MARKDOWN; MinerU uses comma-separated values such as PDF, DOCX.",
-          parseDocumentMineruFormat:
-            "Format list accepted by MinerU. Separate multiple values with commas. Defaults to PDF, DOCX.",
-          parseDocumentUnsupportedFormatPolicy:
-            "Policy for unsupported formats. FAIL_FAST rejects requests before parsing.",
-          profileId: "Stable profile ID used by ingest API requests.",
-          primaryCorpus:
-            "Corpus written by this ingest profile. It also limits available stage strategies.",
-          requiredSourceVersion:
-            "Source version required by this profile. v1 matches the current ingest request contract.",
-          resolveSourceAllowedUriSchemes:
-            "URI schemes accepted by the source resolver. Separate multiple values with commas. Project document references should use project-doc.",
-          resolveSourceMaxBytes:
-            "Maximum document bytes read by the source resolver. Document reference profiles default to 52428800 bytes for PDF/DOCX.",
-          splitTextHeadingDepth:
-            "Maximum Markdown heading depth used to generate chunk paths. markdownHeading supports 1 to 6.",
-          splitTextMaxTokens:
-            "Target maximum tokens for each text unit. Defaults to 800.",
-          splitTextOverlapTokens:
-            "Overlapping tokens between adjacent text units. Defaults to 80.",
-          splitTextType:
-            "Splitter implementation. Use markdownHeading after document parsing and plainText for direct text payloads.",
-          status:
-            "Only Ready profiles are saved as runtime-available RAG profiles.",
-          strategy:
-            "Execution strategy for this stage. Selecting a strategy fills recommended defaults below.",
-          treeSummaryModelCode:
-            "Optional model code used by the LLM tree summary stage. Leave empty to use the workspace default LLM model.",
-        },
-        retrieval: {
-          contextStrategy:
-            "Strategy used to assemble context packs from retrieval results. At least one strategy must be enabled for workbench and API calls.",
-          dedupPolicy:
-            "How multi-route recall results are deduplicated so the same source chunk does not repeat in context.",
-          description:
-            "Readable description shown in profile lists and details.",
-          filterField:
-            "Fixed filter field attached by this profile. It must come from filterable fields on the primary or route corpora.",
-          filterOperator:
-            "Comparison operator used by this filter, such as eq for equals or in for list membership.",
-          filterValue:
-            "Fixed filter value. Each request using this retrieval profile includes this condition after save.",
-          fusionPolicy: "How results from multiple retrieval routes are fused.",
-          graphExpansionPolicy:
-            "Policy used to expand adjacent nodes or structural relations when graph retrieval is enabled.",
-          primaryCorpus:
-            "Default corpus for this retrieval profile. It is also used to infer available filter fields.",
-          profileId: "Stable profile ID used by retrieval API requests.",
-          rerankModelCode:
-            "Model code used for reranking. It only applies when reranking is enabled; leave empty for defaults.",
-          routeCorpus:
-            "Corpus queried by this route. Different corpora affect available retrieval strategies.",
-          routeStrategy:
-            "Recall strategy used by this route, such as fulltext, vector, graph, or structured retrieval.",
-          status: "Only Ready retrieval profiles are runtime-available.",
-          topicPolicy:
-            "Policy used to aggregate or order context packs by topic.",
-        },
-        parseDocumentMineruFormat:
-          "Format list accepted by MinerU. Separate multiple values with commas. Defaults to PDF, DOCX.",
-      },
-      ingest: {
-        advancedNodes: {
-          barrier: "Control barrier",
-          collapseConfig: "Collapse config",
-          configureConfig: "Configure",
-          description:
-            "Use these controls when the selected template needs a custom stage combination.",
-          enableFirst: "Enable first",
-          enableNode: "Enable {{stage}} node",
-          mustRunBefore: "Must run before {{stages}}",
-          required: "Required",
-          title: "Advanced node controls",
-        },
-        inputContract: {
-          description:
-            "These fields define the inputs accepted by the workbench and ingest API for this profile.",
-          title: "Input contract",
-        },
-        pipelineSettings: {
-          advanced: "Advanced pipeline settings",
-          defaultPipeline: "Default write pipeline",
-          mode: "Write mode",
-          title: "Write pipeline",
-        },
-        stageStrategies: {
-          noAvailableStrategy:
-            "No available strategy for this stage and corpus.",
-          noStrategy: "No supported strategy",
-          strategyAria: "{{stage}} strategy ID",
-        },
-        summary: {
-          enabledStages: "Enabled stages",
-          payloadStrategy: "Payload strategy",
-          title: "Pipeline summary",
-        },
-        title: {
-          create: "New ingest profile",
-          edit: "Edit ingest profile",
-        },
-      },
-      loading: {
-        ingestDescription: "Loading ingest profile management data...",
-        ingestTitle: "Loading ingest profile",
-        retrievalDescription: "Loading retrieval profile management data...",
-        retrievalTitle: "Loading retrieval profile",
-        title: "Loading profile",
-      },
-      messages: {
-        catalogLoadFailed: "Profile catalog could not be loaded.",
-        fixProfileErrors: "Resolve profile form errors before saving.",
-        ingestCreated: "Ingest profile created.",
-        ingestSaveFailed: "Ingest profile could not be saved.",
-        profileCreatedWithId: "{{id}} created",
-        profileSavedWithId: "{{id}} saved",
-        profileUpdated: "Profile updated.",
-        retrievalCreated: "Retrieval profile created.",
-        retrievalSaveFailed: "Retrieval profile could not be saved.",
-      },
-      model: {
-        errors: {
-          availableRouteStrategy: "Select an available route strategy.",
-          availableStageStrategy: "Select an available stage strategy.",
-          contextStrategyRequired:
-            "At least one context strategy must be enabled.",
-          documentFormatRequired: "Document format is required.",
-          extractTreeDependency: "extractTree requires splitText.",
-          filterFieldInRoutes:
-            "Filter field must belong to one of the selected route corpora.",
-          filterFieldRequired: "Filter field is required.",
-          filterOperatorRequired: "Filter operator is required.",
-          filtersComplete:
-            "Each filter condition must resolve to a field, operator, and value.",
-          filterValueRequired: "Filter value is required.",
-          graphExpansionRequiresGraph:
-            "Graph expansion requires at least one graph strategy.",
-          headingDepthRange: "Heading depth must be between 1 and 6.",
-          idRequired: "Profile ID is required.",
-          idUnique: "Profile ID must be unique.",
-          maxBytesPositive: "Maximum bytes must be a positive integer.",
-          maxTokensPositive: "Maximum tokens must be a positive integer.",
-          overlapTokensNonNegative:
-            "Overlap tokens must be greater than or equal to 0.",
-          parseDocumentDependency: "parseDocument requires resolveSource.",
-          persistSourceDependencies:
-            "persistSource requires splitText, fulltextIndex, and vectorIndex.",
-          persistTreeDependency: "persistTree requires extractTree.",
-          preparePersistTogether:
-            "preparePayload and persistSource must be enabled together.",
-          primaryCorpusInRoutes:
-            "Primary corpus must appear in at least one route.",
-          primaryCorpusRequired: "Primary corpus is required.",
-          readyStatusOnly:
-            "The current RAG runtime only allows saving Ready profiles.",
-          requiredStagesEnabled:
-            "Required stages must stay enabled: {{stages}}.",
-          resolveSourceDependency: "resolveSource requires validateSource.",
-          routeCorpusExisting: "Route corpus must match an existing corpus.",
-          routeCorpusRequired: "Route corpus is required.",
-          routeRequired: "At least one route must be added.",
-          splitterTypeRequired: "Splitter type is required.",
-          strategyRequired: "Strategy ID is required.",
-          summarizeTreeDependency: "summarizeTree requires extractTree.",
-          treeFulltextDependency: "treeFulltextIndex requires summarizeTree.",
-          treeVectorDependency: "treeVectorIndex requires summarizeTree.",
-        },
-      },
-      notFound: {
-        ingestApi:
-          "The requested ingest profile could not be loaded from the RAG management API.",
-        ingestMock:
-          "The requested ingest profile does not exist in the mock registry.",
-        retrievalApi:
-          "The requested retrieval profile could not be loaded from the RAG management API.",
-        retrievalMock:
-          "The requested retrieval profile does not exist in the mock registry.",
-        title: "Profile not found",
-      },
-      payloadPreview: {
-        description:
-          "This shows the full management payload sent to save and verify APIs.",
-        title: "Developer preview",
-      },
-      pipelineEdges: {
-        empty: "Enable at least two connected nodes to generate DAG edges.",
-        from: "Source node",
-        title: "Pipeline edges",
-        to: "Target node",
-      },
-      pipelineFlow: {
-        detailNodeId: "Node ID",
-        detailStageType: "Stage type",
-        detailStrategy: "Strategy",
-        diagramAria: "Pipeline DAG diagram",
-        edgeDetails: "Edge details",
-        empty: "Apply a template or enable nodes to preview the DAG.",
-        enabledNodes: "{{count}} enabled nodes",
-        title: "Pipeline flow",
-      },
-      retrieval: {
-        advancedSettings: {
-          title: "Advanced retrieval settings",
-        },
-        contextStrategies: {
-          enableLabel: "Enable context strategy {{strategy}}",
-          title: "Context strategies",
-        },
-        graphExpansion: {
-          disabledPlaceholder:
-            "Select a graph strategy before using this policy",
-          title: "Graph expansion",
-        },
-        resultPolicy: {
-          title: "Result policy",
-        },
-        title: {
-          create: "New retrieval profile",
-          edit: "Edit retrieval profile",
-        },
-      },
-      retrievalFlow: {
-        context: "Build context",
-        dedup: "Result deduplication",
-        description:
-          "Saved profiles run route retrieval in parallel, then process results and build context.",
-        enabledRoutes: "{{count}} routes",
-        fusion: "Result fusion",
-        noRoutes: "No routes selected",
-        routeCount: "{{count}} routes",
-        routeSearch: "Route search",
-        title: "Retrieval flow",
-      },
-      routes: {
-        add: "Add route",
-        corpusAria: "Route {{index}} corpus",
-        description:
-          "Each route chooses a corpus and retrieval strategy; the strategy decides fulltext, vector, graph, or structured recall.",
-        noBackendStrategies:
-          "This corpus has no backend-supported retrieval strategies.",
-        noStrategies: "No supported strategies",
-        removeAria: "Remove route {{index}}",
-        selectStrategy: "Select route strategy",
-        strategyAria: "Route {{index}} retrieval strategy",
-        title: "Retrieval routes",
-      },
-      sections: {
-        basicInfo: "Basic information",
-      },
-      stageNames: {
-        BUILD_CONTEXT: "Build context",
-        DEDUP_RESULTS: "Deduplicate results",
-        EXTRACT_TREE: "Extract structure tree",
-        FULLTEXT_INDEX: "Fulltext index",
-        FUSE_RESULTS: "Fuse results",
-        PARSE_DOCUMENT: "Parse document",
-        PERSIST_SOURCE: "Persist source",
-        PERSIST_TREE: "Persist structure tree",
-        PREPARE_PAYLOAD: "Prepare payload",
-        RESOLVE_SOURCE: "Resolve source",
-        ROUTE_SEARCH: "Route search",
-        SPLIT_TEXT: "Split text",
-        SUMMARIZE_TREE: "Summarize structure tree",
-        TREE_FULLTEXT: "Tree fulltext recall",
-        TREE_FULLTEXT_INDEX: "Tree fulltext index",
-        TREE_VECTOR: "Tree vector recall",
-        TREE_VECTOR_INDEX: "Tree vector index",
-        VALIDATE_SOURCE: "Validate source",
-        VECTOR_INDEX: "Vector index",
-      },
-      templates: {
-        basic: "Basic",
-        description:
-          "Choose a backend-declared ingest mode first, then adjust individual stages only when needed.",
-        "document-reference": {
-          description:
-            "Validate a document source reference, parse and split text, then write fulltext and vector indexes.",
-          name: "Document reference ingest",
-        },
-        empty:
-          "No backend templates are available. Use advanced node controls below.",
-        "graph-tree-enhanced": {
-          description:
-            "Build fulltext and vector indexes while extracting and persisting structure tree branches for graph corpora.",
-          name: "Graph tree enhanced ingest",
-        },
-        graphRequired:
-          "Select a graph-backed corpus before using this template.",
-        "mineru-document-reference": {
-          description:
-            "Parse PDF or DOCX project document references with MinerU into Markdown, then build fulltext and vector indexes.",
-          name: "MinerU document reference ingest",
-        },
-        nodeCount: "{{count}} nodes",
-        selected: "Selected",
-        "text-standard": {
-          description:
-            "Prepare text payloads, split text units, build fulltext and vector indexes, then persist the source.",
-          name: "Standard text ingest",
-        },
-        title: "Pipeline templates",
-      },
-      validationSummary: {
-        title: "Validation summary",
-      },
-      values: {
-        enabled: "Enabled",
-        noStrategy: "No strategy set",
-        none: "None",
-        notSet: "Not set",
-        off: "Off",
-      },
-    },
-  },
-  "Execution instances": "Execution instances",
   capabilityManagement: {
     refresh: "Refresh",
     import: "Import pack",
@@ -2861,9 +2079,9 @@ export const pages = {
       categories: {
         navigation: { label: "Menu navigation" },
         eventBus: { label: "Event bus" },
+        modelInvocation: { label: "Model invocation" },
         httpClients: { label: "HTTP clients" },
         mineru: { label: "MinerU parsing" },
-        navigation: { label: "Navigation menus" },
         resource: { label: "Resource" },
         server: { label: "Server" },
         shortTermMemory: { label: "Short-term memory" },

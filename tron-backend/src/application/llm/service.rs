@@ -6,10 +6,11 @@ use crate::{
 };
 
 use super::{
-    LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmEmbeddingCallCommand,
-    LlmEmbeddingCallResult, LlmEmbeddingChunkResultItem, LlmEmbeddingChunkStrategy,
-    LlmRerankCallCommand, LlmRerankCallResult, LlmRerankResultItem, LlmRuntimeClient,
-    LlmRuntimeError, LlmRuntimeModelResolver, LlmTextGenerationCallResult,
+    LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmEmbeddingBatchCallCommand,
+    LlmEmbeddingBatchCallResult, LlmEmbeddingCallCommand, LlmEmbeddingCallResult,
+    LlmEmbeddingChunkResultItem, LlmEmbeddingChunkStrategy, LlmRerankCallCommand,
+    LlmRerankCallResult, LlmRerankResultItem, LlmRuntimeClient, LlmRuntimeError,
+    LlmRuntimeModelResolver, LlmTextGenerationCallResult,
 };
 
 impl LlmRuntimeModelResolver for ModelService {
@@ -137,6 +138,35 @@ impl LlmRuntimeService {
         })
     }
 
+    pub async fn embedding_query_call(
+        &self,
+        command: LlmEmbeddingCallCommand,
+        dimensions: usize,
+    ) -> Result<LlmEmbeddingCallResult, LlmRuntimeError> {
+        let workspace =
+            required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
+        let input = required_trimmed(command.input, LlmRuntimeError::InputRequired)?;
+        let model = optional_trimmed(command.model_code);
+        let config = self.resolve_embedding_model_config(&workspace, model.as_deref())?;
+        let (embedding, provider_model) = self
+            .client
+            .embed_query_with_model(&config, &input, dimensions)
+            .await
+            .map_err(LlmRuntimeError::provider_failed)?;
+        if dimensions == 0
+            || embedding.len() != dimensions
+            || embedding.iter().any(|v| !v.is_finite())
+        {
+            return Err(LlmRuntimeError::invalid_provider_response(
+                "query embedding does not match index space",
+            ));
+        }
+        Ok(LlmEmbeddingCallResult {
+            model_code: config.model_code,
+            provider_model,
+            embedding,
+        })
+    }
     pub async fn embedding_call(
         &self,
         command: LlmEmbeddingCallCommand,
@@ -162,6 +192,50 @@ impl LlmRuntimeService {
             model_code: config.model_code,
             provider_model,
             embedding,
+        })
+    }
+
+    pub async fn embedding_batch_call(
+        &self,
+        command: LlmEmbeddingBatchCallCommand,
+    ) -> Result<LlmEmbeddingBatchCallResult, LlmRuntimeError> {
+        let workspace =
+            required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
+        if command.inputs.is_empty() || command.dimensions == 0 {
+            return Err(LlmRuntimeError::invalid_provider_response(
+                "empty embedding batch or dimension",
+            ));
+        }
+        let inputs = command
+            .inputs
+            .into_iter()
+            .map(|input| required_trimmed(input, LlmRuntimeError::InputRequired))
+            .collect::<Result<Vec<_>, _>>()?;
+        let model = optional_trimmed(command.model_code);
+        let config = self.resolve_embedding_model_config(&workspace, model.as_deref())?;
+        let (vectors, provider_model) = self
+            .client
+            .embed_batch_with_model(&config, &inputs, command.dimensions)
+            .await
+            .map_err(LlmRuntimeError::provider_failed)?;
+        let response = eliteforge_agent_framework::EmbeddingResponse {
+            model: eliteforge_agent_framework::ModelRef::new("http-embedding", &config.model_code),
+            provider_model,
+            vectors,
+            input_tokens: None,
+        };
+        response
+            .validate(inputs.len(), Some(command.dimensions))
+            .map_err(|error| {
+                LlmRuntimeError::invalid_provider_response(format!(
+                    "Embedding批次返回的数量、索引或向量无效（要求{}维）: {error}",
+                    command.dimensions
+                ))
+            })?;
+        Ok(LlmEmbeddingBatchCallResult {
+            model_code: config.model_code,
+            provider_model: response.provider_model,
+            vectors: response.vectors,
         })
     }
 

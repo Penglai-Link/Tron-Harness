@@ -5,10 +5,9 @@ use std::{
 
 use crate::{
     application::rag::{
-        RagDeactivateSourceCommand, RagDiagnosticsRepository, RagDocumentSourceRuntime,
-        RagEmbeddingRuntime, RagIngestRepository, RagIngestScope, RagRetryIndexRepository,
-        RagSearchRepository, RagSearchRuntime, RagService, RagSourceLifecycleRepository,
-        RagStrategyRegistry,
+        RagDeactivateSourceCommand, RagDiagnosticsRepository, RagEmbeddingRuntime,
+        RagIngestRepository, RagIngestScope, RagSearchRepository, RagSearchRuntime, RagService,
+        RagSourceLifecycleRepository,
     },
     domain::{
         skill::{
@@ -30,28 +29,25 @@ use super::{
 };
 
 const SKILL_VECTOR_CORPUS_ID: &str = "skill";
-const SKILL_VECTOR_INGEST_PROFILE_ID: &str = "skill-ingest-v1";
-const SKILL_GRAPH_CORPUS_ID: &str = "skill-graph";
-const SKILL_GRAPH_INGEST_PROFILE_ID: &str = "skill-graph-ingest-v1";
 
 #[derive(Clone)]
-pub struct SkillRagIndexService<R, S, E> {
+pub struct SkillRagIndexService<R, E> {
     skills: SkillRegistryService,
-    rag: RagService<R, S, E>,
+    rag: RagService<R, E>,
 }
 
-impl<R, S, E> SkillRagIndexService<R, S, E>
+impl<R, E> SkillRagIndexService<R, E>
 where
-    R: RagIngestRepository
+    R: Send
+        + Sync
+        + RagIngestRepository
         + RagSearchRepository
         + RagDiagnosticsRepository
-        + RagRetryIndexRepository
         + RagSourceLifecycleRepository
         + Clone,
-    S: RagStrategyRegistry,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime,
+    E: RagEmbeddingRuntime + crate::application::rag::RagGraphRuntime + RagSearchRuntime,
 {
-    pub fn new(skills: SkillRegistryService, rag: RagService<R, S, E>) -> Self {
+    pub fn new(skills: SkillRegistryService, rag: RagService<R, E>) -> Self {
         Self { skills, rag }
     }
 
@@ -263,7 +259,16 @@ where
                 return Ok(state.summary());
             }
         };
-        let text = skill_index_text(&skill.skill_name, &description);
+        let text = format!(
+            "{}\n\n{}\n\nFiles:\n{}",
+            skill_index_text(&skill.skill_name, &description),
+            markdown,
+            files
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
         let content_hash = stable_hash(&text);
         let structure_hash = stable_structure_hash(&files);
         let mut warnings = Vec::new();
@@ -277,57 +282,44 @@ where
                 workspace_code,
                 &skill.skill_name,
                 SKILL_VECTOR_CORPUS_ID,
-                SKILL_VECTOR_INGEST_PROFILE_ID,
-                skill_payload(workspace_code, &skill.skill_name, &description, &text, None),
-            ))
-            .await;
-        let vector_status = match vector_result {
-            Ok(result) if result.embedding_status == "INDEXED" => SkillRagIndexStatus::Indexed,
-            Ok(result) => {
-                warnings.push(rag_embedding_warning(
-                    "skill vector",
-                    &result.embedding_status,
-                    "skill vector index completed without vector embedding; fulltext search remains available",
-                ));
-                SkillRagIndexStatus::Warning
-            }
-            Err(error) => {
-                warnings.push(format!("skill vector index failed: {error}"));
-                SkillRagIndexStatus::Failed
-            }
-        };
-
-        let graph = related_graph_payload(workspace_code, &skill.skill_name, &files);
-        let graph_result = self
-            .rag
-            .ingest(skill_ingest_request(
-                workspace_code,
-                &skill.skill_name,
-                SKILL_GRAPH_CORPUS_ID,
-                SKILL_GRAPH_INGEST_PROFILE_ID,
                 skill_payload(
                     workspace_code,
                     &skill.skill_name,
                     &description,
                     &text,
-                    Some(graph),
+                    Some(related_graph_payload(
+                        workspace_code,
+                        &skill.skill_name,
+                        &files,
+                    )),
                 ),
             ))
             .await;
-        let graph_status = match graph_result {
-            Ok(result) if result.embedding_status == "INDEXED" => SkillRagIndexStatus::Indexed,
-            Ok(result) => {
-                warnings.push(rag_embedding_warning(
-                    "skill graph",
-                    &result.embedding_status,
-                    "skill graph index completed without vector embedding; graph relationships and fulltext search remain available",
-                ));
-                SkillRagIndexStatus::Warning
-            }
-            Err(error) => {
-                warnings.push(format!("skill graph index failed: {error}"));
-                SkillRagIndexStatus::Failed
-            }
+        let settings = self
+            .rag
+            .settings_for_corpus("skill")
+            .map_err(|_| SkillError::StorageFailure)?;
+        let published = vector_result.is_ok();
+        if let Err(error) = &vector_result {
+            warnings.push(format!("skill index failed: {error}"));
+        }
+        let vector_status = if !published {
+            SkillRagIndexStatus::Failed
+        } else if !settings.vector {
+            SkillRagIndexStatus::Disabled
+        } else if published {
+            SkillRagIndexStatus::Indexed
+        } else {
+            SkillRagIndexStatus::Failed
+        };
+        let graph_status = if !published {
+            SkillRagIndexStatus::Failed
+        } else if !settings.graph {
+            SkillRagIndexStatus::Disabled
+        } else if published {
+            SkillRagIndexStatus::Indexed
+        } else {
+            SkillRagIndexStatus::Failed
         };
 
         let state = SkillRagIndexRecord {
@@ -339,9 +331,7 @@ where
             graph_status,
             content_hash: Some(content_hash),
             structure_hash: Some(structure_hash),
-            last_indexed_at: if vector_status == SkillRagIndexStatus::Indexed
-                && graph_status == SkillRagIndexStatus::Indexed
-            {
+            last_indexed_at: if published {
                 Some(current_timestamp())
             } else {
                 None
@@ -355,7 +345,7 @@ where
 
     async fn deactivate_sources(&self, workspace_code: &str, skill_name: &str) -> Vec<String> {
         let mut errors = Vec::new();
-        for corpus_id in [SKILL_VECTOR_CORPUS_ID, SKILL_GRAPH_CORPUS_ID] {
+        for corpus_id in [SKILL_VECTOR_CORPUS_ID] {
             let result = self.rag.deactivate_source(RagDeactivateSourceCommand {
                 corpus_id: corpus_id.to_string(),
                 source_code: source_code(workspace_code, skill_name),
@@ -437,18 +427,6 @@ fn join_errors(errors: Vec<String>) -> Option<String> {
     }
 }
 
-fn rag_embedding_warning(
-    index_label: &str,
-    embedding_status: &str,
-    degraded_message: &str,
-) -> String {
-    if embedding_status == "FAILED" {
-        degraded_message.to_string()
-    } else {
-        format!("{index_label} index completed with embedding status {embedding_status}")
-    }
-}
-
 fn merge_summary(
     batch: &mut SkillRagIndexBatchSummary,
     summary: &crate::domain::skill::SkillRagIndexSummary,
@@ -456,13 +434,15 @@ fn merge_summary(
     if !summary.warnings.is_empty() {
         batch.warnings.extend(summary.warnings.clone());
     }
-    if summary.vector_status == SkillRagIndexStatus::Disabled
-        && summary.graph_status == SkillRagIndexStatus::Disabled
-    {
+    if !summary.desired_enabled {
         batch.disabled_count += 1;
-    } else if summary.vector_status == SkillRagIndexStatus::Indexed
-        && summary.graph_status == SkillRagIndexStatus::Indexed
-    {
+    } else if matches!(
+        summary.vector_status,
+        SkillRagIndexStatus::Indexed | SkillRagIndexStatus::Disabled
+    ) && matches!(
+        summary.graph_status,
+        SkillRagIndexStatus::Indexed | SkillRagIndexStatus::Disabled
+    ) {
         batch.indexed_count += 1;
     } else if summary.vector_status == SkillRagIndexStatus::Failed
         || summary.graph_status == SkillRagIndexStatus::Failed

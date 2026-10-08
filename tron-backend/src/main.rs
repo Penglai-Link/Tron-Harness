@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, future::IntoFuture, time::Duration};
 
 use tokio::net::TcpListener;
 use tron_backend::{
@@ -13,18 +13,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(socket_addr).await?;
     let state = AppState::new(config)?;
     let framework = state.agent_framework.clone();
+    let ingestion = state.knowledge_bases.clone();
     let router = build_router_with_state(state)?;
 
     println!("tron-backend listening on http://{socket_addr}");
-    let result = axum::serve(listener, router)
-        .with_graceful_shutdown(async move {
-            shutdown_signal().await;
-            framework.close().await;
-        })
-        .await;
-    result?;
-
-    Ok(())
+    tokio::select! {
+        result = axum::serve(listener, router).into_future() => {
+            result?;
+            Ok(())
+        }
+        _ = shutdown_signal() => {
+            // A process exit must not depend on HTTP draining, a stuck callback,
+            // or Tokio's blocking-pool teardown. The OS releases file locks on exit.
+            std::thread::spawn(|| {
+                std::thread::sleep(Duration::from_secs(2));
+                eprintln!("shutdown cleanup deadline reached; exiting process");
+                std::process::exit(0);
+            });
+            eprintln!("shutdown requested: stopping ingestion, HTTP and Agent work");
+            ingestion.stop_ingestion_workers();
+            framework.cancel_all_runs();
+            let pty = framework.pty();
+            let (report, terminal) = tokio::join!(
+                framework.close(),
+                tokio::task::spawn_blocking(move || pty.close()),
+            );
+            eprintln!("shutdown cleanup finished: {report:?}; terminal={terminal:?}");
+            std::process::exit(0);
+        }
+    }
 }
 
 async fn shutdown_signal() {

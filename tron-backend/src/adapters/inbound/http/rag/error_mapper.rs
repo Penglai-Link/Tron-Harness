@@ -8,85 +8,20 @@ use crate::{domain::rag::RagError, response::ApiResponse};
 
 pub fn rag_error_response(error: RagError) -> Response {
     let (status, code, message) = match error {
-        RagError::ManagementRequestInvalid => (
-            StatusCode::BAD_REQUEST,
-            "RAG_MANAGEMENT_REQUEST_INVALID",
-            "rag management request is invalid",
-        ),
-        RagError::StorageTopologyUnsupported => (
-            StatusCode::BAD_REQUEST,
-            "RAG_STORAGE_TOPOLOGY_UNSUPPORTED",
-            "rag storage topology is unsupported",
-        ),
-        RagError::StorageGraphBindingRequired => (
-            StatusCode::BAD_REQUEST,
-            "RAG_STORAGE_GRAPH_BINDING_REQUIRED",
-            "rag graph capability requires a graph storage binding",
-        ),
-        RagError::FilterFieldInvalid => (
-            StatusCode::BAD_REQUEST,
-            "RAG_FILTER_FIELD_INVALID",
-            "rag filter field is invalid",
-        ),
-        RagError::FilterOperatorUnsupported => (
-            StatusCode::BAD_REQUEST,
-            "RAG_FILTER_OPERATOR_UNSUPPORTED",
-            "rag filter operator is unsupported",
-        ),
-        RagError::ProfileStrategyInvalid => (
-            StatusCode::BAD_REQUEST,
-            "RAG_PROFILE_STRATEGY_INVALID",
-            "rag profile strategy is invalid",
-        ),
-        RagError::ProfileCorpusInvalid => (
-            StatusCode::BAD_REQUEST,
-            "RAG_PROFILE_CORPUS_INVALID",
-            "rag profile corpus reference is invalid",
-        ),
-        RagError::CorpusBoundToRetrievalProfile => (
+        RagError::SchemaIncompatible => (
             StatusCode::CONFLICT,
-            "RAG_CORPUS_BOUND_TO_RETRIEVAL_PROFILE",
-            "rag corpus is bound to a retrieval profile",
+            "RAG_SCHEMA_INCOMPATIBLE",
+            "旧 RAG 数据结构不兼容，请使用新数据库；现有数据未删除",
         ),
         RagError::IngestRequestInvalid => (
             StatusCode::BAD_REQUEST,
             "RAG_INGEST_REQUEST_INVALID",
             "rag ingest request is invalid",
         ),
-        RagError::IngestProfileInvalid => (
-            StatusCode::BAD_REQUEST,
-            "RAG_INGEST_PROFILE_INVALID",
-            "rag ingest profile is invalid",
-        ),
         RagError::IngestScopeInvalid => (
             StatusCode::FORBIDDEN,
             "RAG_INGEST_SCOPE_INVALID",
             "rag ingest target scope is invalid",
-        ),
-        RagError::IngestStageFailed => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "RAG_INGEST_STAGE_FAILED",
-            "rag ingest stage failed",
-        ),
-        RagError::SourceResolveFailed => (
-            StatusCode::BAD_GATEWAY,
-            "RAG_SOURCE_RESOLVE_FAILED",
-            "rag source resolve failed",
-        ),
-        RagError::DocumentFormatUnsupported => (
-            StatusCode::BAD_REQUEST,
-            "RAG_DOCUMENT_FORMAT_UNSUPPORTED",
-            "rag document format is unsupported",
-        ),
-        RagError::DocumentParseFailed => (
-            StatusCode::BAD_REQUEST,
-            "RAG_DOCUMENT_PARSE_FAILED",
-            "rag document parse failed",
-        ),
-        RagError::DocumentTooLarge => (
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "RAG_DOCUMENT_TOO_LARGE",
-            "rag document is too large",
         ),
         RagError::EmbeddingFailed => (
             StatusCode::BAD_GATEWAY,
@@ -97,11 +32,6 @@ pub fn rag_error_response(error: RagError) -> Response {
             StatusCode::BAD_REQUEST,
             "RAG_SEARCH_REQUEST_INVALID",
             "rag search request is invalid",
-        ),
-        RagError::RetrievalProfileInvalid => (
-            StatusCode::BAD_REQUEST,
-            "RAG_RETRIEVAL_PROFILE_INVALID",
-            "rag retrieval profile is invalid",
         ),
         RagError::SearchFilterInvalid => (
             StatusCode::BAD_REQUEST,
@@ -118,70 +48,15 @@ pub fn rag_error_response(error: RagError) -> Response {
             "RAG_SEARCH_ROUTE_UNAVAILABLE",
             "rag search route is unavailable",
         ),
-        RagError::HydrateSourceInactive => (
-            StatusCode::CONFLICT,
-            "RAG_HYDRATE_SOURCE_INACTIVE",
-            "rag hydrate source is inactive",
-        ),
-        RagError::RerankFailed => (
-            StatusCode::BAD_GATEWAY,
-            "RAG_RERANK_FAILED",
-            "rag rerank failed",
-        ),
         RagError::DebugRequestInvalid => (
             StatusCode::BAD_REQUEST,
             "RAG_DEBUG_REQUEST_INVALID",
             "rag debug request is invalid",
         ),
-        RagError::DebugScopeInvalid => (
-            StatusCode::FORBIDDEN,
-            "RAG_DEBUG_SCOPE_INVALID",
-            "rag debug scope is invalid",
-        ),
-        RagError::RetryRequestInvalid => (
-            StatusCode::BAD_REQUEST,
-            "RAG_RETRY_REQUEST_INVALID",
-            "rag retry request is invalid",
-        ),
-        RagError::RetryScopeInvalid => (
-            StatusCode::FORBIDDEN,
-            "RAG_RETRY_SCOPE_INVALID",
-            "rag retry scope is invalid",
-        ),
-        RagError::RetryStageUnsupported => (
-            StatusCode::BAD_REQUEST,
-            "RAG_RETRY_STAGE_UNSUPPORTED",
-            "rag retry stage is unsupported",
-        ),
-        RagError::RetryTextUnitsMissing => (
-            StatusCode::NOT_FOUND,
-            "RAG_RETRY_TEXT_UNITS_MISSING",
-            "rag retry text units are missing",
-        ),
         RagError::TracePayloadInvalid => (
             StatusCode::BAD_REQUEST,
             "RAG_TRACE_PAYLOAD_INVALID",
             "rag trace payload is invalid",
-        ),
-        RagError::EventPayloadInvalid => (
-            StatusCode::BAD_REQUEST,
-            "RAG_EVENT_PAYLOAD_INVALID",
-            "rag event payload is invalid",
-        ),
-        RagError::CorpusReserved => (
-            StatusCode::BAD_REQUEST,
-            "RAG_CORPUS_RESERVED",
-            "rag corpus is reserved",
-        ),
-        RagError::ProfileNotFound => (
-            StatusCode::NOT_FOUND,
-            "RAG_INGEST_PROFILE_NOT_FOUND",
-            "rag ingest profile was not found",
-        ),
-        RagError::RetrievalProfileNotFound => (
-            StatusCode::NOT_FOUND,
-            "RAG_RETRIEVAL_PROFILE_NOT_FOUND",
-            "rag retrieval profile was not found",
         ),
         RagError::SourceNotFound => (
             StatusCode::NOT_FOUND,

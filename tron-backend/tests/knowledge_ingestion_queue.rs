@@ -559,3 +559,27 @@ fn explicit_rebuild_same_config_can_follow_completed_run_but_request_replay_is_s
     assert_eq!(q.enqueue(rebuild).unwrap().document_revision, 3);
     assert_eq!(doc(&dir, "a")["activeSourceCode"], source);
 }
+
+#[test]
+fn embedding_batch_checkpoint_commits_manifest_and_counts_together() {
+    let (_dir, queue) = fixture();
+    queue.enqueue(queued("a", "x")).unwrap();
+    let task = queue.claim(claim(IngestionStage::Parsing, "p", 1, 1)).unwrap().unwrap();
+    let mut update = task.clone();
+    update.total_units = 3;
+    update.completed_units = 2;
+    update.index_stage = Some("EMBEDDING".into());
+    update.embedding_resource_code = Some("batch-manifest".into());
+    queue.checkpoint(&update, &lease(&task), 2).unwrap();
+    let saved = queue.get(&task.id).unwrap();
+    assert_eq!(saved.total_units, 3);
+    assert_eq!(saved.completed_units, 2);
+    assert_eq!(saved.index_stage.as_deref(), Some("EMBEDDING"));
+    assert_eq!(saved.embedding_resource_code.as_deref(), Some("batch-manifest"));
+    update.completed_units = 4;
+    update.embedding_resource_code = Some("invalid-manifest".into());
+    assert_eq!(queue.checkpoint(&update, &lease(&task), 3), Err(IngestionQueueError::Conflict));
+    let unchanged = queue.get(&task.id).unwrap();
+    assert_eq!(unchanged.completed_units, 2);
+    assert_eq!(unchanged.embedding_resource_code, saved.embedding_resource_code);
+}

@@ -7,18 +7,16 @@ use std::{
 use crate::{
     adapters::outbound::persistence::{
         GrafeoAdapterConfig, GrafeoGraphExplorerStore, GrafeoGraphStore, GrafeoOntologyStore,
-        GrafeoStoreCore, GraphBackedRagRepository, sqlite::SqliteRagRepository,
+        GrafeoStoreCore, sqlite::SqliteRagRepository,
     },
     application::{
         graph::{GraphExplorerService, GraphService, OntologyService, ScopeResolver},
         llm::LlmRuntimeService,
         model_router::LlmModelRouter,
-        prompt::PromptService,
-        rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
+        rag::{DefaultRagRuntime, RagService},
         workspace::WorkspaceService,
     },
     domain::rag::RagError,
-    shared::event_bus::EventBusHandle,
 };
 
 use super::AppRagService;
@@ -119,9 +117,12 @@ impl fmt::Display for AppBootstrapError {
                 formatter,
                 "graph dependency failed to initialize for storage path `{graph_storage_path}`"
             ),
-            Self::RagInitFailed { database_url, .. } => write!(
+            Self::RagInitFailed {
+                database_url,
+                source,
+            } => write!(
                 formatter,
-                "RAG dependency failed to initialize for database `{database_url}`"
+                "RAG dependency failed to initialize for database `{database_url}`: {source}"
             ),
         }
     }
@@ -140,15 +141,8 @@ impl Error for AppBootstrapError {
 
 pub(super) fn build_rag_service(
     database_url: &str,
-    graph_core: GrafeoStoreCore,
-    workspaces: WorkspaceService,
     llm_runtime: LlmRuntimeService,
     llm_router: LlmModelRouter,
-    prompt_service: PromptService,
-    project_doc_root: &str,
-    mineru: crate::application::system_config::BackendRuntimeConfig,
-    document_parsing_client: reqwest::Client,
-    event_bus: EventBusHandle,
 ) -> Result<AppRagService, AppBootstrapError> {
     let sqlite = SqliteRagRepository::connect(database_url).map_err(|source| {
         AppBootstrapError::RagInitFailed {
@@ -156,20 +150,10 @@ pub(super) fn build_rag_service(
             source,
         }
     })?;
-    let repository = GraphBackedRagRepository::new(
-        sqlite,
-        Arc::new(GrafeoGraphStore::new(graph_core)),
-        Arc::new(ScopeResolver::new(workspaces)),
-    );
     Ok(RagService::new(
-        Arc::new(Mutex::new(repository)),
-        DefaultRagStrategyRegistry::default(),
-        DefaultRagRuntime::new(llm_runtime, llm_router, project_doc_root)
-            .with_document_parser(mineru.snapshot().mineru, document_parsing_client)
-            .with_runtime_config(mineru),
-    )
-    .with_event_bus(event_bus)
-    .with_prompt_service(prompt_service))
+        Arc::new(Mutex::new(sqlite)),
+        DefaultRagRuntime::new(llm_runtime, llm_router),
+    ))
 }
 
 pub(super) fn build_graph_core(

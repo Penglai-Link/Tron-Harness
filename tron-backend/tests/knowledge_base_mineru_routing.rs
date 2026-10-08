@@ -23,7 +23,10 @@ use tron_backend::{
         persistence::sqlite::SqliteKnowledgeBaseRepository,
     },
     application::{
-        knowledge_base::{KnowledgeBaseService, parsing::{KnowledgeDocumentParser, OcrMode}},
+        knowledge_base::{
+            KnowledgeBaseService,
+            parsing::{KnowledgeDocumentParser, OcrMode},
+        },
         llm::LlmRuntimeService,
     },
     config::{KnowledgeIngestionConfig, MineruConfig, MineruNode},
@@ -33,8 +36,14 @@ fn synthetic_archive() -> Vec<u8> {
     use std::io::{Cursor, Write};
     let middle = json!({"schema":"docvortex.middle","schema_version":"2.0","metadata":{"file_suffix":"pdf"},"extensions":{"mineru":{"tier":"standard"}},"pages":[{"page_idx":0,"blocks":[{"index":0,"type":"text","content":"Synthetic routing evidence"}]}]});
     let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
-    for (name, bytes) in [("middle_json.json", serde_json::to_vec(&middle).unwrap()), ("structured_content.json", b"{}".to_vec()), ("markdown.md", b"Synthetic routing evidence".to_vec())] {
-        archive.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+    for (name, bytes) in [
+        ("middle_json.json", serde_json::to_vec(&middle).unwrap()),
+        ("structured_content.json", b"{}".to_vec()),
+        ("markdown.md", b"Synthetic routing evidence".to_vec()),
+    ] {
+        archive
+            .start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
         archive.write_all(&bytes).unwrap();
     }
     archive.finish().unwrap().into_inner()
@@ -96,7 +105,10 @@ async fn upload(State(s): State<NodeState>, Json(body): Json<Value>) -> Json<Val
     Json(json!({"status":"completed","file":{"id":file}}))
 }
 async fn start(State(s): State<NodeState>, Json(body): Json<Value>) -> axum::response::Response {
-    assert_eq!(body["ocr_mode"].as_str().unwrap(), s.expected_ocr.lock().unwrap().as_str());
+    assert_eq!(
+        body["ocr_mode"].as_str().unwrap(),
+        s.expected_ocr.lock().unwrap().as_str()
+    );
     let file = body["files"][0]["source"]["file_id"].as_str().unwrap();
     assert!(file.starts_with(&s.id), "file must stay on its node");
     let n = s.posts.fetch_add(1, Ordering::SeqCst) + 1;
@@ -197,7 +209,10 @@ fn config(nodes: Vec<MineruNode>) -> MineruConfig {
 fn service(f: &Fixture, config: &MineruConfig) -> KnowledgeBaseService {
     KnowledgeBaseService::new(
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
-        f.state.rag.clone(),
+        tron_backend::application::rag::RagService::new(
+            Arc::new(std::sync::Mutex::new(tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(&f.state.config.database_url).unwrap())),
+            tron_backend::application::rag::DefaultRagRuntime::new(LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())), f.state.llm_router.clone()),
+        ),
         f.state.resources.clone(),
         f.state.agent_management.clone(),
         LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())),
@@ -273,13 +288,12 @@ async fn restart_resumes_recorded_remote_job_on_same_node_without_upload_post_or
     let f = Fixture::new();
     let cfg = config(vec![na, nb]);
     let first = service(&f, &cfg);
-    let kb = first
-        .create(USER, "Restart affinity", "")
+    let kb = first.create(USER, "Restart affinity", "").unwrap();
+    let doc = first.upload(USER, &kb.id, "one.pdf", &pdf()).unwrap();
+    first
+        .configure_parsing(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr)))
+        .await
         .unwrap();
-    let doc = first
-        .upload(USER, &kb.id, "one.pdf", &pdf())
-        .unwrap();
-    first.configure_parsing(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr))).await.unwrap();
     first.start_index(USER, &kb.id, &doc.id).unwrap();
     until(|| a.polls.load(Ordering::SeqCst) > 0).await;
     let before = first
@@ -380,9 +394,7 @@ async fn malformed_successful_job_post_is_reconciled_without_duplicate_submissio
     let f = Fixture::new();
     let cfg = config(vec![na]);
     let service = service(&f, &cfg);
-    let kb = service
-        .create(USER, "Broken response", "")
-        .unwrap();
+    let kb = service.create(USER, "Broken response", "").unwrap();
     service
         .upload_and_start_index(USER, &kb.id, "one.pdf", &pdf())
         .unwrap();
@@ -407,13 +419,7 @@ async fn ambiguous_post_cancellation_recovers_after_restart_even_when_node_is_di
     let doc = first
         .upload_and_start_index(USER, &kb.id, "one.pdf", &pdf())
         .unwrap();
-    until(|| {
-        first
-            .ingestion_tasks(USER, &kb.id, &doc.id)
-            .unwrap()[0]
-            .reconciling
-    })
-    .await;
+    until(|| first.ingestion_tasks(USER, &kb.id, &doc.id).unwrap()[0].reconciling).await;
     assert_eq!(
         first
             .cancel_index(USER, &kb.id, &doc.id)
@@ -436,22 +442,14 @@ async fn ambiguous_post_cancellation_recovers_after_restart_even_when_node_is_di
     resumed.start_ingestion_workers().unwrap();
     // Retry remains queued until the original upstream has acknowledged cancel.
     assert_eq!(
-        resumed
-            .retry_index(USER, &kb.id, &doc.id)
-            .unwrap()
-            .status,
+        resumed.retry_index(USER, &kb.id, &doc.id).unwrap().status,
         "QUEUED"
     );
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(a.posts.load(Ordering::SeqCst), 1);
     a.cancel_unavailable.store(false, Ordering::SeqCst);
-    until(|| {
-        !resumed
-            .ingestion_tasks(USER, &kb.id, &doc.id)
-            .unwrap()[0]
-            .cancellation_pending
-    })
-    .await;
+    until(|| !resumed.ingestion_tasks(USER, &kb.id, &doc.id).unwrap()[0].cancellation_pending)
+        .await;
     let confirmed = resumed
         .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
@@ -479,33 +477,86 @@ async fn document_ocr_override_changes_request_cache_and_task_snapshot() {
     let service = service(&fixture, &config);
     let kb = service.create(USER, "OCR modes", "").unwrap();
     let doc = service.upload(USER, &kb.id, "modes.pdf", &pdf()).unwrap();
-    assert_eq!(service.parsing_capabilities(USER).await.unwrap().default_ocr_mode, OcrMode::Ocr);
+    assert_eq!(
+        service
+            .parsing_capabilities(USER)
+            .await
+            .unwrap()
+            .default_ocr_mode,
+        OcrMode::Ocr
+    );
     *node.expected_ocr.lock().unwrap() = "txt".into();
-    let selected = service.configure_parsing(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Text))).await.unwrap();
+    let selected = service
+        .configure_parsing(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Text)))
+        .await
+        .unwrap();
     assert_eq!(selected.ocr_mode, Some(OcrMode::Text));
     service.preview(USER, &kb.id, &doc.id).await.unwrap();
     let ready = service.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(ready.status, "READY");
     assert_eq!(ready.ocr_mode, Some(OcrMode::Text));
-    assert_eq!(node.posts.load(Ordering::SeqCst), 1, "same-mode preview and indexing reuse the cache");
+    assert_eq!(
+        node.posts.load(Ordering::SeqCst),
+        1,
+        "same-mode preview and indexing reuse the cache"
+    );
     let text_signature = ready.parsing_artifact.as_ref().unwrap().signature.clone();
     *node.expected_ocr.lock().unwrap() = "ocr".into();
-    let forced = service.configure_and_index(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr))).await.unwrap();
+    let forced = service
+        .configure_and_index(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr)))
+        .await
+        .unwrap();
     assert_eq!(forced.status, "READY");
-    assert_eq!(node.posts.load(Ordering::SeqCst), 2, "changing OCR must reparse");
-    assert_ne!(forced.parsing_artifact.as_ref().unwrap().signature, text_signature);
+    assert_eq!(
+        node.posts.load(Ordering::SeqCst),
+        2,
+        "changing OCR must reparse"
+    );
+    assert_ne!(
+        forced.parsing_artifact.as_ref().unwrap().signature,
+        text_signature
+    );
     let tasks = service.ingestion_tasks(USER, &kb.id, &doc.id).unwrap();
-    assert!(tasks.iter().any(|task| task.configuration["ocrMode"] == "Ocr" && task.configuration["parser"]["ocrMode"] == "ocr"));
-    let inherited = service.configure_parsing(USER, &kb.id, &doc.id, None, None, Some(None)).await.unwrap();
+    assert!(
+        tasks
+            .iter()
+            .any(|task| task.configuration["ocrMode"] == "Ocr"
+                && task.configuration["parser"]["ocrMode"] == "ocr")
+    );
+    let inherited = service
+        .configure_parsing(USER, &kb.id, &doc.id, None, None, Some(None))
+        .await
+        .unwrap();
     assert_eq!(inherited.ocr_mode, None);
     *node.expected_ocr.lock().unwrap() = "auto".into();
-    let automatic = service.configure_and_index(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Auto))).await.unwrap();
+    let automatic = service
+        .configure_and_index(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Auto)))
+        .await
+        .unwrap();
     assert_eq!(automatic.status, "READY");
     assert_eq!(automatic.ocr_mode, Some(OcrMode::Auto));
     assert_eq!(node.posts.load(Ordering::SeqCst), 3);
-    assert_eq!(node.lists.load(Ordering::SeqCst), 0, "upstream history cannot prove the requested OCR mode");
-    let markdown = service.upload(USER, &kb.id, "readme.md", b"readme").unwrap();
-    assert!(service.configure_parsing(USER, &kb.id, &markdown.id, None, None, Some(Some(OcrMode::Ocr))).await.is_err());
+    assert_eq!(
+        node.lists.load(Ordering::SeqCst),
+        0,
+        "upstream history cannot prove the requested OCR mode"
+    );
+    let markdown = service
+        .upload(USER, &kb.id, "readme.md", b"readme")
+        .unwrap();
+    assert!(
+        service
+            .configure_parsing(
+                USER,
+                &kb.id,
+                &markdown.id,
+                None,
+                None,
+                Some(Some(OcrMode::Ocr))
+            )
+            .await
+            .is_err()
+    );
     service.stop_ingestion_workers();
     server.abort();
 }

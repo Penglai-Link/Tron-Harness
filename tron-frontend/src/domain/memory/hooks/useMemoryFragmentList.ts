@@ -96,6 +96,10 @@ export function useMemoryTargets(workspaceCode?: string, refreshKey = 0) {
   const [targets, setTargets] = useState<MemorySearchTarget[]>(() => baseTargets);
 
   useEffect(() => {
+    if (!workspaceCode) {
+      setTargets(baseTargets);
+      return;
+    }
     if (dataSource === "mock") {
       setTargets([
         ...baseTargets,
@@ -117,7 +121,7 @@ export function useMemoryTargets(workspaceCode?: string, refreshKey = 0) {
       });
 
     return () => controller.abort();
-  }, [baseTargets, dataSource, refreshKey, toast]);
+  }, [baseTargets, dataSource, refreshKey, toast, workspaceCode]);
 
   return targets;
 }
@@ -134,16 +138,16 @@ export function useMemoryFragmentList(options: UseMemoryFragmentListOptions | nu
     workspaceCode,
   } = normalizedOptions;
   const [records, setRecords] = useState<MemoryRecord[]>(() => (
-    dataSource === "mock" ? getMemoryFragments() : []
+    dataSource === "mock" && workspaceCode && activeTarget ? getMemoryFragments() : []
   ));
 
   useEffect(() => {
-    if (dataSource === "mock") {
-      setRecords(getMemoryFragments());
-      return;
-    }
     if (!workspaceCode || !activeTarget) {
       setRecords([]);
+      return;
+    }
+    if (dataSource === "mock") {
+      setRecords(getMemoryFragments());
       return;
     }
 

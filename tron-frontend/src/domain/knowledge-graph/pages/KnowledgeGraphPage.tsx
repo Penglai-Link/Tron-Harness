@@ -262,7 +262,7 @@ export function GraphPage() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-[32rem] flex-col lg:min-h-0">
       <PageHeader
         className="shrink-0"
         title={pageT("title", "Knowledge Graph")}

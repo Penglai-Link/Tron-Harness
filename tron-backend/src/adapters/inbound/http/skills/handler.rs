@@ -24,9 +24,8 @@ use super::{
 
 type AppSkillRagIndexService = SkillRagIndexService<
     std::sync::Arc<
-        std::sync::Mutex<crate::adapters::outbound::persistence::GraphBackedRagRepository>,
+        std::sync::Mutex<crate::adapters::outbound::persistence::sqlite::SqliteRagRepository>,
     >,
-    crate::application::rag::DefaultRagStrategyRegistry,
     crate::application::rag::DefaultRagRuntime,
 >;
 

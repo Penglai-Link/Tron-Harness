@@ -15,7 +15,7 @@ function flatten(value: unknown, path = ""): SystemConfigItem[] {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return Object.entries(value).flatMap(([key, child]) => flatten(child, path ? `${path}.${key}` : key));
   }
-  return [{ path, value: value as SystemConfigItem["value"], valueType: Array.isArray(value) ? "array" : typeof value === "boolean" ? "boolean" : typeof value === "number" ? "number" : "string", effect: "restart", sensitive: path === "variableCrypto.keyBase64", overriddenByEnvironment: false }];
+  return [{ path, value: value as SystemConfigItem["value"], valueType: Array.isArray(value) ? "array" : typeof value === "boolean" ? "boolean" : typeof value === "number" ? "number" : "string", effect: path.startsWith("modelInvocation.") ? "hotUpdate" : "restart", sensitive: path === "variableCrypto.keyBase64", overriddenByEnvironment: false }];
 }
 const items = flatten(config).filter(item => !["mineru.parseEndpoint", "mineru.backend", "mineru.parseMethod", "mineru.returnContentList"].includes(item.path));
 // These default fields are materialized by the system-config API even when YAML
@@ -39,7 +39,8 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       expect(description, item.path).not.toMatch(/设置此后端配置值|Sets this backend configuration value|settingsGeneral\.systemConfig/);
     }
     await routeResourceUiShellApi(page); await seedResourceUiShell(page, locale);
-    await page.route("**/api/v1/system/config", route => route.fulfill({ json: { code: "SUCCESS", message: "ok", data: { revision: "help-test", path: "application.yaml", items } } }));
+    let currentItems = items;
+    await page.route("**/api/v1/system/config", route => route.fulfill({ json: { code: "SUCCESS", message: "ok", data: { revision: "help-test", path: "application.yaml", items: currentItems } } }));
     await page.goto(`${frontend!.baseUrl}/settings/general`);
     await page.getByRole("button", { name: locale === "zh-CN" ? "后端配置" : "Backend configuration", exact: true }).click();
     await page.getByRole("button", { name: /MinerU/ }).click();
@@ -64,5 +65,26 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     expect(systemConfigHelp("navigation.maxDepth", t)).not.toBe(systemConfigHelp("resource.limits.maxDepth", t));
     expect(systemConfigHelp("eventBus.enabled", t)).not.toBe(systemConfigHelp("mineru.enabled", t));
     expect(systemConfigHelp("future.unsupported.field", t)).toBe("");
+    await page.mouse.move(1, 1);
+    await page.getByRole("button", { name: locale === "zh-CN" ? /模型调用/ : /Model invocation/ }).click();
+    await expect(page.getByRole("spinbutton", { name: "modelInvocation.embedding.maxBatchInputs", exact: true })).toHaveValue("32");
+    await expect(page.getByRole("spinbutton", { name: "modelInvocation.embedding.maxBatchTokens", exact: true })).toHaveValue("32768");
+    await help("modelInvocation.embedding.maxBatchTokens").hover();
+    await expect(tooltip).toContainText("UTF-8");
+    await page.mouse.move(1, 1);
+    await page.getByRole("spinbutton", { name: "modelInvocation.embedding.maxBatchInputs", exact: true }).fill("8");
+    await page.getByRole("spinbutton", { name: "modelInvocation.embedding.callTimeoutSeconds", exact: true }).fill("240");
+    let submitted: unknown;
+    await page.route("**/api/v1/system/config", async route => {
+      if (route.request().method() === "PUT") {
+        const body = route.request().postDataJSON() as { changes: { path: string; value: number }[] };
+        submitted = body;
+        currentItems = currentItems.map(item => ({ ...item, value: body.changes.find(change => change.path === item.path)?.value ?? item.value }));
+        await route.fulfill({ json: { code: "SUCCESS", message: "ok", data: { revision: "saved", changedPaths: ["modelInvocation.embedding.maxBatchInputs", "modelInvocation.embedding.callTimeoutSeconds"], hotUpdatePaths: ["modelInvocation.embedding.maxBatchInputs", "modelInvocation.embedding.callTimeoutSeconds"], restartPaths: [], migrationPaths: [] } } });
+      } else await route.fallback();
+    });
+    await page.getByRole("button", { name: t("settingsGeneral.systemConfig.actions.save", { count: 2 }), exact: true }).click();
+    await expect.poll(() => submitted).toEqual({ revision: "help-test", confirmMigration: false, changes: expect.arrayContaining([{ path: "modelInvocation.embedding.maxBatchInputs", value: 8 }, { path: "modelInvocation.embedding.callTimeoutSeconds", value: 240 }]) });
+    await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`config-model-invocation-${locale}.png`) });
   });
 }

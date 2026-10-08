@@ -19,15 +19,15 @@ struct FilterField {
 
 pub fn merge_search_filters(
     corpus: &RagCorpusRecord,
-    profile_filters: &Value,
+    authorized_filters: &Value,
     request_filters: &Value,
 ) -> Result<Value, RagError> {
     let schema = parse_schema(&corpus.filter_schema);
-    let mut merged = normalize_filters(&schema, profile_filters)?;
+    let mut merged = normalize_filters(&schema, authorized_filters)?;
     let request = normalize_filters(&schema, request_filters)?;
     for (field, request_value) in request {
-        if let Some(profile_value) = merged.get(&field) {
-            let intersection = merge_filter_values(profile_value, &request_value)
+        if let Some(authorized_value) = merged.get(&field) {
+            let intersection = merge_filter_values(authorized_value, &request_value)
                 .ok_or(RagError::SearchFilterInvalid)?;
             merged.insert(field, intersection);
         } else {
@@ -39,15 +39,15 @@ pub fn merge_search_filters(
 
 pub fn merge_search_request_filters(
     corpus: &RagCorpusRecord,
-    profile_filters: &Value,
+    authorized_filters: &Value,
     request_filters: &Value,
 ) -> Result<Value, RagError> {
     let schema = parse_schema(&corpus.filter_schema);
-    let mut merged = normalize_filters(&schema, profile_filters)?;
+    let mut merged = normalize_filters(&schema, authorized_filters)?;
     let request = normalize_request_filters(&schema, request_filters)?;
     for (field, request_value) in request {
-        if let Some(profile_value) = merged.get(&field) {
-            let intersection = merge_filter_values(profile_value, &request_value)
+        if let Some(authorized_value) = merged.get(&field) {
+            let intersection = merge_filter_values(authorized_value, &request_value)
                 .ok_or(RagError::SearchFilterInvalid)?;
             merged.insert(field, intersection);
         } else {
@@ -96,16 +96,32 @@ fn normalize_filters(
     let mut normalized = BTreeMap::new();
     for (field, raw_value) in object {
         let schema_field = schema.get(field).ok_or(RagError::SearchFilterInvalid)?;
-        let (operator, value) = extract_operator(raw_value);
-        if !schema_field.operators.contains(operator)
-            || !value_matches(&schema_field.field_type, operator, value)
-        {
-            return Err(RagError::SearchFilterInvalid);
-        }
-        let normalized_value = json!({ "op": operator, "value": value.clone() });
+        let normalized_value = normalize_authorized_field(schema_field, raw_value)?;
         normalized.insert(field.clone(), normalized_value);
     }
     Ok(normalized)
+}
+
+fn normalize_authorized_field(field: &FilterField, value: &Value) -> Result<Value, RagError> {
+    let (operator, raw) = extract_operator(value);
+    if operator == "and" {
+        let items = raw.as_array().ok_or(RagError::SearchFilterInvalid)?;
+        if items.is_empty()
+            || items.len() > 32
+            || items.iter().any(|item| extract_operator(item).0 == "and")
+        {
+            return Err(RagError::SearchFilterInvalid);
+        }
+        let normalized = items
+            .iter()
+            .map(|item| normalize_authorized_field(field, item))
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(json!({"op":"and","value":normalized}));
+    }
+    if !field.operators.contains(operator) || !value_matches(&field.field_type, operator, raw) {
+        return Err(RagError::SearchFilterInvalid);
+    }
+    Ok(json!({"op":operator,"value":raw}))
 }
 
 fn normalize_request_filters(
@@ -143,9 +159,7 @@ fn merge_filter_values(left: &Value, right: &Value) -> Option<Value> {
         .intersection(&right_values)
         .cloned()
         .collect::<BTreeSet<_>>();
-    if intersection.is_empty() || intersection.len() != right_values.len() {
-        return None;
-    }
+
     let values = intersection
         .into_iter()
         .map(|value| serde_json::from_str::<Value>(&value).ok())

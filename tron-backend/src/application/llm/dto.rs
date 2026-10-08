@@ -59,3 +59,18 @@ pub struct LlmRerankResultItem {
     pub score: f64,
     pub document: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LlmEmbeddingBatchCallCommand {
+    pub workspace_code: String,
+    pub model_code: Option<String>,
+    pub inputs: Vec<String>,
+    pub dimensions: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct LlmEmbeddingBatchCallResult {
+    pub model_code: String,
+    pub provider_model: Option<String>,
+    pub vectors: Vec<eliteforge_agent_framework::EmbeddingVector>,
+}

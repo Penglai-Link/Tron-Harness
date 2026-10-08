@@ -1,7 +1,7 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    sync::OnceLock,
+    sync::{Mutex, OnceLock},
 };
 
 use rusqlite::{Connection, LoadExtensionGuard, OptionalExtension, params};
@@ -21,6 +21,9 @@ const VEC_RESOURCE_ROOT: &str = concat!(
 const DEFAULT_RUNTIME_ROOT_SUFFIX: &str = "tron/sqlite-extensions";
 
 static DEFAULT_CONTEXT: OnceLock<SqliteExtensionContext> = OnceLock::new();
+// sqlite-simple owns process-global C++ dictionaries. Keep its library loaded while
+// business connections come and go, and serialize dictionary initialization.
+static EXTENSION_KEEPALIVE: Mutex<Option<Connection>> = Mutex::new(None);
 
 pub fn default_sqlite_extension_context() -> &'static SqliteExtensionContext {
     DEFAULT_CONTEXT.get_or_init(SqliteExtensionContext::from_env)
@@ -99,13 +102,25 @@ impl SqliteExtensionContext {
         if self.mode == SqliteExtensionMode::Disabled {
             return Ok(());
         }
-
-        if let Err(error) = self.load_simple(connection) {
+        let mut keepalive = EXTENSION_KEEPALIVE
+            .lock()
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
+        if keepalive.is_none() {
+            *keepalive = Some(Connection::open_in_memory()?);
+        }
+        let keeper = keepalive.as_ref().ok_or(rusqlite::Error::InvalidQuery)?;
+        if let Err(error) = self
+            .load_simple(keeper)
+            .and_then(|_| self.load_simple(connection))
+        {
             if self.mode == SqliteExtensionMode::Required {
                 return Err(error);
             }
         }
-        if let Err(error) = self.load_vec(connection) {
+        if let Err(error) = self
+            .load_vec(keeper)
+            .and_then(|_| self.load_vec(connection))
+        {
             if self.mode == SqliteExtensionMode::Required {
                 return Err(error);
             }
@@ -133,7 +148,13 @@ impl SqliteExtensionContext {
         load_extension(connection, &extension_path)?;
         let dict_directory = self.extract_simple_dict()?;
         let dict_path = dict_directory.to_string_lossy().to_string();
-        let _ = connection.execute("SELECT jieba_dict(?1)", params![dict_path]);
+        connection.query_row("SELECT jieba_dict(?1)", params![dict_path], |row| {
+            row.get::<_, String>(0)
+        })?;
+        // Force lazy dictionary initialization before another connection can load it.
+        if !probe_jieba_query(connection) || !probe_simple_tokenizer(connection) {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
         Ok(())
     }
 
@@ -338,7 +359,15 @@ fn copy_file_once(source: &Path, target: &Path) -> Result<(), rusqlite::Error> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|_| rusqlite::Error::InvalidPath(parent.into()))?;
     }
-    fs::copy(source, target).map_err(|_| rusqlite::Error::InvalidPath(source.into()))?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| rusqlite::Error::InvalidPath(target.into()))?;
+    let temporary = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|_| rusqlite::Error::InvalidPath(target.into()))?;
+    fs::copy(source, temporary.path()).map_err(|_| rusqlite::Error::InvalidPath(source.into()))?;
+    temporary
+        .persist(target)
+        .map_err(|_| rusqlite::Error::InvalidPath(target.into()))?;
     Ok(())
 }
 
