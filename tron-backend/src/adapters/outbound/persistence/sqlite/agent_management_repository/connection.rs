@@ -70,6 +70,10 @@ impl<'a> SqliteAgentManagementRepositorySql<'a> {
                  DEFAULT '[\"toolAssignmentMode\",\"mcpAccessMode\",\"toolExposureMode\",\"expandedDomainPersistenceMode\",\"maxSteps\",\"maxToolCalls\",\"maxParallelToolCalls\",\"selectedToolCodes\",\"selectedServerCodes\"]';"
             ).map_err(storage_error)?;
         }
+        repository.connection.execute_batch(
+            "CREATE TABLE IF NOT EXISTS agent_workspace_grant_policies(agent_code TEXT PRIMARY KEY);
+             CREATE TABLE IF NOT EXISTS agent_workspace_grants(agent_code TEXT NOT NULL, workspace_code TEXT NOT NULL, PRIMARY KEY(agent_code,workspace_code));"
+        ).map_err(storage_error)?;
         Ok(repository)
     }
 }

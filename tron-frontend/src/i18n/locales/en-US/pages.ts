@@ -1,6 +1,7 @@
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
+  platformData: {"agentDefinitions": "Agent definitions", "agentDefinitionHelp": "Define agents and configure their instructions, tools and knowledge libraries, then authorize workspaces below.", "agentAuthorization": "Workspace authorization", "agentAuthorizationHelp": "Assign existing agents to workspaces. Knowledge library access follows the agent authorization.", "noAgentDefinitions": "Create an agent definition first.", "workspace": "Workspace", "selectWorkspace": "Select a workspace", "allWorkspaces": "All workspaces", "assign": "Assign workspaces", "assignTitle": "Assign {{name}} to workspaces", "searchWorkspaces": "Search workspaces", "assignmentHelp": "Only selected workspaces can use this item. Clearing a selection and saving revokes access immediately.", "save": "Save", "cancel": "Cancel", "assignedWorkspaces": "Assigned workspaces", "platformCatalog": "Platform catalog", "spaceAssignments": "Workspace configuration", "unassigned": "Unassigned", "builtinAgent": "Built-in main agent, available in all workspaces"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "Chat not found.", "CHAT_SESSION_MUST_BE_ARCHIVED": "Archive the chat first.", "CHAT_SESSION_RUN_ACTIVE": "The chat is running. Try again later.", "CHAT_SESSION_ARCHIVED": "The chat is archived.", "CHAT_SESSION_DELETE_FAILED": "Deletion failed. Retry this item."},
     cancel: "Cancel",
@@ -97,8 +98,8 @@ export const pages = {
     previewAction: "Preview",
     resources: "Resources",
     resourcesHelp: "Original documents and extracted images are stored as private file resources. View the original, images, and source locations here.",
-    originalResource: "Open original in Resources",
-    openResource: "Open in Resources",
+    originalResource: "Preview original",
+    openResource: "Open resource preview",
     imageTitle: "Image {{number}}",
     imageAlt: "Image {{number}} extracted from {{file}}",
     imageNotice: "Images are saved. This older parse did not record description provenance. Preview again to view current image status.",
@@ -202,8 +203,9 @@ export const pages = {
   "savePreview": "Save and preview",
   "previewCount": "{{total}} chunks; showing {{shown}}.",
   "chunkNumber": "Chunk {{number}}",
-  "grants": "Authorize Agents",
-  "grantsHelp": "Only selected internal Agents may retrieve this knowledge base. No Agent is authorized by default.",
+  "grants": "Authorize agents",
+  "authorizedAgentCount": "Authorized agent count",
+  "grantsHelp": "Selected internal agents can retrieve this knowledge base in their assigned workspaces. No separate workspace authorization is needed.",
   "noAgents": "No internal Agents are available.",
   "unavailableAgent": "Unavailable; revoke to remove access",
   "upload": "Upload",
@@ -2544,7 +2546,7 @@ export const pages = {
     title: "Agents",
     internal: {
       inheritance: {
-        title: "Global internal agents",
+        title: "Agent definitions",
         platform: "Platform definition",
         local: "Workspace definition",
         override: "Workspace override",
@@ -2557,7 +2559,7 @@ export const pages = {
       definition: {
         create: "New",
         title: "New internal agent",
-        description: "Define its role, then select this agent when starting a conversation.",
+        description: "Define its role, configure knowledge libraries, then authorize workspaces.",
         name: "Name",
         code: "Code",
         codeHelp: "Use 1–64 characters, starting with a lowercase letter. Lowercase letters, numbers, hyphens and underscores are allowed. The code cannot be changed after creation.",
@@ -2695,7 +2697,7 @@ export const pages = {
       knowledge: {
         label: "Knowledge bases",
         helpLabel: "About knowledge base assignments",
-        help: "Choose the knowledge bases this agent can search in the current workspace. Assignments stay in sync with agent authorization in knowledge base management.",
+        help: "Choose knowledge bases for this agent. Authorization applies in all its assigned workspaces and stays in sync with knowledge base management.",
         choose: "Choose knowledge bases ({{count}})",
         title: "Choose knowledge bases",
         selected: "{{count}} selected",
@@ -2705,7 +2707,7 @@ export const pages = {
         search: "Search knowledge bases",
         documents: "{{count}} documents",
         noMatches: "No matching knowledge bases",
-        empty: "No knowledge bases in this workspace",
+        empty: "No knowledge bases on the platform",
         saved: "Knowledge base assignments saved",
         cancel: "Cancel",
         confirm: "Confirm",
@@ -4765,6 +4767,7 @@ export const pages = {
       cacheHitCoefficient: "Cache Hit Multiplier",
       outputCoefficient: "Output Multiplier",
       lastSeenAt: "Last Seen",
+      protocol: "Protocol",
       lastSyncAt: "Last Sync",
       model: "Model",
       modelCount: "Model Count",
@@ -4816,7 +4819,7 @@ export const pages = {
       authorizationExpiresAt:
         "The current access-token expiry. The system refreshes it before it expires; administrators must reauthorize if refresh fails.",
       catalog:
-        "Sync includes chat and multimedia catalogs. Models missing from a complete sync are retained as unavailable for history; unavailable chat models cannot be newly selected or used.",
+        "The catalog lists each model, vendor, and quality tier separately. Refresh syncs the latest Person-AI catalog. Models missing from a complete sync are retained as unavailable for history; unavailable chat models cannot be newly selected or used.",
       catalogModels:
         "The number of records in the remote catalog, including offline models retained for historical traceability.",
       account: "The Person-AI account points balance.",

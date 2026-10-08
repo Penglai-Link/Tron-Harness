@@ -187,10 +187,11 @@ export type WorkspaceAgentCategory = "internal" | "system";
 
 interface WorkspaceAgentsPageProps {
   category: WorkspaceAgentCategory;
+  allowCreate?: boolean;
   scope?: "platform" | "workspace";
 }
 
-export function WorkspaceAgentsPage({ category, scope = "workspace" }: WorkspaceAgentsPageProps) {
+export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate = true }: WorkspaceAgentsPageProps) {
   const { t } = useTranslation(["pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("agent");
@@ -721,7 +722,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace" }: Workspace
 
   return (
     <div className="space-y-5">
-      <PageHeader title={pageTitle} actions={internalAgentsPage ? <CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} onCreated={refreshCreatedAgent} /> : undefined} />
+      <PageHeader title={pageTitle} actions={internalAgentsPage && scope === "platform" && allowCreate ? <CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} onCreated={refreshCreatedAgent} /> : undefined} />
 
       {internalAgentsPage ? (
         <SurfaceCard className="space-y-3 p-4">
@@ -751,7 +752,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace" }: Workspace
           }
 
           return (
-            <section data-theme-anchor="card" key={agent.agentCode} className="rounded-2xl bg-[var(--color-surface-container-low)] p-4">
+            <section aria-label={draft.name} data-theme-anchor="card" key={agent.agentCode} className="rounded-2xl bg-[var(--color-surface-container-low)] p-4">
               <div className="flex flex-wrap items-start justify-between gap-2.5">
                 <div>
                   <h3 className="text-base font-semibold text-[var(--color-on-surface)]">
@@ -837,7 +838,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace" }: Workspace
                     </SelectItem>
                   </SelectInput>
                 </Field>
-                {scope === "workspace" ? <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} workspaceCode={activeWorkspaceCode} agentCode={agent.agentCode} agentName={draft.name} disabled={internalBusy} /> : null}
+                <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={draft.name} disabled={internalBusy} />
               </div>
 
               <details className="group mt-3 border-t border-[var(--color-outline-variant)]">

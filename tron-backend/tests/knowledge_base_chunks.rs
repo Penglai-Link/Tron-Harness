@@ -7,17 +7,17 @@ use tron_backend::application::knowledge_base::local_documents::{ChunkConfig, Ch
 #[tokio::test]
 async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
     let f = Fixture::new();
-    let kb = f.service.create(USER, WORKSPACE, "Chunks", "").unwrap();
+    let kb = f.service.create(USER, "Chunks", "").unwrap();
     let body = (0..45)
         .map(|n| format!("# Section {n}\nEvidence {n} {}\n", "content ".repeat(30)))
         .collect::<String>();
     let doc = f
         .service
-        .upload(USER, WORKSPACE, &kb.id, "guide.md", body.as_bytes())
+        .upload(USER, &kb.id, "guide.md", body.as_bytes())
         .unwrap();
     assert_eq!(
         f.service
-            .published_chunks(USER, WORKSPACE, &kb.id, &doc.id, 1, 15)
+            .published_chunks(USER, &kb.id, &doc.id, 1, 15)
             .unwrap()
             .total,
         0
@@ -25,7 +25,6 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
     f.service
         .configure(
             USER,
-            WORKSPACE,
             &kb.id,
             &doc.id,
             Some(ChunkConfig {
@@ -38,7 +37,7 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
         .unwrap();
     let ready = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &doc.id)
+        .index(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     assert_eq!(ready.status, "READY", "{:?}", ready.error);
@@ -47,7 +46,7 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
     for page in 1..=ready.chunk_count.div_ceil(15) {
         let result = f
             .service
-            .published_chunks(USER, WORKSPACE, &kb.id, &doc.id, page, 15)
+            .published_chunks(USER, &kb.id, &doc.id, page, 15)
             .unwrap();
         assert_eq!(result.total, ready.chunk_count);
         assert_eq!(result.page, page);
@@ -62,32 +61,32 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
     }
     assert!(
         f.service
-            .published_chunks("OTHER-USER", WORKSPACE, &kb.id, &doc.id, 1, 15)
+            .published_chunks("OTHER-USER", &kb.id, &doc.id, 1, 15)
             .is_err()
     );
     assert!(
         f.service
-            .published_chunks(USER, "COMPLIANCE", &kb.id, &doc.id, 1, 15)
+            .published_chunks(USER, &kb.id, &doc.id, 1, 15)
             .is_err()
     );
     assert!(
         f.service
-            .published_chunks(USER, WORKSPACE, &kb.id, "missing", 1, 15)
+            .published_chunks(USER, &kb.id, "missing", 1, 15)
             .is_err()
     );
     assert!(
         f.service
-            .published_chunks(USER, WORKSPACE, &kb.id, &doc.id, 0, 15)
+            .published_chunks(USER, &kb.id, &doc.id, 0, 15)
             .is_err()
     );
     assert!(
         f.service
-            .published_chunks(USER, WORKSPACE, &kb.id, &doc.id, 1, 101)
+            .published_chunks(USER, &kb.id, &doc.id, 1, 101)
             .is_err()
     );
     assert!(
         f.service
-            .published_chunks(USER, WORKSPACE, &kb.id, &doc.id, 1000, 15)
+            .published_chunks(USER, &kb.id, &doc.id, 1000, 15)
             .unwrap()
             .items
             .is_empty()
@@ -96,7 +95,6 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
     f.service
         .configure(
             USER,
-            WORKSPACE,
             &kb.id,
             &doc.id,
             Some(ChunkConfig {
@@ -109,20 +107,20 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
         .unwrap();
     let retained = f
         .service
-        .published_chunks(USER, WORKSPACE, &kb.id, &doc.id, 1, 15)
+        .published_chunks(USER, &kb.id, &doc.id, 1, 15)
         .unwrap();
     assert_eq!(retained.total, ready.chunk_count);
     assert_eq!(retained.items[0].text, units[0].text);
     let rebuilt = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &doc.id)
+        .index(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     assert_eq!(rebuilt.status, "READY", "{:?}", rebuilt.error);
     assert!(rebuilt.chunk_count < ready.chunk_count);
     let current = f
         .service
-        .published_chunks(USER, WORKSPACE, &kb.id, &doc.id, 1, 100)
+        .published_chunks(USER, &kb.id, &doc.id, 1, 100)
         .unwrap();
     assert_eq!(current.total, rebuilt.chunk_count);
     assert_eq!(current.items.len(), rebuilt.chunk_count);

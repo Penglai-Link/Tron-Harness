@@ -332,7 +332,6 @@ impl AppState {
             knowledge_base_repository,
             rag.clone(),
             resources.clone(),
-            workspaces.clone(),
             agent_management.clone(),
             llm_runtime.clone(),
         )

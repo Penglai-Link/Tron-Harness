@@ -1,8 +1,8 @@
 -- Current knowledge-base metadata schema.
 CREATE TABLE IF NOT EXISTS knowledge_bases (
- id TEXT PRIMARY KEY, owner_user_code TEXT NOT NULL, workspace_code TEXT NOT NULL,
+ id TEXT PRIMARY KEY, owner_user_code TEXT NOT NULL,
  payload_json TEXT NOT NULL, acl_revision INTEGER NOT NULL DEFAULT 0);
-CREATE INDEX IF NOT EXISTS idx_knowledge_bases_owner ON knowledge_bases(owner_user_code, workspace_code);
+CREATE INDEX IF NOT EXISTS idx_knowledge_bases_owner ON knowledge_bases(owner_user_code);
 CREATE TABLE IF NOT EXISTS knowledge_base_documents (
  id TEXT PRIMARY KEY, knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id),
  payload_json TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0);

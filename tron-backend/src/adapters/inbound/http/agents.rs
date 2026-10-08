@@ -4,3 +4,5 @@ pub mod request;
 pub mod routes;
 mod internal_definitions;
 mod platform_internal_agents;
+
+mod workspace_grants;

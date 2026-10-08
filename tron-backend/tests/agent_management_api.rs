@@ -2891,6 +2891,9 @@ async fn internal_agent_platform_fields_inherit_override_restore_and_persist() {
     )
     .await;
     let code = created["agentCode"].as_str().unwrap();
+    internal_agent_api(&router, &authorization, Method::PUT,
+        &format!("/api/v1/agents/registry/{code}/workspace-grants"),
+        Some(json!({"workspaceCodes":["TRON_CORE", "ENTERPRISE"]}))).await;
     let platform = format!("/api/v1/agents/registry/internal/{code}");
     let workspace = format!("/api/v1/agents/workspaces/TRON_CORE/internal/{code}");
     let other = format!("/api/v1/agents/workspaces/ENTERPRISE/internal/{code}");
@@ -3108,6 +3111,9 @@ async fn internal_agent_runs_use_selected_role_and_follow_next_run_configuration
         Some(json!({"agentCode":"reviewer","name":"Reviewer","rolePrompt":"Unique reviewer instructions"})),
     )
     .await;
+    internal_agent_api(&router, &authorization, Method::PUT,
+        &format!("/api/v1/agents/registry/{}/workspace-grants", first["agentCode"].as_str().unwrap()),
+        Some(json!({"workspaceCodes":["TRON_CORE"]}))).await;
     let second = internal_agent_api(
         &router,
         &authorization,

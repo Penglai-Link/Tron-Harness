@@ -82,7 +82,7 @@ pub(super) fn apply_catalog_snapshot(
                     context_window_tokens, protocols, quality_type, input_coefficient, cache_hit_coefficient,
                     output_coefficient, status, first_seen_at, last_seen_at, updated_at
                  ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?13)
-                 ON CONFLICT(provider_code, model_code) DO UPDATE SET
+                 ON CONFLICT(provider_code, model_code, upstream_vendor_code, quality_type) DO UPDATE SET
                     model_name = excluded.model_name,
                     upstream_vendor_code = excluded.upstream_vendor_code,
                     upstream_vendor_name = excluded.upstream_vendor_name,
@@ -99,7 +99,7 @@ pub(super) fn apply_catalog_snapshot(
                     provider_code.storage_value(),
                     model.model_code,
                     model.model_name,
-                    model.upstream_vendor_code,
+                    model.upstream_vendor_code.as_deref().unwrap_or_default(),
                     model.upstream_vendor_name,
                     model.context_window_tokens.map(i64::from),
                     serde_json::to_string(&model.protocols).unwrap_or_else(|_| "[\"ChatCompletions\"]".into()),

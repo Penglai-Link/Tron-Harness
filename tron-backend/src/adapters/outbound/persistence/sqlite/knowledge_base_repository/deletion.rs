@@ -6,7 +6,6 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
     pub fn delete_empty_library(
         &self,
         user: &str,
-        workspace: &str,
         id: &str,
     ) -> Result<(), KnowledgeBaseError> {
         let tx = super::super::framework_storage::business_transaction(
@@ -15,8 +14,8 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
         )
         .map_err(storage)?;
         let owned: bool = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2 AND workspace_code=?3)",
-            params![id, user, workspace], |row| row.get(0),
+            "SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2)",
+            params![id, user], |row| row.get(0),
         ).map_err(storage)?;
         if !owned {
             return Err(KnowledgeBaseError::NotFound);
@@ -189,7 +188,7 @@ pub(crate) fn plan_derived_cleanup(
 ) -> Result<Option<String>, KnowledgeBaseError> {
     let mut object = None;
     let needle = code;
-    let shared: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_base_documents WHERE id!=?1 AND instr(payload_json,?2)>0) OR EXISTS(SELECT 1 FROM knowledge_base_ingestion_tasks WHERE document_id!=?1 AND instr(payload_json,?2)>0) OR EXISTS(SELECT 1 FROM knowledge_base_derived_resources WHERE document_id!=?1 AND workspace_code=?3 AND resource_code=?4)", params![job.document_id,needle,job.workspace_code,code], |r|r.get(0)).map_err(storage)?;
+    let shared: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_base_documents WHERE id!=?1 AND instr(payload_json,?2)>0) OR EXISTS(SELECT 1 FROM knowledge_base_ingestion_tasks WHERE document_id!=?1 AND instr(payload_json,?2)>0) OR EXISTS(SELECT 1 FROM knowledge_base_derived_resources WHERE document_id!=?1 AND resource_code=?4)", params![job.document_id,needle,job.workspace_code,code], |r|r.get(0)).map_err(storage)?;
     let record: Option<(String,String)> = tx.query_row("SELECT storage_locator,description FROM resource_files WHERE workspace_code=?1 AND resource_code=?2", params![job.workspace_code,code], |r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(storage)?;
     // References in another KB's chunks include Markdown image links and locations.
     let mut chunk_reference = false;
@@ -263,10 +262,10 @@ pub(crate) fn plan_derived_cleanup(
 }
 
 impl SqliteKnowledgeBaseRepository {
-    pub fn delete_empty_library(&self, user: &str, workspace: &str, id: &str) -> Result<(), KnowledgeBaseError> {
-        let (user, workspace, id) = (user.to_owned(), workspace.to_owned(), id.to_owned());
+    pub fn delete_empty_library(&self, user: &str, id: &str) -> Result<(), KnowledgeBaseError> {
+        let (user, id) = (user.to_owned(), id.to_owned());
         self.connection.call(
-            move |connection| SqliteKnowledgeBaseRepositorySql { connection }.delete_empty_library(&user, &workspace, &id),
+            move |connection| SqliteKnowledgeBaseRepositorySql { connection }.delete_empty_library(&user, &id),
             || storage("database worker stopped"),
         )
     }

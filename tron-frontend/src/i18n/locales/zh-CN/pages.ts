@@ -1,6 +1,7 @@
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
+  platformData: {"agentDefinitions": "智能体定义", "agentDefinitionHelp": "先定义智能体，配置指令、工具和知识库，再在下方授权给空间使用。", "agentAuthorization": "空间授权", "agentAuthorizationHelp": "选择已定义的智能体分配给空间；知识库跟随智能体授权，无需单独分配给空间。", "noAgentDefinitions": "请先创建智能体定义。", "workspace": "空间", "selectWorkspace": "请选择空间", "allWorkspaces": "全部空间", "assign": "分配空间", "assignTitle": "分配「{{name}}」给空间", "searchWorkspaces": "搜索空间", "assignmentHelp": "只有选中的空间可以使用。取消勾选并保存后，立即撤销使用权限。", "save": "保存", "cancel": "取消", "assignedWorkspaces": "已分配空间", "platformCatalog": "平台目录", "spaceAssignments": "空间配置", "unassigned": "未分配", "builtinAgent": "内置主智能体，所有空间可用"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "会话不存在。", "CHAT_SESSION_MUST_BE_ARCHIVED": "请先归档会话。", "CHAT_SESSION_RUN_ACTIVE": "会话正在运行，稍后重试。", "CHAT_SESSION_ARCHIVED": "会话已归档。", "CHAT_SESSION_DELETE_FAILED": "删除失败，可重试此项。"},
     cancel: "取消",
@@ -95,8 +96,8 @@ export const pages = {
     previewAction: "预览",
     resources: "文件资源",
     resourcesHelp: "原件与提取图片保存在私有文件资源中，可查看原件、图片和来源位置。",
-    originalResource: "在文件资源管理中查看原件",
-    openResource: "在文件资源管理中打开",
+    originalResource: "查看原件",
+    openResource: "打开资源预览",
     imageTitle: "图片 {{number}}",
     imageAlt: "从 {{file}} 提取的图片 {{number}}",
     imageNotice: "图片已保存；此历史解析结果未记录图片描述来源。重新预览可查看当前图片状态。",
@@ -200,8 +201,9 @@ export const pages = {
   "savePreview": "保存并预览",
   "previewCount": "共 {{total}} 段，预览 {{shown}} 段。",
   "chunkNumber": "第 {{number}} 段",
-  "grants": "授权 Agent",
-  "grantsHelp": "仅选中的内部 Agent 可检索此知识库，默认不授权任何 Agent。",
+  "grants": "授权智能体",
+  "authorizedAgentCount": "授权智能体数",
+  "grantsHelp": "选中的内部智能体可以在其已分配的空间检索此知识库，无需再授权空间。",
   "noAgents": "暂无可用的内部 Agent。",
   "unavailableAgent": "当前不可用，可取消授权",
   "upload": "上传",
@@ -2711,7 +2713,7 @@ export const pages = {
     title: "智能体",
     internal: {
       inheritance: {
-        title: "全局内部智能体",
+        title: "智能体定义",
         platform: "平台定义",
         local: "工作区定义",
         override: "工作区覆盖",
@@ -2724,7 +2726,7 @@ export const pages = {
       definition: {
         create: "创建",
         title: "创建内部智能体",
-        description: "设置角色后，可在新会话中选择这个智能体。",
+        description: "先定义角色，再配置知识库，最后授权给空间使用。",
         name: "名称",
         code: "编码",
         codeHelp: "1–64 位，以小写字母开头，支持小写字母、数字、连字符和下划线。创建后不能修改编码。",
@@ -2848,7 +2850,7 @@ export const pages = {
       knowledge: {
         label: "知识库",
         helpLabel: "知识库关联说明",
-        help: "选择当前工作区中允许此智能体检索的知识库，与知识库管理页面的智能体授权同步。",
+        help: "选择允许此智能体检索的知识库。授权在该智能体已分配的所有空间生效，与知识库管理页面同步。",
         choose: "选择知识库（{{count}}）",
         title: "选择知识库",
         selected: "已选 {{count}} 个",
@@ -2858,7 +2860,7 @@ export const pages = {
         search: "搜索知识库",
         documents: "{{count}} 个文档",
         noMatches: "没有匹配的知识库",
-        empty: "当前工作区暂无知识库",
+        empty: "平台暂无知识库",
         saved: "知识库关联已保存",
         cancel: "取消",
         confirm: "确认",
@@ -4822,6 +4824,7 @@ export const pages = {
       cacheHitCoefficient: "缓存命中系数",
       outputCoefficient: "输出系数",
       lastSeenAt: "最后发现",
+      protocol: "协议",
       lastSyncAt: "上次同步",
       model: "模型",
       modelCount: "模型数",
@@ -4873,7 +4876,7 @@ export const pages = {
       authorizationExpiresAt:
         "当前访问令牌的过期时间。系统会在临近过期时尝试刷新，失败后需要管理员重新授权。",
       catalog:
-        "同步包含对话与多媒体目录。完整同步缺失的模型会保留为“失效”，供历史追溯；失效的对话模型不能新选或发送。",
+        "目录按模型、厂商和质量档位分别列出，点击刷新会重新同步 Person-AI。完整同步缺失的模型会保留为“失效”，供历史追溯；失效的对话模型不能新选或发送。",
       catalogModels:
         "当前远程模型目录中的记录数，包含已下线但仍保留历史追溯的模型。",
       account: "Person-AI 账户积分余额。",

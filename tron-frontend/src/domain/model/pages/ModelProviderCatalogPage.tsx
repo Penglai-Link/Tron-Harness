@@ -14,6 +14,7 @@ import { SelectInput } from "@/components/forms";
 import { PageHeader, useLocaleFormatters } from "@/shared";
 import {
   fetchProviderCatalog,
+  syncModelProvider,
   type ProviderCatalogProtocol,
   type ProviderCatalogModel,
 } from "@/domain/model/api";
@@ -48,9 +49,12 @@ export function ModelProviderCatalogPage() {
   const [protocolFilter, setProtocolFilter] = useState<CatalogProtocolFilter>("ALL");
   const [qualityFilter, setQualityFilter] = useState<CatalogQualityFilter>("ALL");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (sync = false) => {
     setLoading(true);
     try {
+      if (sync) {
+        await syncModelProvider(personAiProviderCode);
+      }
       setRecords(await fetchProviderCatalog(personAiProviderCode));
     } catch (error) {
       toast.error(
@@ -252,7 +256,7 @@ export function ModelProviderCatalogPage() {
             <Button
               disabled={loading}
               variant="secondary"
-              onClick={() => void load()}
+              onClick={() => void load(true)}
             >
               {loading ? (
                 <Spinner size={16} aria-hidden="true" />
@@ -288,7 +292,10 @@ export function ModelProviderCatalogPage() {
                 })}
           </span>
         }
-        rowKey={(model) => `${model.catalogModelType}:${model.modelId ?? model.modelCode}`}
+        rowKey={(model) => JSON.stringify([
+          model.catalogModelType, model.modelId ?? model.modelCode,
+          model.upstreamVendorCode, model.qualityType,
+        ])}
         rows={loading ? [] : filteredRecords}
         tableClassName="min-w-[1240px]"
         title={t("modelProviders.columns.catalogModels")}

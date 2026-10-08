@@ -1,9 +1,10 @@
+import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router";
+
 import {
   MoreHorizontal
 } from "lucide-react";
@@ -96,7 +97,7 @@ export function RagProfilesTab({
   onTestProfile: (profile: RetrievalProfileRecord) => void;
   profiles: ProfileRecord[];
 }) {
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
   const { t } = useTranslation(["pages"]);
   const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
   const [query, setQuery] = useState("");

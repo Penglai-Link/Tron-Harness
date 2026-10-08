@@ -1,0 +1,53 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Link, MemoryRouter, useLocation } from "react-router";
+import { afterEach, expect, it, vi } from "vitest";
+import { PlatformWorkspaceScope, usePlatformDataHref, usePlatformDataNavigate } from "./PlatformWorkspaceScope";
+import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
+
+vi.mock("@/domain/admin/api", () => ({ fetchWorkspaceOptions: vi.fn(async () => [
+  { workspaceCode: "alpha", name: "Alpha", label: "Alpha" },
+  { workspaceCode: "beta", name: "Beta", label: "Beta" },
+]) }));
+vi.mock("@/store/authStore", () => ({ useAuthStore: (select: (state: unknown) => unknown) => select({ session: { user: { userCode: "owner" } } }) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+
+function Probe() {
+  const spaces = useWorkspaceSpaces();
+  const href = usePlatformDataHref();
+  const navigate = usePlatformDataNavigate();
+  const location = useLocation();
+  return <>
+    <output>scope:{spaces.selectedPrimarySpace?.workspaceCode}</output>
+    <output>{location.pathname}{location.search}</output>
+    <Link to={href("/memory")}>Memory home</Link>
+    <button onClick={() => navigate("/rag?section=retrieval")}>RAG workbench</button>
+  </>;
+}
+function mount(path: string) {
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <MemoryRouter initialEntries={[path]}><PlatformWorkspaceScope><Probe /></PlatformWorkspaceScope></MemoryRouter>
+  </QueryClientProvider>);
+}
+afterEach(cleanup);
+it("preserves the explicit space across both breadcrumbs and workbench navigation", async () => {
+  mount("/settings/memory/item?workspaceCode=beta");
+  await screen.findByText("scope:beta");
+  fireEvent.click(screen.getByText("Memory home"));
+  expect(screen.getByText("/settings/memory?workspaceCode=beta")).toBeTruthy();
+  fireEvent.click(screen.getByText("RAG workbench"));
+  expect(screen.getByText("/settings/rag?section=retrieval&workspaceCode=beta")).toBeTruthy();
+});
+it("carries the initially selected space into navigation before it has a URL parameter", async () => {
+  mount("/settings/memory");
+  await screen.findByText("scope:alpha");
+  fireEvent.click(screen.getByText("RAG workbench"));
+  expect(screen.getByText("/settings/rag?section=retrieval&workspaceCode=alpha")).toBeTruthy();
+});
+it("does not silently fall back to another space for a stale explicit code", async () => {
+  mount("/settings/memory?workspaceCode=deleted");
+  await screen.findByRole("status");
+  expect(screen.queryByText("scope:alpha")).toBeNull();
+  expect(screen.queryByText("Memory home")).toBeNull();
+});

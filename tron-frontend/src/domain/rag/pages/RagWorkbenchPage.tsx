@@ -1,9 +1,9 @@
+import { usePlatformDataHref, usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   useMemo,
   useState,
 } from "react";
 import {
-  useNavigate,
   useParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -48,7 +48,8 @@ function useRagWorkbenchPageData() {
 }
 
 export function RagIngestTestPage() {
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
+  const dataHref = usePlatformDataHref();
   const { corpusCode = "" } = useParams();
   const { t } = useTranslation("pages");
   const [notice, setNotice] = useState("");
@@ -65,7 +66,7 @@ export function RagIngestTestPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: selectedCorpus?.name ?? (corpusCode || title) }]}
+        breadcrumbs={[{ label: "RAG", href: dataHref("/rag") }, { label: selectedCorpus?.name ?? (corpusCode || title) }]}
         title={title}
         actions={<Button variant="secondary" onClick={() => navigate("/rag")}>{pageT("actions.backToList", "Back to list")}</Button>}
       />
@@ -89,7 +90,8 @@ export function RagIngestTestPage() {
 }
 
 export function RagRetrievalTestPage() {
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
+  const dataHref = usePlatformDataHref();
   const { profileId = "" } = useParams();
   const { t } = useTranslation("pages");
   const [notice, setNotice] = useState("");
@@ -105,7 +107,7 @@ export function RagRetrievalTestPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "RAG", href: "/rag?section=retrieval" }, { label: profileId || title }]}
+        breadcrumbs={[{ label: "RAG", href: dataHref("/rag?section=retrieval") }, { label: profileId || title }]}
         title={title}
         actions={<Button variant="secondary" onClick={() => navigate("/rag?section=retrieval")}>{pageT("actions.backToList", "Back to list")}</Button>}
       />

@@ -74,17 +74,15 @@ impl KnowledgeBaseService {
                 },
             });
         }
-        let resources = self
-            .resources
-            .for_agent_in_workspace(Some(agent), workspace);
+
         let mut output = KnowledgeBaseVisualContext::default();
         let mut seen = BTreeSet::new();
         let mut total = 0usize;
         for hit in hits {
-            let doc = allowed
-                .iter()
-                .find(|k| k.id == hit.knowledge_base_id)
-                .and_then(|k| k.documents.iter().find(|d| d.id == hit.document_id))
+            let library = allowed.iter().find(|k| k.id == hit.knowledge_base_id).ok_or(KnowledgeBaseError::Forbidden)?;
+            // The target-space grant was verified above; this scoped reader cannot expose unrelated resources.
+            let resources = &self.resources;
+            let doc = library.documents.iter().find(|d| d.id == hit.document_id)
                 .ok_or(KnowledgeBaseError::Forbidden)?;
             let registered = doc
                 .parsing_artifact
@@ -113,7 +111,7 @@ impl KnowledgeBaseService {
                 let (_, record) = match resources.download_binary_to_file(
                     user,
                     ResourceBinaryDownloadCommand {
-                        workspace_code: workspace.into(),
+                        workspace_code: "PLATFORM".into(),
                         resource_code: code.into(),
                     },
                 ) {

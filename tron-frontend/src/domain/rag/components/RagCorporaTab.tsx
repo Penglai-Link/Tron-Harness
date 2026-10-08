@@ -1,3 +1,4 @@
+import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   useState,
 } from "react";
@@ -6,7 +7,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+
 
 import { DataTable } from "@/components/data-table";
 import { SelectInput, TextInput } from "@/components/forms";
@@ -54,7 +55,7 @@ export function RagCorporaTab({
   onQueryChange: (value: string) => void;
   onStatusFilterChange: (value: string) => void;
 }) {
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
   const { t } = useTranslation(["pages"]);
   const [rowBusyCode, setRowBusyCode] = useState("");
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (

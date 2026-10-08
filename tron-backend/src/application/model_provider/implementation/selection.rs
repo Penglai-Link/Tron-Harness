@@ -10,8 +10,19 @@ impl ModelProviderService {
         this.connection.clone().call(
             move |connection| {
                 let workspace_code = &worker_workspace_code;
-                let default_selection =
+                let mut default_selection =
                     effective_default_selection(&connection, workspace_code, ModelType::Text)?;
+                if let Some(selection) = default_selection.as_mut()
+                    && selection.provider_code == Some(ModelProviderCode::PersonAi)
+                    && selection.kind == ModelSelectionKind::Fixed
+                    && let Some(code) = selection.model_code.as_deref()
+                    && let Some(model) = read_catalog_model(
+                        &connection, ModelProviderCode::PersonAi, code, selection.quality_type,
+                    )?
+                {
+                    selection.model_code = Some(model.selection_model_code());
+                    selection.quality_type = selection.quality_type.or(model.quality_type);
+                }
                 let Some(provider) = read_connection(&connection, ModelProviderCode::PersonAi)?
                 else {
                     return Ok(Vec::new());
@@ -45,7 +56,7 @@ impl ModelProviderService {
                 for model in read_chat_catalog_models(&connection, ModelProviderCode::PersonAi)? {
                     let enabled = active && model.status == ProviderCatalogModelStatus::Available;
                     let selection = ModelSelection::person_ai_fixed(
-                        model.model_code.clone(),
+                        model.selection_model_code(),
                         model
                             .quality_type
                             .expect("chat catalog models always have a quality"),
@@ -59,7 +70,7 @@ impl ModelProviderService {
                                 .quality_type
                                 .expect("chat catalog models always have a quality")
                                 .storage_value(),
-                            model.model_code,
+                            model.selection_model_code(),
                         ),
                         display_name: model.model_name.clone(),
                         provider_code: ModelProviderCode::PersonAi,

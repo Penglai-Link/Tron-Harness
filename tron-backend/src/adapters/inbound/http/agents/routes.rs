@@ -22,6 +22,7 @@ use super::handler::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/agents/registry/{agent_code}/workspace-grants", get(super::workspace_grants::list).put(super::workspace_grants::replace))
         .route("/api/v1/agents/registry/internal", get(platform::list_platform_internal_agents).post(platform::create_platform_internal_agent))
         .route("/api/v1/agents/registry/internal/{agent_code}", get(platform::get_platform_internal_agent))
         .route("/api/v1/agents/registry/internal/{agent_code}/definition", patch(platform::update_platform_internal_agent_definition))

@@ -73,7 +73,6 @@ export interface KnowledgeLibrary {
   id: string;
   name: string;
   description: string;
-  workspaceCode: string;
   documentCount: number;
   status?: string;
 }

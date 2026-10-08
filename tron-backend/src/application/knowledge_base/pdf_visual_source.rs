@@ -104,14 +104,13 @@ impl KnowledgeBaseService {
     pub async fn reparse_visual_document(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         doc: &str,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.prepare_visual_reparse(user, workspace, kb, doc)
+        self.prepare_visual_reparse(user, kb, doc)
             .await?;
-        self.preview(user, workspace, kb, doc).await?;
-        self.owned(user, workspace, kb)?;
+        self.preview(user, kb, doc).await?;
+        self.owned(user, kb)?;
         self.repository.document(kb, doc)
     }
 
@@ -119,11 +118,11 @@ impl KnowledgeBaseService {
     pub async fn prepare_visual_reparse(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         doc_id: &str,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.owned(user, workspace, kb)?;
+        let workspace = "PLATFORM";
+        self.owned(user, kb)?;
         let mut doc = self.repository.document(kb, doc_id)?;
         if !doc.file_name.to_ascii_lowercase().ends_with(".pdf") || doc.status != "REVIEW_REQUIRED"
         {
@@ -165,7 +164,7 @@ impl KnowledgeBaseService {
         let (derived, hashes) = tokio::task::spawn_blocking(move || image_pdf(&original))
             .await
             .map_err(invalid_storage)??;
-        self.owned(user, workspace, kb)?;
+        self.owned(user, kb)?;
         let derived_sha256 = digest(&derived);
         let derived_resource_code = self.derived_resource(
             user,

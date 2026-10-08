@@ -135,6 +135,7 @@ export const shell = {
   settings: {
     back: "Back",
     groups: {
+      data: "Data",
       administration: "Administration",
       foundation: "Foundation",
       integration: "Integrations",

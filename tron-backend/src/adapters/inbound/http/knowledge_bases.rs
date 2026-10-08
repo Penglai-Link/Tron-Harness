@@ -16,15 +16,11 @@ use axum::{
 use serde::Deserialize;
 mod library;
 mod agent_grants;
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Scope {
-    workspace_code: String,
-}
+mod platform_catalog;
+mod library_agent_grants;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Create {
-    workspace_code: String,
     name: String,
     #[serde(default)]
     description: String,
@@ -32,7 +28,6 @@ struct Create {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Configure {
-    workspace_code: String,
     chunk_config: Option<ChunkConfig>,
     #[serde(default, deserialize_with = "present_nullable")]
     parsing_tier: Option<Option<crate::application::knowledge_base::parsing::ParsingTier>>,
@@ -42,7 +37,6 @@ struct Configure {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Grants {
-    workspace_code: String,
     agent_codes: Vec<String>,
 }
 fn present_nullable<'de, T: Deserialize<'de>, D: serde::Deserializer<'de>>(
@@ -53,19 +47,20 @@ fn present_nullable<'de, T: Deserialize<'de>, D: serde::Deserializer<'de>>(
 async fn parsing(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
-    Query(q): Query<Scope>,
 ) -> Response {
     response(
-        kb.parsing_capabilities(&auth.user().user_code, &q.workspace_code)
-            .await,
+        kb.parsing_capabilities(&auth.user().user_code).await,
     )
 }
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/knowledge-bases", get(list).post(create))
+        .route("/api/v1/knowledge-bases/platform", get(platform_catalog::list))
+        .route("/api/v1/knowledge-bases/{id}/agent-grants", get(library_agent_grants::get_grants).put(library_agent_grants::replace))
         .route("/api/v1/knowledge-bases/parsing-capabilities", get(parsing))
         .route("/api/v1/knowledge-bases/agent-grants/{agentCode}", get(agent_grants::list).put(agent_grants::replace))
         .route("/api/v1/knowledge-bases/{id}", get(detail).delete(library::remove))
+        .route("/api/v1/knowledge-bases/{id}/resources/{resourceCode}/binary", get(binary))
         .route(
             "/api/v1/knowledge-bases/{id}/documents",
             get(documents).post(upload),
@@ -114,9 +109,8 @@ fn response<T: serde::Serialize>(result: Result<T, KnowledgeBaseError>) -> Respo
 async fn list(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
-    Query(q): Query<Scope>,
 ) -> Response {
-    match kb.list(&auth.user().user_code, &q.workspace_code) {
+    match kb.platform_libraries(&auth.user().user_code) {
         Ok(items) => Json(ApiResponse::protocol_success(
             items.into_iter().map(library::KnowledgeLibraryListVo::from).collect::<Vec<_>>(),
         )).into_response(),
@@ -130,7 +124,6 @@ async fn create(
 ) -> Response {
     response(kb.create(
         &auth.user().user_code,
-        &q.workspace_code,
         &q.name,
         &q.description,
     ))
@@ -139,18 +132,16 @@ async fn detail(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path(id): Path<String>,
-    Query(q): Query<Scope>,
 ) -> Response {
-    response(kb.detail(&auth.user().user_code, &q.workspace_code, &id))
+    response(kb.detail(&auth.user().user_code, &id))
 }
 async fn documents(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path(id): Path<String>,
-    Query(q): Query<Scope>,
 ) -> Response {
     response(
-        kb.detail(&auth.user().user_code, &q.workspace_code, &id)
+        kb.detail(&auth.user().user_code, &id)
             .map(|k| k.documents),
     )
 }
@@ -160,20 +151,11 @@ async fn upload(
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Response {
-    let mut workspace = None;
     let mut file = None;
     let mut request_key = None;
     loop {
         match multipart.next_field().await {
             Ok(Some(field)) => match field.name().unwrap_or("") {
-                "workspaceCode" => match field.text().await {
-                    Ok(v) => workspace = Some(v),
-                    Err(_) => {
-                        return response::<()>(Err(KnowledgeBaseError::Invalid(
-                            "workspaceCode无效".into(),
-                        )));
-                    }
-                },
                 "file" => {
                     let name = field.file_name().unwrap_or("").to_string();
                     match field.bytes().await {
@@ -197,12 +179,12 @@ async fn upload(
             }
         }
     }
-    match (workspace, file) {
-        (Some(w), Some((name, bytes))) => {
-            response(kb.upload_with_request(&auth.user().user_code, &w, &id, &name, &bytes, request_key.as_deref()))
+    match file {
+        Some((name, bytes)) => {
+            response(kb.upload_with_request(&auth.user().user_code, &id, &name, &bytes, request_key.as_deref()))
         }
         _ => response::<()>(Err(KnowledgeBaseError::Invalid(
-            "需要workspaceCode和file".into(),
+            "需要file".into(),
         ))),
     }
 }
@@ -215,7 +197,6 @@ async fn configure(
     response(
         kb.configure_and_start_index(
             &auth.user().user_code,
-            &q.workspace_code,
             &id,
             &doc,
             q.chunk_config,
@@ -229,10 +210,9 @@ async fn preview(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path((id, doc)): Path<(String, String)>,
-    Json(q): Json<Scope>,
 ) -> Response {
     response(
-        kb.preview(&auth.user().user_code, &q.workspace_code, &id, &doc)
+        kb.preview(&auth.user().user_code, &id, &doc)
             .await,
     )
 }
@@ -240,22 +220,12 @@ async fn index(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path((id, doc)): Path<(String, String)>,
-    Json(q): Json<Scope>,
 ) -> Response {
     response(
-        kb.start_index(&auth.user().user_code, &q.workspace_code, &id, &doc),
+        kb.start_index(&auth.user().user_code, &id, &doc),
     )
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CancelRequest { workspace_code: String }
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RetryRequest { workspace_code: String }
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TasksQuery { workspace_code: String }
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct IngestionTaskView {
@@ -271,23 +241,22 @@ struct IngestionTaskView {
     error: Option<String>,
     wait_reason: Option<crate::application::knowledge_base::ingestion::IngestionWaitReason>,
 }
-async fn tasks(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, doc)): Path<(String, String)>, Query(q): Query<TasksQuery>) -> Response {
-    response(kb.ingestion_tasks(&auth.user().user_code, &q.workspace_code, &id, &doc).map(|tasks| tasks.into_iter().map(|t| IngestionTaskView { id: t.id, document_id: t.document_id, state: t.state, stage: t.stage, attempt: t.attempt, failures: t.failures, cancellation_pending: t.cancellation_pending, retry_after_ms: t.retry_after_ms, endpoint_id: t.endpoint_id, error: t.error, wait_reason: t.wait_reason }).collect::<Vec<_>>()))
+async fn tasks(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, doc)): Path<(String, String)>) -> Response {
+    response(kb.ingestion_tasks(&auth.user().user_code, &id, &doc).map(|tasks| tasks.into_iter().map(|t| IngestionTaskView { id: t.id, document_id: t.document_id, state: t.state, stage: t.stage, attempt: t.attempt, failures: t.failures, cancellation_pending: t.cancellation_pending, retry_after_ms: t.retry_after_ms, endpoint_id: t.endpoint_id, error: t.error, wait_reason: t.wait_reason }).collect::<Vec<_>>()))
 }
-async fn cancel(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, doc)): Path<(String, String)>, Json(q): Json<CancelRequest>) -> Response {
-    response(kb.cancel_index(&auth.user().user_code, &q.workspace_code, &id, &doc).await)
+async fn cancel(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, doc)): Path<(String, String)>) -> Response {
+    response(kb.cancel_index(&auth.user().user_code, &id, &doc).await)
 }
-async fn retry(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, doc)): Path<(String, String)>, Json(q): Json<RetryRequest>) -> Response {
-    response(kb.retry_index(&auth.user().user_code, &q.workspace_code, &id, &doc))
+async fn retry(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, doc)): Path<(String, String)>) -> Response {
+    response(kb.retry_index(&auth.user().user_code, &id, &doc))
 }
 async fn remove(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path((id, doc)): Path<(String, String)>,
-    Query(q): Query<Scope>,
 ) -> Response {
     response(
-        kb.remove_document(&auth.user().user_code, &q.workspace_code, &id, &doc),
+        kb.remove_document(&auth.user().user_code, &id, &doc),
     )
 }
 async fn grants(
@@ -298,7 +267,6 @@ async fn grants(
 ) -> Response {
     response(kb.set_grants(
         &auth.user().user_code,
-        &q.workspace_code,
         &id,
         q.agent_codes,
     ))
@@ -307,7 +275,6 @@ async fn grants(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ChunkPageQuery {
-    workspace_code: String,
     page: usize,
     page_size: usize,
 }
@@ -319,7 +286,6 @@ async fn chunks(
 ) -> Response {
     response(kb.published_chunks(
         &auth.user().user_code,
-        &q.workspace_code,
         &id,
         &doc,
         q.page,
@@ -333,14 +299,39 @@ mod ocr_contract_tests {
     use crate::application::knowledge_base::parsing::OcrMode;
     #[test]
     fn ocr_patch_distinguishes_omitted_inherited_and_selected_modes() {
-        let omitted: Configure = serde_json::from_value(serde_json::json!({"workspaceCode":"space","chunkConfig":null})).unwrap();
+        let omitted: Configure = serde_json::from_value(serde_json::json!({"chunkConfig":null})).unwrap();
         assert_eq!(omitted.ocr_mode, None);
-        let inherited: Configure = serde_json::from_value(serde_json::json!({"workspaceCode":"space","ocrMode":null})).unwrap();
+        let inherited: Configure = serde_json::from_value(serde_json::json!({"ocrMode":null})).unwrap();
         assert_eq!(inherited.ocr_mode, Some(None));
         for mode in [OcrMode::Auto, OcrMode::Text, OcrMode::Ocr] {
-            let selected: Configure = serde_json::from_value(serde_json::json!({"workspaceCode":"space","ocrMode":mode})).unwrap();
+            let selected: Configure = serde_json::from_value(serde_json::json!({"ocrMode":mode})).unwrap();
             assert_eq!(selected.ocr_mode, Some(Some(mode)));
         }
-        assert!(serde_json::from_value::<Configure>(serde_json::json!({"workspaceCode":"space","ocrMode":"invalid"})).is_err());
+        assert!(serde_json::from_value::<Configure>(serde_json::json!({"ocrMode":"invalid"})).is_err());
     }
+}
+
+async fn binary(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, code)): Path<(String, String)>) -> Response {
+    let user = auth.user().user_code.clone();
+    let (file, length) = match tokio::task::spawn_blocking(move || kb.download_resource(&user, &id, &code)).await {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => return response::<()>(Err(error)),
+        Err(error) => return response::<()>(Err(KnowledgeBaseError::Storage(error.to_string()))),
+    };
+    let stream = async_stream::stream! {
+        use tokio::io::AsyncReadExt;
+        let mut file = tokio::fs::File::from_std(file);
+        let mut buffer = vec![0u8; 64 * 1024];
+        loop {
+            match file.read(&mut buffer).await {
+                Ok(0) => break,
+                Ok(count) => yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buffer[..count])),
+                Err(error) => { yield Err(error); break; }
+            }
+        }
+    };
+    let mut result = Response::new(axum::body::Body::from_stream(stream));
+    result.headers_mut().insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("application/octet-stream"));
+    if let Ok(value) = axum::http::HeaderValue::from_str(&length.to_string()) { result.headers_mut().insert(axum::http::header::CONTENT_LENGTH, value); }
+    result
 }

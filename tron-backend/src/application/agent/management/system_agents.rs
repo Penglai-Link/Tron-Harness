@@ -175,7 +175,10 @@ impl AgentManagementService {
             .into_iter()
             .map(|policy| (policy.agent_code.clone(), policy))
             .collect::<HashMap<_, _>>();
-        let mut entries = self.repository().list_system_agents()?;
+        let entries = self.repository().list_system_agents()?;
+        let mut assigned = Vec::new();
+        for entry in entries { if self.agent_assigned(&entry.agent_code, workspace_code)? { assigned.push(entry); } }
+        let mut entries = assigned;
         entries.sort_by(|left, right| left.agent_code.cmp(&right.agent_code));
         Ok(entries
             .into_iter()
@@ -215,6 +218,7 @@ impl AgentManagementService {
                 name: definition.name,
             });
         }
+        if !self.agent_assigned(normalized_agent_code, workspace_code)? { return Err(AgentManagementError::SystemAgentUnavailable); }
         let entry = self.required_system_agent(normalized_agent_code)?;
         if !entry.available || !entry.enabled || entry.command_name.trim().is_empty() {
             return Err(AgentManagementError::SystemAgentUnavailable);

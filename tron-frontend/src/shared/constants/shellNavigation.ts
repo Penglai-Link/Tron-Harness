@@ -1,14 +1,11 @@
 import {
   AlarmClock,
   Archive,
-  Bot,
-  BookOpenText,
   Database,
   DatabaseZap,
   Folder,
   FolderGit2,
   KeyRound,
-  Network,
   ListTodo,
   PlugZap,
   Server,
@@ -34,26 +31,6 @@ export const tronNavigation: TronNavSection[] = [
     label: "Agent Operations",
     translationKey: "shell:nav.sections.agentOperations",
     items: [
-      {
-        label: "Agents",
-        href: "/agents/internal",
-        icon: Bot,
-        translationKey: "shell:nav.items.agents",
-        children: [
-          {
-            label: "Internal Agents",
-            href: "/agents/internal",
-            icon: Bot,
-            translationKey: "shell:nav.items.internalAgents",
-          },
-          {
-            label: "System Agents",
-            href: "/agents/system",
-            icon: Server,
-            translationKey: "shell:nav.items.systemAgents",
-          },
-        ],
-      },
       { label: "MCP Servers", href: "/mcp-servers", icon: PlugZap, translationKey: "shell:nav.items.mcpServers" },
       { label: "Prompts", href: "/prompts", icon: ScrollText, translationKey: "shell:nav.items.prompts" },
       { label: "Models", href: "/models", icon: Sparkles, translationKey: "shell:nav.items.models" },
@@ -64,9 +41,6 @@ export const tronNavigation: TronNavSection[] = [
     label: "Data",
     translationKey: "shell:nav.sections.data",
     items: [
-      { label: "Memory", href: "/memory", icon: Database, translationKey: "shell:nav.items.memory" },
-      { label: "KnowledgeGraph", href: "/knowledge-graph", icon: Network, translationKey: "shell:nav.items.knowledgeGraph" },
-      { label: "KnowledgeBase", href: "/knowledge-base", icon: BookOpenText, translationKey: "shell:nav.items.knowledgeBase" },
       {
         label: "Resource Management",
         href: "/resource-management/files",

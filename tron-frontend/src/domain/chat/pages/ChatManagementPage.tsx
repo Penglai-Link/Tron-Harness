@@ -118,6 +118,8 @@ import { chatApiEndpoints } from "@/domain/chat/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
+import { ChatDraftResources } from "../model/chatDraftResources";
+import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
 import { ContextDetailPreview, contextDetailRawValue, type ContextDetailBlock } from "@/domain/chat/components/ContextDetailPreview";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
@@ -4486,6 +4488,11 @@ export function ChatManagementPage() {
   const [currentSearchText, setCurrentSearchText] = useState(routerSearchText);
   const currentSearchParams = useMemo(() => new URLSearchParams(currentSearchText), [currentSearchText]);
   const requestedSessionCode = currentSearchParams.get("sessionCode")?.trim() ?? "";
+  const requestedDraftCode = currentSearchParams.get("draftCode")?.trim() ?? "";
+  const draftProjectCode = currentSearchParams.get("projectCode")?.trim() || undefined;
+  const isDraft = Boolean(requestedDraftCode && !requestedSessionCode);
+  const draftComposerKey = useRef(requestedDraftCode);
+  const [draftResources] = useState(() => new ChatDraftResources());
   const requestedSourceTab = parseChatSessionSourceTab(currentSearchParams.get("sourceTab"));
   const toast = useToast();
   const { agentReplyEffect, agentReplySpeed } = useTheme();
@@ -4512,7 +4519,41 @@ export function ChatManagementPage() {
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
-  const chatRuntimeAdapter = useMemo(
+  const { create: openDraftChatTab } = useCreateChatTab(activeWorkspaceCode, draftProjectCode);
+  const promoteDraftSession = useStableCallback((session: ChatSession) => {
+    setOptimisticActiveSession(session);
+    setSessionGroups((current) => insertSession(current, session));
+    activeSessionCodeRef.current = session.sessionCode;
+    setActiveSessionCode(session.sessionCode);
+    if (selectedModelCode) {
+      setSessionModelSelections((current) => ({
+        ...current,
+        [sessionModelSelectionKey(session.sessionCode, session.agentCode ?? selectedAgentCode)]: selectedModelCode,
+      }));
+    }
+    const path = `/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`;
+    useTabStore.getState().updateTab(scopeTabId, {
+      path, activeNav: `chat-session:${session.sessionCode}`,
+      title: session.title, titleTranslationKey: undefined,
+    });
+    setCurrentSearchText(new URLSearchParams({ sessionCode: session.sessionCode }).toString());
+    if (useTabStore.getState().activeTabId === scopeTabId) navigate(path, { replace: true });
+    window.dispatchEvent(new CustomEvent("tron:chat-session-created", { detail: session }));
+  });
+  const createRuntimeSession = useStableCallback((input: Parameters<typeof createChatSession>[0]) => (
+    draftResources.createSession(async () => {
+      setCreatingSession(true);
+      try {
+        // Localized composer labels are not user-assigned session titles.
+        const session = await createChatSession({ ...input, title: undefined, projectCode: draftProjectCode });
+        promoteDraftSession(session);
+        return session;
+      } finally {
+        setCreatingSession(false);
+      }
+    })
+  ));
+  const chatTransportAdapter = useMemo(
     () => getServiceDataSource("chat") === "mock"
       ? createTronMockChatAdapter()
       : createInternalChatAdapter({
@@ -4522,6 +4563,10 @@ export function ChatManagementPage() {
         }),
     [activeWorkspaceCode],
   );
+  const chatRuntimeAdapter = useMemo(() => draftResources.adapt({
+    ...chatTransportAdapter,
+    createSession: createRuntimeSession,
+  }), [chatTransportAdapter, createRuntimeSession, draftResources]);
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
   const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);
   const [activeRunRefreshKey, setActiveRunRefreshKey] = useState(0);
@@ -4551,11 +4596,11 @@ export function ChatManagementPage() {
     ? optimisticActiveSession
     : undefined;
   const resolvedActiveSessionCode = requestedSession?.sessionCode ?? optimisticSession?.sessionCode ?? activeSessionCode;
-  const selectedSession = requestedSession
+  const selectedSession = isDraft ? undefined : requestedSession
     ?? optimisticSession
     ?? (!requestedSessionCode && resolvedActiveSessionCode ? findSession(sessionGroups, resolvedActiveSessionCode) : undefined);
   const activeSession = selectedSession ?? (
-    !requestedSessionCode && !requestedSourceTab && !activeSessionCode
+    !isDraft && !requestedSessionCode && !requestedSourceTab && !activeSessionCode
       ? firstSessionForSourceTab(sessionGroups, defaultChatSessionSourceTab)
       : undefined
   );
@@ -4644,7 +4689,7 @@ export function ChatManagementPage() {
   >({});
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
 
-  const composerSessionCode = activeSession?.sessionCode ?? "";
+  const composerSessionCode = draftComposerKey.current || activeSession?.sessionCode || "";
   const composer = composerSessionCode
     ? composerDraftsBySessionCode[composerSessionCode] ?? ""
     : "";
@@ -4896,6 +4941,7 @@ export function ChatManagementPage() {
   );
 
   const handleRuntimeSessionChange = useCallback((nextSession: RuntimeChatSession | null) => {
+    if (!nextSession) return;
     if (nextSession) {
       setSessionGroups((current) => replaceSession(current, toPageChatSession(nextSession)));
       window.dispatchEvent(new Event("tron:chat-session-updated"));
@@ -4922,6 +4968,7 @@ export function ChatManagementPage() {
     options: Omit<Parameters<typeof uploadChatSessionAttachment>[1], "file"> = {},
   ): Promise<ChatMessageAttachment | null> {
     const targetSession = activeSession;
+    if (!targetSession && isDraft) return draftResources.stage({ ...options, file });
     if (!targetSession) {
       toast.warning(t("chat.management.toasts.attachNoSession"), { title: t("chat.management.toasts.sessionRequiredTitle") });
       return null;
@@ -5093,7 +5140,7 @@ export function ChatManagementPage() {
   }, [activeSessionCode, requestedSessionCode, sessionGroups]);
 
   useEffect(() => {
-    if (!requestedSourceTab) return;
+    if (isDraft || !requestedSourceTab) return;
     selectSourceTab(requestedSourceTab);
     if (!sessionGroups.length) return;
 
@@ -5127,7 +5174,7 @@ export function ChatManagementPage() {
       next.delete("sessionCode");
       next.set("sourceTab", requestedSourceTab);
     });
-  }, [replaceChatSearchParams, requestedSessionCode, requestedSourceTab, sessionGroups]);
+  }, [isDraft, replaceChatSearchParams, requestedSessionCode, requestedSourceTab, sessionGroups]);
 
   useEffect(() => {
     let active = true;
@@ -5217,17 +5264,17 @@ export function ChatManagementPage() {
 
   useEffect(() => {
     const sessionAgentCode = activeSession?.agentCode ?? mainChatAgentOption.agentCode;
-    const identity = `${activeWorkspaceCode}:${activeSession?.sessionCode ?? ""}:${sessionAgentCode}`;
+    const identity = `${activeWorkspaceCode}:${composerSessionCode}:${sessionAgentCode}`;
     const shouldSync = agentSelectionSessionRef.current !== identity
       && chatAgents.some((agent) => agent.agentCode === sessionAgentCode);
     if (shouldSync) agentSelectionSessionRef.current = identity;
     setSelectedAgentCode((current) => shouldSync ? sessionAgentCode
       : current && chatAgents.some((agent) => agent.agentCode === current)
         ? current : mainChatAgentOption.agentCode);
-  }, [activeWorkspaceCode, activeSession?.agentCode, activeSession?.sessionCode, chatAgents]);
+  }, [activeWorkspaceCode, activeSession?.agentCode, composerSessionCode, chatAgents]);
 
   useEffect(() => {
-    const sessionCode = activeSession?.sessionCode ?? "";
+    const sessionCode = composerSessionCode;
     const sessionAgentCode = (activeSession?.agentCode ?? selectedAgentCode ?? mainChatAgentOption.agentCode).toLowerCase();
     const selectionKey = sessionCode ? sessionModelSelectionKey(sessionCode, sessionAgentCode) : "";
     const switchedSession = modelSelectionSessionRef.current !== sessionCode;
@@ -5253,7 +5300,7 @@ export function ChatManagementPage() {
       }
       return defaultChatModelOption(agentScopedModels)?.optionCode ?? "";
     });
-  }, [activeSession?.agentCode, activeSession?.sessionCode, agentScopedModels, chatModels, selectedAgentCode, sessionModelSelections]);
+  }, [activeSession?.agentCode, composerSessionCode, agentScopedModels, chatModels, selectedAgentCode, sessionModelSelections]);
 
   useEffect(() => {
     const sessionCode = activeSession?.sessionCode;
@@ -5284,10 +5331,10 @@ export function ChatManagementPage() {
 
   useEffect(() => {
     setSelectedReasoningEffort(null);
-  }, [activeSession?.sessionCode, selectedModel?.optionCode, selectedMainAgentModel?.optionCode]);
+  }, [composerSessionCode, selectedModel?.optionCode, selectedMainAgentModel?.optionCode]);
 
   useEffect(() => {
-    if (requestedSessionCode || requestedSourceTab || activeSessionCode) return;
+    if (isDraft || requestedSessionCode || requestedSourceTab || activeSessionCode) return;
     const defaultSession = firstSessionForSourceTab(sessionGroups, defaultChatSessionSourceTab);
     if (defaultSession) {
       setActiveSessionCode(defaultSession.sessionCode);
@@ -5298,6 +5345,7 @@ export function ChatManagementPage() {
     }
   }, [
     activeSessionCode,
+    isDraft,
     replaceChatSearchParams,
     requestedSessionCode,
     requestedSourceTab,
@@ -5625,10 +5673,12 @@ export function ChatManagementPage() {
   }, [activeSession?.sessionCode, handleCreateCompactionForRightPanel, rightPanel, rightPanelSnapshots, t]);
   const downloadPendingAttachment = useCallback(
     (attachment: ChatMessageAttachment) => {
+      const file = draftResources.file(attachment);
+      if (file) return Promise.resolve(file);
       if (!activeSession) return Promise.reject(new Error("No active chat session"));
       return downloadChatSessionAttachment(activeSession, attachment).then((response) => response.blob);
     },
-    [activeSession],
+    [activeSession, draftResources],
   );
   const transcriptWorkReplayOptions = useMemo(() => ({
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
@@ -5658,7 +5708,7 @@ export function ChatManagementPage() {
         />
         <Button
           aria-label={t("chat.management.composer.uploadAttachment")}
-          disabled={!activeSession || attachmentUploadPending}
+          disabled={(!activeSession && !isDraft) || creatingSession || attachmentUploadPending}
           size="icon"
           title={attachmentUploadPending ? t("chat.management.composer.uploading") : t("chat.management.composer.uploadAttachment")}
           type="button"
@@ -5734,6 +5784,8 @@ export function ChatManagementPage() {
     agentSelectionLocked,
     agentsLoading,
     activeSession,
+    isDraft,
+    creatingSession,
     attachmentUploadPending,
     chatAgents,
     handleAttachmentFileInputChange,
@@ -6848,31 +6900,12 @@ export function ChatManagementPage() {
     );
   }
 
-  async function handleCreateSession() {
+  function handleCreateSession() {
     if (!activeWorkspaceCode) {
       toast.warning(t("chat.management.toasts.createWorkspaceFirst"), { title: t("chat.management.toasts.noWorkspaceTitle") });
       return;
     }
-
-    const nextSessionAgentCode = mainChatAgentOption.agentCode;
-    setCreatingSession(true);
-    try {
-      const session = await createChatSession({
-        agentCode: nextSessionAgentCode,
-        title: "New chat",
-        workspaceCode: activeWorkspaceCode,
-      });
-      invalidatedQueueSessionCodesRef.current.delete(session.sessionCode);
-      setSessionGroups((current) => insertSession(current, session));
-      handleSessionSelect(session);
-      setVisibleMessages([]);
-      setComposer("");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t("chat.management.toasts.createSessionFailed");
-      toast.error(message, { title: t("chat.management.toasts.createSessionFailed") });
-    } finally {
-      setCreatingSession(false);
-    }
+    openDraftChatTab();
   }
 
 
@@ -6899,25 +6932,14 @@ export function ChatManagementPage() {
       forgetComposerDraft(archived.sessionCode);
 
       if (shouldCreateProjectReplacement) {
-        try {
-          setCreatingSession(true);
-          const replacement = await createChatSession({
-            agentCode: mainChatAgentOption.agentCode,
-            projectCode: session.projectCode,
-            title: "New chat",
-            workspaceCode: session.workspaceCode,
-          });
-          invalidatedQueueSessionCodesRef.current.delete(replacement.sessionCode);
-          setSessionGroups((current) => insertSession(current, replacement));
-          handleSessionSelect(replacement, returnSourceTab);
-          setVisibleMessages([]);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : t("chat.management.toasts.createSessionFailed");
-          toast.error(message, { title: t("chat.management.toasts.createSessionFailed") });
-          selectSessionAfterRemoval(nextGroups, returnSourceTab);
-        } finally {
-          setCreatingSession(false);
-        }
+        const params = new URLSearchParams({ draftCode: crypto.randomUUID(), projectCode: session.projectCode! });
+        const path = `/chats?${params}`;
+        const tabId = useTabStore.getState().addTab({
+          title: t("shell:chatSidebar.newChat"), titleTranslationKey: "shell:chatSidebar.newChat",
+          path, closable: true, activeNav: `chat-draft:${params.get("draftCode")}`,
+        });
+        useTabStore.getState().setActiveTab(tabId);
+        navigate(path);
       } else if (activeSessionCode === archived.sessionCode) {
         selectSessionAfterRemoval(nextGroups, returnSourceTab);
       }
@@ -6995,8 +7017,9 @@ export function ChatManagementPage() {
         />
       </div>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {activeSession ? (
+        {activeSession || isDraft ? (
           <AgentChatWindow
+            allowDraftSession={isDraft}
             agentReplyEffect={agentReplyEffect}
             agentReplySpeed={agentReplySpeed}
             adapter={chatRuntimeAdapter}
@@ -7006,12 +7029,12 @@ export function ChatManagementPage() {
             composerHeader={transcriptAttachmentHeader}
             config={{
               agentCode: effectiveAgentCode,
-              disabledInput: creatingSession || !selectedModel,
+              disabledInput: creatingSession || !selectedModel?.enabled,
               floating: false,
               inputPlaceholder: t("chat.management.composer.inputPlaceholder"),
               showAgui: true,
               storageKey: "tron.chat.management.runtime",
-              title: activeSession.title,
+              title: activeSession?.title ?? t("shell:chatSidebar.newChat"),
               userInputLabels,
               workRailLabels,
               workspaceCode: activeWorkspaceCode,
@@ -7021,9 +7044,10 @@ export function ChatManagementPage() {
             debugOptions={transcriptWorkReplayOptions}
             formatAnnotationCount={formatAnnotationCount}
             draft={composer}
-            initialSession={activeSession}
+            initialSession={activeSession ?? null}
             onDraftChange={setComposer}
             onPendingAttachmentsChange={setPendingAttachments}
+            onPasteAttachment={handleAttachmentFile}
             onRunStateChange={handleRuntimeRunStateChange}
             onSessionChange={handleRuntimeSessionChange}
             pendingAttachments={pendingAttachments}

@@ -31,7 +31,7 @@ export interface AppRoute {
   shellConfig?: AppRouteShellConfig;
 }
 
-export const appRoutes: AppRoute[] = [
+const registeredRoutes: AppRoute[] = [
   {
     pageId: "admin.archivedChats",
     route: "/settings/archived-chats",
@@ -912,3 +912,18 @@ export const appRoutes: AppRoute[] = [
     settingsNav: "Skill Center",
   },
 ] as const;
+
+const platformDataLabels: Record<string, string> = {
+  memory: "Memory", knowledgeGraph: "KnowledgeGraph", knowledgeBase: "KnowledgeBase", rag: "RAG",
+};
+export const appRoutes: AppRoute[] = registeredRoutes.flatMap((route) => {
+  const label = platformDataLabels[route.pageId.split(".")[0]];
+  if (label) {
+    const settingsRoute = { ...route, layout: "settings" as const, activeNav: "Settings", settingsNav: label };
+    return [settingsRoute, { ...settingsRoute, route: `/settings${route.route}` }];
+  }
+  if (route.pageId.startsWith("agents.")) {
+    return [{ ...route, pageId: "settings.agents", layout: "settings" as const, activeNav: "Settings", settingsNav: "Agents" }];
+  }
+  return [route];
+});

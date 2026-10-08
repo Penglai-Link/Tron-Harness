@@ -1,3 +1,4 @@
+import { PlatformWorkspaceScope } from "@/domain/settings/components/PlatformWorkspaceScope";
 import { AuthUserMenuPanel } from "@/domain/auth";
 import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
 import {
@@ -110,7 +111,10 @@ export default function AppRoutePage() {
     pathname === "/chats"
       ? new URLSearchParams(search).get("sessionCode")?.trim() ?? ""
       : "";
-  const isBareChatsRoute = pathname === "/chats" && !chatSessionCode;
+  const chatDraftCode = pathname === "/chats"
+    ? new URLSearchParams(search).get("draftCode")?.trim() ?? ""
+    : "";
+  const isBareChatsRoute = pathname === "/chats" && !chatSessionCode && !chatDraftCode;
 
   const addTab = useTabStore((state) => state.addTab);
   const addToCache = useTabStore((state) => state.addToCache);
@@ -181,7 +185,9 @@ export default function AppRoutePage() {
         resolved.route.pageId === "chats.index" ? chatSessionCode : "";
       const sessionActiveNav = requestedSessionCode
         ? `chat-session:${requestedSessionCode}`
-        : undefined;
+        : resolved.route.pageId === "chats.index" && chatDraftCode
+          ? `chat-draft:${chatDraftCode}`
+          : undefined;
       const existingSessionTab = sessionActiveNav
         ? useTabStore
             .getState()
@@ -190,10 +196,14 @@ export default function AppRoutePage() {
       const navItem =
         resolveActiveItem(pathname) ??
         resolveActiveItemByLabel(resolved.route.activeNav);
-      const titleTranslationKey = sessionActiveNav
+      const titleTranslationKey = chatDraftCode && !requestedSessionCode
+        ? "shell:chatSidebar.newChat"
+        : sessionActiveNav
         ? undefined
         : navItem?.translationKey ?? resolved.route.titleTranslationKey;
-      const tabTitle = sessionActiveNav
+      const tabTitle = chatDraftCode && !requestedSessionCode
+        ? t("shell:chatSidebar.newChat")
+        : sessionActiveNav
         ? existingSessionTab?.title ?? "New chat"
         : titleTranslationKey
           ? t(titleTranslationKey)
@@ -270,7 +280,9 @@ export default function AppRoutePage() {
         items={settingsNavigation}
       >
         <Routes>
-          <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute><resolved.Component key={routeRenderKey} /></SuspendedRoute>} />
+          <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute>{ /^(memory|knowledgeGraph|rag)\./.test(route.pageId)
+            ? <PlatformWorkspaceScope><resolved.Component key={routeRenderKey} /></PlatformWorkspaceScope>
+            : <resolved.Component key={routeRenderKey} /> }</SuspendedRoute>} />
         </Routes>
       </SettingsShell>
     );

@@ -3,6 +3,7 @@ mod internal_definition_error;
 mod internal_definitions;
 mod platform_internal_agents;
 mod system_agents;
+mod workspace_grants;
 
 use std::{
     collections::HashMap,
@@ -75,6 +76,9 @@ pub struct ResolvedAgentRuntime {
 const MAIN_AGENT_CODE: &str = "main-agent";
 
 pub trait AgentManagementRepository: Send {
+    fn agent_workspace_grants(&mut self, _agent: &str) -> Result<Option<Vec<String>>, AgentManagementError> { Ok(None) }
+    fn replace_agent_workspace_grants(&mut self, _agent: &str, _workspaces: &[String]) -> Result<(), AgentManagementError> { Err(AgentManagementError::StorageFailure) }
+
     fn insert_platform_internal_agent_config(
         &mut self,
         config: &PlatformInternalAgentConfig,

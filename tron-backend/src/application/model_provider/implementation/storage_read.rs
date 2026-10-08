@@ -329,7 +329,7 @@ pub(super) fn read_chat_catalog_models(
                 model_name: row.get(2)?,
                 protocols: serde_json::from_str(&row.get::<_, String>(6)?)
                     .unwrap_or_else(|_| vec![AgentModelProtocol::ChatCompletions]),
-                upstream_vendor_code: row.get(3)?,
+                upstream_vendor_code: row.get::<_, Option<String>>(3)?.filter(|code| !code.is_empty()),
                 upstream_vendor_name: row.get(4)?,
                 context_window_tokens: row
                     .get::<_, Option<i64>>(5)?
@@ -407,7 +407,7 @@ pub(super) fn read_catalog_model(
 ) -> Result<Option<ProviderCatalogModelView>, ModelProviderError> {
     read_chat_catalog_models(connection, provider_code).map(|models| {
         models.into_iter().find(|model| {
-            model.model_code == model_code
+            (model.model_code == model_code || model.selection_model_code() == model_code)
                 && quality_type.is_none_or(|quality| model.quality_type == Some(quality))
         })
     })

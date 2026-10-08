@@ -20,6 +20,7 @@ import {
 
 import { cn } from "@/shared/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import { useTabStore } from "@/store/tabStore";
 
 interface SettingsNavItem {
   href: string;
@@ -44,7 +45,10 @@ interface SettingsShellProps {
 
 const settingsReturnToStorageKey = "tron.settings.returnTo";
 
-function resolveReturnTo(state: unknown) {
+function resolveReturnTo(state: unknown, hasOpenTabs: boolean) {
+  // Closing the last tab retains its URL; returning to it would reopen that tab.
+  if (!hasOpenTabs) return "/workspace";
+
   if (state && typeof state === "object" && "from" in state && typeof state.from === "string" && state.from.length > 0) {
     return state.from;
   }
@@ -62,7 +66,8 @@ function resolveReturnTo(state: unknown) {
 export function SettingsShell({ activeItem, children, contentClassName, items }: SettingsShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const location = useLocation();
-  const returnTo = resolveReturnTo(location.state);
+  const hasOpenTabs = useTabStore((state) => state.tabs.some((tab) => !tab.hide));
+  const returnTo = resolveReturnTo(location.state, hasOpenTabs);
   const visibleItems = useMemo(() => items, [items]);
   const flatItems = useMemo(() => visibleItems.flatMap((group) => group.items), [visibleItems]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => (

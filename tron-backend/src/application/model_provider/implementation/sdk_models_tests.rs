@@ -19,6 +19,7 @@ struct MockState {
     steps: VecDeque<Step>,
     observed: Vec<String>,
     errors: Vec<String>,
+    model_queries: Vec<String>,
 }
 
 type SharedMock = Arc<Mutex<MockState>>;
@@ -29,6 +30,7 @@ async fn respond(
 ) -> impl IntoResponse {
     let method = request.method().to_string();
     let path = request.uri().path().to_owned();
+    let query = request.uri().query().unwrap_or_default().to_owned();
     let product = request
         .headers()
         .get("x-product-code")
@@ -39,6 +41,9 @@ async fn respond(
         .is_some_and(|value| value == "fixture-client");
     let body = to_bytes(request.into_body(), 1024 * 1024).await.unwrap();
     let mut state = state.lock().unwrap();
+    if path.ends_with("/chat/models") {
+        state.model_queries.push(query);
+    }
     state.observed.push(format!("{method} {path}"));
     let Some(step) = state.steps.pop_front() else {
         state.errors.push("unexpected additional request".into());
@@ -189,6 +194,208 @@ async fn poll(
 }
 
 #[tokio::test]
+async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selection() {
+    let (service, state, server) = fixture().await;
+    let row = service
+        .connection
+        .call(
+            |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )
+        .unwrap()
+        .unwrap();
+    let mut credentials = service
+        .decrypt_credentials(row.credentials_encrypted.as_deref().unwrap())
+        .unwrap();
+    credentials.authorization_expires_at = Some(now_millis() + 30 * 24 * 60 * 60 * 1000);
+    let encrypted = service.encrypt_credentials(&credentials).unwrap();
+    service.connection.call(move |connection| {
+        connection.execute(
+            "UPDATE provider_connections SET status='Connected', credentials_encrypted=?1 WHERE provider_code='PersonAi'",
+            [encrypted],
+        ).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    let high = json!([
+        {"model_code":"deepseek-v4.1-flash","provider_code":"alibaba_coding_plan","provider_name":"百炼tokenplan 个人","protocol_types":["chat_completions","responses"]},
+        {"model_code":"deepseek-v4.1-flash","provider_code":"qianfan_plan","provider_name":"百度千帆","protocol_types":["chat_completions"]},
+        {"model_code":"glm-5.3-flash","provider_code":"qianfan_plan","provider_name":"百度千帆"},
+        {"model_code":"glm-5.3-flash","provider_code":"glm_plan","provider_name":"GLM PLAN"},
+        {"model_code":"qwen3.8-flash","provider_code":"qwen","provider_name":"百炼平台"},
+        {"model_code":"qwen3.8-flash","provider_code":"alibaba_coding_plan","provider_name":"百炼tokenplan 个人"},
+        {"model_code":"qwen3.8-flash","provider_code":"qwen","provider_name":"百炼平台"}
+    ]);
+    let steps = VecDeque::from([
+        step("GET", "/chat/models", high),
+        step(
+            "GET",
+            "/chat/models",
+            json!([
+                {"model_code":"deepseek-v4.1-flash","provider_code":"alibaba_coding_plan","provider_name":"百炼tokenplan 个人","protocol_types":["chat_completions"]}
+            ]),
+        ),
+        step(
+            "GET",
+            "/chat/models",
+            json!([
+                {"model_code":"qwen3.6-flash","provider_code":"alibaba_coding_plan","provider_name":"百炼tokenplan 个人"}
+            ]),
+        ),
+        step(
+            "GET",
+            "/multimedia/models",
+            json!([
+                {"model_id":"image-1","model_code":"agnes-image","media_type":0},
+                {"model_id":"speech-1","model_code":"qwen-asr","media_type":2},
+                {"model_id":"aigc-1","model_code":"aigc-detector","media_type":3}
+            ]),
+        ),
+    ]);
+    state.lock().unwrap().steps = steps;
+    let run = service.sync_now(ModelProviderCode::PersonAi).await.unwrap();
+    assert_eq!(run.model_count, Some(11));
+    let catalog = service
+        .list_catalog_models(ModelProviderCode::PersonAi)
+        .unwrap();
+    assert_eq!(catalog.len(), 11);
+    assert_eq!(
+        catalog
+            .iter()
+            .filter(|model| model.quality_type == Some(ProviderModelQuality::High))
+            .count(),
+        6
+    );
+    service.connection.call(|connection| {
+        connection.execute_batch(
+            "INSERT INTO default_model_selections (
+                scope_key, model_type, selection_kind, provider_code, model_code,
+                quality_type, created_at, updated_at
+             ) VALUES ('platform', 'TEXT', 'Fixed', 'PersonAi', 'deepseek-v4.1-flash', 'High', 1, 1);"
+        ).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    let options = service.list_text_select_options("").unwrap();
+    assert_eq!(options.iter().filter(|option| option.is_default).count(), 1);
+    let fixed = options
+        .iter()
+        .filter(|option| option.selection.kind == ModelSelectionKind::Fixed)
+        .collect::<Vec<_>>();
+    assert_eq!(fixed.len(), 8);
+    assert_eq!(
+        fixed
+            .iter()
+            .map(|option| &option.option_code)
+            .collect::<HashSet<_>>()
+            .len(),
+        8
+    );
+    for option in &fixed {
+        let config = service
+            .resolve_chat_selection("", Some(&option.selection), None, None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            config.model_name,
+            *option.selection.model_code.as_ref().unwrap()
+        );
+        assert!(config.model_name.contains('/'));
+        assert_eq!(person_ai_runtime_quality(&config), option.quality_type);
+    }
+    let alibaba = service
+        .resolve_chat_selection(
+            "",
+            Some(&ModelSelection::person_ai_fixed(
+                "alibaba_coding_plan/deepseek-v4.1-flash",
+                ProviderModelQuality::High,
+            )),
+            None,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+    let qianfan = service
+        .resolve_chat_selection(
+            "",
+            Some(&ModelSelection::person_ai_fixed(
+                "qianfan_plan/deepseek-v4.1-flash",
+                ProviderModelQuality::High,
+            )),
+            None,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(alibaba.protocol, AgentModelProtocol::Responses);
+    assert_eq!(qianfan.protocol, AgentModelProtocol::ChatCompletions);
+    // Existing saved bare codes remain usable, while an unknown vendor must not fall back.
+    assert!(
+        service
+            .resolve_chat_selection(
+                "",
+                Some(&ModelSelection::person_ai_fixed(
+                    "deepseek-v4.1-flash",
+                    ProviderModelQuality::High,
+                )),
+                None,
+                None
+            )
+            .unwrap()
+            .is_some()
+    );
+    assert!(matches!(
+        service.resolve_chat_selection(
+            "",
+            Some(&ModelSelection::person_ai_fixed(
+                "unknown/deepseek-v4.1-flash",
+                ProviderModelQuality::High,
+            )),
+            None,
+            None
+        ),
+        Err(ModelProviderError::CatalogModelUnavailable(_))
+    ));
+    {
+        let state = state.lock().unwrap();
+        assert!(state.steps.is_empty());
+        assert!(state.errors.is_empty(), "{:?}", state.errors);
+        assert_eq!(state.model_queries, ["quality_type=high", "quality_type=middle", "quality_type=low"]);
+    }
+    // Retiring one vendor must not retire a same-named model on another vendor.
+    state.lock().unwrap().steps = VecDeque::from([
+        step("GET", "/chat/models", json!([
+            {"model_code":"deepseek-v4.1-flash","provider_code":"alibaba_coding_plan","provider_name":"百炼tokenplan 个人","protocol_types":["chat_completions","responses"]}
+        ])),
+        step("GET", "/chat/models", json!([])),
+        step("GET", "/chat/models", json!([])),
+        step("GET", "/multimedia/models", json!([])),
+    ]);
+    let run = service.sync_now(ModelProviderCode::PersonAi).await.unwrap();
+    assert_eq!(run.model_count, Some(1));
+    let last_good = service.list_catalog_models(ModelProviderCode::PersonAi).unwrap();
+    assert_eq!(last_good.len(), 11);
+    assert_eq!(last_good.iter().filter(|model| model.status == ProviderCatalogModelStatus::Available).count(), 1);
+    assert!(service.resolve_chat_selection("", Some(&ModelSelection::person_ai_fixed(
+        "alibaba_coding_plan/deepseek-v4.1-flash", ProviderModelQuality::High,
+    )), None, None).unwrap().is_some());
+    assert!(matches!(service.resolve_chat_selection("", Some(&ModelSelection::person_ai_fixed(
+        "qianfan_plan/deepseek-v4.1-flash", ProviderModelQuality::High,
+    )), None, None), Err(ModelProviderError::CatalogModelUnavailable(_))));
+    // A later remote failure must not overwrite the last successful snapshot.
+    state.lock().unwrap().steps = VecDeque::from([Step {
+        method: "GET", path: "/chat/models", status: StatusCode::INTERNAL_SERVER_ERROR,
+        body: json!({"code":500,"message":"fixture failure"}),
+    }]);
+    assert!(service.sync_now(ModelProviderCode::PersonAi).await.is_err());
+    assert_eq!(service.list_catalog_models(ModelProviderCode::PersonAi).unwrap(), last_good);
+    {
+        let state = state.lock().unwrap();
+        assert!(state.steps.is_empty());
+        assert!(state.errors.is_empty(), "{:?}", state.errors);
+    }
+    server.abort();
+}
+
+#[tokio::test]
 async fn completed_personai_authorization_verifies_distinct_model_routes_before_commit() {
     let (service, state, server) = fixture().await;
     state.lock().unwrap().steps = completed_steps(StatusCode::OK);
@@ -227,7 +434,7 @@ async fn completed_personai_authorization_verifies_distinct_model_routes_before_
                 || ModelProviderError::Storage
             )
             .unwrap(),
-        1
+        3
     );
     assert_eq!(
         service

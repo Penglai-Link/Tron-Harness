@@ -23,6 +23,8 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
         connection
             .execute_batch(REMOVE_CHATS_NAVIGATION_MIGRATION)
             .map_err(|error| navigation_migration_error("remove chat page navigation", error))?;
+        connection.execute_batch(include_str!("../../../../../../migrations/20261008_0002_platform_data_navigation.sql"))
+            .map_err(|error| navigation_migration_error("platform data navigation", error))?;
         Self::apply_child_display_migration(&connection)?;
         Ok(Self { connection })
     }

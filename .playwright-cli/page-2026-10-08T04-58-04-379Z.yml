@@ -1,0 +1,98 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e3]:
+    - banner [ref=f2e4]:
+      - generic [ref=f2e5]:
+        - generic [ref=f2e6]:
+          - button "关闭导航菜单" [ref=f2e7] [cursor=pointer]:
+            - generic [ref=f2e8]: Toggle Sidebar
+          - button "打开工作区选择器" [ref=f2e9] [cursor=pointer]:
+            - generic [ref=f2e10]: 我的工作区/示例项目
+        - generic [ref=f2e13]:
+          - button "Main Agent" [ref=f2e14]
+          - button "打开终端" [ref=f2e15]
+          - button "打开右侧边栏" [ref=f2e16]
+    - generic "Tron 主导航" [ref=f2e18]:
+      - generic [ref=f2e19]:
+        - button "打开领域选择器" [ref=f2e22]:
+          - generic [ref=f2e23]: 高级模式
+        - generic [ref=f2e26]:
+          - generic [ref=f2e27]:
+            - button "新会话" [active] [ref=f2e29]
+            - generic [ref=f2e34]:
+              - generic [ref=f2e35]: 项目
+              - generic [ref=f2e36]:
+                - button [ref=f2e37]
+                - button [ref=f2e39]
+          - navigation "Tron 主导航" [ref=f2e42]:
+            - generic [ref=f2e43]:
+              - button "核心" [expanded] [ref=f2e44]
+              - list [ref=f2e48]:
+                - listitem [ref=f2e49]:
+                  - link "应用" [ref=f2e50] [cursor=pointer]:
+                    - /url: /apps
+                - listitem [ref=f2e57]:
+                  - link "任务" [ref=f2e58] [cursor=pointer]:
+                    - /url: /tasks
+                - listitem [ref=f2e63]:
+                  - link "自动化" [ref=f2e64] [cursor=pointer]:
+                    - /url: /automations
+            - generic [ref=f2e73]:
+              - button "智能体操作" [expanded] [ref=f2e74]
+              - list [ref=f2e78]:
+                - listitem [ref=f2e79]:
+                  - button "展开智能体子菜单" [ref=f2e80]:
+                    - generic [ref=f2e84]: 智能体
+                - listitem [ref=f2e87]:
+                  - link "MCP 服务" [ref=f2e88] [cursor=pointer]:
+                    - /url: /mcp-servers
+                - listitem [ref=f2e96]:
+                  - link "提示词" [ref=f2e97] [cursor=pointer]:
+                    - /url: /prompts
+                - listitem [ref=f2e102]:
+                  - link "模型" [ref=f2e103] [cursor=pointer]:
+                    - /url: /models
+                - listitem [ref=f2e108]:
+                  - link "技能" [ref=f2e109] [cursor=pointer]:
+                    - /url: /skills
+            - generic [ref=f2e113]:
+              - button "数据" [expanded] [ref=f2e114]
+              - list [ref=f2e118]:
+                - listitem [ref=f2e119]:
+                  - link "记忆" [ref=f2e120] [cursor=pointer]:
+                    - /url: /memory
+                - listitem [ref=f2e126]:
+                  - link "知识图谱" [ref=f2e127] [cursor=pointer]:
+                    - /url: /knowledge-graph
+                - listitem [ref=f2e134]:
+                  - link "知识库" [ref=f2e135] [cursor=pointer]:
+                    - /url: /knowledge-base
+                - listitem [ref=f2e139]:
+                  - button "展开资源管理子菜单" [ref=f2e140]:
+                    - generic [ref=f2e144]: 资源管理
+                - listitem [ref=f2e147]:
+                  - link "变量" [ref=f2e148] [cursor=pointer]:
+                    - /url: /variables
+        - button "打开用户菜单" [ref=f2e155] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f2e156]: 验
+          - generic [ref=f2e157]: 验收用户
+    - generic [ref=f2e163]:
+      - generic [ref=f2e166]:
+        - tablist [ref=f2e249]:
+          - tab "新会话" [selected] [ref=f2e250] [cursor=pointer]:
+            - button [ref=f2e252]
+        - generic [ref=f2e168]:
+          - main [ref=f2e171]:
+            - main [ref=f2e255]:
+              - generic [ref=f2e260]:
+                - generic [ref=f2e261]: No session selected
+                - generic [ref=f2e262]: Create a session to start chatting.
+                - button "Start chat" [ref=f2e264] [cursor=pointer]
+          - separator [disabled] [ref=f2e234]
+      - generic [ref=f2e237]:
+        - tablist [ref=f2e239]:
+          - button "新建终端标签" [ref=f2e240]
+        - button "最大化终端" [ref=f2e243]
+  - generic:
+    - region "Notifications"
+  - generic:
+    - region "Notifications"

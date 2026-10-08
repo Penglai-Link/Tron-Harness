@@ -193,7 +193,6 @@ fn service(
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
         f.state.rag.clone(),
         f.state.resources.clone(),
-        f.state.workspaces.clone(),
         f.state.agent_management.clone(),
         LlmRuntimeService::new(Arc::new(Resolver), Arc::new(v.clone())),
     )
@@ -258,28 +257,27 @@ async fn default_off_preview_never_calls_vision_and_enabled_index_is_acl_scoped(
     let v = Vision::new(f.client.clone());
     let (s, parses) = service(&f, &v, false, DOCX.to_vec());
     let kb = s
-        .create(USER, WORKSPACE, "Images", "synthetic only")
+        .create(USER, "Images", "synthetic only")
         .unwrap();
     let doc = s
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "synthetic.docx",
             include_bytes!("fixtures/mineru-v1/synthetic.docx"),
         )
         .unwrap();
-    let ready = s.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let ready = s.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(ready.status, "READY");
     assert_eq!(v.calls.load(Ordering::SeqCst), 0);
     let (s, _) = service(&f, &v, true, DOCX.to_vec());
-    let before = s.preview(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let before = s.preview(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(
         before.image_analysis.unwrap().supplement_status.as_deref(),
         Some("pending")
     );
     assert_eq!(v.calls.load(Ordering::SeqCst), 0);
-    let ready = s.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let ready = s.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(ready.status, "READY");
     assert_eq!(
         ready
@@ -316,7 +314,7 @@ async fn default_off_preview_never_calls_vision_and_enabled_index_is_acl_scoped(
             .hits
             .is_empty()
     );
-    s.set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+    s.set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     let hits = s
         .search_for_agent(USER, WORKSPACE, &f.agent, "cobalt-orbit", 1200)
@@ -353,7 +351,7 @@ async fn default_off_preview_never_calls_vision_and_enabled_index_is_acl_scoped(
             .download_binary_to_file(USER, command())
             .is_err()
     );
-    let cached = s.preview(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let cached = s.preview(USER, &kb.id, &doc.id).await.unwrap();
     assert!(
         cached
             .chunks
@@ -361,10 +359,10 @@ async fn default_off_preview_never_calls_vision_and_enabled_index_is_acl_scoped(
             .any(|c| c.text.contains("cobalt-orbit"))
     );
     assert_eq!(v.calls.load(Ordering::SeqCst), 1);
-    s.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    s.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(v.calls.load(Ordering::SeqCst), 1);
     assert_eq!(parses.load(Ordering::SeqCst), 1);
-    s.set_grants(USER, WORKSPACE, &kb.id, vec![]).unwrap();
+    s.set_grants(USER, &kb.id, vec![]).unwrap();
     assert!(
         s.search_for_agent(USER, WORKSPACE, &f.agent, "cobalt-orbit", 1200)
             .await
@@ -385,37 +383,37 @@ async fn provider_failure_and_invalid_json_are_retryable_without_reparsing() {
     let f = Fixture::new();
     let v = Vision::new(f.client.clone());
     let (s, parses) = service(&f, &v, true, DOCX.to_vec());
-    let kb = s.create(USER, WORKSPACE, "Retry", "synthetic").unwrap();
+    let kb = s.create(USER, "Retry", "synthetic").unwrap();
     let d = s
-        .upload(USER, WORKSPACE, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
+        .upload(USER, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
         .unwrap();
     v.fail.store(true, Ordering::SeqCst);
-    let failed = s.index(USER, WORKSPACE, &kb.id, &d.id).await.unwrap();
+    let failed = s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(failed.status, "FAILED");
     assert!(failed.active_source_code.is_none());
     assert!(failed.image_description_artifacts.is_empty());
     v.fail.store(false, Ordering::SeqCst);
     v.bad_json.store(true, Ordering::SeqCst);
     assert_eq!(
-        s.index(USER, WORKSPACE, &kb.id, &d.id)
+        s.index(USER, &kb.id, &d.id)
             .await
             .unwrap()
             .status,
         "FAILED"
     );
     v.bad_json.store(false, Ordering::SeqCst);
-    let ready = s.index(USER, WORKSPACE, &kb.id, &d.id).await.unwrap();
+    let ready = s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(ready.status, "READY");
     assert_eq!(v.calls.load(Ordering::SeqCst), 3);
     assert_eq!(parses.load(Ordering::SeqCst), 1);
     f.client.failing.store(true, Ordering::SeqCst);
-    let failed = s.index(USER, WORKSPACE, &kb.id, &d.id).await.unwrap();
+    let failed = s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(failed.status, "FAILED");
     assert_eq!(failed.active_source_code, ready.active_source_code);
     assert_eq!(v.calls.load(Ordering::SeqCst), 3);
     f.client.failing.store(false, Ordering::SeqCst);
     assert_eq!(
-        s.index(USER, WORKSPACE, &kb.id, &d.id)
+        s.index(USER, &kb.id, &d.id)
             .await
             .unwrap()
             .status,
@@ -429,12 +427,12 @@ async fn cancellation_keeps_successful_private_cache_and_retry_finishes_remainin
     let v = Vision::new(f.client.clone());
     v.block_at.store(2, Ordering::SeqCst);
     let (s, parses) = service(&f, &v, true, two_images());
-    let kb = s.create(USER, WORKSPACE, "Cancel", "synthetic").unwrap();
+    let kb = s.create(USER, "Cancel", "synthetic").unwrap();
     let d = s
-        .upload(USER, WORKSPACE, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
+        .upload(USER, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
         .unwrap();
     {
-        let pending = s.index(USER, WORKSPACE, &kb.id, &d.id);
+        let pending = s.index(USER, &kb.id, &d.id);
         tokio::pin!(pending);
         tokio::select! {
             result = &mut pending => panic!("index unexpectedly completed: {result:?}"),
@@ -448,21 +446,21 @@ async fn cancellation_keeps_successful_private_cache_and_retry_finishes_remainin
         }
     }
     let d = s
-        .detail(USER, WORKSPACE, &kb.id)
+        .detail(USER, &kb.id)
         .unwrap()
         .documents
         .remove(0);
     assert_eq!(d.status, "FAILED");
     assert_eq!(d.image_description_artifacts.len(), 1);
     assert_eq!(v.calls.load(Ordering::SeqCst), 2);
-    let p = s.preview(USER, WORKSPACE, &kb.id, &d.id).await.unwrap();
+    let p = s.preview(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(
         p.image_analysis.unwrap().supplement_status.as_deref(),
         Some("pending")
     );
     assert_eq!(v.calls.load(Ordering::SeqCst), 2);
     v.block_at.store(0, Ordering::SeqCst);
-    let ready = s.index(USER, WORKSPACE, &kb.id, &d.id).await.unwrap();
+    let ready = s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(ready.status, "READY");
     assert_eq!(ready.image_description_artifacts.len(), 2);
     assert_eq!(v.calls.load(Ordering::SeqCst), 3);
@@ -474,19 +472,19 @@ async fn account_change_during_response_is_rejected_and_cache_is_not_published()
     let v = Vision::new(f.client.clone());
     v.flip_scope.store(true, Ordering::SeqCst);
     let (s, _) = service(&f, &v, true, DOCX.to_vec());
-    let kb = s.create(USER, WORKSPACE, "Identity", "synthetic").unwrap();
+    let kb = s.create(USER, "Identity", "synthetic").unwrap();
     let d = s
-        .upload(USER, WORKSPACE, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
+        .upload(USER, &kb.id, "synthetic.docx", include_bytes!("fixtures/mineru-v1/synthetic.docx"))
         .unwrap();
-    let failed = s.index(USER, WORKSPACE, &kb.id, &d.id).await.unwrap();
+    let failed = s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(failed.status, "FAILED");
     assert!(failed.image_description_artifacts.is_empty());
     assert!(failed.active_source_code.is_none());
     v.flip_scope.store(false, Ordering::SeqCst);
-    let ready = s.index(USER, WORKSPACE, &kb.id, &d.id).await.unwrap();
+    let ready = s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(ready.status, "READY");
     assert_eq!(v.calls.load(Ordering::SeqCst), 2);
     *v.scope.lock().unwrap() = "synthetic-account-c".into();
-    s.index(USER, WORKSPACE, &kb.id, &d.id).await.unwrap();
+    s.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(v.calls.load(Ordering::SeqCst), 3);
 }

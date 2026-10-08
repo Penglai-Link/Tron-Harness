@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import type { ApiBlobResponse } from "@/shared/api/httpClient";
 import { useAuthStore } from "@/store/authStore";
 import { downloadResourceBinary } from "../api/resourceApi";
 import type { ResourceKind } from "../model/ResourceModel";
@@ -22,19 +23,20 @@ export function resourcePreviewFormat(fileName: string, kind: ResourceKind, mime
 }
 
 /** Shared by a single resource file and the knowledge document's aggregate view. */
-export function ResourceFilePreview({ workspaceCode, resourceCode, fileName, kind, revision = "", compact = false, fullscreen = false, format }: {
-  workspaceCode: string; resourceCode: string; fileName: string; kind: ResourceKind;
+export function ResourceFilePreview({ workspaceCode, resourceCode, fileName, kind, revision = "", compact = false, fullscreen = false, format, loadBinary, cacheScope }: {
+  workspaceCode?: string; resourceCode: string; fileName: string; kind: ResourceKind;
+  loadBinary?: (signal: AbortSignal) => Promise<ApiBlobResponse>; cacheScope?: string;
   revision?: string; compact?: boolean; fullscreen?: boolean; format?: PreviewFormat;
 }) {
   const { t } = useTranslation("pages");
   const user = useAuthStore(state => state.session?.user.userCode ?? "");
   const toast = useToast();
   const resource = useQuery({
-    queryKey: ["resource-file-preview", user, workspaceCode, resourceCode, revision, fileName, kind, format],
+    queryKey: ["resource-file-preview", user, cacheScope ?? workspaceCode, resourceCode, revision, fileName, kind, format],
     gcTime: 0, retry: false,
-    enabled: Boolean(user && workspaceCode && resourceCode),
+    enabled: Boolean(user && (loadBinary || workspaceCode) && resourceCode),
     queryFn: async ({ signal }) => {
-      const response = await downloadResourceBinary({ workspaceCode, resourceCode }, signal);
+      const response = await (loadBinary ? loadBinary(signal) : downloadResourceBinary({ workspaceCode: workspaceCode!, resourceCode }, signal));
       const resolvedFormat = format ?? resourcePreviewFormat(fileName, kind, response.blob.type);
       return { blob: response.blob, format: resolvedFormat, text: resolvedFormat === "text" ? await response.blob.text() : null };
     },
@@ -53,7 +55,7 @@ export function ResourceFilePreview({ workspaceCode, resourceCode, fileName, kin
   }, [resource.error, toast]);
   const url = object?.blob === resource.data?.blob ? object?.url : undefined;
   if (resource.isPending) return <p role="status">{t("resourceEditor.preview.loading")}</p>;
-  if (resource.error) return <Button variant="outline" onClick={() => void resource.refetch()}>{t("resourceEditor.preview.retry")}</Button>;
+  if (resource.error) return <div className="space-y-2"><p role="alert" className="text-sm text-[var(--color-error)]">{resource.error.message}</p><Button variant="outline" onClick={() => void resource.refetch()}>{t("resourceEditor.preview.retry")}</Button></div>;
   if (resource.data?.format === "unsupported") return <p className="text-sm text-[var(--color-on-surface-variant)]">{t("resourceEditor.preview.unsupported")}</p>;
   if (resource.data?.format === "text") return <pre aria-label={fileName} className={`${fullscreen ? "h-full" : "max-h-[65vh]"} overflow-auto whitespace-pre-wrap break-words font-mono text-sm`}>{resource.data.text}</pre>;
   if (!url) return null;

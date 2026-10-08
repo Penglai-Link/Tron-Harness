@@ -82,7 +82,7 @@ vi.mock("@/domain/agent/components", () => ({
   </div>,
 }));
 
-vi.mock("../components/InternalAgentKnowledgeField", () => ({ InternalAgentKnowledgeField: () => null }));
+vi.mock("../components/InternalAgentKnowledgeField", () => ({ InternalAgentKnowledgeField: ({ agentCode }: {agentCode:string}) => <output aria-label={`Knowledge libraries for ${agentCode}`}>platform</output> }));
 
 import { WorkspaceAgentsPage } from "./WorkspaceAgentsPage";
 
@@ -155,8 +155,8 @@ describe("internal agent tool selection autosave", () => {
     expect(screen.queryByText(/Inherit platform agents or create workspace agents/)).toBeNull();
   });
 
-  it.each(["workspace", "platform"] as const)("creates a coded agent in %s with its own role prompt", async (scope) => {
-    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
+  it("creates a platform definition before workspace authorization", async () => {
+    render(<WorkspaceAgentsPage category="internal" scope="platform" />);
     await screen.findByRole("textbox", { name: "Role prompt" });
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const dialog = await screen.findByRole("dialog");
@@ -169,9 +169,17 @@ describe("internal agent tool selection autosave", () => {
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Role prompt" }), { target: { value: "Review changes and explain risks." } });
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "Review changes and explain risks." }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "Review changes and explain risks." }));
     await screen.findByRole("heading", { name: "Reviewer" });
     expect(screen.getAllByRole("textbox", { name: "Role prompt" })).toHaveLength(2);
+    expect(screen.getByLabelText("Knowledge libraries for main-agent").textContent).toBe("platform");
+    expect(screen.getByLabelText("Knowledge libraries for reviewer").textContent).toBe("platform");
+  });
+
+  it("offers no agent creation inside a workspace", async () => {
+    render(<WorkspaceAgentsPage category="internal" />);
+    await screen.findByRole("textbox", { name: "Role prompt" });
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
   });
 
   it("autosaves name and role together without changing tool policy", async () => {

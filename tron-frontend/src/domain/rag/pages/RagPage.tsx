@@ -1,3 +1,4 @@
+import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   useEffect,
   useMemo,
@@ -5,7 +6,6 @@ import {
   useState,
 } from "react";
 import {
-  useNavigate,
   useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -38,7 +38,7 @@ import { resolveCorpusIngestProfiles } from "@/domain/rag/model/ragProfileBindin
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 export function RagPage() {
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation("pages");
   const toast = useToast();

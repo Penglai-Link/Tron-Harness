@@ -11,17 +11,17 @@ import { useToast } from "@/components/ui/toast";
 import { listAgentKnowledgeLibraries, setAgentKnowledgeLibraries, type AgentKnowledgeLibrary } from "@/domain/knowledge-base/api/knowledgeBaseApi";
 import { useKnowledgeUser, useKnowledgeViewActive } from "@/domain/knowledge-base/hooks/useKnowledgeLibraries";
 
-interface Props { workspaceCode: string; agentCode: string; agentName: string; disabled: boolean }
+interface Props { agentCode: string; agentName: string; disabled: boolean }
 
-export function InternalAgentKnowledgeField({ workspaceCode, agentCode, agentName, disabled }: Props) {
+export function InternalAgentKnowledgeField({ agentCode, agentName, disabled }: Props) {
   const { t } = useTranslation("pages");
   const user = useKnowledgeUser();
   const [open, setOpen] = useState(false);
   const text = (key: string, options?: Record<string, unknown>) => t(`workspaceAgents.internal.knowledge.${key}`, options);
   const query = useQuery({
-    queryKey: ["knowledge-agent-libraries", user, workspaceCode, agentCode],
-    enabled: Boolean(user && workspaceCode),
-    queryFn: ({ signal }) => listAgentKnowledgeLibraries(workspaceCode, agentCode, signal),
+    queryKey: ["knowledge-agent-libraries", user, agentCode],
+    enabled: Boolean(user),
+    queryFn: ({ signal }) => listAgentKnowledgeLibraries( agentCode, signal),
   });
   const selected = query.data?.filter((library) => library.granted) ?? [];
 
@@ -29,11 +29,11 @@ export function InternalAgentKnowledgeField({ workspaceCode, agentCode, agentNam
     actions={<Button size="sm" variant="outline" disabled={disabled || query.isPending || Boolean(query.error)} onClick={() => setOpen(true)}>{text("choose", { count: selected.length })}</Button>}>
     {query.isPending ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{text("loading")}</p> : query.error ? <div className="flex items-center gap-2"><p role="alert" className="text-sm text-[var(--color-error)]">{query.error.message}</p><Button size="sm" variant="outline" onClick={() => void query.refetch()}>{text("retry")}</Button></div> : <p className="text-sm text-[var(--color-on-surface-variant)]">{selected.length ? selected.map((library) => library.name).join(" · ") : text("none")}</p>}
   </Field>
-    {open && query.data ? <KnowledgeSelectionDialog key={user} workspaceCode={workspaceCode} agentCode={agentCode} agentName={agentName} libraries={query.data} onClose={() => setOpen(false)} /> : null}
+    {open && query.data ? <KnowledgeSelectionDialog key={user} agentCode={agentCode} agentName={agentName} libraries={query.data} onClose={() => setOpen(false)} /> : null}
   </>;
 }
 
-function KnowledgeSelectionDialog({ workspaceCode, agentCode, agentName, libraries, onClose }: Omit<Props, "disabled"> & { libraries: AgentKnowledgeLibrary[]; onClose: () => void }) {
+function KnowledgeSelectionDialog({ agentCode, agentName, libraries, onClose }: Omit<Props, "disabled"> & { libraries: AgentKnowledgeLibrary[]; onClose: () => void }) {
   const { t } = useTranslation("pages");
   const text = (key: string, options?: Record<string, unknown>) => t(`workspaceAgents.internal.knowledge.${key}`, options);
   const toast = useToast();
@@ -42,12 +42,14 @@ function KnowledgeSelectionDialog({ workspaceCode, agentCode, agentName, librari
   const [selected, setSelected] = useState(() => libraries.filter((library) => library.granted).map((library) => library.id));
   const [search, setSearch] = useState("");
   const save = useMutation({
-    mutationFn: () => setAgentKnowledgeLibraries(workspaceCode, agentCode, selected),
+    mutationFn: () => setAgentKnowledgeLibraries( agentCode, selected),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["knowledge-agent-libraries"] }),
         queryClient.invalidateQueries({ queryKey: ["knowledge-base"] }),
         queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] }),
+        queryClient.invalidateQueries({ queryKey: ["platform-knowledge-bases"] }),
+        queryClient.invalidateQueries({ queryKey: ["knowledge-library-agent-grants"] }),
       ]);
       if (!active.current) return;
       toast.success(text("saved"));

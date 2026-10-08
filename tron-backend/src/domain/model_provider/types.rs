@@ -331,6 +331,21 @@ pub struct ProviderCatalogModelView {
     pub updated_at: i64,
 }
 
+impl ProviderCatalogModelView {
+    /// Person-AI accepts a vendor-qualified model code to bind a fixed selection
+    /// to the upstream vendor. Older catalogues without a vendor keep bare codes.
+    pub fn selection_model_code(&self) -> String {
+        match self
+            .upstream_vendor_code
+            .as_deref()
+            .filter(|code| !code.is_empty())
+        {
+            Some(vendor) => format!("{vendor}/{}", self.model_code),
+            None => self.model_code.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderSyncRunView {

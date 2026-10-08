@@ -113,13 +113,13 @@ impl KnowledgeBaseService {
     pub fn upload_with_request(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         name: &str,
         bytes: &[u8],
         key: Option<&str>,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.owned(user, workspace, kb)?;
+        let workspace = "PLATFORM";
+        self.owned(user, kb)?;
         let identity = hash(
             &serde_json::to_string(&(name, format!("{:x}", Sha256::digest(bytes))))
                 .map_err(invalid_storage)?,
@@ -146,7 +146,7 @@ impl KnowledgeBaseService {
                         self.enqueue_index(user, workspace, &parent, &doc)?;
                     }
                     self.start_ingestion_workers()?;
-                    return self.document_with_task(user, workspace, &parent, &doc);
+                    return self.document_with_task(user, &parent, &doc);
                 }
             }
             let document_id = format!(
@@ -177,7 +177,7 @@ impl KnowledgeBaseService {
             self.enqueue_index(user, workspace, kb, &doc.id)?;
         }
         self.start_ingestion_workers()?;
-        self.document_with_task(user, workspace, kb, &doc.id)
+        self.document_with_task(user, kb, &doc.id)
     }
     pub fn with_ingestion_config(
         mut self,
@@ -267,11 +267,10 @@ impl KnowledgeBaseService {
     pub(super) fn document_with_task(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         doc: &str,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.detail(user, workspace, kb)?
+        self.detail(user, kb)?
             .documents
             .into_iter()
             .find(|d| d.id == doc)
@@ -280,25 +279,23 @@ impl KnowledgeBaseService {
     pub fn ingestion_tasks(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         doc: &str,
     ) -> Result<Vec<IngestionTask>, KnowledgeBaseError> {
-        self.owned(user, workspace, kb)?;
+        self.owned(user, kb)?;
         self.repository.document(kb, doc)?;
         self.queue.for_document(doc).map_err(queue_error)
     }
     pub async fn cancel_index(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         doc: &str,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        let tasks = self.ingestion_tasks(user, workspace, kb, doc)?;
+        let tasks = self.ingestion_tasks(user, kb, doc)?;
         let Some(task) = tasks.first() else {
             self.repository.cancel_ingestion_intent(kb, doc)?;
-            return self.document_with_task(user, workspace, kb, doc);
+            return self.document_with_task(user, kb, doc);
         };
         let cancelled = self.queue.cancel(&task.id).map_err(queue_error)?;
         // The local fence commits first. A slow/unavailable upstream cannot hold
@@ -308,7 +305,7 @@ impl KnowledgeBaseService {
             self.finish_remote_cancellation(&cancelled),
         )
         .await;
-        self.document_with_task(user, workspace, kb, doc)
+        self.document_with_task(user, kb, doc)
     }
     async fn finish_remote_cancellation(
         &self,
@@ -329,13 +326,12 @@ impl KnowledgeBaseService {
     pub fn retry_index(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         doc: &str,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        let tasks = self.ingestion_tasks(user, workspace, kb, doc)?;
+        let tasks = self.ingestion_tasks(user, kb, doc)?;
         let Some(task) = tasks.first() else {
-            return self.start_index(user, workspace, kb, doc);
+            return self.start_index(user, kb, doc);
         };
         if matches!(task.state.as_str(), "FAILED" | "CANCELLED") {
             self.queue.retry(&task.id, now_ms()).map_err(queue_error)?;
@@ -343,7 +339,7 @@ impl KnowledgeBaseService {
             return Err(KnowledgeBaseError::Conflict);
         }
         self.start_ingestion_workers()?;
-        self.document_with_task(user, workspace, kb, doc)
+        self.document_with_task(user, kb, doc)
     }
     pub(super) fn enqueue_index(
         &self,
@@ -352,7 +348,7 @@ impl KnowledgeBaseService {
         kb_id: &str,
         doc_id: &str,
     ) -> Result<IngestionTask, KnowledgeBaseError> {
-        let kb = self.owned(user, workspace, kb_id)?;
+        let kb = self.owned(user, kb_id)?;
         let doc = self.repository.document(kb_id, doc_id)?;
         if let Some(active) = self
             .queue

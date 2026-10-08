@@ -1,37 +1,27 @@
-import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { createChatSession } from "@/domain/chat/hooks";
-import { useToast } from "@/components/ui/toast";
 import { useTabStore } from "@/store/tabStore";
 
+/** A draft is a local tab. Only the first submission creates a server session. */
 export function useCreateChatTab(workspaceCode: string, projectCode?: string) {
   const navigate = useNavigate();
-  const toast = useToast();
   const { t } = useTranslation("shell");
-  const pending = useRef(false);
-  const [creating, setCreating] = useState(false);
 
-  async function create() {
-    if (!workspaceCode || pending.current) return;
-    pending.current = true;
-    setCreating(true);
-    try {
-      const session = await createChatSession({ workspaceCode, projectCode, title: "New chat", agentCode: "main-agent" });
-      window.dispatchEvent(new CustomEvent("tron:chat-session-created", { detail: session }));
-      const path = `/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`;
-      const tabId = useTabStore.getState().addTab({
-        title: session.title || "New chat", path, closable: true,
-        activeNav: `chat-session:${session.sessionCode}`,
-      });
-      useTabStore.getState().setActiveTab(tabId);
-      navigate(path);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("chatSidebar.session.createFailed"));
-    } finally {
-      pending.current = false;
-      setCreating(false);
-    }
+  function create() {
+    if (!workspaceCode) return;
+    const draftCode = crypto.randomUUID();
+    const params = new URLSearchParams({ draftCode });
+    if (projectCode) params.set("projectCode", projectCode);
+    const path = `/chats?${params}`;
+    const tabId = useTabStore.getState().addTab({
+      title: t("chatSidebar.newChat"),
+      titleTranslationKey: "shell:chatSidebar.newChat",
+      path,
+      closable: true,
+      activeNav: `chat-draft:${draftCode}`,
+    });
+    useTabStore.getState().setActiveTab(tabId);
+    navigate(path);
   }
-  return { create, creating };
+  return { create, creating: false };
 }

@@ -211,7 +211,7 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         }
         let mut doc = document(&tx, &task)?;
         if let Some(configured) = configured {
-            let owned: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2 AND workspace_code=?3)", params![task.knowledge_base_id,task.user_code,task.workspace_code], |r|r.get(0)).map_err(storage)?;
+            let owned: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2 AND ?3='PLATFORM')", params![task.knowledge_base_id,task.user_code,task.workspace_code], |r|r.get(0)).map_err(storage)?;
             if !owned || configured.id != task.document_id || configured.revision != task.document_revision
                 || configured.resource_code != doc["resourceCode"].as_str().unwrap_or("")
                 || configured.resource_revision != task.resource_revision {

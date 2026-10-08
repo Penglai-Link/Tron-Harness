@@ -12,6 +12,7 @@ import {
   disablePlatformSystemAgent,
   enablePlatformSystemAgent,
   fetchPlatformSystemAgents,
+  fetchWorkspaceInternalAgents,
   rescanPlatformSystemAgents,
 } from "@/domain/agent/api";
 import {
@@ -37,6 +38,11 @@ import {
 } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
+import { AgentWorkspaceAssignment } from "../components/AgentWorkspaceAssignment";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { INTERNAL_AGENT_REGISTRY_CHANGED_EVENT, PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
+import { listWorkspaceInternalAgentsMock } from "@/domain/agent/mock";
+import { useAuthStore } from "@/store/authStore";
 import { WorkspaceAgentsPage } from "./WorkspaceAgentsPage";
 function formatLastScanned(lastScannedAt: string | null, formatDateTime: (value: string | number | Date) => string) {
   if (!lastScannedAt) {
@@ -49,8 +55,24 @@ function formatLastScanned(lastScannedAt: string | null, formatDateTime: (value:
 export function PlatformAgentsPage() {
   const { t } = useTranslation(["common", "pages"]);
   const toast = useToast();
+  const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.session?.user.userCode ?? "");
   const { formatDateTime, formatNumber } = useLocaleFormatters();
   const dataSource = getServiceDataSource("agent");
+  const internalAgents = useQuery({
+    queryKey: ["platform-agent-definitions", user, dataSource],
+    queryFn: ({ signal }) => dataSource === "api"
+      ? fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE, signal)
+      : listWorkspaceInternalAgentsMock(PLATFORM_INTERNAL_AGENT_SCOPE),
+  });
+  useEffect(() => {
+    const refresh = () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-agent-definitions"] });
+      void queryClient.invalidateQueries({ queryKey: ["knowledge-base-agents"] });
+    };
+    window.addEventListener(INTERNAL_AGENT_REGISTRY_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(INTERNAL_AGENT_REGISTRY_CHANGED_EVENT, refresh);
+  }, [queryClient]);
   const [systemAgents, setSystemAgents] = useState<PlatformSystemAgentRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -149,6 +171,9 @@ export function PlatformAgentsPage() {
     <div className="space-y-6">
       <PageHeader title={pageT("title", "Agent Management")} />
 
+      <section aria-label={t("pages:platformData.agentDefinitions")} className="space-y-6">
+      <h2 className="text-base font-semibold">{t("pages:platformData.agentDefinitions")}</h2>
+      <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:platformData.agentDefinitionHelp")}</p>
       <WorkspaceAgentsPage category="internal" scope="platform" />
 
       <DataTable<PlatformSystemAgentRecord>
@@ -214,7 +239,7 @@ export function PlatformAgentsPage() {
             header: pageT("table.columns.actions", "Actions"),
             width: "14%",
             render: (row) => (
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-3">
                 <AgentPolicySwitch
                   checked={row.enabled}
                   disabled={!row.available || rowBusyCode === row.agentCode}
@@ -231,6 +256,24 @@ export function PlatformAgentsPage() {
           },
         ]}
       />
+      </section>
+
+      <section aria-label={t("pages:platformData.agentAuthorization")} className="space-y-3">
+        <h2 className="text-base font-semibold">{t("pages:platformData.agentAuthorization")}</h2>
+        <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:platformData.agentAuthorizationHelp")}</p>
+        {internalAgents.error ? <p role="alert" className="text-[var(--color-error)]">{internalAgents.error.message}</p> : null}
+        {internalAgents.isPending ? <p role="status">{t("common:loading")}</p> : null}
+        <DataTable
+          pagination={null}
+          rows={[...(internalAgents.data ?? []), ...systemAgents]}
+          rowKey={(row) => row.agentCode}
+          emptyState={t("pages:platformData.noAgentDefinitions")}
+          columns={[
+            { id: "agent", header: pageT("table.columns.agent", "Agent"), render: (row) => <div><p className="font-medium">{row.name}</p><p className="mt-1 font-mono text-xs text-[var(--color-on-surface-variant)]">{row.agentCode}</p></div> },
+            { id: "authorization", header: t("pages:platformData.agentAuthorization"), align: "right", render: (row) => <AgentWorkspaceAssignment code={row.agentCode} name={row.name} /> },
+          ]}
+        />
+      </section>
     </div>
   );
 }

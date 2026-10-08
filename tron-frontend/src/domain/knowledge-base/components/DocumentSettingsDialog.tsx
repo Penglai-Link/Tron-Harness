@@ -14,8 +14,8 @@ import { formatDocumentLocation } from "../model/documentLocation";
 import { ImageAnalysisStatus } from "./ImageAnalysisStatus";
 import { useKnowledgeViewActive } from "../hooks/useKnowledgeLibraries";
 
-export function DocumentSettingsDialog({ workspace, libraryId, document, defaults, onClose, onChanged }: {
-  workspace: string; libraryId: string; document: KnowledgeDocument; defaults: ChunkConfig;
+export function DocumentSettingsDialog({ libraryId, document, defaults, onClose, onChanged }: {
+  libraryId: string; document: KnowledgeDocument; defaults: ChunkConfig;
   onClose: () => void; onChanged: () => Promise<unknown>;
 }) {
   const { t, i18n } = useTranslation("pages");
@@ -30,7 +30,7 @@ export function DocumentSettingsDialog({ workspace, libraryId, document, default
   const [ocrMode, setOcrMode] = useState<OcrMode | "inherit">(document.ocrMode ?? "inherit");
   const office = /\.(docx|xlsx)$/i.test(document.fileName);
   const [tier, setTier] = useState<ParsingTier | "inherit">(document.parsingTier ?? "inherit");
-  const capabilities = useQuery({ queryKey: ["kb-parsing-capabilities", workspace], queryFn: ({ signal }) => getParsingCapabilities(workspace, signal), enabled: !markdown, retry: false });
+  const capabilities = useQuery({ queryKey: ["kb-parsing-capabilities"], queryFn: ({ signal }) => getParsingCapabilities( signal), enabled: !markdown, retry: false });
   const [preview, setPreview] = useState<ChunkPreview | null>(null);
   const [persisted, setPersisted] = useState({ config: document.chunkConfig, tier: document.parsingTier ?? null, ocrMode: document.ocrMode ?? null });
   const nextConfig = inherit ? null : config;
@@ -49,7 +49,7 @@ export function DocumentSettingsDialog({ workspace, libraryId, document, default
     mutationFn: async (withPreview: boolean) => {
       const changed = dirty;
       if (changed) {
-        const result = markdown ? await updateKnowledgeDocument(workspace, libraryId, document.id, nextConfig) : await updateKnowledgeDocument(workspace, libraryId, document.id, nextConfig, nextTier, pdf ? nextOcrMode : undefined);
+        const result = markdown ? await updateKnowledgeDocument( libraryId, document.id, nextConfig) : await updateKnowledgeDocument( libraryId, document.id, nextConfig, nextTier, pdf ? nextOcrMode : undefined);
         if (result.error || result.status?.includes("FAILED")) { await onChanged(); throw new Error(result.error || text("indexFailed")); }
         if (!active.current) return null;
         setPersisted({ config: nextConfig, tier: nextTier, ocrMode: nextOcrMode });
@@ -57,7 +57,7 @@ export function DocumentSettingsDialog({ workspace, libraryId, document, default
         if (["QUEUED", "PARSING", "CHUNKING", "EMBEDDING", "PUBLISHING"].includes(result.status)) return { preview: null, changed, processing: true };
       }
       if (!active.current) return null;
-      return { preview: withPreview ? await previewKnowledgeDocument(workspace, libraryId, document.id) : null, changed, processing: false };
+      return { preview: withPreview ? await previewKnowledgeDocument( libraryId, document.id) : null, changed, processing: false };
     },
     onSuccess: (result) => { if (!active.current || !result) return; setPreview(result.preview); if (result.changed) toast.success(text(result.processing ? "processingStarted" : "saved")); },
     onError: (error) => { if (active.current) toast.error(formatKnowledgeDocumentError(error.message, t)); },

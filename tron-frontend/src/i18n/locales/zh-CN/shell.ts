@@ -135,6 +135,7 @@ export const shell = {
   settings: {
     back: "返回",
     groups: {
+      data: "数据",
       administration: "管理",
       foundation: "基础配置",
       integration: "集成接入",

@@ -11,7 +11,6 @@ pub(super) struct KnowledgeLibraryListVo {
     id: String,
     name: String,
     description: String,
-    workspace_code: String,
     document_count: usize,
     authorized_agent_count: usize,
 }
@@ -22,17 +21,10 @@ impl From<KnowledgeBase> for KnowledgeLibraryListVo {
             id: kb.id,
             name: kb.name,
             description: kb.description,
-            workspace_code: kb.workspace_code,
             document_count: kb.document_count,
             authorized_agent_count: kb.agent_codes.len(),
         }
     }
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct DeleteLibraryRequest {
-    workspace_code: String,
 }
 
 pub(super) struct LibraryDeletionApiError(KnowledgeBaseError, String);
@@ -86,9 +78,8 @@ pub(super) async fn remove(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path(id): Path<String>,
-    Query(q): Query<DeleteLibraryRequest>,
 ) -> Result<Json<ApiResponse<EmptyData>>, LibraryDeletionApiError> {
-    kb.remove_library(&auth.user().user_code, &q.workspace_code, &id)
+    kb.remove_library(&auth.user().user_code, &id)
         .map_err(|error| LibraryDeletionApiError(error, auth.locale.clone()))?;
     Ok(Json(ApiResponse::protocol_success(EmptyData {})))
 }

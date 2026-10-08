@@ -1,3 +1,4 @@
+import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import { useEffect, useMemo, useState } from "react";
 import {
   Boxes,
@@ -9,7 +10,7 @@ import {
   RefreshCcw,
   UserRound,
 } from "lucide-react";
-import { useNavigate } from "react-router";
+
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
 
 import { useAuthSession } from "@/domain/auth";
@@ -457,7 +458,7 @@ function MemoryRecordsTable({
 
 function MemoryRepository() {
   const { t } = useTranslation(["pages"]);
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
   const [refreshKey, setRefreshKey] = useState(0);
   const dataSource = getServiceDataSource("memory");
   const { session } = useAuthSession();

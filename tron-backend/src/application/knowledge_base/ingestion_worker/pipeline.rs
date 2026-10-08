@@ -9,7 +9,6 @@ impl KnowledgeBaseService {
         let owned = lease(&task);
         let mut kb = self.owned(
             &task.user_code,
-            &task.workspace_code,
             &task.knowledge_base_id,
         )?;
         let mut doc = self.repository.document(&kb.id, &task.document_id)?;

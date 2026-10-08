@@ -55,7 +55,6 @@ fn service(f: &Fixture, llm: LlmRuntimeService) -> KnowledgeBaseService {
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
         f.state.rag.clone(),
         f.state.resources.clone(),
-        f.state.workspaces.clone(),
         f.state.agent_management.clone(),
         llm,
     )
@@ -89,6 +88,8 @@ fn explicit_embedding_route_obeys_workspace_selection_and_connection_state() {
             .unwrap()
             .is_none()
     );
+    // Platform-owned libraries resolve the platform default directly.
+    assert_eq!(r.embedding_runtime_model_config("PLATFORM", None).unwrap().unwrap().model_code, AUTO);
     fixed_selection(&f, WORKSPACE, "missing-fixed-model");
     assert!(
         r.embedding_runtime_model_config(WORKSPACE, Some(AUTO))
@@ -161,16 +162,15 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
         .unwrap();
     f.state
         .models
-        .set_workspace_default(WORKSPACE, &model.model_code)
+        .set_platform_default(&model.model_code)
         .unwrap();
-    fixed_selection(&f, WORKSPACE, &model.model_code);
+    fixed_selection(&f, "PLATFORM", &model.model_code);
     let llm = LlmRuntimeService::new(Arc::new(resolver(&f)), Arc::new(f.client.clone()));
     let svc = service(&f, llm);
-    let kb = svc.create(USER, WORKSPACE, "Pinned space", "").unwrap();
+    let kb = svc.create(USER, "Pinned space", "").unwrap();
     let doc = svc
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "chunks.md",
             "orchid evidence for a fixed embedding space. "
@@ -180,7 +180,6 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
         .unwrap();
     svc.configure(
         USER,
-        WORKSPACE,
         &kb.id,
         &doc.id,
         Some(ChunkConfig {
@@ -191,7 +190,7 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
         }),
     )
     .unwrap();
-    let first = svc.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let first = svc.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(first.status, "READY", "{:?}", first.error);
     assert!(first.chunk_count > 1);
     assert_eq!(
@@ -200,7 +199,7 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
     );
     assert_eq!(first.embedding_dimension, Some(1024));
     assert_eq!(f.client.calls.load(Ordering::SeqCst), first.chunk_count);
-    svc.set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+    svc.set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     // A new default cannot switch the published index to an automatic query space.
     Connection::open(&f.state.config.database_url)
@@ -216,7 +215,7 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
         .unwrap();
     assert!(!ctx.hits.is_empty());
     assert_eq!(f.client.calls.load(Ordering::SeqCst), first.chunk_count + 1);
-    let rebuilt = svc.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let rebuilt = svc.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(rebuilt.status, "READY");
     assert_eq!(rebuilt.index_revision, first.index_revision + 1);
     assert_eq!(
@@ -239,7 +238,7 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
             .is_empty()
     );
     assert_eq!(f.client.calls.load(Ordering::SeqCst), calls);
-    svc.set_grants(USER, WORKSPACE, &kb.id, vec![]).unwrap();
+    svc.set_grants(USER, &kb.id, vec![]).unwrap();
     assert!(
         svc.search_for_agent_in_run(USER, WORKSPACE, &f.agent, "orchid", 1200, &run())
             .await
@@ -262,12 +261,11 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
     );
     let svc = service(&f, llm);
     let kb = svc
-        .create(USER, WORKSPACE, "Single model route", "")
+        .create(USER, "Single model route", "")
         .unwrap();
     let doc = svc
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "chunks.md",
             "orchid vector evidence. ".repeat(30).as_bytes(),
@@ -275,7 +273,6 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
         .unwrap();
     svc.configure(
         USER,
-        WORKSPACE,
         &kb.id,
         &doc.id,
         Some(ChunkConfig {
@@ -286,7 +283,7 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
         }),
     )
     .unwrap();
-    let first = svc.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let first = svc.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(first.status, "READY", "{:?}", first.error);
     assert!(first.chunk_count > 1);
     assert_eq!(first.embedding_dimension, Some(1024));
@@ -294,14 +291,14 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
         first.embedding_provider_model.as_deref(),
         Some("observed-model-a")
     );
-    svc.set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+    svc.set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     let hits = svc
         .search_for_agent_in_run(USER, WORKSPACE, &f.agent, "unseen paraphrase", 1200, &run())
         .await
         .unwrap();
     assert!(!hits.hits.is_empty());
-    let rebuilt = svc.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let rebuilt = svc.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(rebuilt.status, "READY");
     assert_eq!(rebuilt.index_revision, first.index_revision + 1);
     *f.client.provider_model.lock().unwrap() = Some("observed-model-b".into());
@@ -313,7 +310,7 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
             .is_empty()
     );
     let changed = svc
-        .detail(USER, WORKSPACE, &kb.id)
+        .detail(USER, &kb.id)
         .unwrap()
         .documents
         .remove(0);
@@ -326,7 +323,7 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
             .contains("实际Embedding模型")
     );
     assert_eq!(changed.active_source_code, rebuilt.active_source_code);
-    let refreshed = svc.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    let refreshed = svc.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(refreshed.status, "READY");
     assert_eq!(
         refreshed.embedding_provider_model.as_deref(),
@@ -340,7 +337,7 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
             .is_empty()
     );
     let calls = f.client.calls.load(Ordering::SeqCst);
-    svc.set_grants(USER, WORKSPACE, &kb.id, vec![]).unwrap();
+    svc.set_grants(USER, &kb.id, vec![]).unwrap();
     assert!(
         svc.search_for_agent_in_run(USER, WORKSPACE, &f.agent, "orchid", 1200, &run())
             .await
@@ -366,12 +363,11 @@ fn count_vectors(f: &Fixture, kb: &str) -> usize {
 #[tokio::test]
 async fn only_1024_index_geometry_is_published_and_retrieved() {
     let f = Fixture::new();
-    let kb = f.service.create(USER, WORKSPACE, "1024 only", "").unwrap();
+    let kb = f.service.create(USER, "1024 only", "").unwrap();
     let d = f
         .service
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "proof.md",
             b"synthetic 1024 geometry fact",
@@ -379,14 +375,14 @@ async fn only_1024_index_geometry_is_published_and_retrieved() {
         .unwrap();
     let ready = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &d.id)
+        .index(USER, &kb.id, &d.id)
         .await
         .unwrap();
     assert_eq!(ready.status, "READY");
     assert_eq!(ready.embedding_dimension, Some(1024));
     assert_eq!(count_vectors(&f, &kb.id), 1);
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     assert!(
         f.service
@@ -410,7 +406,6 @@ async fn only_1024_index_geometry_is_published_and_retrieved() {
             .service
             .upload(
                 USER,
-                WORKSPACE,
                 &kb.id,
                 &format!("invalid{invalid}.md"),
                 b"invalid geometry",
@@ -418,7 +413,7 @@ async fn only_1024_index_geometry_is_published_and_retrieved() {
             .unwrap();
         let failed = f
             .service
-            .index(USER, WORKSPACE, &kb.id, &d.id)
+            .index(USER, &kb.id, &d.id)
             .await
             .unwrap();
         assert_eq!(failed.status, "FAILED");
@@ -433,13 +428,12 @@ async fn query_geometry_change_requires_rebuild_and_failed_rebuild_keeps_1024_ge
     let f = Fixture::new();
     let kb = f
         .service
-        .create(USER, WORKSPACE, "Geometry rejection", "")
+        .create(USER, "Geometry rejection", "")
         .unwrap();
     let d = f
         .service
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "proof.md",
             b"synthetic 1024 geometry fact",
@@ -447,11 +441,11 @@ async fn query_geometry_change_requires_rebuild_and_failed_rebuild_keeps_1024_ge
         .unwrap();
     let ready = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &d.id)
+        .index(USER, &kb.id, &d.id)
         .await
         .unwrap();
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     f.client.dimensions.store(4096, Ordering::SeqCst);
     assert!(
@@ -463,12 +457,12 @@ async fn query_geometry_change_requires_rebuild_and_failed_rebuild_keeps_1024_ge
             .is_empty()
     );
     assert_eq!(
-        f.service.detail(USER, WORKSPACE, &kb.id).unwrap().documents[0].status,
+        f.service.detail(USER, &kb.id).unwrap().documents[0].status,
         "NEEDS_REBUILD"
     );
     let failed = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &d.id)
+        .index(USER, &kb.id, &d.id)
         .await
         .unwrap();
     assert_eq!(failed.status, "FAILED");
@@ -478,7 +472,7 @@ async fn query_geometry_change_requires_rebuild_and_failed_rebuild_keeps_1024_ge
     f.client.dimensions.store(1024, Ordering::SeqCst);
     assert_eq!(
         f.service
-            .index(USER, WORKSPACE, &kb.id, &d.id)
+            .index(USER, &kb.id, &d.id)
             .await
             .unwrap()
             .status,
@@ -498,13 +492,12 @@ async fn obsolete_4096_metadata_cannot_dispatch_queries_and_needs_explicit_rebui
     let f = Fixture::new();
     let kb = f
         .service
-        .create(USER, WORKSPACE, "Obsolete metadata", "")
+        .create(USER, "Obsolete metadata", "")
         .unwrap();
     let d = f
         .service
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "proof.md",
             b"synthetic geometry fact",
@@ -512,11 +505,11 @@ async fn obsolete_4096_metadata_cannot_dispatch_queries_and_needs_explicit_rebui
         .unwrap();
     let ready = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &d.id)
+        .index(USER, &kb.id, &d.id)
         .await
         .unwrap();
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     // Simulate a persisted old geometry record without using or copying user data.
     let c = Connection::open(&f.state.config.database_url).unwrap();
@@ -541,7 +534,7 @@ async fn obsolete_4096_metadata_cannot_dispatch_queries_and_needs_explicit_rebui
     assert_eq!(f.client.calls.load(Ordering::SeqCst), calls);
     let old = f
         .service
-        .detail(USER, WORKSPACE, &kb.id)
+        .detail(USER, &kb.id)
         .unwrap()
         .documents
         .remove(0);
@@ -549,7 +542,7 @@ async fn obsolete_4096_metadata_cannot_dispatch_queries_and_needs_explicit_rebui
     assert_eq!(old.active_source_code, ready.active_source_code);
     let rebuilt = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &d.id)
+        .index(USER, &kb.id, &d.id)
         .await
         .unwrap();
     assert_eq!(rebuilt.status, "READY");
@@ -560,13 +553,12 @@ async fn mixed_chunk_dimensions_cannot_replace_published_1024_vectors() {
     let f = Fixture::new();
     let kb = f
         .service
-        .create(USER, WORKSPACE, "Chunk rejection", "")
+        .create(USER, "Chunk rejection", "")
         .unwrap();
     let d = f
         .service
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "proof.md",
             "synthetic text. ".repeat(50).as_bytes(),
@@ -575,7 +567,6 @@ async fn mixed_chunk_dimensions_cannot_replace_published_1024_vectors() {
     f.service
         .configure(
             USER,
-            WORKSPACE,
             &kb.id,
             &d.id,
             Some(ChunkConfig {
@@ -588,7 +579,7 @@ async fn mixed_chunk_dimensions_cannot_replace_published_1024_vectors() {
         .unwrap();
     let ready = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &d.id)
+        .index(USER, &kb.id, &d.id)
         .await
         .unwrap();
     assert_eq!(ready.status, "READY");
@@ -600,7 +591,7 @@ async fn mixed_chunk_dimensions_cannot_replace_published_1024_vectors() {
         .extend([1024, 4096]);
     let failed = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &d.id)
+        .index(USER, &kb.id, &d.id)
         .await
         .unwrap();
     assert_eq!(failed.status, "FAILED");

@@ -26,7 +26,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const invalidate = vi.spyOn(client, "invalidateQueries");
-  render(<QueryClientProvider client={client}><InternalAgentKnowledgeField workspaceCode="WORKSPACE" agentCode="main-agent" agentName="Main" disabled={false} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><InternalAgentKnowledgeField agentCode="main-agent" agentName="Main" disabled={false} /></QueryClientProvider>);
   return { client, invalidate };
 }
 async function open() {
@@ -38,7 +38,7 @@ describe("internal agent knowledge assignments", () => {
   it("shows existing grants and discards changes on cancel", async () => {
     setup();
     const dialog = await open();
-    expect(fixture.list).toHaveBeenCalledWith("WORKSPACE", "main-agent", expect.any(AbortSignal));
+    expect(fixture.list).toHaveBeenCalledWith("main-agent", expect.any(AbortSignal));
     expect((within(dialog).getByRole("switch", { name: "Engineering" }) as HTMLInputElement).getAttribute("aria-checked")).toBe("true");
     fireEvent.click(within(dialog).getByRole("switch", { name: "Engineering" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
@@ -57,7 +57,7 @@ describe("internal agent knowledge assignments", () => {
       { id: "b", name: "Product", description: "User scenarios", documentCount: 1, granted: true },
     ]);
     fireEvent.click(within(dialog).getByRole("button", { name: "confirm" }));
-    await waitFor(() => expect(fixture.save).toHaveBeenCalledExactlyOnceWith("WORKSPACE", "main-agent", ["a", "b"]));
+    await waitFor(() => expect(fixture.save).toHaveBeenCalledExactlyOnceWith("main-agent", ["a", "b"]));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByRole("button", { name: "Choose knowledge bases (2)" })).toBeTruthy();
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["knowledge-base"] });
@@ -70,7 +70,7 @@ describe("internal agent knowledge assignments", () => {
     fireEvent.click(within(dialog).getByRole("switch", { name: "Engineering" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "confirm" }));
     await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("Storage unavailable"));
-    expect(fixture.save).toHaveBeenCalledWith("WORKSPACE", "main-agent", []);
+    expect(fixture.save).toHaveBeenCalledWith("main-agent", []);
     expect(screen.getByRole("dialog")).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
     expect(screen.getByRole("button", { name: "Choose knowledge bases (1)" })).toBeTruthy();

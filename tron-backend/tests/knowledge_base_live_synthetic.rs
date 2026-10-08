@@ -282,24 +282,22 @@ async fn authorized_singleton_route_real_vectors_reach_native_contributor_with_a
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
         f.state.rag.clone(),
         f.state.resources.clone(),
-        f.state.workspaces.clone(),
         f.state.agent_management.clone(),
         llm,
     );
     let kb = service
-        .create(USER, WORKSPACE, "Synthetic verification", "synthetic only")
+        .create(USER, "Synthetic verification", "synthetic only")
         .unwrap();
     let doc = service
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "synthetic.md",
             b"SYNTHETIC_VECTOR_PROOF imaginary archive cooling uses violet frost.",
         )
         .unwrap();
     let indexed = service
-        .index(USER, WORKSPACE, &kb.id, &doc.id)
+        .index(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     let measurements = observed.lock().unwrap().clone();
@@ -343,7 +341,7 @@ async fn authorized_singleton_route_real_vectors_reach_native_contributor_with_a
         .unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     // Plain full-text-only API must still miss after grant; it sends no embedding request.
     assert!(
@@ -358,13 +356,13 @@ async fn authorized_singleton_route_real_vectors_reach_native_contributor_with_a
         .run(context(&f, "synthetic-with-grant", true))
         .await
         .unwrap();
-    service.set_grants(USER, WORKSPACE, &kb.id, vec![]).unwrap();
+    service.set_grants(USER, &kb.id, vec![]).unwrap();
     harness
         .run(context(&f, "synthetic-revoked", true))
         .await
         .unwrap();
     service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     harness
         .run(context(&f, "synthetic-no-identity", false))
@@ -426,18 +424,18 @@ async fn real_http_mineru_resources_reach_native_contributor_with_revocation() {
     let models=Arc::new(HttpModelClient::new(Arc::new(PersonAiModelProviderClient::new(HttpModelProviderClient::new(eliteforge_agent_official_plugin_model_http::ModelHttpClient::new()),providers.clone()))).with_model_executor(providers.model_executor()));
     let calls=Arc::new(AtomicUsize::new(0));let observed=Arc::new(Mutex::new(vec![]));
     let llm=LlmRuntimeService::new(Arc::new(ProviderAwareLlmRuntimeResolver::new(state.models.clone(),providers)),Arc::new(CappedClient{inner:HttpLlmRuntimeClient::with_model_client(models.clone()),calls:calls.clone(),observed:observed.clone()}));
-    let service=KnowledgeBaseService::new(SqliteKnowledgeBaseRepository::connect(&state.config.database_url).unwrap(),state.rag.clone(),state.resources.clone(),state.workspaces.clone(),state.agent_management.clone(),llm);
+    let service=KnowledgeBaseService::new(SqliteKnowledgeBaseRepository::connect(&state.config.database_url).unwrap(),state.rag.clone(),state.resources.clone(),state.agent_management.clone(),llm);
     let host=FrameworkHost::temporary(Some(state.resources.clone())).unwrap();host.bind_knowledge_bases(service.clone()).unwrap();let capture=Arc::new(Capture::default());host.bind_model_client(capture.clone()).unwrap();
     let harness=ReactAgentBuilder::new(capture.clone(),Arc::new(ToolRegistry::default()),EventBusHandle::disabled()).with_framework_host(Some(host.clone())).build().unwrap();
     let context=|run:&str,identity:bool|serde_json::from_value(serde_json::json!({"agentCode":if identity{Some(agent)}else{None},"conversationCode":run,"runCode":run,"workspaceCode":workspace,"userCode":owner,"locale":"en-US","agentKind":"REACT","model":{"modelCode":"fixture-chat","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"synthetic","modelName":"fixture","maxTokens":128,"contextWindowTokens":8000},"variables":[],"skills":[],"tools":[],"executionScope":{},"limits":{"maxSteps":2,"maxToolCalls":2,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":"diagram pipeline before search"}]}],"observations":[],"startedAt":"synthetic"})).unwrap();
     harness.run(context("real-mineru-no-grant",true)).await.unwrap();assert_eq!(calls.load(Ordering::SeqCst),0);
-    service.set_grants(&owner,workspace,kb_id,vec![agent.into()]).unwrap();
-    let details=service.detail(&owner,workspace,kb_id).unwrap();let images=details.documents.iter().filter_map(|d|d.parsing_artifact.as_ref()).flat_map(|p|p.image_resource_codes.iter().cloned()).collect::<Vec<_>>();assert!(!images.is_empty());
+    service.set_grants(&owner,kb_id,vec![agent.into()]).unwrap();
+    let details=service.detail(&owner,kb_id).unwrap();let images=details.documents.iter().filter_map(|d|d.parsing_artifact.as_ref()).flat_map(|p|p.image_resource_codes.iter().cloned()).collect::<Vec<_>>();assert!(!images.is_empty());
     for code in &images {assert!(state.resources.for_agent(Some(agent)).download_binary_to_file(&owner,tron_backend::application::resource::ResourceBinaryDownloadCommand{workspace_code:workspace.into(),resource_code:code.clone()}).is_ok());}
     harness.run(context("real-mineru-granted",true)).await.unwrap();assert_eq!(calls.load(Ordering::SeqCst),1);
-    service.set_grants(&owner,workspace,kb_id,vec![]).unwrap();
+    service.set_grants(&owner,kb_id,vec![]).unwrap();
     for code in &images {assert!(state.resources.for_agent(Some(agent)).download_binary_to_file(&owner,tron_backend::application::resource::ResourceBinaryDownloadCommand{workspace_code:workspace.into(),resource_code:code.clone()}).is_err());}
-    harness.run(context("real-mineru-revoked",true)).await.unwrap();service.set_grants(&owner,workspace,kb_id,vec![agent.into()]).unwrap();harness.run(context("real-mineru-missing-identity",false)).await.unwrap();assert_eq!(calls.load(Ordering::SeqCst),1);
+    harness.run(context("real-mineru-revoked",true)).await.unwrap();service.set_grants(&owner,kb_id,vec![agent.into()]).unwrap();harness.run(context("real-mineru-missing-identity",false)).await.unwrap();assert_eq!(calls.load(Ordering::SeqCst),1);
     let texts=capture.0.lock().unwrap().iter().map(|r|r.messages.iter().map(|m|m.content.text()).collect::<Vec<_>>().join("\n")).collect::<Vec<_>>();assert_eq!(texts.len(),4);
     assert!(!texts[0].contains("ORBIT REPORT"));assert!(texts[1].contains("Alpha") && texts[1].contains("resource:KB_"),"real structured/image evidence did not reach native model request");assert!(!texts[2].contains("ORBIT REPORT"));assert!(!texts[3].contains("ORBIT REPORT"));
     std::fs::write(evidence.join("kb-real-native-contributor.json"),serde_json::to_vec_pretty(&serde_json::json!({"source":"actual HTTP-created synthetic MinerU KB, isolated online copy for grants/runtime","queryEmbeddingCalls":calls.load(Ordering::SeqCst),"observedEmbedding":*observed.lock().unwrap(),"nativeCaptureRequests":texts.len(),"grantedStructuredTextAndImageReferences":true,"revokedNoContext":true,"missingIdentityNoContext":true,"derivedImageAclGrantAndRevoke":true,"imagesChecked":images.len(),"defaultKbFinalGrants":"revoked; isolated grant tests do not mutate default DB"})).unwrap()).unwrap();

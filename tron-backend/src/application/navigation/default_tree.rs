@@ -43,24 +43,6 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "AGENTS",
-        parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 0,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "INTERNAL_AGENTS",
-        parent_menu_code: Some("AGENTS"),
-        position: 0,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "SYSTEM_AGENTS",
-        parent_menu_code: Some("AGENTS"),
-        position: 1,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
         menu_code: "MCP_SERVERS",
         parent_menu_code: Some("AGENT_OPERATIONS"),
         position: 1,
@@ -88,30 +70,6 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         menu_code: "DATA",
         parent_menu_code: None,
         position: 2,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "MEMORY",
-        parent_menu_code: Some("DATA"),
-        position: 0,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "KNOWLEDGE_GRAPH",
-        parent_menu_code: Some("DATA"),
-        position: 1,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "KNOWLEDGE_BASE",
-        parent_menu_code: Some("DATA"),
-        position: 2,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "RAG",
-        parent_menu_code: Some("DATA"),
-        position: 3,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",

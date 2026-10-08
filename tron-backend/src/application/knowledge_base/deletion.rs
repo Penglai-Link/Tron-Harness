@@ -46,12 +46,11 @@ impl KnowledgeBaseService {
     pub fn remove_library(
         &self,
         user: &str,
-        workspace: &str,
         id: &str,
     ) -> Result<(), KnowledgeBaseError> {
-        self.workspace(user, workspace)?;
+        self.require_user(user)?;
         let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
-        self.repository.delete_empty_library(user, workspace, id)
+        self.repository.delete_empty_library(user, id)
     }
 
     pub(super) fn request_document_deletion(
@@ -61,7 +60,7 @@ impl KnowledgeBaseService {
         kb: &str,
         doc: &str,
     ) -> Result<DocumentDeletion, KnowledgeBaseError> {
-        self.owned(user, workspace, kb)?;
+        self.owned(user, kb)?;
         // This gate also surrounds creation of derived objects and generation publication.
         let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
         let document = self.repository.document(kb, doc)?;

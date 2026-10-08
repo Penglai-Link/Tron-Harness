@@ -1,3 +1,4 @@
+import { usePlatformDataHref, usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   type FormEvent,
   useEffect,
@@ -5,7 +6,6 @@ import {
   useState,
 } from "react";
 import {
-  useNavigate,
   useParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -598,7 +598,8 @@ function mapCorpusApiErrors(
 }
 
 export function RagCorpusFormPage() {
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
+  const dataHref = usePlatformDataHref();
   const toast = useToast();
   const { pageT, hintT } = useCorpusFormCopy();
   const dataSource = getServiceDataSource("rag");
@@ -1105,7 +1106,7 @@ export function RagCorpusFormPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: pageT("loading.breadcrumb", "Loading corpus") }]}
+          breadcrumbs={[{ label: "RAG", href: dataHref("/rag") }, { label: pageT("loading.breadcrumb", "Loading corpus") }]}
           title={pageT("loading.title", "Loading corpus")}
           actions={<Button variant="secondary" onClick={() => navigate("/rag")}>{pageT("actions.backToList", "Back to list")}</Button>}
         />
@@ -1120,7 +1121,7 @@ export function RagCorpusFormPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: pageT("notFound.breadcrumb", "Corpus not found") }]}
+          breadcrumbs={[{ label: "RAG", href: dataHref("/rag") }, { label: pageT("notFound.breadcrumb", "Corpus not found") }]}
           title={pageT("notFound.title", "Corpus not found")}
           actions={<Button variant="secondary" onClick={() => navigate("/rag")}>{pageT("actions.backToList", "Back to list")}</Button>}
         />
@@ -1138,7 +1139,7 @@ export function RagCorpusFormPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: mode === "create" ? pageT("title.create", "New corpus") : form.code }]}
+        breadcrumbs={[{ label: "RAG", href: dataHref("/rag") }, { label: mode === "create" ? pageT("title.create", "New corpus") : form.code }]}
         title={title}
         actions={(
           <>

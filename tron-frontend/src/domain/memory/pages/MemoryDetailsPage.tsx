@@ -1,10 +1,10 @@
+import { usePlatformDataHref, usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   useEffect,
   useState,
 } from "react";
 import {
   Navigate,
-  useNavigate,
   useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -102,7 +102,8 @@ function targetFromMemory(memory: MemoryRecord): MemorySearchTarget {
 export function MemoryDetailsPage() {
   const { t } = useTranslation(["pages"]);
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
+  const dataHref = usePlatformDataHref();
   const toast = useToast();
   const dataSource = getServiceDataSource("memory");
   const {
@@ -129,14 +130,14 @@ export function MemoryDetailsPage() {
   }, [memory]);
 
   if (!memoryId) {
-    return <Navigate replace to="/memory" />;
+    return <Navigate replace to={dataHref("/memory")} />;
   }
 
   if (!memory) {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: t("pages:memory.title", "Memory"), href: "/memory" }, { label: t("pages:variables.notFound", "Not Found") }]}
+          breadcrumbs={[{ label: t("pages:memory.title", "Memory"), href: dataHref("/memory") }, { label: t("pages:variables.notFound", "Not Found") }]}
           title={t("pages:memory.title", "Memory")}
         />
         <SurfaceCard>{t("pages:memory.errors.notFound", "Memory not found.")}</SurfaceCard>
@@ -215,7 +216,7 @@ export function MemoryDetailsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Memory", href: "/memory" }, { label: memory.title }]}
+        breadcrumbs={[{ label: "Memory", href: dataHref("/memory") }, { label: memory.title }]}
         title={memory.title}
         actions={editing ? (
           <>

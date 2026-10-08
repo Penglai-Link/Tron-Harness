@@ -57,9 +57,9 @@ impl ModelClient for Capture {
         Box::pin(async { Ok(Default::default()) })
     }
 }
-fn context(f: &Fixture, run: &str, identity: bool) -> AgentRunContext {
+fn context(f: &Fixture, _run: &str, identity: bool) -> AgentRunContext {
     serde_json::from_value(serde_json::json!({
-        "agentCode": if identity {Some(&f.agent)} else {None}, "conversationCode":run, "runCode":run, "workspaceCode":WORKSPACE,"userCode":USER,"locale":"en-US","agentKind":"REACT",
+        "agentCode": if identity {Some(&f.agent)} else {None}, "conversationCode":null, "runCode":fw::RunId::new_v4().to_string(), "workspaceCode":WORKSPACE,"userCode":USER,"locale":"en-US","agentKind":"REACT",
         "model":{"modelCode":"fixture-chat","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"synthetic","modelName":"fixture","maxTokens":128,"contextWindowTokens":8000},
         "variables":[],"skills":[],"tools":[],"executionScope":{},"limits":{"maxSteps":2,"maxToolCalls":2,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":"Tell me about orchid"}]}],"observations":[],"startedAt":"fixture"
     })).unwrap()
@@ -71,13 +71,12 @@ async fn native_framework_loop_reads_current_agent_grants_and_revocation_without
         f.client.dimensions.store(1024, Ordering::SeqCst);
         let kb = f
             .service
-            .create(USER, WORKSPACE, "orchid", "source")
+            .create(USER, "orchid", "source")
             .unwrap();
         let d = f
             .service
             .upload(
                 USER,
-                WORKSPACE,
                 &kb.id,
                 "orchid.md",
                 b"# Orchid\nPRIVATE_ORCHID_FACT orchid grows in cool weather.",
@@ -85,7 +84,7 @@ async fn native_framework_loop_reads_current_agent_grants_and_revocation_without
             .unwrap();
         assert_eq!(
             f.service
-                .index(USER, WORKSPACE, &kb.id, &d.id)
+                .index(USER, &kb.id, &d.id)
                 .await
                 .unwrap()
                 .status,
@@ -107,16 +106,16 @@ async fn native_framework_loop_reads_current_agent_grants_and_revocation_without
         harness.run(context(&f, "no-grants", true)).await.unwrap();
         assert_eq!(f.client.calls.load(Ordering::SeqCst), before);
         f.service
-            .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+            .set_grants(USER, &kb.id, vec![f.agent.clone()])
             .unwrap();
         harness.run(context(&f, "with-grants", true)).await.unwrap();
         assert_eq!(f.client.calls.load(Ordering::SeqCst), before + 1);
         f.service
-            .set_grants(USER, WORKSPACE, &kb.id, vec![])
+            .set_grants(USER, &kb.id, vec![])
             .unwrap();
         harness.run(context(&f, "revoked", true)).await.unwrap();
         f.service
-            .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+            .set_grants(USER, &kb.id, vec![f.agent.clone()])
             .unwrap();
         harness
             .run(context(&f, "legacy-no-identity", false))

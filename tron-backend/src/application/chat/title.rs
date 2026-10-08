@@ -163,14 +163,19 @@ fn title_generation_error_code(error: &LlmRuntimeError) -> &'static str {
 pub(super) fn should_generate_manual_session_title(session: &ChatSession) -> bool {
     session.source_type == ChatSessionSourceType::Manual
         && session.task_code.is_none()
-        && (session
-            .title
-            .trim()
-            .eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE)
-            || session
-                .title
-                .trim()
-                .eq_ignore_ascii_case(DEFAULT_MAIN_AGENT_SESSION_TITLE))
+        && is_default_session_title(&session.title)
+}
+
+fn is_default_session_title(title: &str) -> bool {
+    // Older clients persisted the translated new-chat label as the title.
+    [
+        DEFAULT_MANUAL_SESSION_TITLE,
+        DEFAULT_MAIN_AGENT_SESSION_TITLE,
+        "新会话",
+        "主智能体",
+    ]
+    .iter()
+    .any(|default| title.trim().eq_ignore_ascii_case(default))
 }
 
 fn manual_session_title_prompt(
@@ -220,10 +225,7 @@ fn normalize_generated_session_title(value: &str) -> Option<String> {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    if title.is_empty()
-        || title.eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE)
-        || title.eq_ignore_ascii_case(DEFAULT_MAIN_AGENT_SESSION_TITLE)
-    {
+    if title.is_empty() || is_default_session_title(&title) {
         return None;
     }
     if title.chars().count() > MAX_GENERATED_TITLE_CHARS {
@@ -273,6 +275,34 @@ mod tests {
         session.title = DEFAULT_MAIN_AGENT_SESSION_TITLE.into();
 
         assert!(should_generate_manual_session_title(&session));
+    }
+
+    #[test]
+    fn localized_default_titles_remain_eligible_after_a_completed_run() {
+        for title in ["新会话", " 主智能体 ", "new CHAT"] {
+            let mut session = manual_new_chat_session(Some("RUN-1".into()));
+            session.title = title.into();
+            assert!(should_generate_manual_session_title(&session));
+            assert!(normalize_generated_session_title(title).is_none());
+        }
+    }
+
+    #[test]
+    fn localized_custom_and_task_titles_are_not_regenerated() {
+        let mut session = manual_new_chat_session(Some("RUN-1".into()));
+        session.title = "黄女士会诊".into();
+        assert!(!should_generate_manual_session_title(&session));
+        assert_eq!(
+            normalize_generated_session_title(&session.title).as_deref(),
+            Some("黄女士会诊")
+        );
+
+        session.title = "新会话".into();
+        session.task_code = Some("TASK-1".into());
+        assert!(!should_generate_manual_session_title(&session));
+        session.task_code = None;
+        session.source_type = ChatSessionSourceType::Task;
+        assert!(!should_generate_manual_session_title(&session));
     }
 
     #[test]

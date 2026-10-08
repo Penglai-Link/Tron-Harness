@@ -21,10 +21,10 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
     let f = Fixture::new();
     let kb = f
         .service
-        .create(USER, WORKSPACE, "知识资料", "四格式")
+        .create(USER, "知识资料", "四格式")
         .unwrap();
-    assert!(f.service.detail("OTHER-USER", WORKSPACE, &kb.id).is_err());
-    assert!(f.service.detail(USER, "COMPLIANCE", &kb.id).is_err());
+    assert!(f.service.detail("OTHER-USER", &kb.id).is_err());
+    assert!(f.service.detail(USER, &kb.id).is_ok());
     for (name, bytes) in [
         ("guide.md", b"# Orchid\norchid markdown evidence".to_vec()),
         ("guide.docx", office()),
@@ -33,9 +33,9 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
     ] {
         let doc = f
             .service
-            .upload(USER, WORKSPACE, &kb.id, name, &bytes)
+            .upload(USER, &kb.id, name, &bytes)
             .unwrap();
-        let preview = f.service.preview(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+        let preview = f.service.preview(USER, &kb.id, &doc.id).await.unwrap();
         assert!(preview.chunk_count > 0);
         assert!(
             preview
@@ -45,7 +45,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
         );
         let indexed = f
             .service
-            .index(USER, WORKSPACE, &kb.id, &doc.id)
+            .index(USER, &kb.id, &doc.id)
             .await
             .unwrap();
         assert_eq!(indexed.status, "READY", "{:?}", indexed.error);
@@ -56,7 +56,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
                 .download_binary_to_file(
                     "OTHER-USER",
                     ResourceBinaryDownloadCommand {
-                        workspace_code: WORKSPACE.into(),
+                        workspace_code: "PLATFORM".into(),
                         resource_code: doc.resource_code.clone()
                     }
                 )
@@ -68,7 +68,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
                 .get_resource(
                     "OTHER-USER",
                     ResourceGetQuery {
-                        workspace_code: WORKSPACE.into(),
+                        workspace_code: "PLATFORM".into(),
                         resource_code: doc.resource_code.clone()
                     }
                 )
@@ -80,7 +80,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
                 .update_resource(
                     USER,
                     ResourceUpdateCommand {
-                        workspace_code: WORKSPACE.into(),
+                        workspace_code: "PLATFORM".into(),
                         resource_code: doc.resource_code.clone(),
                         name: Some("tampered".into()),
                         description: None,
@@ -95,7 +95,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
                 .delete_resource(
                     USER,
                     ResourceDeleteCommand {
-                        workspace_code: WORKSPACE.into(),
+                        workspace_code: "PLATFORM".into(),
                         resource_code: doc.resource_code.clone()
                     }
                 )
@@ -107,7 +107,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
             .download_binary_to_file(
                 USER,
                 ResourceBinaryDownloadCommand {
-                    workspace_code: WORKSPACE.into(),
+                    workspace_code: "PLATFORM".into(),
                     resource_code: doc.resource_code,
                 },
             )
@@ -130,7 +130,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
     );
     assert_eq!(f.client.calls.load(Ordering::SeqCst), calls);
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     let context = f
         .service
@@ -157,8 +157,9 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
             .hits
             .is_empty()
     );
+    // The same authorized Agent can retrieve the library in every assigned space.
     assert!(
-        f.service
+        !f.service
             .search_for_agent(USER, "COMPLIANCE", &f.agent, "orchid", 1200)
             .await
             .unwrap()
@@ -174,7 +175,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
             .is_empty()
     );
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![])
+        .set_grants(USER, &kb.id, vec![])
         .unwrap();
     assert!(
         f.service
@@ -190,7 +191,7 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
         .query_resources(
             "OTHER-USER",
             ResourcePageQuery {
-                workspace_code: WORKSPACE.into(),
+                workspace_code: "PLATFORM".into(),
                 kinds: vec![],
                 source_kind: None,
                 search: None,
@@ -202,31 +203,31 @@ async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locati
     assert!(!page.records.iter().any(|r| r.description == "知识库原件"));
     assert!(
         f.service
-            .upload(USER, WORKSPACE, &kb.id, "old.doc", b"legacy")
+            .upload(USER, &kb.id, "old.doc", b"legacy")
             .is_err()
     );
     assert!(
         f.service
-            .upload(USER, WORKSPACE, &kb.id, "old.xls", b"legacy")
+            .upload(USER, &kb.id, "old.xls", b"legacy")
             .is_err()
     );
 }
 #[tokio::test]
 async fn per_document_configuration_rebuild_and_failure_preserve_published_generation() {
     let f = Fixture::new();
-    let kb = f.service.create(USER, WORKSPACE, "Rebuild", "").unwrap();
+    let kb = f.service.create(USER, "Rebuild", "").unwrap();
     let content = format!("orchid {}", "evidence ".repeat(250));
     let a = f
         .service
-        .upload(USER, WORKSPACE, &kb.id, "a.md", content.as_bytes())
+        .upload(USER, &kb.id, "a.md", content.as_bytes())
         .unwrap();
     let b = f
         .service
-        .upload(USER, WORKSPACE, &kb.id, "b.md", b"orchid independent")
+        .upload(USER, &kb.id, "b.md", b"orchid independent")
         .unwrap();
     let first = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &a.id)
+        .index(USER, &kb.id, &a.id)
         .await
         .unwrap();
     let small = ChunkConfig {
@@ -236,18 +237,18 @@ async fn per_document_configuration_rebuild_and_failure_preserve_published_gener
         ..Default::default()
     };
     f.service
-        .configure(USER, WORKSPACE, &kb.id, &a.id, Some(small))
+        .configure(USER, &kb.id, &a.id, Some(small))
         .unwrap();
     assert!(
         f.service
-            .preview(USER, WORKSPACE, &kb.id, &a.id)
+            .preview(USER, &kb.id, &a.id)
             .await.unwrap()
             .chunk_count
             > first.chunk_count
     );
     assert_eq!(
         f.service
-            .preview(USER, WORKSPACE, &kb.id, &b.id)
+            .preview(USER, &kb.id, &b.id)
             .await.unwrap()
             .chunk_count,
         1
@@ -255,14 +256,14 @@ async fn per_document_configuration_rebuild_and_failure_preserve_published_gener
     f.client.failing.store(true, Ordering::SeqCst);
     let failed = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &a.id)
+        .index(USER, &kb.id, &a.id)
         .await
         .unwrap();
     assert_eq!(failed.status, "FAILED");
     assert_eq!(failed.active_source_code, first.active_source_code);
     assert_eq!(failed.index_revision, first.index_revision);
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     let old = f
         .service
@@ -276,7 +277,7 @@ async fn per_document_configuration_rebuild_and_failure_preserve_published_gener
     f.client.failing.store(false, Ordering::SeqCst);
     let rebuilt = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &a.id)
+        .index(USER, &kb.id, &a.id)
         .await
         .unwrap();
     assert_eq!(rebuilt.status, "READY");
@@ -294,7 +295,7 @@ async fn per_document_configuration_rebuild_and_failure_preserve_published_gener
             .all(|h| Some(&h.source_code) == rebuilt.active_source_code.as_ref())
     );
     f.service
-        .remove_document(USER, WORKSPACE, &kb.id, &a.id)
+        .remove_document(USER, &kb.id, &a.id)
         .unwrap();
     assert!(
         f.service
@@ -310,7 +311,7 @@ async fn per_document_configuration_rebuild_and_failure_preserve_published_gener
             .get_resource(
                 USER,
                 ResourceGetQuery {
-                    workspace_code: WORKSPACE.into(),
+                    workspace_code: "PLATFORM".into(),
                     resource_code: a.resource_code
                 }
             )
@@ -324,7 +325,7 @@ async fn generic_rag_cannot_expose_product_corpus_or_mix_it_into_legacy_profiles
     let mut placeholder = legacy.get_corpus("code-graph").unwrap().unwrap();
     placeholder.status = RagStatus::Reserved;
     legacy.save_managed_corpus(&placeholder).unwrap();
-    let kb = f.service.create(USER, WORKSPACE, "Private", "").unwrap();
+    let kb = f.service.create(USER, "Private", "").unwrap();
     assert!(f.state.rag.get_corpus(&kb.id).is_err());
     assert!(f.state.rag.get_corpus_management(&kb.id).is_err());
     assert!(
@@ -418,14 +419,14 @@ async fn generic_rag_cannot_expose_product_corpus_or_mix_it_into_legacy_profiles
 #[tokio::test]
 async fn interrupted_index_claim_recovers_only_new_document_metadata() {
     let f = Fixture::new();
-    let kb = f.service.create(USER, WORKSPACE, "Recover", "").unwrap();
+    let kb = f.service.create(USER, "Recover", "").unwrap();
     let doc = f
         .service
-        .upload(USER, WORKSPACE, &kb.id, "guide.md", b"orchid recovery")
+        .upload(USER, &kb.id, "guide.md", b"orchid recovery")
         .unwrap();
     let indexed = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &doc.id)
+        .index(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     let repo = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
@@ -442,7 +443,7 @@ async fn interrupted_index_claim_recovers_only_new_document_metadata() {
     assert_eq!(recovered.revision, interrupted.revision + 1);
     let retried = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &doc.id)
+        .index(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     assert_eq!(retried.status, "READY");
@@ -543,18 +544,17 @@ async fn product_http_contract_upload_configure_preview_index_and_grants() {
         None,
     )
     .await;
-    assert_eq!(denied.status(), StatusCode::NOT_FOUND);
+    assert_eq!(denied.status(), StatusCode::OK);
 }
 
 #[tokio::test]
 async fn vector_retrieval_uses_one_authorized_query_embedding_and_skips_zero_or_stale_space() {
     let f = Fixture::new();
-    let kb = f.service.create(USER, WORKSPACE, "Vectors", "").unwrap();
+    let kb = f.service.create(USER, "Vectors", "").unwrap();
     let doc = f
         .service
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "guide.md",
             b"orchid semantic evidence",
@@ -562,7 +562,7 @@ async fn vector_retrieval_uses_one_authorized_query_embedding_and_skips_zero_or_
         .unwrap();
     let indexed = f
         .service
-        .index(USER, WORKSPACE, &kb.id, &doc.id)
+        .index(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     let run = eliteforge_agent_core::ModelInvocationOptions::for_call(
@@ -589,7 +589,7 @@ async fn vector_retrieval_uses_one_authorized_query_embedding_and_skips_zero_or_
     );
     assert_eq!(f.client.calls.load(Ordering::SeqCst), count);
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     for (query, budget) in [("orchid", 0), ("", 1200)] {
         assert!(
@@ -639,13 +639,12 @@ async fn same_owner_agent_resource_reads_require_grants_and_removed_docs_stay_pr
     let f = Fixture::new();
     let kb = f
         .service
-        .create(USER, WORKSPACE, "Resource ACL", "")
+        .create(USER, "Resource ACL", "")
         .unwrap();
     let doc = f
         .service
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "guide.md",
             b"orchid private original",
@@ -655,62 +654,62 @@ async fn same_owner_agent_resource_reads_require_grants_and_removed_docs_stay_pr
         service.download_binary_to_file(
             USER,
             ResourceBinaryDownloadCommand {
-                workspace_code: WORKSPACE.into(),
+                workspace_code: "PLATFORM".into(),
                 resource_code: doc.resource_code.clone(),
             },
         )
     };
     assert!(read(&f.state.resources).is_ok());
     assert!(read(&f.state.resources.for_agent(None)).is_err());
-    assert!(read(&f.state.resources.for_agent(Some(&f.agent))).is_err());
+    assert!(read(&f.state.resources.for_agent_in_workspace(Some(&f.agent), WORKSPACE)).is_err());
     assert!(read(&f.state.resources.for_agent(Some("FORGED_AGENT"))).is_err());
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
-    assert!(read(&f.state.resources.for_agent(Some(&f.agent))).is_ok());
+    assert!(read(&f.state.resources.for_agent_in_workspace(Some(&f.agent), WORKSPACE)).is_ok());
     assert!(
         read(
             &f.state
                 .resources
                 .for_agent_in_workspace(Some(&f.agent), "COMPLIANCE")
         )
-        .is_err()
+        .is_ok()
     );
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![])
+        .set_grants(USER, &kb.id, vec![])
         .unwrap();
-    assert!(read(&f.state.resources.for_agent(Some(&f.agent))).is_err());
+    assert!(read(&f.state.resources.for_agent_in_workspace(Some(&f.agent), WORKSPACE)).is_err());
     f.service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     f.service
-        .remove_document(USER, WORKSPACE, &kb.id, &doc.id)
+        .remove_document(USER, &kb.id, &doc.id)
         .unwrap();
-    assert!(read(&f.state.resources.for_agent(Some(&f.agent))).is_err());
+    assert!(read(&f.state.resources.for_agent_in_workspace(Some(&f.agent), WORKSPACE)).is_err());
     assert!(read(&f.state.resources).is_ok());
 }
 
 #[tokio::test]
 async fn automatic_ingestion_preserves_recorded_parser_failure_without_a_review_workflow() {
     use tron_backend::application::knowledge_base::fidelity::FidelityIssue;
-    let f=Fixture::new();let kb=f.service.create(USER,WORKSPACE,"Automatic lifecycle","").unwrap();
-    let ready=f.service.upload_and_index(USER,WORKSPACE,&kb.id,"clean.md",b"orchid automatic evidence").await.unwrap();
+    let f=Fixture::new();let kb=f.service.create(USER,"Automatic lifecycle","").unwrap();
+    let ready=f.service.upload_and_index(USER,&kb.id,"clean.md",b"orchid automatic evidence").await.unwrap();
     assert_eq!(ready.status,"READY");assert_eq!(ready.index_revision,1);
-    let rebuilt=f.service.configure_and_index(USER,WORKSPACE,&kb.id,&ready.id,Some(ChunkConfig{mode:ChunkMode::Fixed,max_chars:200,overlap_chars:0,heading_depth:2}),None,None).await.unwrap();
+    let rebuilt=f.service.configure_and_index(USER,&kb.id,&ready.id,Some(ChunkConfig{mode:ChunkMode::Fixed,max_chars:200,overlap_chars:0,heading_depth:2}),None,None).await.unwrap();
     assert_eq!(rebuilt.status,"READY");assert_eq!(rebuilt.index_revision,2);
-    let original=pdf();let bad=f.service.upload(USER,WORKSPACE,&kb.id,"known-failure.pdf",&original).unwrap();
-    f.service.preview(USER,WORKSPACE,&kb.id,&bad.id).await.unwrap();
+    let original=pdf();let bad=f.service.upload(USER,&kb.id,"known-failure.pdf",&original).unwrap();
+    f.service.preview(USER,&kb.id,&bad.id).await.unwrap();
     let repo=SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
     let mut failed=repo.document(&kb.id,&bad.id).unwrap();
     failed.parsing_artifact.as_mut().unwrap().fidelity_issues.push(FidelityIssue{kind:"RECORDED_PARSER_ERROR".into(),page:Some(1),blocks:vec![],source_excerpt:"upstream extraction lost a source comparator".into(),image_resource_codes:vec![],source_region:None,candidate_region:None,candidate_excerpt:None});
     let revision=failed.revision;failed.revision+=1;repo.save_document(&kb.id,&failed,revision).unwrap();
     let before=f.client.calls.load(Ordering::SeqCst);
-    let result=f.service.index(USER,WORKSPACE,&kb.id,&bad.id).await.unwrap();
+    let result=f.service.index(USER,&kb.id,&bad.id).await.unwrap();
     assert_eq!(result.status,"FAILED");assert!(result.error.as_ref().unwrap().contains("source comparator"));assert!(result.active_source_code.is_none());
     assert_eq!(before,f.client.calls.load(Ordering::SeqCst));
-    let configured=f.service.configure_and_index(USER,WORKSPACE,&kb.id,&bad.id,None,None,None).await.unwrap();assert_eq!(configured.status,"FAILED");
+    let configured=f.service.configure_and_index(USER,&kb.id,&bad.id,None,None,None).await.unwrap();assert_eq!(configured.status,"FAILED");
     assert_eq!(before,f.client.calls.load(Ordering::SeqCst));
-    f.service.set_grants(USER,WORKSPACE,&kb.id,vec![f.agent.clone()]).unwrap();
+    f.service.set_grants(USER,&kb.id,vec![f.agent.clone()]).unwrap();
     let hits=f.service.search_for_agent(USER,WORKSPACE,&f.agent,"orchid",1200).await.unwrap().hits;
     assert!(hits.iter().any(|h|h.document_id==ready.id));assert!(!hits.iter().any(|h|h.document_id==bad.id));
     let (_,record)=f.state.resources.download_binary_to_file(USER,ResourceBinaryDownloadCommand{workspace_code:WORKSPACE.into(),resource_code:bad.resource_code.clone()}).unwrap();let mut bytes=vec![];f.state.resources.download_binary_storage(&record,&mut bytes).unwrap();assert_eq!(bytes,original);
@@ -731,14 +730,14 @@ async fn wait_http_ready(app: &axum::Router, kb: &str, document: &str) {
 }
 
 #[tokio::test]
-async fn durable_task_http_contract_cancel_retry_and_workspace_scope() {
+async fn durable_task_http_contract_cancel_retry_and_owner_scope() {
     use axum::http::{Method, StatusCode};
     let f = Fixture::new();
     f.client.blocking.store(true, Ordering::SeqCst);
-    let kb = f.service.create(USER, WORKSPACE, "Task API", "").unwrap();
-    let doc = f.service.upload_and_start_index(USER, WORKSPACE, &kb.id, "task.md", b"orchid durable HTTP").unwrap();
+    let kb = f.service.create(USER, "Task API", "").unwrap();
+    let doc = f.service.upload_and_start_index(USER, &kb.id, "task.md", b"orchid durable HTTP").unwrap();
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        while f.service.detail(USER,WORKSPACE,&kb.id).unwrap().documents[0].status != "EMBEDDING" {
+        while f.service.detail(USER,&kb.id).unwrap().documents[0].status != "EMBEDDING" {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
     }).await.unwrap();
@@ -752,7 +751,7 @@ async fn durable_task_http_contract_cancel_retry_and_workspace_scope() {
     assert_eq!(tasks["data"][0]["stage"],"Embedding"); assert_eq!(tasks["data"][0]["state"],"RUNNING");
     assert!(tasks["data"][0].get("configuration").is_none()); assert!(tasks["data"][0].get("leaseOwner").is_none());
     let denied=common::authenticated_request(&app,Method::GET,&format!("{root}/tasks?workspaceCode=COMPLIANCE"),None).await;
-    assert!(!denied.status().is_success());
+    assert!(denied.status().is_success());
     let cancelled=common::authenticated_request(&app,Method::POST,&format!("{root}/cancel"),Some(json!({"workspaceCode":WORKSPACE}))).await;
     assert_eq!(cancelled.status(),StatusCode::OK);
     let cancelled=common::response_json(cancelled).await;

@@ -1,3 +1,4 @@
+import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   Fragment,
   type FormEvent,
@@ -6,7 +7,6 @@ import {
   useState,
 } from "react";
 import {
-  useNavigate,
   useParams,
   useSearchParams,
 } from "react-router";
@@ -1261,7 +1261,7 @@ function FilterRow({
 }
 
 export function RagIngestProfileFormPage() {
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
   const [searchParams] = useSearchParams();
   const toast = useToast();
   const { pageT, ingestHintT, t } = useProfileFormCopy();
@@ -1876,7 +1876,7 @@ export function RagIngestProfileFormPage() {
 }
 
 export function RagRetrievalProfileFormPage() {
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
   const [searchParams] = useSearchParams();
   const toast = useToast();
   const { pageT, retrievalHintT, t } = useProfileFormCopy();

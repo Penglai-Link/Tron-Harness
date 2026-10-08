@@ -72,7 +72,7 @@ impl AgentManagementService {
         let saved = self
             .repository()
             .list_workspace_internal_agent_definitions(workspace_code)?;
-        let mut definitions = self
+        let definitions = self
             .platform_internal_agent_configs()?
             .into_iter()
             .map(|config| InternalAgentDefinition {
@@ -92,7 +92,14 @@ impl AgentManagementService {
                 platform_defined: true,
             })
             .collect::<Vec<_>>();
+        let mut assigned = Vec::new();
+        for definition in definitions {
+            if self.agent_assigned(&definition.agent_code, workspace_code)? { assigned.push(definition); }
+        }
+        let mut definitions = assigned;
         for record in saved {
+            if self.platform_internal_agent_configs()?.iter().any(|config| config.agent_code == record.agent_code)
+                && !self.agent_assigned(&record.agent_code, workspace_code)? { continue; }
             if let Some(definition) = definitions
                 .iter_mut()
                 .find(|definition| definition.agent_code == record.agent_code)

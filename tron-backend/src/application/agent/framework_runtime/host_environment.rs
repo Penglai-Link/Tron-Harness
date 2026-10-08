@@ -11,7 +11,15 @@ impl FrameworkHost {
         let mut builder = Framework::builder()
             .default_models(false)
             .capability_skills_root(self.0.path.with_extension("skills"))
-            .plugin(eliteforge_agent_official_plugin_agui::AgUiPlugin::default())
+            .plugin(
+                eliteforge_agent_official_plugin_agui::AgUiPlugin::new(
+                    eliteforge_agent_official_plugin_agui::AgUiOptions {
+                        include_error_details: true,
+                        ..Default::default()
+                    },
+                )
+                .map_err(|error| error.to_string())?,
+            )
             .plugin(
                 LocalStoragePlugin::new(&self.0.path, self.0.path.with_extension("artifacts"))
                     .with_database(self.shared_database().await.map_err(|e| e.to_string())?),

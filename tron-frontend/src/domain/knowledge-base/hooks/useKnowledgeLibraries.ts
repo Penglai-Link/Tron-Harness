@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { useQuery } from "@tanstack/react-query";
-import { useWorkspaceSpaces } from "@/shared";
+import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
 import { fetchWorkspaceInternalAgents } from "@/domain/agent/api/agentManagementApi";
 import { getKnowledgeLibrary, listKnowledgeLibraries } from "../api/knowledgeBaseApi";
 
@@ -15,32 +15,27 @@ export function useKnowledgeViewActive() {
   return active;
 }
 
-export function useKnowledgeWorkspace() {
-  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
-  return selectedSecondarySpace?.workspaceCode ?? selectedPrimarySpace?.workspaceCode ?? "";
-}
-
-export function useKnowledgeLibraries(workspaceCode: string) {
+export function useKnowledgeLibraries() {
   const user = useKnowledgeUser();
   return useQuery({
-    queryKey: ["knowledge-bases", user, workspaceCode], enabled: Boolean(user && workspaceCode),
-    queryFn: ({ signal }) => listKnowledgeLibraries(workspaceCode, signal),
+    queryKey: ["knowledge-bases", user], enabled: Boolean(user),
+    queryFn: ({ signal }) => listKnowledgeLibraries( signal),
   });
 }
 
-export function useKnowledgeLibrary(workspaceCode: string, id: string) {
+export function useKnowledgeLibrary(id: string) {
   const user = useKnowledgeUser();
   return useQuery({
-    queryKey: ["knowledge-base", user, workspaceCode, id], enabled: Boolean(user && workspaceCode && id),
-    queryFn: ({ signal }) => getKnowledgeLibrary(workspaceCode, id, signal),
+    queryKey: ["knowledge-base", user, id], enabled: Boolean(user && id),
+    queryFn: ({ signal }) => getKnowledgeLibrary( id, signal),
     refetchInterval: (query) => query.state.data?.documents.some((doc) => ["QUEUED", "PARSING", "CHUNKING", "EMBEDDING", "PUBLISHING"].includes(doc.status)) ? 2000 : false,
   });
 }
 
-export function useKnowledgeAgents(workspaceCode: string, enabled: boolean) {
+export function useKnowledgeAgents(enabled: boolean) {
   const user = useKnowledgeUser();
   return useQuery({
-    queryKey: ["knowledge-base-agents", user, workspaceCode], enabled: Boolean(user && workspaceCode && enabled),
-    queryFn: ({ signal }) => fetchWorkspaceInternalAgents(workspaceCode, signal),
+    queryKey: ["knowledge-base-agents", user], enabled: Boolean(user && enabled),
+    queryFn: ({ signal }) => fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE, signal),
   });
 }

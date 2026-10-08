@@ -1,8 +1,9 @@
+import { usePlatformDataHref, usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   useMemo,
   useState,
 } from "react";
-import { useNavigate } from "react-router";
+
 import { useTranslation } from "react-i18next";
 import { Save } from "lucide-react";
 
@@ -59,7 +60,8 @@ function buildDisplayTargets(
 
 export function CreateMemoryPage() {
   const { t } = useTranslation(["pages"]);
-  const navigate = useNavigate();
+  const navigate = usePlatformDataNavigate();
+  const dataHref = usePlatformDataHref();
   const toast = useToast();
   const dataSource = getServiceDataSource("memory");
   const { session } = useAuthSession();
@@ -120,7 +122,7 @@ export function CreateMemoryPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: t("pages:memory.title", "Memory"), href: "/memory" }, { label: t("pages:memory.actions.new", "New") }]}
+        breadcrumbs={[{ label: t("pages:memory.title", "Memory"), href: dataHref("/memory") }, { label: t("pages:memory.actions.new", "New") }]}
         title={t("pages:memory.createTitle", "New Memory")}
         actions={(
           <>

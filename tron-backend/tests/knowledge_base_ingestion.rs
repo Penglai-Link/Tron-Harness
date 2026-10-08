@@ -32,7 +32,6 @@ fn reopen(f: &Fixture) -> KnowledgeBaseService {
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
         f.state.rag.clone(),
         f.state.resources.clone(),
-        f.state.workspaces.clone(),
         f.state.agent_management.clone(),
         LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())),
     )
@@ -47,7 +46,7 @@ async fn wait_document(
     tokio::time::timeout(Duration::from_secs(8), async {
         loop {
             let document = service
-                .detail(USER, WORKSPACE, kb)
+                .detail(USER, kb)
                 .unwrap()
                 .documents
                 .into_iter()
@@ -68,13 +67,12 @@ async fn repeated_upload_and_clicks_have_one_document_and_live_task_with_scoped_
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
     let kb = service
-        .create(USER, WORKSPACE, "Duplicate protection", "")
+        .create(USER, "Duplicate protection", "")
         .unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
     let first = service
         .upload_with_request(
             USER,
-            WORKSPACE,
             &kb.id,
             "guide.md",
             b"orchid durable",
@@ -84,7 +82,6 @@ async fn repeated_upload_and_clicks_have_one_document_and_live_task_with_scoped_
     let replay = service
         .upload_with_request(
             USER,
-            WORKSPACE,
             &kb.id,
             "guide.md",
             b"orchid durable",
@@ -92,7 +89,7 @@ async fn repeated_upload_and_clicks_have_one_document_and_live_task_with_scoped_
         )
         .unwrap();
     let duplicate = service
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "guide.md", b"orchid durable")
+        .upload_and_start_index(USER, &kb.id, "guide.md", b"orchid durable")
         .unwrap();
     assert_eq!(first.id, replay.id);
     assert_eq!(first.id, duplicate.id);
@@ -100,7 +97,6 @@ async fn repeated_upload_and_clicks_have_one_document_and_live_task_with_scoped_
         service
             .upload_with_request(
                 USER,
-                WORKSPACE,
                 &kb.id,
                 "guide.md",
                 b"different bytes",
@@ -110,12 +106,12 @@ async fn repeated_upload_and_clicks_have_one_document_and_live_task_with_scoped_
     );
     for _ in 0..5 {
         service
-            .start_index(USER, WORKSPACE, &kb.id, &first.id)
+            .start_index(USER, &kb.id, &first.id)
             .unwrap();
     }
     assert_eq!(
         service
-            .detail(USER, WORKSPACE, &kb.id)
+            .detail(USER, &kb.id)
             .unwrap()
             .documents
             .len(),
@@ -123,14 +119,14 @@ async fn repeated_upload_and_clicks_have_one_document_and_live_task_with_scoped_
     );
     assert_eq!(
         service
-            .ingestion_tasks(USER, WORKSPACE, &kb.id, &first.id)
+            .ingestion_tasks(USER, &kb.id, &first.id)
             .unwrap()
             .len(),
         1
     );
     assert!(
         service
-            .ingestion_tasks("OTHER-USER", WORKSPACE, &kb.id, &first.id)
+            .ingestion_tasks("OTHER-USER", &kb.id, &first.id)
             .is_err()
     );
     service.stop_ingestion_workers();
@@ -141,7 +137,7 @@ async fn completed_parses_release_capacity_while_embedding_is_blocked_and_cancel
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
     let kb = service
-        .create(USER, WORKSPACE, "Independent capacities", "")
+        .create(USER, "Independent capacities", "")
         .unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
     let mut documents = Vec::new();
@@ -150,7 +146,6 @@ async fn completed_parses_release_capacity_while_embedding_is_blocked_and_cancel
             service
                 .upload_and_start_index(
                     USER,
-                    WORKSPACE,
                     &kb.id,
                     &format!("guide-{n}.md"),
                     b"orchid staged",
@@ -165,7 +160,7 @@ async fn completed_parses_release_capacity_while_embedding_is_blocked_and_cancel
                 .iter()
                 .map(|d| {
                     service
-                        .ingestion_tasks(USER, WORKSPACE, &kb.id, &d.id)
+                        .ingestion_tasks(USER, &kb.id, &d.id)
                         .unwrap()
                         .remove(0)
                 })
@@ -183,7 +178,7 @@ async fn completed_parses_release_capacity_while_embedding_is_blocked_and_cancel
     .unwrap();
     for doc in &documents {
         let cancelled = service
-            .cancel_index(USER, WORKSPACE, &kb.id, &doc.id)
+            .cancel_index(USER, &kb.id, &doc.id)
             .await
             .unwrap();
         assert_eq!(cancelled.status, "CANCELLED");
@@ -192,7 +187,7 @@ async fn completed_parses_release_capacity_while_embedding_is_blocked_and_cancel
     tokio::time::sleep(Duration::from_millis(150)).await;
     assert!(
         service
-            .detail(USER, WORKSPACE, &kb.id)
+            .detail(USER, &kb.id)
             .unwrap()
             .documents
             .iter()
@@ -204,21 +199,21 @@ async fn completed_parses_release_capacity_while_embedding_is_blocked_and_cancel
 async fn cancelled_rebuild_keeps_old_whole_index_and_manual_retry_uses_saved_chunks() {
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service.create(USER, WORKSPACE, "Publication", "").unwrap();
+    let kb = service.create(USER, "Publication", "").unwrap();
     let doc = service
-        .upload_and_index(USER, WORKSPACE, &kb.id, "guide.md", b"orchid published")
+        .upload_and_index(USER, &kb.id, "guide.md", b"orchid published")
         .await
         .unwrap();
     service
-        .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+        .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
     service
-        .start_index(USER, WORKSPACE, &kb.id, &doc.id)
+        .start_index(USER, &kb.id, &doc.id)
         .unwrap();
     wait_document(&service, &kb.id, &doc.id, "EMBEDDING").await;
     let cancelled = service
-        .cancel_index(USER, WORKSPACE, &kb.id, &doc.id)
+        .cancel_index(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     assert_eq!(cancelled.active_source_code, doc.active_source_code);
@@ -232,18 +227,18 @@ async fn cancelled_rebuild_keeps_old_whole_index_and_manual_retry_uses_saved_chu
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].source_code, doc.active_source_code.clone().unwrap());
     let task = service
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     let checkpoint = task.chunks_resource_code.clone();
     service
-        .retry_index(USER, WORKSPACE, &kb.id, &doc.id)
+        .retry_index(USER, &kb.id, &doc.id)
         .unwrap();
     let ready = wait_document(&service, &kb.id, &doc.id, "READY").await;
     assert_eq!(ready.index_revision, 2);
     assert_ne!(ready.active_source_code, doc.active_source_code);
     let after = service
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     assert_eq!(after.id, task.id);
@@ -263,14 +258,14 @@ async fn cancelled_rebuild_keeps_old_whole_index_and_manual_retry_uses_saved_chu
 async fn reopening_database_preserves_live_lease_and_resumes_expired_embedding_without_reparse() {
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service.create(USER, WORKSPACE, "Restart", "").unwrap();
+    let kb = service.create(USER, "Restart", "").unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
     let doc = service
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "guide.md", b"orchid checkpoint")
+        .upload_and_start_index(USER, &kb.id, "guide.md", b"orchid checkpoint")
         .unwrap();
     wait_document(&service, &kb.id, &doc.id, "EMBEDDING").await;
     let before = service
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     let repository = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
@@ -285,7 +280,7 @@ async fn reopening_database_preserves_live_lease_and_resumes_expired_embedding_w
     let ready = wait_document(&resumed, &kb.id, &doc.id, "READY").await;
     assert_eq!(ready.index_revision, 1);
     let after = resumed
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     assert_eq!(after.id, before.id);
@@ -298,15 +293,15 @@ async fn reopening_database_preserves_live_lease_and_resumes_expired_embedding_w
 async fn automatic_retry_backoff_is_bounded_and_partial_embedding_never_publishes() {
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
-    let kb = service.create(USER, WORKSPACE, "Retry limit", "").unwrap();
+    let kb = service.create(USER, "Retry limit", "").unwrap();
     f.client.failing.store(true, Ordering::SeqCst);
     let doc = service
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "guide.md", b"orchid fail")
+        .upload_and_start_index(USER, &kb.id, "guide.md", b"orchid fail")
         .unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let task = service
-                .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+                .ingestion_tasks(USER, &kb.id, &doc.id)
                 .unwrap()
                 .remove(0);
             if task.state == "FAILED" {
@@ -321,7 +316,7 @@ async fn automatic_retry_backoff_is_bounded_and_partial_embedding_never_publishe
     .await
     .unwrap();
     let doc = service
-        .detail(USER, WORKSPACE, &kb.id)
+        .detail(USER, &kb.id)
         .unwrap()
         .documents
         .remove(0);
@@ -329,7 +324,7 @@ async fn automatic_retry_backoff_is_bounded_and_partial_embedding_never_publishe
     assert_eq!(doc.index_revision, 0);
     f.client.failing.store(false, Ordering::SeqCst);
     service
-        .retry_index(USER, WORKSPACE, &kb.id, &doc.id)
+        .retry_index(USER, &kb.id, &doc.id)
         .unwrap();
     wait_document(&service, &kb.id, &doc.id, "READY").await;
     service.stop_ingestion_workers();
@@ -349,16 +344,15 @@ async fn restart_reuses_each_completed_vector_checkpoint() {
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
     let kb = service
-        .create(USER, WORKSPACE, "Vector checkpoints", "")
+        .create(USER, "Vector checkpoints", "")
         .unwrap();
     let content = format!("# Guide\n{}", "orchid durable fact. ".repeat(80));
     let doc = service
-        .upload(USER, WORKSPACE, &kb.id, "guide.md", content.as_bytes())
+        .upload(USER, &kb.id, "guide.md", content.as_bytes())
         .unwrap();
     service
         .configure(
             USER,
-            WORKSPACE,
             &kb.id,
             &doc.id,
             Some(ChunkConfig {
@@ -371,11 +365,11 @@ async fn restart_reuses_each_completed_vector_checkpoint() {
         .unwrap();
     f.client.block_after_calls.store(1, Ordering::SeqCst);
     service
-        .start_index(USER, WORKSPACE, &kb.id, &doc.id)
+        .start_index(USER, &kb.id, &doc.id)
         .unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while service
-            .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+            .ingestion_tasks(USER, &kb.id, &doc.id)
             .unwrap()[0]
             .embedding_resource_code
             .is_none()
@@ -404,12 +398,11 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
     let kb = service
-        .create(USER, WORKSPACE, "Publish recovery", "")
+        .create(USER, "Publish recovery", "")
         .unwrap();
     let doc = service
         .upload_and_index(
             USER,
-            WORKSPACE,
             &kb.id,
             "guide.md",
             b"orchid complete publication",
@@ -417,7 +410,7 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
         .await
         .unwrap();
     let initial = service
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     let q = SqliteKnowledgeIngestionQueue::connect(&f.state.config.database_url).unwrap();
@@ -464,7 +457,7 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
     let repository = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
     let current = repository.document(&kb.id, &doc.id).unwrap();
     let preview = service
-        .preview(USER, WORKSPACE, &kb.id, &doc.id)
+        .preview(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     let chunks = checkpoint_resource(
@@ -490,7 +483,7 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
     ));
     q.checkpoint(&publish, &owned(&publish), 4).unwrap();
     assert_eq!(
-        service.detail(USER, WORKSPACE, &kb.id).unwrap().documents[0].active_source_code,
+        service.detail(USER, &kb.id).unwrap().documents[0].active_source_code,
         doc.active_source_code
     );
     let before = f.client.calls.load(Ordering::SeqCst);
@@ -595,12 +588,11 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
     let kb = service
-        .create(USER, WORKSPACE, "Atomic settings", "")
+        .create(USER, "Atomic settings", "")
         .unwrap();
     let before = service
         .upload_and_index(
             USER,
-            WORKSPACE,
             &kb.id,
             "guide.md",
             b"orchid atomic settings",
@@ -621,7 +613,6 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
         service
             .configure_and_start_index(
                 USER,
-                WORKSPACE,
                 &kb.id,
                 &before.id,
                 Some(config.clone()),
@@ -637,7 +628,7 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
     );
     assert_eq!(
         service
-            .ingestion_tasks(USER, WORKSPACE, &kb.id, &before.id)
+            .ingestion_tasks(USER, &kb.id, &before.id)
             .unwrap()
             .len(),
         1
@@ -648,7 +639,6 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
     service
         .configure_and_start_index(
             USER,
-            WORKSPACE,
             &kb.id,
             &before.id,
             Some(config.clone()),
@@ -659,7 +649,7 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
         .unwrap();
     let queued = repo.document(&kb.id, &before.id).unwrap();
     let task = service
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &before.id)
+        .ingestion_tasks(USER, &kb.id, &before.id)
         .unwrap()
         .remove(0);
     assert_eq!(queued.revision, original.revision + 1);
@@ -673,7 +663,7 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
         serde_json::to_value(&config).unwrap()
     );
     service
-        .cancel_index(USER, WORKSPACE, &kb.id, &before.id)
+        .cancel_index(USER, &kb.id, &before.id)
         .await
         .unwrap();
     service.stop_ingestion_workers();
@@ -703,7 +693,7 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
         config_snapshot,
     );
     service
-        .configure(USER, WORKSPACE, &kb.id, &before.id, Some(config))
+        .configure(USER, &kb.id, &before.id, Some(config))
         .unwrap();
     let latest = repo.document(&kb.id, &before.id).unwrap();
     let queue = SqliteKnowledgeIngestionQueue::connect(&f.state.config.database_url).unwrap();
@@ -729,10 +719,10 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         .with_document_parser(Arc::new(CleanupImageParser))
         .with_ingestion_config(fast());
     let kb = service
-        .create(USER, WORKSPACE, "Rebuild cleanup", "")
+        .create(USER, "Rebuild cleanup", "")
         .unwrap();
     let first = service
-        .upload_and_index(USER, WORKSPACE, &kb.id, "guide.pdf", &pdf())
+        .upload_and_index(USER, &kb.id, "guide.pdf", &pdf())
         .await
         .unwrap();
     let repo = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
@@ -753,7 +743,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         )
         .unwrap();
     let other = service
-        .upload_and_index(USER, WORKSPACE, &kb.id, "other.md", b"orchid independent")
+        .upload_and_index(USER, &kb.id, "other.md", b"orchid independent")
         .await
         .unwrap();
     let shared = checkpoint_resource(&f, &old, "shared-cache.json", &serde_json::json!({}));
@@ -762,7 +752,6 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
     service
         .configure_and_start_index(
             USER,
-            WORKSPACE,
             &kb.id,
             &first.id,
             None,
@@ -780,7 +769,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         .clone();
     assert_ne!(new_cache, old_cache);
     let tasks = service
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &first.id)
+        .ingestion_tasks(USER, &kb.id, &first.id)
         .unwrap();
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].state, "READY");
@@ -875,7 +864,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
             .unwrap();
     }
     service
-        .preview(USER, WORKSPACE, &kb.id, &ready.id)
+        .preview(USER, &kb.id, &ready.id)
         .await
         .unwrap();
     assert_eq!(
@@ -905,10 +894,10 @@ async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
     let f = Fixture::new();
     let service = f.service.clone().with_ingestion_config(fast());
     let kb = service
-        .create(USER, WORKSPACE, "Publication rollback", "")
+        .create(USER, "Publication rollback", "")
         .unwrap();
     let first = service
-        .upload_and_index(USER, WORKSPACE, &kb.id, "guide.md", b"orchid keep active")
+        .upload_and_index(USER, &kb.id, "guide.md", b"orchid keep active")
         .await
         .unwrap();
     let repo = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
@@ -917,7 +906,7 @@ async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
     let conn = rusqlite::Connection::open(&f.state.config.database_url).unwrap();
     conn.execute_batch(&format!("CREATE TRIGGER reject_resource_cleanup BEFORE DELETE ON resource_files WHEN OLD.resource_code='{obsolete}' BEGIN SELECT RAISE(ABORT,'test cleanup failure'); END;")).unwrap();
     let failed = service
-        .index(USER, WORKSPACE, &kb.id, &first.id)
+        .index(USER, &kb.id, &first.id)
         .await
         .unwrap();
     assert_eq!(failed.status, "FAILED");
@@ -930,7 +919,7 @@ async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
     assert_eq!(old_count, before.chunk_count);
     assert_eq!(
         service
-            .ingestion_tasks(USER, WORKSPACE, &kb.id, &first.id)
+            .ingestion_tasks(USER, &kb.id, &first.id)
             .unwrap()
             .len(),
         2
@@ -943,13 +932,13 @@ async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
     conn.execute_batch("DROP TRIGGER reject_resource_cleanup;")
         .unwrap();
     service
-        .retry_index(USER, WORKSPACE, &kb.id, &first.id)
+        .retry_index(USER, &kb.id, &first.id)
         .unwrap();
     let ready = wait_document(&service, &kb.id, &first.id, "READY").await;
     assert_eq!(ready.index_revision, before.index_revision + 1);
     assert_eq!(
         service
-            .ingestion_tasks(USER, WORKSPACE, &kb.id, &first.id)
+            .ingestion_tasks(USER, &kb.id, &first.id)
             .unwrap()
             .len(),
         1

@@ -4,14 +4,7 @@ use serde::Serialize;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ListRequest {
-    workspace_code: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub(super) struct ReplaceRequest {
-    workspace_code: String,
     library_ids: Vec<String>,
 }
 
@@ -32,8 +25,8 @@ impl IntoResponse for AgentGrantsApiError {
         let (status, zh, en) = match descriptor.message_key {
             "tron.knowledge_base.not_found" => (
                 StatusCode::NOT_FOUND,
-                "知识库不存在或不属于当前工作区",
-                "Knowledge base not found in this workspace",
+                "知识库不存在",
+                "Knowledge base not found",
             ),
             "tron.knowledge_base.forbidden" => (
                 StatusCode::FORBIDDEN,
@@ -42,8 +35,8 @@ impl IntoResponse for AgentGrantsApiError {
             ),
             "tron.knowledge_base.invalid" => (
                 StatusCode::BAD_REQUEST,
-                "请选择当前工作区的内部智能体",
-                "Choose an internal agent in this workspace",
+                "请选择已定义的内部智能体",
+                "Choose a defined internal agent",
             ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -66,10 +59,9 @@ pub(super) async fn list(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
     Path(agent): Path<String>,
-    Query(query): Query<ListRequest>,
 ) -> Result<Json<ApiResponse<Vec<AgentLibraryVo>>>, AgentGrantsApiError> {
     let libraries = kb
-        .list_agent_knowledge_libraries(&auth.user().user_code, &query.workspace_code, &agent)
+        .list_agent_knowledge_libraries(&auth.user().user_code, &agent)
         .map_err(|error| AgentGrantsApiError(error, auth.locale.clone()))?;
     Ok(Json(ApiResponse::protocol_success(
         libraries
@@ -93,7 +85,6 @@ pub(super) async fn replace(
 ) -> Result<Json<ApiResponse<EmptyData>>, AgentGrantsApiError> {
     kb.set_agent_knowledge_libraries(
         &auth.user().user_code,
-        &body.workspace_code,
         &agent,
         &body.library_ids,
     )

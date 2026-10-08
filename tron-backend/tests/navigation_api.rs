@@ -436,18 +436,11 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         "TASKS",
         "AUTOMATIONS",
         "CORE",
-        "INTERNAL_AGENTS",
-        "SYSTEM_AGENTS",
-        "AGENTS",
         "MCP_SERVERS",
         "PROMPTS",
         "MODELS",
         "SKILLS",
         "AGENT_OPERATIONS",
-        "MEMORY",
-        "KNOWLEDGE_GRAPH",
-        "KNOWLEDGE_BASE",
-        "RAG",
         "FILE_MANAGEMENT",
         "DATA_SOURCE_MANAGEMENT",
         "SERVER_MANAGEMENT",
@@ -495,7 +488,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         restore_payload["data"]["restoredDomainCodes"],
         json!(["ADVANCED", "CHAT_PANEL"])
     );
-    assert_eq!(restore_payload["data"]["restoredItemCount"], 23);
+    assert_eq!(restore_payload["data"]["restoredItemCount"], 16);
 
     let restored_tree = request_json(
         &router,
@@ -511,14 +504,11 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     assert_eq!(restored_payload["data"][0]["menuCode"], "CORE");
     assert_eq!(restored_payload["data"][0]["childDisplay"], "Flyout");
     assert_eq!(restored_payload["data"][1]["menuCode"], "AGENT_OPERATIONS");
-    assert_eq!(
-        restored_payload["data"][1]["children"][0]["children"][0]["menuCode"],
-        "INTERNAL_AGENTS"
-    );
-    assert_eq!(
-        restored_payload["data"][1]["children"][0]["children"][1]["menuCode"],
-        "SYSTEM_AGENTS"
-    );
+    assert_eq!(restored_payload["data"][1]["children"][0]["menuCode"], "MCP_SERVERS");
+    let tree_json = restored_payload["data"].to_string();
+    for removed in ["INTERNAL_AGENTS", "SYSTEM_AGENTS", "KNOWLEDGE_BASE", "KNOWLEDGE_GRAPH", "MEMORY", "RAG"] {
+        assert!(!tree_json.contains(removed), "removed menu {removed} was restored");
+    }
 
     let second_restore = request_json(
         &router,
@@ -673,6 +663,32 @@ fn existing_chat_menu_and_assignments_are_removed_on_repository_startup() {
             [], |row| row.get(0),
         ).expect("chat panel menus remain usable");
         assert_eq!(panel_count, 4);
+        assert!(connection.prepare("PRAGMA foreign_key_check").unwrap().query([]).unwrap().next().unwrap().is_none());
+    }
+}
+
+#[test]
+fn platform_menu_migration_removes_old_entries_and_retains_custom_children() {
+    use tron_backend::adapters::outbound::persistence::sqlite::SqliteNavigationRepository;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy-navigation.sqlite");
+    let url = path.to_str().unwrap();
+    drop(SqliteNavigationRepository::connect(url).unwrap());
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    connection.execute_batch(include_str!("../migrations/20260829_0002_create_navigation_management.sql")).unwrap();
+    connection.execute_batch(include_str!("../migrations/20260902_0001_split_workspace_agents_navigation.sql")).unwrap();
+    connection.execute_batch(include_str!("../migrations/20260922_0001_create_navigation_menu_trees.sql")).unwrap();
+    connection.execute_batch("INSERT INTO navigation_menus(id,menu_code,source,menu_type,page_code,icon,enabled,created_at,updated_at) VALUES(900000000000000001,'CUSTOM_EXPERT','Custom','Internal','apps.index','Bot',1,'fixture','fixture');
+        INSERT INTO navigation_menu_tree_items(id,tree_id,menu_id,parent_item_id,position) VALUES(900000000000000002,734500000000000001,900000000000000001,734520000000000007,2);").unwrap();
+    drop(connection);
+    for _ in 0..2 {
+        drop(SqliteNavigationRepository::connect(url).unwrap());
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        let count: i64 = connection.query_row("SELECT COUNT(*) FROM navigation_menus WHERE menu_code IN ('AGENTS','INTERNAL_AGENTS','SYSTEM_AGENTS','MEMORY','KNOWLEDGE_GRAPH','KNOWLEDGE_BASE','RAG')", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 0);
+        let parent: Option<i64> = connection.query_row("SELECT parent_item_id FROM navigation_menu_tree_items WHERE menu_id=900000000000000001", [], |row| row.get(0)).unwrap();
+        assert_eq!(parent, None);
         assert!(connection.prepare("PRAGMA foreign_key_check").unwrap().query([]).unwrap().next().unwrap().is_none());
     }
 }

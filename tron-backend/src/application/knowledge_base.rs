@@ -1,6 +1,7 @@
 pub mod ingestion;
 pub mod deletion;
 mod agent_grants;
+mod platform_catalog;
 mod ingestion_worker;
 pub mod local_documents;
 pub mod parsing;
@@ -24,8 +25,7 @@ use crate::{
             ResourceBinaryDownloadCommand, ResourceCommitBinary, ResourceCreateCommand,
             ResourceService,
         },
-        workspace::WorkspaceService,
-    },
+        },
     domain::{rag::*, resource::ResourceKind},
     shared::sqlite_extensions::TRON_VECTOR_INDEX_DIMENSION,
 };
@@ -83,7 +83,6 @@ pub struct KnowledgeBase {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub workspace_code: String,
     pub owner_user_code: String,
     pub default_chunk_config: ChunkConfig,
     #[serde(default)]
@@ -176,7 +175,6 @@ pub struct KnowledgeBaseService {
     repository: SqliteKnowledgeBaseRepository,
     rag: AppRagService,
     resources: ResourceService,
-    workspaces: WorkspaceService,
     agents: AgentManagementService,
     llm: LlmRuntimeService,
     parser: Option<Arc<dyn KnowledgeDocumentParser>>,
@@ -190,8 +188,7 @@ impl KnowledgeBaseService {
         repository: SqliteKnowledgeBaseRepository,
         rag: AppRagService,
         resources: ResourceService,
-        workspaces: WorkspaceService,
-        agents: AgentManagementService,
+            agents: AgentManagementService,
         llm: LlmRuntimeService,
     ) -> Self {
         let queue = Arc::new(repository.ingestion_queue().expect("knowledge ingestion schema"));
@@ -204,7 +201,6 @@ impl KnowledgeBaseService {
             repository,
             rag,
             resources,
-            workspaces,
             agents,
             llm,
             parser: None,
@@ -262,58 +258,46 @@ impl KnowledgeBaseService {
         self.parser = Some(parser);
         self
     }
-    pub async fn parsing_capabilities(
-        &self,
-        user: &str,
-        workspace: &str,
-    ) -> Result<ParsingCapabilities, KnowledgeBaseError> {
-        self.workspace(user, workspace)?;
+    pub async fn parsing_capabilities(&self, user: &str) -> Result<ParsingCapabilities, KnowledgeBaseError> {
+        self.require_user(user)?;
         self.parser.as_ref().ok_or_else(||KnowledgeBaseError::Invalid("文档解析服务未配置".into()))?.capabilities().await
     }
-    fn workspace(&self, user: &str, workspace: &str) -> Result<(), KnowledgeBaseError> {
-        if user.trim().is_empty()
-            || workspace.trim().is_empty()
-            || !self
-                .workspaces
-                .workspace_is_active(workspace)
-                .unwrap_or(false)
-        {
-            return Err(KnowledgeBaseError::Forbidden);
-        }
+    fn require_user(&self, user: &str) -> Result<(), KnowledgeBaseError> {
+        if user.trim().is_empty() { return Err(KnowledgeBaseError::Forbidden); }
         Ok(())
+    }
+    pub(crate) fn download_resource(&self, user: &str, id: &str, code: &str) -> Result<(std::fs::File, u64), KnowledgeBaseError> {
+        self.owned(user, id)?;
+        let mut reachable = std::collections::BTreeSet::new();
+        for document in self.repository.documents(id)? {
+            deletion::collect_codes(&serde_json::to_value(&document).map_err(invalid_storage)?, &mut reachable);
+            reachable.insert(document.resource_code);
+            reachable.extend(self.repository.derived_resources(&document.id)?);
+        }
+        if !reachable.contains(code) { return Err(KnowledgeBaseError::NotFound); }
+        let (download, record) = self.resources.download_binary_to_file(user, ResourceBinaryDownloadCommand { workspace_code: "PLATFORM".into(), resource_code: code.into() })?;
+        let mut file = tempfile::tempfile().map_err(invalid_storage)?;
+        self.resources.download_binary_storage(&record, &mut file)?;
+        std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(0)).map_err(invalid_storage)?;
+        Ok((file, download.byte_size))
     }
     fn owned(
         &self,
         user: &str,
-        workspace: &str,
         id: &str,
     ) -> Result<KnowledgeBase, KnowledgeBaseError> {
-        self.workspace(user, workspace)?;
-        if !self.repository.owns(user, workspace, id) {
+        self.require_user(user)?;
+        if !self.repository.owns(user, id) {
             return Err(KnowledgeBaseError::NotFound);
         }
         self.repository.get(id)
     }
-    pub fn list(
-        &self,
-        user: &str,
-        workspace: &str,
-    ) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
-        self.workspace(user, workspace)?;
-        let mut list = self.repository.list(user, workspace)?;
-        for kb in &mut list {
-            kb.document_count = self.repository.documents(&kb.id)?.len();
-            kb.agent_codes = self.repository.grants(&kb.id)?;
-        }
-        Ok(list)
-    }
     pub fn detail(
         &self,
         user: &str,
-        workspace: &str,
         id: &str,
     ) -> Result<KnowledgeBase, KnowledgeBaseError> {
-        let mut kb = self.owned(user, workspace, id)?;
+        let mut kb = self.owned(user, id)?;
         kb.documents = self.repository.documents(id)?;
         for doc in &mut kb.documents {
             if let Some(task) = self.queue.for_document(&doc.id).map_err(ingestion_worker::queue_error)?.first() {
@@ -328,14 +312,14 @@ impl KnowledgeBaseService {
     pub fn published_chunks(
         &self,
         user: &str,
-        workspace: &str,
         id: &str,
         document: &str,
         page: usize,
         page_size: usize,
     ) -> Result<RagSourceUnitsPage, KnowledgeBaseError> {
+        let namespace = "PLATFORM";
         let _guard = self.cleanup_gate.lock().map_err(invalid_storage)?;
-        let kb = self.owned(user, workspace, id)?;
+        let kb = self.owned(user, id)?;
         let doc = self.repository.document(&kb.id, document)?;
         if page == 0 || page_size == 0 || page_size > 100 || page > 1_000_000 {
             return Err(KnowledgeBaseError::Invalid(
@@ -354,12 +338,12 @@ impl KnowledgeBaseService {
             .repository_handle()
             .source_units_page(
                 RagDebugSourceRequest {
-                    workspace_code: workspace.into(),
+                    workspace_code: namespace.into(),
                     corpus_id: kb.id,
                     source_code: source,
                     source_version: "v1".into(),
                     scope_type: "SPACE".into(),
-                    scope_code: workspace.into(),
+                    scope_code: namespace.into(),
                     include_text_units: true,
                     include_warnings: false,
                 },
@@ -372,11 +356,10 @@ impl KnowledgeBaseService {
     pub fn create(
         &self,
         user: &str,
-        workspace: &str,
         name: &str,
         description: &str,
     ) -> Result<KnowledgeBase, KnowledgeBaseError> {
-        self.workspace(user, workspace)?;
+        self.require_user(user)?;
         if name.trim().is_empty() || name.chars().count() > 120 {
             return Err(KnowledgeBaseError::Invalid(
                 "知识库名称需为1–120字符".into(),
@@ -387,7 +370,6 @@ impl KnowledgeBaseService {
             id: id.clone(),
             name: name.trim().into(),
             description: description.trim().into(),
-            workspace_code: workspace.into(),
             owner_user_code: user.into(),
             default_chunk_config: ChunkConfig::default(),
             documents: vec![],
@@ -462,23 +444,23 @@ impl KnowledgeBaseService {
     pub fn upload(
         &self,
         user: &str,
-        workspace: &str,
         kb_id: &str,
         filename: &str,
         bytes: &[u8],
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.upload_original(user, workspace, kb_id, filename, bytes, false)
+        let namespace = "PLATFORM";
+        self.upload_original(user, namespace, kb_id, filename, bytes, false)
     }
     pub(super) fn upload_original(
         &self,
         user: &str,
-        workspace: &str,
+        namespace: &str,
         kb_id: &str,
         filename: &str,
         bytes: &[u8],
         request_ingestion: bool,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.owned(user, workspace, kb_id)?;
+        self.owned(user, kb_id)?;
         // Serialize original creation across service clones; stable content IDs also
         // prevent duplicate persisted documents after request replay or restart.
         static UPLOAD_GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -497,19 +479,19 @@ impl KnowledgeBaseService {
                 "支持 .md/.docx/.xlsx/.pdf；旧 .doc/.xls 请先另存为新格式".into(),
             ));
         }
-        let id = format!("doc_{}", hash(&serde_json::to_string(&(user, workspace, kb_id, filename, format!("{:x}", Sha256::digest(bytes)))).map_err(invalid_storage)?));
+        let id = format!("doc_{}", hash(&serde_json::to_string(&(user, namespace, kb_id, filename, format!("{:x}", Sha256::digest(bytes)))).map_err(invalid_storage)?));
         if let Ok(existing) = self.repository.document(kb_id, &id) {
             if request_ingestion { self.repository.request_ingestion(kb_id, &existing)?; }
             return self.repository.document(kb_id, &id);
         }
         let resource = format!("KB_{}", new_id());
-        self.repository.mark_private(user, workspace, &resource)?;
+        self.repository.mark_private(user, namespace, &resource)?;
         let mut temporary = tempfile::NamedTempFile::new().map_err(invalid_storage)?;
         temporary.write_all(bytes).map_err(invalid_storage)?;
         self.resources.create_file_resource(
             user,
             ResourceCreateCommand {
-                workspace_code: workspace.into(),
+                workspace_code: namespace.into(),
                 resource_code: resource.clone(),
                 kind: if ext == "pdf" {
                     ResourceKind::Pdf
@@ -528,7 +510,7 @@ impl KnowledgeBaseService {
         let (_, stored) = self.resources.download_binary_to_file(
             user,
             ResourceBinaryDownloadCommand {
-                workspace_code: workspace.into(),
+                workspace_code: namespace.into(),
                 resource_code: resource.clone(),
             },
         )?;
@@ -565,15 +547,17 @@ impl KnowledgeBaseService {
         Ok(doc)
     }
     /// Product upload uses the existing per-document index lifecycle; no extra job layer.
-    pub async fn upload_and_index(&self, user:&str, workspace:&str, kb:&str, filename:&str, bytes:&[u8]) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
-        let doc=self.upload_original(user,workspace,kb,filename,bytes,true)?;
-        self.index(user,workspace,kb,&doc.id).await
+    pub async fn upload_and_index(&self, user:&str, kb:&str, filename:&str, bytes:&[u8]) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
+        let namespace = "PLATFORM";
+        let doc=self.upload_original(user,namespace,kb,filename,bytes,true)?;
+        self.index(user,kb,&doc.id).await
     }
     /// Saving document settings automatically rebuilds only that document.
-    pub async fn configure_and_index(&self,user:&str,workspace:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
-        let task = self.enqueue_configured_index(user, workspace, kb, doc, config, tier, ocr).await?;
+    pub async fn configure_and_index(&self,user:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
+        let namespace = "PLATFORM";
+        let task = self.enqueue_configured_index(user, namespace, kb, doc, config, tier, ocr).await?;
         self.run_task_inline(&task.id).await?;
-        self.document_with_task(user, workspace, kb, doc)
+        self.document_with_task(user, kb, doc)
     }
     fn document_parser(&self, doc: &KnowledgeBaseDocument) -> Result<Option<Arc<dyn KnowledgeDocumentParser>>, KnowledgeBaseError> {
         match (&self.parser, doc.ocr_mode) {
@@ -585,7 +569,7 @@ impl KnowledgeBaseService {
     async fn chunks(
         &self,
         user: &str,
-        workspace: &str,
+        namespace: &str,
         kb: &KnowledgeBase,
         doc: &KnowledgeBaseDocument,
         generate_descriptions: bool,
@@ -593,7 +577,7 @@ impl KnowledgeBaseService {
         let (_, record) = self.resources.download_binary_to_file(
             user,
             ResourceBinaryDownloadCommand {
-                workspace_code: workspace.into(),
+                workspace_code: namespace.into(),
                 resource_code: doc.resource_code.clone(),
             },
         )?;
@@ -607,9 +591,9 @@ impl KnowledgeBaseService {
             let task = checkpoint.task()?;
             if task.configuration["originalSha256"].as_str() != Some(format!("{:x}", Sha256::digest(&bytes)).as_str()) { return Err(KnowledgeBaseError::Conflict); }
         }
-        let (parsed, parsed_doc) = self.parsed_document(user, workspace, kb, doc, &bytes).await?;
+        let (parsed, parsed_doc) = self.parsed_document(user, namespace, kb, doc, &bytes).await?;
         if generate_descriptions && fidelity::blocked(&parsed_doc) { return Err(KnowledgeBaseError::Invalid("现有解析产物已记录失败，未发布索引；原件已保留".into())); }
-        let (parsed, mut parsed_doc) = self.supplement_image_descriptions(user, workspace, kb, &parsed_doc, parsed, generate_descriptions).await?;
+        let (parsed, mut parsed_doc) = self.supplement_image_descriptions(user, namespace, kb, &parsed_doc, parsed, generate_descriptions).await?;
         parsed_doc.image_analysis = parsed.image_analysis.clone();
         if let Some(checkpoint) = &self.parse_checkpoint { checkpoint.chunking()?; }
         let chunks = split_document(
@@ -624,13 +608,13 @@ impl KnowledgeBaseService {
     pub async fn preview(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         doc: &str,
     ) -> Result<KnowledgeBasePreview, KnowledgeBaseError> {
-        let kb = self.owned(user, workspace, kb)?;
+        let namespace = "PLATFORM";
+        let kb = self.owned(user, kb)?;
         let doc = self.repository.document(&kb.id, doc)?;
-        let (chunks, warnings, parsed_doc) = self.chunks(user, workspace, &kb, &doc, false).await?;
+        let (chunks, warnings, parsed_doc) = self.chunks(user, namespace, &kb, &doc, false).await?;
         Ok(KnowledgeBasePreview {
             fidelity_issues: vec![], // Legacy response field; no interactive audit workflow.
             chunk_count: chunks.len(),
@@ -639,20 +623,20 @@ impl KnowledgeBaseService {
             image_analysis: parsed_doc.image_analysis,
         })
     }
-    pub async fn configure_parsing(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        let mut document = self.prepare_parsing_configuration(user, workspace, kb, doc, config, tier, ocr).await?;
+    pub async fn configure_parsing(&self, user: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        let mut document = self.prepare_parsing_configuration(user, kb, doc, config, tier, ocr).await?;
         let revision = document.revision;
         document.revision += 1;
         self.repository.save_document(kb, &document, revision)?;
         Ok(document)
     }
-    async fn prepare_parsing_configuration(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.owned(user,workspace,kb)?;
+    async fn prepare_parsing_configuration(&self, user: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        self.owned(user,kb)?;
         if let Some(Some(selected)) = tier {
             let filename = self.repository.document(kb,doc)?.file_name.to_ascii_lowercase();
             if (filename.ends_with(".docx") || filename.ends_with(".xlsx")) && selected != ParsingTier::Flash { return Err(KnowledgeBaseError::Invalid("Word/Excel仅支持原生解析".into())); }
             if filename.ends_with(".md") {return Err(KnowledgeBaseError::Invalid("Markdown使用直接读取，无需解析质量覆盖".into()));}
-            let capabilities=self.parsing_capabilities(user,workspace).await?;
+            let capabilities=self.parsing_capabilities(user).await?;
             if !capabilities.available_tiers.contains(&selected) {return Err(KnowledgeBaseError::Invalid("选定解析质量不可用".into()));}
         }
         if let Some(Some(mode)) = ocr {
@@ -662,27 +646,26 @@ impl KnowledgeBaseService {
             }
             self.parser.as_ref().ok_or_else(|| KnowledgeBaseError::Invalid("文档解析服务未配置".into()))?.with_ocr_mode(mode)?;
         }
-        self.prepare_document_configuration(user,workspace,kb,doc,config,tier,ocr)
+        self.prepare_document_configuration(user,kb,doc,config,tier,ocr)
     }
     pub fn configure(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         doc: &str,
         config: Option<ChunkConfig>,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.configure_document(user,workspace,kb,doc,config,None,None)
+        self.configure_document(user,kb,doc,config,None,None)
     }
-    fn configure_document(&self,user:&str,workspace:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
-        let mut document = self.prepare_document_configuration(user, workspace, kb, doc, config, tier, ocr)?;
+    fn configure_document(&self,user:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
+        let mut document = self.prepare_document_configuration(user, kb, doc, config, tier, ocr)?;
         let revision = document.revision;
         document.revision += 1;
         self.repository.save_document(kb, &document, revision)?;
         Ok(document)
     }
-    fn prepare_document_configuration(&self,user:&str,workspace:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
-        self.owned(user, workspace, kb)?;
+    fn prepare_document_configuration(&self,user:&str,kb:&str,doc:&str,config:Option<ChunkConfig>,tier:Option<Option<ParsingTier>>,ocr:Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument,KnowledgeBaseError> {
+        self.owned(user, kb)?;
         if let Some(c) = &config {
             c.validate()
                 .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
@@ -708,62 +691,54 @@ impl KnowledgeBaseService {
     pub fn set_grants(
         &self,
         user: &str,
-        workspace: &str,
         kb: &str,
         agents: Vec<String>,
     ) -> Result<KnowledgeBase, KnowledgeBaseError> {
-        self.owned(user, workspace, kb)?;
-        let valid = self
-            .agents
-            .list_workspace_internal_agents(workspace)
-            .map_err(|e| KnowledgeBaseError::Storage(format!("{e:?}")))?;
-        if agents
-            .iter()
-            .any(|a| !valid.iter().any(|p| p.agent_code == *a))
-        {
-            return Err(KnowledgeBaseError::Invalid(
-                "只支持当前空间的内部 Agent".into(),
-            ));
-        }
-        self.repository.set_grants(kb, &agents)?;
-        self.detail(user, workspace, kb)
+        self.owned(user, kb)?;
+        self.assign_library_agents(user, kb, &agents)?;
+        self.detail(user, kb)
     }
-    pub fn remove_document(&self, user: &str, workspace: &str, kb: &str, doc: &str) -> Result<deletion::DocumentDeletion, KnowledgeBaseError> {
+    pub fn remove_document(&self, user: &str, kb: &str, doc: &str) -> Result<deletion::DocumentDeletion, KnowledgeBaseError> {
+        let namespace = "PLATFORM";
         self.start_ingestion_workers()?;
-        self.request_document_deletion(user, workspace, kb, doc)
+        self.request_document_deletion(user, namespace, kb, doc)
     }
-    pub fn start_index(&self, user: &str, workspace: &str, kb: &str, doc: &str) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.enqueue_index(user, workspace, kb, doc)?;
+    pub fn start_index(&self, user: &str, kb: &str, doc: &str) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        let namespace = "PLATFORM";
+        self.enqueue_index(user, namespace, kb, doc)?;
         self.start_ingestion_workers()?;
-        self.document_with_task(user, workspace, kb, doc)
+        self.document_with_task(user, kb, doc)
     }
-    pub fn upload_and_start_index(&self, user: &str, workspace: &str, kb: &str, name: &str, bytes: &[u8]) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        let doc = self.upload_original(user, workspace, kb, name, bytes, true)?;
+    pub fn upload_and_start_index(&self, user: &str, kb: &str, name: &str, bytes: &[u8]) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        let namespace = "PLATFORM";
+        let doc = self.upload_original(user, namespace, kb, name, bytes, true)?;
         let tasks = self.queue.for_document(&doc.id).map_err(ingestion_worker::queue_error)?;
-        if tasks.first().is_none() { return self.start_index(user, workspace, kb, &doc.id); }
+        if tasks.first().is_none() { return self.start_index(user, kb, &doc.id); }
         self.start_ingestion_workers()?;
-        self.document_with_task(user, workspace, kb, &doc.id)
+        self.document_with_task(user, kb, &doc.id)
     }
-    pub async fn configure_and_start_index(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.enqueue_configured_index(user, workspace, kb, doc, config, tier, ocr).await?;
+    pub async fn configure_and_start_index(&self, user: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        let namespace = "PLATFORM";
+        self.enqueue_configured_index(user, namespace, kb, doc, config, tier, ocr).await?;
         self.start_ingestion_workers()?;
-        self.document_with_task(user, workspace, kb, doc)
+        self.document_with_task(user, kb, doc)
     }
-    async fn enqueue_configured_index(&self, user: &str, workspace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<ingestion::IngestionTask, KnowledgeBaseError> {
-        let document = self.prepare_parsing_configuration(user, workspace, kb, doc, config, tier, ocr).await?;
-        let library = self.owned(user, workspace, kb)?;
-        let task = self.prepare_index_task(user, workspace, &library, &document)?;
+    async fn enqueue_configured_index(&self, user: &str, namespace: &str, kb: &str, doc: &str, config: Option<ChunkConfig>, tier: Option<Option<ParsingTier>>, ocr: Option<Option<OcrMode>>) -> Result<ingestion::IngestionTask, KnowledgeBaseError> {
+        let document = self.prepare_parsing_configuration(user, kb, doc, config, tier, ocr).await?;
+        let library = self.owned(user, kb)?;
+        let task = self.prepare_index_task(user, namespace, &library, &document)?;
         self.queue.enqueue_configured(task, document).map_err(ingestion_worker::queue_error)
     }
     /// Awaited entrypoint uses exactly the same durable stages as background work.
-    pub async fn index(&self, user: &str, workspace: &str, kb: &str, doc: &str) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        let task = self.enqueue_index(user, workspace, kb, doc)?;
+    pub async fn index(&self, user: &str, kb: &str, doc: &str) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        let namespace = "PLATFORM";
+        let task = self.enqueue_index(user, namespace, kb, doc)?;
         self.run_task_inline(&task.id).await?;
-        self.document_with_task(user, workspace, kb, doc)
+        self.document_with_task(user, kb, doc)
     }
     fn deactivate(
         &self,
-        workspace: &str,
+        namespace: &str,
         kb: &str,
         source: &str,
     ) -> Result<(), KnowledgeBaseError> {
@@ -773,10 +748,10 @@ impl KnowledgeBaseService {
                 corpus_id: kb.into(),
                 source_code: source.into(),
                 source_version: "v1".into(),
-                workspace_code: workspace.into(),
+                workspace_code: namespace.into(),
                 scope: RagIngestScope {
                     scope_type: "SPACE".into(),
-                    scope_code: workspace.into(),
+                    scope_code: namespace.into(),
                 },
             })?;
         Ok(())
@@ -834,7 +809,7 @@ impl KnowledgeBaseService {
                     self.require_rebuild(&kb.id, document.clone(), "已发布索引不是1024维，请重建索引")?;
                     continue;
                 }
-                if let Ok(current) = self.llm.embedding_space_fingerprint(workspace,Some(model),dim) {
+                if let Ok(current) = self.llm.embedding_space_fingerprint("PLATFORM",Some(model),dim) {
                     if &current != stored {
                         self.require_rebuild(&kb.id, document.clone(), "Embedding模型配置与已发布索引不同，请重建索引")?;
                         continue;
@@ -858,19 +833,20 @@ impl KnowledgeBaseService {
         }));
         let space = if incompatible {
             // One query cannot mix spaces. Require rebuild; keep published generations.
-            for (kb,document) in candidates {
-                self.require_rebuild(&kb, document, "已授权文档的Embedding模型或维度不一致，请重建索引后检索")?;
+            for (kb,document) in &candidates {
+                self.require_rebuild(kb, document.clone(), "已授权文档的Embedding模型或维度不一致，请重建索引后检索")?;
             }
             None
         } else {
             candidates.first().map(|(_,d)|(d.embedding_model_code.clone().unwrap(),d.embedding_dimension.unwrap()))
         };
+        let embedding_workspace = "PLATFORM".to_owned();
         let embedding = if let Some((model, dimensions)) = space {
             match self
                 .llm
                 .embedding_query_in_run(
                     LlmEmbeddingCallCommand {
-                        workspace_code: workspace.into(),
+                        workspace_code: embedding_workspace,
                         model_code: Some(model.clone()),
                         input: query.into(),
                     },
@@ -922,7 +898,7 @@ impl KnowledgeBaseService {
         workspace: &str,
         agent: &str,
     ) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
-        self.workspace(user, workspace)?;
+        self.require_user(user)?;
         if self
             .agents
             .workspace_internal_agent_policy(workspace, agent)
@@ -931,9 +907,9 @@ impl KnowledgeBaseService {
             return Ok(vec![]);
         }
         let mut allowed = vec![];
-        for kb in self.repository.list(user, workspace)? {
+        for kb in self.repository.platform_libraries(user)? {
             if self.repository.grants(&kb.id)?.iter().any(|a| a == agent) {
-                let detail=self.detail(user,workspace,&kb.id)?;
+                let detail=self.detail(user,&kb.id)?;
 
                 allowed.push(detail);
             }
@@ -1009,7 +985,7 @@ impl KnowledgeBaseService {
                                 .is_some_and(|stored| {
                                     self.llm
                                         .embedding_space_fingerprint(
-                                            workspace,
+                                            "PLATFORM",
                                             Some(model),
                                             values.len(),
                                         )
@@ -1030,14 +1006,14 @@ impl KnowledgeBaseService {
                         corpus_id: kb.id.clone(),
                         route_id: "knowledge_base".into(),
                         retriever: retriever.into(),
-                        workspace_code: workspace.into(),
+                        workspace_code: "PLATFORM".into(),
                         query: query.into(),
                         query_embedding: vector.map(|(_, v, _)| v.clone()),
                         query_embedding_model_code: vector.map(|(m, _, _)| m.clone()),
                         source_version: "v1".into(),
                         scopes: vec![RagSearchScope {
                             scope_type: "SPACE".into(),
-                            scope_code: workspace.into(),
+                            scope_code: "PLATFORM".into(),
                         }],
                         filters: json!({"sourceCode":{"op":"in","value":sources}}),
                         policy: json!({}),

@@ -764,7 +764,7 @@ mod tests {
     }
 
     #[test]
-    fn catalog_schema_adds_point_coefficients_without_recreating_existing_catalogs() {
+    fn catalog_schema_adds_point_coefficients_to_legacy_catalogs() {
         let connection = Connection::open_in_memory().expect("open in-memory database");
         connection
             .execute_batch(
@@ -806,6 +806,8 @@ mod tests {
         connection
             .execute_batch(MODEL_PROVIDER_MIGRATION)
             .expect("create provider tables");
+
+        migrate_provider_catalog_model_schema(&connection).expect("migrate catalog identity");
 
         let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection,rusqlite::TransactionBehavior::Immediate).expect("start first snapshot");
         apply_catalog_snapshot(

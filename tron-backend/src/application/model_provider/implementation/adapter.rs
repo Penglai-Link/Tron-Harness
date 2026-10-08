@@ -148,33 +148,36 @@ impl ModelProviderAdapter for PersonAiAdapter {
             let client = ChatCompletionsClient::new(credentials.server_base_url.clone())
                 .map_err(|_| ModelProviderError::InvalidServerBaseUrl)?;
             let context = credentials.context();
-            let mut distinct = BTreeMap::<String, ExternalCatalogModel>::new();
+            let mut distinct = BTreeMap::new();
             for quality in [QualityType::High, QualityType::Middle, QualityType::Low] {
                 for model in client
                     .list_models(&context, Some(quality), None, None)
                     .await
                     .map_err(server_api_error)?
                 {
-                    distinct.entry(model.model_code.clone()).or_insert_with(|| {
-                        ExternalCatalogModel {
-                            model_code: model.model_code.clone(),
-                            model_name: model.model_name.unwrap_or(model.model_code),
-                            protocols: model
-                                .protocol_types
-                                .unwrap_or_default()
-                                .into_iter()
-                                .map(agent_protocol_from_sdk)
-                                .collect(),
-                            upstream_vendor_code: model.provider_code,
-                            upstream_vendor_name: model.provider_name,
-                            context_window_tokens: model
-                                .context_length
-                                .and_then(|value| u32::try_from(value).ok()),
-                            quality_type: provider_quality_from_sdk(quality),
-                            input_coefficient: model.input_coefficient,
-                            cache_hit_coefficient: model.cache_hit_coefficient,
-                            output_coefficient: model.output_coefficient,
-                        }
+                    let key = (
+                        model.provider_code.clone().unwrap_or_default(),
+                        model.model_code.clone(),
+                        quality.as_str(),
+                    );
+                    distinct.entry(key).or_insert_with(|| ExternalCatalogModel {
+                        model_code: model.model_code.clone(),
+                        model_name: model.model_name.unwrap_or(model.model_code),
+                        protocols: model
+                            .protocol_types
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(agent_protocol_from_sdk)
+                            .collect(),
+                        upstream_vendor_code: model.provider_code,
+                        upstream_vendor_name: model.provider_name,
+                        context_window_tokens: model
+                            .context_length
+                            .and_then(|value| u32::try_from(value).ok()),
+                        quality_type: provider_quality_from_sdk(quality),
+                        input_coefficient: model.input_coefficient,
+                        cache_hit_coefficient: model.cache_hit_coefficient,
+                        output_coefficient: model.output_coefficient,
                     });
                 }
             }

@@ -52,16 +52,16 @@ impl KnowledgeOfficeRenderer for Render {
 async fn local_charts_are_cached_private_and_preserve_original_sources() {
  let f=Fixture::new();let parses=Arc::new(AtomicUsize::new(0));let renders=Arc::new(AtomicUsize::new(0));
  let service=f.service.clone().with_document_parser(Arc::new(Parse(parses.clone()))).with_office_renderer(Arc::new(Render(renders.clone()))).with_visual_context(true);
- let kb=service.create(USER,WORKSPACE,"Synthetic chart evidence","no user data").unwrap();
+ let kb=service.create(USER,"Synthetic chart evidence","no user data").unwrap();
  for (name,raw) in [("chart.docx",WORD),("chart.xlsx",EXCEL)] {
-  let doc=service.upload(USER,WORKSPACE,&kb.id,name,raw).unwrap();
-  let preview=service.preview(USER,WORKSPACE,&kb.id,&doc.id).await.unwrap();
+  let doc=service.upload(USER,&kb.id,name,raw).unwrap();
+  let preview=service.preview(USER,&kb.id,&doc.id).await.unwrap();
   let visuals:Vec<_>=preview.chunks.iter().filter(|c|c.location.rendered_page.is_some()).collect();assert!(!visuals.is_empty());
   for chunk in &visuals {assert!(chunk.location.page.is_none());assert!(!chunk.location.chart_sources.is_empty());assert!(!chunk.location.image_resource_codes.is_empty());if name.ends_with("xlsx"){assert_eq!(chunk.location.sheet.as_deref(),Some("Revenue"));}else{assert!(chunk.location.chart_sources[0].contains("Word段3"));}}
   let pc=parses.load(Ordering::SeqCst);let rc=renders.load(Ordering::SeqCst);
-  let cached=service.preview(USER,WORKSPACE,&kb.id,&doc.id).await.unwrap();assert_eq!(cached.chunks.len(),preview.chunks.len());assert_eq!(parses.load(Ordering::SeqCst),pc);assert_eq!(renders.load(Ordering::SeqCst),rc);
-  let ready=service.index(USER,WORKSPACE,&kb.id,&doc.id).await.unwrap();assert_eq!(ready.status,"READY","{:?}",ready.error);assert_eq!(renders.load(Ordering::SeqCst),rc);
-  service.set_grants(USER,WORKSPACE,&kb.id,vec![f.agent.clone()]).unwrap();
+  let cached=service.preview(USER,&kb.id,&doc.id).await.unwrap();assert_eq!(cached.chunks.len(),preview.chunks.len());assert_eq!(parses.load(Ordering::SeqCst),pc);assert_eq!(renders.load(Ordering::SeqCst),rc);
+  let ready=service.index(USER,&kb.id,&doc.id).await.unwrap();assert_eq!(ready.status,"READY","{:?}",ready.error);assert_eq!(renders.load(Ordering::SeqCst),rc);
+  service.set_grants(USER,&kb.id,vec![f.agent.clone()]).unwrap();
   let hits=service.search_for_agent(USER,WORKSPACE,&f.agent,"Alpha",8000).await.unwrap();
   let images=service.visual_evidence_for_agent(USER,WORKSPACE,&f.agent,&hits.hits).unwrap();assert!(!images.evidence.is_empty());
   assert!(service.visual_evidence_for_agent("OTHER-USER",WORKSPACE,&f.agent,&hits.hits).is_err());

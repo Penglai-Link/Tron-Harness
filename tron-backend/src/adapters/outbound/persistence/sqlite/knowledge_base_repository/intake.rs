@@ -37,7 +37,7 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
         now: i64,
     ) -> Result<Vec<(String, String, String, String, u64, String)>, KnowledgeBaseError> {
         let conn = &*self.connection;
-        let mut stmt = conn.prepare("SELECT k.owner_user_code,k.workspace_code,i.knowledge_base_id,i.document_id,i.document_revision,json_extract(d.payload_json,'$.resourceCode') FROM knowledge_base_ingestion_intents i JOIN knowledge_base_documents d ON d.id=i.document_id JOIN knowledge_bases k ON k.id=i.knowledge_base_id WHERE i.retry_after_ms<=?1 ORDER BY i.retry_after_ms,i.rowid LIMIT 32").map_err(storage)?;
+        let mut stmt = conn.prepare("SELECT k.owner_user_code,'PLATFORM',i.knowledge_base_id,i.document_id,i.document_revision,json_extract(d.payload_json,'$.resourceCode') FROM knowledge_base_ingestion_intents i JOIN knowledge_base_documents d ON d.id=i.document_id JOIN knowledge_bases k ON k.id=i.knowledge_base_id WHERE i.retry_after_ms<=?1 ORDER BY i.retry_after_ms,i.rowid LIMIT 32").map_err(storage)?;
         stmt.query_map([now], |r| {
             Ok((
                 r.get(0)?,

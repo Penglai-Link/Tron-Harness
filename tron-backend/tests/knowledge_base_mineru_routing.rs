@@ -199,7 +199,6 @@ fn service(f: &Fixture, config: &MineruConfig) -> KnowledgeBaseService {
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
         f.state.rag.clone(),
         f.state.resources.clone(),
-        f.state.workspaces.clone(),
         f.state.agent_management.clone(),
         LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())),
     )
@@ -222,19 +221,19 @@ async fn two_nodes_keep_file_job_download_and_cancel_affinity() {
     let f = Fixture::new();
     let cfg = config(vec![na, nb]);
     let service = service(&f, &cfg);
-    let kb = service.create(USER, WORKSPACE, "Nodes", "").unwrap();
+    let kb = service.create(USER, "Nodes", "").unwrap();
     let one = service
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "one.pdf", &pdf())
+        .upload_and_start_index(USER, &kb.id, "one.pdf", &pdf())
         .unwrap();
     let two = service
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "two.pdf", &pdf())
+        .upload_and_start_index(USER, &kb.id, "two.pdf", &pdf())
         .unwrap();
     until(|| a.posts.load(Ordering::SeqCst) == 1 && b.posts.load(Ordering::SeqCst) == 1).await;
     let tasks: Vec<_> = [&one, &two]
         .iter()
         .map(|d| {
             service
-                .ingestion_tasks(USER, WORKSPACE, &kb.id, &d.id)
+                .ingestion_tasks(USER, &kb.id, &d.id)
                 .unwrap()
                 .remove(0)
         })
@@ -245,7 +244,7 @@ async fn two_nodes_keep_file_job_download_and_cancel_affinity() {
         .find(|t| t.endpoint_id.as_deref() == Some("node_a"))
         .unwrap();
     service
-        .cancel_index(USER, WORKSPACE, &kb.id, &on_a.document_id)
+        .cancel_index(USER, &kb.id, &on_a.document_id)
         .await
         .unwrap();
     assert!(a.cancels.load(Ordering::SeqCst) >= 1);
@@ -253,7 +252,7 @@ async fn two_nodes_keep_file_job_download_and_cancel_affinity() {
     b.complete.store(true, Ordering::SeqCst);
     until(|| {
         service
-            .detail(USER, WORKSPACE, &kb.id)
+            .detail(USER, &kb.id)
             .unwrap()
             .documents
             .iter()
@@ -275,16 +274,16 @@ async fn restart_resumes_recorded_remote_job_on_same_node_without_upload_post_or
     let cfg = config(vec![na, nb]);
     let first = service(&f, &cfg);
     let kb = first
-        .create(USER, WORKSPACE, "Restart affinity", "")
+        .create(USER, "Restart affinity", "")
         .unwrap();
     let doc = first
-        .upload(USER, WORKSPACE, &kb.id, "one.pdf", &pdf())
+        .upload(USER, &kb.id, "one.pdf", &pdf())
         .unwrap();
-    first.configure_parsing(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr))).await.unwrap();
-    first.start_index(USER, WORKSPACE, &kb.id, &doc.id).unwrap();
+    first.configure_parsing(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr))).await.unwrap();
+    first.start_index(USER, &kb.id, &doc.id).unwrap();
     until(|| a.polls.load(Ordering::SeqCst) > 0).await;
     let before = first
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     assert!(before.remote_job_id.is_some());
@@ -294,9 +293,9 @@ async fn restart_resumes_recorded_remote_job_on_same_node_without_upload_post_or
     changed.ocr_mode = "txt".into();
     let resumed = service(&f, &changed);
     resumed.start_ingestion_workers().unwrap();
-    until(|| resumed.detail(USER, WORKSPACE, &kb.id).unwrap().documents[0].status == "READY").await;
+    until(|| resumed.detail(USER, &kb.id).unwrap().documents[0].status == "READY").await;
     let after = resumed
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     assert_eq!(after.id, before.id);
@@ -319,13 +318,13 @@ async fn lost_job_post_response_reconciles_original_file_and_does_not_submit_dup
     let f = Fixture::new();
     let cfg = config(vec![na]);
     let service = service(&f, &cfg);
-    let kb = service.create(USER, WORKSPACE, "Unknown POST", "").unwrap();
+    let kb = service.create(USER, "Unknown POST", "").unwrap();
     let doc = service
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "one.pdf", &pdf())
+        .upload_and_start_index(USER, &kb.id, "one.pdf", &pdf())
         .unwrap();
-    until(|| service.detail(USER, WORKSPACE, &kb.id).unwrap().documents[0].status == "READY").await;
+    until(|| service.detail(USER, &kb.id).unwrap().documents[0].status == "READY").await;
     let task = service
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     assert!(!task.reconciling);
@@ -345,11 +344,11 @@ async fn unhealthy_nodes_are_excluded_and_unauthorized_remote_nodes_are_rejected
     let f = Fixture::new();
     let cfg = config(vec![na, nb]);
     let service = service(&f, &cfg);
-    let kb = service.create(USER, WORKSPACE, "Health", "").unwrap();
+    let kb = service.create(USER, "Health", "").unwrap();
     service
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "one.pdf", &pdf())
+        .upload_and_start_index(USER, &kb.id, "one.pdf", &pdf())
         .unwrap();
-    until(|| service.detail(USER, WORKSPACE, &kb.id).unwrap().documents[0].status == "READY").await;
+    until(|| service.detail(USER, &kb.id).unwrap().documents[0].status == "READY").await;
     assert_eq!(a.uploads.load(Ordering::SeqCst), 0);
     assert_eq!(b.posts.load(Ordering::SeqCst), 1);
     let mut cfg = config(vec![MineruNode {
@@ -382,12 +381,12 @@ async fn malformed_successful_job_post_is_reconciled_without_duplicate_submissio
     let cfg = config(vec![na]);
     let service = service(&f, &cfg);
     let kb = service
-        .create(USER, WORKSPACE, "Broken response", "")
+        .create(USER, "Broken response", "")
         .unwrap();
     service
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "one.pdf", &pdf())
+        .upload_and_start_index(USER, &kb.id, "one.pdf", &pdf())
         .unwrap();
-    until(|| service.detail(USER, WORKSPACE, &kb.id).unwrap().documents[0].status == "READY").await;
+    until(|| service.detail(USER, &kb.id).unwrap().documents[0].status == "READY").await;
     assert_eq!(a.posts.load(Ordering::SeqCst), 1);
     assert_eq!(a.uploads.load(Ordering::SeqCst), 1);
     assert!(a.lists.load(Ordering::SeqCst) > 0);
@@ -404,27 +403,27 @@ async fn ambiguous_post_cancellation_recovers_after_restart_even_when_node_is_di
     let mut cfg = config(vec![na]);
     cfg.ingestion.retry_backoff_ms = 10_000;
     let first = service(&f, &cfg);
-    let kb = first.create(USER, WORKSPACE, "Durable cancel", "").unwrap();
+    let kb = first.create(USER, "Durable cancel", "").unwrap();
     let doc = first
-        .upload_and_start_index(USER, WORKSPACE, &kb.id, "one.pdf", &pdf())
+        .upload_and_start_index(USER, &kb.id, "one.pdf", &pdf())
         .unwrap();
     until(|| {
         first
-            .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+            .ingestion_tasks(USER, &kb.id, &doc.id)
             .unwrap()[0]
             .reconciling
     })
     .await;
     assert_eq!(
         first
-            .cancel_index(USER, WORKSPACE, &kb.id, &doc.id)
+            .cancel_index(USER, &kb.id, &doc.id)
             .await
             .unwrap()
             .status,
         "CANCELLED"
     );
     let cancelled = first
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     assert!(cancelled.cancellation_pending);
@@ -438,7 +437,7 @@ async fn ambiguous_post_cancellation_recovers_after_restart_even_when_node_is_di
     // Retry remains queued until the original upstream has acknowledged cancel.
     assert_eq!(
         resumed
-            .retry_index(USER, WORKSPACE, &kb.id, &doc.id)
+            .retry_index(USER, &kb.id, &doc.id)
             .unwrap()
             .status,
         "QUEUED"
@@ -448,13 +447,13 @@ async fn ambiguous_post_cancellation_recovers_after_restart_even_when_node_is_di
     a.cancel_unavailable.store(false, Ordering::SeqCst);
     until(|| {
         !resumed
-            .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+            .ingestion_tasks(USER, &kb.id, &doc.id)
             .unwrap()[0]
             .cancellation_pending
     })
     .await;
     let confirmed = resumed
-        .ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id)
+        .ingestion_tasks(USER, &kb.id, &doc.id)
         .unwrap()
         .remove(0);
     assert_eq!(confirmed.id, cancelled.id);
@@ -464,7 +463,7 @@ async fn ambiguous_post_cancellation_recovers_after_restart_even_when_node_is_di
     a.complete.store(true, Ordering::SeqCst);
     let enabled = service(&f, &cfg);
     enabled.start_ingestion_workers().unwrap();
-    until(|| enabled.detail(USER, WORKSPACE, &kb.id).unwrap().documents[0].status == "READY").await;
+    until(|| enabled.detail(USER, &kb.id).unwrap().documents[0].status == "READY").await;
     assert_eq!(a.posts.load(Ordering::SeqCst), 2);
     assert_eq!(a.uploads.load(Ordering::SeqCst), 1);
     enabled.stop_ingestion_workers();
@@ -478,35 +477,35 @@ async fn document_ocr_override_changes_request_cache_and_task_snapshot() {
     let fixture = Fixture::new();
     let config = config(vec![endpoint]);
     let service = service(&fixture, &config);
-    let kb = service.create(USER, WORKSPACE, "OCR modes", "").unwrap();
-    let doc = service.upload(USER, WORKSPACE, &kb.id, "modes.pdf", &pdf()).unwrap();
-    assert_eq!(service.parsing_capabilities(USER, WORKSPACE).await.unwrap().default_ocr_mode, OcrMode::Ocr);
+    let kb = service.create(USER, "OCR modes", "").unwrap();
+    let doc = service.upload(USER, &kb.id, "modes.pdf", &pdf()).unwrap();
+    assert_eq!(service.parsing_capabilities(USER).await.unwrap().default_ocr_mode, OcrMode::Ocr);
     *node.expected_ocr.lock().unwrap() = "txt".into();
-    let selected = service.configure_parsing(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Text))).await.unwrap();
+    let selected = service.configure_parsing(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Text))).await.unwrap();
     assert_eq!(selected.ocr_mode, Some(OcrMode::Text));
-    service.preview(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
-    let ready = service.index(USER, WORKSPACE, &kb.id, &doc.id).await.unwrap();
+    service.preview(USER, &kb.id, &doc.id).await.unwrap();
+    let ready = service.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(ready.status, "READY");
     assert_eq!(ready.ocr_mode, Some(OcrMode::Text));
     assert_eq!(node.posts.load(Ordering::SeqCst), 1, "same-mode preview and indexing reuse the cache");
     let text_signature = ready.parsing_artifact.as_ref().unwrap().signature.clone();
     *node.expected_ocr.lock().unwrap() = "ocr".into();
-    let forced = service.configure_and_index(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr))).await.unwrap();
+    let forced = service.configure_and_index(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Ocr))).await.unwrap();
     assert_eq!(forced.status, "READY");
     assert_eq!(node.posts.load(Ordering::SeqCst), 2, "changing OCR must reparse");
     assert_ne!(forced.parsing_artifact.as_ref().unwrap().signature, text_signature);
-    let tasks = service.ingestion_tasks(USER, WORKSPACE, &kb.id, &doc.id).unwrap();
+    let tasks = service.ingestion_tasks(USER, &kb.id, &doc.id).unwrap();
     assert!(tasks.iter().any(|task| task.configuration["ocrMode"] == "Ocr" && task.configuration["parser"]["ocrMode"] == "ocr"));
-    let inherited = service.configure_parsing(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(None)).await.unwrap();
+    let inherited = service.configure_parsing(USER, &kb.id, &doc.id, None, None, Some(None)).await.unwrap();
     assert_eq!(inherited.ocr_mode, None);
     *node.expected_ocr.lock().unwrap() = "auto".into();
-    let automatic = service.configure_and_index(USER, WORKSPACE, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Auto))).await.unwrap();
+    let automatic = service.configure_and_index(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Auto))).await.unwrap();
     assert_eq!(automatic.status, "READY");
     assert_eq!(automatic.ocr_mode, Some(OcrMode::Auto));
     assert_eq!(node.posts.load(Ordering::SeqCst), 3);
     assert_eq!(node.lists.load(Ordering::SeqCst), 0, "upstream history cannot prove the requested OCR mode");
-    let markdown = service.upload(USER, WORKSPACE, &kb.id, "readme.md", b"readme").unwrap();
-    assert!(service.configure_parsing(USER, WORKSPACE, &kb.id, &markdown.id, None, None, Some(Some(OcrMode::Ocr))).await.is_err());
+    let markdown = service.upload(USER, &kb.id, "readme.md", b"readme").unwrap();
+    assert!(service.configure_parsing(USER, &kb.id, &markdown.id, None, None, Some(Some(OcrMode::Ocr))).await.is_err());
     service.stop_ingestion_workers();
     server.abort();
 }

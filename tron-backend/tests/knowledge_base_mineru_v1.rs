@@ -67,7 +67,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
         calls: calls.clone(),
     }));
     let kb = service
-        .create(USER, WORKSPACE, "Structured", "synthetic only")
+        .create(USER, "Structured", "synthetic only")
         .unwrap();
     for name in [
         "synthetic.docx",
@@ -76,10 +76,10 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
         "synthetic-scanned.pdf",
     ] {
         let doc = service
-            .upload(USER, WORKSPACE, &kb.id, name, if name.ends_with(".docx") { include_bytes!("fixtures/mineru-v1/synthetic.docx").as_slice() } else if name.ends_with(".xlsx") { include_bytes!("fixtures/mineru-v1/synthetic.xlsx").as_slice() } else { b"synthetic replay input" })
+            .upload(USER, &kb.id, name, if name.ends_with(".docx") { include_bytes!("fixtures/mineru-v1/synthetic.docx").as_slice() } else if name.ends_with(".xlsx") { include_bytes!("fixtures/mineru-v1/synthetic.xlsx").as_slice() } else { b"synthetic replay input" })
             .unwrap();
         let preview = service
-            .preview(USER, WORKSPACE, &kb.id, &doc.id)
+            .preview(USER, &kb.id, &doc.id)
             .await
             .unwrap();
         assert!(
@@ -90,7 +90,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
         );
         assert!(preview.chunks.iter().any(|c| !c.location.blocks.is_empty()));
         let cached = service
-            .detail(USER, WORKSPACE, &kb.id)
+            .detail(USER, &kb.id)
             .unwrap()
             .documents
             .into_iter()
@@ -106,7 +106,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
         assert_eq!(artifact.effective_tier, expected);
         let before = calls.load(Ordering::SeqCst);
         let indexed = service
-            .index(USER, WORKSPACE, &kb.id, &doc.id)
+            .index(USER, &kb.id, &doc.id)
             .await
             .unwrap();
         assert_eq!(indexed.status, "READY", "{:?}", indexed.error);
@@ -150,7 +150,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
                     .is_err()
             );
             service
-                .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+                .set_grants(USER, &kb.id, vec![f.agent.clone()])
                 .unwrap();
             assert!(
                 f.state
@@ -159,7 +159,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
                     .download_binary_to_file(USER, command())
                     .is_ok()
             );
-            service.set_grants(USER, WORKSPACE, &kb.id, vec![]).unwrap();
+            service.set_grants(USER, &kb.id, vec![]).unwrap();
             assert!(
                 f.state
                     .resources
@@ -168,7 +168,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
                     .is_err()
             );
         }
-        service.set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()]).unwrap();
+        service.set_grants(USER, &kb.id, vec![f.agent.clone()]).unwrap();
         let retrieved=service.search_for_agent(USER,WORKSPACE,&f.agent,"Alpha",8000).await.unwrap();
         assert!(!retrieved.hits.is_empty());
         // Removing the isolated image object proves default-off performs no image IO.
@@ -204,15 +204,15 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
         assert!(visual_service.visual_evidence_for_agent(USER,WORKSPACE,"unknown-agent",&retrieved.hits).is_err());
         let mut forged=retrieved.hits.clone();forged[0].location["imageResourceCodes"]=serde_json::json!([artifact.resource_code]);
         assert!(visual_service.visual_evidence_for_agent(USER,WORKSPACE,&f.agent,&forged).is_err());
-        service.set_grants(USER,WORKSPACE,&kb.id,vec![]).unwrap();
+        service.set_grants(USER,&kb.id,vec![]).unwrap();
         assert!(visual_service.visual_evidence_for_agent(USER,WORKSPACE,&f.agent,&retrieved.hits).is_err());
         service
-            .remove_document(USER, WORKSPACE, &kb.id, &doc.id)
+            .remove_document(USER, &kb.id, &doc.id)
             .unwrap();
-        service.set_grants(USER,WORKSPACE,&kb.id,vec![f.agent.clone()]).unwrap();
+        service.set_grants(USER,&kb.id,vec![f.agent.clone()]).unwrap();
         assert!(visual_service.visual_evidence_for_agent(USER,WORKSPACE,&f.agent,&retrieved.hits).is_err());
         service
-            .set_grants(USER, WORKSPACE, &kb.id, vec![f.agent.clone()])
+            .set_grants(USER, &kb.id, vec![f.agent.clone()])
             .unwrap();
         let image = artifact.image_resource_codes[0].clone();
         assert!(
@@ -228,7 +228,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
                 )
                 .is_err()
         );
-        service.set_grants(USER, WORKSPACE, &kb.id, vec![]).unwrap();
+        service.set_grants(USER, &kb.id, vec![]).unwrap();
     }
     assert_eq!(calls.load(Ordering::SeqCst), 4);
 }
@@ -299,12 +299,11 @@ async fn cancellation_preserves_parsed_resources_and_retry_reuses_cache() {
         calls: calls.clone(),
     }));
     let kb = service
-        .create(USER, WORKSPACE, "Cancel synthetic", "")
+        .create(USER, "Cancel synthetic", "")
         .unwrap();
     let doc = service
         .upload(
             USER,
-            WORKSPACE,
             &kb.id,
             "synthetic.pdf",
             b"synthetic cancel",
@@ -314,11 +313,11 @@ async fn cancellation_preserves_parsed_resources_and_retry_reuses_cache() {
     let owned = service.clone();
     let kb_id = kb.id.clone();
     let doc_id = doc.id.clone();
-    let work = tokio::spawn(async move { owned.index(USER, WORKSPACE, &kb_id, &doc_id).await });
+    let work = tokio::spawn(async move { owned.index(USER, &kb_id, &doc_id).await });
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
             let current = service
-                .detail(USER, WORKSPACE, &kb.id)
+                .detail(USER, &kb.id)
                 .unwrap()
                 .documents
                 .remove(0);
@@ -333,7 +332,7 @@ async fn cancellation_preserves_parsed_resources_and_retry_reuses_cache() {
     work.abort();
     assert!(work.await.unwrap_err().is_cancelled());
     let interrupted = service
-        .detail(USER, WORKSPACE, &kb.id)
+        .detail(USER, &kb.id)
         .unwrap()
         .documents
         .remove(0);
@@ -342,7 +341,7 @@ async fn cancellation_preserves_parsed_resources_and_retry_reuses_cache() {
     assert!(!interrupted.derived_resource_codes.is_empty());
     f.client.blocking.store(false, Ordering::SeqCst);
     let ready = service
-        .index(USER, WORKSPACE, &kb.id, &doc.id)
+        .index(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     assert_eq!(ready.status, "READY");
@@ -396,11 +395,11 @@ async fn independent_clean_ocr_cannot_clear_original_risks_or_publish_vectors() 
     assert!((rotated[0].width_points-200.0).abs()<0.01 && (rotated[0].height_points-300.0).abs()<0.01);
     assert!(rotated[0].width<rotated[0].height);
     let f=Fixture::new();let service=f.service.clone().with_document_parser(Arc::new(TwoExtractions{calls:AtomicUsize::new(0)}));
-    let kb=service.create(USER,WORKSPACE,"Independent OCR guard fixture","").unwrap();
-    let uploaded=service.upload(USER,WORKSPACE,&kb.id,"independent-encoding.pdf",&original).unwrap();
-    let before=service.preview(USER,WORKSPACE,&kb.id,&uploaded.id).await.unwrap();
+    let kb=service.create(USER,"Independent OCR guard fixture","").unwrap();
+    let uploaded=service.upload(USER,&kb.id,"independent-encoding.pdf",&original).unwrap();
+    let before=service.preview(USER,&kb.id,&uploaded.id).await.unwrap();
     assert!(before.fidelity_issues.iter().any(|i|i.kind=="UNRESOLVED_TEXT_GLYPH"));
-    let after=service.reparse_visual_document(USER,WORKSPACE,&kb.id,&uploaded.id).await.unwrap();
+    let after=service.reparse_visual_document(USER,&kb.id,&uploaded.id).await.unwrap();
     assert_eq!(after.status,"REVIEW_REQUIRED");
     let artifact=after.parsing_artifact.as_ref().unwrap();
     assert!(artifact.fidelity_issues.iter().any(|i|i.kind=="ORIGINAL_FIDELITY_UNRESOLVED"));
@@ -408,12 +407,12 @@ async fn independent_clean_ocr_cannot_clear_original_risks_or_publish_vectors() 
     let source=after.visual_source.as_ref().unwrap();
     assert!(source.original_parse_resource_code.is_some());
     // Repeating the cached preview must also retain the original quarantine.
-    let repeated=service.preview(USER,WORKSPACE,&kb.id,&uploaded.id).await.unwrap();
+    let repeated=service.preview(USER,&kb.id,&uploaded.id).await.unwrap();
     assert!(repeated.fidelity_issues.iter().any(|i|i.kind=="ORIGINAL_FIDELITY_UNRESOLVED"));
-    let indexed=service.index(USER,WORKSPACE,&kb.id,&uploaded.id).await.unwrap();
+    let indexed=service.index(USER,&kb.id,&uploaded.id).await.unwrap();
     assert_eq!(indexed.status,"REVIEW_REQUIRED");assert!(indexed.active_source_code.is_none());
     assert_eq!(f.client.calls.load(Ordering::SeqCst),0);
-    service.set_grants(USER,WORKSPACE,&kb.id,vec![f.agent.clone()]).unwrap();
+    service.set_grants(USER,&kb.id,vec![f.agent.clone()]).unwrap();
     assert!(service.search_for_agent(USER,WORKSPACE,&f.agent,"ORBIT",800).await.unwrap().hits.is_empty());
     let (_,record)=f.state.resources.download_binary_to_file(USER,ResourceBinaryDownloadCommand{workspace_code:WORKSPACE.into(),resource_code:source.derived_resource_code.clone()}).unwrap();
     let mut bytes=vec![];f.state.resources.download_binary_storage(&record,&mut bytes).unwrap();

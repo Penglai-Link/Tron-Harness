@@ -9,8 +9,8 @@ import { formatDocumentLocation } from "../model/documentLocation";
 import { useKnowledgeUser } from "../hooks/useKnowledgeLibraries";
 import type { KnowledgeDocument } from "../model/KnowledgeLibraryModel";
 
-export function KnowledgeDocumentChunksDialog({ workspace, libraryId, document, onClose }: {
-  workspace: string; libraryId: string; document: KnowledgeDocument; onClose: () => void;
+export function KnowledgeDocumentChunksDialog({ libraryId, document, onClose }: {
+  libraryId: string; document: KnowledgeDocument; onClose: () => void;
 }) {
   const { t, i18n } = useTranslation("pages");
   const user = useKnowledgeUser();
@@ -18,8 +18,8 @@ export function KnowledgeDocumentChunksDialog({ workspace, libraryId, document, 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
   const query = useQuery({
-    queryKey: ["kb-published-chunks", user, workspace, libraryId, document.id, document.indexRevision, page, pageSize],
-    queryFn: ({ signal }) => getPublishedKnowledgeChunks(workspace, libraryId, document.id, page, pageSize, signal), retry: false,
+    queryKey: ["kb-published-chunks", user, libraryId, document.id, document.indexRevision, page, pageSize],
+    queryFn: ({ signal }) => getPublishedKnowledgeChunks( libraryId, document.id, page, pageSize, signal), retry: false,
   });
   const total = query.data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / pageSize));

@@ -10,7 +10,8 @@ vi.mock("@/domain/auth", () => ({
   DEFAULT_AUTH_REDIRECT: "/workspace",
   AuthUserMenuPanel: () => null,
 }));
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...await importOriginal<typeof import("react-i18next")>(),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock("@/shared", () => ({
@@ -95,6 +96,19 @@ it("never injects another session location into a cached chat while switching", 
   fireEvent.click(screen.getByText("First session"));
   await waitFor(() => expect(contents[0].closest("[hidden]")).toBeNull());
   expect(contents[1].getAttribute("data-session")).toBe("?sessionCode=session-two");
+});
+
+it("renders independent draft chats without redirecting to the workspace", async () => {
+  render(<MemoryRouter initialEntries={["/chats?draftCode=draft-one&projectCode=project"]}>
+    <Link to="/chats?draftCode=draft-two">Second draft</Link>
+    <AppRoutePage />
+  </MemoryRouter>);
+  await screen.findByText("Session content");
+  expect(screen.getByText("Session content").getAttribute("data-session")).toBe("?draftCode=draft-one&projectCode=project");
+  expect(useTabStore.getState().tabs.at(-1)?.activeNav).toBe("chat-draft:draft-one");
+  fireEvent.click(screen.getByText("Second draft"));
+  await waitFor(() => expect(screen.getAllByText("Session content")).toHaveLength(2));
+  expect(useTabStore.getState().tabs.at(-1)?.activeNav).toBe("chat-draft:draft-two");
 });
 
 it("provides dynamic route parameters to cached editors", async () => {

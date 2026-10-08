@@ -128,7 +128,7 @@ impl KnowledgeBaseService {
             .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
         let mut pending = false;
         for image in images {
-            self.owned(user, workspace, &kb.id)?;
+            self.owned(user, &kb.id)?;
             self.llm
                 .check_vision_binding(&binding)
                 .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
@@ -206,7 +206,7 @@ impl KnowledgeBaseService {
                 .map_err(|_| KnowledgeBaseError::Invalid("图片描述生成超时，请重试".into()))?
                 .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
                 let content = ImageDescription::parse(&output)?;
-                self.owned(user, workspace, &kb.id)?;
+                self.owned(user, &kb.id)?;
                 self.llm
                     .check_vision_binding(&binding)
                     .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;

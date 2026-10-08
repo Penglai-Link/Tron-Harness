@@ -71,7 +71,6 @@ impl Fixture {
             SqliteKnowledgeBaseRepository::connect(&state.config.database_url).unwrap(),
             state.rag.clone(),
             state.resources.clone(),
-            state.workspaces.clone(),
             state.agent_management.clone(),
             llm,
         )
