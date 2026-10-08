@@ -41,6 +41,7 @@ impl AgentManagementService {
         config.agent_code = self.validate_new_agent_code(&command.agent_code)?;
         config.name = command.name.trim().to_owned();
         config.role_prompt = command.role_prompt;
+        config.loop_code = self.validate_loop_selection(command.loop_code.as_deref())?;
         self.repository()
             .insert_platform_internal_agent_config(&config)?;
         Ok(platform_view(config))
@@ -73,7 +74,13 @@ impl AgentManagementService {
         code: &str,
         command: UpdateWorkspaceInternalAgentDefinitionCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        if let Some(loop_code) = &command.loop_code {
+            self.validate_loop_selection(Some(loop_code))?;
+        }
         self.change_platform_internal_agent(code, |config| {
+            if let Some(loop_code) = command.loop_code {
+                config.loop_code = loop_code;
+            }
             if let Some(name) = command.name {
                 config.name = name.trim().to_owned();
             }
@@ -183,6 +190,7 @@ fn platform_view(config: PlatformInternalAgentConfig) -> InternalAgentToolPolicy
         name: config.name,
         description: "Platform internal agent.".into(),
         role_prompt: config.role_prompt,
+        loop_code: config.loop_code,
         platform_defined: true,
         source: InternalAgentPolicySource::PlatformDefault,
         tool_assignment_mode: config.tool_assignment_mode,
@@ -206,6 +214,7 @@ fn default_config(
         agent_code: definition.agent_code,
         name: definition.name,
         role_prompt: definition.role_prompt,
+        loop_code: definition.loop_code,
         tool_assignment_mode: definition.tool_assignment_mode,
         mcp_access_mode: definition.mcp_access_mode,
         tool_exposure_mode: definition.tool_exposure_mode,

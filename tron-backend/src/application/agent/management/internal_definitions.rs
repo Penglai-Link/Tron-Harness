@@ -7,6 +7,7 @@ pub(super) struct InternalAgentDefinition {
     pub(super) name: String,
     pub(super) description: String,
     pub(super) role_prompt: String,
+    pub(super) loop_code: String,
     pub(super) tool_assignment_mode: ToolAssignmentMode,
     pub(super) mcp_access_mode: McpAccessMode,
     pub(super) tool_exposure_mode: ToolExposureMode,
@@ -26,6 +27,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         description: "Primary workspace internal agent with access to platform business tools."
             .to_string(),
         role_prompt: String::new(),
+        loop_code: crate::domain::agent::loop_design::REACT_LOOP_CODE.into(),
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
         mcp_access_mode: McpAccessMode::AllEnabledServers,
         tool_exposure_mode: ToolExposureMode::DomainDiscovery,
@@ -80,6 +82,7 @@ impl AgentManagementService {
                 name: config.name,
                 description: "Platform internal agent.".into(),
                 role_prompt: config.role_prompt,
+                loop_code: config.loop_code,
                 tool_assignment_mode: config.tool_assignment_mode,
                 mcp_access_mode: config.mcp_access_mode,
                 tool_exposure_mode: config.tool_exposure_mode,
@@ -94,18 +97,29 @@ impl AgentManagementService {
             .collect::<Vec<_>>();
         let mut assigned = Vec::new();
         for definition in definitions {
-            if self.agent_assigned(&definition.agent_code, workspace_code)? { assigned.push(definition); }
+            if self.agent_assigned(&definition.agent_code, workspace_code)? {
+                assigned.push(definition);
+            }
         }
         let mut definitions = assigned;
         for record in saved {
-            if self.platform_internal_agent_configs()?.iter().any(|config| config.agent_code == record.agent_code)
-                && !self.agent_assigned(&record.agent_code, workspace_code)? { continue; }
+            if self
+                .platform_internal_agent_configs()?
+                .iter()
+                .any(|config| config.agent_code == record.agent_code)
+                && !self.agent_assigned(&record.agent_code, workspace_code)?
+            {
+                continue;
+            }
             if let Some(definition) = definitions
                 .iter_mut()
                 .find(|definition| definition.agent_code == record.agent_code)
             {
                 if let Some(name) = record.name {
                     definition.name = name;
+                }
+                if let Some(code) = record.loop_code {
+                    definition.loop_code = code;
                 }
                 if let Some(prompt) = record.role_prompt {
                     definition.role_prompt = prompt;
@@ -116,6 +130,9 @@ impl AgentManagementService {
                 definition.name = record.name.unwrap_or_default();
                 definition.description = "Workspace internal agent.".into();
                 definition.role_prompt = record.role_prompt.unwrap_or_default();
+                definition.loop_code = record
+                    .loop_code
+                    .unwrap_or_else(|| crate::domain::agent::loop_design::REACT_LOOP_CODE.into());
                 definition.platform_defined = false;
                 definitions.push(definition);
             }
@@ -130,6 +147,7 @@ impl AgentManagementService {
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
         self.active_workspace_detail(workspace_code)?;
         validate_definition(&command.name, &command.role_prompt)?;
+        let loop_code = self.validate_loop_selection(command.loop_code.as_deref())?;
         let agent_code = self.validate_new_agent_code(&command.agent_code)?;
         let now = current_timestamp();
         let definition = WorkspaceInternalAgentDefinition {
@@ -137,6 +155,7 @@ impl AgentManagementService {
             agent_code,
             name: Some(command.name.trim().to_owned()),
             role_prompt: Some(command.role_prompt),
+            loop_code: Some(loop_code),
             created_at: now.clone(),
             updated_at: now,
         };
@@ -151,6 +170,9 @@ impl AgentManagementService {
         agent_code: &str,
         command: UpdateWorkspaceInternalAgentDefinitionCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        if let Some(code) = &command.loop_code {
+            self.validate_loop_selection(Some(code))?;
+        }
         let current = self.workspace_internal_agent_policy(workspace_code, agent_code)?;
         let name = command.name.clone().unwrap_or(current.name);
         let role_prompt = command.role_prompt.clone().unwrap_or(current.role_prompt);
@@ -176,6 +198,9 @@ impl AgentManagementService {
                 role_prompt: command
                     .role_prompt
                     .or_else(|| saved.as_ref().and_then(|record| record.role_prompt.clone())),
+                loop_code: command
+                    .loop_code
+                    .or_else(|| saved.as_ref().and_then(|record| record.loop_code.clone())),
                 created_at,
                 updated_at: now,
             })?;

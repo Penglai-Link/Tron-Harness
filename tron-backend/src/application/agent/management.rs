@@ -1,6 +1,7 @@
 mod internal_agents;
 mod internal_definition_error;
 mod internal_definitions;
+pub(crate) mod loop_designs;
 mod platform_internal_agents;
 mod system_agents;
 mod workspace_grants;
@@ -52,12 +53,14 @@ pub struct CreateWorkspaceInternalAgentCommand {
     pub agent_code: String,
     pub name: String,
     pub role_prompt: String,
+    pub loop_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct UpdateWorkspaceInternalAgentDefinitionCommand {
     pub name: Option<String>,
     pub role_prompt: Option<String>,
+    pub loop_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -76,8 +79,35 @@ pub struct ResolvedAgentRuntime {
 const MAIN_AGENT_CODE: &str = "main-agent";
 
 pub trait AgentManagementRepository: Send {
-    fn agent_workspace_grants(&mut self, _agent: &str) -> Result<Option<Vec<String>>, AgentManagementError> { Ok(None) }
-    fn replace_agent_workspace_grants(&mut self, _agent: &str, _workspaces: &[String]) -> Result<(), AgentManagementError> { Err(AgentManagementError::StorageFailure) }
+    fn list_loop_designs(
+        &mut self,
+    ) -> Result<Vec<crate::domain::agent::loop_design::LoopDesign>, AgentManagementError> {
+        Ok(vec![])
+    }
+    fn save_loop_design(
+        &mut self,
+        _design: &crate::domain::agent::loop_design::LoopDesign,
+        _expected: u32,
+    ) -> Result<(), AgentManagementError> {
+        Err(AgentManagementError::StorageFailure)
+    }
+    fn delete_loop_design(&mut self, _code: &str) -> Result<(), AgentManagementError> {
+        Err(AgentManagementError::StorageFailure)
+    }
+
+    fn agent_workspace_grants(
+        &mut self,
+        _agent: &str,
+    ) -> Result<Option<Vec<String>>, AgentManagementError> {
+        Ok(None)
+    }
+    fn replace_agent_workspace_grants(
+        &mut self,
+        _agent: &str,
+        _workspaces: &[String],
+    ) -> Result<(), AgentManagementError> {
+        Err(AgentManagementError::StorageFailure)
+    }
 
     fn insert_platform_internal_agent_config(
         &mut self,

@@ -74,6 +74,22 @@ impl<'a> SqliteAgentManagementRepositorySql<'a> {
             "CREATE TABLE IF NOT EXISTS agent_workspace_grant_policies(agent_code TEXT PRIMARY KEY);
              CREATE TABLE IF NOT EXISTS agent_workspace_grants(agent_code TEXT NOT NULL, workspace_code TEXT NOT NULL, PRIMARY KEY(agent_code,workspace_code));"
         ).map_err(storage_error)?;
+        if !column_exists(
+            &repository.connection,
+            "workspace_internal_agent_definitions",
+            "loop_code",
+        )? {
+            repository
+                .connection
+                .execute_batch(
+                    "ALTER TABLE workspace_internal_agent_definitions ADD COLUMN loop_code TEXT;",
+                )
+                .map_err(storage_error)?;
+        }
+        repository
+            .connection
+            .execute_batch(super::super::migrations::AGENT_LOOPS_MIGRATION)
+            .map_err(storage_error)?;
         Ok(repository)
     }
 }

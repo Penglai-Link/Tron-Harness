@@ -217,6 +217,7 @@ const toolSeed: ToolSeed[] = [
 ];
 
 type WorkspaceInternalAgentSeed = {
+  loopCode: string;
   rolePrompt: string;
   agentCode: string;
   description: string;
@@ -235,6 +236,7 @@ type WorkspaceInternalAgentSeed = {
 const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
   {
     rolePrompt: "",
+    loopCode: "builtin.react-loop",
     agentCode: "main-agent",
     description: "Primary platform internal agent used for workspace chat runtime policy.",
     expandedDomainPersistenceMode: "sticky_expanded",
@@ -409,6 +411,7 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     agentCode: effective.agentCode,
     description: effective.description,
     rolePrompt: effective.rolePrompt,
+    loopCode: effective.loopCode,
     platformDefined,
     expandedDomainPersistenceMode: effective.expandedDomainPersistenceMode,
     maxSteps: effective.maxSteps,
@@ -465,12 +468,12 @@ export function createWorkspaceInternalAgentMock(workspaceCode: string, payload:
     || scopes.some((scope) => workspaceInternalAgentDefinitions[scope]?.some((agent) => agent.agentCode === agentCode))) {
     throw new Error("Agent code is already in use; choose another code");
   }
-  const agent = { ...workspaceInternalAgentSeed[0], ...payload, agentCode, name: payload.name.trim(), description: "Workspace internal agent." };
+  const agent = { ...workspaceInternalAgentSeed[0], ...payload, agentCode, loopCode: payload.loopCode ?? "builtin.react-loop", name: payload.name.trim(), description: "Workspace internal agent." };
   workspaceInternalAgentDefinitions[workspaceCode] = [...(workspaceInternalAgentDefinitions[workspaceCode] ?? []), agent];
   return buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode);
 }
 
-export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string }) {
+export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string }) {
   buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
   upsertWorkspaceInternalAgentOverride(workspaceCode, { ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode), ...payload, agentCode });
   return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
@@ -690,4 +693,9 @@ export function setWorkspaceSystemAgentEnabledMock(
   };
 
   return cloneWorkspaceSystemRecord(workspaceCode, record);
+}
+
+export function isLoopUsedByAgentMock(loopCode: string) {
+  const scopes = new Set([PLATFORM_INTERNAL_AGENT_SCOPE, ...Object.keys(workspaceInternalAgentDefinitions), ...Object.keys(workspaceOverrides)]);
+  return [...scopes].some(scope => listWorkspaceInternalAgentRecords(scope).some(agent => agent.loopCode === loopCode));
 }

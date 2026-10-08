@@ -236,6 +236,10 @@ pub(crate) fn resolve_chat_agent_runtime(
             crate::domain::agent::AgentManagementError::InternalAgentNotFound
             | crate::domain::agent::AgentManagementError::InternalAgentCodeInvalid
             | crate::domain::agent::AgentManagementError::InternalAgentCodeConflict
+            | crate::domain::agent::AgentManagementError::LoopInvalid
+            | crate::domain::agent::AgentManagementError::LoopNotFound
+            | crate::domain::agent::AgentManagementError::LoopConflict
+            | crate::domain::agent::AgentManagementError::LoopInUse
             | crate::domain::agent::AgentManagementError::InternalAgentDefinitionInvalid
             | crate::domain::agent::AgentManagementError::InternalAgentPolicyInvalid
             | crate::domain::agent::AgentManagementError::InternalMcpServerAssignmentStale(_)

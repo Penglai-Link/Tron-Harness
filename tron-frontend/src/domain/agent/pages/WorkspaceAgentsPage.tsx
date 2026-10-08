@@ -81,7 +81,10 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { SelectItem } from "@/components/ui/select";
 
+import { AgentLoopField } from "../components/AgentLoopField";
+
 interface InternalAgentDraft {
+  loopCode: string;
   name: string;
   rolePrompt: string;
   expandedDomainPersistenceMode: WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"];
@@ -137,6 +140,7 @@ function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDra
   return {
     name: record.name,
     rolePrompt: record.rolePrompt,
+    loopCode: record.loopCode || "builtin.react-loop",
     expandedDomainPersistenceMode: record.expandedDomainPersistenceMode,
     maxSteps: record.maxSteps,
     maxToolCalls: record.maxToolCalls,
@@ -169,6 +173,7 @@ function mergeSavedDraft(
 function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAgentDraft) {
   return (
     record.name !== draft.name
+    || (record.loopCode || "builtin.react-loop") !== draft.loopCode
     || record.rolePrompt !== draft.rolePrompt
     ||
     record.toolAssignmentMode !== draft.toolAssignmentMode
@@ -622,8 +627,9 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     setBusy(`internal-save:${agentCode}`, true);
     setInternalSaveState(agentCode, "saving");
     try {
-      if (row.name !== draft.name || row.rolePrompt !== draft.rolePrompt) {
+      if (row.name !== draft.name || row.rolePrompt !== draft.rolePrompt || (row.loopCode || "builtin.react-loop") !== draft.loopCode) {
         const definition = {
+          ...((row.loopCode || "builtin.react-loop") !== draft.loopCode ? { loopCode: draft.loopCode } : {}),
           ...(row.name !== draft.name ? { name: draft.name } : {}),
           ...(row.rolePrompt !== draft.rolePrompt ? { rolePrompt: draft.rolePrompt } : {}),
         };
@@ -804,6 +810,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
               </div>
 
               <div className="mt-3 space-y-3">
+                <AgentLoopField value={draft.loopCode} disabled={internalBusy} onChange={(loopCode) => setInternalDraft(agent.agentCode, { loopCode })} />
                 <Field label={internalPageT("definition.name", "Name")}>
                   <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={editingDisabled} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
                 </Field>

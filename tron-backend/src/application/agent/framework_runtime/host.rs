@@ -76,10 +76,20 @@ struct Host {
     shutdown: host_shutdown::OwnedShutdown,
     presentation: std::sync::RwLock<Option<crate::application::agent::AgentAguiStreamService>>,
     resources: Option<crate::application::resource::ResourceService>,
+    agent_management: OnceCell<crate::application::agent::AgentManagementService>,
     knowledge_bases: OnceCell<crate::application::knowledge_base::KnowledgeBaseService>,
     _temporary: Option<tempfile::TempDir>,
 }
 impl FrameworkHost {
+    pub fn bind_agent_management(
+        &self,
+        service: crate::application::agent::AgentManagementService,
+    ) {
+        self.0
+            .agent_management
+            .set(service)
+            .unwrap_or_else(|_| panic!("agent management already bound"));
+    }
     pub fn bind_runtime_config(
         &self,
         runtime: crate::application::system_config::BackendRuntimeConfig,
@@ -285,6 +295,7 @@ impl FrameworkHost {
             pty: Default::default(),
             resources,
             knowledge_bases: OnceCell::new(),
+            agent_management: OnceCell::new(),
             _temporary: None,
         }))
     }
@@ -321,6 +332,7 @@ impl FrameworkHost {
             pty: Default::default(),
             resources,
             knowledge_bases: OnceCell::new(),
+            agent_management: OnceCell::new(),
             _temporary: Some(directory),
         })))
     }

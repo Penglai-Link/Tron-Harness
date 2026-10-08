@@ -101,6 +101,20 @@ impl FrameworkHost {
             })
             .await
             .map_err(|e| map_error(e.into()))?;
+        if request.resume.is_none() {
+            if let Some(management) = self.0.agent_management.get() {
+                let policy = management
+                    .workspace_internal_agent_policy(
+                        &context.workspace_code,
+                        context.agent_code.as_deref().unwrap_or("main-agent"),
+                    )
+                    .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
+                let design = management
+                    .loop_design(&policy.loop_code)
+                    .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
+                request.extensions.insert(design);
+            }
+        }
         request.limits.max_steps = context.limits.max_steps as usize;
         request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
         request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
@@ -194,7 +208,7 @@ impl FrameworkHost {
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
         let parent = eliteforge_agent_framework::current_continuation_parent();
-        let result = if let Some(parent) = parent {
+        let mut result = if let Some(parent) = parent {
             let started = agent
                 .start_child_with_output_owned::<eliteforge_agent_official_plugin_agui::AgUiStream>(
                     request, &parent,
@@ -232,6 +246,16 @@ impl FrameworkHost {
                 Err(error) => Err(error),
             }
         };
+        // Multiple terminal DAG nodes produce structured JSON rather than text.
+        // Keep every result visible in Tron's text-oriented run/history contract.
+        if let Ok(result) = &mut result {
+            if result.status == fw::RunStatus::Completed && result.output.is_empty() {
+                if let Some(value) = &result.structured {
+                    result.output = serde_json::to_string_pretty(value)
+                        .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
+                }
+            }
+        }
         let state = state.lock().await;
         let failure = match &result {
             Err(error) => Some(match error.primary() {
@@ -247,7 +271,7 @@ impl FrameworkHost {
         }
         lifecycle.finish(&state.context, &result)?;
         let result = result.map_err(map_error)?;
-        let output = state.final_output.clone();
+        let output = result.output.clone();
         Ok(AgentRunResult {
             run_code: context.run_code,
             conversation_code: context.conversation_code,

@@ -35,3 +35,8 @@ mod auxiliary_models;
 pub(crate) use auxiliary_models::attach_auxiliary_model;
 
 pub(crate) mod summary_loop;
+
+mod configured_loop;
+
+#[cfg(test)]
+mod configured_loop_tests;

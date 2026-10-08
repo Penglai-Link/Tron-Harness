@@ -2891,9 +2891,14 @@ async fn internal_agent_platform_fields_inherit_override_restore_and_persist() {
     )
     .await;
     let code = created["agentCode"].as_str().unwrap();
-    internal_agent_api(&router, &authorization, Method::PUT,
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PUT,
         &format!("/api/v1/agents/registry/{code}/workspace-grants"),
-        Some(json!({"workspaceCodes":["TRON_CORE", "ENTERPRISE"]}))).await;
+        Some(json!({"workspaceCodes":["TRON_CORE", "ENTERPRISE"]})),
+    )
+    .await;
     let platform = format!("/api/v1/agents/registry/internal/{code}");
     let workspace = format!("/api/v1/agents/workspaces/TRON_CORE/internal/{code}");
     let other = format!("/api/v1/agents/workspaces/ENTERPRISE/internal/{code}");
@@ -3111,9 +3116,17 @@ async fn internal_agent_runs_use_selected_role_and_follow_next_run_configuration
         Some(json!({"agentCode":"reviewer","name":"Reviewer","rolePrompt":"Unique reviewer instructions"})),
     )
     .await;
-    internal_agent_api(&router, &authorization, Method::PUT,
-        &format!("/api/v1/agents/registry/{}/workspace-grants", first["agentCode"].as_str().unwrap()),
-        Some(json!({"workspaceCodes":["TRON_CORE"]}))).await;
+    internal_agent_api(
+        &router,
+        &authorization,
+        Method::PUT,
+        &format!(
+            "/api/v1/agents/registry/{}/workspace-grants",
+            first["agentCode"].as_str().unwrap()
+        ),
+        Some(json!({"workspaceCodes":["TRON_CORE"]})),
+    )
+    .await;
     let second = internal_agent_api(
         &router,
         &authorization,
@@ -3363,4 +3376,248 @@ async fn concurrent_internal_agent_creation_preserves_the_first_definition() {
         assert_eq!(saved["name"], winner["data"]["name"]);
         assert_eq!(saved["rolePrompt"], winner["data"]["rolePrompt"]);
     }
+}
+
+#[tokio::test]
+async fn agent_loop_runs_follow_stage_order_and_new_versions() {
+    let server = recording_model_server().await;
+    let router = app();
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let loop_body = json!({"loopCode":"staged-review","name":"Staged review","kind":"Workflow","nodes":[
+        {"id":"prepare","kind":"Model","instructions":"LOOP_PREPARE_UNIQUE","join":"Selected","condition":null},
+        {"id":"finish","kind":"Model","instructions":"LOOP_FINISH_UNIQUE","join":"Selected","condition":null}
+    ],"edges":[],"maxParallelNodes":1});
+    internal_agent_api(
+        &router,
+        &auth,
+        Method::POST,
+        "/api/v1/agents/loops",
+        Some(loop_body.clone()),
+    )
+    .await;
+    internal_agent_api(&router,&auth,Method::POST,"/api/v1/agents/workspaces/TRON_CORE/internal",Some(json!({"agentCode":"staged-agent","name":"Staged","rolePrompt":"SHARED_AGENT_ROLE","loopCode":"staged-review"}))).await;
+    let run = || {
+        json!({"prompt":"Check the proposal.","workspaceCode":"TRON_CORE","agentCode":"staged-agent",
+        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}})
+    };
+    let result = internal_agent_api(
+        &router,
+        &auth,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(run()),
+    )
+    .await;
+    assert_eq!(result["stepCount"], 2);
+    let mut update = loop_body;
+    update.as_object_mut().unwrap().remove("loopCode");
+    update["expectedVersion"] = json!(1);
+    update["nodes"][1]["instructions"] = json!("LOOP_FINISH_V2");
+    internal_agent_api(
+        &router,
+        &auth,
+        Method::PUT,
+        "/api/v1/agents/loops/staged-review",
+        Some(update),
+    )
+    .await;
+    internal_agent_api(
+        &router,
+        &auth,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(run()),
+    )
+    .await;
+    let requests = server.requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 4);
+    for (index, marker) in [
+        "LOOP_PREPARE_UNIQUE",
+        "LOOP_FINISH_UNIQUE",
+        "LOOP_PREPARE_UNIQUE",
+        "LOOP_FINISH_V2",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let messages = requests[index]["messages"].to_string();
+        assert!(messages.contains(marker), "{messages}");
+        assert!(messages.contains("SHARED_AGENT_ROLE"), "{messages}");
+    }
+}
+
+#[tokio::test]
+async fn agent_loop_dag_branches_skip_unselected_nodes() {
+    let server = recording_model_server().await;
+    let router = app();
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let model_node = |id: &str, prompt: &str| json!({"id":id,"kind":"Model","instructions":prompt,"join":"Selected","condition":null});
+    internal_agent_api(&router,&auth,Method::POST,"/api/v1/agents/loops",Some(json!({"loopCode":"branch-review","name":"Branch review","kind":"Dag","nodes":[
+        model_node("source","DAG_SOURCE_UNIQUE"),
+        {"id":"route","kind":"Branch","instructions":"","join":"Selected","condition":{"sourceNode":"source","pointer":"/absent","equals":true,"matchTarget":"approved","elseTarget":"rejected"}},
+        model_node("approved","DAG_APPROVED_UNIQUE"), model_node("rejected","DAG_REJECTED_UNIQUE"),model_node("finish","DAG_FINISH_UNIQUE")
+    ],"edges":[{"from":"source","to":"route"},{"from":"route","to":"approved"},{"from":"route","to":"rejected"},{"from":"approved","to":"finish"},{"from":"rejected","to":"finish"}],"maxParallelNodes":2}))).await;
+    internal_agent_api(&router,&auth,Method::POST,"/api/v1/agents/workspaces/TRON_CORE/internal",Some(json!({"agentCode":"branch-agent","name":"Branch","rolePrompt":"BRANCH_ROLE","loopCode":"branch-review"}))).await;
+    let result=internal_agent_api(&router,&auth,Method::POST,"/api/v1/agents/runs",Some(json!({"prompt":"Check the proposal.","workspaceCode":"TRON_CORE","agentCode":"branch-agent",
+        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}}))).await;
+    assert_eq!(result["stepCount"], 3);
+    let requests = server.requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 3);
+    assert!(
+        requests[0]["messages"]
+            .to_string()
+            .contains("DAG_SOURCE_UNIQUE")
+    );
+    assert!(
+        requests[1]["messages"]
+            .to_string()
+            .contains("DAG_REJECTED_UNIQUE")
+    );
+    assert!(
+        requests[2]["messages"]
+            .to_string()
+            .contains("DAG_FINISH_UNIQUE")
+    );
+    assert!(
+        !requests
+            .iter()
+            .any(|r| r["messages"].to_string().contains("DAG_APPROVED_UNIQUE"))
+    );
+}
+
+#[tokio::test]
+async fn agent_loop_dag_runs_parallel_roots_with_isolated_contexts() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let requests = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let barrier = Arc::new(tokio::sync::Barrier::new(2));
+    async fn completion(
+        axum::extract::State((requests, barrier)): axum::extract::State<(
+            Arc<Mutex<Vec<Value>>>,
+            Arc<tokio::sync::Barrier>,
+        )>,
+        Json(payload): Json<Value>,
+    ) -> Json<Value> {
+        let index = {
+            let mut requests = requests.lock().unwrap();
+            requests.push(payload);
+            requests.len()
+        };
+        if index <= 2 {
+            // A serial implementation cannot reach this barrier's second participant.
+            tokio::time::timeout(std::time::Duration::from_secs(10), barrier.wait())
+                .await
+                .expect("DAG roots must execute concurrently");
+        }
+        Json(
+            json!({"choices":[{"message":{"role":"assistant","content":format!("parallel-result-{index}")}}]}),
+        )
+    }
+    let server = Router::new()
+        .route("/v1/chat/completions", post(completion))
+        .with_state((requests.clone(), barrier));
+    let task = tokio::spawn(async move {
+        axum::serve(listener, server).await.unwrap();
+    });
+    let router = app();
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let node = |id: &str| json!({"id":id,"kind":"Model","instructions":format!("ISOLATED_{id}"),"join":"All","condition":null});
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(json!({
+        "loopCode":"parallel-review","name":"Parallel review","kind":"Dag",
+        "nodes":[node("left"),node("right"),node("finish")],
+        "edges":[{"from":"left","to":"finish"},{"from":"right","to":"finish"}],"maxParallelNodes":2
+    }))).await;
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"parallel-agent","name":"Parallel","rolePrompt":"Parallel review","loopCode":"parallel-review"}))).await;
+    let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
+        "prompt":"Review this proposal.","workspaceCode":"TRON_CORE","agentCode":"parallel-agent",
+        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":format!("http://{address}/v1"),"apiKey":"sk-test","modelName":"gpt-test"}
+    }))).await;
+    assert_eq!(result["stepCount"], 3);
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 3);
+    let roots = requests[..2]
+        .iter()
+        .map(|r| r["messages"].to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        roots.iter().filter(|s| s.contains("ISOLATED_left")).count(),
+        1
+    );
+    assert_eq!(
+        roots
+            .iter()
+            .filter(|s| s.contains("ISOLATED_right"))
+            .count(),
+        1
+    );
+    assert!(roots.iter().all(|s| !s.contains("ISOLATED_finish")));
+    let finish = requests[2]["messages"].to_string();
+    assert!(
+        finish.contains("parallel-result-1") && finish.contains("parallel-result-2"),
+        "{finish}"
+    );
+    assert!(finish.contains("ISOLATED_finish"));
+    task.abort();
+}
+
+#[tokio::test]
+async fn agent_loop_dag_matches_json_fields_from_model_output() {
+    let response =
+        |content: &str| json!({"choices":[{"message":{"role":"assistant","content":content}}]});
+    let server = scripted_model_server(vec![
+        response(r#"{"approved":true}"#),
+        response("Approved result"),
+    ])
+    .await;
+    let router = app();
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let node = |id: &str| json!({"id":id,"kind":"Model","instructions":format!("JSON_BRANCH_{id}"),"join":"Selected","condition":null});
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(json!({
+        "loopCode":"json-branch","name":"JSON branch","kind":"Dag","nodes":[node("source"),
+        {"id":"route","kind":"Branch","instructions":"","join":"Selected","condition":{"sourceNode":"source","pointer":"/approved","equals":true,"matchTarget":"approved","elseTarget":"rejected"}},
+        node("approved"),node("rejected")],"edges":[{"from":"source","to":"route"},{"from":"route","to":"approved"},{"from":"route","to":"rejected"}],"maxParallelNodes":1
+    }))).await;
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"json-agent","name":"JSON","rolePrompt":"JSON","loopCode":"json-branch"}))).await;
+    let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
+        "prompt":"Review this proposal.","workspaceCode":"TRON_CORE","agentCode":"json-agent",
+        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
+    }))).await;
+    assert_eq!(result["stepCount"], 2);
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests[1]["messages"]
+            .to_string()
+            .contains("JSON_BRANCH_approved")
+    );
+    assert!(
+        !requests[1]["messages"]
+            .to_string()
+            .contains("JSON_BRANCH_rejected")
+    );
+}
+
+#[tokio::test]
+async fn agent_loop_dag_preserves_all_terminal_outputs() {
+    let server = recording_model_server().await;
+    let router = app();
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let node = |id: &str| json!({"id":id,"kind":"Model","instructions":id,"join":"Selected","condition":null});
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(json!({
+        "loopCode":"two-results","name":"Two results","kind":"Dag","nodes":[node("first"),node("second")],"edges":[],"maxParallelNodes":2
+    }))).await;
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"two-results-agent","name":"Two results","rolePrompt":"Review","loopCode":"two-results"}))).await;
+    let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
+        "prompt":"Review this proposal.","workspaceCode":"TRON_CORE","agentCode":"two-results-agent",
+        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
+    }))).await;
+    assert_eq!(result["stepCount"], 2);
+    let outputs: Value = serde_json::from_str(
+        result["finalOutput"]
+            .as_str()
+            .expect("nonempty terminal outputs"),
+    )
+    .unwrap();
+    assert!(outputs["first"].as_str().is_some());
+    assert!(outputs["second"].as_str().is_some());
 }

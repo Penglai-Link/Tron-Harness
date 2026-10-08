@@ -44,6 +44,9 @@ import { INTERNAL_AGENT_REGISTRY_CHANGED_EVENT, PLATFORM_INTERNAL_AGENT_SCOPE } 
 import { listWorkspaceInternalAgentsMock } from "@/domain/agent/mock";
 import { useAuthStore } from "@/store/authStore";
 import { WorkspaceAgentsPage } from "./WorkspaceAgentsPage";
+import { LoopDesigner } from "../components/LoopDesigner";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
 function formatLastScanned(lastScannedAt: string | null, formatDateTime: (value: string | number | Date) => string) {
   if (!lastScannedAt) {
     return "Not scanned";
@@ -171,6 +174,10 @@ export function PlatformAgentsPage() {
     <div className="space-y-6">
       <PageHeader title={pageT("title", "Agent Management")} />
 
+      <Tabs defaultValue="agents">
+      <TabsList><TabsTrigger value="agents">{t("pages:settingsAgents.title")}</TabsTrigger><TabsTrigger value="loops">{t("pages:agentLoops.title")}</TabsTrigger></TabsList>
+      <TabsContent keepMounted value="loops" className="mt-5"><LoopDesigner /></TabsContent>
+      <TabsContent keepMounted value="agents" className="mt-5 space-y-6">
       <section aria-label={t("pages:platformData.agentDefinitions")} className="space-y-6">
       <h2 className="text-base font-semibold">{t("pages:platformData.agentDefinitions")}</h2>
       <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:platformData.agentDefinitionHelp")}</p>
@@ -274,6 +281,8 @@ export function PlatformAgentsPage() {
           ]}
         />
       </section>
+      </TabsContent>
+      </Tabs>
     </div>
   );
 }

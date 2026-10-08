@@ -10,18 +10,19 @@ use crate::app::AppState;
 use super::handler::{
     activate_agui_stream, create_agent_run, deactivate_agui_stream, disable_platform_system_agent,
     disable_workspace_system_agent, enable_platform_system_agent, enable_workspace_system_agent,
-    get_agent_run, get_runtime_capability, get_tool,
-    get_workspace_internal_agent, list_agent_runs, list_agui_stream_events,
-    list_agui_stream_protocol_events, list_platform_system_agents, list_runtime_capabilities,
-    list_tool_domains, list_tools, list_workspace_internal_agents, list_workspace_system_agents,
-    replace_workspace_internal_agent_mcp_server_assignments,
+    get_agent_run, get_runtime_capability, get_tool, get_workspace_internal_agent, list_agent_runs,
+    list_agui_stream_events, list_agui_stream_protocol_events, list_platform_system_agents,
+    list_runtime_capabilities, list_tool_domains, list_tools, list_workspace_internal_agents,
+    list_workspace_system_agents, replace_workspace_internal_agent_mcp_server_assignments,
     replace_workspace_internal_agent_tool_assignments, rescan_platform_system_agents,
-    reset_workspace_internal_agent_policy,
-    update_workspace_internal_agent_mcp_policy, update_workspace_internal_agent_policy,
+    reset_workspace_internal_agent_policy, update_workspace_internal_agent_mcp_policy,
+    update_workspace_internal_agent_policy,
 };
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/agents/loops", get(super::loop_designs::list).post(super::loop_designs::create))
+        .route("/api/v1/agents/loops/{loop_code}", put(super::loop_designs::update).delete(super::loop_designs::delete))
         .route("/api/v1/agents/registry/{agent_code}/workspace-grants", get(super::workspace_grants::list).put(super::workspace_grants::replace))
         .route("/api/v1/agents/registry/internal", get(platform::list_platform_internal_agents).post(platform::create_platform_internal_agent))
         .route("/api/v1/agents/registry/internal/{agent_code}", get(platform::get_platform_internal_agent))

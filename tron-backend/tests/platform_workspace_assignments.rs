@@ -27,6 +27,7 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
         .state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            loop_code: None,
             agent_code: "knowledge-expert".into(),
             name: "Expert".into(),
             role_prompt: "Help".into(),
@@ -181,6 +182,7 @@ async fn platform_agent_assignment_controls_catalog_and_runtime() {
     let service = &f.state.agent_management;
     let agent = service
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            loop_code: None,
             agent_code: "shared-expert".into(),
             name: "Expert".into(),
             role_prompt: "Help".into(),

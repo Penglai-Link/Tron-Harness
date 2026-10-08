@@ -205,6 +205,7 @@ async fn platform_agent_knowledge_configuration_precedes_space_authorization() {
     use tron_backend::application::agent::CreateWorkspaceInternalAgentCommand;
     let f = Fixture::new();
     let agent = f.state.agent_management.create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+        loop_code: None,
         agent_code: "platform-reader".into(), name: "Reader".into(), role_prompt: "Read documents".into(),
     }).unwrap();
     let library = f.service.create(USER, "Global library", "").unwrap();

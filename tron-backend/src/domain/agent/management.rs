@@ -68,6 +68,8 @@ pub struct WorkspaceInternalAgentDefinition {
     pub agent_code: String,
     pub name: Option<String>,
     pub role_prompt: Option<String>,
+    #[serde(default)]
+    pub loop_code: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -78,6 +80,8 @@ pub struct PlatformInternalAgentConfig {
     pub agent_code: String,
     pub name: String,
     pub role_prompt: String,
+    #[serde(default = "default_loop_code")]
+    pub loop_code: String,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
     pub tool_exposure_mode: ToolExposureMode,
@@ -117,6 +121,8 @@ pub struct InternalAgentToolPolicy {
     pub name: String,
     pub description: String,
     pub role_prompt: String,
+    #[serde(default = "default_loop_code")]
+    pub loop_code: String,
     pub platform_defined: bool,
     pub source: InternalAgentPolicySource,
     pub tool_assignment_mode: ToolAssignmentMode,
@@ -244,6 +250,10 @@ pub struct RuntimeAdapterCapabilityRecord {
 pub enum AgentManagementError {
     InvalidWorkspace,
     InternalAgentDefinitionInvalid,
+    LoopInvalid,
+    LoopNotFound,
+    LoopConflict,
+    LoopInUse,
     InternalAgentCodeInvalid,
     InternalAgentCodeConflict,
     InternalAgentPolicyInvalid,
@@ -294,4 +304,8 @@ pub struct ToolCatalogRecord {
     pub module_owner: String,
     pub availability_state: ToolAvailabilityState,
     pub sample_result_summary: String,
+}
+
+fn default_loop_code() -> String {
+    super::loop_design::REACT_LOOP_CODE.into()
 }

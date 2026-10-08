@@ -34,6 +34,7 @@ vi.mock("@/domain/agent/api", () => ({
   disableWorkspaceSystemAgent: vi.fn(),
   enableWorkspaceSystemAgent: vi.fn(),
 }));
+vi.mock("@/domain/agent/hooks/useLoopDesignList", () => ({ useLoopDesignList: () => ({ designs: [{loopCode:"builtin.react-loop",name:"ReAct",kind:"React"},{loopCode:"review-flow",name:"Review",kind:"Workflow"}], loading:false,error:null }) }));
 vi.mock("@/domain/mcp", () => ({ fetchWorkspaceMcpServers: vi.fn(async () => []), fetchPlatformMcpServers: vi.fn(async () => []), listPlatformMcpServersMock: vi.fn(() => []), listWorkspaceMcpServersMock: vi.fn(() => []) }));
 vi.mock("@/shared/api/serviceConfig", () => ({ getServiceDataSource: () => "api" }));
 vi.mock("react-i18next", async () => {
@@ -169,7 +170,7 @@ describe("internal agent tool selection autosave", () => {
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Role prompt" }), { target: { value: "Review changes and explain risks." } });
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "Review changes and explain risks." }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "Review changes and explain risks.", loopCode: "builtin.react-loop" }));
     await screen.findByRole("heading", { name: "Reviewer" });
     expect(screen.getAllByRole("textbox", { name: "Role prompt" })).toHaveLength(2);
     expect(screen.getByLabelText("Knowledge libraries for main-agent").textContent).toBe("platform");
@@ -466,4 +467,11 @@ describe("internal agent MCP selection autosave", () => {
     expect(fixture.record.mcpAccessMode).toBe("disabled");
     expect(fixture.record.selectedServerCodes).toEqual(["old-server"]);
   });
+});
+
+it("autosaves Loop selection with the agent definition", async () => {
+  render(<WorkspaceAgentsPage category="internal" />);
+  const select = await screen.findByRole("combobox", {name:"Agent Loop"});
+  fireEvent.change(select,{target:{value:"review-flow"}});
+  await waitFor(()=>expect(fixture.patchDefinition).toHaveBeenCalledWith("TRON_CORE","main-agent",{loopCode:"review-flow"}),{timeout:2500});
 });

@@ -138,7 +138,28 @@ pub fn agent_agui_error_response(error: AgentAguiStreamError, locale: &str) -> R
 
 pub fn agent_management_error_response(error: AgentManagementError) -> Response {
     let (status, code, message) = match error {
-        AgentManagementError::InternalAgentDefinitionInvalid | AgentManagementError::InternalAgentPolicyInvalid => (
+        AgentManagementError::LoopInvalid => (
+            StatusCode::BAD_REQUEST,
+            "101028011",
+            "Loop definition is invalid".to_string(),
+        ),
+        AgentManagementError::LoopNotFound => (
+            StatusCode::NOT_FOUND,
+            "101028012",
+            "Loop was not found".to_string(),
+        ),
+        AgentManagementError::LoopConflict => (
+            StatusCode::CONFLICT,
+            "101028013",
+            "Loop code or version conflicts".to_string(),
+        ),
+        AgentManagementError::LoopInUse => (
+            StatusCode::CONFLICT,
+            "101028014",
+            "Loop is in use".to_string(),
+        ),
+        AgentManagementError::InternalAgentDefinitionInvalid
+        | AgentManagementError::InternalAgentPolicyInvalid => (
             StatusCode::BAD_REQUEST,
             "101028001",
             "internal agent name or role prompt is invalid".to_string(),

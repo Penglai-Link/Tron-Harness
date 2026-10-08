@@ -26,6 +26,20 @@ impl FrameworkHost {
             )
             .plugin(eliteforge_agent_framework::ReactPlugin)
             .plugin(fw::AgentLoopPlugin::named(
+                "tron.configured-loop",
+                super::super::configured_loop::ConfiguredLoop(
+                    self.0.agent_management.get().cloned(),
+                ),
+            ))
+            .plugin(fw::WorkflowNodePlugin::new(
+                "tron.branch",
+                super::super::configured_loop::BranchNode,
+            ))
+            .plugin(fw::WorkflowNodePlugin::new(
+                "tron.model-stage",
+                super::super::configured_loop::ModelStageNode,
+            ))
+            .plugin(fw::AgentLoopPlugin::named(
                 "tron.external-loop",
                 eliteforge_agent_framework::ExternalAgentLoop,
             ))
@@ -136,7 +150,7 @@ impl FrameworkHost {
             }
         };
         Ok(AgentSelection {
-            agent_loop: Some("builtin.react-loop".into()),
+            agent_loop: Some("tron.configured-loop".into()),
             external_agent: Some("framework.external-agent".into()),
             model_strategy: one(registry.providers::<fw::ModelStrategyService>())?,
             context_assembler: Some(

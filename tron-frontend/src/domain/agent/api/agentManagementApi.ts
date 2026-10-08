@@ -77,6 +77,7 @@ interface WorkspaceInternalAgentRecordApi {
   name: string;
   description: string;
   rolePrompt: string;
+  loopCode?: string;
   platformDefined: boolean;
   source?: WorkspaceInternalAgentSourceApi;
   mcpAccessMode?: McpAccessModeApi;
@@ -222,6 +223,7 @@ function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRec
     agentCode: record.agentCode,
     description: record.description,
     rolePrompt: record.rolePrompt ?? "",
+    loopCode: record.loopCode || "builtin.react-loop",
     platformDefined: record.platformDefined ?? record.agentCode === "main-agent",
     expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(record.expandedDomainPersistenceMode),
     mcpAccessMode: normalizeMcpAccessMode(record.mcpAccessMode),

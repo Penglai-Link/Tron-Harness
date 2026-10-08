@@ -10,12 +10,15 @@ import { notifyInternalAgentRegistryChanged } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { AgentRolePromptField } from "./AgentRolePromptField";
 
+import { AgentLoopField } from "./AgentLoopField";
+
 export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { workspaceCode: string; onCreated: () => Promise<void> }) {
   const { t } = useTranslation(["pages"]);
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [agentCode, setAgentCode] = useState("");
   const [name, setName] = useState("");
+  const [loopCode, setLoopCode] = useState("builtin.react-loop");
   const [rolePrompt, setRolePrompt] = useState("");
   const [saving, setSaving] = useState(false);
   const text = (key: string, fallback: string) => t(`pages:workspaceAgents.internal.definition.${key}`, { defaultValue: fallback });
@@ -26,7 +29,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
     if (!codeValid || !name.trim() || saving) return;
     setSaving(true);
     try {
-      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt };
+      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode };
       if (getServiceDataSource("agent") === "api") {
         await createWorkspaceInternalAgent(workspaceCode, payload);
       } else {
@@ -36,6 +39,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
       setAgentCode("");
       setName("");
       setRolePrompt("");
+      setLoopCode("builtin.react-loop");
       notifyInternalAgentRegistryChanged();
       await onCreated();
     } catch (error) {
@@ -61,6 +65,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
           <Field label={text("name", "Name")} required>
             <TextInput aria-label={text("name", "Name")} maxLength={100} required disabled={saving} value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
+          <AgentLoopField value={loopCode} disabled={saving} onChange={setLoopCode} />
           <AgentRolePromptField workspaceCode={workspaceCode} rows={8} disabled={saving} value={rolePrompt} onChange={setRolePrompt} />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>{text("cancel", "Cancel")}</Button>

@@ -8,6 +8,10 @@ pub struct ApplicationErrorDescriptor {
 impl AgentManagementError {
     pub fn internal_definition_descriptor(&self) -> ApplicationErrorDescriptor {
         let (code, message_key) = match self {
+            Self::LoopInvalid => ("101028011", "tron.agent.loop_invalid"),
+            Self::LoopNotFound => ("101028012", "tron.agent.loop_not_found"),
+            Self::LoopConflict => ("101028013", "tron.agent.loop_conflict"),
+            Self::LoopInUse => ("101028014", "tron.agent.loop_in_use"),
             Self::InternalAgentDefinitionInvalid => ("101028001", "tron.agent.definition_invalid"),
             Self::InternalAgentCodeInvalid => ("101028009", "tron.agent.code_invalid"),
             Self::InternalAgentCodeConflict => ("101028010", "tron.agent.code_conflict"),

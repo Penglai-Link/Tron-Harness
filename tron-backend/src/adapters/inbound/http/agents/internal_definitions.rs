@@ -21,6 +21,7 @@ pub struct CreateInternalAgentRequest {
     agent_code: String,
     name: String,
     role_prompt: String,
+    loop_code: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -29,6 +30,7 @@ pub struct CreateInternalAgentResponse {
     agent_code: String,
     name: String,
     role_prompt: String,
+    loop_code: String,
 }
 
 #[derive(Deserialize)]
@@ -36,6 +38,7 @@ pub struct CreateInternalAgentResponse {
 pub struct UpdateInternalAgentDefinitionRequest {
     name: Option<String>,
     role_prompt: Option<String>,
+    loop_code: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -44,6 +47,7 @@ pub struct UpdateInternalAgentDefinitionResponse {
     agent_code: String,
     name: String,
     role_prompt: String,
+    loop_code: String,
 }
 
 pub async fn create_internal_agent(
@@ -60,6 +64,7 @@ pub async fn create_internal_agent(
                 agent_code: request.agent_code,
                 name: request.name,
                 role_prompt: request.role_prompt,
+                loop_code: request.loop_code,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?;
@@ -67,6 +72,7 @@ pub async fn create_internal_agent(
         agent_code: record.agent_code,
         name: record.name,
         role_prompt: record.role_prompt,
+        loop_code: record.loop_code,
     })))
 }
 
@@ -84,6 +90,7 @@ pub async fn update_internal_agent_definition(
             UpdateWorkspaceInternalAgentDefinitionCommand {
                 name: request.name,
                 role_prompt: request.role_prompt,
+                loop_code: request.loop_code,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?;
@@ -92,6 +99,7 @@ pub async fn update_internal_agent_definition(
             agent_code: record.agent_code,
             name: record.name,
             role_prompt: record.role_prompt,
+            loop_code: record.loop_code,
         },
     )))
 }
@@ -101,6 +109,22 @@ impl IntoResponse for InternalAgentApiError {
     fn into_response(self) -> Response {
         let descriptor = self.0.internal_definition_descriptor();
         let (status, zh, en) = match descriptor.message_key {
+            "tron.agent.loop_invalid" => (
+                StatusCode::BAD_REQUEST,
+                "Loop 配置无效，请检查节点、依赖、分支和并行限制",
+                "Invalid loop nodes, dependencies, branch conditions or concurrency",
+            ),
+            "tron.agent.loop_not_found" => (StatusCode::NOT_FOUND, "Loop 不存在", "Loop not found"),
+            "tron.agent.loop_conflict" => (
+                StatusCode::CONFLICT,
+                "Loop 已存在或版本已变化，请刷新后重试",
+                "Loop already exists or version changed; refresh and retry",
+            ),
+            "tron.agent.loop_in_use" => (
+                StatusCode::CONFLICT,
+                "Loop 已被智能体引用，无法删除",
+                "Loop is referenced by an agent and cannot be deleted",
+            ),
             "tron.agent.code_invalid" => (
                 StatusCode::BAD_REQUEST,
                 "编码为 1–64 位，以小写字母开头，仅支持小写字母、数字、连字符和下划线",
