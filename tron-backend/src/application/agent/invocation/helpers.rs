@@ -70,6 +70,7 @@ pub(super) fn map_agent_error(
         | AgentManagementError::LoopConflict
         | AgentManagementError::LoopInUse
         | AgentManagementError::InternalAgentDefinitionInvalid
+        | AgentManagementError::ToolPermissionInvalid
         | AgentManagementError::InternalAgentPolicyInvalid => AgentInvocationError::RuntimeFailed(
             "internal agent name or role prompt is invalid".into(),
         ),
