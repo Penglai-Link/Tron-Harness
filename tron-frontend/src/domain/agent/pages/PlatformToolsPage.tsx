@@ -2,10 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 
-import { fetchToolDomains, listTools } from "@/domain/agent/api";
-import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";
 import type { PlatformToolRecord, ToolCatalogDomainRecord } from "@/domain/agent/model";
-import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { DataTable } from "@/components/data-table";
 import { SearchField } from "@/components/search-field";
 import { TablePagination } from "@/components/table-pagination";
@@ -13,15 +10,13 @@ import {
   PageHeader,
   useTablePagination,
 } from "@/shared";
-import { useToast } from "@/components/ui/toast";
+import { usePlatformToolSettings } from "../hooks/usePlatformToolSettings";
+import { Button } from "@/components/ui/button";
+import { ToolPermissionControl } from "../components/ToolPermissionControl";
 
 export function PlatformToolsPage() {
   const { t } = useTranslation(["pages", "common"]);
-  const toast = useToast();
-  const dataSource = getServiceDataSource("agent");
-  const [domains, setDomains] = useState<ToolCatalogDomainRecord[]>([]);
-  const [tools, setTools] = useState<PlatformToolRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { domains, tools, loading, saving, loaded, permissions, dirty, refreshTools, savePermissions, discard, setPermission } = usePlatformToolSettings();
   const [domainSearch, setDomainSearch] = useState("");
   const [debouncedDomainSearch, setDebouncedDomainSearch] = useState("");
   const [expandedDomainCodes, setExpandedDomainCodes] = useState<Set<string>>(() => new Set());
@@ -65,32 +60,6 @@ export function PlatformToolsPage() {
     return grouped;
   }, [tools]);
 
-  async function refreshTools() {
-    setLoading(true);
-    try {
-      const [nextDomains, nextTools] = dataSource === "api"
-        ? await Promise.all([
-          fetchToolDomains(),
-          listTools(),
-        ])
-        : await Promise.all([
-          listToolDomainsMock(),
-          listToolsMock(),
-        ]);
-
-      setDomains(nextDomains);
-      setTools(nextTools);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform tools could not be loaded"));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void refreshTools();
-  }, [dataSource]);
-
   function toggleDomain(domainCode: string) {
     setExpandedDomainCodes((current) => {
       const next = new Set(current);
@@ -105,9 +74,15 @@ export function PlatformToolsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={pageT("title", "Platform Tools")} />
+      <PageHeader title={pageT("title", "Platform Tools")} actions={<div className="flex flex-wrap items-center gap-2">
+        <span role="status" className="text-xs text-[var(--color-on-surface-variant)]">{loading ? pageT("permissions.loading", "Loading tool permissions…") : dirty ? pageT("permissions.dirty", "Unsaved changes") : ""}</span>
+        <Button variant="outline" disabled={loading || saving || dirty} onClick={() => void refreshTools()}>{pageT("permissions.refresh", "Refresh")}</Button>
+        <Button variant="outline" disabled={!dirty || saving || loading} onClick={discard}>{pageT("permissions.discard", "Discard changes")}</Button>
+        <Button disabled={!dirty || !loaded || loading || saving} onClick={() => void savePermissions()}>{pageT(saving ? "permissions.saving" : "permissions.save", saving ? "Saving…" : "Save")}</Button>
+      </div>} />
 
       <div className="space-y-4">
+        <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("permissions.hint", "Platform permissions apply together with the tools assigned to an Agent.")}</p>
         <DataTable<ToolCatalogDomainRecord>
           rowKey={(row) => row.domainCode}
           rows={domainPagination.visibleItems}
@@ -132,6 +107,7 @@ export function PlatformToolsPage() {
                       <th className="px-4 py-2.5">{pageT("domains.tools.columns.englishName", "工具名称英文")}</th>
                       <th className="px-4 py-2.5">{pageT("domains.tools.columns.description", "描述")}</th>
                       <th className="px-4 py-2.5">{pageT("domains.tools.columns.type", "类型")}</th>
+                      <th className="px-4 py-2.5">{pageT("permissions.title", "Execution permission")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -141,6 +117,9 @@ export function PlatformToolsPage() {
                         <td className="px-4 py-2.5 font-mono text-xs text-[var(--color-on-surface-variant)]">{tool.toolName}</td>
                         <td className="px-4 py-2.5 text-[13px] text-[var(--color-on-surface-variant)]">{tool.description}</td>
                         <td className="px-4 py-2.5">{t(`common:toolOperationKind.${tool.operationKind}`, { defaultValue: tool.operationKind })}</td>
+                        <td className="px-4 py-2.5"><ToolPermissionControl name={tool.name} disabled={loading || saving || !loaded}
+                          value={permissions.find((item) => item.toolCode === tool.toolCode) ?? { toolCode: tool.toolCode, permission: "run", confirmLevel: "low" }}
+                          onChange={setPermission} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -165,7 +144,7 @@ export function PlatformToolsPage() {
               id: "domain",
               header: pageT("domains.columns.domainCode", "Domain"),
               width: "18%",
-              render: (row) => <span className="flex items-center gap-2 font-medium text-[var(--color-on-surface)]"><ChevronRight className={expandedDomainCodes.has(row.domainCode) ? "rotate-90 transition-transform" : "transition-transform"} size={16} aria-hidden="true" />{row.domainCode}</span>,
+              render: (row) => <Button variant="ghost" aria-expanded={expandedDomainCodes.has(row.domainCode)} aria-label={`${row.domainCode}: ${row.name}`} onClick={(event) => { event.stopPropagation(); toggleDomain(row.domainCode); }} className="flex items-center gap-2 font-medium text-[var(--color-on-surface)]"><ChevronRight className={expandedDomainCodes.has(row.domainCode) ? "rotate-90 transition-transform" : "transition-transform"} size={16} aria-hidden="true" />{row.domainCode}</Button>,
             },
             {
               id: "description",

@@ -1652,6 +1652,13 @@ export const pages = {
     },
   },
   settingsTools: {
+    permissions: {
+      title: "执行权限", hint: "平台权限与 Agent 已分配的工具权限共同生效。直接执行无需审批；询问按风险阈值审批；无权限禁止调用。",
+      run: "直接执行", ask: "询问", no: "无权限", label: "{{tool}} 的执行权限", threshold: "{{tool}} 的确认阈值",
+      riskHint: "风险达到所选等级时询问，低于该等级自动执行。",
+      levels: { safe: "无风险（全部询问）", low: "低", medium: "中", high: "高", critical: "非常危险" },
+      save: "保存", saving: "保存中…", discard: "放弃改动", refresh: "刷新", dirty: "有未保存的改动", saved: "权限已保存", loadError: "工具权限加载失败，请重试", saveError: "权限保存失败，改动已保留", loading: "正在加载工具权限…",
+    },
     catalog: {
       domains: {
         app: {
