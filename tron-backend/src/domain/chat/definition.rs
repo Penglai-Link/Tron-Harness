@@ -116,7 +116,13 @@ pub struct ChatSessionGroup {
 pub struct ChatClientCapabilities {
     #[serde(default)]
     pub user_input_requests: bool,
+    #[serde(default)]
+    pub a2ui: Option<ChatA2uiCapabilities>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct ChatA2uiCapabilities {pub version:String,pub catalog_ids:Vec<String>}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]

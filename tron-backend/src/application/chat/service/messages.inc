@@ -182,8 +182,7 @@ impl ChatService {
             page_context: command.page_context,
             supports_user_input_requests,
             transcript_input_kind: None,
-            transcript_input_metadata: (!command.resume.is_empty())
-                .then(|| json!({"resume": command.resume})),
+            transcript_input_metadata: Some(json!({"resume": command.resume, "a2uiClientCapabilities":command.client_capabilities.and_then(|c|c.a2ui),"a2uiMetadata":command.a2ui_metadata})),
         };
         let mut run = if let Some(sink) = sink {
             agent

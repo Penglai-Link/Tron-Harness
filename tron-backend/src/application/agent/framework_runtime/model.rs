@@ -9,6 +9,8 @@ use tokio::sync::Mutex;
 
 pub(super) struct HostRunState {
     pub context: AgentRunContext,
+    /// Product ACL captured before model exposure rewrites `context.tools`.
+    pub product_tool_authority: std::collections::BTreeSet<String>,
     pub trusted_prefix: Vec<crate::domain::agent::AgentMessage>,
     /// Actual admitted native IDs for product exposure audits; never an executor.
     pub tool_catalog: std::collections::BTreeMap<String, String>,
@@ -39,8 +41,16 @@ impl HostRunState {
             .take_while(|message| matches!(message.role.as_str(), "system" | "developer"))
             .cloned()
             .collect();
+        let product_tool_authority = context
+            .authorized_tools()
+            .iter()
+            .chain(context.tool_exposure.hidden_tools.iter())
+            .filter(|tool| context.is_tool_authorized(&tool.tool_name))
+            .map(|tool| tool.tool_name.clone())
+            .collect();
         Self {
             context,
+            product_tool_authority,
             trusted_prefix,
             tool_catalog: Default::default(),
             tool_sequence: 0,
@@ -179,8 +189,12 @@ impl fw::ChatModel for TronChatModel {
             .tools
             .iter()
             .map(|descriptor| {
-                super::tools::map_authorized_descriptor(&state.context, descriptor)
-                    .map_err(|error| fw::ModelError::Fatal(error.to_string()))
+                super::tools::map_authorized_descriptor(
+                    &state.context,
+                    descriptor,
+                    &request.extensions,
+                )
+                .map_err(|error| fw::ModelError::Fatal(error.to_string()))
             })
             .collect::<Result<Vec<_>, fw::ModelError>>()?;
         state.context.tools = tools;

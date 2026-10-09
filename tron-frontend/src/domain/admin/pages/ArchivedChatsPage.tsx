@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ChatA2uiSession } from "@eliteforge/agent-ui-chat-core";
+import { ChatA2UI } from "@eliteforge/agent-ui-chat-react";
 import { Eye, RefreshCcw, RotateCcw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -52,6 +54,12 @@ export function ArchivedChatsPage() {
   const [messages, setMessages] = useState<ArchivedMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [detail, setDetail] = useState<ArchivedSessionDetail | null>(null);
+  const archivedA2ui = useMemo(() => {
+    if (!detail?.a2uiState) return undefined;
+    const runtime = new ChatA2uiSession(detail.session.sessionCode);
+    runtime.hydrate(detail.a2uiState);
+    return runtime;
+  }, [detail]);
   const listRequest = useRef(0);
   const detailRequest = useRef(0);
 
@@ -289,6 +297,7 @@ export function ArchivedChatsPage() {
                   {detail.runs.map((run) => <p key={run.runCode} className="font-mono text-xs">{nativeLabel("runKinds", run.kind)} · {nativeLabel("statuses", run.status)} · {run.runCode}</p>)}
                 </div>
               )}
+              {archivedA2ui?.messages().map(message => <ChatA2UI key={message.messageId} message={message} runtime={archivedA2ui} disabled />)}
               {detail?.history.map((branch) => <details key={`${branch.branch}:${branch.generation}`} className="mb-3 rounded-lg border border-[var(--color-outline-variant)] p-3">
                 <summary className="cursor-pointer text-xs">{branch.branch} · {branch.messages.length}</summary>
                 <ol className="mt-2 space-y-2">{branch.messages.map((message) => <li key={message.messageCode} className="whitespace-pre-wrap break-words text-xs"><span className="font-medium">{nativeLabel("roles", message.role)}</span>: {message.content}</li>)}</ol>

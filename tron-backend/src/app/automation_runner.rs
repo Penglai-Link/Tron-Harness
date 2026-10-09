@@ -200,6 +200,7 @@ async fn run_automation_with_main_agent(
         .send_message(
             &session.session_code,
             SendChatMessageCommand {
+            a2ui_action_id: None, a2ui_metadata: None,
                 run_code: None,
                 content: Some(automation.prompt_text.clone()),
                 workspace_code: Some(automation.workspace_code.clone()),

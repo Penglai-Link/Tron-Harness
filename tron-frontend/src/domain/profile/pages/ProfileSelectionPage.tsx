@@ -59,6 +59,7 @@ export function ProfileSelectionPage() {
   const { changeLocale, currentLocale, supportedLocales } = useLocale();
   const nextLocale = supportedLocales.find((locale) => locale.code !== currentLocale)?.code ?? currentLocale;
   const navigate = useNavigate();
+  const authStatus = useAuthStore(state => state.status);
   const [searchParams] = useSearchParams();
   const forceReauthorization = searchParams.get("mode") === "reauth";
   const forceSelection = searchParams.get("mode") === "switch" || forceReauthorization;
@@ -98,18 +99,20 @@ export function ProfileSelectionPage() {
   }, []);
 
   useEffect(() => {
-    if (forceSelection || loading || authorization || error || bootstrap?.activeProfile?.status === "PENDING") return;
+    if (forceSelection || loading || authorization || error || authStatus === "checking" || bootstrap?.activeProfile?.status === "PENDING") return;
     const availableProfiles = profiles.filter((profile) => profile.status !== "PENDING");
     if (availableProfiles.length !== 1) return;
     const [profile] = availableProfiles;
     if (autoEnteredProfileRef.current === profile.profileId) return;
     autoEnteredProfileRef.current = profile.profileId;
     if (bootstrap?.activeProfileId === profile.profileId) {
-      navigate("/workspace", { replace: true });
+      // A locally ACTIVE profile does not prove that its remote credentials work.
+      // Re-entering a protected route while unauthenticated creates a redirect loop.
+      navigate(authStatus === "authenticated" ? "/workspace" : "/profiles?mode=reauth", { replace: true });
       return;
     }
     void selectProfile(profile);
-  }, [authorization, bootstrap, error, forceSelection, loading, navigate, profiles]);
+  }, [authStatus, authorization, bootstrap, error, forceSelection, loading, navigate, profiles]);
 
   useEffect(() => {
     if (!authorization) return;

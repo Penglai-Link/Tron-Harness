@@ -18,9 +18,19 @@ pub(super) fn official_name(name: &str) -> &str {
         _ => name,
     }
 }
+fn local_id(name: &str) -> Option<String> {
+    local::local_tool_catalog()
+        .into_iter()
+        .find(|tool| tool.call_name == official_name(name))
+        .map(|tool| tool.id)
+}
 pub(super) fn official_id(name: &str) -> Option<String> {
     local::local_tool_catalog()
         .into_iter()
+        .chain(eliteforge_agent_official_plugin_a2ui::tool_descriptors())
+        .chain(std::iter::once(
+            eliteforge_agent_official_plugin_a2ui::expand_descriptor(),
+        ))
         .find(|tool| tool.call_name == official_name(name))
         .map(|tool| tool.id)
 }
@@ -61,7 +71,7 @@ impl local::LocalToolScopeProvider for LocalScope {
         let mut names = BTreeMap::new();
         let mut ids = BTreeSet::new();
         for tool in state.context.authorized_tools() {
-            if let Some(id) = official_id(&tool.tool_name) {
+            if let Some(id) = local_id(&tool.tool_name) {
                 ids.insert(id.clone());
                 names.insert(id, tool.tool_name.clone());
             }
@@ -356,7 +366,9 @@ impl fw::ToolResultProcessor for ToolAudit {
             });
         if let Some(error) = input_error {
             result = fw::ToolOutput::error(format!("tool input is invalid: {error}"));
-        } else if result.is_error && result.content.protocol_text() == "Tool arguments do not match input schema" {
+        } else if result.is_error
+            && result.content.protocol_text() == "Tool arguments do not match input schema"
+        {
             result = fw::ToolOutput::error(format!(
                 "Tool arguments do not match input schema. Pass object/array parameters as JSON values, not quoted JSON strings. Expected input schema: {}",
                 invocation.descriptor.input_schema

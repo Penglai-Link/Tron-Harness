@@ -11,3 +11,5 @@ pub(crate) mod stream_task;
 mod terminals;
 
 pub(crate) mod workspace_scope;
+
+mod a2ui;

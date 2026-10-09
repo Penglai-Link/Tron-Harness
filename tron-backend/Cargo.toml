@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+eliteforge-agent-official-plugin-a2ui = { path = "../.agent-deps/agent-framework/crates/plugin/protocol/eliteforge-agent-official-plugin-a2ui" }
 eliteforge-agent-official-plugin-skills = { path = "../.agent-deps/agent-framework/crates/plugin/skill/eliteforge-agent-official-plugin-skills" }
 eliteforge-agent-plugin-core = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-plugin-core" }
 eliteforge-agent-official-plugin-agui = { path = "../.agent-deps/agent-framework/crates/plugin/protocol/eliteforge-agent-official-plugin-agui" }

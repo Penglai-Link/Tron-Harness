@@ -14,6 +14,31 @@
 - 关闭顺序是停止 Agent、等待运行及宿主回调结束、关闭驱动环境，最后关闭 profile Framework。`agent.close()` 不承担插件关闭责任。
 - 已安装能力通过 Agent 选择切换，保留会话与 PTY。新导入的插件需要在重启 profile 后、首次运行前启用；运行期间不能把新插件装进已有 Framework。存储和模型是必需服务，不能关闭。
 
+## A2UI 可选能力（2026-10-10）
+
+`framework.a2ui` 是可选能力包，Tron 默认启用。关闭后，普通聊天、业务工具、原生提问和工具审批继续运行；Framework 本身不依赖 A2UI。profile 首次装配时如果未安装该包，重新启用需要重启 profile；已安装的包通过 Agent 选择开关。
+
+职责按以下链路划分：
+
+```text
+Tron：客户端能力声明 + Catalog/技能许可 + 产品文案
+  → Framework A2uiPack
+    → ContextContributor：简短使用指引
+    → SkillProvider：a2ui-interface 技能与按需组件资源
+    → a2ui_expand：展开生成工具
+    → a2ui_publish / a2ui_request_input
+  → Framework 持久化 / 原生 interaction / AG-UI
+  → Tron Adapter → 公共 ChatRuntimeWindow → A2UI 组件
+```
+
+工具、使用指引、技能正文、协议与组件 Schema 全部由 Framework 插件提供。Tron 不维护第二套 A2UI 工具描述或协议提示词，也不把它们注册进产品业务领域目录。`a2ui_expand` 是插件自己的领域展开入口，使用 Framework 的原生工具曝光机制；初始上下文只有简短指引、技能摘要和展开入口，详细资源按需读取。
+
+启用需要同时满足包已安装并选中、工具扩展开启、Agent 许可 `a2ui-interface`、客户端声明 v0.9.1 及服务端支持的 Catalog。A2UI 技能许可只允许加载该技能，不放行其他技能或业务工具。产品工具 ACL 与模型可见工具列表分别处理，展开不能改变执行权限。
+
+普通 surface 使用 `Display` 或 `Reusable`；`a2ui_request_input` 使用 `SubmitOnce` 并绑定真实 interaction。原生提问和工具审批沿用现有执行机制，由插件投影为卡片；模型生成的审批外观不能授权执行。客户端不支持 A2UI 或包关闭时保留原交互协议。
+
+公共 Runtime 的接入、快照恢复和动作提交见 Agent UI 的 `docs/chat-a2ui.md`。本轮源码及自动化验证与此前历史验收记录分开；新增技能和展开流程仍需使用更新后的桌面构建完成真实验收。
+
 ## 当前迁移状态
 
 **本轮收敛原生运行时职责与统一上下文来源，验收独立记录。** Tron 的 Agent 模型/工具循环、模型重试、上下文压缩执行、

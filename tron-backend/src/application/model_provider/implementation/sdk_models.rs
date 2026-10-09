@@ -131,6 +131,8 @@ impl ModelProviderService {
         if !rejected {
             return;
         }
+        let rejected_access =
+            terminal && error.category == fw::ProviderErrorCategory::Authentication;
         let identity = identity.to_owned();
         let result = (|| -> Result<(), ModelProviderError> {
             let this = self.clone();
@@ -148,6 +150,23 @@ impl ModelProviderService {
                 return Ok(());
             }
             let now = now_millis();
+            if rejected_access {
+                // A model call can exhaust its retry budget before refresh runs.
+                // Rejecting an access token alone does not revoke the refresh token.
+                if !matches!(active.status, ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded) {
+                    return Ok(());
+                }
+                let mut retryable = credentials;
+                retryable.authorization_expires_at = Some(0);
+                let encrypted = this.encrypt_credentials(&retryable)?;
+                let reason = "PersonAI access token rejected; refresh pending";
+                transaction.execute("UPDATE provider_connections SET status=?2,last_error=?3,authorization_expires_at=0,credentials_encrypted=?4,updated_at=?5 WHERE provider_code=?1", params![ModelProviderCode::PersonAi.storage_value(),ProviderConnectionStatus::Degraded.storage_value(),reason,encrypted,now]).map_err(|_| ModelProviderError::Storage)?;
+                if let Some(user) = active.person_ai_user_id.as_deref() {
+                    transaction.execute("UPDATE person_ai_profile_credentials SET status=?2,last_error=?3,authorization_expires_at=0,credentials_encrypted=?4,updated_at=?5 WHERE person_ai_user_id=?1",params![user,ProviderConnectionStatus::Degraded.storage_value(),reason,encrypted,now]).map_err(|_| ModelProviderError::Storage)?;
+                }
+                transaction.commit().map_err(|_| ModelProviderError::Storage)?;
+                return Ok(());
+            }
             let reason = if unbound {
                 "PersonAI device was unbound; login again"
             } else {

@@ -1,6 +1,9 @@
 use crate::{
     app::AppState,
-    application::profile::{PersonAiAccountSummary, ProfileRecord, ProfileRegistryError},
+    application::{
+        model_provider::ModelProviderError,
+        profile::{PersonAiAccountSummary, ProfileRecord, ProfileRegistryError},
+    },
     response::{ApiResponse, EmptyData},
 };
 use axum::{
@@ -65,10 +68,29 @@ async fn active_profile_token(State(state): State<AppState>) -> Response {
         Ok(token) => {
             Json(ApiResponse::success(serde_json::json!({ "token": token }))).into_response()
         }
-        Err(_) => generic_profile_error(
+        Err(error) => active_profile_token_error(error),
+    }
+}
+
+fn active_profile_token_error(error: ModelProviderError) -> Response {
+    match error {
+        ModelProviderError::AuthenticationRequired
+        | ModelProviderError::Unauthorized
+        | ModelProviderError::DeviceUnbound
+        | ModelProviderError::ConnectionNotReady => generic_profile_error(
             StatusCode::UNAUTHORIZED,
             "PERSONAI_PROFILE_AUTH_REQUIRED",
             "The active PersonAI profile is not authorized",
+        ),
+        ModelProviderError::Remote(_) => generic_profile_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "PERSONAI_PROFILE_TEMPORARILY_UNAVAILABLE",
+            "PersonAI is temporarily unavailable; please retry",
+        ),
+        _ => generic_profile_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PERSONAI_PROFILE_TOKEN_FAILED",
+            "Could not load the active PersonAI profile token",
         ),
     }
 }
@@ -290,4 +312,31 @@ fn generic_profile_error(
         Json(ApiResponse::<EmptyData>::error(code, message.into())),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod token_error_tests {
+    use super::*;
+
+    #[test]
+    fn refresh_outages_are_not_reported_as_authorization_failures() {
+        assert_eq!(
+            active_profile_token_error(ModelProviderError::Remote("timeout".into())).status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            active_profile_token_error(ModelProviderError::Storage).status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        for error in [
+            ModelProviderError::Unauthorized,
+            ModelProviderError::AuthenticationRequired,
+            ModelProviderError::DeviceUnbound,
+        ] {
+            assert_eq!(
+                active_profile_token_error(error).status(),
+                StatusCode::UNAUTHORIZED
+            );
+        }
+    }
 }

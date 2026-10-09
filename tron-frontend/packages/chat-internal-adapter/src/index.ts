@@ -229,6 +229,54 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
         signal,
       });
     },
+    loadA2uiState(sessionCode, signal) {
+      return transport.requestJson<import("@eliteforge/agent-ui-chat-core").ChatA2uiState>({path:"/api/v1/chats/sessions/{sessionCode}/a2ui-state",pathParams:{sessionCode},signal});
+    },
+    sendA2uiActionStream(session, input, handlers, signal) {
+      return transport.streamSse<ChatSendResult>({
+        body: input,
+        handlers: {
+          onFrame: (eventName, payload) => {
+            const type = String(payload.type ?? eventName).toUpperCase();
+            const aguiEvent = { ...payload, type } as ChatAguiStreamEvent;
+            handlers?.onAguiEvent?.(aguiEvent);
+            if (type === "TEXT_MESSAGE_CONTENT" && typeof payload.delta === "string") {
+              handlers?.onDelta?.(payload.delta);
+            }
+          },
+        },
+        onResult: (payload) => {
+          const type = String(payload.type ?? "").toUpperCase();
+          if (payload.productCompletion === true && payload.productCompletionError && typeof payload.productCompletionError === "object") {
+            const error=payload.productCompletionError as Record<string,unknown>;
+            throw new FetchTransportError(String(error.message ?? "Product completion is unavailable"), {code:typeof error.code === "string" ? error.code : "CHAT_STREAM_COMPLETION_UNAVAILABLE",data:payload,status:200});
+          }
+          if (type === "RUN_ERROR" && (payload.productCompletion === true || isChatSendResult(payload.result) || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
+            throw new FetchTransportError(
+              String(payload.message ?? payload.code ?? "Chat stream failed"),
+              {
+                code: typeof payload.code === "string" ? payload.code : undefined,
+                data: payload,
+                status: 200,
+              },
+            );
+          }
+          if (type !== "RUN_FINISHED") return null;
+          if (isChatSendResult(payload.result)) return normalizeChatSendResult(payload.result);
+          if (payload.productCompletion === true) {
+            throw new FetchTransportError("Product completion result is invalid", {
+              code: "CHAT_STREAM_COMPLETION_INVALID", status: 200,
+            });
+          }
+          // Native child/continuation terminals carry SDK results and are
+          // delivered above to onAguiEvent; only the product result settles SSE.
+          return null;
+        },
+        path: "/api/v1/chats/sessions/{sessionCode}/a2ui/actions/stream",
+        pathParams: { sessionCode: session.sessionCode },
+        signal,
+      });
+    },
     streamMessage(session: ChatSession, input: SendChatMessageInput, handlers, signal) {
       return transport.streamSse<ChatSendResult>({
         body: {
@@ -283,6 +331,7 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
     answerUserInputRequestStream(session, requestCode, input: ChatUserInputAnswerInput, handlers, signal) {
       return transport.streamSse<ChatSendResult>({
         body: {
+          clientCapabilities: input.clientCapabilities, a2uiMetadata:input.a2uiMetadata,
           resume: input.resume ?? [{
             interruptId: requestCode,
             status: "resolved",

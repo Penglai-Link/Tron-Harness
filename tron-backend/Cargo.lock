@@ -1555,6 +1555,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "eliteforge-agent-official-plugin-a2ui"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "eliteforge-agent-core",
+ "jsonschema 0.52.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "eliteforge-agent-official-plugin-agent-external"
 version = "0.1.0"
 dependencies = [
@@ -6511,6 +6522,7 @@ dependencies = [
  "eliteforge-agent-core",
  "eliteforge-agent-framework",
  "eliteforge-agent-memory",
+ "eliteforge-agent-official-plugin-a2ui",
  "eliteforge-agent-official-plugin-agui",
  "eliteforge-agent-official-plugin-model-http",
  "eliteforge-agent-official-plugin-skills",

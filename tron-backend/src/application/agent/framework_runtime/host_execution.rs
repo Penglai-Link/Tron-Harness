@@ -72,6 +72,48 @@ impl FrameworkHost {
             .map_err(AgentError::InvalidConfiguration)?
             .content;
         let answers = host_interactions::answers_from_parts(&current.parts)?;
+        let a2ui_options = current
+            .parts
+            .iter()
+            .find_map(|part| {
+                if let crate::domain::agent::AgentMessagePart::Context {
+                    kind,
+                    metadata: Some(metadata),
+                    ..
+                } = part
+                {
+                    if kind == "tron_interaction_response" {
+                        return metadata.get("a2uiClientCapabilities").and_then(|v| {
+                            serde_json::from_value::<
+                                eliteforge_agent_official_plugin_a2ui::A2uiClientCapabilities,
+                            >(v.clone())
+                            .ok()
+                        });
+                    }
+                }
+                None
+            })
+            .filter(|c| {
+                c.version == eliteforge_agent_official_plugin_a2ui::VERSION
+                    && c.catalog_ids.iter().any(|id| {
+                        [
+                            eliteforge_agent_official_plugin_a2ui::AGENT_CATALOG_ID,
+                            eliteforge_agent_official_plugin_a2ui::MINIMAL_CATALOG_ID,
+                        ]
+                        .contains(&id.as_str())
+                    })
+            });
+        let a2ui_options = a2ui_options.filter(|_| {
+            self.0
+                .tools_enabled
+                .load(std::sync::atomic::Ordering::Acquire)
+                && self
+                    .capability_state()
+                    .0
+                    .get(eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID)
+                    .copied()
+                    .unwrap_or(true)
+        });
         let key = fw::ConversationKey::new(&session);
         let snapshot = agent.conversation(&key).await.map_err(map_error)?;
         if snapshot.revision == 0 && !history.is_empty() {
@@ -81,6 +123,17 @@ impl FrameworkHost {
                 .map_err(map_error)?;
         }
         let mut request = fw::RunRequest::new(&session, input);
+        if let Some(capabilities) = a2ui_options {
+            request
+                .extensions
+                .insert(eliteforge_agent_official_plugin_a2ui::A2uiRunOptions {
+                    capabilities,
+                    owner_agent_id: context
+                        .agent_code
+                        .clone()
+                        .unwrap_or_else(|| "main-agent".into()),
+                });
+        }
         request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(|e| {
             AgentError::InvalidConfiguration(format!("invalid native run identity: {e}"))
         })?);

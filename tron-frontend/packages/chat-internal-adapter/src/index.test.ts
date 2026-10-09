@@ -86,6 +86,8 @@ describe("createInternalChatAdapter", () => {
     await adapter.loadProtocolEvents?.(fixture.sessionCode);
     await adapter.loadUserInputRequests?.(fixture.sessionCode);
     await adapter.getActiveRun?.(fixture.sessionCode);
+    await adapter.loadA2uiState?.(fixture.sessionCode);
+    await adapter.sendA2uiActionStream?.(fixture, {actionId:"action-1",surfaceInstanceId:"surface-instance",expectedRevision:2,message:{version:"v0.9.1",action:{surfaceId:"search",name:"submit",sourceComponentId:"submit",timestamp:"2026-10-09T12:00:00Z",context:{query:"q"}}},metadata:{a2uiClientDataModel:{surfaces:{search:{query:"q"}}}}});
     await adapter.streamMessage(fixture, { workspaceCode: fixture.workspaceCode, content: "hello" });
     await adapter.steerMessage?.(fixture, { workspaceCode: fixture.workspaceCode, content: "steer" }, { expectedRunCode: "RUN-1" });
     await adapter.stopRun?.(fixture, { expectedRunCode: "RUN-1" });
@@ -93,7 +95,9 @@ describe("createInternalChatAdapter", () => {
     await adapter.uploadAttachment?.(fixture, { file: new File(["note"], "note.txt") });
     await adapter.downloadAttachment?.(fixture, attachment);
     await adapter.deleteSession(fixture.sessionCode);
-    expect(fetchMock).toHaveBeenCalledTimes(13);
+    expect(fetchMock).toHaveBeenCalledTimes(15);
+    const actionCall = fetchMock.mock.calls.find(([url])=>url.includes("/a2ui/actions/stream"))!;
+    expect(JSON.parse(String(actionCall[1]?.body))).toMatchObject({actionId:"action-1",surfaceInstanceId:"surface-instance",expectedRevision:2,metadata:{a2uiClientDataModel:{surfaces:{search:{query:"q"}}}}});
   });
 
   it("keeps in-flight workspace scopes independent when another workspace opens", async () => {

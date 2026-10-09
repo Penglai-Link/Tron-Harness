@@ -20,7 +20,7 @@ pub async fn send_message(
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
     };
-    let run_code = generate_agent_run_code();
+    let run_code = request.run_code.clone().unwrap_or_else(generate_agent_run_code);
     request.run_code = Some(run_code.clone());
     let prepared_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
@@ -150,7 +150,7 @@ pub(crate) async fn stream_message_command(
         Err(error) => return chat_send_error_response(error),
     };
     let supports_steer = matches!(resolved_runtime.runtime_type, AgentRuntimeType::React);
-    let run_code = generate_agent_run_code();
+    let run_code = request.run_code.clone().unwrap_or_else(generate_agent_run_code);
     request.run_code = Some(run_code.clone());
     let prepared_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
@@ -209,6 +209,8 @@ pub(crate) async fn stream_message_command(
     let sink = Arc::new(|_event: ModelStreamEvent| {});
 
     let llm_runtime = state.llm_runtime.clone();
+    let a2ui_action_id = request.a2ui_action_id.clone();
+    let a2ui_host = state.agent_framework.clone();
     let run_task = AuthHolder::spawn(async move {
         let result = chats
             .send_message_stream(
@@ -230,7 +232,20 @@ pub(crate) async fn stream_message_command(
                 ChatStreamCompletion::Error { code, message }
             }
         };
-        let done_payload = completion.payload(&session_code_for_task, &run_code_for_task);
+        let mut done_payload = completion.payload(&session_code_for_task, &run_code_for_task);
+        if let Some(id)=a2ui_action_id {
+            done_payload.data["productCompletion"]=json!(true);
+            if let Ok(framework)=a2ui_host.storage_framework().await {
+                if let Ok(services)=framework.services() {
+                    if let Some(service)=services.get::<eliteforge_agent_official_plugin_a2ui::A2uiService>() {
+                        if let Err(error)=service.complete_action(&session_code_for_task,&id,done_payload.data.clone()).await {
+                            done_payload.data["productCompletionError"]=json!({"code":"101031004","message":"Could not persist UI action completion; refresh session"});
+                            let _ = error;
+                        }
+                    }
+                }
+            }
+        }
         let _ = completion_sender.send(done_payload).await;
     });
 

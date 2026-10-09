@@ -83,6 +83,16 @@ impl FrameworkHost {
                     .with_context_preparation(TronContext, 32)
                     .capability_pack(),
             );
+        if packs
+            .get(eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID)
+            .copied()
+            .unwrap_or(true)
+        {
+            builder = builder.capability_pack(
+                eliteforge_agent_official_plugin_a2ui::A2uiPack::new()
+                    .map_err(|e| e.to_string())?,
+            );
+        }
         let manager =
             eliteforge_agent_capability_runtime::CapabilityPackManager::new(&self.0.pack_root)
                 .map_err(|error| error.to_string())?;
@@ -116,6 +126,7 @@ impl FrameworkHost {
         matches!(
             id,
             "framework.external-agent"
+                | "framework.a2ui"
                 | "framework.local.scoped"
                 | "framework.tool-pack.agent-collaboration"
                 | "tron.harness"
@@ -130,6 +141,15 @@ impl FrameworkHost {
         let registry = framework.services().map_err(|e| e.to_string())?;
         let enabled = |point: &str| extensions.get(point).copied().unwrap_or(true);
         let pack_enabled = |id: &str| packs.get(id).copied().unwrap_or(true);
+        if pack_enabled(eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID)
+            && registry
+                .get::<eliteforge_agent_official_plugin_a2ui::A2uiService>()
+                .is_none()
+        {
+            return Err(
+                "A2UI is not installed in this Framework; restart the profile to enable it".into(),
+            );
+        }
         let installed = self.0.installed_packs.read().unwrap();
         for (id, active) in packs {
             if *active && !Self::builtin_pack(id) && !installed.contains_key(id) {
@@ -172,6 +192,10 @@ impl FrameworkHost {
                     .filter(|id| {
                         selected(id)
                             && enabled("tool")
+                            && (*id != "agent.a2ui"
+                                || pack_enabled(
+                                    eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID,
+                                ))
                             && (*id != "tron.harness.tools" || pack_enabled("tron.harness"))
                             && (*id != "tools.agents"
                                 || pack_enabled(
@@ -191,6 +215,11 @@ impl FrameworkHost {
                     .iter()
                     .filter(|(pack, _)| pack_enabled(pack))
                     .flat_map(|(_, names)| names.clone())
+                    .chain(
+                        pack_enabled(eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID).then(
+                            || eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.to_owned(),
+                        ),
+                    )
                     .collect::<std::collections::BTreeSet<_>>()
                     .into_iter()
                     .collect(),
@@ -199,7 +228,13 @@ impl FrameworkHost {
                 registry
                     .providers::<fw::ContextContributorService>()
                     .into_iter()
-                    .filter(|id| selected(id))
+                    .filter(|id| {
+                        selected(id)
+                            && (*id != "agent.a2ui"
+                                || pack_enabled(
+                                    eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID,
+                                ))
+                    })
                     .map(str::to_owned)
                     .collect(),
             ),

@@ -170,6 +170,8 @@ export interface ChatAguiResumeEntry {
 }
 
 export interface ChatUserInputAnswerInput {
+  clientCapabilities?: SendChatMessageInput["clientCapabilities"];
+  a2uiMetadata?: SendChatMessageInput["a2uiMetadata"];
   answers: ChatUserInputAnswer[];
   resume?: ChatAguiResumeEntry[];
 }
@@ -260,8 +262,10 @@ export interface SendChatMessageInput {
   systemModelId?: string | null;
   reasoningEffort?: ReasoningEffort | null;
   attachments?: ChatMessageAttachment[];
+  a2uiMetadata?: import("@eliteforge/agent-ui-chat-core").SendChatMessageInput["a2uiMetadata"];
   clientCapabilities?: {
     userInputRequests?: boolean;
+    a2ui?: { version: "v0.9.1"; catalogIds: string[] };
   };
 }
 
@@ -398,6 +402,8 @@ export interface ChatAdapterCapabilities {
 }
 
 export interface ChatAdapter {
+  loadA2uiState?: (id: string, signal?: AbortSignal) => Promise<import("@eliteforge/agent-ui-chat-core").ChatA2uiState>;
+  sendA2uiActionStream?: (session: ChatSession, input: import("@eliteforge/agent-ui-chat-core").ChatA2uiActionInput, handlers?: ChatStreamHandlers, signal?: AbortSignal) => Promise<ChatSendResult>;
   capabilities: ChatAdapterCapabilities;
   createSession: (input: CreateChatSessionInput) => Promise<ChatSession>;
   deleteSession: (sessionCode: string, signal?: AbortSignal) => Promise<ChatSession>;

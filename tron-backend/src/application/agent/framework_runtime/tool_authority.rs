@@ -23,10 +23,27 @@ pub(super) fn has_product_implementation(
         .is_ok()
 }
 
+fn framework_a2ui_binding(extensions: &fw::Extensions, descriptor: &fw::ToolDescriptor) -> bool {
+    eliteforge_agent_official_plugin_a2ui::negotiated(extensions)
+        && (eliteforge_agent_official_plugin_a2ui::is_a2ui_tool(descriptor)
+            || native_skill_descriptor(descriptor))
+}
+
 pub(crate) fn map_authorized_descriptor(
     context: &AgentRunContext,
     descriptor: &fw::ToolDescriptor,
+    extensions: &fw::Extensions,
 ) -> Result<EffectiveTool, fw::AgentError> {
+    if framework_a2ui_binding(extensions, descriptor) {
+        return Ok(EffectiveTool {
+            tool_name: descriptor.call_name.clone(),
+            domain_code: Some("a2ui".into()),
+            description: descriptor.description.clone(),
+            input_schema: descriptor.input_schema.clone(),
+            skill_name: Some(eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into()),
+            required_variable_keys: vec![],
+        });
+    }
     if !context.is_tool_authorized(&descriptor.call_name) {
         return Err(fw::AgentError::ToolSetup(format!(
             "unauthorized tool: {}",
@@ -97,10 +114,14 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         let host = HostExecution::from_extensions(&run.extensions)?;
         let state = host.state.lock().await;
         let name = &binding.descriptor.call_name;
-        if !state.context.is_tool_authorized(name)
+        if (!state.product_tool_authority.contains(name)
+            && !framework_a2ui_binding(&run.extensions, &binding.descriptor))
             || overridden_native_skill(&host, &state, &binding.descriptor)
         {
             return Ok(fw::ToolBindingAdmission::Exclude);
+        }
+        if framework_a2ui_binding(&run.extensions, &binding.descriptor) {
+            return Ok(fw::ToolBindingAdmission::Allow);
         }
         Ok(
             if state
@@ -157,9 +178,17 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         }
         let host = HostExecution::from_extensions(&invocation.run.extensions)?;
         let state = host.state.lock().await;
-        if !state
-            .context
-            .is_tool_authorized(&invocation.descriptor.call_name)
+        if (!state
+            .product_tool_authority
+            .contains(&invocation.descriptor.call_name)
+            && !(framework_a2ui_binding(&invocation.run.extensions, invocation.descriptor)
+                && (!native_skill_descriptor(invocation.descriptor)
+                    || invocation
+                        .call
+                        .arguments
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME))))
             || overridden_native_skill(&host, &state, invocation.descriptor)
         {
             return Ok(fw::ToolPolicyDecision::Deny(

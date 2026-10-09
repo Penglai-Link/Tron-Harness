@@ -72,6 +72,22 @@ impl ModelClient for Client {
                     "skill_read_resource",
                     json!({"name":"review","path":"guide.md"}),
                 ),
+                (4, 0) => ModelResponse::tool_call_with_id(
+                    "a2ui-skill",
+                    "skill_load",
+                    json!({"name":"a2ui-interface"}),
+                ),
+                (4, 1) => ModelResponse::tool_call_with_id("a2ui-expand", "a2ui_expand", json!({})),
+                (4, 2) => ModelResponse::tool_call_with_id(
+                    "a2ui-report",
+                    "a2ui_publish",
+                    json!({"mode":"Display","messages":[{"version":"v0.9.1","createSurface":{"surfaceId":"report","catalogId":"https://eliteforge.dev/a2ui/v0.9.1/agent"}},{"version":"v0.9.1","updateComponents":{"surfaceId":"report","components":[{"id":"root","component":"Text","text":"Report ready"}]}}]}),
+                ),
+                (5, 0) => ModelResponse::tool_call_with_id(
+                    "unauthorized-skill",
+                    "skill_load",
+                    json!({"name":"review"}),
+                ),
                 (2, 0) | (3, 0) => {
                     ModelResponse::tool_call_with_id("registered", "skill_load", json!({}))
                 }
@@ -357,5 +373,108 @@ async fn disabling_tool_extension_denies_managed_tools_but_keeps_context_capabil
                 .filter(|message| message.role == fw::Role::Tool)
                 .all(|message| message.tool_result.as_ref().unwrap().is_error)
         );
+    }
+}
+
+#[tokio::test]
+async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_injection() {
+    for (client_support, pack_enabled, tools_enabled, try_other_skill) in [
+        (true, true, true, false),
+        (false, true, true, false),
+        (true, false, true, false),
+        (true, true, false, false),
+        (true, true, true, true),
+    ] {
+        let enabled = client_support && pack_enabled && tools_enabled;
+        let host = FrameworkHost::temporary(None).unwrap();
+        host.set_pack_enabled(
+            eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID,
+            pack_enabled,
+        )
+        .await
+        .unwrap();
+        host.set_extension_enabled("tool", tools_enabled)
+            .await
+            .unwrap();
+        // Another selected skill exists, but A2UI must not grant product ACL to load it.
+        super::super::capability_catalog::install_capability_pack(host.pack_root(), &archive())
+            .unwrap();
+        host.set_pack_enabled("fixture.managed-skills", true)
+            .await
+            .unwrap();
+        let client = Arc::new(Client {
+            mode: if try_other_skill {
+                5
+            } else if enabled {
+                4
+            } else {
+                6
+            },
+            step: AtomicUsize::new(0),
+            requests: Mutex::new(vec![]),
+        });
+        let agent = ReactAgentBuilder::new(
+            client.clone(),
+            Arc::new(ToolRegistry::default()),
+            EventBusHandle::disabled(),
+        )
+        .with_framework_host(Some(host.clone()))
+        .build()
+        .unwrap();
+        let mut context = context(1);
+        context.tools.clear();
+        if client_support {
+            context.messages[0].parts.push(crate::domain::agent::AgentMessagePart::Context {kind:"tron_interaction_response".into(),text:String::new(),metadata:Some(json!({"a2uiClientCapabilities":{"version":"v0.9.1","catalogIds":["https://eliteforge.dev/a2ui/v0.9.1/agent"]}}))});
+        }
+        let result = agent.run(context).await.unwrap();
+        assert_eq!(result.final_output, "done");
+        let requests = client.requests.lock().unwrap();
+        let first = &requests[0];
+        assert_eq!(
+            first
+                .tools
+                .iter()
+                .any(|tool| tool.call_name == "a2ui_expand"),
+            enabled
+        );
+        assert!(
+            !first
+                .tools
+                .iter()
+                .any(|tool| tool.call_name == "a2ui_publish")
+        );
+        assert_eq!(
+            serde_json::to_string(&first.messages)
+                .unwrap()
+                .contains("A2UI interactive interfaces are available"),
+            enabled
+        );
+        if enabled && !try_other_skill {
+            assert_eq!(requests.len(), 4);
+            assert!(
+                result
+                    .observations
+                    .iter()
+                    .any(|o| o.output.contains("# A2UI interface"))
+            );
+            assert!(requests[2].tools.iter().any(|t| t.id == "a2ui.publish"));
+            let f = host.storage_framework().await.unwrap();
+            assert!(
+                f.services()
+                    .unwrap()
+                    .get::<eliteforge_agent_official_plugin_a2ui::A2uiService>()
+                    .is_some()
+            );
+        }
+        if try_other_skill {
+            assert!(
+                !result
+                    .observations
+                    .iter()
+                    .any(|o| o.output.contains("NATIVE_MANAGED_INSTRUCTIONS"))
+            );
+        }
+        drop(requests);
+        assert!(host.close().await.is_success());
     }
 }

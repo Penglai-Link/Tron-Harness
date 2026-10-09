@@ -15,7 +15,7 @@ export function toUiSession(session: ChatSession): MappedSession {
     groupId: session.taskCode, displayName: sessionAgentTagLabel(session.agentCode),
     title: session.title, status: session.status, lastRunId: session.lastRunCode,
     lastRunStatus: session.lastRunStatus, createdAt: session.createdAt, updatedAt: session.updatedAt,
-    metadata: { tron: session },
+    metadata: { tron: session, agentId:session.agentCode } as MappedSession["metadata"],
   };
 }
 
@@ -76,13 +76,13 @@ export function toUiResult(value: ChatSendResult): Ui.ChatSendResult {
 export function toUiInput(input: SendChatMessageInput): MappedInput {
   const model = input.modelSelection;
   return { content: input.content, pageContext: input.pageContext, modelId: input.modelCode,
-    reasoningEffort: input.reasoningEffort, clientCapabilities: input.clientCapabilities,
+    reasoningEffort: input.reasoningEffort, clientCapabilities: input.clientCapabilities, a2uiMetadata: input.a2uiMetadata,
     attachments: input.attachments?.map(toUiAttachment),
     modelSelection: model ? {
       kind: model.kind === "Fixed" ? "fixed" : model.kind === "ProviderRoute" ? "route" : "auto",
       providerId: model.providerCode, modelId: model.modelCode, routeId: model.routeCode,
     } : model,
-    metadata: { tron: input } };
+    metadata: { tron: input, agentId: input.agentCode } as MappedInput["metadata"] };
 }
 function isMappedInput(input: Ui.SendChatMessageInput): input is MappedInput {
   const host = input.metadata?.tron;
@@ -91,7 +91,7 @@ function isMappedInput(input: Ui.SendChatMessageInput): input is MappedInput {
 }
 export function fromUiInput(input: Ui.SendChatMessageInput): SendChatMessageInput {
   if (!isMappedInput(input)) throw new Error("Chat input is missing its Tron host context");
-  return { ...input.metadata.tron, content: input.content,
+  return { ...input.metadata.tron, content: input.content, clientCapabilities: input.clientCapabilities, a2uiMetadata: input.a2uiMetadata,
     attachments: input.attachments?.map(fromUiAttachment) };
 }
 

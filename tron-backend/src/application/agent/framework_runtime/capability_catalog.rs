@@ -94,6 +94,14 @@ pub fn capability_pack_catalog() -> Vec<CapabilityPackInfo> {
             Some("2026-10-09"),
         ),
         (
+            eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID,
+            "A2UI Interfaces",
+            "Optional interactive cards, forms, guidance and skills for A2UI v0.9.1 clients",
+            "EliteForge",
+            "0.1.0",
+            Some("2026-10-10"),
+        ),
+        (
             "tron.harness",
             "Tron Harness",
             "Tron context preparation and product-specific agent tools",

@@ -321,6 +321,7 @@ impl From<eliteforge_agent_core::ConversationSnapshot> for ArchivedHistoryBranch
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArchivedSessionDetailResponse {
+    pub a2ui_state: eliteforge_agent_official_plugin_a2ui::A2uiState,
     pub session: ArchivedSessionResponse,
     pub messages: Vec<ArchivedMessageResponse>,
     pub goals: Vec<ArchivedGoalResponse>,

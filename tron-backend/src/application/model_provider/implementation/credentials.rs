@@ -88,13 +88,18 @@ impl ModelProviderService {
                 || ModelProviderError::Storage,
             )?
         };
-        if row.status == ProviderConnectionStatus::AuthRequired {
+        let retry_rejected_access = row.status == ProviderConnectionStatus::AuthRequired
+            && row.last_error.as_deref()
+                == Some("PersonAI rejected access credentials; reauthorization required");
+        if row.status == ProviderConnectionStatus::AuthRequired && !retry_rejected_access {
             return Err(ModelProviderError::AuthenticationRequired);
         }
-        if !matches!(
-            row.status,
-            ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
-        ) {
+        if !retry_rejected_access
+            && !matches!(
+                row.status,
+                ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
+            )
+        {
             return Err(ModelProviderError::ConnectionNotReady);
         }
         let encrypted = row
@@ -108,18 +113,19 @@ impl ModelProviderService {
                 return Err(ModelProviderError::AuthenticationRequired);
             }
         };
-        if credentials
-            .authorization_expires_at
-            .is_some_and(|expires_at| {
-                expires_at > now_millis().saturating_add(TOKEN_REFRESH_LEAD_MILLIS)
-            })
+        if !retry_rejected_access
+            && credentials
+                .authorization_expires_at
+                .is_some_and(|expires_at| {
+                    expires_at > now_millis().saturating_add(TOKEN_REFRESH_LEAD_MILLIS)
+                })
         {
             return Ok(credentials);
         }
         self.refresh_credentials_for_match(
             provider_code,
             &self.sdk_attempt_for_row(&row, &credentials.token),
-            false,
+            retry_rejected_access,
             true,
         )
         .await
@@ -167,10 +173,15 @@ impl ModelProviderService {
                 || ModelProviderError::Storage,
             )?
         };
-        if !matches!(
-            row.status,
-            ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
-        ) {
+        let retry_rejected_access = row.status == ProviderConnectionStatus::AuthRequired
+            && row.last_error.as_deref()
+                == Some("PersonAI rejected access credentials; reauthorization required");
+        if !retry_rejected_access
+            && !matches!(
+                row.status,
+                ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
+            )
+        {
             return Err(if row.status == ProviderConnectionStatus::AuthRequired {
                 ModelProviderError::AuthenticationRequired
             } else {
@@ -240,6 +251,12 @@ impl ModelProviderService {
         let now = now_millis();
         let refreshed = match refreshed {
             Ok(refreshed) if !refreshed.token.trim().is_empty() => refreshed,
+            Err(error) if !matches!(error, ModelProviderError::Unauthorized | ModelProviderError::AuthenticationRequired | ModelProviderError::DeviceUnbound)
+                && !is_person_ai_authorization_key_error(&error) => {
+                // A timeout, upstream outage or local failure does not revoke
+                // the refresh credential. Leave it available for the next attempt.
+                return Err(error);
+            }
             result => {
                 let unbound = matches!(result, Err(ModelProviderError::DeviceUnbound));
                 let reason = if unbound {

@@ -421,7 +421,7 @@ pub async fn answer_user_input(
         },
         None => None,
     };
-    let command = match state.chats.native_resume_command(
+    let mut command = match state.chats.native_resume_command(
         &session_code,
         entry,
         history.as_ref().map(|record| record.model_code.clone()),
@@ -430,6 +430,8 @@ pub async fn answer_user_input(
         Ok(command) => command,
         Err(error) => return chat_error_response(error),
     };
+    if request.client_capabilities.is_some() {command.client_capabilities=request.client_capabilities;}
+    command.a2ui_metadata=request.a2ui_metadata;
     stream_message_command(state, auth, session_code, command).await
 }
 
@@ -501,6 +503,11 @@ pub async fn archived_session_detail(
             .await
             .map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?;
         Ok::<_, eliteforge_agent_core::StateError>(super::response::ArchivedSessionDetailResponse {
+            a2ui_state: match framework.services().map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?
+                .get::<eliteforge_agent_official_plugin_a2ui::A2uiService>() {
+                Some(service)=>service.state(&code).await.map_err(|e| eliteforge_agent_core::StateError::Backend(e.to_string()))?,
+                None=>eliteforge_agent_official_plugin_a2ui::A2uiState {session_id:code.clone(),revision:0,surfaces:vec![],pending_interactions:vec![]},
+            },
             session: session.into(),
             messages: messages.into_iter().map(Into::into).collect(),
             goals: goals.into_iter().map(Into::into).collect(),

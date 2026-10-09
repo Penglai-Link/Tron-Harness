@@ -402,6 +402,7 @@ impl ChatService {
     ) -> Result<SendChatMessageCommand, ChatError> {
         let session = self.repository().get_session(session_code)?;
         Ok(SendChatMessageCommand {
+            a2ui_action_id: None, a2ui_metadata: None,
             run_code: None,
             content: None,
             workspace_code: Some(session.workspace_code),
@@ -418,6 +419,7 @@ impl ChatService {
             attachments: Vec::new(),
             client_capabilities: Some(crate::domain::chat::ChatClientCapabilities {
                 user_input_requests: true,
+            a2ui: None,
             }),
             resume: vec![entry],
         })

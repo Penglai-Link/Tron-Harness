@@ -30,7 +30,12 @@ pub struct ReadHistoryResponse {
     pub active_runs: Vec<fw::HistoryRun>,
 }
 impl From<fw::SessionHistory> for ReadHistoryResponse {
-    fn from(h: fw::SessionHistory) -> Self {
+    fn from(mut h: fw::SessionHistory) -> Self {
+        for message in &mut h.records.messages {
+            message.content.retain(|block| !matches!(block,
+                fw::HistoryContentBlock::Json {value} if value.pointer("/tronMessagePart/type").and_then(serde_json::Value::as_str) == Some("context")
+                    && value.pointer("/tronMessagePart/kind").and_then(serde_json::Value::as_str) == Some("tron_interaction_response")));
+        }
         Self {
             session_id: h.session_id,
             version: h.version,

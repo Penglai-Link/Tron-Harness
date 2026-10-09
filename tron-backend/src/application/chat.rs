@@ -23,3 +23,5 @@ pub use run_control::{
 };
 pub use service::{ChatSendError, ChatService};
 pub use steer::ChatSteerError;
+
+pub(crate) mod a2ui_error;

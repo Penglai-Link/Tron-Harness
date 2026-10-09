@@ -18,6 +18,8 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
       })));
     },
     deleteSession: async (...args) => toUiSession(await uiRequest(host.deleteSession(...args))),
+    loadA2uiState: host.loadA2uiState ? (...args) => uiRequest(host.loadA2uiState!(...args)) : undefined,
+    sendA2uiActionStream: host.sendA2uiActionStream ? async (session,input,events,signal) => toUiResult(await uiRequest(host.sendA2uiActionStream!(fromUiSession(session),input,handlers(events),signal))) : undefined,
     loadMessages: async (id) => (await uiRequest(host.loadMessages(id))).map(toUiMessage),
     loadHistory: host.loadHistory ? (...args) => uiRequest(host.loadHistory!(...args)) : undefined,
     loadAguiEvents: async (id) => (await uiRequest(host.loadAguiEvents(id))).map(({ runCode, ...event }) => ({ ...event, runId: runCode })),
@@ -50,7 +52,7 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
       // The payload is a product API contract too; mapping only the outer answers loses resume data.
       const resume = input.resume ? (input.answers.length ? fromUiResume(input.resume) : input.resume) : undefined;
       return toUiResult(await uiRequest(host.answerUserInputRequestStream!(fromUiSession(session), id,
-        { answers, resume }, handlers(events), signal)));
+        { answers, resume, clientCapabilities:input.clientCapabilities, a2uiMetadata:input.a2uiMetadata }, handlers(events), signal)));
     } : undefined,
   };
 }

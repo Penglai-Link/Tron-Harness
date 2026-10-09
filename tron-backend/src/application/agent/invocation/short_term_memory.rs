@@ -26,7 +26,7 @@ pub(super) fn activate_short_term_memory(
     // and ephemeral runs. It is not promoted into trusted instructions.
     if let Some(metadata) = input_metadata
         .as_ref()
-        .filter(|metadata| metadata.get("resume").is_some())
+        .filter(|metadata| metadata.get("resume").is_some() || metadata.get("a2uiClientCapabilities").is_some())
     {
         let part = crate::domain::agent::AgentMessagePart::Context {
             kind: "tron_interaction_response".into(),

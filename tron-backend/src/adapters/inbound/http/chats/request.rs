@@ -32,6 +32,8 @@ pub struct SteerChatMessageRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AnswerChatUserInputRequest {
+    pub client_capabilities: Option<crate::domain::chat::ChatClientCapabilities>,
+    pub a2ui_metadata: Option<serde_json::Value>,
     pub answers: Option<Vec<ChatUserInputAnswer>>,
     #[serde(default)]
     pub resume: Vec<ChatResumeEntry>,

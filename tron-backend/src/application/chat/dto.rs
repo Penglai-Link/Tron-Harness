@@ -93,6 +93,10 @@ pub struct ChatResumeEntry {
 pub struct SendChatMessageCommand {
     #[serde(skip)]
     pub run_code: Option<String>,
+    #[serde(skip)]
+    pub a2ui_action_id: Option<String>,
+    #[serde(default)]
+    pub a2ui_metadata: Option<Value>,
     pub content: Option<String>,
     pub workspace_code: Option<String>,
     pub app_code: Option<String>,

@@ -6,7 +6,7 @@ import type {
 } from "@/domain/auth/model";
 import { fetchActiveProfileToken, fetchBootstrapProfileStatus } from "@/domain/profile/api";
 import { useTabStore } from "@/store/tabStore";
-import { setApiAccessToken, setApiUnauthorizedHandler } from "@/shared/api/httpClient";
+import { isUnauthorizedApiError, setApiAccessToken, setApiUnauthorizedHandler } from "@/shared/api/httpClient";
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
@@ -23,6 +23,7 @@ interface AuthState {
 
 let initializePromise: Promise<void> | null = null;
 let sessionLoadGeneration = 0;
+let recoveryPromise: Promise<boolean> | null = null;
 
 function sessionFromProfile(profile: {
   personAiUserId: string;
@@ -79,8 +80,12 @@ async function loadActiveProfile(
       status: "authenticated",
     });
     return true;
-  } catch {
+  } catch (error) {
     if (generation === sessionLoadGeneration) {
+      // A refresh outage does not invalidate an existing session.
+      if (!isUnauthorizedApiError(error) && useAuthStore.getState().status === "authenticated") {
+        return false;
+      }
       transitionToUnauthenticated(set);
       return false;
     }
@@ -102,7 +107,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   markUnauthenticated: () => transitionToUnauthenticated(set),
   logout: async () => transitionToUnauthenticated(set),
-  recoverFromUnauthorized: async (): Promise<boolean> => true,
+  recoverFromUnauthorized: (): Promise<boolean> => {
+    // All concurrent 401s share one refresh; replay only after a real token load.
+    if (recoveryPromise) return recoveryPromise;
+    recoveryPromise = loadActiveProfile(set, ++sessionLoadGeneration).finally(() => {
+      recoveryPromise = null;
+    });
+    return recoveryPromise;
+  },
   updateSessionUser: (patch) => {
     set((state) => state.session ? {
       session: {

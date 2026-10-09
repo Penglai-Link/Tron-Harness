@@ -10,6 +10,7 @@ export interface ArchivedMessage {
   content: string; attachments: ChatMessageAttachment[]; createdAt: number;
 }
 export interface ArchivedSessionDetail {
+  a2uiState?: import("@eliteforge/agent-ui-chat-core").ChatA2uiState;
   session: ArchivedSession; messages: ArchivedMessage[];
   goals: { goalCode: string; objective: string; status: string; progress: unknown; criteria: { id: string; text: string; completed: boolean }[]; lastDecision: { verdict: string; reason: string; next_input: string | null; required_input: string | null } | null; runsUsed: number; maxRuns: number; reason: string | null; updatedAt: number }[];
   goalEvents: { eventCode: string; goalCode: string; runCode: string | null; kind: string; payload: unknown; createdAt: number }[];

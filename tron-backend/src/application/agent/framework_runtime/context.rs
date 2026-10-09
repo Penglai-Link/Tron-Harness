@@ -78,7 +78,13 @@ impl fw::ContextPreparationPolicy for TronContext {
         state.context.tools = input
             .tools
             .iter()
-            .map(|descriptor| super::tools::map_authorized_descriptor(&state.context, descriptor))
+            .map(|descriptor| {
+                super::tools::map_authorized_descriptor(
+                    &state.context,
+                    descriptor,
+                    &input.run.extensions,
+                )
+            })
             .collect::<Result<Vec<_>, fw::AgentError>>()?;
         let super::model::HostRunState { context, turn, .. } = &mut *state;
         let projection = match host.harness.prepare_framework_context(context, turn).await {

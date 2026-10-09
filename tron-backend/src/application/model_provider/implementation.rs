@@ -166,6 +166,7 @@ mod tests {
         refresh_tokens: Mutex<Vec<String>>,
         block: AtomicBool,
         fail: AtomicBool,
+        remote_failure: AtomicBool,
         entered: tokio::sync::Notify,
         release: tokio::sync::Notify,
     }
@@ -209,6 +210,11 @@ mod tests {
                 if self.block.load(Ordering::SeqCst) {
                     self.entered.notify_one();
                     self.release.notified().await;
+                }
+                if self.remote_failure.load(Ordering::SeqCst) {
+                    return Err(ModelProviderError::Remote(
+                        "refresh temporarily unavailable".into(),
+                    ));
                 }
                 if self.fail.load(Ordering::SeqCst) {
                     return Err(ModelProviderError::DeviceUnbound);
@@ -317,6 +323,37 @@ mod tests {
                 message: "expired".into(),
             },
         ));
+        // An upstream outage must leave the same credentials retryable.
+        adapter.remote_failure.store(true, Ordering::SeqCst);
+        let failure = service
+            .sdk_recover_model_authentication(&rejected)
+            .await
+            .unwrap_err();
+        assert!(
+            failure
+                .to_string()
+                .contains("refresh temporarily unavailable")
+        );
+        service.sdk_final_model_failure(&failure);
+        let retained = service
+            .connection
+            .call(
+                |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                || ModelProviderError::Storage,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(retained.status, ProviderConnectionStatus::Connected);
+        assert!(retained.last_error.is_none());
+        let retained_credentials = service
+            .decrypt_credentials(retained.credentials_encrypted.as_deref().unwrap())
+            .unwrap();
+        assert_eq!(retained_credentials.token, "expired-access");
+        assert_eq!(retained_credentials.refresh_token, "initial-refresh");
+        adapter.remote_failure.store(false, Ordering::SeqCst);
+        adapter.refresh_count.store(0, Ordering::SeqCst);
+        adapter.refresh_tokens.lock().unwrap().clear();
+
         let (first, concurrent) = tokio::join!(
             service.sdk_recover_model_authentication(&rejected),
             service.sdk_recover_model_authentication(&rejected)
@@ -430,8 +467,48 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .status,
-            ProviderConnectionStatus::AuthRequired
+            ProviderConnectionStatus::Degraded
         );
+        // A call without recovery budget leaves credentials available for automatic refresh.
+        let refreshed = service
+            .active_credentials(ModelProviderCode::PersonAi)
+            .await
+            .unwrap();
+        assert_eq!(refreshed.token, "access-3");
+        assert_eq!(adapter.refresh_count.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            service
+                .connection
+                .call(
+                    |connection| read_connection(connection, ModelProviderCode::PersonAi),
+                    || ModelProviderError::Storage,
+                )
+                .unwrap()
+                .unwrap()
+                .status,
+            ProviderConnectionStatus::Connected
+        );
+        service.connection.call(
+            |connection| connection.execute("UPDATE provider_connections SET status='AuthRequired',last_error='PersonAI rejected access credentials; reauthorization required' WHERE provider_code='PersonAi'", []),
+            || rusqlite::Error::InvalidQuery,
+        ).unwrap();
+        let recovered_legacy = service
+            .active_credentials(ModelProviderCode::PersonAi)
+            .await
+            .unwrap();
+        assert_eq!(recovered_legacy.token, "access-4");
+        assert_eq!(adapter.refresh_count.load(Ordering::SeqCst), 4);
+        service.connection.call(
+            |connection| connection.execute("UPDATE provider_connections SET status='AuthRequired',last_error='token refresh failed' WHERE provider_code='PersonAi'", []),
+            || rusqlite::Error::InvalidQuery,
+        ).unwrap();
+        assert!(matches!(
+            service
+                .active_credentials(ModelProviderCode::PersonAi)
+                .await,
+            Err(ModelProviderError::AuthenticationRequired)
+        ));
+        assert_eq!(adapter.refresh_count.load(Ordering::SeqCst), 4);
     }
 
     #[test]
