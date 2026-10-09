@@ -42,8 +42,10 @@ pub fn identify_tool_risk(
     }
     match id {
         "system.command.exec" | "framework.terminal.start" => command_risk(args),
-        "system.command.task.write" | "framework.terminal.write" => ToolRisk::High,
-        "system.command.task.stop" | "framework.terminal.stop" => ToolRisk::Medium,
+        // Input may be interpreted by an already running shell. Its state is
+        // unavailable here, so a Critical threshold must still ask for approval.
+        "system.command.task.write" | "framework.terminal.write" => ToolRisk::Critical,
+        "system.command.task.stop" | "framework.terminal.stop" => ToolRisk::High,
         "system.command.task.read"
         | "system.command.list"
         | "framework.terminal.read"

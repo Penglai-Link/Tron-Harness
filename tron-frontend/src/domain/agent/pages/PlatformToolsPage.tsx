@@ -86,7 +86,7 @@ export function PlatformToolsPage() {
         <DataTable<ToolCatalogDomainRecord>
           rowKey={(row) => row.domainCode}
           rows={domainPagination.visibleItems}
-          tableClassName="[&_td]:py-2 [&_th]:py-2"
+          tableClassName="table-fixed [&_td]:py-2 [&_th]:py-2"
           expandedRowClassName="bg-[var(--color-surface-container)]"
           isRowExpanded={(row) => expandedDomainCodes.has(row.domainCode)}
           onRowClick={(row) => toggleDomain(row.domainCode)}
@@ -100,7 +100,14 @@ export function PlatformToolsPage() {
             const domainTools = toolsByDomain.get(domain.domainCode) ?? [];
             return domainTools.length ? (
               <div className="overflow-x-auto rounded-md border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]">
-                <table className="w-full min-w-[680px] text-left text-sm">
+                <table className="w-full min-w-[900px] table-fixed whitespace-normal text-left text-sm [&_td]:break-words">
+                  <colgroup>
+                    <col className="w-[105px]" />
+                    <col className="w-[175px]" />
+                    <col />
+                    <col className="w-[64px]" />
+                    <col className="w-[290px]" />
+                  </colgroup>
                   <thead className="border-b border-[var(--color-card-border)] text-xs font-medium text-[var(--color-on-surface-variant)]">
                     <tr>
                       <th className="px-4 py-2.5">{pageT("domains.tools.columns.name", "工具名称")}</th>
