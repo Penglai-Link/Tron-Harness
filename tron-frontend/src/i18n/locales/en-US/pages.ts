@@ -2,6 +2,8 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   ragUnified: {
+    fileSize: "File size",
+    smallFilesFirst: "Smaller queued files run first; equal sizes follow submission order.",
     taskStatistics: "Ingestion task statistics",
     totalTasks: "Total tasks",
     processingTasks: "In progress",
@@ -1224,6 +1226,7 @@ export const pages = {
         actionRun: "Run",
         actionEdit: "Edit",
         commandSummary: "Run: {{command}}",
+        searchSummary: "{{name}}: {{query}}",
       },
       rail: {
         waitingModel: "Waiting for model...",

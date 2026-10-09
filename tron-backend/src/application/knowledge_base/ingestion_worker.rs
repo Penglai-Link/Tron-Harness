@@ -421,7 +421,7 @@ impl KnowledgeBaseService {
             "{}:{}:{config}",
             doc.resource_code, doc.resource_revision
         ));
-        Ok(IngestionTask::queued(
+        let mut task = IngestionTask::queued(
             format!("ingest_{}", new_id()),
             kb.id.clone(),
             doc.id.clone(),
@@ -431,7 +431,9 @@ impl KnowledgeBaseService {
             doc.resource_revision,
             identity,
             config,
-        ))
+        );
+        task.file_size_bytes = Some(original.byte_size);
+        Ok(task)
     }
     async fn claim_task(
         &self,

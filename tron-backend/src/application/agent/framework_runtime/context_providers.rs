@@ -241,7 +241,7 @@ pub(super) async fn assemble(
                 let model = host.harness.framework_compaction_model_config(&context.model);
                 let compressor = memory::ModelCompressor::new(
                     super::model::compaction_model_reference(&input.run.extensions,input.model)?,
-                    memory::CompressionOptions { max_input_tokens: model.context_window_tokens.unwrap_or(128_000).saturating_sub(model.max_tokens.unwrap_or(4096)) as usize, max_summary_bytes: model.max_tokens.unwrap_or(4096) as usize, max_model_calls: 16 },
+                    memory::CompressionOptions { max_input_tokens: model.context_window_tokens.unwrap_or(128_000).saturating_sub(model.max_tokens.unwrap_or(input.limits.max_model_output_tokens)) as usize, max_summary_bytes: model.max_tokens.unwrap_or(input.limits.max_model_output_tokens) as usize, max_model_calls: 16 },
                 )?.with_store(host.summaries.clone(), "tron.history.native-v1")?;
                 block.reducer = Arc::new(ScopedReduction { inner:Arc::new(compressor), extensions:host.harness.framework_compaction_extensions(&model), limits:input.limits.clone() });
             },
@@ -382,11 +382,11 @@ fn reducer(
                 model
                     .context_window_tokens
                     .unwrap_or(128_000)
-                    .saturating_sub(model.max_tokens.unwrap_or(4096)) as usize,
+                    .saturating_sub(model.max_tokens.unwrap_or(limits.max_model_output_tokens)) as usize,
             );
             auxiliary_limits.max_model_output_tokens = limits
                 .max_model_output_tokens
-                .min(model.max_tokens.unwrap_or(4096));
+                .min(model.max_tokens.unwrap_or(limits.max_model_output_tokens));
             let options = memory::CompressionOptions {
                 max_input_tokens: auxiliary_limits.max_context_tokens.max(1),
                 max_summary_bytes: auxiliary_limits.max_model_output_tokens as usize,

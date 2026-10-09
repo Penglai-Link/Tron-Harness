@@ -1,6 +1,6 @@
 mod agent_grants;
 pub mod deletion;
-pub mod fidelity; // Retained diagnostic evidence; never invoked by normal ingestion.
+pub mod fidelity; // Legacy finding types and read guards for persisted documents.
 pub mod ingestion;
 pub(crate) mod ingestion_worker;
 pub mod local_documents;
@@ -935,26 +935,6 @@ impl KnowledgeBaseService {
         let task = self.enqueue_index(user, namespace, kb, doc)?;
         self.run_task_inline(&task.id).await?;
         self.document_with_task(user, kb, doc)
-    }
-    fn deactivate(
-        &self,
-        namespace: &str,
-        kb: &str,
-        source: &str,
-    ) -> Result<(), KnowledgeBaseError> {
-        self.rag
-            .repository_handle()
-            .deactivate_source(RagDeactivateSourceCommand {
-                corpus_id: kb.into(),
-                source_code: source.into(),
-                source_version: "v1".into(),
-                workspace_code: namespace.into(),
-                scope: RagIngestScope {
-                    scope_type: "SPACE".into(),
-                    scope_code: namespace.into(),
-                },
-            })?;
-        Ok(())
     }
     fn require_rebuild(
         &self,

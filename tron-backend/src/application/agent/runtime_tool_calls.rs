@@ -132,6 +132,10 @@ impl ReactAgent {
         name: &str,
         line: &str,
     ) {
+        // Blank lines remain in native progress and the complete tool result.
+        if line.is_empty() {
+            return;
+        }
         let _ = self.publish_tool(
             context,
             "agent.tool.activity",

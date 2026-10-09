@@ -158,7 +158,7 @@ impl FrameworkHost {
             .model
             .max_tokens
             .filter(|value| *value > 0)
-            .unwrap_or(4096);
+            .unwrap_or_else(|| self.invocation_config().default_output_tokens);
         let invocation = self.invocation_config().external_agent;
         request.limits.model_timeout = Duration::from_secs(invocation.call_timeout_seconds);
         request.limits.run_timeout = Duration::from_secs(invocation.operation_timeout_seconds);

@@ -379,10 +379,3 @@ fn map_image_resources(
     }
     Ok(())
 }
-
-pub(super) fn cached_document_for_fidelity(
-    bytes: &[u8],
-) -> Result<ParsedDocument, KnowledgeBaseError> {
-    let cached: StoredParse = serde_json::from_slice(bytes).map_err(invalid_storage)?;
-    Ok(cached.document)
-}

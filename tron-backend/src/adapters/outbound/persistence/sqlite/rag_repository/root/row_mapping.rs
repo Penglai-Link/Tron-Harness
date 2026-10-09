@@ -199,55 +199,6 @@ fn ensure_database_parent(database_url: &str) -> Result<(), RagError> {
     Ok(())
 }
 
-fn ensure_legacy_memory_source_domain_columns(connection: &Connection) -> Result<(), RagError> {
-    let columns = table_columns_for_migration(connection, "rag_memory_sources")?;
-    if columns.is_empty() {
-        return Ok(());
-    }
-
-    for (column, definition) in [
-        ("memory_type", "TEXT"),
-        ("memory_status", "TEXT"),
-        ("review_status", "TEXT"),
-        ("version", "TEXT"),
-        ("superseded_by", "TEXT"),
-        ("conflict_group", "TEXT"),
-        ("duplicate_group", "TEXT"),
-        ("injectable", "INTEGER NOT NULL DEFAULT 1"),
-        ("importance_score", "INTEGER"),
-        ("confidence_score", "INTEGER"),
-        ("quality_score", "INTEGER"),
-        ("pin_level", "INTEGER NOT NULL DEFAULT 0"),
-        ("expires_at", "INTEGER"),
-        ("derived_source_type", "TEXT"),
-        ("derived_source_code", "TEXT"),
-    ] {
-        if !columns.contains(column) {
-            connection
-                .execute(
-                    &format!("ALTER TABLE rag_memory_sources ADD COLUMN {column} {definition}"),
-                    [],
-                )
-                .map_err(storage_error)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn table_columns_for_migration(
-    connection: &Connection,
-    table_name: &str,
-) -> Result<BTreeSet<String>, RagError> {
-    let pragma = format!("PRAGMA table_info({table_name})");
-    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
-    statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<BTreeSet<_>, _>>()
-        .map_err(storage_error)
-}
-
 fn storage_error(error: rusqlite::Error) -> RagError {
     eprintln!("RAG SQLite storage error: {error:?}");
     RagError::StorageFailure

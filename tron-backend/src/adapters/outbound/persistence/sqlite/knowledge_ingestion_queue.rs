@@ -286,7 +286,17 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
             false
         };
         let ids = {
-            let mut stmt = tx.prepare(&format!("SELECT id FROM knowledge_base_ingestion_tasks WHERE stage IN {stages} AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0 AND ((state='QUEUED' AND retry_after_ms<=?1) OR (state='RUNNING' AND lease_until_ms<=?1)) ORDER BY rowid")).map_err(storage)?;
+            // Only eligible, unleased work competes for a slot. Keep FIFO for
+            // equal sizes; old tasks without a size follow known-size files.
+            let mut stmt = tx.prepare(&format!(
+                "SELECT id FROM knowledge_base_ingestion_tasks
+                 WHERE stage IN {stages}
+                   AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0
+                   AND ((state='QUEUED' AND retry_after_ms<=?1)
+                     OR (state='RUNNING' AND lease_until_ms<=?1))
+                 ORDER BY json_extract(payload_json,'$.fileSizeBytes') IS NULL,
+                          json_extract(payload_json,'$.fileSizeBytes'), rowid"
+            )).map_err(storage)?;
             stmt.query_map([claim.now_ms], |r| r.get::<_, String>(0))
                 .map_err(storage)?
                 .collect::<Result<Vec<_>, _>>()

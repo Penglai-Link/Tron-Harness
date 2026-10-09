@@ -108,7 +108,7 @@ impl HttpLlmRuntimeClient {
             }
         };
         let config = self.models.invocation_config().embedding;
-        let effective = limits(&model, &config.timeouts());
+        let effective = limits(&model, &config.timeouts(), self.models.invocation_config().default_output_tokens);
         let mut options = match fw::ModelInvocationOptions::for_call(&effective) {
             Ok(options) => options,
             Err(error) => return failure(error.to_string()),
@@ -190,7 +190,8 @@ impl HttpLlmRuntimeClient {
                 };
             }
         };
-        let effective = limits(&model, &self.models.invocation_config().rerank);
+        let invocation = self.models.invocation_config();
+        let effective = limits(&model, &invocation.rerank, invocation.default_output_tokens);
         let options = match fw::ModelInvocationOptions::for_call(&effective) {
             Ok(options) => options,
             Err(error) => return failure(error.to_string()),

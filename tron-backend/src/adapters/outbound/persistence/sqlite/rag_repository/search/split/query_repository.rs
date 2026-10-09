@@ -96,19 +96,6 @@ impl RagSearchRepository for SqliteRagRepositorySql<'_> {
     }
 }
 
-impl<'a> SqliteRagRepositorySql<'a> {
-    pub(crate) fn hydrate_graph_rows_from_text_units(
-        &self,
-        corpus: &crate::domain::rag::RagCorpusRecord,
-        rows: Vec<RagSearchRow>,
-    ) -> Result<Vec<RagSearchRow>, RagError> {
-        let plan = compile_sql_corpus_plan(self, corpus)?;
-        rows.into_iter()
-            .map(|row| hydrate_graph_row_from_text_units(self, &plan, row))
-            .collect()
-    }
-}
-
 fn search_route(
     repository: &SqliteRagRepositorySql<'_>,
     plan: &SqliteRagCorpusPlan,
@@ -142,63 +129,6 @@ fn search_route(
         .collect::<Result<Vec<_>, _>>()
         .map_err(storage_error)?;
     Ok(rows)
-}
-
-fn hydrate_graph_row_from_text_units(
-    repository: &SqliteRagRepositorySql<'_>,
-    plan: &SqliteRagCorpusPlan,
-    mut row: RagSearchRow,
-) -> Result<RagSearchRow, RagError> {
-    let table = quote_identifier(&plan.text_unit_table)?;
-    let status_column = quote_identifier(&plan.text_unit_status_column)?;
-    let sql = format!(
-        "SELECT text, heading_path, token_count, metadata
-         FROM {table}
-         WHERE source_code = ?1 AND source_version = ?2
-           AND scope_type = ?3 AND scope_code = ?4
-           AND {status_column} = 'ACTIVE'
-         ORDER BY ordinal"
-    );
-    let mut statement = repository.connection.prepare(&sql).map_err(storage_error)?;
-    let units = statement
-        .query_map(
-            params![
-                row.source_code,
-                row.source_version,
-                row.scope_type,
-                row.scope_code
-            ],
-            |unit| {
-                Ok((
-                    unit.get::<_, String>(0)?,
-                    unit.get::<_, String>(1)?,
-                    unit.get::<_, Option<i64>>(2)?.unwrap_or(0),
-                    unit.get::<_, Option<String>>(3)?
-                        .unwrap_or_else(|| "{}".into()),
-                ))
-            },
-        )
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    if units.is_empty() {
-        return Ok(row);
-    }
-    row.text = units
-        .iter()
-        .map(|(text, _, _, _)| text.as_str())
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    row.heading_path = split_heading_path(&units[0].1);
-    row.token_count = units
-        .iter()
-        .map(|(_, _, token_count, _)| *token_count)
-        .sum();
-    row.text_metadata = parse_metadata_json(&units[0].3);
-    if let Some(object) = row.text_metadata.as_object_mut() {
-        object.insert("hydratedTextUnitCount".into(), json!(units.len()));
-    }
-    Ok(row)
 }
 
 struct SelectProjection {
@@ -660,22 +590,6 @@ impl RagSearchRepository for SqliteRagRepository {
     fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError> {
         self.connection.call(
             move |connection| SqliteRagRepositorySql { connection }.persist_search_trace(trace),
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-}
-impl SqliteRagRepository {
-    pub(crate) fn hydrate_graph_rows_from_text_units(
-        &self,
-        corpus: &crate::domain::rag::RagCorpusRecord,
-        rows: Vec<RagSearchRow>,
-    ) -> Result<Vec<RagSearchRow>, RagError> {
-        let corpus = corpus.to_owned();
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }
-                    .hydrate_graph_rows_from_text_units(&corpus, rows)
-            },
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }

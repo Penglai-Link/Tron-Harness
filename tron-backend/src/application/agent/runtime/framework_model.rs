@@ -210,6 +210,7 @@ impl ReactAgent {
             Ok(response) => response,
             Err(message) => return Err(AgentError::ModelFailure(message)),
         };
+        crate::application::agent::tool_arguments::normalize(&mut response, &context.tools);
         if let (Some(router), Some(route)) = (
             self.auto_model_router.as_ref(),
             context.auto_model_route.as_mut(),

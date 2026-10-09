@@ -110,6 +110,89 @@ fn doc(dir: &tempfile::TempDir, id: &str) -> Value {
 }
 
 #[test]
+fn smaller_files_are_claimed_first_in_both_stages_with_fifo_ties_and_unknown_sizes_last() {
+    for stage in [IngestionStage::Parsing, IngestionStage::Embedding] {
+        let (dir, q) = fixture();
+        for (id, size) in [
+            ("d", None),
+            ("a", Some(4096)),
+            ("b", Some(1024)),
+            ("c", Some(1024)),
+        ] {
+            let mut task = queued(id, "size-order");
+            task.file_size_bytes = size;
+            let submitted = q.enqueue(task).unwrap();
+            assert_eq!(q.get(&submitted.id).unwrap().file_size_bytes, size);
+            if stage == IngestionStage::Embedding {
+                let mut request = claim(IngestionStage::Parsing, "parser", 1, 4);
+                request.task_id = Some(submitted.id);
+                let parsing = q.claim(request).unwrap().unwrap();
+                complete_parse(&q, parsing, 2);
+            }
+        }
+        // Tasks written before size tracking still deserialize and run last.
+        let conn = Connection::open(dir.path().join("queue.sqlite")).unwrap();
+        conn.execute("UPDATE knowledge_base_ingestion_tasks SET payload_json=json_remove(payload_json,'$.fileSizeBytes') WHERE document_id='d'", []).unwrap();
+        for expected in ["b", "c", "a", "d"] {
+            let task = q.claim(claim(stage, "worker", 3, 4)).unwrap().unwrap();
+            assert_eq!(task.document_id, expected);
+            if stage == IngestionStage::Parsing {
+                complete_parse(&q, task, 4);
+            }
+        }
+    }
+}
+
+#[test]
+fn smaller_arrivals_do_not_preempt_live_leases_or_bypass_retry_backoff() {
+    let (_dir, q) = fixture();
+    let mut large = queued("a", "priority");
+    large.file_size_bytes = Some(4096);
+    q.enqueue(large).unwrap();
+    let running = q
+        .claim(claim(IngestionStage::Parsing, "large", 1, 1))
+        .unwrap()
+        .unwrap();
+    let mut small = queued("b", "priority");
+    small.file_size_bytes = Some(1024);
+    q.enqueue(small).unwrap();
+    assert!(
+        q.claim(claim(IngestionStage::Parsing, "small", 2, 1))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        q.get(&running.id).unwrap().lease_owner.as_deref(),
+        Some("large")
+    );
+    complete_parse(&q, running, 3);
+    let small = q
+        .claim(claim(IngestionStage::Parsing, "small", 4, 1))
+        .unwrap()
+        .unwrap();
+    q.fail(&lease(&small), 5, "retry later", Some(50)).unwrap();
+    let mut medium = queued("c", "priority");
+    medium.file_size_bytes = Some(2048);
+    q.enqueue(medium).unwrap();
+    let next = q
+        .claim(claim(IngestionStage::Parsing, "medium", 6, 1))
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.document_id, "c");
+    complete_parse(&q, next, 7);
+    assert!(
+        q.claim(claim(IngestionStage::Parsing, "early", 8, 1))
+            .unwrap()
+            .is_none()
+    );
+    let retry = q
+        .claim(claim(IngestionStage::Parsing, "retry", 50, 1))
+        .unwrap()
+        .unwrap();
+    assert_eq!(retry.id, small.id);
+    assert_eq!(retry.file_size_bytes, Some(1024));
+}
+#[test]
 fn duplicate_enqueue_is_one_task_and_one_generation() {
     let (dir, q) = fixture();
     let one = q.enqueue(queued("a", "same")).unwrap();

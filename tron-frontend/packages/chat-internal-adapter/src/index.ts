@@ -150,19 +150,10 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
         path: "/api/v1/agents/agui/streams/{streamKey}/events",
         pathParams: { streamKey: sessionCode },
       });
-      const events = payload.events ?? [];
-      if (!payload.replayIncomplete) return events;
-      if (!events.length) {
-        throw new FetchTransportError("Presentation replay is incomplete", {
-          code: "AGENT_AGUI_REPLAY_INCOMPLETE",
-          status: 503,
-        });
-      }
-      // Canonical metadata uses string values; preserve the known usage subtotal.
-      return events.map((event) => ({
-        ...event,
-        metadata: { ...event.metadata, replayIncomplete: "true" },
-      }));
+      // These audit totals are auxiliary. A session-wide historical delivery
+      // diagnostic cannot establish a failure in the latest native execution.
+      // Native protocol errors and completion health carry run-specific notices.
+      return payload.events ?? [];
     },
     loadMessages(sessionCode: string) {
       return transport.requestJson<ChatMessage[]>({

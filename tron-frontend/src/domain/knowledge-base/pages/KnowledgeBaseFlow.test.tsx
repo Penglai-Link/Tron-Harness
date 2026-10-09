@@ -34,6 +34,10 @@ vi.mock("../api/knowledgeBaseApi", () => ({
 }));
 import { KnowledgeBasePage } from "./KnowledgeBasePage";
 import { KnowledgeBaseDetailPage } from "./KnowledgeBaseDetailPage";
+function documentStatusCell() {
+ const column = screen.getAllByRole("columnheader").findIndex((header) => header.textContent?.trim() === pages.knowledgeLibrary.status);
+ return screen.getAllByRole("row")[1].querySelectorAll("td")[column];
+}
 async function openDocumentActions() {
  fireEvent.click(screen.getByRole("button", { name: `Actions for ${fixture.filename}` }));
  await screen.findByRole("menuitem", { name: "Settings" });
@@ -54,7 +58,7 @@ describe("knowledge base flow", () => {
  it.each(["READY", "FAILED", "CANCELLED", "NEEDS_REBUILD"])("shows only %s even if the last task stage was publishing", async (status) => {
   fixture.status=status; fixture.stage="Publishing";
   mount(); await screen.findByText("policy.md");
-  const statusCell=screen.getAllByRole("row")[1].querySelectorAll("td")[3];
+  const statusCell=documentStatusCell();
   expect(statusCell.textContent).toBe(pages.knowledgeLibrary.statuses[status as keyof typeof pages.knowledgeLibrary.statuses]);
   expect(statusCell.querySelectorAll("p")).toHaveLength(1);
   expect(statusCell.querySelector('[data-slot="badge"]')).toBeNull();
@@ -62,14 +66,14 @@ describe("knowledge base flow", () => {
  it.each(["Parsing", "Chunking", "Embedding", "Publishing"] as const)("identifies the queued %s stage without showing two statuses", async (stage) => {
   fixture.status="QUEUED"; fixture.stage=stage;
   mount(); await screen.findByText("policy.md");
-  const statusCell=screen.getAllByRole("row")[1].querySelectorAll("td")[3];
+  const statusCell=documentStatusCell();
   expect(statusCell.textContent).toBe(pages.knowledgeLibrary.queuedStages[stage]);
   expect(statusCell.querySelectorAll("p")).toHaveLength(1);
  });
  it("shows queued when no stage is available", async () => {
   fixture.status="QUEUED"; fixture.stage=null;
   mount(); await screen.findByText("policy.md");
-  expect(screen.getAllByRole("row")[1].querySelectorAll("td")[3].textContent).toBe("Queued");
+  expect(documentStatusCell().textContent).toBe("Queued");
  });
  it("keeps parsing quality separate from inherited automatic splitting before and after parsing", async () => {
   fixture.filename="guideline.pdf"; fixture.status="QUEUED"; fixture.hasArtifact=false;
@@ -135,7 +139,7 @@ describe("knowledge base flow", () => {
   fixture.status = status; mount(); await screen.findByText("policy.md");
   await openDocumentActions();
   expect(screen.getByRole("menuitem", { name: "Settings" }).getAttribute("aria-disabled")).toBe("true");
-  const statusCell = screen.getAllByRole("row")[1].querySelectorAll("td")[3];
+  const statusCell = documentStatusCell();
   expect(statusCell.querySelector('[data-slot="badge"]')).toBeNull();
   const firstLine = status === "QUEUED" ? pages.knowledgeLibrary.queuedStages.Parsing : pages.knowledgeLibrary.statuses[status as keyof typeof pages.knowledgeLibrary.statuses];
   expect(within(statusCell).getByText(firstLine, { exact: true })).toBeTruthy();

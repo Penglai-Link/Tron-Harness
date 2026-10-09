@@ -100,10 +100,8 @@ fn rejected_oversize_delivery_exposes_incomplete_replay() {
         bus.publish(draft()),
         PublishOutcome::RejectedOversize { .. }
     ));
-    assert!(matches!(
-        service.protocol_events("SESSION"),
-        Err(AgentAguiStreamError::ReplayIncomplete(_))
-    ));
+    assert!(service.ensure_complete("SESSION").is_err());
+    assert!(service.protocol_events("SESSION").unwrap().is_empty());
 }
 
 #[test]
@@ -116,10 +114,36 @@ fn canonical_subtotal_remains_available_with_explicit_incomplete_flag() {
     service.mark_incomplete("SESSION", "dropped presentation");
     let snapshot = service.events("SESSION").unwrap();
     assert!(snapshot.replay_incomplete);
-    assert!(matches!(
-        service.protocol_events("SESSION"),
-        Err(AgentAguiStreamError::ReplayIncomplete(_))
-    ));
+    assert!(service.ensure_complete("SESSION").is_err());
+    assert!(service.protocol_events("SESSION").unwrap().is_empty());
+}
+
+#[test]
+fn historical_delivery_failure_does_not_block_a_later_run_or_restart_replay() {
+    let path = database_path("retry-after-incomplete");
+    {
+        let store = Arc::new(replay_store(&path));
+        let service = AgentAguiStreamService::with_replay_store(
+            Arc::new(AguiEventSink::new(&EventBusConfig::default())),
+            store,
+        );
+        service.record_protocol_event("SESSION", event(1)).unwrap();
+        service.mark_incomplete("SESSION", "previous output dropped");
+        let mut next = event(2);
+        next.data["runId"] = json!("RETRY-RUN");
+        next.data["delta"] = json!("你好");
+        service.record_protocol_event("SESSION", next).unwrap();
+        let frames = service.protocol_events("SESSION").unwrap();
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[1].data["delta"], "你好");
+        assert!(service.events("SESSION").unwrap().replay_incomplete);
+    }
+    let service = AgentAguiStreamService::with_replay_store(
+        Arc::new(AguiEventSink::new(&EventBusConfig::default())),
+        Arc::new(replay_store(&path)),
+    );
+    assert_eq!(service.protocol_events("SESSION").unwrap()[1].data["runId"], "RETRY-RUN");
+    let _ = std::fs::remove_file(path);
 }
 
 fn terminal(sequence: u64, kind: &str, outcome: serde_json::Value) -> AgentAguiProtocolEvent {

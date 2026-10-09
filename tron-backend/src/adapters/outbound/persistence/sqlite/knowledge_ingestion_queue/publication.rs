@@ -82,22 +82,3 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         Ok(cleanup)
     }
 }
-
-impl SqliteKnowledgeIngestionQueue {
-    pub(super) fn publish_generation(
-        &self,
-        lease: &IngestionLease,
-        now: i64,
-        ready: &Value,
-    ) -> Result<PublicationCleanup, IngestionQueueError> {
-        let lease = lease.to_owned();
-        let ready = ready.to_owned();
-        self.connection.call(
-            move |connection| {
-                SqliteKnowledgeIngestionQueueSql { connection }
-                    .publish_generation(&lease, now, &ready)
-            },
-            || storage("database worker stopped"),
-        )
-    }
-}

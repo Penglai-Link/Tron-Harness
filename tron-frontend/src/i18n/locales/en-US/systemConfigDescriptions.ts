@@ -1,5 +1,6 @@
 // Help is scoped to full configuration paths; dynamic profile names use "profile".
 export const systemConfigDescriptions = {
+  "modelInvocation_defaultOutputTokens": "Default output token limit per call when the model has no explicit limit. Defaults to 16384; adjust to the provider's supported limit.",
   "modelInvocation_text_callTimeoutSeconds": "Maximum wait in seconds for one standalone chat or auxiliary text call. Embedding calls are timed per batch, not per document.",
   "modelInvocation_text_operationTimeoutSeconds": "Total budget in seconds for one standalone chat or auxiliary text operation, including retries and backoff. Must be at least the per-call timeout.",
   "modelInvocation_embedding_callTimeoutSeconds": "Maximum wait in seconds for one embedding call. Embedding calls are timed per batch, not per document.",

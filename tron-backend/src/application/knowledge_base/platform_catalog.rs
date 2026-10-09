@@ -54,6 +54,7 @@ impl KnowledgeBaseService {
             for doc in self.repository.documents(&kb.id)? {
                 for task in self.ingestion_tasks(user, &kb.id, &doc.id)? {
                     views.push(RagTaskView {
+                        file_size_bytes: task.file_size_bytes,
                         id: task.id,
                         document_id: Some(doc.id.clone()),
                         corpus_id: kb.id.clone(),

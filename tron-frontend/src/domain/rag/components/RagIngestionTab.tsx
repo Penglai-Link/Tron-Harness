@@ -24,7 +24,19 @@ const ingestionSteps = [
 ];
 
 const taskStates = ["RUNNING", "QUEUED", "WAITING", "COMPLETED", "FAILED", "CANCELLED"] as const;
-const taskPriority = (task: RagTask) => task.state === "RUNNING" ? 0 : task.state === "QUEUED" ? 1 : 2;
+const taskPriority = (task: RagTask) => task.state === "RUNNING" ? 0 : ["QUEUED", "WAITING"].includes(task.state) ? 1 : 2;
+const compareTasks = (left: RagTask, right: RagTask) => {
+  const priority = taskPriority(left) - taskPriority(right);
+  if (priority || taskPriority(left) !== 1) return priority;
+  return (left.fileSizeBytes ?? Number.MAX_SAFE_INTEGER) - (right.fileSizeBytes ?? Number.MAX_SAFE_INTEGER)
+    || left.createdAt - right.createdAt;
+};
+function formatFileSize(bytes: number | null, locale: string) {
+  if (bytes == null) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const exponent = bytes > 0 ? Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1) : 0;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(bytes / 1024 ** exponent)} ${units[exponent]}`;
+}
 const canRebuildTask = (task: RagTask) => !["RUNNING", "QUEUED", "WAITING"].includes(task.state);
 
 export function RagIngestionTab({ corpora, tasks, selected, onSelect, stateFilter, onSelectState, onChanged, onRefresh, refreshing, error }: { corpora: RagCorpus[]; tasks: RagTask[]; selected: string; onSelect: (id: string) => void; stateFilter: string; onSelectState: (state: string) => void; onChanged: () => void; onRefresh: () => void; refreshing?: boolean; error?: string }) {
@@ -34,7 +46,7 @@ export function RagIngestionTab({ corpora, tasks, selected, onSelect, stateFilte
   const [pending, setPending] = useState("");
   const [preview, setPreview] = useState<RagDocumentPreview | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
-  const corpusTasks = tasks.filter((task) => !selected || task.corpusId === selected).sort((left, right) => taskPriority(left) - taskPriority(right));
+  const corpusTasks = tasks.filter((task) => !selected || task.corpusId === selected).sort(compareTasks);
   const statistics = [
     { key: "totalTasks", count: corpusTasks.length },
     { key: "processingTasks", count: corpusTasks.filter((task) => ["RUNNING", "QUEUED", "WAITING"].includes(task.state)).length },
@@ -97,7 +109,8 @@ export function RagIngestionTab({ corpora, tasks, selected, onSelect, stateFilte
       <Button variant="outline" disabled={selectedTasks.length === 0 || !!pending} onClick={() => void rebuildSelected()}>{t(pending === "__batch__" ? "ragUnified.rebuilding" : "ragUnified.rebuild")}</Button>
       <Button variant="outline" disabled={!!pending || refreshing} onClick={onRefresh}>{t("ragUnified.refresh")}</Button>
     </div>
-    <Card><CardContent className="pt-6"><Table><TableHeader><TableRow><TableHead className="w-12"><input type="checkbox" className="size-4 accent-[var(--color-primary)]" aria-label={t("ragUnified.selectAllTasks")} checked={allSelected} ref={(node) => { if (node) node.indeterminate = selectedTasks.length > 0 && !allSelected; }} disabled={!!pending || selectableTasks.length === 0} onChange={(event) => setSelectedTaskIds(event.target.checked ? new Set(selectableTasks.map((task) => task.id)) : new Set())} /></TableHead>{["document", "corpus", "state", "stage", "chunks", "actions"].map((key) => <TableHead key={key} className={key === "actions" ? "w-16 text-right" : undefined}>{t(`ragUnified.${key}`)}</TableHead>)}</TableRow></TableHeader><TableBody>
+    <p className="text-sm text-muted-foreground">{t("ragUnified.smallFilesFirst")}</p>
+    <Card><CardContent className="pt-6"><Table><TableHeader><TableRow><TableHead className="w-12"><input type="checkbox" className="size-4 accent-[var(--color-primary)]" aria-label={t("ragUnified.selectAllTasks")} checked={allSelected} ref={(node) => { if (node) node.indeterminate = selectedTasks.length > 0 && !allSelected; }} disabled={!!pending || selectableTasks.length === 0} onChange={(event) => setSelectedTaskIds(event.target.checked ? new Set(selectableTasks.map((task) => task.id)) : new Set())} /></TableHead>{["document", "fileSize", "corpus", "state", "stage", "chunks", "actions"].map((key) => <TableHead key={key} className={key === "actions" ? "w-16 text-right" : undefined}>{t(`ragUnified.${key}`)}</TableHead>)}</TableRow></TableHeader><TableBody>
       {rows.map((task) => {
         const taskCorpus = corpora.find((item) => item.id === task.corpusId);
         const libraryId = taskCorpus?.knowledgeBaseId;
@@ -105,7 +118,7 @@ export function RagIngestionTab({ corpora, tasks, selected, onSelect, stateFilte
         const canRetry = ["FAILED", "CANCELLED"].includes(task.state);
         const canPreview = !!task.documentId && !!libraryId;
         const isSelected = canRebuildTask(task) && selectedTaskIds.has(task.id);
-        return <TableRow key={task.id} data-state={isSelected ? "selected" : undefined}><TableCell><input type="checkbox" className="size-4 accent-[var(--color-primary)]" aria-label={t("ragUnified.selectTask", { name: task.title })} checked={isSelected} disabled={!!pending || !canRebuildTask(task)} onChange={(event) => toggleTask(task.id, event.target.checked)} /></TableCell><TableCell><div>{task.title}</div>{task.error ? <p className="mt-1 max-w-lg whitespace-pre-wrap text-sm text-destructive">{task.error}</p> : null}</TableCell><TableCell>{taskCorpus?.name ?? task.corpusId}</TableCell><TableCell><Badge variant="secondary">{t(`ragUnified.states.${task.state}`, { defaultValue: task.state })}</Badge></TableCell><TableCell>{t(`ragUnified.stages.${task.stage}`, { defaultValue: task.stage })}</TableCell><TableCell>{task.totalUnits > 0 ? number.format(task.totalUnits) : "—"}</TableCell><TableCell className="text-right">
+        return <TableRow key={task.id} data-state={isSelected ? "selected" : undefined}><TableCell><input type="checkbox" className="size-4 accent-[var(--color-primary)]" aria-label={t("ragUnified.selectTask", { name: task.title })} checked={isSelected} disabled={!!pending || !canRebuildTask(task)} onChange={(event) => toggleTask(task.id, event.target.checked)} /></TableCell><TableCell><div>{task.title}</div>{task.error ? <p className="mt-1 max-w-lg whitespace-pre-wrap text-sm text-destructive">{task.error}</p> : null}</TableCell><TableCell className="whitespace-nowrap tabular-nums">{formatFileSize(task.fileSizeBytes, i18n.resolvedLanguage ?? i18n.language)}</TableCell><TableCell>{taskCorpus?.name ?? task.corpusId}</TableCell><TableCell><Badge variant="secondary">{t(`ragUnified.states.${task.state}`, { defaultValue: task.state })}</Badge></TableCell><TableCell>{t(`ragUnified.stages.${task.stage}`, { defaultValue: task.stage })}</TableCell><TableCell>{task.totalUnits > 0 ? number.format(task.totalUnits) : "—"}</TableCell><TableCell className="text-right">
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon" disabled={!canCancel && !canRetry && !canPreview} aria-label={t("ragUnified.taskActions", { name: task.title })}><MoreHorizontal size={16} aria-hidden="true" /></Button>} />
             <DropdownMenuContent align="end">
@@ -117,7 +130,7 @@ export function RagIngestionTab({ corpora, tasks, selected, onSelect, stateFilte
           </DropdownMenu>
         </TableCell></TableRow>;
       })}
-      {rows.length === 0 ? <TableRow><TableCell colSpan={7}>{t(stateFilter || selected ? "ragUnified.emptyFilteredTasks" : "ragUnified.emptyTasks")}</TableCell></TableRow> : null}
+      {rows.length === 0 ? <TableRow><TableCell colSpan={8}>{t(stateFilter || selected ? "ragUnified.emptyFilteredTasks" : "ragUnified.emptyTasks")}</TableCell></TableRow> : null}
     </TableBody></Table></CardContent></Card>
     {preview ? <RagDocumentPreviewDialog key={`${preview.libraryId}:${preview.documentId}:${preview.view}`} preview={preview} onClose={() => setPreview(null)} /> : null}
   </div>;

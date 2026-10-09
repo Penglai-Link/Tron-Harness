@@ -40,6 +40,9 @@ systemAgents:
   codexCommand: codex
   opencodeCommand: opencode
 
+modelInvocation:
+  defaultOutputTokens: 16384
+
 httpClients:
   default:
     connectTimeoutMs: 1500

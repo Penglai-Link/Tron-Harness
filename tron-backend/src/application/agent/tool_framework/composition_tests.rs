@@ -178,6 +178,33 @@ async fn run(
     assert!(host.close().await.is_success());
     (result, actual, closed.load(Ordering::SeqCst))
 }
+
+#[tokio::test]
+async fn blank_command_activity_does_not_mark_presentation_incomplete() {
+    let bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(804_300_000_000_001_000)),
+    ).without_workers_for_testing().build();
+    let host = FrameworkHost::temporary(None).unwrap();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(NativeClient { step: AtomicUsize::new(0), actual: Default::default() }),
+        Arc::new(ToolRegistry::default()), bus.clone(),
+    ).with_framework_host(Some(host.clone())).build().unwrap();
+    let context: AgentRunContext = serde_json::from_value(json!({
+        "runCode":"command-progress", "workspaceCode":"test", "locale":"en-US", "agentKind":"REACT",
+        "model":{"modelCode":"test","protocol":"CHAT_COMPLETIONS","baseUrl":"http://unused.invalid","apiKey":"","modelName":"test"},
+        "variables":[],"skills":[],"tools":[],"executionScope":{},
+        "limits":{"maxSteps":2,"maxToolCalls":1,"maxParallelToolCalls":1},
+        "messages":[],"observations":[],"startedAt":"test"
+    })).unwrap();
+    agent.framework_tool_activity(&context, "CALL-1", "bash_exec", "");
+    assert_eq!(bus.stats_snapshot().rejected_invalid, 0);
+    assert_eq!(bus.stats_snapshot().accepted, 0);
+    agent.framework_tool_activity(&context, "CALL-1", "bash_exec", "line");
+    assert_eq!(bus.stats_snapshot().accepted, 1);
+    assert_eq!(bus.stats_snapshot().rejected_invalid, 0);
+    assert!(host.close().await.is_success());
+}
 #[tokio::test]
 async fn native_tool_content_and_metadata_survive_product_audit_and_context_to_actual_model_dispatch()
  {

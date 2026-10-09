@@ -1,5 +1,6 @@
 // Help is scoped to full configuration paths; dynamic profile names use "profile".
 export const systemConfigDescriptions = {
+  "modelInvocation_defaultOutputTokens": "模型未单独配置输出额度时，每次调用使用的默认输出 token 上限。默认 16384，可按模型服务限制调整。",
   "modelInvocation_text_callTimeoutSeconds": "独立对话或辅助文本单次模型调用的最长等待时间，单位秒。向量场景按每批请求计时，不是整份文档。",
   "modelInvocation_text_operationTimeoutSeconds": "独立对话或辅助文本一次操作的总等待预算，包含重试和退避，单位秒；不能小于单次调用超时。",
   "modelInvocation_embedding_callTimeoutSeconds": "向量生成单次模型调用的最长等待时间，单位秒。向量场景按每批请求计时，不是整份文档。",

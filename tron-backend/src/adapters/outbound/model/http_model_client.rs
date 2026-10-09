@@ -22,6 +22,29 @@ pub(crate) fn sdk_config(config: &AgentModelConfig) -> Result<sdk::AgentModelCon
     }
     Ok(config)
 }
+
+fn native_request(admitted: &fw::ChatRequest) -> Result<sdk::ModelRequest, String> {
+    let messages = admitted
+        .messages
+        .iter()
+        .map(crate::application::agent::framework_runtime::decode_native_message)
+        .collect::<Result<Vec<_>, _>>()?;
+    let product = ModelRequest {
+        messages,
+        tools: Vec::new(),
+        prepared_tool_schema: None,
+        system_agent_session_id: None,
+        response_input_items: None,
+        previous_response_id: None,
+    };
+    // Translate the host's reserved records through both typed codecs. Never
+    // rename arbitrary JSON keys or turn native tool identities into prose.
+    let mut wire = admitted.clone();
+    wire.messages = sdk::request_to_framework(convert(&product)?)
+        .map_err(|e| e.to_string())?
+        .messages;
+    sdk::request_from_framework(&wire).map_err(|e| sdk::encode_model_error(&e))
+}
 pub(crate) fn error(error: fw::AgentError) -> String {
     match error.primary() {
         fw::AgentError::Model(error) => sdk::encode_model_error(error),
@@ -31,11 +54,15 @@ pub(crate) fn error(error: fw::AgentError) -> String {
 pub(crate) fn limits(
     config: &AgentModelConfig,
     timeouts: &crate::config::ModelInvocationTimeouts,
+    default_output_tokens: u32,
 ) -> fw::RunLimits {
     fw::RunLimits {
         max_model_retries: config.max_retries.unwrap_or(0) as usize,
         max_model_calls_per_step: Some(config.max_retries.unwrap_or(0) as usize + 2),
-        max_model_output_tokens: config.max_tokens.filter(|v| *v > 0).unwrap_or(4096),
+        max_model_output_tokens: config
+            .max_tokens
+            .filter(|v| *v > 0)
+            .unwrap_or(default_output_tokens),
         model_timeout: std::time::Duration::from_secs(timeouts.call_timeout_seconds),
         run_timeout: std::time::Duration::from_secs(timeouts.operation_timeout_seconds),
         max_context_tokens: config.context_window_tokens.unwrap_or(128_000) as usize,
@@ -122,7 +149,8 @@ impl HttpModelClient {
             input.options.temperature = config.temperature;
             input.options.top_p = config.top_p;
             input.options.max_output_tokens = config.max_tokens.filter(|v| *v > 0);
-            let mut effective = limits(config, &self.invocation_config().text);
+            let invocation = self.invocation_config();
+            let mut effective = limits(config, &invocation.text, invocation.default_output_tokens);
             effective.max_model_calls_per_step = Some(max_calls);
             let client = match parent {
                 Some(parent) => {
@@ -191,8 +219,7 @@ impl ModelClient for HttpModelClient {
         sink: Option<ModelStreamSink>,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
         Box::pin(async move {
-            let mut input =
-                sdk::request_from_framework(admitted).map_err(|e| sdk::encode_model_error(&e))?;
+            let mut input = native_request(admitted)?;
             // Continuation is prepared by the product turn state; every content block
             // and tool schema still comes from the SDK's final admitted request.
             // SDK regenerates the schema from the admitted descriptors.
@@ -395,7 +422,43 @@ impl sdk::ModelTransportFactory for HttpModelProviderClient {
 #[cfg(test)]
 mod controlled_native_tests {
     use super::*;
+    use serde_json::json;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[test]
+    fn host_records_are_typed_protocol_messages_not_assistant_prose() {
+        let input = json!({"fileRef":{"kind":"session_attachment","attachmentCode":"ATTACH-1"}});
+        let mut assistant = fw::Message::assistant(fw::Content(vec![
+            fw::ContentBlock::Json { value:json!({"tronMessagePart":{"type":"reasoningSummary","text":"summary"}}) },
+            fw::ContentBlock::Json { value:json!({"tronMessagePart":{"type":"toolCall","call_id":"CALL-1","tool_name":"word_read","input":input}}) },
+        ]));
+        assistant.tool_calls.push(fw::ToolCall::new("CALL-1", "word_read", input.clone()));
+        let mut result = fw::Message::new(fw::Role::Tool, "document evidence");
+        result.tool_call_id = Some("CALL-1".into());
+        let mut admitted = fw::ChatRequest {
+            messages: vec![fw::Message::user("read"), assistant, result],
+            tools: Vec::new(), options: Default::default(), extensions: Default::default(),
+        };
+        let request = native_request(&admitted).unwrap();
+        assert!(!request.messages[1].plain_text_content().contains("tronMessagePart"));
+        assert_eq!(request.messages[1].plain_text_content(), "summary");
+        let sdk::AgentMessagePart::ToolCall { call_id, input: actual, .. } = &request.messages[1].parts[1] else { panic!("tool call missing") };
+        assert_eq!(call_id.as_deref(), Some("CALL-1"));
+        assert_eq!(*actual, input);
+        assert!(request.messages[2].text_content().contains("document evidence"));
+        admitted.messages[1].tool_calls[0].arguments = json!({"forged":true});
+        assert!(native_request(&admitted).is_err());
+    }
+
+    #[test]
+    fn explicit_output_limit_wins_over_configured_default() {
+        let mut config: AgentModelConfig = serde_json::from_value(json!({"modelCode":"fixture","protocol":"RESPONSES","baseUrl":"http://unused.invalid","apiKey":"","modelName":"fixture"})).unwrap();
+        let invocation = crate::config::ModelInvocationConfig::default();
+        assert_eq!(limits(&config, &invocation.text, invocation.default_output_tokens).max_model_output_tokens, 16_384);
+        assert_eq!(limits(&config, &invocation.text, 8192).max_model_output_tokens, 8192);
+        config.max_tokens = Some(512);
+        assert_eq!(limits(&config, &invocation.text, invocation.default_output_tokens).max_model_output_tokens, 512);
+    }
     #[tokio::test]
     async fn native_image_and_attachment_generate_uses_controlled_sdk_transport() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -428,10 +491,11 @@ mod controlled_native_tests {
             let body: serde_json::Value = serde_json::from_slice(&data[end..end + len]).unwrap();
             assert!(body.to_string().contains("data:image/png;base64,aW1hZ2U="));
             assert!(body.to_string().contains("reference data"));
+            assert_eq!(body["max_tokens"], 16_384);
             let answer = r#"{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":1}}"#;
             socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}",answer.len()).as_bytes()).await.unwrap();
         });
-        let config:AgentModelConfig=serde_json::from_value(serde_json::json!({"modelCode":"fixture","protocol":"CHAT_COMPLETIONS","baseUrl":url,"apiKey":"fixture","modelName":"fixture","maxTokens":32,"contextWindowTokens":12000})).unwrap();
+        let config:AgentModelConfig=serde_json::from_value(serde_json::json!({"modelCode":"fixture","protocol":"CHAT_COMPLETIONS","baseUrl":url,"apiKey":"fixture","modelName":"fixture","contextWindowTokens":128000})).unwrap();
         let request:ModelRequest=serde_json::from_value(serde_json::json!({"messages":[{"role":"user","parts":[{"type":"text","text":"inspect reference data"},{"type":"image","mime_type":"image/png","data":"aW1hZ2U="}]}],"tools":[]})).unwrap();
         let client = HttpModelClient::new(Arc::new(HttpModelProviderClient::new(
             sdk::ModelHttpClient::new(),

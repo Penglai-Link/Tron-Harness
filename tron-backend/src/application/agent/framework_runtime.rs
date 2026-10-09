@@ -1,4 +1,5 @@
 mod messages;
+pub(crate) use messages::decode as decode_native_message;
 mod model;
 pub(crate) use model::NativeModelScope;
 mod presentation;

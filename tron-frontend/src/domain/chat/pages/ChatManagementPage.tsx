@@ -92,6 +92,7 @@ import {
   useChatSessionLatestGoalState,
   useChatSessionTodosState,
   useChatSessionGroupList,
+  useChatGeneratedTitle,
   useChatWorkRailLabels,
 } from "@/domain/chat/hooks";
 import { useAuthSession } from "@/domain/auth";
@@ -4605,6 +4606,11 @@ export function ChatManagementPage() {
       : undefined
   );
   const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "", activeChatDataRefreshKey);
+  useChatGeneratedTitle(activeSession, useStableCallback((updated: ChatSession) => {
+    setSessionGroups((current) => replaceSession(current, updated));
+    setOptimisticActiveSession((current) => current?.sessionCode === updated.sessionCode ? updated : current);
+    window.dispatchEvent(new Event("tron:chat-session-updated"));
+  }));
   const activeRunState = useChatActiveRunState(
     activeSession?.sessionCode ?? "",
     activeRunRefreshKey,

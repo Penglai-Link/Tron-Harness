@@ -356,6 +356,11 @@ impl fw::ToolResultProcessor for ToolAudit {
             });
         if let Some(error) = input_error {
             result = fw::ToolOutput::error(format!("tool input is invalid: {error}"));
+        } else if result.is_error && result.content.protocol_text() == "Tool arguments do not match input schema" {
+            result = fw::ToolOutput::error(format!(
+                "Tool arguments do not match input schema. Pass object/array parameters as JSON values, not quoted JSON strings. Expected input schema: {}",
+                invocation.descriptor.input_schema
+            ));
         } else if invocation.descriptor.id == "unavailable" {
             // The native loop already rejected this call without executing it.
             // Preserve the product distinction between an absent registration

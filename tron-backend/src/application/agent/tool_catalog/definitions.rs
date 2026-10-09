@@ -12,6 +12,7 @@ use crate::domain::agent::{ToolAvailabilityState, ToolOperationKind};
 
 pub(super) fn file_reference_schema() -> Value {
     json!({
+        "type": "object",
         "oneOf": [
             {
                 "type": "object",

@@ -488,6 +488,9 @@ fn prepare_fixture_artifacts(path: &std::path::Path) {
 #[path = "host_status_tests.rs"]
 mod status_tests;
 
+#[path = "host_chat_regression_tests.rs"]
+mod chat_regression_tests;
+
 struct StorageAcceptanceModel;
 impl ModelClient for StorageAcceptanceModel {
     fn generate<'a>(

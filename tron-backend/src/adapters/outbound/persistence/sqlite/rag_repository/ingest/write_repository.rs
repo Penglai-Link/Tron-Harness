@@ -1,5 +1,5 @@
 use super::SqliteRagRepositorySql;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use rusqlite::params;
 
@@ -8,7 +8,7 @@ use crate::{
         RagConfigRepository, RagIngestRepository, RagIngestWarning, RagPersistIngestCommand,
         RagTextUnitWrite, RagTreeNodeWrite,
     },
-    domain::rag::{RagCorpusRecord, RagError},
+    domain::rag::RagError,
 };
 
 use super::{
@@ -25,86 +25,6 @@ use super::{
     sql_plan::{SqliteRagCorpusPlan, compile_sql_corpus_plan, quote_identifier},
     storage_error,
 };
-
-#[derive(Debug, Clone)]
-struct SqliteSourceOnlyPlan {
-    source_table: String,
-    source_columns: BTreeSet<String>,
-    field_mapping: BTreeMap<String, String>,
-    source_field_mapping: BTreeMap<String, String>,
-    source_status_column: String,
-    source_content_hash_column: Option<String>,
-    source_metadata_column: Option<String>,
-    source_created_at_column: Option<String>,
-    source_updated_at_column: Option<String>,
-}
-
-impl SqliteSourceOnlyPlan {
-    fn compile(
-        corpus: &RagCorpusRecord,
-        source_table: String,
-        source_columns: BTreeSet<String>,
-    ) -> Result<Self, RagError> {
-        Ok(Self {
-            source_table,
-            source_status_column: first_existing_source_column(
-                &source_columns,
-                &["source_status", "status"],
-            )
-            .ok_or(RagError::StorageBindingInvalid)?,
-            source_content_hash_column: first_existing_source_column(
-                &source_columns,
-                &["source_content_hash", "content_hash"],
-            ),
-            source_metadata_column: first_existing_source_column(
-                &source_columns,
-                &["source_metadata", "metadata"],
-            ),
-            source_created_at_column: first_existing_source_column(
-                &source_columns,
-                &["source_created_at", "created_at"],
-            ),
-            source_updated_at_column: first_existing_source_column(
-                &source_columns,
-                &["source_updated_at", "updated_at"],
-            ),
-            source_columns,
-            field_mapping: corpus.field_mapping.clone(),
-            source_field_mapping: corpus.source_field_mapping.clone(),
-        })
-    }
-
-    fn domain_mapping(&self) -> &BTreeMap<String, String> {
-        if self.source_field_mapping.is_empty() {
-            &self.field_mapping
-        } else {
-            &self.source_field_mapping
-        }
-    }
-}
-
-impl<'a> SqliteRagRepositorySql<'a> {
-    pub(crate) fn persist_source_only(
-        &self,
-        corpus: &RagCorpusRecord,
-        command: &RagPersistIngestCommand,
-    ) -> Result<(), RagError> {
-        self.ensure_sqlite_runtime_storage_for_corpus(corpus)?;
-        let Some(source_table) = corpus.storage_binding.sqlite_table_for_segment("source") else {
-            return Ok(());
-        };
-        let plan = SqliteSourceOnlyPlan::compile(
-            corpus,
-            source_table.to_string(),
-            self.table_columns(source_table)?,
-        )?;
-        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self
-            .connection, rusqlite::TransactionBehavior::Immediate)
-            .map_err(storage_error)?;
-        persist_source_only_row(&tx, &plan, command)?;
-        tx.commit().map_err(storage_error)
-    }
-}
 
 impl RagIngestRepository for SqliteRagRepositorySql<'_> {
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
@@ -258,93 +178,6 @@ fn persist_source(
     Ok(())
 }
 
-fn persist_source_only_row(
-    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
-    plan: &SqliteSourceOnlyPlan,
-    command: &RagPersistIngestCommand,
-) -> Result<(), RagError> {
-    let now = now_millis();
-    let mut values = Vec::new();
-    push_text(
-        &mut values,
-        &plan.source_columns,
-        "source_code",
-        &command.source_code,
-    );
-    push_text(
-        &mut values,
-        &plan.source_columns,
-        "source_version",
-        &command.source_version,
-    );
-    push_text(
-        &mut values,
-        &plan.source_columns,
-        "scope_type",
-        &command.scope.scope_type,
-    );
-    push_text(
-        &mut values,
-        &plan.source_columns,
-        "scope_code",
-        &command.scope.scope_code,
-    );
-    push_dynamic_text(
-        &mut values,
-        &plan.source_columns,
-        &plan.source_status_column,
-        &command.source_status,
-    );
-    push_optional_text(
-        &mut values,
-        &plan.source_columns,
-        "title",
-        command.title.as_deref(),
-    );
-    if let Some(column) = plan.source_content_hash_column.as_deref() {
-        push_dynamic_text(
-            &mut values,
-            &plan.source_columns,
-            column,
-            &command.content_hash,
-        );
-    }
-    push_optional_text(
-        &mut values,
-        &plan.source_columns,
-        "body_hash",
-        command.body_hash.as_deref(),
-    );
-    if let Some(column) = plan.source_metadata_column.as_deref() {
-        push_dynamic_text(
-            &mut values,
-            &plan.source_columns,
-            column,
-            &json_string(&command.metadata)?,
-        );
-    }
-    if let Some(column) = plan.source_created_at_column.as_deref() {
-        push_integer(&mut values, &plan.source_columns, column, now);
-    }
-    if let Some(column) = plan.source_updated_at_column.as_deref() {
-        push_integer(&mut values, &plan.source_columns, column, now);
-    }
-    push_available_domain_values(
-        &mut values,
-        &plan.source_columns,
-        plan.domain_mapping(),
-        command,
-    )?;
-    execute_upsert(
-        tx,
-        &plan.source_table,
-        values,
-        &["source_code", "source_version", "scope_type", "scope_code"],
-        &[plan.source_created_at_column.as_deref()],
-    )?;
-    Ok(())
-}
-
 fn persist_text_units(
     tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     plan: &SqliteRagCorpusPlan,
@@ -378,13 +211,6 @@ fn persist_text_units(
     )
     .map_err(storage_error)?;
     Ok(())
-}
-
-fn first_existing_source_column(columns: &BTreeSet<String>, candidates: &[&str]) -> Option<String> {
-    candidates
-        .iter()
-        .find(|candidate| columns.contains(**candidate))
-        .map(|candidate| (*candidate).to_string())
 }
 
 fn persist_text_unit(
@@ -538,22 +364,6 @@ fn persist_vector_units(
     Ok(())
 }
 
-impl SqliteRagRepository {
-    pub(crate) fn persist_source_only(
-        &self,
-        corpus: &RagCorpusRecord,
-        command: &RagPersistIngestCommand,
-    ) -> Result<(), RagError> {
-        let corpus = corpus.to_owned();
-        let command = command.to_owned();
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }.persist_source_only(&corpus, &command)
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-}
 impl RagIngestRepository for SqliteRagRepository {
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
         self.connection.call(

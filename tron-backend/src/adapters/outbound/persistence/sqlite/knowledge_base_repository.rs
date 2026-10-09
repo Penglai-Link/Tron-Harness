@@ -254,19 +254,6 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
         self.connection.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_base_resource_privacy WHERE workspace_code=?1 AND resource_code=?2)",params![workspace,resource],|r|r.get::<_,bool>(0)).unwrap_or(true)
     }
 }
-impl SqliteKnowledgeBaseRepositorySql<'_> {
-    fn is_product_corpus(&self, id: &str) -> bool {
-        id.starts_with("kb_")
-            || self
-                .connection
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1)",
-                    [id],
-                    |r| r.get::<_, bool>(0),
-                )
-                .unwrap_or(true)
-    }
-}
 fn storage(error: impl std::fmt::Display) -> KnowledgeBaseError {
     KnowledgeBaseError::Storage(error.to_string())
 }

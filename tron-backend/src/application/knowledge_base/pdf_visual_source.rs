@@ -1,6 +1,7 @@
 //! Explicit local page-image reprocessing, bound to the immutable original and audit resources.
 use super::*;
 use serde::{Deserialize, Serialize};
+use std::io;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PdfVisualSource {
@@ -141,7 +142,7 @@ impl KnowledgeBaseService {
                 "重新识别需要本机MinerU及支持OCR的解析质量；不会外发或自动降级".into(),
             ));
         }
-        let original = self.fidelity_bytes(
+        let original = self.visual_source_bytes(
             user,
             workspace,
             &doc.resource_code,
@@ -206,49 +207,44 @@ impl KnowledgeBaseService {
         self.repository.save_document(kb, &doc, revision)?;
         Ok(doc)
     }
-    pub(super) fn effective_pdf_source(
+}
+
+struct Bounded(Vec<u8>, usize);
+impl io::Write for Bounded {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.0.len().saturating_add(bytes.len()) > self.1 {
+            return Err(io::Error::other("visual source exceeds bound"));
+        }
+        self.0.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+impl KnowledgeBaseService {
+    fn visual_source_bytes(
         &self,
         user: &str,
         workspace: &str,
-        doc: &KnowledgeBaseDocument,
-        original: &[u8],
+        code: &str,
+        limit: usize,
     ) -> Result<Vec<u8>, KnowledgeBaseError> {
-        let Some(source) = &doc.visual_source else {
-            return Ok(original.to_vec());
-        };
-        if !doc.file_name.to_ascii_lowercase().ends_with(".pdf")
-            || digest(original) != source.original_sha256
-            || source.page_count == 0
-            || source.page_count != source.page_image_sha256.len()
-        {
-            return Err(KnowledgeBaseError::Conflict);
-        }
-        let audit =
-            self.fidelity_bytes(user, workspace, &source.audit_resource_code, 1024 * 1024)?;
-        let audit: Audit = serde_json::from_slice(&audit).map_err(invalid_storage)?;
-        if audit.original_resource_code != doc.resource_code
-            || audit.original_resource_revision != doc.resource_revision
-            || audit.original_sha256 != source.original_sha256
-            || audit.derived_sha256 != source.derived_sha256
-            || audit.page_image_sha256 != source.page_image_sha256
-            || audit.original_parse_resource_code != source.original_parse_resource_code
-            || audit.actor_user_code != user
-        {
-            return Err(KnowledgeBaseError::Conflict);
-        }
-        let derived = self.fidelity_bytes(
+        let (_, record) = self.resources.download_binary_to_file(
             user,
-            workspace,
-            &source.derived_resource_code,
-            local_documents::MAX_RAW_BYTES,
+            ResourceBinaryDownloadCommand {
+                workspace_code: workspace.into(),
+                resource_code: code.into(),
+            },
         )?;
-        if digest(&derived) != source.derived_sha256 {
-            return Err(KnowledgeBaseError::Conflict);
+        if record.byte_size > limit as u64 {
+            return Err(KnowledgeBaseError::Invalid(
+                "数据保真核验资源超出上限".into(),
+            ));
         }
-        let pdf = pdf_extract::Document::load_mem(&derived).map_err(invalid_storage)?;
-        if pdf.get_pages().len() != source.page_count {
-            return Err(KnowledgeBaseError::Conflict);
-        }
-        Ok(derived)
+        let mut bytes = Bounded(Vec::new(), limit);
+        self.resources
+            .download_binary_storage(&record, &mut bytes)?;
+        Ok(bytes.0)
     }
 }

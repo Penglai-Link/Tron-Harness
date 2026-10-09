@@ -108,6 +108,7 @@ pub struct RagRecordTask {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RagTaskView {
+    pub file_size_bytes: Option<u64>,
     pub document_id: Option<String>,
     pub id: String,
     pub corpus_id: String,
@@ -124,6 +125,7 @@ pub struct RagTaskView {
 impl From<RagRecordTask> for RagTaskView {
     fn from(task: RagRecordTask) -> Self {
         Self {
+            file_size_bytes: None,
             document_id: None,
             title: task.payload["title"]
                 .as_str()

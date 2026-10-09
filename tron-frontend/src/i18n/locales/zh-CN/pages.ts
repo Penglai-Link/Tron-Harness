@@ -2,6 +2,8 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   ragUnified: {
+    fileSize: "文件大小",
+    smallFilesFirst: "等待中的任务优先处理小文件；同大小按提交顺序处理。",
     taskStatistics: "入库任务统计",
     totalTasks: "总任务数",
     processingTasks: "处理中",
@@ -1207,6 +1209,7 @@ export const pages = {
         actionRun: "运行",
         actionEdit: "编辑",
         commandSummary: "执行：{{command}}",
+        searchSummary: "{{name}}：{{query}}",
       },
       rail: {
         waitingModel: "等待模型...",

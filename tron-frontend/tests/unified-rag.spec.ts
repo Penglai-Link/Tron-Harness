@@ -88,14 +88,14 @@ for (const locale of ["zh-CN", "en-US"] as const) {
           rejectedTaskLists += 1;
           return route.fulfill({ status: 503, json: { code: "UNAVAILABLE", message: "Task list unavailable", data: null } });
         }
-        const task = { documentId: null, corpusId: "corpus-evidence", stage: "PARSING", completedUnits: 0, totalUnits: 0, error: null, createdAt: 1, updatedAt: 2 };
+        const task = { fileSizeBytes: null, documentId: null, corpusId: "corpus-evidence", stage: "PARSING", completedUnits: 0, totalUnits: 0, error: null, createdAt: 1, updatedAt: 2 };
         data = [
-          { ...task, id: "queued-first", sourceCode: "queued-first", title: "Queued first", state: "QUEUED" },
+          { ...task, id: "queued-first", sourceCode: "queued-first", title: "Queued first", state: "QUEUED", fileSizeBytes: 2048 },
           { ...task, id: "completed-one", documentId: "doc-completed", sourceCode: "completed-one", title: "Completed record", state: "COMPLETED" },
           { ...task, id: "failed-one", documentId: "doc-failed", sourceCode: "failed-one", title: "Failed record", state: "FAILED" },
           { ...task, id: "cancelled-one", sourceCode: "cancelled-one", title: "Cancelled record", state: "CANCELLED" },
-          { ...task, id: "task-one", documentId: "doc-one", sourceCode: "source-one", title: "Guideline.pdf", state: taskState, stage: "EMBEDDING", completedUnits: 3, totalUnits: 12 },
-          { ...task, id: "queued-second", sourceCode: "queued-second", title: "Queued second", state: "QUEUED" },
+          { ...task, id: "task-one", documentId: "doc-one", sourceCode: "source-one", title: "Guideline.pdf", fileSizeBytes: 1572864, state: taskState, stage: "EMBEDDING", completedUnits: 3, totalUnits: 12 },
+          { ...task, id: "queued-second", sourceCode: "queued-second", title: "Queued second", state: "QUEUED", fileSizeBytes: 1024 },
           { ...task, id: "memory-failed", sourceCode: "memory-failed", corpusId: "memory-card", title: "Failed memory", state: "FAILED" },
         ];
       }
@@ -181,6 +181,10 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await page.getByRole("option", { name: zh ? "全部语料库" : "All corpora", exact: true }).click();
     await expect(page.getByRole("columnheader", { name: zh ? "分块数" : "Chunks", exact: true })).toBeVisible();
     await expect(page.getByRole("row").filter({ hasText: "Guideline.pdf" }).getByRole("cell", { name: "12", exact: true })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: zh ? "文件大小" : "File size", exact: true })).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "Guideline.pdf" })).toContainText("1.5 MB");
+    await expect(page.getByRole("row").filter({ hasText: "Queued second" })).toContainText("1 KB");
+    await expect(page.getByRole("row").filter({ hasText: "Failed memory" }).getByRole("cell").nth(2)).toHaveText("—");
     await expect(page.locator("[aria-current=step]")).toHaveCount(0);
     const ingestionFlow = page.getByRole("list", { name: zh ? "统一入库流程" : "Unified ingestion flow", exact: true });
     await expect(ingestionFlow.getByRole("listitem")).toHaveCount(4);
@@ -193,7 +197,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expectStatistics([7, 3, 2]);
     await expect(page.getByText(zh ? "启用的索引全部成功后发布新版本；失败或取消时，旧版本继续服务。" : "A new version is published only after all enabled indexes succeed. Failed or cancelled jobs leave the published version serving.", { exact: true })).toHaveCount(0);
     const taskNames = page.locator("table tbody tr td:nth-child(2)");
-    await expect(taskNames).toHaveText(["Guideline.pdf", "Queued first", "Queued second", "Completed record", "Failed record", "Cancelled record", "Failed memory"]);
+    await expect(taskNames).toHaveText(["Guideline.pdf", "Queued second", "Queued first", "Completed record", "Failed record", "Cancelled record", "Failed memory"]);
     const rebuild = page.getByRole("button", { name: zh ? "重建索引" : "Rebuild indexes", exact: true });
     await expect(rebuild).toBeDisabled();
     const toolbar = page.locator("[role=tabpanel] button").filter({ hasText: zh ? /重建索引|刷新/ : /Rebuild indexes|Refresh/ });

@@ -189,6 +189,12 @@ impl fw::ChatModel for TronChatModel {
         let callback_overflow = overflow.clone();
         let sink = host.sink.clone();
         let callback: ModelStreamSink = Arc::new(move |event| {
+            if event.delta.is_empty()
+                || (event.kind != crate::domain::agent::ModelStreamEventKind::Text
+                    && event.delta.trim().is_empty())
+            {
+                return;
+            }
             if event.delta.len() > 256 * 1024 || sender.try_send(event.clone()).is_err() {
                 callback_overflow.store(true, std::sync::atomic::Ordering::Release);
                 return;
@@ -216,7 +222,7 @@ impl fw::ChatModel for TronChatModel {
                     context,
                     turn,
                     *usage,
-                    host.sink.as_ref().map(|_| callback),
+                    Some(callback),
                     prepared.clone(),
                     Some(&request),
                 );
@@ -233,8 +239,8 @@ impl fw::ChatModel for TronChatModel {
                             if let Some(event) = event {
                                 match event.kind {
                                     crate::domain::agent::ModelStreamEventKind::Text => stream.text_delta(&event.delta).await,
-                                    crate::domain::agent::ModelStreamEventKind::ReasoningSummary => stream.reasoning_delta(&event.delta).await,
-                                    crate::domain::agent::ModelStreamEventKind::Reasoning => {},
+                                    crate::domain::agent::ModelStreamEventKind::ReasoningSummary
+                                    | crate::domain::agent::ModelStreamEventKind::Reasoning => stream.reasoning_delta(&event.delta).await,
                                 }
                             } else {
                                 break invocation.await;
@@ -270,10 +276,10 @@ impl fw::ChatModel for TronChatModel {
                 crate::domain::agent::ModelStreamEventKind::Text => {
                     stream.text_delta(&event.delta).await
                 }
-                crate::domain::agent::ModelStreamEventKind::ReasoningSummary => {
+                crate::domain::agent::ModelStreamEventKind::ReasoningSummary
+                | crate::domain::agent::ModelStreamEventKind::Reasoning => {
                     stream.reasoning_delta(&event.delta).await
                 }
-                crate::domain::agent::ModelStreamEventKind::Reasoning => {}
             }
         }
         if overflow.load(std::sync::atomic::Ordering::Acquire) {

@@ -5,34 +5,20 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use crate::{
-    application::rag::RagConfigRepository,
-    domain::rag::{RagCorpusRecord, RagError, RagStatus},
+    domain::rag::{RagCorpusRecord, RagError},
     shared::sqlite_extensions::{
         sqlite_fts5_available, sqlite_simple_tokenizer_available, sqlite_vec_available,
     },
 };
 
 use super::{
-    indexes::{fts_table_name, supported_vector_dimensions, table_exists, vec_table_name},
+    indexes::{fts_table_name, supported_vector_dimensions, vec_table_name},
     sql_plan::quote_identifier,
     storage_error,
 };
 
 mod tree_schema;
 use tree_schema::ensure_tree_storage_table;
-
-pub(super) fn apply_extension_index_migration(
-    repository: &SqliteRagRepositorySql<'_>,
-) -> Result<(), RagError> {
-    drop_retired_extension_tables(&repository.connection)?;
-    for corpus in repository.list_corpora()? {
-        if corpus.status != RagStatus::Enabled || !has_sqlite_runtime_table(&corpus) {
-            continue;
-        }
-        ensure_runtime_storage_for_corpus(repository, &corpus)?;
-    }
-    rebuild_all_extension_indexes(repository)
-}
 
 pub(super) fn ensure_runtime_storage_for_corpus(
     repository: &SqliteRagRepositorySql<'_>,
@@ -97,89 +83,6 @@ fn has_sqlite_runtime_table(corpus: &RagCorpusRecord) -> bool {
             .sqlite_table_for_segment(segment)
             .is_some()
     })
-}
-
-fn drop_retired_extension_tables(connection: &Connection) -> Result<(), RagError> {
-    connection
-        .execute_batch(
-            "DROP TABLE IF EXISTS rag_sqlite_vector_indexes;
-             DROP TABLE IF EXISTS rag_sqlite_extension_capabilities;",
-        )
-        .map_err(storage_error)?;
-    Ok(())
-}
-
-fn configured_fulltext_tables(
-    repository: &SqliteRagRepositorySql<'_>,
-) -> Result<Vec<String>, RagError> {
-    let mut tables = Vec::new();
-    for corpus in repository.list_corpora()? {
-        if corpus.status != RagStatus::Enabled {
-            continue;
-        }
-        if !has_sqlite_runtime_table(&corpus) {
-            continue;
-        }
-        let Some(table) = corpus
-            .storage_binding
-            .sqlite_table_for_segment("fulltext")
-            .or_else(|| corpus.storage_binding.sqlite_table_for_segment("textUnit"))
-            .map(ToOwned::to_owned)
-        else {
-            continue;
-        };
-        if tables.contains(&table) {
-            continue;
-        }
-        quote_identifier(&table)?;
-        tables.push(table);
-    }
-    Ok(tables)
-}
-
-fn rebuild_all_extension_indexes(repository: &SqliteRagRepositorySql<'_>) -> Result<(), RagError> {
-    for table in configured_fulltext_tables(repository)? {
-        if !table_exists(&repository.connection, &table)? {
-            continue;
-        }
-        rebuild_table_indexes(&repository.connection, &table)?;
-    }
-    Ok(())
-}
-
-fn rebuild_table_indexes(connection: &Connection, table_name: &str) -> Result<(), RagError> {
-    let fts_table_name = fts_table_name(table_name);
-    if table_exists(connection, &fts_table_name)? {
-        let fts_table = quote_identifier(&fts_table_name)?;
-        connection
-            .execute(&format!("DELETE FROM {fts_table}"), [])
-            .map_err(storage_error)?;
-        let source_table = quote_identifier(table_name)?;
-        let search_column = if table_has_column(connection, table_name, "summary_text")? {
-            "summary_text"
-        } else if table_has_column(connection, table_name, "search_text")? {
-            "search_text"
-        } else {
-            "text"
-        };
-        let status_column = if table_has_column(connection, table_name, "status")? {
-            "status"
-        } else {
-            "text_unit_status"
-        };
-        connection
-            .execute(
-                &format!(
-                    "INSERT INTO {fts_table}(rowid, search_text)
-                     SELECT id, {search_column}
-                     FROM {source_table}
-                     WHERE {status_column} = 'ACTIVE' AND fulltext_status = 'INDEXED'"
-                ),
-                [],
-            )
-            .map_err(storage_error)?;
-    }
-    Ok(())
 }
 
 fn ensure_fts_table(connection: &Connection, table_name: &str) -> Result<(), RagError> {
@@ -536,23 +439,6 @@ fn extend_valid_columns_from_mapping<'a>(
             columns.insert(column.clone());
         }
     }
-}
-
-fn table_has_column(
-    connection: &Connection,
-    table_name: &str,
-    column_name: &str,
-) -> Result<bool, RagError> {
-    let table = quote_identifier(table_name)?;
-    let mut statement = connection
-        .prepare(&format!("PRAGMA table_info({table})"))
-        .map_err(storage_error)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    Ok(columns.iter().any(|column| column == column_name))
 }
 
 fn table_columns(connection: &Connection, table_name: &str) -> Result<BTreeSet<String>, RagError> {

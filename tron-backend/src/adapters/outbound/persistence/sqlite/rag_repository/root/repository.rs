@@ -305,18 +305,6 @@ fn collect_rows<T>(
     rows.collect::<Result<Vec<_>, _>>().map_err(storage_error)
 }
 
-fn rag_corpora_has_column(connection: &Connection, column_name: &str) -> Result<bool, RagError> {
-    let mut statement = connection
-        .prepare("PRAGMA table_info(rag_corpora)")
-        .map_err(storage_error)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    Ok(columns.iter().any(|column| column == column_name))
-}
-
 impl SqliteRagRepository {
     pub fn connect(database_url: &str) -> Result<Self, RagError> {
         let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
@@ -331,19 +319,6 @@ impl SqliteRagRepository {
     }
 }
 impl SqliteRagRepository {
-    pub(crate) fn ensure_sqlite_runtime_storage_for_corpus(
-        &self,
-        corpus: &RagCorpusRecord,
-    ) -> Result<(), RagError> {
-        let corpus = corpus.to_owned();
-        self.connection.call(
-            move |connection| {
-                SqliteRagRepositorySql { connection }
-                    .ensure_sqlite_runtime_storage_for_corpus(&corpus)
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
     pub fn rag_table_names(&self) -> Result<BTreeSet<String>, RagError> {
         self.connection.call(
             move |connection| SqliteRagRepositorySql { connection }.rag_table_names(),

@@ -15,6 +15,9 @@ pub enum IngestionStage {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestionTask {
+    /// Original resource size captured when this generation is submitted.
+    #[serde(default)]
+    pub file_size_bytes: Option<u64>,
     #[serde(default)]
     pub index_stage: Option<String>,
     #[serde(default)]
@@ -79,6 +82,7 @@ impl IngestionTask {
         configuration: serde_json::Value,
     ) -> Self {
         Self {
+            file_size_bytes: None,
             index_stage: None,
             completed_units: 0,
             total_units: 0,

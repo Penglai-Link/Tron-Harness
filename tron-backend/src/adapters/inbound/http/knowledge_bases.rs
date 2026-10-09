@@ -229,6 +229,7 @@ async fn index(
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct IngestionTaskView {
+    file_size_bytes: Option<u64>,
     id: String,
     document_id: String,
     state: String,
@@ -242,7 +243,7 @@ struct IngestionTaskView {
     wait_reason: Option<crate::application::knowledge_base::ingestion::IngestionWaitReason>,
 }
 async fn tasks(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, doc)): Path<(String, String)>) -> Response {
-    response(kb.ingestion_tasks(&auth.user().user_code, &id, &doc).map(|tasks| tasks.into_iter().map(|t| IngestionTaskView { id: t.id, document_id: t.document_id, state: t.state, stage: t.stage, attempt: t.attempt, failures: t.failures, cancellation_pending: t.cancellation_pending, retry_after_ms: t.retry_after_ms, endpoint_id: t.endpoint_id, error: t.error, wait_reason: t.wait_reason }).collect::<Vec<_>>()))
+    response(kb.ingestion_tasks(&auth.user().user_code, &id, &doc).map(|tasks| tasks.into_iter().map(|t| IngestionTaskView { file_size_bytes: t.file_size_bytes, id: t.id, document_id: t.document_id, state: t.state, stage: t.stage, attempt: t.attempt, failures: t.failures, cancellation_pending: t.cancellation_pending, retry_after_ms: t.retry_after_ms, endpoint_id: t.endpoint_id, error: t.error, wait_reason: t.wait_reason }).collect::<Vec<_>>()))
 }
 async fn cancel(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext, Path((id, doc)): Path<(String, String)>) -> Response {
     response(kb.cancel_index(&auth.user().user_code, &id, &doc).await)

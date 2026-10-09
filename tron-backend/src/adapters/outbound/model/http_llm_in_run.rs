@@ -55,6 +55,7 @@ impl HttpLlmRuntimeClient {
         let effective = limits(
             &model,
             &self.models.invocation_config().embedding.timeouts(),
+            self.models.invocation_config().default_output_tokens,
         );
         let options = match run {
             Some(run) => fw::ModelInvocationOptions::for_run(run, &effective),

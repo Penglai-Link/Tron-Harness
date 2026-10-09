@@ -202,6 +202,98 @@ describe("internal agent tool selection autosave", () => {
     await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", { rolePrompt: "Workspace role" }));
   });
 
+  it.each(["workspace", "platform"] as const)("keeps focus and saves newer typing after an in-flight %s autosave", async (scope) => {
+    let finishSave!: () => void;
+    const response = new Promise<void>((resolve) => { finishSave = resolve; });
+    fixture.patchDefinition.mockImplementationOnce(async (_workspace: string, _agent: string, payload: { rolePrompt: string }) => {
+      await response;
+      fixture.record = { ...fixture.record, ...payload };
+      return { ...fixture.record };
+    });
+    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
+    const role = await screen.findByRole<HTMLTextAreaElement>("textbox", { name: "Role prompt" });
+    await waitFor(() => expect(role.disabled).toBe(false));
+    vi.useFakeTimers();
+    role.focus();
+    fireEvent.change(role, { target: { value: "First draft" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(fixture.patchDefinition).toHaveBeenCalledTimes(1);
+    expect(role.disabled).toBe(false);
+    expect(document.activeElement).toBe(role);
+
+    fireEvent.change(role, { target: { value: "First draft with newer text" } });
+    role.setSelectionRange(6, 6);
+    // Typing during a slow save must not start another overlapping request.
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(fixture.patchDefinition).toHaveBeenCalledTimes(1);
+    await act(async () => { finishSave(); });
+    expect(role.value).toBe("First draft with newer text");
+    expect(document.activeElement).toBe(role);
+    expect(role.selectionStart).toBe(6);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(fixture.patchDefinition).toHaveBeenCalledTimes(2);
+    expect(fixture.patchDefinition).toHaveBeenLastCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", { rolePrompt: "First draft with newer text" });
+    expect(fixture.record.rolePrompt).toBe(role.value);
+    expect(screen.getByText("Saved automatically")).toBeTruthy();
+    expect(document.activeElement).toBe(role);
+  });
+
+  it("keeps newer name and limit edits when a role autosave finishes", async () => {
+    let finishSave!: () => void;
+    const response = new Promise<void>((resolve) => { finishSave = resolve; });
+    fixture.patchDefinition.mockImplementationOnce(async (_workspace: string, _agent: string, payload: { rolePrompt: string }) => {
+      await response;
+      fixture.record = { ...fixture.record, ...payload };
+      return { ...fixture.record };
+    });
+    render(<WorkspaceAgentsPage category="internal" />);
+    const role = await screen.findByRole<HTMLTextAreaElement>("textbox", { name: "Role prompt" });
+    const name = screen.getByRole<HTMLInputElement>("textbox", { name: "Name" });
+    const limit = screen.getByRole<HTMLInputElement>("spinbutton", { name: "Max steps" });
+    await waitFor(() => expect(role.disabled).toBe(false));
+    vi.useFakeTimers();
+    fireEvent.change(role, { target: { value: "Role draft" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(name.disabled).toBe(false);
+    expect(limit.disabled).toBe(false);
+    name.focus();
+    fireEvent.change(name, { target: { value: "Updated name" } });
+    fireEvent.change(limit, { target: { value: "25" } });
+    await act(async () => { finishSave(); });
+    expect(name.value).toBe("Updated name");
+    expect(limit.value).toBe("25");
+    expect(document.activeElement).toBe(name);
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(fixture.patchDefinition).toHaveBeenLastCalledWith("TRON_CORE", "main-agent", { name: "Updated name" });
+    expect(fixture.patch).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", { maxSteps: 25 });
+    expect(fixture.record.name).toBe("Updated name");
+    expect(fixture.record.maxSteps).toBe(25);
+  });
+
+  it("retains newer typing and focus when autosave fails, then retries on edit", async () => {
+    let failSave!: (error: Error) => void;
+    const response = new Promise<void>((_resolve, reject) => { failSave = reject; });
+    fixture.patchDefinition.mockImplementationOnce(async () => { await response; });
+    render(<WorkspaceAgentsPage category="internal" />);
+    const role = await screen.findByRole<HTMLTextAreaElement>("textbox", { name: "Role prompt" });
+    await waitFor(() => expect(role.disabled).toBe(false));
+    vi.useFakeTimers();
+    role.focus();
+    fireEvent.change(role, { target: { value: "First draft" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    fireEvent.change(role, { target: { value: "Newer draft" } });
+    await act(async () => { failSave(new Error("Save failed")); });
+    expect(role.value).toBe("Newer draft");
+    expect(role.disabled).toBe(false);
+    expect(document.activeElement).toBe(role);
+    expect(fixture.error).toHaveBeenCalledWith("Save failed");
+    fireEvent.change(role, { target: { value: "Retried draft" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(fixture.record.rolePrompt).toBe("Retried draft");
+    expect(screen.getByText("Saved automatically")).toBeTruthy();
+  });
+
   it("restores a platform definition and updates its visible role", async () => {
     fixture.record.source = "workspace_override";
     fixture.record.rolePrompt = "Workspace role";

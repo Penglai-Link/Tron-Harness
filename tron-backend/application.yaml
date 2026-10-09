@@ -41,6 +41,7 @@ systemAgents:
 
 # Model budgets are read at the next invocation; batch limits at the next embedding batch.
 modelInvocation:
+  defaultOutputTokens: 16384
   text:
     callTimeoutSeconds: 300
     operationTimeoutSeconds: 900

@@ -29,6 +29,7 @@ impl ChatService {
         user_message: &str,
         run_code: &str,
         llm_runtime: LlmRuntimeService,
+        fallback_model: crate::domain::agent::AgentModelConfig,
     ) {
         let Some(prompt) =
             manual_session_title_prompt(self.prompt_service.as_ref(), workspace_code, user_message)
@@ -41,62 +42,18 @@ impl ChatService {
             );
             return;
         };
-        let Some(llm_router) = self.llm_router.as_ref() else {
-            self.publish_title_generation_failure(
-                session_code,
-                run_code,
-                "LLM_MODEL_ROUTER_UNAVAILABLE",
-                "标题生成模型路由不可用",
-            );
-            return;
-        };
-        let config = match llm_router.route_text(workspace_code, None) {
-            Ok(config) => config,
-            Err(error) => {
-                self.publish_title_generation_failure(
-                    session_code,
-                    run_code,
-                    "LLM_MODEL_UNAVAILABLE",
-                    error,
-                );
+        let fallback = crate::application::model_router::runtime_from_agent(fallback_model);
+        let preferred = self
+            .llm_router
+            .as_ref()
+            .and_then(|router| router.route_text(workspace_code, None).ok());
+        let candidates = title_model_candidates(preferred, fallback);
+        let title = match generate_title(&llm_runtime, candidates, &prompt).await {
+            Ok(title) => title,
+            Err((code, message)) => {
+                self.publish_title_generation_failure(session_code, run_code, code, message);
                 return;
             }
-        };
-        let result = tokio::time::timeout(
-            TITLE_GENERATION_TIMEOUT,
-            llm_runtime.text_generation_call_with_config(config, prompt),
-        )
-        .await;
-        let result = match result {
-            Ok(Ok(result)) => result,
-            Ok(Err(error)) => {
-                let code = title_generation_error_code(&error);
-                self.publish_title_generation_failure(
-                    session_code,
-                    run_code,
-                    code,
-                    error.to_string(),
-                );
-                return;
-            }
-            Err(_) => {
-                self.publish_title_generation_failure(
-                    session_code,
-                    run_code,
-                    "LLM_UPSTREAM_TIMEOUT",
-                    "标题生成模型调用超时",
-                );
-                return;
-            }
-        };
-        let Some(title) = normalize_generated_session_title(&result.output) else {
-            self.publish_title_generation_failure(
-                session_code,
-                run_code,
-                "TITLE_FORMAT_INVALID",
-                "模型返回的标题为空或格式无效",
-            );
-            return;
         };
         let Ok(session) = self.repository().get_session(session_code) else {
             self.publish_title_generation_failure(
@@ -133,6 +90,7 @@ impl ChatService {
         message: impl Into<String>,
     ) {
         let message = message.into();
+        eprintln!("session title generation failed for {session_code}: {code}");
         let _ = self.event_bus.publish(
             crate::shared::event_bus::BusEventDraft::agui(
                 "agent.session_title_generation_failed",
@@ -150,6 +108,47 @@ impl ChatService {
     }
 }
 
+fn title_model_candidates(
+    preferred: Option<crate::application::model::RuntimeModelConfig>,
+    fallback: crate::application::model::RuntimeModelConfig,
+) -> Vec<crate::application::model::RuntimeModelConfig> {
+    let mut candidates = Vec::new();
+    if let Some(preferred) = preferred.filter(|model| model.model_code != fallback.model_code) {
+        candidates.push(preferred);
+    }
+    candidates.push(fallback);
+    candidates
+}
+
+async fn generate_title(
+    runtime: &LlmRuntimeService,
+    candidates: Vec<crate::application::model::RuntimeModelConfig>,
+    prompt: &str,
+) -> Result<String, (&'static str, String)> {
+    let mut failure = ("LLM_MODEL_UNAVAILABLE", "标题生成模型不可用".into());
+    for config in candidates {
+        match tokio::time::timeout(
+            TITLE_GENERATION_TIMEOUT,
+            runtime.text_generation_call_with_config(config, prompt.into()),
+        )
+        .await
+        {
+            Ok(Ok(result)) => {
+                if let Some(title) = normalize_generated_session_title(&result.output) {
+                    return Ok(title);
+                }
+                failure = (
+                    "TITLE_FORMAT_INVALID",
+                    "模型返回的标题为空或格式无效".into(),
+                );
+            }
+            Ok(Err(error)) => failure = (title_generation_error_code(&error), error.to_string()),
+            Err(_) => failure = ("LLM_UPSTREAM_TIMEOUT", "标题生成模型调用超时".into()),
+        }
+    }
+    Err(failure)
+}
+
 fn title_generation_error_code(error: &LlmRuntimeError) -> &'static str {
     match error {
         LlmRuntimeError::TextModelUnavailable => "LLM_MODEL_UNAVAILABLE",
@@ -159,6 +158,10 @@ fn title_generation_error_code(error: &LlmRuntimeError) -> &'static str {
         _ => "LLM_TITLE_GENERATION_FAILED",
     }
 }
+
+#[cfg(test)]
+#[path = "title_generation_tests.rs"]
+mod generation_tests;
 
 pub(super) fn should_generate_manual_session_title(session: &ChatSession) -> bool {
     session.source_type == ChatSessionSourceType::Manual

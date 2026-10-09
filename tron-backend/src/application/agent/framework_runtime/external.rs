@@ -162,11 +162,13 @@ async fn forward_event(
             sink.emit(fw::ExternalAgentEvent::TextDelta(event.delta))
                 .await
         }
-        ModelStreamEventKind::ReasoningSummary => {
+        ModelStreamEventKind::ReasoningSummary | ModelStreamEventKind::Reasoning => {
+            if event.delta.trim().is_empty() {
+                return;
+            }
             sink.emit(fw::ExternalAgentEvent::ReasoningDelta(event.delta))
                 .await
         }
-        ModelStreamEventKind::Reasoning => {}
     }
 }
 

@@ -149,6 +149,23 @@ function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDra
   };
 }
 
+function mergeSavedDraft(
+  record: WorkspaceInternalAgentRecord,
+  submitted: InternalAgentDraft,
+  latest: InternalAgentDraft,
+) {
+  let merged = draftFromRecord(record);
+  for (const key of Object.keys(merged) as (keyof InternalAgentDraft)[]) {
+    const currentValue = latest[key];
+    const submittedValue = submitted[key];
+    const changedSinceSubmission = Array.isArray(currentValue) && Array.isArray(submittedValue)
+      ? !hasSameToolCodes(currentValue, submittedValue)
+      : currentValue !== submittedValue;
+    if (changedSinceSubmission) merged = { ...merged, [key]: currentValue };
+  }
+  return merged;
+}
+
 function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAgentDraft) {
   return (
     record.name !== draft.name
@@ -363,7 +380,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       const saveState = internalSaveStates[agentCode] ?? "idle";
       const hasChanges = draft ? hasDraftChanges(agent, draft) : false;
 
-      if (!draft || !hasChanges || saveState !== "pending" || isBusy(`internal-save:${agentCode}`) || loading) {
+      if (!draft || !hasChanges || saveState !== "pending" || isBusy(`internal-save:${agentCode}`) || isBusy(`internal-reset:${agentCode}`) || loading) {
         clearInternalSaveTimer(agentCode);
         return;
       }
@@ -373,7 +390,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         void handleSaveInternalAgent(agentCode);
       }, 450);
     });
-  }, [activeWorkspaceCode, internalAgents, internalDrafts, internalSaveStates, loading]);
+  }, [activeWorkspaceCode, internalAgents, internalDrafts, internalSaveStates, busyKeys, loading]);
 
   const filteredSystemAgents = systemAgents.filter((record) => {
     const normalizedSearch = debouncedSystemSearch;
@@ -536,7 +553,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     ])));
   }
 
-  async function refreshInternalAgent(agentCode: string) {
+  async function refreshInternalAgent(agentCode: string, submittedDraft?: InternalAgentDraft) {
     if (!activeWorkspaceCode) return;
 
     const nextInternalAgents = dataSource === "api"
@@ -550,15 +567,20 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     setInternalAgents((current) => current.map((agent) => (
       agent.agentCode === agentCode ? savedAgent : agent
     )));
-    const savedDraft = draftFromRecord(savedAgent);
+    // Keep edits made while saving; only unchanged fields adopt the server response.
+    const latestDraft = internalDraftsRef.current[agentCode];
+    const savedDraft = submittedDraft && latestDraft
+      ? mergeSavedDraft(savedAgent, submittedDraft, latestDraft)
+      : draftFromRecord(savedAgent);
     internalDraftsRef.current = { ...internalDraftsRef.current, [agentCode]: savedDraft };
     setInternalDrafts((current) => ({ ...current, [agentCode]: savedDraft }));
+    return hasDraftChanges(savedAgent, savedDraft);
   }
 
   async function handleSaveInternalAgent(agentCode: string) {
     const row = internalAgents.find((item) => item.agentCode === agentCode);
     const draft = internalDraftsRef.current[agentCode];
-    if (!row || !draft || isBusy(`internal-save:${agentCode}`)) {
+    if (!row || !draft || isBusy(`internal-save:${agentCode}`) || isBusy(`internal-reset:${agentCode}`)) {
       return;
     }
     if (!hasDraftChanges(row, draft)) {
@@ -641,13 +663,15 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
           patchWorkspaceInternalAgentMcpPolicyMock(activeWorkspaceCode, agentCode, mcpPayload);
         }
       }
-      await refreshInternalAgent(agentCode);
+      const hasPendingChanges = await refreshInternalAgent(agentCode, draft);
       notifyInternalAgentRegistryChanged();
-      setInternalSaveState(agentCode, "saved");
-      internalSaveFlashTimersRef.current[agentCode] = window.setTimeout(() => {
-        setInternalSaveState(agentCode, "idle");
-        delete internalSaveFlashTimersRef.current[agentCode];
-      }, 1600);
+      setInternalSaveState(agentCode, hasPendingChanges ? "pending" : "saved");
+      if (!hasPendingChanges) {
+        internalSaveFlashTimersRef.current[agentCode] = window.setTimeout(() => {
+          setInternalSaveState(agentCode, "idle");
+          delete internalSaveFlashTimersRef.current[agentCode];
+        }, 1600);
+      }
     } catch (error) {
       setInternalSaveState(agentCode, "error");
       toast.error(error instanceof Error ? error.message : internalPageT("errors.save", "Internal agent policy update failed"));
@@ -658,7 +682,8 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
 
   async function handleRestoreInheritance(agentCode: string) {
     clearInternalSaveTimer(agentCode);
-    setBusy(`internal-save:${agentCode}`, true);
+    clearInternalSaveFlashTimer(agentCode);
+    setBusy(`internal-reset:${agentCode}`, true);
     try {
       if (dataSource === "api") {
         await resetWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode);
@@ -670,7 +695,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       setInternalSaveState(agentCode, "idle");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : internalPageT("errors.reset", "Internal policy reset failed"));
-    } finally { setBusy(`internal-save:${agentCode}`, false); }
+    } finally { setBusy(`internal-reset:${agentCode}`, false); }
   }
 
   async function handleToggleSystemAgent(row: WorkspaceSystemAgentRecord) {
@@ -735,7 +760,8 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         {internalAgents.map((agent) => {
           const draft = internalDrafts[agent.agentCode] ?? draftFromRecord(agent);
           const isSaving = isBusy(`internal-save:${agent.agentCode}`);
-          const internalBusy = isSaving || loading;
+          const editingDisabled = isBusy(`internal-reset:${agent.agentCode}`) || loading;
+          const internalBusy = isSaving || editingDisabled;
           const saveState = internalSaveStates[agent.agentCode] ?? "idle";
 
           let statusLabel = "";
@@ -779,9 +805,9 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
 
               <div className="mt-3 space-y-3">
                 <Field label={internalPageT("definition.name", "Name")}>
-                  <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={internalBusy} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
+                  <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={editingDisabled} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
                 </Field>
-                <AgentRolePromptField key={`${activeWorkspaceCode}:${agent.agentCode}`} workspaceCode={activeWorkspaceCode} disabled={internalBusy} value={draft.rolePrompt} onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })} />
+                <AgentRolePromptField key={`${activeWorkspaceCode}:${agent.agentCode}`} workspaceCode={activeWorkspaceCode} disabled={editingDisabled} value={draft.rolePrompt} onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })} />
               </div>
 
               <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -887,7 +913,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   <Field label={fieldLabel("maxSteps", "Max steps")}>
                     <TextInput
                       aria-label={internalPageT("labels.maxSteps", "Max steps")}
-                      disabled={internalBusy}
+                      disabled={editingDisabled}
                       min={1}
                       step={1}
                       type="number"
@@ -900,7 +926,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   <Field label={fieldLabel("maxToolCalls", "Max tool calls")}>
                     <TextInput
                       aria-label={internalPageT("labels.maxToolCalls", "Max total tool calls")}
-                      disabled={internalBusy}
+                      disabled={editingDisabled}
                       min={1}
                       step={1}
                       type="number"
@@ -913,7 +939,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   <Field label={fieldLabel("maxParallelToolCalls", "Max parallel tool calls", "end")}>
                     <TextInput
                       aria-label={internalPageT("labels.maxParallelToolCalls", "Max parallel tool calls")}
-                      disabled={internalBusy}
+                      disabled={editingDisabled}
                       min={1}
                       step={1}
                       type="number"

@@ -43,7 +43,15 @@ export function useChatWorkRailLabels() {
         const domainCode = typeof payload?.domainCode === "string" ? payload.domainCode : "";
         return catalog.domains.get(domainCode) ?? (domainCode || runtimeName);
       }
-      return catalog.tools.get(runtimeName) ?? runtimeName;
+      const name = catalog.tools.get(runtimeName) ?? runtimeName;
+      if (runtimeName === "rag_search") {
+        const payload = typeof args === "string"
+          ? (() => { try { return JSON.parse(args) as { query?: unknown }; } catch { return {}; } })()
+          : args as { query?: unknown } | null;
+        const query = typeof payload?.query === "string" ? payload.query.trim().replace(/\s+/g, " ") : "";
+        if (query) return t("chat.management.tool.searchSummary", { name, query });
+      }
+      return name;
     };
     return {
       ariaLabel: t("chat.workRail.ariaLabel"),

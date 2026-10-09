@@ -134,6 +134,7 @@ impl ChatService {
             let workspace_code = workspace_code.clone();
             let user_message_content = content.clone();
             let title_run_code = run_code.clone();
+            let title_fallback_model = resolved_model.clone();
             tokio::spawn(async move {
                 chat_service
                     .try_generate_manual_session_title(
@@ -142,6 +143,7 @@ impl ChatService {
                         &user_message_content,
                         &title_run_code,
                         llm_runtime,
+                        title_fallback_model,
                     )
                     .await;
             });

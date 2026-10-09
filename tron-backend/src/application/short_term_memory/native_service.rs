@@ -803,6 +803,9 @@ impl ShortTermMemoryService {
             ShortTermMemoryError::StorageFailure
         })?;
         let mut request = fw::RunRequest::new(session, "");
+        // This snapshot-only task must not occupy the foreground chat executor.
+        // SummaryLoop checks the source revision atomically before publishing.
+        request.execution_scope = Some("tron.session-summary".into());
         request.extensions.insert(source);
         crate::application::agent::framework_runtime::attach_auxiliary_model(
             &mut request,
@@ -822,6 +825,9 @@ impl ShortTermMemoryService {
             eprintln!("native summary failed: {e}");
             match e.primary() {
                 fw::AgentError::SessionBusy(_) => ShortTermMemoryError::RunConflict,
+                fw::AgentError::State(fw::StateError::Conflict) => {
+                    ShortTermMemoryError::CompactionConflict
+                }
                 _ => ShortTermMemoryError::StorageFailure,
             }
         })?;

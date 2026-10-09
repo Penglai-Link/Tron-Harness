@@ -330,6 +330,20 @@ async fn platform_rag_contract_lists_automatic_corpora_and_validates_test_identi
     assert!(rows.iter().any(|c| c["id"] == kb.id
         && c["knowledgeBaseId"] == kb.id
         && c["counts"]["chunkCount"] == 1));
+    let response =
+        common::authenticated_request(&app, Method::GET, "/api/v1/rag/tasks", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let result = common::response_json(response).await;
+    let task = result["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["documentId"] == doc.id)
+        .unwrap();
+    assert_eq!(
+        task["fileSizeBytes"],
+        b"# Orchid\norchid authorized HTTP evidence".len()
+    );
     let input = json!({"workspaceCode":WORKSPACE,"agentCode":f.agent,"query":"orchid","corpusIds":[kb.id],"limit":8});
     let response = common::authenticated_request(
         &app,

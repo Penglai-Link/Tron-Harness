@@ -53,6 +53,7 @@ impl EmbeddingInvocationConfig {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct ModelInvocationConfig {
+    pub default_output_tokens: u32,
     pub text: ModelInvocationTimeouts,
     pub embedding: EmbeddingInvocationConfig,
     pub rerank: ModelInvocationTimeouts,
@@ -65,6 +66,7 @@ pub struct ModelInvocationConfig {
 impl Default for ModelInvocationConfig {
     fn default() -> Self {
         Self {
+            default_output_tokens: 16_384,
             text: ModelInvocationTimeouts {
                 call_timeout_seconds: 300,
                 operation_timeout_seconds: 900,
@@ -90,6 +92,9 @@ impl Default for ModelInvocationConfig {
 
 impl ModelInvocationConfig {
     pub(super) fn validate(&self) -> Result<(), String> {
+        if self.default_output_tokens == 0 {
+            return Err("defaultOutputTokens必须大于零".into());
+        }
         for (scope, limits) in [
             ("text", &self.text),
             ("rerank", &self.rerank),
@@ -117,6 +122,7 @@ impl ModelInvocationConfig {
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct ModelInvocationFileConfig {
+    default_output_tokens: Option<u32>,
     text: Option<TimeoutFileConfig>,
     embedding: Option<EmbeddingFileConfig>,
     rerank: Option<TimeoutFileConfig>,
@@ -154,6 +160,9 @@ struct EmbeddingFileConfig {
 
 impl ModelInvocationConfig {
     pub(super) fn apply_overrides(&mut self, file: ModelInvocationFileConfig) {
+        if let Some(value) = file.default_output_tokens {
+            self.default_output_tokens = value;
+        }
         for (overrides, current) in [
             (file.text, &mut self.text),
             (file.rerank, &mut self.rerank),
@@ -184,5 +193,26 @@ impl ModelInvocationConfig {
                 self.embedding.max_batch_tokens = v;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_default_is_configurable_and_zero_is_rejected() {
+        let mut config = ModelInvocationConfig::default();
+        assert_eq!(config.default_output_tokens, 16_384);
+        config.apply_overrides(serde_yaml::from_str("defaultOutputTokens: 8192").unwrap());
+        config.validate().unwrap();
+        assert_eq!(config.default_output_tokens, 8192);
+        config.apply_overrides(serde_yaml::from_str("defaultOutputTokens: 0").unwrap());
+        assert!(
+            config
+                .validate()
+                .unwrap_err()
+                .contains("defaultOutputTokens")
+        );
     }
 }

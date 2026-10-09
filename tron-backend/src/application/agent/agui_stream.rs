@@ -119,7 +119,8 @@ impl AgentAguiStreamService {
             .collect::<Vec<_>>();
         let stored_events = match &self.replay_store {
             Some(store) => {
-                self.ensure_complete(&stream_key)?;
+                // Delivery diagnostics describe history, not read availability.
+                // A past dropped frame must not block later runs in this session.
                 store
                     .replay_protocol_events(&stream_key)
                     .map_err(AgentAguiStreamError::ReplayReadFailed)?
