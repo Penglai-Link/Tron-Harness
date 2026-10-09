@@ -8,7 +8,9 @@ export const pages = {
     "refresh": "刷新",
     "loading": "加载中…",
     "catalog": "Loop 列表",
-    "emptySelection": "选择一个 Loop，或创建新的 Loop。",
+    "emptyCatalog": "暂无 Loop",
+    "sourceFilter": "Loop 来源",
+    "sources": { "all": "全部", "builtin": "内置", "custom": "自定义" },
     "code": "Loop 编码",
     "name": "名称",
     "kind": "执行方式",
@@ -38,7 +40,6 @@ export const pages = {
     "elseTarget": "其他出口",
     "matched": "匹配",
     "otherwise": "其他",
-    "builtinHelp": "内置 ReAct 只读。",
     "save": "保存",
     "saving": "保存中…",
     "saved": "Loop 已保存",
@@ -236,7 +237,7 @@ export const pages = {
       "sourceCode": "来源"
     }
   },
-  platformData: {"agentDefinitions": "智能体定义", "agentDefinitionHelp": "先定义智能体，配置指令、工具和知识库，再在下方授权给空间使用。", "agentAuthorization": "空间授权", "agentAuthorizationHelp": "选择已定义的智能体分配给空间；知识库跟随智能体授权，无需单独分配给空间。", "noAgentDefinitions": "请先创建智能体定义。", "workspace": "空间", "selectWorkspace": "请选择空间", "allWorkspaces": "全部空间", "assign": "分配空间", "assignTitle": "分配「{{name}}」给空间", "searchWorkspaces": "搜索空间", "assignmentHelp": "只有选中的空间可以使用。取消勾选并保存后，立即撤销使用权限。", "save": "保存", "cancel": "取消", "assignedWorkspaces": "已分配空间", "platformCatalog": "平台目录", "spaceAssignments": "空间配置", "unassigned": "未分配", "builtinAgent": "内置主智能体，所有空间可用"},
+  platformData: {"agentDefinitions": "智能体定义", "agentAuthorization": "空间授权", "agentAuthorizationHelp": "选择已定义的智能体分配给空间；知识库跟随智能体授权，无需单独分配给空间。", "noAgentDefinitions": "请先创建智能体定义。", "workspace": "空间", "selectWorkspace": "请选择空间", "allWorkspaces": "全部空间", "assign": "分配空间", "assignTitle": "分配「{{name}}」给空间", "searchWorkspaces": "搜索空间", "assignmentHelp": "只有选中的空间可以使用。取消勾选并保存后，立即撤销使用权限。", "save": "保存", "cancel": "取消", "assignedWorkspaces": "已分配空间", "platformCatalog": "平台目录", "spaceAssignments": "空间配置", "unassigned": "未分配", "builtinAgent": "内置主智能体，所有空间可用"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "会话不存在。", "CHAT_SESSION_MUST_BE_ARCHIVED": "请先归档会话。", "CHAT_SESSION_RUN_ACTIVE": "会话正在运行，稍后重试。", "CHAT_SESSION_ARCHIVED": "会话已归档。", "CHAT_SESSION_DELETE_FAILED": "删除失败，可重试此项。"},
     cancel: "取消",

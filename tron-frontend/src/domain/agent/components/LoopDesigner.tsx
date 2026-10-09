@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, ArrowUp, ArrowDown, Trash2 } from "lucide-react";
 import { Field, SelectInput, TextInput, TextArea } from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,15 @@ import {
 import { validateLoop, visibleEdges } from "../model/loopValidation";
 import { LoopGraph } from "./LoopGraph";
 
+type LoopSource = "all" | "builtin" | "custom";
+
+function matchesSource(design: LoopDesign, source: LoopSource) {
+  return (
+    source === "all" ||
+    (design.loopCode === REACT_LOOP_CODE) === (source === "builtin")
+  );
+}
+
 export function LoopDesigner() {
   const { t } = useTranslation("pages");
   const toast = useToast();
@@ -36,21 +46,52 @@ export function LoopDesigner() {
   const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState(false);
   const [jsonInvalid, setJsonInvalid] = useState(false);
-  const [pending, setPending] = useState<LoopDesign | null>(null);
+  const [source, setSource] = useState<LoopSource>("all");
+  const [pending, setPending] = useState<{
+    design: LoopDesign | null;
+    source: LoopSource;
+  } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const filteredDesigns = useMemo(
+    () => designs.filter((design) => matchesSource(design, source)),
+    [designs, source],
+  );
   const dirty = Boolean(draft && JSON.stringify(draft) !== original);
   const builtin = draft?.loopCode === REACT_LOOP_CODE;
   const issue = draft && !builtin ? validateLoop(draft) : null;
   const node = draft?.nodes[selected];
-  function open(design: LoopDesign) {
+  const open = useCallback((design: LoopDesign) => {
     setDraft(structuredClone(design));
     setOriginal(JSON.stringify(design));
     setSelected(0);
     setJsonInvalid(false);
+  }, []);
+  useEffect(() => {
+    if (!draft && !loading && !error && filteredDesigns[0]) {
+      open(filteredDesigns[0]);
+    }
+  }, [draft, loading, error, filteredDesigns, open]);
+  function navigate(design: LoopDesign | null, nextSource: LoopSource) {
+    if (dirty) setPending({ design, source: nextSource });
+    else {
+      setSource(nextSource);
+      if (design) open(design);
+      else setDraft(null);
+    }
   }
   function select(design: LoopDesign) {
-    if (dirty) setPending(design);
-    else open(design);
+    navigate(
+      design,
+      design.version === 0 && source === "builtin" ? "custom" : source,
+    );
+  }
+  function filter(nextSource: LoopSource) {
+    if (draft && matchesSource(draft, nextSource)) setSource(nextSource);
+    else
+      navigate(
+        designs.find((design) => matchesSource(design, nextSource)) ?? null,
+        nextSource,
+      );
   }
   function patch(value: Partial<LoopDesign>) {
     setDraft((d) => (d ? { ...d, ...value } : d));
@@ -171,8 +212,24 @@ export function LoopDesigner() {
   }
   return (
     <section className="space-y-4" aria-label={t("agentLoops.title")}>
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold">{t("agentLoops.title")}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          role="group"
+          aria-label={t("agentLoops.sourceFilter")}
+          className="flex gap-1"
+        >
+          {(["all", "builtin", "custom"] as const).map((value) => (
+            <Button
+              key={value}
+              variant={source === value ? "secondary" : "ghost"}
+              aria-pressed={source === value}
+              disabled={busy}
+              onClick={() => filter(value)}
+            >
+              {t(`agentLoops.sources.${value}`)}
+            </Button>
+          ))}
+        </div>
         <Button
           disabled={busy || loading || Boolean(error)}
           onClick={() => select(newLoopDesign())}
@@ -199,7 +256,12 @@ export function LoopDesigner() {
       ) : null}
       <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label={t("agentLoops.catalog")} className="space-y-1">
-          {designs.map((d) => (
+          {!loading && !error && filteredDesigns.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-[var(--color-on-surface-variant)]">
+              {t("agentLoops.emptyCatalog")}
+            </p>
+          ) : null}
+          {filteredDesigns.map((d) => (
             <button
               key={d.loopCode}
               type="button"
@@ -208,18 +270,23 @@ export function LoopDesigner() {
               aria-current={draft?.loopCode === d.loopCode ? "true" : undefined}
               className="w-full rounded-lg px-3 py-3 text-left transition-colors hover:bg-[var(--color-hover-surface)] aria-[current=true]:bg-[var(--color-accent-container)]"
             >
-              <span className="block text-sm font-medium">{d.name}</span>
+              <span className="flex items-center justify-between gap-2">
+                <span className="min-w-0 break-words text-sm font-medium">
+                  {d.name}
+                </span>
+                <Badge variant="outline">
+                  {t(
+                    `agentLoops.sources.${d.loopCode === REACT_LOOP_CODE ? "builtin" : "custom"}`,
+                  )}
+                </Badge>
+              </span>
               <span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">
                 {t(`agentLoops.kinds.${d.kind}`)} · v{d.version}
               </span>
             </button>
           ))}
         </nav>
-        {!draft ? (
-          <p className="py-10 text-center text-sm text-[var(--color-on-surface-variant)]">
-            {t("agentLoops.emptySelection")}
-          </p>
-        ) : (
+        {draft ? (
           <form
             className="min-w-0 space-y-4"
             onSubmit={(e) => {
@@ -485,11 +552,7 @@ export function LoopDesigner() {
                 </>
               ) : null}
             </fieldset>
-            {builtin ? (
-              <p className="text-sm text-[var(--color-on-surface-variant)]">
-                {t("agentLoops.builtinHelp")}
-              </p>
-            ) : (
+            {!builtin ? (
               <>
                 {issue || jsonInvalid ? (
                   <p
@@ -530,9 +593,9 @@ export function LoopDesigner() {
                   </div>
                 </div>
               </>
-            )}
+            ) : null}
           </form>
-        )}
+        ) : null}
       </div>
       <Dialog
         open={Boolean(pending)}
@@ -551,7 +614,11 @@ export function LoopDesigner() {
             </Button>
             <Button
               onClick={() => {
-                if (pending) open(pending);
+                if (pending) {
+                  setSource(pending.source);
+                  if (pending.design) open(pending.design);
+                  else setDraft(null);
+                }
                 setPending(null);
               }}
             >

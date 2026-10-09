@@ -8,7 +8,9 @@ export const pages = {
     "refresh": "Refresh",
     "loading": "Loading…",
     "catalog": "Loop catalog",
-    "emptySelection": "Select a Loop or create one.",
+    "emptyCatalog": "No Loops",
+    "sourceFilter": "Loop source",
+    "sources": { "all": "All", "builtin": "Built-in", "custom": "Custom" },
     "code": "Loop code",
     "name": "Name",
     "kind": "Execution mode",
@@ -38,7 +40,6 @@ export const pages = {
     "elseTarget": "Other target",
     "matched": "Match",
     "otherwise": "Other",
-    "builtinHelp": "Built-in ReAct is read-only.",
     "save": "Save",
     "saving": "Saving…",
     "saved": "Loop saved",
@@ -236,7 +237,7 @@ export const pages = {
       "sourceCode": "Source"
     }
   },
-  platformData: {"agentDefinitions": "Agent definitions", "agentDefinitionHelp": "Define agents and configure their instructions, tools and knowledge libraries, then authorize workspaces below.", "agentAuthorization": "Workspace authorization", "agentAuthorizationHelp": "Assign existing agents to workspaces. Knowledge library access follows the agent authorization.", "noAgentDefinitions": "Create an agent definition first.", "workspace": "Workspace", "selectWorkspace": "Select a workspace", "allWorkspaces": "All workspaces", "assign": "Assign workspaces", "assignTitle": "Assign {{name}} to workspaces", "searchWorkspaces": "Search workspaces", "assignmentHelp": "Only selected workspaces can use this item. Clearing a selection and saving revokes access immediately.", "save": "Save", "cancel": "Cancel", "assignedWorkspaces": "Assigned workspaces", "platformCatalog": "Platform catalog", "spaceAssignments": "Workspace configuration", "unassigned": "Unassigned", "builtinAgent": "Built-in main agent, available in all workspaces"},
+  platformData: {"agentDefinitions": "Agent definitions", "agentAuthorization": "Workspace authorization", "agentAuthorizationHelp": "Assign existing agents to workspaces. Knowledge library access follows the agent authorization.", "noAgentDefinitions": "Create an agent definition first.", "workspace": "Workspace", "selectWorkspace": "Select a workspace", "allWorkspaces": "All workspaces", "assign": "Assign workspaces", "assignTitle": "Assign {{name}} to workspaces", "searchWorkspaces": "Search workspaces", "assignmentHelp": "Only selected workspaces can use this item. Clearing a selection and saving revokes access immediately.", "save": "Save", "cancel": "Cancel", "assignedWorkspaces": "Assigned workspaces", "platformCatalog": "Platform catalog", "spaceAssignments": "Workspace configuration", "unassigned": "Unassigned", "builtinAgent": "Built-in main agent, available in all workspaces"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "Chat not found.", "CHAT_SESSION_MUST_BE_ARCHIVED": "Archive the chat first.", "CHAT_SESSION_RUN_ACTIVE": "The chat is running. Try again later.", "CHAT_SESSION_ARCHIVED": "The chat is archived.", "CHAT_SESSION_DELETE_FAILED": "Deletion failed. Retry this item."},
     cancel: "Cancel",

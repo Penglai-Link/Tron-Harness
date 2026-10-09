@@ -180,7 +180,6 @@ export function PlatformAgentsPage() {
       <TabsContent keepMounted value="agents" className="mt-5 space-y-6">
       <section aria-label={t("pages:platformData.agentDefinitions")} className="space-y-6">
       <h2 className="text-base font-semibold">{t("pages:platformData.agentDefinitions")}</h2>
-      <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:platformData.agentDefinitionHelp")}</p>
       <WorkspaceAgentsPage category="internal" scope="platform" />
 
       <DataTable<PlatformSystemAgentRecord>
