@@ -181,6 +181,12 @@ DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BIN
 ELECTRON_NPM := $(NPM)
 NODE ?= node
 
+# Compiler caches follow the current user, including Windows and Git worktrees.
+_BUILD_CACHE_HOME := $(if $(filter Windows_NT,$(OS)),$(if $(strip $(USERPROFILE)),$(subst \,/,$(USERPROFILE)),$(HOME)),$(HOME))
+export RUST_CACHE_DIR ?= $(_BUILD_CACHE_HOME)/rust-cache
+export SCCACHE_DIR ?= $(RUST_CACHE_DIR)/sccache
+export CCACHE_DIR ?= $(RUST_CACHE_DIR)/ccache
+
 .PHONY: help
 help:
 	@echo "Common commands:"
@@ -238,6 +244,17 @@ help:
 	@echo "  make skill-memory-spec-test"
 	@echo "                    Validate the memory spec skill"
 	@echo "  make skill-theme-test（主题包脚本测试）"
+	@echo "构建缓存：默认当前用户目录下的 rust-cache，自动创建；可用 RUST_CACHE_DIR 覆盖"
+
+.PHONY: _build-cache
+agent-harness-check agent-harness-test be-check be-test be-dev openapi web-build web-dev desktop-build desktop-dev be-ui-acceptance: | _build-cache
+_build-cache:
+ifeq ($(OS),Windows_NT)
+	@if not exist "$(subst /,\,$(SCCACHE_DIR))\" mkdir "$(subst /,\,$(SCCACHE_DIR))"
+	@if not exist "$(subst /,\,$(CCACHE_DIR))\" mkdir "$(subst /,\,$(CCACHE_DIR))"
+else
+	@mkdir -p "$(SCCACHE_DIR)" "$(CCACHE_DIR)"
+endif
 
 .PHONY: clean
 clean: be-clean fe-clean web-clean desktop-clean
