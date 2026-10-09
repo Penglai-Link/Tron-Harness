@@ -24,7 +24,9 @@ describe("AgentChatWindow feedback", () => {
       expect(headers.get("X-Workspace-Code")).toBe("WORKSPACE");
       expect(headers.get("Accept-Language")).toBe(locale);
       if (url.endsWith("/stream")) return new Response(JSON.stringify({ code: "CHAT_WORKSPACE_REQUIRED", message: "workspaceCode is required", data: {} }), { status: 400 });
-      const data = url.includes("get-active-run") ? { sessionCode: "SESSION", activeRun: null }
+      const data = url.endsWith("/a2ui-state") ? { sessionId: "SESSION", revision: 0, surfaces: [], pendingInteractions: [] }
+        : url.endsWith("/history/query") ? { sessionId: "SESSION", version: "1", nextCursor: null, runs: [], records: { steps: [], messages: [], toolInvocations: [], interactions: [] }, pendingInteractions: [], activeRuns: [] }
+        : url.includes("get-active-run") ? { sessionCode: "SESSION", activeRun: null }
         : url.endsWith("/events") ? { events: [] } : [];
       return new Response(JSON.stringify({ code: "SUCCESS", message: "ok", data }));
     });

@@ -152,7 +152,7 @@ describe("role prompt templates", () => {
     expect((role as HTMLTextAreaElement).value).toBe(record.promptBody);
     fireEvent.change(role, { target: { value: "Edited template instructions" } });
     fireEvent.click(screen.getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith(workspaceCode, { agentCode: "my-role", name: "My role", rolePrompt: "Edited template instructions" }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith(workspaceCode, { agentCode: "my-role", name: "My role", loopCode: "builtin.react-loop", rolePrompt: "Edited template instructions" }));
     if (workspaceCode === "$platform") {
       expect(fixture.platformPage).toHaveBeenCalled();
       expect(fixture.workspacePage).not.toHaveBeenCalled();
