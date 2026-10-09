@@ -6850,6 +6850,7 @@ dependencies = [
  "async-trait",
  "eliteforge-agent-core",
  "eliteforge-agent-official-plugin-tools-local",
+ "serde",
  "serde_json",
 ]
 

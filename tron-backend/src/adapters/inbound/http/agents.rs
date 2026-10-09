@@ -8,3 +8,5 @@ pub mod routes;
 mod workspace_grants;
 
 mod loop_designs;
+
+mod tool_permissions;

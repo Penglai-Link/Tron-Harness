@@ -263,6 +263,7 @@ pub enum AgentManagementError {
     InternalMcpServerAssignmentStale(String),
     InternalToolUnknown(String),
     SystemAgentUnavailable,
+    ToolPermissionInvalid,
     StorageFailure,
 }
 

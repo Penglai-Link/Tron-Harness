@@ -69,6 +69,7 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/agents/workspaces/{workspace_code}/system/{agent_code}/disable",
             post(disable_workspace_system_agent),
         )
+        .route("/api/v1/tools/permissions", get(super::tool_permissions::list).put(super::tool_permissions::replace))
         .route("/api/v1/tools/domains", get(list_tool_domains))
         .route("/api/v1/tools", get(list_tools))
         .route("/api/v1/tools/{tool_code}", get(get_tool))

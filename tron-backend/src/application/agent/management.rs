@@ -4,6 +4,7 @@ mod internal_definitions;
 pub(crate) mod loop_designs;
 mod platform_internal_agents;
 mod system_agents;
+mod tool_permissions;
 mod workspace_grants;
 
 use std::{
@@ -79,6 +80,27 @@ pub struct ResolvedAgentRuntime {
 const MAIN_AGENT_CODE: &str = "main-agent";
 
 pub trait AgentManagementRepository: Send {
+    fn list_tool_permissions(
+        &mut self,
+    ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {
+        Ok(vec![])
+    }
+    fn replace_tool_permissions(
+        &mut self,
+        _: &[tron_agent_harness::ToolPermissionSetting],
+    ) -> Result<(), AgentManagementError> {
+        Err(AgentManagementError::StorageFailure)
+    }
+    fn list_discovered_tools(&mut self) -> Result<Vec<ToolCatalogRecord>, AgentManagementError> {
+        Ok(vec![])
+    }
+    fn remember_discovered_tool(
+        &mut self,
+        _: &ToolCatalogRecord,
+    ) -> Result<(), AgentManagementError> {
+        Ok(())
+    }
+
     fn list_loop_designs(
         &mut self,
     ) -> Result<Vec<crate::domain::agent::loop_design::LoopDesign>, AgentManagementError> {
@@ -252,7 +274,7 @@ impl AgentManagementService {
     }
 
     pub fn list_tool_domains(&self, locale: &str) -> Vec<ToolDomainRecord> {
-        BusinessToolCatalog::domains(locale)
+        BusinessToolCatalog::domains_for_records(&self.list_tools(None, None, locale), locale)
     }
 
     pub fn list_tools(
@@ -261,11 +283,28 @@ impl AgentManagementService {
         search: Option<&str>,
         locale: &str,
     ) -> Vec<ToolCatalogRecord> {
-        BusinessToolCatalog::list_tools(domain_code, search, locale)
+        let mut records = BusinessToolCatalog::list_tools(domain_code, search, locale);
+        if let Ok(dynamic) = self.repository().list_discovered_tools() {
+            records.extend(dynamic.into_iter().filter(|tool| {
+                domain_code.is_none_or(|domain| tool.domain_code == domain)
+                    && search.is_none_or(|query| {
+                        format!("{} {} {}", tool.tool_code, tool.name, tool.description)
+                            .to_lowercase()
+                            .contains(&query.to_lowercase())
+                    })
+            }));
+        }
+        records
     }
 
     pub fn tool(&self, tool_code: &str, locale: &str) -> Option<ToolCatalogRecord> {
-        BusinessToolCatalog::tool(tool_code, locale)
+        BusinessToolCatalog::tool(tool_code, locale).or_else(|| {
+            self.repository()
+                .list_discovered_tools()
+                .ok()?
+                .into_iter()
+                .find(|tool| tool.tool_code == tool_code)
+        })
     }
 
     fn active_workspace_detail(

@@ -65,6 +65,69 @@ fn ensure_internal_agent_code_available(
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
+    fn list_tool_permissions(
+        &mut self,
+    ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT config_json FROM platform_tool_permissions ORDER BY tool_code")
+            .map_err(storage_error)?;
+        statement
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(storage_error)?
+            .map(|r| {
+                serde_json::from_str(&r.map_err(storage_error)?)
+                    .map_err(|_| AgentManagementError::StorageFailure)
+            })
+            .collect()
+    }
+    fn replace_tool_permissions(
+        &mut self,
+        settings: &[tron_agent_harness::ToolPermissionSetting],
+    ) -> Result<(), AgentManagementError> {
+        let tx = super::framework_storage::business_transaction(
+            self.connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(storage_error)?;
+        tx.execute("DELETE FROM platform_tool_permissions", [])
+            .map_err(storage_error)?;
+        for s in settings {
+            let json =
+                serde_json::to_string(s).map_err(|_| AgentManagementError::StorageFailure)?;
+            tx.execute(
+                "INSERT INTO platform_tool_permissions VALUES(?1,?2)",
+                params![s.tool_code, json],
+            )
+            .map_err(storage_error)?;
+        }
+        tx.commit().map_err(storage_error)
+    }
+    fn list_discovered_tools(
+        &mut self,
+    ) -> Result<Vec<crate::domain::agent::ToolCatalogRecord>, AgentManagementError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT config_json FROM platform_discovered_tools ORDER BY tool_code")
+            .map_err(storage_error)?;
+        statement
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(storage_error)?
+            .map(|r| {
+                serde_json::from_str(&r.map_err(storage_error)?)
+                    .map_err(|_| AgentManagementError::StorageFailure)
+            })
+            .collect()
+    }
+    fn remember_discovered_tool(
+        &mut self,
+        tool: &crate::domain::agent::ToolCatalogRecord,
+    ) -> Result<(), AgentManagementError> {
+        let json = serde_json::to_string(tool).map_err(|_| AgentManagementError::StorageFailure)?;
+        self.connection.execute("INSERT INTO platform_discovered_tools VALUES(?1,?2) ON CONFLICT(tool_code) DO UPDATE SET config_json=excluded.config_json WHERE config_json<>excluded.config_json",params![tool.tool_code,json]).map_err(storage_error)?;
+        Ok(())
+    }
+
     fn list_loop_designs(
         &mut self,
     ) -> Result<Vec<crate::domain::agent::loop_design::LoopDesign>, AgentManagementError> {
@@ -792,6 +855,52 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepository {
+    fn list_tool_permissions(
+        &mut self,
+    ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.list_tool_permissions()
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn replace_tool_permissions(
+        &mut self,
+        settings: &[tron_agent_harness::ToolPermissionSetting],
+    ) -> Result<(), AgentManagementError> {
+        let settings = settings.to_vec();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .replace_tool_permissions(&settings)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_discovered_tools(
+        &mut self,
+    ) -> Result<Vec<crate::domain::agent::ToolCatalogRecord>, AgentManagementError> {
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.list_discovered_tools()
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn remember_discovered_tool(
+        &mut self,
+        tool: &crate::domain::agent::ToolCatalogRecord,
+    ) -> Result<(), AgentManagementError> {
+        let tool = tool.clone();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.remember_discovered_tool(&tool)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+
     fn list_loop_designs(
         &mut self,
     ) -> Result<Vec<crate::domain::agent::loop_design::LoopDesign>, AgentManagementError> {

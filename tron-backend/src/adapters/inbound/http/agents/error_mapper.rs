@@ -138,6 +138,11 @@ pub fn agent_agui_error_response(error: AgentAguiStreamError, locale: &str) -> R
 
 pub fn agent_management_error_response(error: AgentManagementError) -> Response {
     let (status, code, message) = match error {
+        AgentManagementError::ToolPermissionInvalid => (
+            StatusCode::BAD_REQUEST,
+            "101028015",
+            "Invalid tool permission configuration".to_string(),
+        ),
         AgentManagementError::LoopInvalid => (
             StatusCode::BAD_REQUEST,
             "101028011",

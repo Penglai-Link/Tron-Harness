@@ -88,6 +88,7 @@ pub struct TronHarness {
     context_sources: Vec<Arc<dyn ContextContributor>>,
     preparation: Option<Arc<dyn eliteforge_agent_core::Plugin>>,
     tools: Arc<dyn ToolProvider>,
+    tool_policy: Option<Arc<dyn eliteforge_agent_core::ToolPolicy>>,
     shared_ids: HashSet<String>,
     shared_names: HashSet<String>,
 }
@@ -107,6 +108,7 @@ impl TronHarness {
         Self {
             context_sources: Vec::new(),
             preparation: None,
+            tool_policy: None,
             tools,
             shared_ids: catalog.iter().map(|tool| tool.id.clone()).collect(),
             shared_names: catalog.into_iter().map(|tool| tool.call_name).collect(),
@@ -133,11 +135,26 @@ impl TronHarness {
         self
     }
 
+    /// Global product policy is additional to the host's per-Agent ACL.
+    pub fn with_tool_policy(
+        mut self,
+        policy: impl eliteforge_agent_core::ToolPolicy + 'static,
+    ) -> Self {
+        self.tool_policy = Some(Arc::new(policy));
+        self
+    }
+
     pub fn capability_pack(self) -> CapabilityPackBuilder<()> {
         let shared = Arc::new(self);
         let mut pack = CapabilityPackBuilder::new(PACK_ID, ()).plugin(
             ToolProviderPlugin::from_arc("tron.harness.tools", shared.clone()),
         );
+        if let Some(policy) = &shared.tool_policy {
+            pack = pack.plugin(eliteforge_agent_core::ToolPolicyPlugin::from_arc(
+                "tron.harness.tool-permissions",
+                policy.clone(),
+            ));
+        }
         for source in &shared.context_sources {
             pack = pack.plugin(ContextContributorPlugin::from_arc(
                 source.block_id(),
@@ -207,3 +224,10 @@ impl Tool for ScopedTool {
         self.inner.call(arguments, run).await
     }
 }
+
+pub mod tool_policy;
+pub mod tool_risk;
+pub use tool_policy::{
+    ToolPermission, ToolPermissionSetting, ToolPermissionSource, TronToolPolicy,
+};
+pub use tool_risk::{ToolRisk, identify_tool_risk};
