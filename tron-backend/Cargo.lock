@@ -6515,6 +6515,7 @@ dependencies = [
  "eliteforge-agent-official-plugin-model-http",
  "eliteforge-agent-official-plugin-skills",
  "eliteforge-agent-official-plugin-storage-local",
+ "eliteforge-agent-official-plugin-tools-agents",
  "eliteforge-agent-official-plugin-tools-human",
  "eliteforge-agent-official-plugin-tools-local",
  "eliteforge-agent-official-plugin-tools-mcp",

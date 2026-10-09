@@ -16,6 +16,8 @@ use std::sync::Arc;
 #[path = "context_budget.rs"]
 mod context_budget;
 use context_budget::SharedSeedBudget;
+#[path = "agent_directory_context.rs"]
+mod agent_directory_context;
 #[path = "knowledge_base_context.rs"]
 mod knowledge_base_context;
 
@@ -145,6 +147,15 @@ pub(super) async fn assemble(
         },
     }));
     let mut configs = std::collections::HashMap::new();
+    let directory = input
+        .run
+        .extensions
+        .get::<super::host::collaboration::Runtime>();
+    if let Some(runtime) = directory.as_ref() {
+        contributors.push(Arc::new(
+            agent_directory_context::AgentDirectoryContributor((**runtime).clone()),
+        ));
+    }
     configs.insert(
         "seed_prompt_prefix",
         fw::ContextBlockConfig::new(fw::INSTRUCTIONS_BLOCK, fw::BlockBudget::tokens(seed_cap)),
@@ -250,7 +261,7 @@ pub(super) async fn assemble(
         }
     }
     configs.insert("current_session_history", block);
-    let layout = config
+    let mut layout = config
         .context
         .providers
         .order
@@ -267,6 +278,14 @@ pub(super) async fn assemble(
         return Err(fw::AgentError::InvalidConfiguration(
             "context layout must include every mandatory and data block exactly once".into(),
         ));
+    }
+    if directory.is_some() {
+        let mut block =
+            fw::ContextBlockConfig::new("agent_directory", fw::BlockBudget::tokens(2048));
+        block.reducer = Arc::new(memory::BoundMemoryData::new(|_, _| {
+            fw::Message::user("Agent directory entry omitted due to context budget.")
+        }));
+        layout.insert(layout.len().saturating_sub(1), block);
     }
     let base_policy: Arc<dyn fw::ContextBudgetPolicy> = Arc::new(SharedSeedBudget {
         max_tokens: seed_cap,

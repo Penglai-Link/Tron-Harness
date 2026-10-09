@@ -1,0 +1,457 @@
+mod common;
+#[path = "support/knowledge_base_fixture.rs"]
+mod fixture;
+use eliteforge_agent_core as fw;
+use fixture::*;
+use serde_json::{Value, json};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
+use tron_backend::{
+    application::agent::{
+        CreateWorkspaceInternalAgentCommand, ModelClient, ModelStreamSink, ReactAgentBuilder,
+    },
+    domain::agent::{AgentModelConfig, AgentRunContext, ModelRequest, ModelResponse},
+    shared::event_bus::EventBusHandle,
+};
+
+#[derive(Default)]
+struct Script {
+    requests: Mutex<Vec<fw::ChatRequest>>,
+    configs: Mutex<Vec<AgentModelConfig>>,
+    management: Option<tron_backend::application::agent::AgentManagementService>,
+    thread_id: Mutex<Option<String>>,
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+impl ModelClient for Script {
+    fn generate<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        _: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async { Err("native model required".into()) })
+    }
+    fn generate_native_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a fw::ChatRequest,
+        _: &'a ModelRequest,
+        _: Option<ModelStreamSink>,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.requests.lock().unwrap().push(request.clone());
+            self.configs.lock().unwrap().push(config.clone());
+            let root = request.messages.iter().find_map(|m| {
+                let text = m.content.text();
+                text.starts_with("root:").then_some(text)
+            });
+            let results: Vec<_> = request
+                .messages
+                .iter()
+                .filter_map(|m| m.tool_result.as_ref().map(|_| m.content.text()))
+                .collect();
+            Ok(match root.as_deref() {
+                Some("root:revoke-during-run") if results.is_empty() => {
+                    self.management
+                        .as_ref()
+                        .unwrap()
+                        .assign_agent_workspaces("reviewer", vec![])
+                        .unwrap();
+                    ModelResponse::tool_call(
+                        "agent_spawn",
+                        json!({"agentCode":"reviewer","task":"child:review"}),
+                    )
+                }
+                Some("root:read-other") if results.is_empty() => ModelResponse::tool_call(
+                    "thread_read",
+                    json!({"thread_id":self.thread_id.lock().unwrap().clone().unwrap()}),
+                ),
+                Some("root:thread-leave" | "root:thread-revoke") if results.is_empty() => {
+                    ModelResponse::tool_call(
+                        "thread_create",
+                        json!({"agentCode":"reviewer","task":"child:first"}),
+                    )
+                }
+                Some("root:thread-leave" | "root:thread-revoke") => {
+                    let created: Value = serde_json::from_str(&results[0]).unwrap();
+                    let id = created["thread_id"].as_str().unwrap();
+                    *self.thread_id.lock().unwrap() = Some(id.into());
+                    if results.len() == 1 {
+                        ModelResponse::tool_call("thread_wait", json!({"thread_id":id}))
+                    } else if root.as_deref() == Some("root:thread-revoke") && results.len() == 2 {
+                        self.management
+                            .as_ref()
+                            .unwrap()
+                            .assign_agent_workspaces("reviewer", vec![])
+                            .unwrap();
+                        ModelResponse::tool_call(
+                            "thread_send",
+                            json!({"thread_id":id,"message":"child:denied"}),
+                        )
+                    } else {
+                        ModelResponse::final_output(results.join("\n"))
+                    }
+                }
+                Some("root:cancel") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer", "task":"child:slow"}),
+                ),
+                Some("root:spawn") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer", "task":"child:review"}),
+                ),
+                Some("root:unknown") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"missing", "task":"child:review"}),
+                ),
+                Some("root:revoked") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer", "task":"child:review"}),
+                ),
+                Some("root:thread") if results.is_empty() => ModelResponse::tool_call(
+                    "thread_create",
+                    json!({"agentCode":"reviewer", "task":"child:first", "title":"Review"}),
+                ),
+                Some("root:thread") => {
+                    let created: Value = serde_json::from_str(&results[0])
+                        .map_err(|e| format!("thread result: {e}: {}", results[0]))?;
+                    let id = created["thread_id"].as_str().ok_or("missing thread ID")?;
+                    match results.len() {
+                        1 => ModelResponse::tool_call("thread_wait", json!({"thread_id":id})),
+                        2 => ModelResponse::tool_call(
+                            "thread_send",
+                            json!({"thread_id":id,"message":"child:second"}),
+                        ),
+                        3 => ModelResponse::tool_call("thread_wait", json!({"thread_id":id})),
+                        4 => ModelResponse::tool_call("thread_read", json!({"thread_id":id})),
+                        5 => ModelResponse::tool_call("thread_close", json!({"thread_id":id})),
+                        _ => ModelResponse::final_output(results.join("\n")),
+                    }
+                }
+                Some(_) => ModelResponse::final_output(results.join("\n")),
+                None => {
+                    if request
+                        .messages
+                        .iter()
+                        .any(|m| m.content.text() == "child:slow")
+                    {
+                        self.entered.notify_one();
+                        self.release.notified().await;
+                    }
+                    assert!(
+                        request.messages.iter().any(|m| m.role == fw::Role::System
+                            && m.content.text().contains("REVIEWER_ROLE")),
+                        "target role was not loaded"
+                    );
+                    assert!(
+                        request
+                            .tools
+                            .iter()
+                            .all(|t| t.call_name == "agent_spawn"
+                                || t.call_name.starts_with("thread_")),
+                        "target inherited unauthorized tools"
+                    );
+                    ModelResponse::final_output("reviewed by target")
+                }
+            })
+        })
+    }
+    fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
+    fn close_observed<'a>(
+        &'a self,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
+fn context(prompt: &str) -> AgentRunContext {
+    serde_json::from_value(json!({
+        "agentCode":"main-agent", "runCode":fw::RunId::new_v4().to_string(), "workspaceCode":WORKSPACE,"userCode":USER,"locale":"en-US","agentKind":"REACT",
+        "model":{"modelCode":"fixture-chat","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"synthetic","modelName":"fixture","maxTokens":2048,"contextWindowTokens":32000},
+        "variables":[],"skills":[],"tools":[],"executionScope":{},"limits":{"maxSteps":12,"maxToolCalls":12,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":prompt}]}],"observations":[],"startedAt":"fixture"
+    })).unwrap()
+}
+fn reviewer(f: &Fixture) {
+    f.state
+        .agent_management
+        .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            agent_code: "reviewer".into(),
+            name: "Reviewer".into(),
+            role_prompt: "REVIEWER_ROLE: inspect changes and report concrete findings.".into(),
+        })
+        .unwrap();
+    f.state
+        .agent_management
+        .assign_agent_workspaces("reviewer", vec![WORKSPACE.into()])
+        .unwrap();
+    f.state
+        .agent_management
+        .update_internal_agent_policy(
+            WORKSPACE,
+            "reviewer",
+            tron_backend::application::agent::UpdateWorkspaceInternalAgentPolicyCommand {
+                tool_assignment_mode: Some(
+                    tron_backend::domain::agent::ToolAssignmentMode::SelectedTools,
+                ),
+                tool_exposure_mode: Some(tron_backend::domain::agent::ToolExposureMode::DirectList),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+}
+#[tokio::test]
+async fn collaboration_directory_named_child_and_revocation() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let result = agent.run(context("root:spawn")).await.unwrap();
+    assert!(
+        result.final_output.contains("reviewed by target"),
+        "{}",
+        result.final_output
+    );
+    {
+        let requests = script.requests.lock().unwrap();
+        let first = &requests[0];
+        assert!(
+            first
+                .messages
+                .iter()
+                .any(|m| m.content.text().contains("\"agentCode\":\"reviewer\"")),
+            "Agent directory missing"
+        );
+        assert!(first.tools.iter().any(|t| t.call_name == "agent_spawn"));
+    }
+    let unknown = agent.run(context("root:unknown")).await.unwrap();
+    assert!(
+        unknown.final_output.contains("unavailable"),
+        "{}",
+        unknown.final_output
+    );
+    f.state
+        .agent_management
+        .assign_agent_workspaces("reviewer", vec![])
+        .unwrap();
+    let before = script.requests.lock().unwrap().len();
+    let revoked = agent.run(context("root:revoked")).await.unwrap();
+    assert!(
+        revoked.final_output.contains("unavailable"),
+        "{}",
+        revoked.final_output
+    );
+    let requests = script.requests.lock().unwrap();
+    assert!(requests[before..].iter().all(|r| {
+        !r.messages
+            .iter()
+            .any(|m| m.content.text().contains("\"agentCode\":\"reviewer\""))
+    }));
+    drop(requests);
+    assert!(host.close().await.is_success());
+}
+#[tokio::test]
+async fn collaboration_thread_keeps_target_across_messages() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let result = agent.run(context("root:thread")).await.unwrap();
+    assert!(
+        result.final_output.contains("reviewed by target"),
+        "{}",
+        result.final_output
+    );
+    assert!(
+        result.final_output.contains("child:second"),
+        "{}",
+        result.final_output
+    );
+    assert!(
+        result.final_output.contains("\"closed\":true"),
+        "{}",
+        result.final_output
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test]
+async fn collaboration_checks_authorization_after_directory_was_read() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script {
+        management: Some(f.state.agent_management.clone()),
+        ..Default::default()
+    });
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let result = agent.run(context("root:revoke-during-run")).await.unwrap();
+    assert!(
+        result.final_output.contains("unavailable"),
+        "{}",
+        result.final_output
+    );
+    assert_eq!(
+        script.requests.lock().unwrap().len(),
+        2,
+        "revoked target executed"
+    );
+    assert!(host.close().await.is_success());
+}
+#[tokio::test]
+async fn collaboration_threads_recheck_access_and_hide_other_users() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script {
+        management: Some(f.state.agent_management.clone()),
+        ..Default::default()
+    });
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    agent.run(context("root:thread-leave")).await.unwrap();
+    let mut other = context("root:read-other");
+    other.user_code = Some("OTHER-USER".into());
+    let denied = agent.run(other).await.unwrap();
+    assert!(
+        denied.final_output.contains("thread not found"),
+        "{}",
+        denied.final_output
+    );
+    let revoked = agent.run(context("root:thread-revoke")).await.unwrap();
+    assert!(
+        revoked.final_output.contains("unavailable"),
+        "{}",
+        revoked.final_output
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test]
+async fn collaboration_child_stops_with_parent_cancellation() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let context = context("root:cancel");
+    let run_code = context.run_code.clone();
+    let run = tokio::spawn(async move { agent.run(context).await });
+    tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        script.entered.notified(),
+    )
+    .await
+    .unwrap();
+    host.cancel_run(&run_code).unwrap();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(30), run)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(
+            result,
+            Err(tron_backend::domain::agent::AgentError::Cancelled)
+        ),
+        "{result:?}"
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test]
+async fn collaboration_person_ai_child_uses_its_own_provider_session() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let mut context = context("root:spawn");
+    context.model.model_code = "PERSON_AI:fixture".into();
+    context.model = tron_backend::adapters::outbound::model::with_person_ai_conversation(
+        context.model,
+        "parent-session",
+        Some(&context.run_code),
+    );
+    let result = agent.run(context).await.unwrap();
+    assert!(
+        result.final_output.contains("reviewed by target"),
+        "{}",
+        result.final_output
+    );
+    let configs = script.configs.lock().unwrap();
+    assert!(
+        configs[0]
+            .api_path
+            .as_ref()
+            .unwrap()
+            .contains("parent-session")
+    );
+    assert!(
+        configs[1]
+            .api_path
+            .as_ref()
+            .unwrap()
+            .contains("tool-child-")
+    );
+    assert!(
+        !configs[1]
+            .api_path
+            .as_ref()
+            .unwrap()
+            .contains("parent-session")
+    );
+    drop(configs);
+    assert!(host.close().await.is_success());
+}

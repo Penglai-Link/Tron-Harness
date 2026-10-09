@@ -20,6 +20,8 @@ use tokio::sync::{Mutex, OnceCell};
 
 #[path = "host_capability_state.rs"]
 mod capability_state;
+#[path = "host_collaboration.rs"]
+pub(super) mod collaboration;
 #[path = "host_continuation.rs"]
 mod host_continuation;
 #[path = "host_control.rs"]
@@ -78,6 +80,9 @@ struct Host {
     resources: Option<crate::application::resource::ResourceService>,
     agent_management: OnceCell<crate::application::agent::AgentManagementService>,
     knowledge_bases: OnceCell<crate::application::knowledge_base::KnowledgeBaseService>,
+    collaboration_builder:
+        OnceCell<std::sync::Weak<crate::application::agent::AgentRunContextBuilder>>,
+    collaboration_threads: collaboration::Threads,
     _temporary: Option<tempfile::TempDir>,
 }
 impl FrameworkHost {
@@ -89,6 +94,15 @@ impl FrameworkHost {
             .agent_management
             .set(service)
             .unwrap_or_else(|_| panic!("agent management already bound"));
+    }
+    pub(crate) fn bind_collaboration(
+        &self,
+        builder: &Arc<crate::application::agent::AgentRunContextBuilder>,
+    ) -> Result<(), AgentError> {
+        self.0
+            .collaboration_builder
+            .set(Arc::downgrade(builder))
+            .map_err(|_| AgentError::InvalidConfiguration("collaboration is already bound".into()))
     }
     pub fn bind_runtime_config(
         &self,
@@ -296,6 +310,8 @@ impl FrameworkHost {
             resources,
             knowledge_bases: OnceCell::new(),
             agent_management: OnceCell::new(),
+            collaboration_builder: OnceCell::new(),
+            collaboration_threads: Default::default(),
             _temporary: None,
         }))
     }
@@ -333,6 +349,8 @@ impl FrameworkHost {
             resources,
             knowledge_bases: OnceCell::new(),
             agent_management: OnceCell::new(),
+            collaboration_builder: OnceCell::new(),
+            collaboration_threads: Default::default(),
             _temporary: Some(directory),
         })))
     }

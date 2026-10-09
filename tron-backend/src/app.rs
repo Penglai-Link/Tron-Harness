@@ -97,6 +97,7 @@ pub type AppMemoryService = MemoryService<Arc<Mutex<SqliteRagRepository>>, Defau
 pub struct AppState {
     pub config: AppConfig,
     _temporary_database: Option<Arc<tempfile::TempDir>>,
+    _agent_collaboration_builder: Arc<crate::application::agent::AgentRunContextBuilder>,
     pub readiness: AppReadiness,
     pub agui_events: Arc<AguiEventSink>,
     pub agui_replay_store: Arc<dyn AgentAguiReplayStore>,
@@ -379,6 +380,29 @@ impl AppState {
         )
         .with_runtime_config(runtime_config.clone());
         let agent_tool_registry = Arc::new(ToolRegistry::default());
+        // The application owns this bridge. The host keeps a weak reference because
+        // registered product tools may themselves hold the same FrameworkHost.
+        let agent_collaboration_builder = Arc::new(
+            crate::application::agent::AgentRunContextBuilder::new(
+                workspaces.clone(),
+                apps.clone(),
+                variables.clone(),
+                skills.clone(),
+                agent_management.clone(),
+                mcp.clone(),
+                event_bus.clone(),
+                agent_tool_registry.clone(),
+                None,
+                Some(prompts.clone()),
+                None,
+                Some(Arc::new(
+                    crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
+                )),
+            ),
+        );
+        agent_framework
+            .bind_collaboration(&agent_collaboration_builder)
+            .expect("initial Agent collaboration binding");
         let agent_terminal: Arc<dyn crate::application::agent::AgentTerminal> = Arc::new(
             crate::adapters::outbound::agent_terminal::LocalAgentTerminal::new(
                 agent_framework.pty(),
@@ -482,6 +506,7 @@ impl AppState {
         Ok(Self {
             config,
             _temporary_database: temporary_database,
+            _agent_collaboration_builder: agent_collaboration_builder,
             readiness,
             agui_events,
             agui_replay_store,

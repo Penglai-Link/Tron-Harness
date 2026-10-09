@@ -4,11 +4,12 @@ impl FrameworkHost {
     pub(super) async fn run_inner(
         &self,
         harness: ReactAgent,
-        context: AgentRunContext,
+        mut context: AgentRunContext,
         sink: Option<ModelStreamSink>,
         steering: Option<ActiveRunControl>,
         registration: host_control::NativeRegistration,
     ) -> Result<AgentRunResult, AgentError> {
+        collaboration::authorize_tools(self, &mut context);
         let admission = self.0.config_lock.lock().await;
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
@@ -202,6 +203,7 @@ impl FrameworkHost {
                     control,
                 })));
         }
+        collaboration::attach(self, &context, &mut request);
         harness
             .framework_model_scope(&context)?
             .attach(&mut request);

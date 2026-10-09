@@ -16,6 +16,7 @@ async-trait = "0.1"
 tokio-util = "0.7"
 eliteforge-agent-official-plugin-tools-mcp = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-mcp" }
 eliteforge-agent-capability-tools = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-tools" }
+eliteforge-agent-official-plugin-tools-agents = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-agents" }
 tron-agent-harness = { path = "crates/tron-agent-harness" }
 eliteforge-agent-core = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-core" }
 eliteforge-agent-framework = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-framework", default-features = false }

@@ -77,6 +77,7 @@ impl FrameworkHost {
                 Arc::new(LocalScope),
                 self.pty(),
             ))
+            .capability_pack(eliteforge_agent_capability_tools::agent_collaboration_pack())
             .capability_pack(
                 tron_agent_harness::TronHarness::new(Arc::new(HarnessTools), [])
                     .with_context_preparation(TronContext, 32)
@@ -114,7 +115,10 @@ impl FrameworkHost {
     fn builtin_pack(id: &str) -> bool {
         matches!(
             id,
-            "framework.external-agent" | "framework.local.scoped" | "tron.harness"
+            "framework.external-agent"
+                | "framework.local.scoped"
+                | "framework.tool-pack.agent-collaboration"
+                | "tron.harness"
         )
     }
     pub(super) fn main_selection(
@@ -169,6 +173,10 @@ impl FrameworkHost {
                         selected(id)
                             && enabled("tool")
                             && (*id != "tron.harness.tools" || pack_enabled("tron.harness"))
+                            && (*id != "tools.agents"
+                                || pack_enabled(
+                                    eliteforge_agent_capability_tools::AGENT_COLLABORATION_PACK,
+                                ))
                             && (*id != "framework.local.scoped.tools"
                                 || pack_enabled("framework.local.scoped"))
                     })

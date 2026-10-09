@@ -122,6 +122,10 @@ pub(crate) struct AgentRunContextBuilder {
 }
 
 impl AgentRunContextBuilder {
+    pub(crate) fn agent_management(&self) -> &AgentManagementService {
+        &self.management
+    }
+
     pub(crate) fn new(
         workspaces: WorkspaceService,
         apps: AppService,

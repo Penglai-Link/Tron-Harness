@@ -81,6 +81,7 @@ impl FrameworkHost {
         &self,
         finished: watch::Sender<Option<ShutdownReport>>,
     ) -> ShutdownReport {
+        self.0.collaboration_threads.write().unwrap().clear();
         let mut report = ShutdownReport::default();
         let mut pending = Vec::new();
         let admission = tokio::time::timeout(CLOSE_TIMEOUT, self.0.config_lock.lock()).await;

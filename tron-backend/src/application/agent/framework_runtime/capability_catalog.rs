@@ -86,6 +86,14 @@ pub fn capability_pack_catalog() -> Vec<CapabilityPackInfo> {
             Some("2026-09-27"),
         ),
         (
+            eliteforge_agent_capability_tools::AGENT_COLLABORATION_PACK,
+            "Agent Collaboration",
+            "Named child-agent delegation and independent threads",
+            "EliteForge",
+            "0.1.0",
+            Some("2026-10-09"),
+        ),
+        (
             "tron.harness",
             "Tron Harness",
             "Tron context preparation and product-specific agent tools",
