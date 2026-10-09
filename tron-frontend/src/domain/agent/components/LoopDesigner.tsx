@@ -328,7 +328,10 @@ export function LoopDesigner() {
                         nodes:
                           kind === "React"
                             ? []
-                            : draft.nodes.map((n) => ({
+                            : (draft.nodes.length
+                                ? draft.nodes
+                                : newLoopDesign().nodes
+                              ).map((n) => ({
                                 ...n,
                                 kind: "Model",
                                 condition: null,
