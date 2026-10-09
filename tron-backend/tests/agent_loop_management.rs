@@ -38,6 +38,7 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
     )
     .await;
     assert_eq!(saved["data"]["version"], 1);
+    assert_eq!(saved["data"]["nodes"][0]["position"], Value::Null);
     assert!(saved["data"]["updatedAt"].as_i64().unwrap() > 0);
     let agent=call(&app,Method::POST,"/api/v1/agents/registry/internal",Some(json!({"agentCode":"loop-agent","name":"Loop agent","rolePrompt":"Role","loopCode":"review-flow"})),StatusCode::OK).await;
     assert_eq!(agent["data"]["loopCode"], "review-flow");
@@ -78,6 +79,7 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
     update.as_object_mut().unwrap().remove("loopCode");
     update["expectedVersion"] = json!(1);
     update["nodes"][1]["instructions"] = json!("Review v2");
+    update["nodes"][0]["position"] = json!({"x":-120.5,"y":640.25});
     let updated = call(
         &app,
         Method::PUT,
@@ -87,6 +89,10 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
     )
     .await;
     assert_eq!(updated["data"]["version"], 2);
+    assert_eq!(
+        updated["data"]["nodes"][0]["position"],
+        json!({"x":-120.5,"y":640.25})
+    );
     call(
         &app,
         Method::PUT,
@@ -106,6 +112,10 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
     )
     .await;
     assert_eq!(list["data"][1]["version"], 2);
+    assert_eq!(
+        list["data"][1]["nodes"][0]["position"],
+        json!({"x":-120.5,"y":640.25})
+    );
     let overridden = call(
         &restarted,
         Method::GET,
@@ -183,6 +193,17 @@ async fn loop_rejects_invalid_graphs_references_and_duplicate_identity() {
         )
         .await;
     }
+    let mut invalid = design();
+    invalid["loopCode"] = json!("bad-position");
+    invalid["nodes"][0]["position"] = json!({"x":100001,"y":0});
+    call(
+        &app,
+        Method::POST,
+        "/api/v1/agents/loops",
+        Some(invalid),
+        StatusCode::BAD_REQUEST,
+    )
+    .await;
     let mut invalid = design();
     invalid["loopCode"] = json!("bad-dag");
     invalid["kind"] = json!("Dag");

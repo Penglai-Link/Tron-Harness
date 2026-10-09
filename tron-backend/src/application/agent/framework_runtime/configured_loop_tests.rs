@@ -102,6 +102,7 @@ async fn configured_loop_resume_keeps_admitted_workflow_and_dag_definitions() {
                     instructions: format!("ORIGINAL_{id}"),
                     join: LoopJoin::Selected,
                     condition: None,
+                    position: None,
                 })
                 .collect(),
             edges: if kind == LoopKind::Dag {

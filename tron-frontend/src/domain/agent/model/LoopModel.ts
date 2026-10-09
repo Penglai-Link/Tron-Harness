@@ -12,6 +12,7 @@ export interface LoopNode {
   instructions: string;
   join: "Selected" | "All";
   condition: BranchCondition | null;
+  position?: { x: number; y: number } | null;
 }
 export interface LoopEdge {
   from: string;
@@ -42,6 +43,7 @@ export function newLoopDesign(): LoopDesign {
         instructions: "",
         join: "Selected",
         condition: null,
+        position: null,
       },
     ],
     edges: [],

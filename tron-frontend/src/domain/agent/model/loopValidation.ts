@@ -31,6 +31,17 @@ export function validateLoop(d: LoopDesign): string | null {
     return "nodes";
   const ids = new Set(d.nodes.map((n) => n.id));
   if (
+    d.nodes.some(
+      (n) =>
+        n.position &&
+        (!Number.isFinite(n.position.x) ||
+          !Number.isFinite(n.position.y) ||
+          Math.abs(n.position.x) > 100000 ||
+          Math.abs(n.position.y) > 100000),
+    )
+  )
+    return "position";
+  if (
     ids.size !== d.nodes.length ||
     d.nodes.some((n) => !/^[a-z][a-z0-9_-]{0,63}$/.test(n.id))
   )
@@ -102,7 +113,12 @@ export function graphPositions(d: LoopDesign) {
       const level = levels.get(n.id) ?? 0;
       const row = counts.get(level) ?? 0;
       counts.set(level, row + 1);
-      return [n.id, { x: level * 210 + 24, y: row * 88 + 28 }];
+      return [
+        n.id,
+        d.kind === "Dag" && n.position
+          ? n.position
+          : { x: level * 210 + 24, y: row * 88 + 28 },
+      ];
     }),
   );
 }

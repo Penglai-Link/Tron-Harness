@@ -2,6 +2,17 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   agentLoops: {
+    "removeEdge": "Remove connection",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fitCanvas": "Fit to view",
+    "connections": "Connections",
+    "inputPort": "{{node}} input",
+    "outputPort": "{{node}} {{outlet}} output",
+    "output": "Output",
+    "canvasHelp": "Drag ports to connect · Drag canvas to pan",
+    "connecting": "Drag to an input port · Escape to cancel",
+    connectionErrors: {"cycle": "Connections cannot point to themselves or create a cycle.", "branch": "Branch exits must connect to different nodes.", "edges": "Use unique node IDs and at most 256 connections."},
     "title": "Loops",
     "selection": "Agent Loop",
     "new": "New",
@@ -66,6 +77,7 @@ export const pages = {
       "notFound": "Loop was not found."
     },
     "validation": {
+      "position": "Node coordinates must be finite and within ±100000.",
       "size": "Configuration must be at most 256 KiB; each node instruction at most 64 KiB.",
       "identity": "Enter a name and a code with 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter.",
       "parallel": "Parallel nodes must be an integer between 1 and 16.",

@@ -2,6 +2,17 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   agentLoops: {
+    "removeEdge": "删除连线",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fitCanvas": "适应画布",
+    "connections": "连线",
+    "inputPort": "{{node}} 输入",
+    "outputPort": "{{node}} {{outlet}}出口",
+    "output": "输出",
+    "canvasHelp": "拖动端口连线 · 拖动画布平移",
+    "connecting": "拖到输入端口 · Esc 取消",
+    connectionErrors: {"cycle": "连线不能指向自身或形成循环。", "branch": "分支的两个出口须连接不同节点。", "edges": "节点编码须唯一，连线最多 256 条。"},
     "title": "Loop 管理",
     "selection": "Agent Loop",
     "new": "创建",
@@ -66,6 +77,7 @@ export const pages = {
       "notFound": "Loop 不存在。"
     },
     "validation": {
+      "position": "节点坐标须在 -100000 到 100000 之间。",
       "size": "配置最多 256 KiB，单节点指令最多 64 KiB。",
       "identity": "填写名称和编码。编码为 1–64 位小写字母、数字、短横线或下划线，必须以字母开头。",
       "parallel": "并行节点数须为 1–16 的整数。",

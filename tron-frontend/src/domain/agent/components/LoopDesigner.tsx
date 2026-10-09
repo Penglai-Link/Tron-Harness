@@ -26,6 +26,15 @@ import {
 } from "../model/LoopModel";
 import { validateLoop, visibleEdges } from "../model/loopValidation";
 import { LoopGraph } from "./LoopGraph";
+import { DagLoopCanvas } from "./DagLoopCanvas";
+import {
+  connectLoopNodes,
+  disconnectLoopEdge,
+  clearNodeReferences,
+  withCanvasPositions,
+  LoopConnectionError,
+  type CanvasPosition,
+} from "../model/loopCanvas";
 
 type LoopSource = "all" | "builtin" | "custom";
 
@@ -109,25 +118,25 @@ export function LoopDesigner() {
         i === selected
           ? next
           : n.condition
-            ? {
-                ...n,
-                condition: {
-                  ...n.condition,
-                  sourceNode:
-                    n.condition.sourceNode === old.id
-                      ? next.id
-                      : n.condition.sourceNode,
-                  matchTarget:
-                    n.condition.matchTarget === old.id
-                      ? next.id
-                      : n.condition.matchTarget,
-                  elseTarget:
-                    n.condition.elseTarget === old.id
-                      ? next.id
-                      : n.condition.elseTarget,
-                },
-              }
-            : n,
+          ? {
+              ...n,
+              condition: {
+                ...n.condition,
+                sourceNode:
+                  n.condition.sourceNode === old.id
+                    ? next.id
+                    : n.condition.sourceNode,
+                matchTarget:
+                  n.condition.matchTarget === old.id
+                    ? next.id
+                    : n.condition.matchTarget,
+                elseTarget:
+                  n.condition.elseTarget === old.id
+                    ? next.id
+                    : n.condition.elseTarget,
+              },
+            }
+          : n,
       );
       return { ...d, nodes, edges };
     });
@@ -149,8 +158,8 @@ export function LoopDesigner() {
       edges,
     });
   }
-  function add(kind: "Model" | "Branch") {
-    if (!draft) return;
+  function add(kind: "Model" | "Branch", position?: CanvasPosition) {
+    if (!draft || draft.nodes.length >= 64) return;
     let number = draft.nodes.length + 1;
     while (draft.nodes.some((n) => n.id === `node-${number}`)) number++;
     const next: LoopNode = {
@@ -158,6 +167,7 @@ export function LoopDesigner() {
       kind,
       instructions: "",
       join: "Selected",
+      position: position ?? null,
       condition:
         kind === "Branch"
           ? {
@@ -169,14 +179,19 @@ export function LoopDesigner() {
             }
           : null,
     };
-    patch({ nodes: [...draft.nodes, next] });
+    const existing =
+      draft.kind === "Dag" ? withCanvasPositions(draft).nodes : draft.nodes;
+    patch({ nodes: [...existing, next] });
     setSelected(draft.nodes.length);
     setJsonInvalid(false);
   }
   function removeNode() {
     if (!draft || !node) return;
     patch({
-      nodes: draft.nodes.filter((_, i) => i !== selected),
+      nodes: clearNodeReferences(
+        draft.nodes.filter((_, i) => i !== selected),
+        node.id,
+      ),
       edges: draft.edges.filter((e) => e.from !== node.id && e.to !== node.id),
     });
     setSelected(Math.max(0, selected - 1));
@@ -276,7 +291,9 @@ export function LoopDesigner() {
                 </span>
                 <Badge variant="outline">
                   {t(
-                    `agentLoops.sources.${d.loopCode === REACT_LOOP_CODE ? "builtin" : "custom"}`,
+                    `agentLoops.sources.${
+                      d.loopCode === REACT_LOOP_CODE ? "builtin" : "custom"
+                    }`,
                   )}
                 </Badge>
               </span>
@@ -369,17 +386,63 @@ export function LoopDesigner() {
                   </Field>
                 ) : null}
               </div>
-              <LoopGraph
-                design={draft}
-                selected={selected}
-                onSelect={(i) => {
-                  setSelected(i);
-                  setJsonInvalid(false);
-                }}
-              />
-              {draft.kind !== "React" ? (
-                <>
-                  <div className="flex flex-wrap gap-2">
+              <div
+                className={
+                  draft.kind === "Dag"
+                    ? "grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_260px]"
+                    : "space-y-4"
+                }
+              >
+                <div className="min-w-0 space-y-4">
+                  {draft.kind === "Dag" ? (
+                    <DagLoopCanvas
+                      key={original}
+                      design={draft}
+                      selected={selected}
+                      disabled={busy || Boolean(builtin)}
+                      onSelect={(index) => {
+                        setSelected(index);
+                        setJsonInvalid(false);
+                      }}
+                      onMove={(index, position) => {
+                        const next = withCanvasPositions(draft);
+                        patch({
+                          nodes: next.nodes.map((node, i) =>
+                            i === index ? { ...node, position } : node,
+                          ),
+                        });
+                      }}
+                      onConnect={(from, to, outlet) => {
+                        try {
+                          patch(connectLoopNodes(draft, from, to, outlet));
+                        } catch (error) {
+                          toast.error(
+                            t(
+                              `agentLoops.connectionErrors.${
+                                error instanceof LoopConnectionError
+                                  ? error.reason
+                                  : "edges"
+                              }`,
+                            ),
+                          );
+                        }
+                      }}
+                      onDisconnect={(edge) =>
+                        patch(disconnectLoopEdge(draft, edge))
+                      }
+                      onAdd={add}
+                    />
+                  ) : (
+                    <LoopGraph
+                      design={draft}
+                      selected={selected}
+                      onSelect={(index) => {
+                        setSelected(index);
+                        setJsonInvalid(false);
+                      }}
+                    />
+                  )}
+                  {draft.kind === "Workflow" ? (
                     <Button
                       type="button"
                       variant="outline"
@@ -389,171 +452,116 @@ export function LoopDesigner() {
                       <Plus size={14} />
                       {t("agentLoops.addModel")}
                     </Button>
-                    {draft.kind === "Dag" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={draft.nodes.length >= 64}
-                        onClick={() => add("Branch")}
-                      >
-                        <Plus size={14} />
-                        {t("agentLoops.addBranch")}
-                      </Button>
-                    ) : null}
-                  </div>
-                  {node ? (
-                    <section className="space-y-4 border-t border-[var(--color-outline-variant)] pt-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h3 className="text-sm font-semibold">
-                          {t("agentLoops.nodeSettings")}
-                        </h3>
-                        <div className="flex gap-2">
-                          {draft.kind === "Workflow"
-                            ? [-1, 1].map((offset) => (
-                                <Button
-                                  key={offset}
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  aria-label={t(
-                                    offset < 0
-                                      ? "agentLoops.moveUp"
-                                      : "agentLoops.moveDown",
-                                  )}
-                                  disabled={
-                                    selected + offset < 0 ||
-                                    selected + offset >= draft.nodes.length
-                                  }
-                                  onClick={() => {
-                                    const nodes = [...draft.nodes];
-                                    [
-                                      nodes[selected],
-                                      nodes[selected + offset],
-                                    ] = [
-                                      nodes[selected + offset],
-                                      nodes[selected],
-                                    ];
-                                    patch({ nodes });
-                                    setSelected(selected + offset);
-                                  }}
-                                >
-                                  {offset < 0 ? (
-                                    <ArrowUp size={16} />
-                                  ) : (
-                                    <ArrowDown size={16} />
-                                  )}
-                                </Button>
-                              ))
-                            : null}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={removeNode}
-                          >
-                            <Trash2 size={14} />
-                            {t("agentLoops.removeNode")}
-                          </Button>
-                        </div>
+                  ) : null}
+                </div>
+                {draft.kind !== "React" && node ? (
+                  <section
+                    className={
+                      draft.kind === "Dag"
+                        ? "max-h-[570px] space-y-4 overflow-y-auto border-l border-[var(--color-outline-variant)] pl-4"
+                        : "space-y-4 border-t border-[var(--color-outline-variant)] pt-4"
+                    }
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-sm font-semibold">
+                        {t("agentLoops.nodeSettings")}
+                      </h3>
+                      <div className="flex gap-2">
+                        {draft.kind === "Workflow"
+                          ? [-1, 1].map((offset) => (
+                              <Button
+                                key={offset}
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                aria-label={t(
+                                  offset < 0
+                                    ? "agentLoops.moveUp"
+                                    : "agentLoops.moveDown",
+                                )}
+                                disabled={
+                                  selected + offset < 0 ||
+                                  selected + offset >= draft.nodes.length
+                                }
+                                onClick={() => {
+                                  const nodes = [...draft.nodes];
+                                  [nodes[selected], nodes[selected + offset]] =
+                                    [nodes[selected + offset], nodes[selected]];
+                                  patch({ nodes });
+                                  setSelected(selected + offset);
+                                }}
+                              >
+                                {offset < 0 ? (
+                                  <ArrowUp size={16} />
+                                ) : (
+                                  <ArrowDown size={16} />
+                                )}
+                              </Button>
+                            ))
+                          : null}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={removeNode}
+                        >
+                          <Trash2 size={14} />
+                          {t("agentLoops.removeNode")}
+                        </Button>
                       </div>
-                      <Field label={t("agentLoops.nodeId")}>
-                        <TextInput
-                          aria-label={t("agentLoops.nodeId")}
-                          value={node.id}
-                          maxLength={64}
-                          onChange={(e) => updateNode({ id: e.target.value })}
+                    </div>
+                    <Field label={t("agentLoops.nodeId")}>
+                      <TextInput
+                        aria-label={t("agentLoops.nodeId")}
+                        value={node.id}
+                        maxLength={64}
+                        onChange={(e) => updateNode({ id: e.target.value })}
+                      />
+                    </Field>
+                    {node.kind === "Model" ? (
+                      <Field label={t("agentLoops.instructions")}>
+                        <TextArea
+                          aria-label={t("agentLoops.instructions")}
+                          rows={6}
+                          value={node.instructions}
+                          onChange={(e) =>
+                            updateNode({ instructions: e.target.value })
+                          }
                         />
                       </Field>
-                      {node.kind === "Model" ? (
-                        <Field label={t("agentLoops.instructions")}>
-                          <TextArea
-                            aria-label={t("agentLoops.instructions")}
-                            rows={6}
-                            value={node.instructions}
-                            onChange={(e) =>
-                              updateNode({ instructions: e.target.value })
+                    ) : (
+                      <BranchEditor
+                        key={`${selected}:${node.id}`}
+                        condition={node.condition!}
+                        nodes={draft.nodes.filter((n) => n.id !== node.id)}
+                        onChange={updateBranch}
+                        onInvalid={setJsonInvalid}
+                        canvas
+                      />
+                    )}
+                    {draft.kind === "Dag" ? (
+                      <>
+                        <Field label={t("agentLoops.join")}>
+                          <SelectInput
+                            aria-label={t("agentLoops.join")}
+                            value={node.join}
+                            onValueChange={(v) =>
+                              updateNode({ join: v as LoopNode["join"] })
                             }
-                          />
+                          >
+                            <SelectItem value="Selected">
+                              {t("agentLoops.joinSelected")}
+                            </SelectItem>
+                            <SelectItem value="All">
+                              {t("agentLoops.joinAll")}
+                            </SelectItem>
+                          </SelectInput>
                         </Field>
-                      ) : (
-                        <BranchEditor
-                          key={`${selected}:${node.id}`}
-                          condition={node.condition!}
-                          nodes={draft.nodes.filter((n) => n.id !== node.id)}
-                          onChange={updateBranch}
-                          onInvalid={setJsonInvalid}
-                        />
-                      )}
-                      {draft.kind === "Dag" ? (
-                        <>
-                          <Field label={t("agentLoops.join")}>
-                            <SelectInput
-                              aria-label={t("agentLoops.join")}
-                              value={node.join}
-                              onValueChange={(v) =>
-                                updateNode({ join: v as LoopNode["join"] })
-                              }
-                            >
-                              <SelectItem value="Selected">
-                                {t("agentLoops.joinSelected")}
-                              </SelectItem>
-                              <SelectItem value="All">
-                                {t("agentLoops.joinAll")}
-                              </SelectItem>
-                            </SelectInput>
-                          </Field>
-                          {node.kind === "Model" ? (
-                            <fieldset className="space-y-2">
-                              <legend className="mb-2 text-sm font-medium">
-                                {t("agentLoops.dependencies")}
-                              </legend>
-                              {draft.nodes
-                                .filter(
-                                  (n) =>
-                                    n.id !== node.id && n.kind !== "Branch",
-                                )
-                                .map((n) => (
-                                  <label
-                                    key={n.id}
-                                    className="mr-4 inline-flex items-center gap-2 text-sm"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={draft.edges.some(
-                                        (e) =>
-                                          e.from === n.id && e.to === node.id,
-                                      )}
-                                      onChange={(e) =>
-                                        patch({
-                                          edges: e.target.checked
-                                            ? [
-                                                ...draft.edges,
-                                                { from: n.id, to: node.id },
-                                              ]
-                                            : draft.edges.filter(
-                                                (e) =>
-                                                  !(
-                                                    e.from === n.id &&
-                                                    e.to === node.id
-                                                  ),
-                                              ),
-                                        })
-                                      }
-                                    />
-                                    {n.id}
-                                  </label>
-                                ))}
-                              <p className="text-xs text-[var(--color-on-surface-variant)]">
-                                {t("agentLoops.dependenciesHelp")}
-                              </p>
-                            </fieldset>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </section>
-                  ) : null}
-                </>
-              ) : null}
+                      </>
+                    ) : null}
+                  </section>
+                ) : null}
+              </div>
             </fieldset>
             {!builtin ? (
               <>
@@ -665,29 +673,38 @@ function BranchEditor({
   nodes,
   onChange,
   onInvalid,
+  canvas = false,
 }: {
   condition: BranchCondition;
   nodes: LoopNode[];
   onChange: (c: BranchCondition) => void;
   onInvalid: (invalid: boolean) => void;
+  canvas?: boolean;
 }) {
   const { t } = useTranslation("pages");
   const [json, setJson] = useState(JSON.stringify(condition.equals));
-  const options = (key: "sourceNode" | "matchTarget" | "elseTarget") => (
-    <Field label={t(`agentLoops.${key}`)}>
-      <SelectInput
-        aria-label={t(`agentLoops.${key}`)}
-        value={condition[key]}
-        onValueChange={(v) => onChange({ ...condition, [key]: v })}
-      >
-        {nodes.map((n) => (
-          <SelectItem value={n.id} key={n.id}>
-            {n.id}
-          </SelectItem>
-        ))}
-      </SelectInput>
-    </Field>
-  );
+  const options = (key: "sourceNode" | "matchTarget" | "elseTarget") =>
+    canvas ? (
+      <Field label={t(`agentLoops.${key}`)}>
+        <span className="break-all text-sm text-[var(--color-on-surface-variant)]">
+          {condition[key] || "—"}
+        </span>
+      </Field>
+    ) : (
+      <Field label={t(`agentLoops.${key}`)}>
+        <SelectInput
+          aria-label={t(`agentLoops.${key}`)}
+          value={condition[key]}
+          onValueChange={(v) => onChange({ ...condition, [key]: v })}
+        >
+          {nodes.map((n) => (
+            <SelectItem value={n.id} key={n.id}>
+              {n.id}
+            </SelectItem>
+          ))}
+        </SelectInput>
+      </Field>
+    );
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {options("sourceNode")}

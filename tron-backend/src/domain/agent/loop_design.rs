@@ -30,12 +30,20 @@ pub struct BranchCondition {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LoopPosition {
+    pub x: f64,
+    pub y: f64,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LoopNode {
     pub id: String,
     pub kind: LoopNodeKind,
     pub instructions: String,
     pub join: LoopJoin,
     pub condition: Option<BranchCondition>,
+    #[serde(default)]
+    pub position: Option<LoopPosition>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -77,7 +77,15 @@ pub(crate) fn validate(design: &LoopDesign) -> Result<(), AgentManagementError> 
         return Ok(());
     }
     for node in &design.nodes {
-        if !valid_code(&node.id) || node.instructions.len() > 65_536 {
+        if !valid_code(&node.id)
+            || node.instructions.len() > 65_536
+            || node.position.as_ref().is_some_and(|p| {
+                !p.x.is_finite()
+                    || !p.y.is_finite()
+                    || p.x.abs() > 100_000.0
+                    || p.y.abs() > 100_000.0
+            })
+        {
             return Err(invalid);
         }
         match node.kind {
