@@ -193,7 +193,8 @@ impl AppState {
         let agent_presentation = AgentAguiStreamService::with_replay_store(
             agui_events.clone(),
             agui_replay_store.clone(),
-        );
+        )
+        .with_transient_protocol();
         let event_bus = EventBusRuntimeBuilder::new(config.event_bus.clone(), id_provider.clone())
             .register_sink(agui_events.clone())
             .register_sink(agui_replay_store.clone())

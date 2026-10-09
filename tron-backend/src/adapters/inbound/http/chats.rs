@@ -1,6 +1,7 @@
 mod application_context;
 pub mod error_mapper;
 pub mod handler;
+mod history;
 pub mod request;
 pub mod response;
 pub mod routes;

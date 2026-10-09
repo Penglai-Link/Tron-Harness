@@ -21,7 +21,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { MarkdownLink } from "@/components/markdown-link";
-import { useChatWorkRailLabels } from "@/domain/chat";
+import { useChatWorkRailLabels, useChatHistoryLabels } from "@/domain/chat";
 import { getApiAccessToken } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
@@ -96,6 +96,7 @@ export function MainAgentChatWindow({
   const { t } = useTranslation("pages");
   const { agentReplyEffect, agentReplySpeed } = useTheme();
   const workRailLabels = useChatWorkRailLabels();
+  const historyLabels = useChatHistoryLabels();
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
   const openMarkdownLinkInChatsSidebar = useCallback((url: string) => {
     window.dispatchEvent(new CustomEvent(OPEN_CHATS_PAGE_VIEW_EVENT, { detail: url }));
@@ -176,8 +177,9 @@ export function MainAgentChatWindow({
     storageKey: MAIN_AGENT_WINDOW_STORAGE_KEY,
     title: "Main Agent",
     workRailLabels,
+    historyLabels,
     workspaceCode,
-  }), [workRailLabels, workspaceCode]);
+  }), [workRailLabels, historyLabels, workspaceCode]);
   const createSendInput = useCallback((
     session: ChatSession,
     content: string,

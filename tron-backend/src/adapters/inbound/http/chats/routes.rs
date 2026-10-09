@@ -21,6 +21,7 @@ use super::short_term_memory::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/chats/sessions/{session_code}/history/query", post(super::history::read_history))
         .route("/api/v1/chats/sessions/{session_code}/terminals", get(super::terminals::list))
         .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}", get(super::terminals::read))
         .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}/stop", post(super::terminals::stop))

@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    sync::{Arc, Mutex},
+};
 
 use serde_json::Value;
 
@@ -45,6 +48,62 @@ pub trait AgentAguiReplayStore: Send + Sync {
 pub struct AgentAguiStreamService {
     sink: Arc<AguiEventSink>,
     replay_store: Option<Arc<dyn AgentAguiReplayStore>>,
+    transient_protocol: bool,
+    protocol_buffer: Arc<Mutex<ProtocolBuffer>>,
+}
+#[derive(Default)]
+struct ProtocolBuffer {
+    frames: VecDeque<(String, AgentAguiProtocolEvent, usize)>,
+    bytes: usize,
+}
+const MAX_PROTOCOL_BUFFER_BYTES: usize = 8 * 1024 * 1024;
+const MAX_PROTOCOL_BUFFER_FRAMES: usize = 8192;
+
+#[cfg(test)]
+mod reconnect_tests {
+    use super::*;
+    use crate::shared::event_bus::EventBusConfig;
+
+    #[test]
+    fn transient_reconnect_retains_a_bounded_tail_across_sessions() {
+        let service =
+            AgentAguiStreamService::new(Arc::new(AguiEventSink::new(&EventBusConfig::default())));
+        for sequence in 0..MAX_PROTOCOL_BUFFER_FRAMES + 2 {
+            service
+                .record_protocol_event(
+                    "session",
+                    AgentAguiProtocolEvent {
+                        sse_event: "TEXT_MESSAGE_CONTENT".into(),
+                        data: serde_json::json!({"sequence": sequence, "delta":"text"}),
+                    },
+                )
+                .unwrap();
+        }
+        let frames = service.protocol_events("session").unwrap();
+        assert_eq!(frames.len(), MAX_PROTOCOL_BUFFER_FRAMES);
+        assert_eq!(frames[0].data["sequence"], 2);
+        for session in ["other", "third"] {
+            service.record_protocol_event(session, AgentAguiProtocolEvent {
+                sse_event: "TEXT_MESSAGE_CONTENT".into(),
+                data: serde_json::json!({"delta":"x".repeat(MAX_PROTOCOL_BUFFER_BYTES / 2)}),
+            }).unwrap();
+        }
+        service
+            .record_protocol_event(
+                "oversized",
+                AgentAguiProtocolEvent {
+                    sse_event: "TEXT_MESSAGE_CONTENT".into(),
+                    data: serde_json::json!({"delta":"x".repeat(MAX_PROTOCOL_BUFFER_BYTES)}),
+                },
+            )
+            .unwrap();
+        let buffer = service.protocol_buffer.lock().unwrap();
+        assert!(buffer.bytes <= MAX_PROTOCOL_BUFFER_BYTES);
+        assert!(buffer.frames.len() <= MAX_PROTOCOL_BUFFER_FRAMES);
+        assert!(buffer.frames.iter().all(|(key, _, _)| key == "third"));
+        drop(buffer);
+        assert!(service.protocol_events("oversized").unwrap().is_empty());
+    }
 }
 
 impl AgentAguiStreamService {
@@ -52,6 +111,8 @@ impl AgentAguiStreamService {
         Self {
             sink,
             replay_store: None,
+            transient_protocol: true,
+            protocol_buffer: Arc::default(),
         }
     }
 
@@ -62,7 +123,18 @@ impl AgentAguiStreamService {
         Self {
             sink,
             replay_store: Some(replay_store),
+            transient_protocol: false,
+            protocol_buffer: Arc::default(),
         }
+    }
+    /// Ordinary chat uses bounded in-memory reconnect evidence. Permanent
+    /// protocol replay is an explicit debugging mode, separate from history.
+    pub fn with_transient_protocol(mut self) -> Self {
+        self.transient_protocol = true;
+        self
+    }
+    pub(crate) fn records_transient_protocol(&self) -> bool {
+        self.transient_protocol
     }
 
     pub fn activate(&self, stream_key: &str) -> Result<AgentAguiStreamState, AgentAguiStreamError> {
@@ -111,6 +183,17 @@ impl AgentAguiStreamService {
         stream_key: &str,
     ) -> Result<Vec<AgentAguiProtocolEvent>, AgentAguiStreamError> {
         let stream_key = normalized_stream_key(stream_key)?;
+        if self.transient_protocol {
+            return Ok(self
+                .protocol_buffer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .frames
+                .iter()
+                .filter(|(key, _, _)| key == &stream_key)
+                .map(|(_, frame, _)| frame.clone())
+                .collect());
+        }
         let memory_events = self
             .sink
             .replay(&stream_key)
@@ -142,6 +225,30 @@ impl AgentAguiStreamService {
         event: AgentAguiProtocolEvent,
     ) -> Result<(), AgentAguiStreamError> {
         let stream_key = normalized_stream_key(stream_key)?;
+        if self.transient_protocol {
+            let bytes = serde_json::to_vec(&event)
+                .map(|v| v.len() + stream_key.len())
+                .unwrap_or(usize::MAX);
+            if bytes > MAX_PROTOCOL_BUFFER_BYTES {
+                return Ok(());
+            }
+            let mut buffer = self
+                .protocol_buffer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            while buffer.bytes.saturating_add(bytes) > MAX_PROTOCOL_BUFFER_BYTES
+                || buffer.frames.len() >= MAX_PROTOCOL_BUFFER_FRAMES
+            {
+                if let Some((_, _, size)) = buffer.frames.pop_front() {
+                    buffer.bytes = buffer.bytes.saturating_sub(size);
+                } else {
+                    break;
+                }
+            }
+            buffer.bytes += bytes;
+            buffer.frames.push_back((stream_key, event, bytes));
+            return Ok(());
+        }
         if let Some(store) = self.replay_store.as_ref() {
             if let Err(error) = store.append_protocol_event(&stream_key, event) {
                 store.record_delivery_failure(&stream_key, &error);

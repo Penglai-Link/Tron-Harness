@@ -161,6 +161,12 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
         pathParams: { sessionCode },
       }).then((messages) => messages.map(normalizeChatMessage));
     },
+    loadHistory(sessionCode, query, signal) {
+      return transport.requestJson<import("@eliteforge/agent-ui-chat-core").SessionHistory>({
+        method: "POST", path: "/api/v1/chats/sessions/{sessionCode}/history/query", pathParams: { sessionCode },
+        body: { size: query.limit, cursor: query.cursor }, signal,
+      });
+    },
     loadUserInputRequests(sessionCode, signal) {
       return transport.requestJson<ChatUserInputRequest[]>({
         path: "/api/v1/chats/sessions/{sessionCode}/user-input-requests",

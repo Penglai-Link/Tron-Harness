@@ -1,4 +1,5 @@
 import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
+import { historyMessages } from "@eliteforge/agent-ui-chat-core";
 import { useTabPanelScopeId } from "@/shared/layout/content/TabPanelRegistry";
 import { AgentTerminalToolCard, AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
 import { openAgentTerminalFromLiveResult } from "../terminal/store";
@@ -94,6 +95,7 @@ import {
   useChatSessionGroupList,
   useChatGeneratedTitle,
   useChatWorkRailLabels,
+  useChatHistoryLabels,
 } from "@/domain/chat/hooks";
 import { useAuthSession } from "@/domain/auth";
 import { useTranslation } from "react-i18next";
@@ -4483,6 +4485,7 @@ function AguiWaitingForModelRail() {
 
 export function ChatManagementPage() {
   const scopeTabId = useTabPanelScopeId();
+  const contextPanelOpen = useTabStore((state) => state.tabs.find((tab) => tab.id === scopeTabId)?.rightPanelOpen ?? false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const routerSearchText = searchParams.toString();
@@ -4516,6 +4519,7 @@ export function ChatManagementPage() {
     otherAnswerAriaLabel: (index) => t("chat.userInput.otherAnswerAriaLabel", { index }),
   }), [i18n.language, t]);
   const workRailLabels = useChatWorkRailLabels();
+  const historyLabels = useChatHistoryLabels();
   const { session: authSession } = useAuthSession();
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -4564,9 +4568,20 @@ export function ChatManagementPage() {
         }),
     [activeWorkspaceCode],
   );
+  const [historyPreviewMessages, setHistoryPreviewMessages] = useState<ChatMessage[]>([]);
   const chatRuntimeAdapter = useMemo(() => draftResources.adapt({
     ...chatTransportAdapter,
     createSession: createRuntimeSession,
+    loadHistory: chatTransportAdapter.loadHistory ? async (...args: Parameters<NonNullable<typeof chatTransportAdapter.loadHistory>>) => {
+      const page = await chatTransportAdapter.loadHistory!(...args);
+      if (!args[1]?.cursor && !args[2]?.aborted && activeSessionCodeRef.current === page.sessionId) setHistoryPreviewMessages(historyMessages(page).map((message) => ({
+        id: message.messageId, messageCode: message.messageId, sessionCode: page.sessionId, runCode: message.runId,
+        actor: message.actor, role: message.role, channel: "MAIN_AGENT" as const, content: message.content,
+        inputTokens: message.inputTokens, outputTokens: message.outputTokens, totalTokens: message.totalTokens,
+        createdAt: message.createdAt,
+      })));
+      return page;
+    } : undefined,
   }), [chatTransportAdapter, createRuntimeSession, draftResources]);
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
   const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);
@@ -4605,14 +4620,16 @@ export function ChatManagementPage() {
       ? firstSessionForSourceTab(sessionGroups, defaultChatSessionSourceTab)
       : undefined
   );
-  const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "", activeChatDataRefreshKey);
+  const legacySessionCode = chatRuntimeAdapter.loadHistory ? "" : activeSession?.sessionCode ?? "";
+  const legacyMessages = useChatMessageListBySession(legacySessionCode, activeChatDataRefreshKey);
+  const messages = chatRuntimeAdapter.loadHistory ? historyPreviewMessages : legacyMessages;
   useChatGeneratedTitle(activeSession, useStableCallback((updated: ChatSession) => {
     setSessionGroups((current) => replaceSession(current, updated));
     setOptimisticActiveSession((current) => current?.sessionCode === updated.sessionCode ? updated : current);
     window.dispatchEvent(new Event("tron:chat-session-updated"));
   }));
   const activeRunState = useChatActiveRunState(
-    activeSession?.sessionCode ?? "",
+    legacySessionCode,
     activeRunRefreshKey,
   );
   const shortTermMemoryTodosState = useChatSessionTodosState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
@@ -4636,8 +4653,10 @@ export function ChatManagementPage() {
     error: activeGoalState.error,
     retry: activeGoalState.retry,
   }), [activeGoalState.error, activeGoalState.loading, activeGoalState.retry]);
-  const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "", activeChatDataRefreshKey + shortTermMemoryRefreshKey);
-  const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "", activeChatReplayRefreshKey);
+  // Context inspection is an explicit, separate read from ordinary public history.
+  const contextInspectionSessionCode = contextPanelOpen ? activeSession?.sessionCode ?? "" : legacySessionCode;
+  const aguiEvents = useChatAguiEvents(contextInspectionSessionCode, activeChatDataRefreshKey + shortTermMemoryRefreshKey);
+  const aguiProtocolEvents = useChatAguiProtocolEvents(contextInspectionSessionCode, activeChatReplayRefreshKey);
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
   const openedLiveTerminalCallsRef = useRef(new Set<string>());
@@ -4828,7 +4847,7 @@ export function ChatManagementPage() {
 
   useEffect(() => {
     let active = true;
-    const sessionCode = activeSession?.sessionCode ?? "";
+    const sessionCode = legacySessionCode;
     if (!sessionCode) {
       setUserInputRequests([]);
       setUserInputRequest(null);
@@ -4853,7 +4872,7 @@ export function ChatManagementPage() {
     return () => {
       active = false;
     };
-  }, [activeChatDataRefreshKey, activeSession?.sessionCode]);
+  }, [activeChatDataRefreshKey, legacySessionCode]);
 
   function setSendingState(value: boolean) {
     sendingRef.current = value;
@@ -7043,6 +7062,7 @@ export function ChatManagementPage() {
               title: activeSession?.title ?? t("shell:chatSidebar.newChat"),
               userInputLabels,
               workRailLabels,
+              historyLabels,
               workspaceCode: activeWorkspaceCode,
             }}
             createSendInput={createRuntimeSendInput}

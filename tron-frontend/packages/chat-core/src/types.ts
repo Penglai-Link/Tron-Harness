@@ -412,6 +412,7 @@ export interface ChatAdapter {
   ) => Promise<ChatActiveRunResult>;
   loadAguiEvents: (sessionCode: string) => Promise<ChatAguiEvent[]>;
   loadMessages: (sessionCode: string) => Promise<ChatMessage[]>;
+  loadHistory?: (sessionCode: string, query: import("@eliteforge/agent-ui-chat-core").HistoryQuery, signal?: AbortSignal) => Promise<import("@eliteforge/agent-ui-chat-core").SessionHistory>;
   loadUserInputRequests?: (
     sessionCode: string,
     signal?: AbortSignal,
@@ -488,6 +489,7 @@ export interface ChatClientConfig {
   userId?: string;
   variables?: unknown;
   workRailLabels?: ChatWorkRailLabels;
+  historyLabels?: import("@eliteforge/agent-ui-chat-core").ChatHistoryLabels;
   workspaceCode?: string;
 }
 

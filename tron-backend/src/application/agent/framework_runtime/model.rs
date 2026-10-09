@@ -334,6 +334,40 @@ impl fw::ChatModel for TronChatModel {
             reasoning_tokens: usage.reasoning_tokens.map(u64::from),
         });
         let result = fw::ChatResponse {
+            public_content: Some(fw::Content(
+                message
+                    .content
+                    .0
+                    .iter()
+                    .filter(|block| match block {
+                        fw::ContentBlock::Json { value } => {
+                            !value.get("tronMessagePart").is_some_and(|part| {
+                                matches!(
+                                    part.get("type").and_then(serde_json::Value::as_str),
+                                    Some("reasoning" | "reasoningSummary" | "toolCall")
+                                )
+                            })
+                        }
+                        _ => true,
+                    })
+                    .cloned()
+                    .collect(),
+            )),
+            reasoning: {
+                let text: String = response
+                    .assistant
+                    .parts
+                    .iter()
+                    .filter_map(|part| match part {
+                        crate::domain::agent::AgentMessagePart::Reasoning { text }
+                        | crate::domain::agent::AgentMessagePart::ReasoningSummary { text } => {
+                            Some(text.as_str())
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                (!text.is_empty()).then_some(text)
+            },
             content: message.content,
             structured: None,
             tool_calls: message.tool_calls,

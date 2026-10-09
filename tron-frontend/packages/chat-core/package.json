@@ -22,5 +22,8 @@
   "publishConfig": {
     "registry": "http://nexus.cisdigital.cn/repository/npm-internal/",
     "access": "restricted"
+  },
+  "peerDependencies": {
+    "@eliteforge/agent-ui-chat-core": "^0.1.0"
   }
 }

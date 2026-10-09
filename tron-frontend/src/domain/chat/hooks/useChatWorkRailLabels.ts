@@ -106,3 +106,14 @@ export function useChatWorkRailLabels() {
     };
   }, [catalog, i18n.language, t]);
 }
+
+export function useChatHistoryLabels() {
+  const { i18n } = useTranslation("pages");
+  return useMemo(() => i18n.language.startsWith("zh") ? {
+    loading: "正在加载历史…", loadOlder: "加载更早的对话", step: "步骤", attempt: "尝试",
+    statuses: { Running: "执行中", Waiting: "等待输入", Completed: "已完成", Interrupted: "已中断", Failed: "失败", Unknown: "结果未知", Planned: "待执行", Approved: "已批准" },
+  } : {
+    loading: "Loading history…", loadOlder: "Load earlier turns", step: "Step", attempt: "Attempt",
+    statuses: { Running: "Running", Waiting: "Waiting", Completed: "Completed", Interrupted: "Interrupted", Failed: "Failed", Unknown: "Result unknown", Planned: "Planned", Approved: "Approved" },
+  }, [i18n.language]);
+}

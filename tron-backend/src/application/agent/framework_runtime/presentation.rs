@@ -102,6 +102,10 @@ async fn consume_native_projected(
         let Some(service) = &service else {
             continue;
         };
+        if service.records_transient_protocol() {
+            let _ = service.record_protocol_event(stream_key, event);
+            continue;
+        }
         if persistence_stalled {
             continue;
         }

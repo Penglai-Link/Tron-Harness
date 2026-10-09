@@ -2,6 +2,7 @@ mod admission;
 mod attachments;
 mod dto;
 mod goal_loop;
+pub(crate) mod history_error;
 mod port;
 mod run_control;
 mod service;

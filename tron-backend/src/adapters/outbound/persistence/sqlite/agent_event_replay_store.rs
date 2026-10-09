@@ -348,6 +348,13 @@ impl EventSink for SqliteAgentEventReplayStore {
     fn accepts(&self, event: &BusEvent) -> bool {
         event.stream_key().is_some()
             && CanonicalRuntimeEvent::from_bus_event_name(&event.event_name).is_some()
+            && !matches!(
+                event.event_name.as_str(),
+                "agent.reasoning.delta"
+                    | "agent.reasoning.raw_delta"
+                    | "agent.output.delta"
+                    | "agent.tool.activity"
+            )
     }
     fn delivery_failed(&self, event: &BusEvent, detail: &str) {
         if let Some(key) = event.stream_key() {
