@@ -2,6 +2,46 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   agentLoops: {
+    "builtins": {
+      "review": {
+        "name": "Draft and review",
+        "description": "Draft an answer, check omissions and issues, then produce the final version.",
+        "nodes": {
+          "draft": "Draft",
+          "review": "Review",
+          "finalize": "Finalize"
+        }
+      },
+      "analysis": {
+        "name": "Analyze and decide",
+        "description": "Analyze solutions and risks in parallel, then choose an action plan or request missing information.",
+        "nodes": {
+          "solution": "Solution analysis",
+          "risks": "Risk analysis",
+          "decision": "Combined decision",
+          "route": "Ready to act?",
+          "action": "Action plan",
+          "clarify": "Clarify"
+        }
+      }
+    },
+    "yes": "Yes (true)",
+    "no": "No (false)",
+    "copy": "Copy as custom",
+    "copyName": "{{name}} (copy)",
+    "valueType": "Value type",
+    "valueTypes": {
+      "boolean": "Yes / No",
+      "string": "Text",
+      "number": "Number",
+      "null": "Null",
+      "json": "JSON (advanced)"
+    },
+    "nestedField": "How to read a nested field?",
+    "nestedFieldHelp": "Use /result/approved for approved inside result. Leave empty to compare the whole output. Text, numbers and booleans must match the output type.",
+    "wholeOutput": "whole output",
+    "branchSummary": "Read {{field}} from “{{source}}”. If it equals {{value}}, run “{{target}}”; otherwise run “{{otherwise}}”.",
+
     "removeEdge": "Remove connection",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
@@ -43,14 +83,14 @@ export const pages = {
     "joinAll": "Require all incoming branches",
     "dependencies": "Dependencies",
     "dependenciesHelp": "Root nodes run in parallel. Branch connections are configured by the branch node.",
-    "sourceNode": "Source node",
-    "pointer": "JSON Pointer",
-    "pointerHelp": "Leave empty to compare the whole output. Missing values use the other branch.",
-    "equals": "Equals (JSON value)",
-    "matchTarget": "Match target",
-    "elseTarget": "Other target",
-    "matched": "Match",
-    "otherwise": "Other",
+    "sourceNode": "Read from node",
+    "pointer": "Field to check",
+    "pointerHelp": "If the upstream output is {\"approved\": true}, enter approved. Require JSON output in that node’s instructions. Missing fields or non-JSON output use the “Not met” exit.",
+    "equals": "Equals",
+    "matchTarget": "When met, run",
+    "elseTarget": "Otherwise, run",
+    "matched": "Met",
+    "otherwise": "Not met",
     "save": "Save",
     "saving": "Saving…",
     "saved": "Loop saved",

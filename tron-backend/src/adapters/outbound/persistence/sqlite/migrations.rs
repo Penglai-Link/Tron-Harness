@@ -102,3 +102,6 @@ pub(super) const REMOVE_OBSERVABILITY_NAVIGATION_MIGRATION: &str =
 
 pub(super) const AGENT_LOOPS_MIGRATION: &str =
     include_str!("../../../../../migrations/20261009_0001_create_agent_loops.sql");
+
+pub(super) const BUILTIN_WORKFLOW_LOOPS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20261009_0002_builtin_workflow_loops.sql");

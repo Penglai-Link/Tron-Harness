@@ -1,0 +1,168 @@
+[
+  {
+    "loopCode": "builtin.react-loop",
+    "name": "ReAct",
+    "kind": "React",
+    "version": 1,
+    "updatedAt": 0,
+    "maxParallelNodes": 1,
+    "edges": [],
+    "nodes": []
+  },
+  {
+    "loopCode": "builtin.review-workflow",
+    "name": "Draft, review and finalize",
+    "kind": "Workflow",
+    "version": 1,
+    "updatedAt": 0,
+    "maxParallelNodes": 1,
+    "edges": [],
+    "nodes": [
+      {
+        "id": "draft",
+        "kind": "Model",
+        "instructions": "根据用户请求和智能体指令起草答案或方案。明确目标、关键事实与约束，给出完整初稿；证据不足时标明假设，不编造事实。使用用户的语言。",
+        "join": "Selected",
+        "condition": null,
+        "position": {
+          "x": 40,
+          "y": 40
+        }
+      },
+      {
+        "id": "review",
+        "kind": "Model",
+        "instructions": "审查上一阶段的初稿：检查是否回应用户目标、事实依据、遗漏、逻辑和可执行性。输出具体问题和修改建议；保留正确内容，不为修改而修改。使用用户的语言。",
+        "join": "Selected",
+        "condition": null,
+        "position": {
+          "x": 240,
+          "y": 40
+        }
+      },
+      {
+        "id": "finalize",
+        "kind": "Model",
+        "instructions": "结合初稿和审查意见，输出可直接使用的最终答案。修正问题，保留必要的假设和待确认事项，不展示内部审查过程。遵循智能体指令和用户要求的格式与语言。",
+        "join": "Selected",
+        "condition": null,
+        "position": {
+          "x": 440,
+          "y": 40
+        }
+      }
+    ]
+  },
+  {
+    "loopCode": "builtin.analysis-dag",
+    "name": "Analyze and choose next steps",
+    "kind": "Dag",
+    "version": 1,
+    "updatedAt": 0,
+    "maxParallelNodes": 2,
+    "nodes": [
+      {
+        "id": "solution",
+        "kind": "Model",
+        "instructions": "根据用户目标、已知信息和智能体指令，独立分析可行方案、必要条件与实施步骤。明确事实和假设，不编造信息。使用用户的语言。",
+        "join": "Selected",
+        "condition": null,
+        "position": {
+          "x": 20,
+          "y": 60
+        }
+      },
+      {
+        "id": "risks",
+        "kind": "Model",
+        "instructions": "根据用户目标、已知信息和智能体指令，独立分析风险、缺失信息和限制，提出可行的缓解方法。区分阻断问题和可接受的风险。使用用户的语言。",
+        "join": "Selected",
+        "condition": null,
+        "position": {
+          "x": 20,
+          "y": 280
+        }
+      },
+      {
+        "id": "decision",
+        "kind": "Model",
+        "instructions": "综合上游的方案与风险分析，判断是否足以给出行动方案。信息充分且没有未解决的阻断风险时 approved 为 true，否则为 false。只输出合法 JSON，不加代码块，格式：{\"approved\":true,\"summary\":\"判断理由\",\"risks\":[\"风险或缺失信息\"],\"nextSteps\":[\"下一步建议\"]}。JSON 中的文字使用用户的语言。",
+        "join": "All",
+        "condition": null,
+        "position": {
+          "x": 200,
+          "y": 170
+        }
+      },
+      {
+        "id": "route",
+        "kind": "Branch",
+        "instructions": "",
+        "join": "Selected",
+        "position": {
+          "x": 380,
+          "y": 170
+        },
+        "condition": {
+          "sourceNode": "decision",
+          "pointer": "/approved",
+          "equals": true,
+          "matchTarget": "action",
+          "elseTarget": "clarify"
+        }
+      },
+      {
+        "id": "action",
+        "kind": "Model",
+        "instructions": "依据上游汇总判断和已有分析，给出用户可以执行的行动方案，包含优先步骤、注意事项和必要的验证方法。不展示内部流程或 JSON。遵循智能体指令与用户要求的语言和格式。",
+        "join": "All",
+        "condition": null,
+        "position": {
+          "x": 560,
+          "y": 60
+        }
+      },
+      {
+        "id": "clarify",
+        "kind": "Model",
+        "instructions": "依据上游汇总判断，说明目前阻碍决策的关键问题，提出少量必要的澄清问题，并给出有依据的临时建议。不要在信息不足时给出确定结论。遵循智能体指令与用户要求的语言和格式。",
+        "join": "All",
+        "condition": null,
+        "position": {
+          "x": 560,
+          "y": 280
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "solution",
+        "to": "decision"
+      },
+      {
+        "from": "risks",
+        "to": "decision"
+      },
+      {
+        "from": "decision",
+        "to": "route"
+      },
+      {
+        "from": "route",
+        "to": "action"
+      },
+      {
+        "from": "route",
+        "to": "clarify"
+      },
+      {
+        "from": "decision",
+        "to": "action"
+      },
+      {
+        "from": "decision",
+        "to": "clarify"
+      }
+    ]
+  }
+]

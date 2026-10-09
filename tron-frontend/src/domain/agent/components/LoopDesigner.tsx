@@ -18,11 +18,9 @@ import { useLoopDesignList } from "../hooks/useLoopDesignList";
 import { useLoopDesignActions } from "../hooks/useLoopDesignActions";
 import {
   newLoopDesign,
-  REACT_LOOP_CODE,
   type LoopDesign,
   type LoopKind,
   type LoopNode,
-  type BranchCondition,
 } from "../model/LoopModel";
 import { validateLoop, visibleEdges } from "../model/loopValidation";
 import { LoopGraph } from "./LoopGraph";
@@ -36,12 +34,20 @@ import {
   type CanvasPosition,
 } from "../model/loopCanvas";
 
+import {
+  isBuiltinLoop,
+  loopName,
+  loopDescription,
+  copyLoopDesign,
+} from "../model/builtinLoops";
+import { BranchEditor } from "./BranchEditor";
+
 type LoopSource = "all" | "builtin" | "custom";
 
 function matchesSource(design: LoopDesign, source: LoopSource) {
   return (
     source === "all" ||
-    (design.loopCode === REACT_LOOP_CODE) === (source === "builtin")
+    isBuiltinLoop(design.loopCode) === (source === "builtin")
   );
 }
 
@@ -66,7 +72,7 @@ export function LoopDesigner() {
     [designs, source],
   );
   const dirty = Boolean(draft && JSON.stringify(draft) !== original);
-  const builtin = draft?.loopCode === REACT_LOOP_CODE;
+  const builtin = Boolean(draft && isBuiltinLoop(draft.loopCode));
   const issue = draft && !builtin ? validateLoop(draft) : null;
   const node = draft?.nodes[selected];
   const open = useCallback((design: LoopDesign) => {
@@ -141,7 +147,7 @@ export function LoopDesigner() {
       return { ...d, nodes, edges };
     });
   }
-  function updateBranch(c: BranchCondition) {
+  function updateBranch(c: NonNullable<LoopNode["condition"]>) {
     if (!draft || !node) return;
     const edges = draft.edges.filter(
       (e) =>
@@ -210,7 +216,7 @@ export function LoopDesigner() {
     }
   }
   async function remove() {
-    if (!draft || busy) return;
+    if (!draft || busy || builtin) return;
     setBusy(true);
     try {
       await actions.remove(draft.loopCode);
@@ -287,12 +293,12 @@ export function LoopDesigner() {
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="min-w-0 break-words text-sm font-medium">
-                  {d.name}
+                  {loopName(d, t)}
                 </span>
                 <Badge variant="outline">
                   {t(
                     `agentLoops.sources.${
-                      d.loopCode === REACT_LOOP_CODE ? "builtin" : "custom"
+                      isBuiltinLoop(d.loopCode) ? "builtin" : "custom"
                     }`,
                   )}
                 </Badge>
@@ -311,8 +317,29 @@ export function LoopDesigner() {
               void save();
             }}
           >
+            {builtin ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-[var(--color-on-surface-variant)]">
+                  {loopDescription(draft, t)}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    select(
+                      copyLoopDesign(
+                        draft,
+                        t("agentLoops.copyName", { name: loopName(draft, t) }),
+                      ),
+                    )
+                  }
+                >
+                  {t("agentLoops.copy")}
+                </Button>
+              </div>
+            ) : null}
             <fieldset
-              disabled={busy || builtin}
+              disabled={busy}
               className="min-w-0 space-y-4 disabled:opacity-80"
             >
               <div className="grid gap-3 sm:grid-cols-2">
@@ -328,7 +355,8 @@ export function LoopDesigner() {
                 <Field label={t("agentLoops.name")} required>
                   <TextInput
                     aria-label={t("agentLoops.name")}
-                    value={draft.name}
+                    value={loopName(draft, t)}
+                    disabled={builtin}
                     maxLength={100}
                     onChange={(e) => patch({ name: e.target.value })}
                   />
@@ -377,6 +405,7 @@ export function LoopDesigner() {
                       max={16}
                       step={1}
                       value={draft.maxParallelNodes}
+                      disabled={builtin}
                       onChange={(e) =>
                         patch({
                           maxParallelNodes: e.currentTarget.valueAsNumber,
@@ -446,7 +475,7 @@ export function LoopDesigner() {
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={draft.nodes.length >= 64}
+                      disabled={builtin || draft.nodes.length >= 64}
                       onClick={() => add("Model")}
                     >
                       <Plus size={14} />
@@ -455,7 +484,8 @@ export function LoopDesigner() {
                   ) : null}
                 </div>
                 {draft.kind !== "React" && node ? (
-                  <section
+                  <fieldset
+                    disabled={builtin}
                     className={
                       draft.kind === "Dag"
                         ? "max-h-[570px] space-y-4 overflow-y-auto border-l border-[var(--color-outline-variant)] pl-4"
@@ -533,10 +563,9 @@ export function LoopDesigner() {
                       <BranchEditor
                         key={`${selected}:${node.id}`}
                         condition={node.condition!}
-                        nodes={draft.nodes.filter((n) => n.id !== node.id)}
+                        design={draft}
                         onChange={updateBranch}
                         onInvalid={setJsonInvalid}
-                        canvas
                       />
                     )}
                     {draft.kind === "Dag" ? (
@@ -559,7 +588,7 @@ export function LoopDesigner() {
                         </Field>
                       </>
                     ) : null}
-                  </section>
+                  </fieldset>
                 ) : null}
               </div>
             </fieldset>
@@ -666,78 +695,5 @@ export function LoopDesigner() {
         </DialogContent>
       </Dialog>
     </section>
-  );
-}
-function BranchEditor({
-  condition,
-  nodes,
-  onChange,
-  onInvalid,
-  canvas = false,
-}: {
-  condition: BranchCondition;
-  nodes: LoopNode[];
-  onChange: (c: BranchCondition) => void;
-  onInvalid: (invalid: boolean) => void;
-  canvas?: boolean;
-}) {
-  const { t } = useTranslation("pages");
-  const [json, setJson] = useState(JSON.stringify(condition.equals));
-  const options = (key: "sourceNode" | "matchTarget" | "elseTarget") =>
-    canvas ? (
-      <Field label={t(`agentLoops.${key}`)}>
-        <span className="break-all text-sm text-[var(--color-on-surface-variant)]">
-          {condition[key] || "—"}
-        </span>
-      </Field>
-    ) : (
-      <Field label={t(`agentLoops.${key}`)}>
-        <SelectInput
-          aria-label={t(`agentLoops.${key}`)}
-          value={condition[key]}
-          onValueChange={(v) => onChange({ ...condition, [key]: v })}
-        >
-          {nodes.map((n) => (
-            <SelectItem value={n.id} key={n.id}>
-              {n.id}
-            </SelectItem>
-          ))}
-        </SelectInput>
-      </Field>
-    );
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {options("sourceNode")}
-      <Field label={t("agentLoops.pointer")}>
-        <TextInput
-          aria-label={t("agentLoops.pointer")}
-          value={condition.pointer}
-          placeholder="/status"
-          onChange={(e) => onChange({ ...condition, pointer: e.target.value })}
-        />
-        <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-          {t("agentLoops.pointerHelp")}
-        </p>
-      </Field>
-      <Field label={t("agentLoops.equals")}>
-        <TextInput
-          aria-label={t("agentLoops.equals")}
-          value={json}
-          onChange={(e) => {
-            setJson(e.target.value);
-            try {
-              const equals: unknown = JSON.parse(e.target.value);
-              onInvalid(false);
-              onChange({ ...condition, equals });
-            } catch {
-              onInvalid(true);
-            }
-          }}
-        />
-      </Field>
-      <div />
-      {options("matchTarget")}
-      {options("elseTarget")}
-    </div>
   );
 }

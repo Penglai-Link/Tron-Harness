@@ -10,11 +10,21 @@
 | Workflow | 添加模型阶段，调整顺序和指令 | 按阶段顺序执行，后续阶段继承前面的对话 |
 | Dag | 在自由画布中拖动节点和连线，点击节点编辑属性 | 按依赖调度，可并行执行根节点并汇聚结果 |
 
+内置流程可直接绑定智能体，也可以点击「复制为自定义」，填写新编码后保存可编辑的副本。内置配置来自仓库的 `shared/agent-loops.json`，后端执行和前端 mock 共用这份定义，名称和节点标题按界面语言显示。内置版本不可修改或删除。
+
+| 内置 Loop | 编码 | 适用场景 |
+| --- | --- | --- |
+| ReAct | `builtin.react-loop` | 自由对话，默认项 |
+| 起草与审查 | `builtin.review-workflow` | 起草答案或方案 → 审查事实、遗漏与逻辑 → 输出定稿 |
+| 分析与决策 | `builtin.analysis-dag` | 方案和风险并行分析 → 汇总判断 → 信息充分时给行动方案，否则请求补充信息 |
+
+分析与决策的并行节点数为 2。「汇总判断」要求两个分析节点都完成，输出含 `approved`、`summary`、`risks`、`nextSteps` 的 JSON。两个出口节点同时依赖汇总数据和分支连线，汇合方式为 `All`，因此只运行选中的出口，且能读到汇总依据。
+
 内置 `builtin.react-loop` 为只读默认项。已有智能体不配置 `loopCode` 时保持 ReAct 行为。自定义编码保存后不可修改；新版本会用于下一次运行，已暂停的运行继续使用检查点内的原版本。
 
 ## DAG 配置
 
-从画布工具栏添加模型或分支节点，也可以把工具栏中的节点拖到画布上。拖动节点调整位置，点击节点后在右侧编辑属性。拖动右侧输出端口到目标节点左侧输入端口建立依赖；分支节点分别使用「匹配」和「其他」出口，比较值在属性面板中填写。点击连线后可以删除，也支持 Delete 键。连线不能指向自身或形成循环。
+从画布工具栏添加模型或分支节点，也可以把工具栏中的节点拖到画布上。拖动节点调整位置，点击节点后在右侧编辑属性。拖动右侧输出端口到目标节点左侧输入端口建立依赖；分支节点分别使用「满足」和「不满足」出口，比较值在属性面板中填写。点击连线后可以删除，也支持 Delete 键。连线不能指向自身或形成循环。
 
 拖动画布空白处平移，滚轮缩放，「适应画布」显示全部节点。键盘可以用方向键移动选中节点，Shift 加方向键移动更远；聚焦输出端口按 Enter，再聚焦输入端口按 Enter，也可以连接节点。
 
@@ -25,11 +35,15 @@ flowchart LR
     A[方案分析] --> C[汇总]
     B[风险分析] --> C
     C --> D{approved 等于 true}
-    D -->|匹配| E[生成执行建议]
-    D -->|其他| F[补充修改建议]
+    D -->|满足| E[行动方案]
+    C --> E
+    D -->|不满足| F[补充信息]
+    C --> F
 ```
 
-分支使用 JSON Pointer 读取直接前置节点的输出。模型输出是 JSON 文本时，会先解析 JSON，再读取字段。例如来源返回 `{"approved":true}`，配置指针 `/approved`、比较值 `true`，就选择匹配出口。指针留空时比较完整输出；字段不存在或文本无法解析为 JSON 时选择其他出口。比较采用 JSON 类型严格相等，因此 `true`、`"true"` 和 `1` 不相等。
+属性面板用一句话展示当前判断及两个出口。文本值可直接填写文字，不需要 JSON 引号；数字、是/否和空值也使用对应控件。嵌套字段可填写 `/result/approved`。
+
+分支使用 JSON Pointer 读取直接前置节点的输出。模型输出是 JSON 文本时，会先解析 JSON，再读取字段。例如来源返回 `{"approved":true}`，在「判断字段」填写 `approved`、「值类型」选择「是 / 否」、「等于」选择「是（true）」，就选择满足出口。指针留空时比较完整输出；字段不存在或文本无法解析为 JSON 时选择不满足出口。比较采用 JSON 类型严格相等，因此 `true`、`"true"` 和 `1` 不相等。
 
 汇聚方式 `Selected` 等待所有依赖确定后，只要求已选中的前置节点成功，适合互斥分支的汇聚。`All` 要求所有入边都选中且成功，适合并行分析后的汇聚；任何前置分支被跳过时，该节点也会跳过。
 
@@ -77,12 +91,15 @@ Tron 保存业务配置、授权和 Agent 的 Loop 选择；Framework 执行 Loo
 
 ```sh
 make fe-check
-make fe-unit-test TEST='src/domain/agent/model/loopValidation.test.ts src/domain/agent/pages/WorkspaceAgentsPage.test.tsx'
+make fe-unit-test TEST='src/domain/agent/components/BranchEditor.test.tsx src/domain/agent/model/loopValidation.test.ts src/domain/agent/model/loopCanvas.test.ts src/domain/agent/pages/WorkspaceAgentsPage.test.tsx'
 make be-check
 make be-test TEST='--lib configured_loop'
-make be-test TEST='--test agent_loop_management --test agent_management_api loop'
+make be-test TEST='--test agent_loop_management'
+make be-test TEST='--test agent_management_api agent_loop_'
 ```
 
 接口测试使用独立 SQLite 和本地模型 HTTP 夹具，覆盖持久化、继承与覆盖、版本冲突、非法图、阶段顺序、条件出口和并行汇聚。暂停恢复测试使用 Framework 工具交互夹具。自由画布在 API 模式下验证节点拖动、拖入节点、端口连线、分支出口、删除连线、键盘连接、平移，以及保存后刷新恢复坐标和连线；同时检查中英文桌面和中文手机布局。
 
 自由画布验证结果：前端构建及后端检查通过；32 项前端测试、2 项 Loop 接口测试和 1 项暂停恢复测试通过。真实保存验收使用临时 Loop，完成后删除验收数据，未调用付费模型。
+
+本次内置流程验收：前后端检查通过；35 项前端测试、3 项 Loop 配置接口测试、29 项智能体管理接口测试通过，其中运行测试覆盖三阶段顺序、DAG 汇总依据和两个互斥出口。浏览器使用真实 API 检查只读画布的节点点选与缩放、复制自定义、类型值编辑、保存后刷新、中英文和手机布局；验收副本已删除。

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LoopDesign } from "../model/LoopModel";
+import { loopNodeName } from "../model/builtinLoops";
 import type { CanvasPosition, LoopOutlet } from "../model/loopCanvas";
 import { graphPositions } from "../model/loopValidation";
 
@@ -484,7 +485,7 @@ export function DagLoopCanvas({
                 key={index}
                 role="button"
                 tabIndex={0}
-                aria-label={node.id || `${index + 1}`}
+                aria-label={loopNodeName(design, node, t) || `${index + 1}`}
                 aria-pressed={selected === index}
                 className="absolute select-none rounded-lg border bg-[var(--color-surface-container-lowest)] px-3 py-3 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
                 style={{
@@ -555,7 +556,7 @@ export function DagLoopCanvas({
                 }}
               >
                 <span className="block truncate text-xs font-medium">
-                  {node.id || "—"}
+                  {loopNodeName(design, node, t) || "—"}
                 </span>
                 <span className="mt-1 block text-[10px] text-[var(--color-on-surface-variant)]">
                   {t(

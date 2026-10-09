@@ -2,6 +2,46 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   agentLoops: {
+    "builtins": {
+      "review": {
+        "name": "起草与审查",
+        "description": "先起草，再检查遗漏与问题，最后输出定稿。",
+        "nodes": {
+          "draft": "起草",
+          "review": "审查",
+          "finalize": "定稿"
+        }
+      },
+      "analysis": {
+        "name": "分析与决策",
+        "description": "方案与风险并行分析，汇总后决定给出行动方案，还是先补充信息。",
+        "nodes": {
+          "solution": "方案分析",
+          "risks": "风险分析",
+          "decision": "汇总判断",
+          "route": "能否行动？",
+          "action": "行动方案",
+          "clarify": "补充信息"
+        }
+      }
+    },
+    "yes": "是（true）",
+    "no": "否（false）",
+    "copy": "复制为自定义",
+    "copyName": "{{name}}（副本）",
+    "valueType": "值类型",
+    "valueTypes": {
+      "boolean": "是 / 否",
+      "string": "文本",
+      "number": "数字",
+      "null": "空值",
+      "json": "JSON（高级）"
+    },
+    "nestedField": "嵌套字段怎么填？",
+    "nestedFieldHelp": "填写 /result/approved 可读取 result 中的 approved；留空则比较整个输出。文字、数字、是/否必须与输出的类型一致。",
+    "wholeOutput": "完整输出",
+    "branchSummary": "读取「{{source}}」的 {{field}}，等于 {{value}} 时执行「{{target}}」，否则执行「{{otherwise}}」。",
+
     "removeEdge": "删除连线",
     "zoomIn": "放大",
     "zoomOut": "缩小",
@@ -43,14 +83,14 @@ export const pages = {
     "joinAll": "要求全部分支",
     "dependencies": "前置依赖",
     "dependenciesHelp": "无依赖的节点可并行执行。分支连线在分支节点中配置。",
-    "sourceNode": "上游节点",
-    "pointer": "JSON Pointer",
-    "pointerHelp": "留空比较完整输出；填写 /status 等指针时读取 JSON 字段。字段不存在时走其他分支。",
-    "equals": "等于（JSON 值）",
-    "matchTarget": "匹配出口",
-    "elseTarget": "其他出口",
-    "matched": "匹配",
-    "otherwise": "其他",
+    "sourceNode": "读取节点",
+    "pointer": "判断字段",
+    "pointerHelp": "例如上游输出 {\"approved\": true}，这里填 approved。上游指令需要求输出 JSON；字段缺失或输出不是 JSON 时走“不满足”出口。",
+    "equals": "等于",
+    "matchTarget": "满足时执行",
+    "elseTarget": "不满足时执行",
+    "matched": "满足",
+    "otherwise": "不满足",
     "save": "保存",
     "saving": "保存中…",
     "saved": "Loop 已保存",

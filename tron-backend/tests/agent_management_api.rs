@@ -14,6 +14,7 @@ use axum::{
     Json, Router,
     body::Body,
     http::{Method, Request, StatusCode, header},
+    response::{IntoResponse, Response},
     routing::post,
 };
 use serde_json::{Value, json};
@@ -255,10 +256,39 @@ async fn blocking_mcp_transport(
     }
 }
 
+// The Framework requests streaming completions. Keep fixture transport faithful
+// while reusing the same scripted message payloads for non-streaming callers.
+fn model_completion(payload: &Value, response: Value) -> Response {
+    if payload["stream"] != true || !response["choices"].is_array() {
+        return Json(response).into_response();
+    }
+    let message = &response["choices"][0]["message"];
+    let mut delta = message.clone();
+    if let Some(calls) = delta["tool_calls"].as_array_mut() {
+        for (index, call) in calls.iter_mut().enumerate() {
+            call["index"] = json!(index);
+        }
+    }
+    let finish = response["choices"][0]["finish_reason"].as_str().unwrap_or(
+        if message["tool_calls"].is_array() {
+            "tool_calls"
+        } else {
+            "stop"
+        },
+    );
+    let chunk = json!({"choices":[{"index":0,"delta":delta,"finish_reason":null}]});
+    let done = json!({"choices":[{"index":0,"delta":{},"finish_reason":finish}],"usage":response["usage"]});
+    (
+        [(header::CONTENT_TYPE, "text/event-stream")],
+        format!("data: {chunk}\n\ndata: {done}\n\ndata: [DONE]\n\n"),
+    )
+        .into_response()
+}
+
 async fn record_chat_completion(
     axum::extract::State(requests): axum::extract::State<Arc<Mutex<Vec<Value>>>>,
     Json(payload): Json<Value>,
-) -> Json<Value> {
+) -> Response {
     requests
         .lock()
         .expect("recording model request mutex poisoned")
@@ -268,14 +298,17 @@ async fn record_chat_completion(
         .and_then(|messages| messages.last())
         .and_then(|message| message["content"].as_str())
         .unwrap_or_default();
-    Json(json!({
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": format!("mock: {prompt}")
-            }
-        }]
-    }))
+    model_completion(
+        &payload,
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": format!("mock: {prompt}")
+                }
+            }]
+        }),
+    )
 }
 
 async fn scripted_chat_completion(
@@ -284,11 +317,11 @@ async fn scripted_chat_completion(
         Arc<Mutex<VecDeque<Value>>>,
     )>,
     Json(payload): Json<Value>,
-) -> Json<Value> {
+) -> Response {
     requests
         .lock()
         .expect("recording model request mutex poisoned")
-        .push(payload);
+        .push(payload.clone());
     let response = responses
         .lock()
         .expect("scripted model response mutex poisoned")
@@ -303,7 +336,7 @@ async fn scripted_chat_completion(
                 }]
             })
         });
-    Json(response)
+    model_completion(&payload, response)
 }
 
 fn temp_database_url(test_name: &str) -> String {
@@ -3497,10 +3530,10 @@ async fn agent_loop_dag_runs_parallel_roots_with_isolated_contexts() {
             Arc<tokio::sync::Barrier>,
         )>,
         Json(payload): Json<Value>,
-    ) -> Json<Value> {
+    ) -> Response {
         let index = {
             let mut requests = requests.lock().unwrap();
-            requests.push(payload);
+            requests.push(payload.clone());
             requests.len()
         };
         if index <= 2 {
@@ -3509,7 +3542,8 @@ async fn agent_loop_dag_runs_parallel_roots_with_isolated_contexts() {
                 .await
                 .expect("DAG roots must execute concurrently");
         }
-        Json(
+        model_completion(
+            &payload,
             json!({"choices":[{"message":{"role":"assistant","content":format!("parallel-result-{index}")}}]}),
         )
     }
@@ -3620,4 +3654,101 @@ async fn agent_loop_dag_preserves_all_terminal_outputs() {
     .unwrap();
     assert!(outputs["first"].as_str().is_some());
     assert!(outputs["second"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn agent_loop_builtin_review_runs_all_three_stages() {
+    let server = recording_model_server().await;
+    let router = app();
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"builtin-review","name":"Review","rolePrompt":"BUILTIN_ROLE","loopCode":"builtin.review-workflow"}))).await;
+    let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
+        "prompt":"Draft a proposal.","workspaceCode":"TRON_CORE","agentCode":"builtin-review",
+        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
+    }))).await;
+    assert_eq!(result["stepCount"], 3);
+    let catalog =
+        internal_agent_api(&router, &auth, Method::GET, "/api/v1/agents/loops", None).await;
+    let design = catalog
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["loopCode"] == "builtin.review-workflow")
+        .unwrap();
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(requests.len(), 3);
+    for (index, node) in design["nodes"].as_array().unwrap().iter().enumerate() {
+        assert!(
+            requests[index]["messages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|message| message["content"] == node["instructions"])
+        );
+        assert!(
+            requests[index]["messages"]
+                .to_string()
+                .contains("BUILTIN_ROLE")
+        );
+    }
+}
+
+#[tokio::test]
+async fn agent_loop_builtin_analysis_joins_roots_and_selects_each_exit() {
+    for approved in [true, false] {
+        let response = |content: String| json!({"choices":[{"message":{"role":"assistant","content":content}}]});
+        let server = scripted_model_server(vec![
+            response("BUILTIN_ANALYSIS_FIRST".into()),
+            response("BUILTIN_ANALYSIS_SECOND".into()),
+            response(json!({"approved":approved,"summary":"Decision"}).to_string()),
+            response(format!("FINAL_{approved}")),
+        ])
+        .await;
+        let router = app();
+        let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+        internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"builtin-analysis","name":"Analysis","rolePrompt":"BUILTIN_ROLE","loopCode":"builtin.analysis-dag"}))).await;
+        let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
+            "prompt":"Review a proposal.","workspaceCode":"TRON_CORE","agentCode":"builtin-analysis",
+            "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
+        }))).await;
+        assert_eq!(result["stepCount"], 4);
+        assert_eq!(result["finalOutput"], format!("FINAL_{approved}"));
+        let catalog =
+            internal_agent_api(&router, &auth, Method::GET, "/api/v1/agents/loops", None).await;
+        let design = catalog
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["loopCode"] == "builtin.analysis-dag")
+            .unwrap();
+        let requests = server.requests.lock().unwrap();
+        assert_eq!(requests.len(), 4);
+        let merged = requests[2]["messages"].to_string();
+        assert!(
+            merged.contains("BUILTIN_ANALYSIS_FIRST") && merged.contains("BUILTIN_ANALYSIS_SECOND"),
+            "{merged}"
+        );
+        let target = if approved { "action" } else { "clarify" };
+        let other = if approved { "clarify" } else { "action" };
+        let instruction = |id| {
+            design["nodes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|n| n["id"] == id)
+                .unwrap()["instructions"]
+                .clone()
+        };
+        let messages = requests[3]["messages"].as_array().unwrap();
+        assert!(
+            messages
+                .iter()
+                .any(|message| message["content"] == instruction(target))
+        );
+        assert!(
+            !messages
+                .iter()
+                .any(|message| message["content"] == instruction(other))
+        );
+    }
 }

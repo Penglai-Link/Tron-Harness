@@ -3,6 +3,7 @@ import { Field, SelectInput } from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
 import { useLoopDesignList } from "../hooks/useLoopDesignList";
 import { REACT_LOOP_CODE } from "../model/LoopModel";
+import { loopName } from "../model/builtinLoops";
 export function AgentLoopField({
   value,
   onChange,
@@ -29,7 +30,7 @@ export function AgentLoopField({
           : [{ loopCode: REACT_LOOP_CODE, name: "ReAct", kind: "React" }]
         ).map((d) => (
           <SelectItem key={d.loopCode} value={d.loopCode}>
-            {d.name} · {t(`agentLoops.kinds.${d.kind}`)}
+            {loopName(d, t)} · {t(`agentLoops.kinds.${d.kind}`)}
           </SelectItem>
         ))}
       </SelectInput>

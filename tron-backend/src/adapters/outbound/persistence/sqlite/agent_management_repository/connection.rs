@@ -90,6 +90,10 @@ impl<'a> SqliteAgentManagementRepositorySql<'a> {
             .connection
             .execute_batch(super::super::migrations::AGENT_LOOPS_MIGRATION)
             .map_err(storage_error)?;
+        repository
+            .connection
+            .execute_batch(super::super::migrations::BUILTIN_WORKFLOW_LOOPS_MIGRATION)
+            .map_err(storage_error)?;
         Ok(repository)
     }
 }

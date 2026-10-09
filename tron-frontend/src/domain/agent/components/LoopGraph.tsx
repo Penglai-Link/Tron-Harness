@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useId } from "react";
 import type { LoopDesign } from "../model/LoopModel";
+import { loopNodeName } from "../model/builtinLoops";
 import { graphPositions, visibleEdges } from "../model/loopValidation";
 export function LoopGraph({
   design,
@@ -61,7 +62,9 @@ export function LoopGraph({
             return (
               <g key={`${e.from}-${e.to}-${i}`}>
                 <path
-                  d={`M ${a.x + 158} ${a.y + 26} C ${middle} ${a.y + 26}, ${middle} ${b.y + 26}, ${b.x} ${b.y + 26}`}
+                  d={`M ${a.x + 158} ${a.y + 26} C ${middle} ${
+                    a.y + 26
+                  }, ${middle} ${b.y + 26}, ${b.x} ${b.y + 26}`}
                   fill="none"
                   stroke="var(--color-outline)"
                   strokeWidth="1.5"
@@ -85,12 +88,13 @@ export function LoopGraph({
           })}
           {design.nodes.map((n, i) => {
             const p = positions.get(n.id)!;
+            const label = loopNodeName(design, n, t);
             return (
               <g
                 key={i}
                 role="button"
                 tabIndex={0}
-                aria-label={n.id || `${i + 1}`}
+                aria-label={label || `${i + 1}`}
                 aria-pressed={selected === i}
                 onClick={() => onSelect(i)}
                 onKeyDown={(e) => {
@@ -124,7 +128,7 @@ export function LoopGraph({
                   fontSize="12"
                   fill="var(--color-on-surface)"
                 >
-                  {n.id.length > 19 ? `${n.id.slice(0, 18)}…` : n.id || "—"}
+                  {label.length > 19 ? `${label.slice(0, 18)}…` : label || "—"}
                 </text>
                 <text
                   x={p.x + 12}
@@ -133,7 +137,9 @@ export function LoopGraph({
                   fill="var(--color-on-surface-variant)"
                 >
                   {t(
-                    `agentLoops.${n.kind === "Model" ? "modelNode" : "branchNode"}`,
+                    `agentLoops.${
+                      n.kind === "Model" ? "modelNode" : "branchNode"
+                    }`,
                   )}
                 </text>
               </g>

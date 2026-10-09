@@ -138,7 +138,7 @@ fn valid_code(code: &str) -> bool {
 }
 impl AgentManagementService {
     pub fn list_loop_designs(&self) -> Result<Vec<LoopDesign>, AgentManagementError> {
-        let mut designs = vec![LoopDesign::react()];
+        let mut designs = LoopDesign::builtins();
         designs.extend(self.repository().list_loop_designs()?);
         Ok(designs)
     }
@@ -161,7 +161,7 @@ impl AgentManagementService {
         mut design: LoopDesign,
         expected_version: u32,
     ) -> Result<LoopDesign, AgentManagementError> {
-        if design.loop_code == REACT_LOOP_CODE {
+        if is_builtin_loop(&design.loop_code) {
             return Err(AgentManagementError::LoopConflict);
         }
         design.version = expected_version
@@ -175,7 +175,7 @@ impl AgentManagementService {
         Ok(design)
     }
     pub fn delete_loop_design(&self, code: &str) -> Result<(), AgentManagementError> {
-        if code == REACT_LOOP_CODE {
+        if is_builtin_loop(code) {
             return Err(AgentManagementError::LoopInUse);
         }
         self.repository().delete_loop_design(code)
