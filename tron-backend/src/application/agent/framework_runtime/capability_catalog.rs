@@ -128,7 +128,7 @@ pub fn capability_pack_catalog() -> Vec<CapabilityPackInfo> {
         (
             "tron.harness",
             "Tron Harness",
-            "Tron context preparation and product-specific agent tools",
+            "Tron context preparation, business tools and platform risk approval policy",
             "Tron",
             "0.1.0",
             Some("2026-09-27"),

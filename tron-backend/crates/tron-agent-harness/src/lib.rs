@@ -28,7 +28,7 @@ pub const OBSERVATION_IMPLEMENTATION_DESCRIPTION: &str =
     "Records tool-call audit events for runtime observation.";
 /// Product-specific tools description published by the Tron harness capability package.
 pub const TOOL_IMPLEMENTATION_DESCRIPTION: &str =
-    "Adds Tron-specific business tools with run-scope authorization.";
+    "Adds Tron-specific business tools with run-scope authorization and platform risk approval policy.";
 
 /// Trusted host routing information, deliberately not deserializable from a
 /// model argument or HTTP body. Providers must still check current permissions.
