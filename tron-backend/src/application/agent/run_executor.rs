@@ -421,6 +421,7 @@ mod tests {
             observations: Vec::new(),
             native: None,
             sdk_execution: None,
+            effective_model: None,
         }
     }
 

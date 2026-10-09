@@ -4,6 +4,9 @@ use eliteforge_agent_core as fw;
 
 use eliteforge_agent_official_plugin_model_http as sdk;
 
+#[path = "sdk_model_errors.rs"]
+mod model_errors;
+
 impl ModelProviderService {
     pub fn sdk_model_authorization_scope(&self) -> Result<String, fw::ModelError> {
         let this = self.clone();
@@ -356,7 +359,8 @@ fn sdk_provider_error(error: fw::AgentError) -> ModelProviderError {
 }
 
 impl SnapshotTransport {
-    fn failure(&self, mut error: fw::ModelError) -> fw::ModelError {
+    fn failure(&self, error: fw::ModelError) -> fw::ModelError {
+        let mut error = model_errors::classify_upstream_failure(error);
         if let fw::ModelError::Provider(detail) = &mut error {
             detail.authorization_attempt = Some(self.attempt.clone());
         }

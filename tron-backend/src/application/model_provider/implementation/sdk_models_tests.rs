@@ -194,6 +194,81 @@ async fn poll(
 }
 
 #[tokio::test]
+async fn upstream_model_401_keeps_personai_authorization_and_exposes_unavailable() {
+    let (service, state, server) = fixture().await;
+    let row = service
+        .connection
+        .call(
+            |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )
+        .unwrap()
+        .unwrap();
+    let mut credentials = service
+        .decrypt_credentials(row.credentials_encrypted.as_deref().unwrap())
+        .unwrap();
+    credentials.authorization_expires_at = Some(now_millis() + 30 * 24 * 60 * 60 * 1000);
+    let encrypted = service.encrypt_credentials(&credentials).unwrap();
+    service
+        .connection
+        .call(
+            move |connection| {
+                connection
+                    .execute(
+                        "UPDATE provider_connections SET status='Connected', last_error=NULL, credentials_encrypted=?1",
+                        [encrypted],
+                    )
+                    .unwrap();
+                Ok::<_, ModelProviderError>(())
+            },
+            || ModelProviderError::Storage,
+        )
+        .unwrap();
+    state.lock().unwrap().steps = VecDeque::from([Step {
+        method: "POST",
+        path: "/chat/completions",
+        status: StatusCode::UNAUTHORIZED,
+        body: json!({"error":{"type":"gateway_error","message":
+            "上游返回 HTTP 401: {\"error\":{\"code\":\"\",\"message\":\"The model does not exist or you do not have access to it.\",\"param\":\"model\",\"type\":\"invalid_request_error\"}}"}}),
+    }]);
+    let config = person_ai_agent_config(
+        "PERSON_AI:FIXED:High:vendor/model",
+        "vendor/model",
+        None,
+        None,
+        AgentModelProtocol::ChatCompletions,
+    );
+    let transport = service.sdk_model_transport(&config).await.unwrap();
+    let error = transport
+        .json(
+            "chat/completions",
+            &json!({"model":"vendor/model","messages":[{"role":"user","content":"hello"}]}),
+        )
+        .await
+        .unwrap_err();
+    assert!(error.is_unavailable(), "{error}");
+    service.sdk_final_model_failure(&error);
+    let row = service
+        .connection
+        .call(
+            |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.status, ProviderConnectionStatus::Connected);
+    assert!(row.credentials_encrypted.is_some());
+    assert!(row.last_error.is_none());
+    let observed = state.lock().unwrap();
+    assert_eq!(
+        observed.observed,
+        ["POST /person-ai-index/api/v1/chat/completions"]
+    );
+    assert!(observed.errors.is_empty(), "{:?}", observed.errors);
+    server.abort();
+}
+
+#[tokio::test]
 async fn rag_graph_auto_route_uses_chat_provider_transport_and_requires_connection() {
     use crate::{
         adapters::outbound::model::{

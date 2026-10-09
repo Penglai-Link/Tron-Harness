@@ -32,9 +32,11 @@ pub struct ReadHistoryResponse {
 impl From<fw::SessionHistory> for ReadHistoryResponse {
     fn from(mut h: fw::SessionHistory) -> Self {
         for message in &mut h.records.messages {
-            message.content.retain(|block| !matches!(block,
-                fw::HistoryContentBlock::Json {value} if value.pointer("/tronMessagePart/type").and_then(serde_json::Value::as_str) == Some("context")
-                    && value.pointer("/tronMessagePart/kind").and_then(serde_json::Value::as_str) == Some("tron_interaction_response")));
+            message.content = message
+                .content
+                .drain(..)
+                .filter_map(public_history_block)
+                .collect();
         }
         Self {
             session_id: h.session_id,
@@ -45,6 +47,27 @@ impl From<fw::SessionHistory> for ReadHistoryResponse {
             pending_interactions: h.pending_interactions,
             active_runs: h.active_runs,
         }
+    }
+}
+
+// The lossless conversation codec is for model resumption. Only its public
+// projection belongs in the transcript; genuine user JSON stays untouched.
+fn public_history_block(block: fw::HistoryContentBlock) -> Option<fw::HistoryContentBlock> {
+    let fw::HistoryContentBlock::Json { value } = &block else {
+        return Some(block);
+    };
+    match value
+        .pointer("/tronMessagePart/type")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some("reasoningSummary") => value
+            .pointer("/tronMessagePart/text")
+            .and_then(serde_json::Value::as_str)
+            .map(|text| fw::HistoryContentBlock::Reasoning {
+                text: text.to_owned(),
+            }),
+        Some("context" | "reasoning" | "compactionCheckpoint" | "toolCall" | "toolResult") => None,
+        _ => Some(block),
     }
 }
 pub async fn read_history(
@@ -121,4 +144,48 @@ fn history_error(error: fw::StateError, locale: SupportedLocale) -> Response {
         )),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn transcript_projects_reserved_records_without_hiding_public_json() {
+        for kind in [
+            "context",
+            "reasoning",
+            "compactionCheckpoint",
+            "toolCall",
+            "toolResult",
+        ] {
+            assert!(
+                public_history_block(fw::HistoryContentBlock::Json {
+                    value: json!({"tronMessagePart":{"type":kind,"text":"internal data"}}),
+                })
+                .is_none()
+            );
+        }
+        let summary = public_history_block(fw::HistoryContentBlock::Json {
+            value: json!({"tronMessagePart":{"type":"reasoningSummary","text":"public summary"}}),
+        });
+        assert_eq!(
+            summary,
+            Some(fw::HistoryContentBlock::Reasoning {
+                text: "public summary".into()
+            })
+        );
+        for value in [
+            json!({"answer":42}),
+            json!({"public":{"tronMessagePart":{"type":"context"}}}),
+        ] {
+            let block = fw::HistoryContentBlock::Json { value };
+            assert_eq!(public_history_block(block.clone()), Some(block));
+        }
+        let text = fw::HistoryContentBlock::Text {
+            text: "ordinary chat".into(),
+        };
+        assert_eq!(public_history_block(text.clone()), Some(text));
+    }
 }

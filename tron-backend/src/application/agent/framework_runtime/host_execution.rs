@@ -334,6 +334,7 @@ impl FrameworkHost {
             final_output: output,
             step_count: result.steps as u32,
             token_usage: state.usage,
+            effective_model: Some(state.context.model.clone()),
             latest_request_estimate: state.estimate.clone(),
             latest_usage_audit: state.audit.clone(),
             system_agent_session_id: state.context.system_agent_session_id.clone(),

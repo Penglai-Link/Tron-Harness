@@ -327,6 +327,8 @@ fn native_private_events_are_filtered_on_public_read_without_rewriting_storage()
         {"type":"text","text":"public answer"},
         {"type":"json","value":{"tronMessagePart":{"type":"reasoning","text":"OLD_RAW_SENTINEL"}}},
         {"type":"json","value":{"tronMessagePart":{"type":"reasoningSummary","text":"public summary"}}},
+        {"type":"json","value":{"tronMessagePart":{"type":"context","kind":"chat_attachment","text":"INTERNAL_ATTACHMENT_SENTINEL"}}},
+        {"type":"json","value":{"tronMessagePart":{"type":"compactionCheckpoint","summary":"INTERNAL_CHECKPOINT_SENTINEL"}}},
         {"type":"media","media":{"mime_type":"image/png","source":{"type":"base64","value":"PUBLIC_MEDIA"}}},
         {"type":"json","value":{"public":{"tronMessagePart":{"type":"reasoning","text":"PUBLIC_NESTED_JSON"}}}}
     ]);
@@ -380,6 +382,8 @@ fn native_private_events_are_filtered_on_public_read_without_rewriting_storage()
     let public = service.protocol_events("SESSION").unwrap();
     let serialized = serde_json::to_string(&public).unwrap();
     assert!(!serialized.contains("OLD_RAW_SENTINEL"));
+    assert!(!serialized.contains("INTERNAL_ATTACHMENT_SENTINEL"));
+    assert!(!serialized.contains("INTERNAL_CHECKPOINT_SENTINEL"));
     for value in [
         "public answer",
         "public summary",

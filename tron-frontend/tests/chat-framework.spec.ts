@@ -109,7 +109,7 @@ async function inspectContextPreviews(page: import("@playwright/test").Page, tes
   const tool = await openBlock(zh ? "工具定义" : "Tool Schema");
   expect(tool.tools.some((value: { toolName: string }) => value.toolName === "chat_ask_user")).toBe(true);
   await expect(dialog.getByRole("heading", { name: "chat_ask_user", exact: true })).toBeVisible();
-  await expect(dialog.getByRole("table").first()).toContainText("questions");
+  await expect(dialog.locator("section").filter({ has: page.getByRole("heading", { name: "chat_ask_user", exact: true }) }).getByRole("table")).toContainText("questions");
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`tool-definitions-${locale}.png`) });
   await close();
   await openBlock(zh ? "相关会话" : "Related Sessions");
@@ -148,8 +148,10 @@ test("public chat uses the real framework, restores history and shows its contex
   await input.fill("acceptance-turn-one: remember the word sapphire"); await input.press("Enter");
   await expect(transcript).toContainText("framework-first-reply");
   await expect(input).toBeEnabled();
+  await expect(transcript).not.toContainText("tronMessagePart");
   await page.reload();
   await expect(transcript).toContainText("framework-first-reply");
+  await expect(transcript).not.toContainText("tronMessagePart");
   await input.fill("acceptance-turn-two: use the earlier word"); await input.press("Enter");
   await expect(transcript).toContainText("framework-second-reply");
   expect(requests.some(request => request.stream && JSON.stringify(request.messages).includes("acceptance-turn-one") && JSON.stringify(request.messages).includes("acceptance-turn-two") && JSON.stringify(request.messages).includes("framework-first-reply"))).toBe(true);
@@ -168,9 +170,9 @@ test("public chat uses the real framework, restores history and shows its contex
   expect(errors).toEqual([]);
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("real-framework-chat-context.png") });
   await input.fill("acceptance-question: ask me to choose the target"); await input.press("Enter");
-  await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByRole("paragraph")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByText("Choose the acceptance target", { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByRole("paragraph")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByText("Choose the acceptance target", { exact: true })).toBeVisible();
   await page.getByRole("region", { name: "Assistant questions", exact: true }).getByText("Acceptance Local", { exact: true }).click();
   await expect(page.getByRole("radio", { name: /Acceptance Local/ })).toBeChecked();
   await page.getByRole("region", { name: "Assistant questions", exact: true }).getByRole("button", { name: "Continue", exact: true }).filter({ hasText: "Continue" }).click();

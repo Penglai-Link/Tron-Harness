@@ -97,7 +97,7 @@ impl AgentOrchestrator {
         } = prepared;
         let step_code = single_agent_step_code(&run_code);
         let plan_step = AgentRunPlanStep::serial(step_code, agent_code, objective.clone());
-        let session_summary_job_context =
+        let mut session_summary_job_context =
             context
                 .short_term_memory
                 .as_ref()
@@ -108,7 +108,7 @@ impl AgentOrchestrator {
                     locale: context.locale.clone(),
                     model: context.model.clone(),
                 });
-        let metadata = AgentRunExecutionMetadata {
+        let mut metadata = AgentRunExecutionMetadata {
             run_code: run_code.clone(),
             conversation_code,
             workspace_code: workspace_code.clone(),
@@ -139,6 +139,15 @@ impl AgentOrchestrator {
                 reservation,
             )
             .await;
+        if let Ok(result) = &execution {
+            if let Some(model) = &result.run.effective_model {
+                metadata.model_code = model.model_code.clone();
+                metadata.reasoning_effort = model.reasoning_effort;
+                if let Some(summary) = &mut session_summary_job_context {
+                    summary.model = model.clone();
+                }
+            }
+        }
         let finished_at = current_timestamp();
         match &execution {
             Ok(result) => collaboration.complete_first_step(

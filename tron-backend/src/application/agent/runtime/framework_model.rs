@@ -216,14 +216,20 @@ impl ReactAgent {
                     "agent.model.failed",
                     BusOutcome::Failure,
                     Some("model_failed"),
-                    vec![
-                        ("message".into(), message.clone()),
-                        ("model_attempt_id".into(), model_attempt_id.clone()),
-                        (
-                            "request_id".into(),
-                            context.request_id.clone().unwrap_or_default(),
-                        ),
-                    ],
+                    {
+                        let mut payload = vec![
+                            ("message".into(), message.clone()),
+                            ("model_attempt_id".into(), model_attempt_id.clone()),
+                        ];
+                        if let Some(request_id) = context
+                            .request_id
+                            .as_ref()
+                            .filter(|id| !id.trim().is_empty())
+                        {
+                            payload.push(("request_id".into(), request_id.clone()));
+                        }
+                        payload
+                    },
                 )?;
                 return Err(AgentError::ModelFailure(message));
             }

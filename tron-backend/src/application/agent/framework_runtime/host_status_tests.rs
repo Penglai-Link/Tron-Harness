@@ -31,6 +31,7 @@ impl AgentRuntime for ResultRuntime {
                 system_agent_session_id: None,
                 observations: vec![],
                 sdk_execution: None,
+                effective_model: None,
                 native: self.status.map(|status| AgentNativeRunOutcome {
                     run_id: "native-original".into(),
                     status,

@@ -112,6 +112,7 @@ impl SystemCliRuntime {
             observations: observations.lock().unwrap().clone(),
             native: None,
             sdk_execution: None,
+            effective_model: None,
         })
     }
 }

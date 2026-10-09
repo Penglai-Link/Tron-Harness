@@ -347,12 +347,29 @@ pub(crate) fn project_product_visibility(data: &mut Value) {
         _ => return,
     };
     if let Some(content) = data.pointer_mut(path).and_then(Value::as_array_mut) {
-        content.retain(|block| {
-            !(block.get("type").and_then(Value::as_str) == Some("json")
-                && block
-                    .pointer("/value/tronMessagePart/type")
-                    .and_then(Value::as_str)
-                    == Some("reasoning"))
+        content.retain_mut(|block| {
+            if block.get("type").and_then(Value::as_str) != Some("json") {
+                return true;
+            }
+            match block
+                .pointer("/value/tronMessagePart/type")
+                .and_then(Value::as_str)
+            {
+                Some(
+                    "context" | "reasoning" | "compactionCheckpoint" | "toolCall" | "toolResult",
+                ) => false,
+                Some("reasoningSummary") => {
+                    let Some(text) = block
+                        .pointer("/value/tronMessagePart/text")
+                        .and_then(Value::as_str)
+                    else {
+                        return false;
+                    };
+                    *block = serde_json::json!({"type":"text", "text":text});
+                    true
+                }
+                _ => true,
+            }
         });
     }
 }

@@ -19,6 +19,9 @@ pub struct AgentRunResult {
     pub native: Option<AgentNativeRunOutcome>,
     #[serde(skip)]
     pub sdk_execution: Option<AgentNativeExecutionSnapshot>,
+    /// The effective model after SDK recovery, kept internal for follow-up jobs.
+    #[serde(skip)]
+    pub effective_model: Option<super::AgentModelConfig>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
