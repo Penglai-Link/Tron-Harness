@@ -10,16 +10,6 @@ import { useTabStore } from "@/store/tabStore";
 import IconButton from "./IconButton";
 import Item from "./Item";
 
-function sessionAgentTagLabel(agentCode: string | null | undefined) {
-  const normalized = agentCode?.trim().toLowerCase();
-  if (!normalized || normalized === "main-agent") return "MAIN";
-  return normalized.toUpperCase();
-}
-
-function sessionAgentTagTone(_agentCode: string | null | undefined) {
-  return "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
-}
-
 const MessageItem = ({
   active,
   onNavigate,
@@ -100,14 +90,6 @@ const MessageItem = ({
             });
           }}
         >
-          <span
-            className={cn(
-              "inline-flex h-4 shrink-0 items-center rounded border px-1 font-mono text-[0.625rem] leading-none",
-              sessionAgentTagTone(session.agentCode),
-            )}
-          >
-            {sessionAgentTagLabel(session.agentCode)}
-          </span>
           <span className="min-w-0 truncate">{session.title}</span>
         </Link>
       }

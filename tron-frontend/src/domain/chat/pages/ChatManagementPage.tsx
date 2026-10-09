@@ -5742,17 +5742,15 @@ export function ChatManagementPage() {
         >
           <Paperclip aria-hidden="true" />
         </Button>
-        {agentSelectionLocked ? null : (
-          <div className="min-w-0 max-w-[9.5rem] shrink">
-            <ChatAgentSelector
-              locked={agentSelectionLocked}
-              loading={agentsLoading}
-              agents={chatAgents}
-              selectedAgentCode={selectedAgentCode}
-              onSelect={handleAgentSelect}
-            />
-          </div>
-        )}
+        <div className="min-w-0 max-w-[9.5rem] shrink">
+          <ChatAgentSelector
+            locked={agentSelectionLocked}
+            loading={agentsLoading}
+            agents={chatAgents}
+            selectedAgentCode={selectedAgentCode}
+            onSelect={handleAgentSelect}
+          />
+        </div>
         <div
           className={cn("min-w-0 max-w-full")}
         >

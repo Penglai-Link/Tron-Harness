@@ -284,6 +284,8 @@ test("chat agent and model selectors are linked and agent locks after first turn
   await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-REFACTOR`);
   await expect(page).toHaveURL(/sessionCode=SESSION-REFACTOR$/);
 
+  await expect(page.locator('a[href="/chats?sessionCode=SESSION-UNASSIGNED"]')).toHaveText("Historical trace review");
+
   await page.getByRole("button", { name: "New chat", exact: true }).click();
 
   const agentSelector = page.getByRole("button", { name: "Select chat agent", exact: true });
@@ -323,7 +325,9 @@ test("chat agent and model selectors are linked and agent locks after first turn
   await expect(page.getByText("lock agent after first turn").first()).toBeVisible();
   await expect(page.getByText("Recorded in")).toBeVisible();
 
-  await expect(agentSelector).toHaveCount(0);
+  await expect(agentSelector).toBeVisible();
+  await expect(agentSelector).toBeDisabled();
+  await expect(agentSelector).toContainText("Codex");
   await expect(modelSelector).toBeEnabled();
 
   await modelSelector.click();
