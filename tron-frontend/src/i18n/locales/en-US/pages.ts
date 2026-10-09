@@ -1679,6 +1679,13 @@ export const pages = {
     },
   },
   settingsTools: {
+    permissions: {
+      title: "Execution permission", hint: "Platform permissions apply together with the tools assigned to an Agent. Run executes without approval; Ask uses the risk threshold; No blocks execution.",
+      run: "Run", ask: "Ask", no: "No access", label: "Execution permission for {{tool}}", threshold: "Confirmation threshold for {{tool}}",
+      riskHint: "Ask when risk reaches the selected level. Lower risks execute automatically.",
+      levels: { safe: "Safe (ask for everything)", low: "Low", medium: "Medium", high: "High", critical: "Critical" },
+      save: "Save", saving: "Saving…", discard: "Discard changes", refresh: "Refresh", dirty: "Unsaved changes", saved: "Permissions saved", loadError: "Tool permissions could not be loaded. Try again.", saveError: "Permissions could not be saved. Your changes are preserved.", loading: "Loading tool permissions…",
+    },
     catalog: {
       domains: {
         app: {
