@@ -752,8 +752,13 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   }
 
   return (
-    <div className="space-y-5">
-      <PageHeader title={pageTitle} actions={internalAgentsPage && scope === "platform" && allowCreate ? <CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} onCreated={refreshCreatedAgent} /> : undefined} />
+    <div className={internalAgentsPage && scope === "platform" ? "space-y-4" : "space-y-5"}>
+      {internalAgentsPage && scope === "platform" ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">{t("pages:platformData.agentDefinitions")}</h2>
+          {allowCreate ? <CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} onCreated={refreshCreatedAgent} /> : null}
+        </div>
+      ) : <PageHeader title={pageTitle} />}
 
       {internalAgentsPage ? (
         <SurfaceCard className="space-y-3 p-4">

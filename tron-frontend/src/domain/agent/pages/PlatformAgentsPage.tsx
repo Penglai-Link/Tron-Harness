@@ -177,9 +177,8 @@ export function PlatformAgentsPage() {
       <Tabs defaultValue="agents">
       <TabsList><TabsTrigger value="agents">{t("pages:settingsAgents.title")}</TabsTrigger><TabsTrigger value="loops">{t("pages:agentLoops.title")}</TabsTrigger></TabsList>
       <TabsContent keepMounted value="loops" className="mt-5"><LoopDesigner /></TabsContent>
-      <TabsContent keepMounted value="agents" className="mt-5 space-y-6">
-      <section aria-label={t("pages:platformData.agentDefinitions")} className="space-y-6">
-      <h2 className="text-base font-semibold">{t("pages:platformData.agentDefinitions")}</h2>
+      <TabsContent keepMounted value="agents" className="mt-4 space-y-6">
+      <section aria-label={t("pages:platformData.agentDefinitions")} className="space-y-4">
       <WorkspaceAgentsPage category="internal" scope="platform" />
 
       <DataTable<PlatformSystemAgentRecord>
