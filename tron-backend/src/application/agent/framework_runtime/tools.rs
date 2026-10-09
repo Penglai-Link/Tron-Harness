@@ -27,6 +27,7 @@ fn local_id(name: &str) -> Option<String> {
 pub(super) fn official_id(name: &str) -> Option<String> {
     local::local_tool_catalog()
         .into_iter()
+        .chain(crate::application::agent::tool_catalog::official_remote_descriptors())
         .chain(eliteforge_agent_official_plugin_a2ui::tool_descriptors())
         .chain(std::iter::once(
             eliteforge_agent_official_plugin_a2ui::expand_descriptor(),

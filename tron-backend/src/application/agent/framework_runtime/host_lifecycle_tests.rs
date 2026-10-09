@@ -608,3 +608,118 @@ async fn real_host_persists_native_history_and_summary_on_the_shared_database() 
     assert!(conversations.history(&session).await.unwrap().is_empty());
     host.close().await;
 }
+
+struct RemoteCatalogModel(Arc<std::sync::Mutex<Vec<Vec<String>>>>);
+impl ModelClient for RemoteCatalogModel {
+    fn generate<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        self.generate_once(config, request)
+    }
+    fn generate_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        self.0.lock().unwrap().push(
+            request
+                .tools
+                .iter()
+                .map(|tool| tool.tool_name.clone())
+                .collect(),
+        );
+        StorageAcceptanceModel.generate_once(config, request)
+    }
+    fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
+    fn close_observed<'a>(
+        &'a self,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
+#[tokio::test]
+async fn framework_remote_tools_reach_model_only_with_agent_authorization() {
+    use crate::application::agent::ReactAgentBuilder;
+    let host = FrameworkHost::temporary(None).unwrap();
+    let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let model = Arc::new(RemoteCatalogModel(observed.clone()));
+    host.bind_model_client(model.clone()).unwrap();
+    let harness = ReactAgentBuilder::new(
+        model,
+        Arc::new(ToolRegistry::default()),
+        crate::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let descriptors = crate::application::agent::tool_catalog::official_remote_descriptors();
+    let mut context = test_context(0);
+    context.skills.clear();
+    context.conversation_code = None;
+    context.run_code = fw::RunId::new_v4().to_string();
+    context.tools = descriptors
+        .iter()
+        .map(|tool| EffectiveTool {
+            tool_name: tool.call_name.clone(),
+            domain_code: None,
+            description: tool.description.clone(),
+            input_schema: tool.input_schema.clone(),
+            skill_name: None,
+            required_variable_keys: vec![],
+        })
+        .collect();
+    host.run(harness.clone(), context.clone(), None, None)
+        .await
+        .unwrap();
+    let first = observed.lock().unwrap().last().unwrap().clone();
+    for tool in &descriptors {
+        assert!(
+            first.contains(&tool.call_name),
+            "missing runtime binding {}",
+            tool.call_name
+        );
+    }
+    context
+        .tools
+        .retain(|tool| tool.tool_name == "personai_search");
+    context.run_code = fw::RunId::new_v4().to_string();
+    host.run(harness.clone(), context.clone(), None, None)
+        .await
+        .unwrap();
+    let second = observed.lock().unwrap().last().unwrap().clone();
+    assert!(second.contains(&"personai_search".into()));
+    for tool in descriptors
+        .iter()
+        .filter(|tool| tool.call_name != "personai_search")
+    {
+        assert!(
+            !second.contains(&tool.call_name),
+            "unauthorized binding leaked"
+        );
+    }
+    host.set_pack_enabled("framework.personai", false)
+        .await
+        .unwrap();
+    context.run_code = fw::RunId::new_v4().to_string();
+    host.run(harness, context, None, None).await.unwrap();
+    assert!(
+        !observed
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .contains(&"personai_search".into()),
+        "disabled pack leaked a binding"
+    );
+    assert!(host.close().await.is_success());
+}

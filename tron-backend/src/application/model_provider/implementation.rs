@@ -28,6 +28,7 @@ use url::Url;
 
 mod chat_auto_routes;
 mod person_ai_services;
+mod person_ai_tools;
 mod sdk_models;
 
 use crate::{

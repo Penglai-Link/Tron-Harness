@@ -46,6 +46,8 @@ mod host_snapshot;
 mod host_storage;
 #[path = "host_summary.rs"]
 mod host_summary;
+#[path = "host_remote_tools.rs"]
+pub(super) mod remote_tools;
 use capability_state::{load_capability_state, persist_capability_state};
 
 #[derive(Clone)]
@@ -54,6 +56,7 @@ struct Host {
     runtime_config:
         std::sync::RwLock<Option<crate::application::system_config::BackendRuntimeConfig>>,
     model_client: std::sync::RwLock<Option<Arc<dyn crate::application::agent::ModelClient>>>,
+    personai: remote_tools::PersonAiState,
     path: PathBuf,
     state_path: PathBuf,
     pack_root: PathBuf,
@@ -283,6 +286,7 @@ impl FrameworkHost {
         let pack_root = path.with_extension("capability-packs");
         let (packs, extensions) = load_capability_state(&state_path);
         Self(Arc::new(Host {
+            personai: Default::default(),
             runtime_config: Default::default(),
             model_client: Default::default(),
             path,
@@ -322,6 +326,7 @@ impl FrameworkHost {
             .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
         let path = directory.path().join("framework.sqlite3");
         Ok(Self(Arc::new(Host {
+            personai: Default::default(),
             runtime_config: Default::default(),
             model_client: Default::default(),
             state_path: path.with_extension("capabilities.json"),

@@ -361,6 +361,9 @@ impl AppState {
         )
         .expect("initialize Framework storage configuration");
         agent_framework.bind_runtime_config(runtime_config.clone());
+        agent_framework
+            .bind_personai(model_providers.clone())
+            .expect("initial PersonAI tool credentials");
         agent_framework.bind_agent_management(agent_management.clone());
         agui_replay_store
             .bind_framework(&agent_framework)

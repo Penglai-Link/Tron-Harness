@@ -65,6 +65,10 @@ impl FrameworkHost {
                 )
                 .map_err(|error| error.to_string())?,
             ))
+            .plugin(fw::ToolProviderPlugin::new(
+                "tron.remote.tools",
+                remote_tools::RemoteTools(Arc::downgrade(&self.0)),
+            ))
             .plugin(fw::ToolPolicyPlugin::new(
                 "tron.harness.tool-authority",
                 super::super::tools::ToolCatalogPolicy::shared(self.0.tools_enabled.clone()),
@@ -129,6 +133,9 @@ impl FrameworkHost {
                 | "framework.a2ui"
                 | "framework.local.scoped"
                 | "framework.tool-pack.agent-collaboration"
+                | "framework.personai"
+                | "framework.web"
+                | "framework.media"
                 | "tron.harness"
         )
     }

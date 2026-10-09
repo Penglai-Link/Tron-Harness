@@ -231,6 +231,9 @@ impl FrameworkHost {
     async fn close_dependent_stores(&self) -> ShutdownReport {
         // Branch leases must finish before the backing SQLite connections close.
         let mut report = self.0.native_bindings.close().await;
+        if let Err(error) = self.close_personai_tools().await {
+            report.errors.push(error);
+        }
         if let Some(framework) = self.0.framework.get() {
             report.merge(framework.close().await);
         }

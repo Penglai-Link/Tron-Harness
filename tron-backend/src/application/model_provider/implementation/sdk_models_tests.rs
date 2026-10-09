@@ -683,3 +683,41 @@ async fn completed_personai_authorization_401_device_unbound_still_clears_creden
     assert!(state.steps.is_empty());
     server.abort();
 }
+
+#[tokio::test]
+async fn personai_tool_context_rejects_logged_out_and_stale_account_snapshots() {
+    let (service, state, server) = fixture().await;
+    let scope = service.sdk_model_authorization_scope().unwrap();
+    assert!(service.personai_tool_context(&scope).await.is_err());
+    let row = service
+        .connection
+        .call(
+            |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )
+        .unwrap()
+        .unwrap();
+    let mut credentials = service
+        .decrypt_credentials(row.credentials_encrypted.as_deref().unwrap())
+        .unwrap();
+    credentials.authorization_expires_at = Some(now_millis() + 30 * 24 * 60 * 60 * 1000);
+    let encrypted = service.encrypt_credentials(&credentials).unwrap();
+    service.connection.call(move |connection| {
+        connection.execute("UPDATE provider_connections SET status='Connected', credentials_encrypted=?1 WHERE provider_code='PersonAi'", [encrypted]).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    let scope = service.sdk_model_authorization_scope().unwrap();
+    let (_, _, context) = service.personai_tool_context(&scope).await.unwrap();
+    let observed = context.subscribe();
+    let first = context.current().unwrap();
+    assert!(Arc::ptr_eq(&first, &context.current().unwrap()));
+    service.connection.call(|connection| {
+        connection.execute("UPDATE provider_connections SET person_ai_user_id='another-user' WHERE provider_code='PersonAi'", []).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    assert!(context.current().is_none());
+    assert!(observed.borrow().is_none());
+    assert!(service.personai_tool_context(&scope).await.is_err());
+    assert!(state.lock().unwrap().steps.is_empty());
+    server.abort();
+}

@@ -62,7 +62,11 @@ pub(super) fn localize_domain_record(
 
     ToolDomainRecord {
         domain_code: domain_code.to_string(),
-        name: format!("{domain_code} Tools"),
+        name: match (locale, domain_code) {
+            (SupportedLocale::ZhCn, "media") => "图片与文档".into(),
+            (SupportedLocale::EnUs, "media") => "Images and documents".into(),
+            _ => format!("{domain_code} Tools"),
+        },
         description: match locale {
             SupportedLocale::ZhCn => format!("{domain_code} 领域下的业务工具。"),
             SupportedLocale::EnUs => format!("Business tools under the {domain_code} domain."),

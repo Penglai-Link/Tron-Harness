@@ -58,6 +58,7 @@ impl BusinessToolCatalog {
         tool_definitions()
             .into_iter()
             .map(|definition| localize_tool_record(locale, definition))
+            .chain(official_remote_records(locale))
             .filter(|tool| {
                 normalized_domain
                     .as_ref()
@@ -81,6 +82,12 @@ impl BusinessToolCatalog {
     }
 
     pub fn tool(tool_code: &str, locale: &str) -> Option<ToolCatalogRecord> {
+        if let Some(tool) = official_remote_records(SupportedLocale::from_raw(locale))
+            .into_iter()
+            .find(|t| t.tool_code.eq_ignore_ascii_case(tool_code))
+        {
+            return Some(tool);
+        }
         let definition = Self::tool_definition(tool_code)?;
         Some(localize_tool_record(
             SupportedLocale::from_raw(locale),
@@ -92,6 +99,11 @@ impl BusinessToolCatalog {
         tool_definitions()
             .into_iter()
             .map(|tool| tool.tool_code.to_string())
+            .chain(
+                official_remote_descriptors()
+                    .into_iter()
+                    .map(|tool| tool.id),
+            )
             .collect()
     }
 
@@ -111,6 +123,23 @@ pub(crate) use localization::{materialize_schema, translate};
 #[cfg(test)]
 mod tests {
     use super::BusinessToolCatalog;
+
+    #[test]
+    fn framework_tools_share_catalog_identity_and_discovery_domains() {
+        for descriptor in super::official_remote_descriptors() {
+            let record = BusinessToolCatalog::tool(&descriptor.id, "en-US")
+                .expect("Framework tool is selectable");
+            assert_eq!(record.tool_name, descriptor.call_name);
+            assert_eq!(record.input_schema, descriptor.input_schema);
+            assert!(BusinessToolCatalog::tool_codes().contains(&descriptor.id));
+            assert!(
+                BusinessToolCatalog::list_tools(Some(&record.domain_code), None, "en-US")
+                    .iter()
+                    .any(|r| r.tool_code == descriptor.id)
+            );
+        }
+        assert_eq!(super::official_remote_descriptors().len(), 8);
+    }
 
     #[test]
     fn platform_variable_crud_tools_are_catalogued_without_workspace_scope() {
@@ -195,4 +224,52 @@ mod tests {
             Some(4)
         );
     }
+}
+
+pub(crate) fn official_remote_descriptors() -> Vec<eliteforge_agent_core::ToolDescriptor> {
+    let mut tools = eliteforge_agent_capability_personai::personai_tool_catalog();
+    tools.extend(eliteforge_agent_official_plugin_tools_media::media_tool_catalog());
+    tools.push(eliteforge_agent_official_plugin_tools_web::web_fetch_descriptor());
+    tools
+}
+fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
+    use crate::domain::agent::{ToolAvailabilityState, ToolOperationKind};
+    official_remote_descriptors()
+        .into_iter()
+        .map(|tool| {
+            let label = match (locale, tool.call_name.as_str()) {
+                (SupportedLocale::ZhCn, "personai_search") => "搜索网页",
+                (SupportedLocale::ZhCn, "personai_generate_image") => "生成图片",
+                (SupportedLocale::ZhCn, "personai_query_image") => "查询图片任务",
+                (SupportedLocale::ZhCn, "personai_detect_text") => "检测 AI 文本",
+                (SupportedLocale::ZhCn, "personai_detect_image") => "检测 AI 图片",
+                (SupportedLocale::ZhCn, "media_read_image") => "读取图片",
+                (SupportedLocale::ZhCn, "media_read_pdf") => "读取 PDF",
+                (SupportedLocale::ZhCn, "web_fetch") => "读取网页",
+                _ => &tool.call_name,
+            }
+            .to_owned();
+            let domain = if ["personai_search", "web_fetch"].contains(&tool.call_name.as_str()) {
+                "search"
+            } else {
+                "media"
+            };
+            ToolCatalogRecord {
+                tool_code: tool.id,
+                tool_name: tool.call_name.clone(),
+                domain_code: domain.into(),
+                name: label,
+                description: tool.description,
+                operation_kind: if tool.call_name == "personai_generate_image" {
+                    ToolOperationKind::Command
+                } else {
+                    ToolOperationKind::Query
+                },
+                input_schema: tool.input_schema,
+                module_owner: "Framework".into(),
+                availability_state: ToolAvailabilityState::Available,
+                sample_result_summary: String::new(),
+            }
+        })
+        .collect()
 }
