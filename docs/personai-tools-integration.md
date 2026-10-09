@@ -21,4 +21,10 @@ PersonAI 在首次实际调用时连接，复用已有模型和服务适配。�
 
 React、Vue 使用同一结果解析层展示图片、搜索来源、任务状态、检测置信度和原生文本。历史记录保留 content、structured 与 resultReference，不再只取文本而丢失媒体。原始 JSON 可展开和复制。
 
+平台工具页展开领域后，可为每个工具选择「直接执行」「询问」「无权限」。询问支持 Safe、Low、Medium、High、Critical 五级确认阈值；本次调用的风险达到阈值才暂停审批。未配置的工具默认直接执行，保留原有行为。修改后需保存；保存失败保留草稿，可放弃改动或刷新已保存配置。
+
+全局配置通过 GET / PUT `/api/v1/tools/permissions` 读取和整批保存，响应使用 `ApiResponse`。`data.permissions` 每项包含 `toolCode`、`permission`（`Run` / `Ask` / `No`）、`confirmLevel`（上述五级 PascalCase 值）。工具编码来自平台目录或宿主实际发现的原生工具描述；任意未知编码不能注册权限。配置持久化到 Tron SQLite。
+
+Tron 能力包注册 Framework `ToolPolicy`，按可信工具身份、操作类型和实际参数识别风险，不接受模型自报风险。全局权限与 Agent 工具授权取交集；「无权限」既移除发现结果，也在执行时再次拒绝。关闭 Tron harness 工具包不会关闭权限检查。需要询问时走 Framework 原生审批与恢复流程，审批卡片展示风险和确认阈值；等待审批期间撤销权限，确认后也不能继续执行。
+
 本地开发通过 make agent-deps 指向对应 Framework 和 UI 工作树，再构建共享 UI、执行 make fe-install、make be-check、make fe-check。真实远端验收需使用已登录账号调用，不应把本地模拟服务测试视为线上验收。
