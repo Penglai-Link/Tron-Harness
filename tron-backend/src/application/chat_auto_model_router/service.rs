@@ -1,7 +1,7 @@
 use crate::{
     application::{model::ModelService, model_provider::ModelProviderService},
     domain::{
-        agent::{AgentModelConfig, AutoModelRouteContext},
+        agent::{AgentModelConfig, AutoModelCandidate, AutoModelRouteContext},
         model::ModelType,
         model_provider::{
             ModelProviderCode, ModelSelection, ModelSelectionKind, ProviderCatalogModelStatus,
@@ -37,7 +37,22 @@ impl ChatAutoModelRouter {
         agent_code: &str,
         reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<(AgentModelConfig, AutoModelRouteContext), String> {
+        let initial_scope = self.providers.sdk_model_authorization_scope();
         let candidates = self.candidates(workspace_code, reasoning_effort)?;
+        let authorization_scope = if candidates.iter().any(|candidate| candidate.provider) {
+            let scope = initial_scope.map_err(|error| error.to_string())?;
+            if self
+                .providers
+                .sdk_model_authorization_scope()
+                .map_err(|error| error.to_string())?
+                != scope
+            {
+                return Err("Auto authorization changed during initial selection".into());
+            }
+            Some(scope)
+        } else {
+            None
+        };
         let assigned = self
             .providers
             .chat_auto_route_selection(workspace_code, session_code, agent_code)
@@ -65,6 +80,14 @@ impl ChatAutoModelRouter {
         Ok((
             candidate.config.clone(),
             AutoModelRouteContext {
+                authorization_scope,
+                authorized_candidates: candidates
+                    .iter()
+                    .map(|candidate| AutoModelCandidate {
+                        selection: candidate.selection.clone(),
+                        config: candidate.config.clone(),
+                    })
+                    .collect(),
                 session_code: session_code.to_string(),
                 agent_code: agent_code.to_string(),
                 current_candidate_key: candidate.key,
@@ -80,19 +103,35 @@ impl ChatAutoModelRouter {
         workspace: &str,
         current: &AgentModelConfig,
     ) -> Result<Vec<AgentModelConfig>, String> {
-        let mut candidates = self.candidates(workspace, current.reasoning_effort)?;
-        candidates.sort_by_key(|candidate| {
-            (
-                u8::from(candidate.config.model_code != current.model_code),
-                u8::from(!candidate.provider),
-                context_window_rank(
-                    current.context_window_tokens.unwrap_or_default(),
-                    candidate.config.context_window_tokens.unwrap_or_default(),
-                ),
-                candidate.key.clone(),
-            )
-        });
-        Ok(candidates.into_iter().map(|c| c.config).collect())
+        let candidates = self
+            .candidates(workspace, current.reasoning_effort)?
+            .into_iter()
+            .map(|candidate| AutoModelCandidate {
+                selection: candidate.selection,
+                config: candidate.config,
+            })
+            .collect();
+        Ok(order_authorized_candidates(candidates, current))
+    }
+
+    pub fn snapshot_models(
+        &self,
+        route: &AutoModelRouteContext,
+        current: &AgentModelConfig,
+    ) -> Result<Vec<AgentModelConfig>, String> {
+        if let Some(expected) = &route.authorization_scope {
+            let actual = self
+                .providers
+                .sdk_model_authorization_scope()
+                .map_err(|error| error.to_string())?;
+            if &actual != expected {
+                return Err("Auto authorization changed after initial selection".into());
+            }
+        }
+        Ok(order_authorized_candidates(
+            route.authorized_candidates.clone(),
+            current,
+        ))
     }
 
     pub fn mark_success(
@@ -101,10 +140,20 @@ impl ChatAutoModelRouter {
         route: &mut AutoModelRouteContext,
         model: &AgentModelConfig,
     ) -> Result<(), String> {
-        let selection = self
-            .candidates(workspace_code, model.reasoning_effort)?
+        let candidates = if route.authorized_candidates.is_empty() {
+            self.candidates(workspace_code, model.reasoning_effort)?
+                .into_iter()
+                .map(|candidate| AutoModelCandidate {
+                    selection: candidate.selection,
+                    config: candidate.config,
+                })
+                .collect()
+        } else {
+            route.authorized_candidates.clone()
+        };
+        let selection = candidates
             .into_iter()
-            .find(|candidate| candidate.config.model_code == model.model_code)
+            .find(|candidate| candidate.config.identity() == model.identity())
             .map(|candidate| candidate.selection)
             .ok_or_else(|| "successful Auto model is no longer available".to_string())?;
         self.providers
@@ -127,12 +176,12 @@ impl ChatAutoModelRouter {
         reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<Vec<Candidate>, String> {
         let mut candidates = Vec::new();
-        // Provider catalog and credentials may be temporarily unavailable. In
-        // that case Auto should still be able to route to enabled local models.
+        // An unavailable provider is represented by no enabled options.
+        // A failed catalog read must retain its cause, not masquerade as revocation.
         for option in self
             .providers
             .list_text_select_options(workspace_code)
-            .unwrap_or_default()
+            .map_err(|error| format!("Auto provider catalog lookup failed: {error}"))?
         {
             if option.selection.kind != ModelSelectionKind::Fixed
                 || option.selection.provider_code != Some(ModelProviderCode::PersonAi)
@@ -193,6 +242,27 @@ impl ChatAutoModelRouter {
         }
         Ok(candidates)
     }
+}
+
+fn order_authorized_candidates(
+    mut candidates: Vec<AutoModelCandidate>,
+    current: &AgentModelConfig,
+) -> Vec<AgentModelConfig> {
+    candidates.sort_by_key(|candidate| {
+        (
+            u8::from(candidate.config.identity() != current.identity()),
+            u8::from(candidate.selection.provider_code.is_none()),
+            context_window_rank(
+                current.context_window_tokens.unwrap_or_default(),
+                candidate.config.context_window_tokens.unwrap_or_default(),
+            ),
+            candidate_key(&candidate.selection),
+        )
+    });
+    candidates
+        .into_iter()
+        .map(|candidate| candidate.config)
+        .collect()
 }
 
 fn choose_initial_candidate(
@@ -270,6 +340,31 @@ mod tests {
             rendezvous_score("ws", "session", "agent-a", "model"),
             rendezvous_score("ws", "session", "agent-b", "model")
         );
+    }
+
+    #[test]
+    fn snapshot_order_matches_full_identity_and_preserves_context_window_policy() {
+        use super::*;
+        let candidate = |vendor: &str, window| AutoModelCandidate {
+            selection: ModelSelection::person_ai_fixed(
+                format!("{vendor}/model"),
+                crate::domain::model_provider::ProviderModelQuality::High,
+            ),
+            config: serde_json::from_value(serde_json::json!({
+                "modelCode": format!("PERSON_AI:FIXED:High:{vendor}/model"),
+                "protocol": "CHAT_COMPLETIONS", "baseUrl": "https://fixture.test",
+                "apiKey": "fixture", "modelName": "Model", "contextWindowTokens": window,
+            }))
+            .unwrap(),
+        };
+        let small = candidate("small", 128);
+        let current = candidate("current", 256);
+        let large = candidate("large", 512);
+        let ordered = order_authorized_candidates(
+            vec![small.clone(), large.clone(), current.clone()],
+            &current.config,
+        );
+        assert_eq!(ordered, vec![current.config, large.config, small.config]);
     }
 
     #[test]

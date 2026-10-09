@@ -166,6 +166,7 @@ impl ReactAgent {
             prepared_context.context_hash.as_deref(),
         );
         let request_estimate = request_estimate_snapshot(context, &prepared_context);
+        let model_attempt_id = eliteforge_agent_core::RunId::new_v4().to_string();
         self.publish_with_payload(
             &context,
             "agent.model.requested",
@@ -174,6 +175,7 @@ impl ReactAgent {
             {
                 let mut payload = usage_event_payload("usage_estimate_json", &request_estimate);
                 payload.extend(prepared_context_event_payload(&prepared_context));
+                payload.push(("model_attempt_id".into(), model_attempt_id.clone()));
                 payload
             },
         )?;
@@ -208,7 +210,23 @@ impl ReactAgent {
         };
         let mut response = match response_result {
             Ok(response) => response,
-            Err(message) => return Err(AgentError::ModelFailure(message)),
+            Err(message) => {
+                self.publish_with_payload(
+                    context,
+                    "agent.model.failed",
+                    BusOutcome::Failure,
+                    Some("model_failed"),
+                    vec![
+                        ("message".into(), message.clone()),
+                        ("model_attempt_id".into(), model_attempt_id.clone()),
+                        (
+                            "request_id".into(),
+                            context.request_id.clone().unwrap_or_default(),
+                        ),
+                    ],
+                )?;
+                return Err(AgentError::ModelFailure(message));
+            }
         };
         crate::application::agent::tool_arguments::normalize(&mut response, &context.tools);
         if let (Some(router), Some(route)) = (
@@ -244,7 +262,11 @@ impl ReactAgent {
             "agent.model.responded",
             BusOutcome::Completed,
             Some("model_responded"),
-            usage_event_payload("usage_audit_json", &usage_audit),
+            {
+                let mut payload = usage_event_payload("usage_audit_json", &usage_audit);
+                payload.push(("model_attempt_id".into(), model_attempt_id));
+                payload
+            },
         )?;
 
         if let Some(usage) = response.token_usage() {

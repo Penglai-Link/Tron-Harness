@@ -50,6 +50,8 @@ pub fn translate_agui_event(stream_key: &str, event: &BusEvent) -> Option<AgentA
                 | "context_block_id"
                 | "usage_estimate_json"
                 | "code"
+                | "model_attempt_id"
+                | "request_id"
                 | "message"
                 | "runCode"
                 | "sessionCode"

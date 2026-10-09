@@ -405,12 +405,19 @@ pub(super) fn read_catalog_model(
     model_code: &str,
     quality_type: Option<ProviderModelQuality>,
 ) -> Result<Option<ProviderCatalogModelView>, ModelProviderError> {
-    read_chat_catalog_models(connection, provider_code).map(|models| {
-        models.into_iter().find(|model| {
+    let mut matches = read_chat_catalog_models(connection, provider_code)?
+        .into_iter()
+        .filter(|model| {
             (model.model_code == model_code || model.selection_model_code() == model_code)
                 && quality_type.is_none_or(|quality| model.quality_type == Some(quality))
-        })
-    })
+        });
+    let first = matches.next();
+    if matches.next().is_some() {
+        return Err(ModelProviderError::InvalidSelection(format!(
+            "ambiguous model selection {model_code}; specify upstream vendor and quality when applicable"
+        )));
+    }
+    Ok(first)
 }
 
 pub(super) fn read_sync_runs(

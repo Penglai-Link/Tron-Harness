@@ -28,8 +28,8 @@ pub use collaboration::{
 };
 pub use context::{
     AgentExecutionScope, AgentPromptPrefixSource, AgentRunContext, AgentRunLimits,
-    AgentShortTermMemoryRunContext, AgentToolExposureState, AutoModelRouteContext, EffectiveSkill,
-    EffectiveTool, EffectiveVariable,
+    AgentShortTermMemoryRunContext, AgentToolExposureState, AutoModelCandidate,
+    AutoModelRouteContext, EffectiveSkill, EffectiveTool, EffectiveVariable,
 };
 pub use error::AgentError;
 pub use history::{

@@ -10,12 +10,30 @@ impl ReactAgent {
         &self,
         context: &AgentRunContext,
     ) -> Result<Vec<AgentModelConfig>, AgentError> {
+        self.framework_model_candidates(context, true)
+    }
+    pub(crate) fn framework_refreshed_models(
+        &self,
+        context: &AgentRunContext,
+    ) -> Result<Vec<AgentModelConfig>, AgentError> {
+        self.framework_model_candidates(context, false)
+    }
+    fn framework_model_candidates(
+        &self,
+        context: &AgentRunContext,
+        initial: bool,
+    ) -> Result<Vec<AgentModelConfig>, AgentError> {
         if context.auto_model_route.is_some()
             && let Some(router) = &self.auto_model_router
         {
-            let mut models = router
-                .authorized_models(&context.workspace_code, &context.model)
-                .map_err(AgentError::InvalidConfiguration)?;
+            let mut models = match context.auto_model_route.as_ref() {
+                Some(route) if initial && !route.authorized_candidates.is_empty() => router
+                    .snapshot_models(route, &context.model)
+                    .map_err(AgentError::InvalidConfiguration)?,
+                _ => router
+                    .authorized_models(&context.workspace_code, &context.model)
+                    .map_err(AgentError::InvalidConfiguration)?,
+            };
             if let Some(route) = &context.auto_model_route {
                 for model in &mut models {
                     *model = crate::adapters::outbound::model::with_person_ai_conversation(
@@ -25,13 +43,20 @@ impl ReactAgent {
                     );
                 }
             }
-            if !models
-                .iter()
-                .any(|model| model.model_code == context.model.model_code)
+            if initial
+                && !models
+                    .iter()
+                    .any(|model| model.identity() == context.model.identity())
             {
-                return Err(AgentError::InvalidConfiguration(
-                    "initial Auto model is no longer authorized".into(),
-                ));
+                return Err(AgentError::InvalidConfiguration(format!(
+                    "initial Auto model is no longer authorized: selected {}; authorized candidates [{}]",
+                    context.model.model_code,
+                    models
+                        .iter()
+                        .map(|model| model.model_code.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )));
             }
             Ok(models)
         } else {

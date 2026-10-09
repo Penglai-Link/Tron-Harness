@@ -41,6 +41,13 @@ impl AgentModelRouter {
     ) -> Result<Vec<crate::domain::agent::AgentModelConfig>, String> {
         self.inner.authorized_models(workspace, current)
     }
+    pub fn snapshot_models(
+        &self,
+        route: &crate::domain::agent::AutoModelRouteContext,
+        current: &crate::domain::agent::AgentModelConfig,
+    ) -> Result<Vec<crate::domain::agent::AgentModelConfig>, String> {
+        self.inner.snapshot_models(route, current)
+    }
     pub fn mark_success(
         &self,
         workspace_code: &str,

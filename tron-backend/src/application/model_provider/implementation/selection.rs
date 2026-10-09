@@ -16,12 +16,20 @@ impl ModelProviderService {
                     && selection.provider_code == Some(ModelProviderCode::PersonAi)
                     && selection.kind == ModelSelectionKind::Fixed
                     && let Some(code) = selection.model_code.as_deref()
-                    && let Some(model) = read_catalog_model(
-                        &connection, ModelProviderCode::PersonAi, code, selection.quality_type,
-                    )?
                 {
-                    selection.model_code = Some(model.selection_model_code());
-                    selection.quality_type = selection.quality_type.or(model.quality_type);
+                    let model = match read_catalog_model(
+                        &connection, ModelProviderCode::PersonAi, code, selection.quality_type,
+                    ) {
+                        Ok(model) => model,
+                        // A stale ambiguous default must not hide the explicit vendor
+                        // choices needed to replace it. Database failures still propagate.
+                        Err(ModelProviderError::InvalidSelection(_)) => None,
+                        Err(error) => return Err(error),
+                    };
+                    if let Some(model) = model {
+                        selection.model_code = Some(model.selection_model_code());
+                        selection.quality_type = selection.quality_type.or(model.quality_type);
+                    }
                 }
                 let Some(provider) = read_connection(&connection, ModelProviderCode::PersonAi)?
                 else {
@@ -210,14 +218,15 @@ impl ModelProviderService {
                                 model_code.into(),
                             ));
                         }
+                        let canonical_code = model.selection_model_code();
                         Ok(Some(person_ai_agent_config(
                             person_ai_fixed_runtime_code(
                                 model
                                     .quality_type
                                     .expect("chat catalog models always have a quality"),
-                                model_code,
+                                &canonical_code,
                             ),
-                            model_code,
+                            &canonical_code,
                             model.context_window_tokens,
                             reasoning_effort,
                             preferred_protocol(&model.protocols),

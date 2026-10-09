@@ -107,6 +107,7 @@ impl NativeModelScope {
             runtime,
             Arc::new(AuthorizedSelection {
                 order: order.clone(),
+                state: Default::default(),
             }),
         )
         .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?;
@@ -144,6 +145,17 @@ fn add_binding(
     let scope = harness
         .framework_model_authorization_scope(&config)
         .map_err(AgentError::InvalidConfiguration)?;
+    if config.model_code.starts_with("PERSON_AI:")
+        && let Some(expected) = context
+            .auto_model_route
+            .as_ref()
+            .and_then(|route| route.authorization_scope.as_ref())
+        && scope.as_ref() != Some(expected)
+    {
+        return Err(AgentError::InvalidConfiguration(
+            "Auto authorization changed before model binding".into(),
+        ));
+    }
     let model = reference(context, &config, scope.as_deref(), auxiliary);
     if bindings.contains_key(&model) {
         return Ok(model);
@@ -179,6 +191,41 @@ fn add_binding(
 }
 struct AuthorizedSelection {
     order: Vec<fw::ModelRef>,
+    state: std::sync::Mutex<SelectionState>,
+}
+#[derive(Default)]
+struct SelectionState {
+    failed: std::collections::BTreeSet<fw::ModelRef>,
+    current: Option<fw::ModelRef>,
+    retries: std::collections::BTreeMap<String, usize>,
+}
+impl SelectionState {
+    fn choose(
+        &mut self,
+        compatible: &[fw::ModelRef],
+        previous: Option<&fw::ModelRef>,
+        retries: usize,
+        call: &str,
+    ) -> Option<fw::ModelRef> {
+        if retries > self.retries.get(call).copied().unwrap_or_default()
+            && let Some(previous) = previous
+        {
+            self.failed.insert(previous.clone());
+        }
+        self.retries.insert(call.into(), retries);
+        let selected = self
+            .current
+            .as_ref()
+            .filter(|model| !self.failed.contains(*model) && compatible.contains(*model))
+            .or_else(|| {
+                compatible
+                    .iter()
+                    .find(|model| !self.failed.contains(*model))
+            })
+            .cloned();
+        self.current = selected.clone();
+        selected
+    }
 }
 #[async_trait]
 impl fw::ModelSelectionStrategy for AuthorizedSelection {
@@ -192,20 +239,35 @@ impl fw::ModelSelectionStrategy for AuthorizedSelection {
                 "Auto fallback allowance exhausted".into(),
             ));
         }
-        let index = context.transient_failures;
-        self.order
+        let compatible: Vec<_> = self
+            .order
             .iter()
             .filter(|m| {
                 catalog
                     .get(m)
                     .is_some_and(|d| d.accepts(context.messages, context.tools, context.options))
             })
-            .nth(index)
             .cloned()
+            .collect();
+        self.state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .choose(
+                &compatible, context.previous, context.transient_failures,
+                &format!("{:?}", (context.run.node_execution().map(|node| node.invocation_id), context.stage, context.step)),
+            )
             .ok_or_else(|| {
-                fw::AgentError::InvalidConfiguration(
-                    "no authorized compatible model remains".into(),
-                )
+                if compatible.is_empty() {
+                    fw::AgentError::InvalidConfiguration(format!(
+                        "no authorized model supports the current request: {} authorized candidates",
+                        self.order.len()
+                    ))
+                } else {
+                    fw::AgentError::Run(format!(
+                        "Auto fallback exhausted after upstream model failures: {} compatible candidates failed earlier in this run",
+                        compatible.len()
+                    ))
+                }
             })
     }
 }
@@ -221,10 +283,7 @@ pub(crate) fn synchronize_selected_model(
     let binding = bindings.models.get(reference).ok_or_else(|| {
         fw::AgentError::InvalidConfiguration("selected model is outside authorized bindings".into())
     })?;
-    if state.context.model.model_code != binding.config.model_code
-        || state.context.model.protocol != binding.config.protocol
-        || state.context.model.base_url != binding.config.base_url
-    {
+    if state.context.model.identity() != binding.config.identity() {
         state.turn = TurnStateAdapter::new(
             binding.config.protocol,
             binding.config.responses_stateful_enabled,
@@ -284,10 +343,10 @@ impl sdk::ModelCatalogRefresh for AuthorizedRefresh {
         }
         let config = self
             .harness
-            .framework_authorized_models(&self.context)
+            .framework_refreshed_models(&self.context)
             .map_err(|e| fw::ModelError::Fatal(e.to_string()))?
             .into_iter()
-            .find(|config| config.model_code == self.reference.model);
+            .find(|config| config.identity() == self.context.model.identity());
         let mut chat = vec![];
         if let Some(config) = config {
             if config != self.context.model {
@@ -341,4 +400,65 @@ fn account_changed() -> fw::ModelError {
         model: None,
         message: "model authorization changed during discovery".into(),
     }))
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    #[test]
+    fn fallback_keeps_successful_model_for_next_step_and_skips_failed_models() {
+        let models: Vec<_> = ["first", "second", "third"]
+            .into_iter()
+            .map(|model| fw::ModelRef::new("fixture", model))
+            .collect();
+        let mut state = SelectionState::default();
+        assert_eq!(
+            state.choose(&models, None, 0, "step"),
+            Some(models[0].clone())
+        );
+        assert_eq!(
+            state.choose(&models, Some(&models[0]), 1, "step"),
+            Some(models[1].clone())
+        );
+        assert_eq!(
+            state.choose(&models, Some(&models[1]), 2, "step"),
+            Some(models[2].clone())
+        );
+        assert_eq!(
+            state.choose(&models, None, 0, "step"),
+            Some(models[2].clone())
+        );
+        assert_eq!(state.choose(&models, Some(&models[2]), 1, "step"), None);
+    }
+
+    #[test]
+    fn context_overflow_recovery_does_not_mark_the_current_model_failed_again() {
+        let first = fw::ModelRef::new("fixture", "first");
+        let second = fw::ModelRef::new("fixture", "second");
+        let models = vec![first.clone(), second.clone()];
+        let mut state = SelectionState::default();
+        state.choose(&models, None, 0, "step");
+        assert_eq!(
+            state.choose(&models, Some(&first), 1, "step"),
+            Some(second.clone())
+        );
+        // A sibling node starts independently while this node recovers context.
+        state.choose(&models, None, 0, "parallel-node");
+        assert_eq!(
+            state.choose(&models, Some(&second), 1, "step"),
+            Some(second)
+        );
+    }
+
+    #[test]
+    fn fallback_does_not_skip_remaining_candidate_when_compatibility_list_shrinks() {
+        let first = fw::ModelRef::new("fixture", "first");
+        let remaining = fw::ModelRef::new("fixture", "remaining");
+        let mut state = SelectionState::default();
+        assert_eq!(
+            state.choose(&[remaining.clone()], Some(&first), 1, "step"),
+            Some(remaining)
+        );
+    }
 }

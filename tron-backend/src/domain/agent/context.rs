@@ -98,9 +98,15 @@ pub struct AgentPromptPrefixSource {
     pub locale: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoModelRouteContext {
+    /// In-memory initial authorization snapshot; never persist credentials.
+    /// Resumed runs without a snapshot must re-read authorization.
+    #[serde(skip)]
+    pub authorized_candidates: Vec<AutoModelCandidate>,
+    #[serde(skip)]
+    pub authorization_scope: Option<String>,
     pub session_code: String,
     pub agent_code: String,
     pub current_candidate_key: String,
@@ -264,5 +270,43 @@ mod tests {
         assert!(context.is_tool_authorized("bash_exec"));
         assert!(context.is_tool_authorized("discovery_expand_tool_domain"));
         assert!(!context.is_tool_authorized("workspace_delete"));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AutoModelCandidate {
+    pub selection: crate::domain::model_provider::ModelSelection,
+    pub config: super::AgentModelConfig,
+}
+
+#[cfg(test)]
+mod auto_route_tests {
+    use super::*;
+
+    #[test]
+    fn initial_snapshot_is_cloned_in_memory_but_never_persists_credentials() {
+        let config: super::super::AgentModelConfig = serde_json::from_value(serde_json::json!({
+            "modelCode": "local-model", "protocol": "CHAT_COMPLETIONS",
+            "baseUrl": "https://fixture.test", "apiKey": "snapshot-secret", "modelName": "Local"
+        }))
+        .unwrap();
+        let route = AutoModelRouteContext {
+            authorization_scope: Some("account-scope".into()),
+            authorized_candidates: vec![AutoModelCandidate {
+                selection: crate::domain::model_provider::ModelSelection::fixed("local-model"),
+                config,
+            }],
+            session_code: "session".into(),
+            agent_code: "agent".into(),
+            current_candidate_key: "candidate".into(),
+            failed_candidate_keys: vec![],
+            fallback_attempts: 0,
+        };
+        assert_eq!(route.clone().authorized_candidates.len(), 1);
+        let json = serde_json::to_string(&route).unwrap();
+        assert!(!json.contains("snapshot-secret"));
+        assert!(!json.contains("authorizedCandidates"));
+        let resumed: AutoModelRouteContext = serde_json::from_str(&json).unwrap();
+        assert!(resumed.authorized_candidates.is_empty());
     }
 }

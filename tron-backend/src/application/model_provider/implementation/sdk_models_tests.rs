@@ -343,8 +343,35 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
             "INSERT INTO default_model_selections (
                 scope_key, model_type, selection_kind, provider_code, model_code,
                 quality_type, created_at, updated_at
-             ) VALUES ('platform', 'TEXT', 'Fixed', 'PersonAi', 'deepseek-v4.1-flash', 'High', 1, 1);"
+             ) VALUES ('platform', 'TEXT', 'Fixed', 'PersonAi', 'alibaba_coding_plan/deepseek-v4.1-flash', 'High', 1, 1);"
         ).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    let canonical = service
+        .resolve_chat_selection(
+            "",
+            Some(&ModelSelection::person_ai_fixed(
+                "qwen3.6-flash",
+                ProviderModelQuality::Low,
+            )),
+            None,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        canonical.model_code,
+        "PERSON_AI:FIXED:Low:alibaba_coding_plan/qwen3.6-flash"
+    );
+    service.connection.call(|connection| {
+        connection.execute("UPDATE default_model_selections SET model_code='deepseek-v4.1-flash' WHERE scope_key='platform'", []).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    let ambiguous_default_options = service.list_text_select_options("").unwrap();
+    assert!(ambiguous_default_options.iter().any(|option| option.enabled));
+    assert!(!ambiguous_default_options.iter().any(|option| option.is_default));
+    service.connection.call(|connection| {
+        connection.execute("UPDATE default_model_selections SET model_code='alibaba_coding_plan/deepseek-v4.1-flash' WHERE scope_key='platform'", []).unwrap();
         Ok::<_, ModelProviderError>(())
     }, || ModelProviderError::Storage).unwrap();
     let options = service.list_text_select_options("").unwrap();
@@ -400,21 +427,18 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
         .unwrap();
     assert_eq!(alibaba.protocol, AgentModelProtocol::Responses);
     assert_eq!(qianfan.protocol, AgentModelProtocol::ChatCompletions);
-    // Existing saved bare codes remain usable, while an unknown vendor must not fall back.
-    assert!(
-        service
-            .resolve_chat_selection(
-                "",
-                Some(&ModelSelection::person_ai_fixed(
-                    "deepseek-v4.1-flash",
-                    ProviderModelQuality::High,
-                )),
-                None,
-                None
-            )
-            .unwrap()
-            .is_some()
-    );
+    // Bare codes are accepted only when vendor/tier resolution is unique.
+    assert!(matches!(
+        service.resolve_chat_selection(
+            "",
+            Some(&ModelSelection::person_ai_fixed(
+                "deepseek-v4.1-flash", ProviderModelQuality::High,
+            )),
+            None,
+            None,
+        ),
+        Err(ModelProviderError::InvalidSelection(_))
+    ));
     assert!(matches!(
         service.resolve_chat_selection(
             "",
