@@ -92,10 +92,17 @@ fn native_skill_descriptor(descriptor: &fw::ToolDescriptor) -> bool {
 
 pub(crate) struct ToolCatalogPolicy {
     tools_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    management: Option<crate::application::agent::AgentManagementService>,
 }
 impl ToolCatalogPolicy {
-    pub(crate) fn shared(tools_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
-        Self { tools_enabled }
+    pub(crate) fn shared(
+        tools_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        management: Option<crate::application::agent::AgentManagementService>,
+    ) -> Self {
+        Self {
+            tools_enabled,
+            management,
+        }
     }
 }
 #[async_trait]
@@ -152,6 +159,46 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         if state.context.effective_tools.is_empty() {
             state.context.effective_tools = state.context.tools.clone();
         }
+        // Remove globally denied tools from discovery while preserving the
+        // existing distinction between authorized and registered executors.
+        if let Some(management) = &self.management {
+            let mut denied = std::collections::HashSet::new();
+            for tool in state.context.authorized_tools() {
+                if !management
+                    .platform_tool_allowed(&tool.tool_name)
+                    .map_err(|_| {
+                        fw::AgentError::ToolSetup("Could not read platform tool permission".into())
+                    })?
+                {
+                    denied.insert(tool.tool_name.clone());
+                }
+            }
+            state
+                .context
+                .tools
+                .retain(|t| !denied.contains(&t.tool_name));
+            state
+                .context
+                .tool_exposure
+                .hidden_tools
+                .retain(|t| !denied.contains(&t.tool_name));
+            let hidden = state.context.tool_exposure.hidden_tools.clone();
+            state
+                .context
+                .tool_exposure
+                .visible_domains
+                .retain_mut(|domain| {
+                    let tools = hidden
+                        .iter()
+                        .filter(|t| t.domain_code.as_deref() == Some(domain.domain_code.as_str()))
+                        .collect::<Vec<_>>();
+                    domain.tool_count = tools.len();
+                    domain
+                        .sample_tools
+                        .retain(|name| tools.iter().any(|t| &t.tool_name == name));
+                    !tools.is_empty()
+                });
+        }
         state.tool_catalog = bindings
             .iter()
             .map(|binding| {
@@ -178,6 +225,18 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         }
         let host = HostExecution::from_extensions(&invocation.run.extensions)?;
         let state = host.state.lock().await;
+        if let Some(management) = &self.management {
+            if !management
+                .platform_tool_allowed(&invocation.descriptor.call_name)
+                .map_err(|_| {
+                    fw::AgentError::Run("Could not read platform tool permission".into())
+                })?
+            {
+                return Ok(fw::ToolPolicyDecision::Deny(
+                    "This tool has no platform permission".into(),
+                ));
+            }
+        }
         if (!state
             .product_tool_authority
             .contains(&invocation.descriptor.call_name)
@@ -196,5 +255,28 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             ));
         }
         Ok(fw::ToolPolicyDecision::Allow)
+    }
+}
+
+/// Hosts without management (isolated tests) preserve the previous run behavior.
+pub(crate) struct PlatformPermissionSource(
+    pub Option<crate::application::agent::AgentManagementService>,
+);
+impl tron_agent_harness::ToolPermissionSource for PlatformPermissionSource {
+    fn setting(
+        &self,
+        descriptor: &fw::ToolDescriptor,
+    ) -> Result<tron_agent_harness::ToolPermissionSetting, String> {
+        match &self.0 {
+            Some(source) => tron_agent_harness::ToolPermissionSource::setting(source, descriptor),
+            None => Ok(tron_agent_harness::ToolPermissionSetting::default_for(
+                &descriptor.id,
+            )),
+        }
+    }
+    fn operation(&self, descriptor: &fw::ToolDescriptor) -> Option<bool> {
+        self.0
+            .as_ref()
+            .and_then(|s| tron_agent_harness::ToolPermissionSource::operation(s, descriptor))
     }
 }

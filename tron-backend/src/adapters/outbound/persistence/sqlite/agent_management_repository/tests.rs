@@ -135,3 +135,34 @@ fn temp_database_path(prefix: &str) -> PathBuf {
         .as_millis();
     std::env::temp_dir().join(format!("{prefix}-{}-{millis}.sqlite3", std::process::id()))
 }
+
+#[test]
+fn tool_permissions_persist_and_failed_full_replace_rolls_back() {
+    use crate::application::agent::AgentManagementRepository;
+    use tron_agent_harness::{ToolPermission, ToolPermissionSetting, ToolRisk};
+    let path = temp_database_path("tool-permissions-transaction");
+    let mut repository = SqliteAgentManagementRepository::connect(path.to_str().unwrap()).unwrap();
+    let original = ToolPermissionSetting {
+        tool_code: "filesystem.write_text".into(),
+        permission: ToolPermission::Ask,
+        confirm_level: ToolRisk::Medium,
+    };
+    repository
+        .replace_tool_permissions(std::slice::from_ref(&original))
+        .unwrap();
+    let mut replacement = original.clone();
+    replacement.permission = ToolPermission::No;
+    assert!(
+        repository
+            .replace_tool_permissions(&[replacement.clone(), replacement])
+            .is_err()
+    );
+    assert_eq!(
+        repository.list_tool_permissions().unwrap(),
+        vec![original.clone()]
+    );
+    drop(repository);
+    let mut restored = SqliteAgentManagementRepository::connect(path.to_str().unwrap()).unwrap();
+    assert_eq!(restored.list_tool_permissions().unwrap(), vec![original]);
+    let _ = fs::remove_file(path);
+}

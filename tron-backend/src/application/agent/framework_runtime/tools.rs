@@ -4,7 +4,9 @@ mod authority;
 use crate::application::agent::tool_framework::FrameworkToolRegistryExt;
 use crate::domain::agent::{ToolObservation, ToolRequest};
 use async_trait::async_trait;
-pub(super) use authority::{ToolCatalogPolicy, map_authorized_descriptor};
+pub(super) use authority::{
+    PlatformPermissionSource, ToolCatalogPolicy, map_authorized_descriptor,
+};
 use eliteforge_agent_core as fw;
 use eliteforge_agent_official_plugin_tools_local as local;
 use serde_json::Value;

@@ -109,6 +109,11 @@ impl IntoResponse for InternalAgentApiError {
     fn into_response(self) -> Response {
         let descriptor = self.0.internal_definition_descriptor();
         let (status, zh, en) = match descriptor.message_key {
+            "tron.agent.tool_permission_invalid" => (
+                StatusCode::BAD_REQUEST,
+                "工具权限配置无效，请检查工具编码和重复项",
+                "Invalid tool permission configuration; check tool codes and duplicates",
+            ),
             "tron.agent.loop_invalid" => (
                 StatusCode::BAD_REQUEST,
                 "Loop 配置无效，请检查节点、依赖、分支和并行限制",

@@ -639,6 +639,7 @@ dependencies = [
  "cap-std",
  "eliteforge-agent-context-contracts",
  "eliteforge-agent-core",
+ "futures",
  "rusqlite",
  "serde",
  "serde_json",
@@ -648,6 +649,7 @@ dependencies = [
  "tokio",
  "tokio-rusqlite",
  "tokio-util",
+ "tracing",
  "uuid",
 ]
 
@@ -2820,6 +2822,7 @@ dependencies = [
  "eliteforge-agent-framework",
  "eliteforge-agent-official-plugin-tools-local",
  "eliteforge-agent-test-support",
+ "serde",
  "serde_json",
  "tokio",
 ]

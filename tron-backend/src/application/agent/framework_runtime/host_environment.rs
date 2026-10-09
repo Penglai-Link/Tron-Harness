@@ -71,7 +71,10 @@ impl FrameworkHost {
             ))
             .plugin(fw::ToolPolicyPlugin::new(
                 "tron.harness.tool-authority",
-                super::super::tools::ToolCatalogPolicy::shared(self.0.tools_enabled.clone()),
+                super::super::tools::ToolCatalogPolicy::shared(
+                    self.0.tools_enabled.clone(),
+                    self.0.agent_management.get().cloned(),
+                ),
             ))
             .plugin(fw::ToolMiddlewarePlugin::new(
                 "tron.harness.audit",
@@ -84,6 +87,11 @@ impl FrameworkHost {
             .capability_pack(eliteforge_agent_capability_tools::agent_collaboration_pack())
             .capability_pack(
                 tron_agent_harness::TronHarness::new(Arc::new(HarnessTools), [])
+                    .with_tool_policy(tron_agent_harness::TronToolPolicy(Arc::new(
+                        super::super::tools::PlatformPermissionSource(
+                            self.0.agent_management.get().cloned(),
+                        ),
+                    )))
                     .with_context_preparation(TronContext, 32)
                     .capability_pack(),
             );

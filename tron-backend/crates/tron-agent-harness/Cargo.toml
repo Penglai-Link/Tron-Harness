@@ -13,6 +13,7 @@ async-trait = "0.1"
 eliteforge-agent-core = { path = "../../../.agent-deps/agent-framework/crates/framework/eliteforge-agent-core" }
 eliteforge-agent-official-plugin-tools-local = { path = "../../../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-local" }
 serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 eliteforge-agent-framework = { path = "../../../.agent-deps/agent-framework/crates/framework/eliteforge-agent-framework", default-features = false }
