@@ -5,7 +5,7 @@ let frontend: ResourceUiFrontend | undefined;
 test.beforeAll(async () => { frontend = await startResourceUiFrontend("/settings/agents", { VITE_TRON_DATA_SOURCE: "mock", VITE_TRON_AGENT_DATA_SOURCE: "api" }); });
 test.afterAll(async () => { await stopResourceUiFrontend(frontend); });
 for (const locale of ["zh-CN", "en-US"] as const) {
-  test(`Define, bind knowledge, then authorize workspaces in ${locale}`, async ({ page }, testInfo) => {
+  test(`Draft workspace and knowledge access inside the agent editor in ${locale}`, async ({ page }, testInfo) => {
     await routeResourceUiShellApi(page); await seedResourceUiShell(page, locale);
     const zh = locale === "zh-CN";
     const defaults = { avatarId:"robot", description:"", rolePrompt:"", platformDefined:true, source:"PLATFORM_DEFAULT", toolAssignmentMode:"ALL_PLATFORM_TOOLS", mcpAccessMode:"DISABLED", toolExposureMode:"DOMAIN_DISCOVERY", expandedDomainPersistenceMode:"STICKY_EXPANDED", maxSteps:100,maxToolCalls:100,maxParallelToolCalls:4,selectedToolCodes:[],selectedServerCodes:[] };
@@ -46,12 +46,10 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await page.goto(`${frontend!.baseUrl}/settings/agents`);
     await expect(page.getByRole("tab")).toHaveCount(2);
     const definitions=page.getByRole("region",{name:zh?"智能体定义":"Agent definitions",exact:true});
-    const authorization=page.getByRole("region",{name:zh?"空间授权":"Workspace authorization",exact:true});
+    await expect(page.getByRole("region",{name:zh?"空间授权":"Workspace authorization",exact:true})).toHaveCount(0);
     await expect(definitions.getByRole("button",{name:zh?"编辑 主智能体":"Edit Main Agent",exact:true})).toBeVisible();
     await expect(definitions.getByRole("textbox")).toHaveCount(0);
     await expect(definitions.getByRole("button",{name:zh?"分配空间":"Assign workspaces",exact:true})).toHaveCount(0);
-    await expect(authorization.getByRole("textbox")).toHaveCount(0);
-    await expect(authorization.getByRole("button",{name:zh?"创建":"New",exact:true})).toHaveCount(0);
     await definitions.getByRole("button",{name:zh?"创建":"New",exact:true}).click();
     const create=page.getByRole("dialog",{name:zh?"创建内部智能体":"New internal agent",exact:true});
     await create.getByRole("textbox",{name:zh?"编码":"Code",exact:true}).fill("reviewer");
@@ -91,7 +89,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await page.mouse.click(8, 8);
     await expect(reviewer).toBeVisible();
     await expect(reviewer.getByRole("textbox",{name:zh?"名称":"Name",exact:true})).toHaveValue("Reviewer draft");
-    expect(calls).toEqual(["define"]);
+    expect(calls).toEqual(["define", "authorize"]);
     await reviewer.getByRole("textbox",{name:zh?"名称":"Name",exact:true}).fill("Reviewer");
     await reviewer.getByRole("button",{name:zh?/选择知识库/:/Choose knowledge bases/}).click();
     await page.getByRole("switch",{name:"Shared library",exact:true}).check();
@@ -103,12 +101,29 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await reviewer.getByRole("button",{name:zh?"保存":"Save",exact:true}).click();
     await expect(reviewer).toHaveCount(0);
     expect(libraries).toEqual(["kb-shared"]);
-    await authorization.getByRole("row").filter({hasText:"Reviewer"}).getByRole("button",{name:zh?"分配空间":"Assign workspaces",exact:true}).click();
+    // Workspace selection is an editor draft, and canceling the editor discards it.
+    await card.click();
+    await reviewer.getByRole("button",{name:zh?/选择空间/:/Choose workspaces/}).click();
     const assign=page.getByRole("dialog").filter({has:page.getByRole("checkbox",{name:"Tron Core",exact:true})});
     await assign.getByRole("checkbox",{name:"Tron Core",exact:true}).check();
-    await assign.getByRole("button",{name:zh?"保存":"Save",exact:true}).click();
-    await expect(assign).toHaveCount(0); expect(calls).toEqual(["define","knowledge","authorize"]); expect(spaces).toEqual(["TRON_CORE"]);
-    await authorization.scrollIntoViewIfNeeded();
+    await assign.getByRole("button",{name:zh?"确认":"Confirm",exact:true}).click();
+    await expect(assign).toHaveCount(0);
+    await expect(reviewer.getByText("Tron Core",{exact:true})).toBeVisible();
+    expect(spaces).toEqual([]);
+    await reviewer.getByRole("button",{name:zh?"取消":"Cancel",exact:true}).click();
+    await card.click();
+    await expect(reviewer.getByRole("button",{name:zh?"选择空间（0）":"Choose workspaces (0)",exact:true})).toBeVisible();
+    await reviewer.getByRole("button",{name:zh?/选择空间/:/Choose workspaces/}).click();
+    await assign.getByRole("checkbox",{name:"Tron Core",exact:true}).check();
+    await assign.getByRole("button",{name:zh?"确认":"Confirm",exact:true}).click();
+    const fieldBounds = await reviewer.getByRole("button",{name:zh?/选择空间/:/Choose workspaces/}).boundingBox();
+    const nameBounds = await reviewer.getByRole("textbox",{name:zh?"名称":"Name",exact:true}).boundingBox();
+    expect(fieldBounds!.y).toBeGreaterThan(nameBounds!.y);
+    expect(fieldBounds!.y - nameBounds!.y).toBeLessThan(120);
+    await reviewer.getByRole("button",{name:zh?"保存":"Save",exact:true}).click();
+    await expect(reviewer).toHaveCount(0);
+    expect(calls).toEqual(["define","authorize","knowledge","authorize"]);
+    expect(spaces).toEqual(["TRON_CORE"]);
     await page.screenshot({animations:"disabled",path:testInfo.outputPath(`agent-management-${locale}.png`)});
   });
 }

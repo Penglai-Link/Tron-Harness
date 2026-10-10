@@ -18,10 +18,13 @@ const fixture = vi.hoisted(() => ({
   create: vi.fn(),
   reset: vi.fn(),
   knowledge: vi.fn(),
+  workspaceGrants: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 vi.mock("@/domain/knowledge-base/api/knowledgeBaseApi", () => ({ setAgentKnowledgeLibraries: fixture.knowledge }));
+vi.mock("../hooks/agentWorkspaceGrants", () => ({ persistAgentWorkspaceGrants: fixture.workspaceGrants }));
+vi.mock("../components/AgentWorkspaceField", () => ({ AgentWorkspaceField: ({ disabled, onSelectionChange }: { disabled: boolean; onSelectionChange: (codes: string[]) => void }) => <><button type="button" disabled={disabled} onClick={() => onSelectionChange(["TRON_CORE"])}>Choose workspace</button><button type="button" disabled={disabled} onClick={() => onSelectionChange([])}>Clear workspaces</button></> }));
 
 vi.mock("@/domain/agent/api", () => ({
   fetchWorkspaceInternalAgents: vi.fn(async () => [fixture.record, ...fixture.additionalRecords].map((record) => ({ ...record, selectedToolCodes: [...record.selectedToolCodes] }))),
@@ -290,9 +293,64 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.owl" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
     await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "builtin.react-loop", avatarId: "owl" }));
     expect(await screen.findByRole("button", { name: "Edit Reviewer" })).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
+    expect(fixture.workspaceGrants).toHaveBeenCalledWith("reviewer", ["TRON_CORE"]);
+  });
+
+  it("saves workspace-only changes including clearing every grant", async () => {
+    fixture.record.agentCode = "reviewer";
+    await openEditor("platform");
+    fireEvent.click(screen.getByRole("button", { name: "Clear workspaces" }));
+    expect(fixture.workspaceGrants).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(fixture.workspaceGrants).toHaveBeenCalledWith("reviewer", []));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patchDefinition).not.toHaveBeenCalled();
+  });
+
+  it("drops workspace drafts on Cancel and keeps workspace-scope editing isolated", async () => {
+    fixture.record.agentCode = "reviewer";
+    await openEditor("platform");
+    fireEvent.click(screen.getByRole("button", { name: "Choose workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Main Agent" }));
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save" }).disabled).toBe(true);
+    expect(fixture.workspaceGrants).not.toHaveBeenCalled();
+    cleanup();
+    await openEditor("workspace");
+    expect(screen.queryByRole("button", { name: "Choose workspace" })).toBeNull();
+  });
+
+  it("keeps a failed assignment draft for retry", async () => {
+    fixture.record.agentCode = "reviewer";
+    fixture.workspaceGrants.mockRejectedValueOnce(new Error("Assignment failed"));
+    await openEditor("platform");
+    fireEvent.click(screen.getByRole("button", { name: "Choose workspace" }));
+    save();
+    await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("Assignment failed"));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    save();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.workspaceGrants).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a created agent's failed assignment without creating twice", async () => {
+    fixture.workspaceGrants.mockRejectedValueOnce(new Error("Assignment failed"));
+    render(<WorkspaceAgentsPage category="internal" scope="platform" />);
+    await screen.findByRole("button", { name: "Edit Main Agent" });
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
+    await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("Assignment failed"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "pages:platformData.save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.create).toHaveBeenCalledTimes(1);
+    expect(fixture.workspaceGrants).toHaveBeenCalledTimes(2);
   });
 });

@@ -66,6 +66,8 @@ import { DataTable } from "@/components/data-table";
 import { Field, SelectInput, TextInput } from "@/components/forms";
 import { CreateInternalAgentDialog } from "../components/CreateInternalAgentDialog";
 import { InternalAgentKnowledgeField } from "../components/InternalAgentKnowledgeField";
+import { AgentWorkspaceField } from "../components/AgentWorkspaceField";
+import { persistAgentWorkspaceGrants } from "../hooks/agentWorkspaceGrants";
 import { AgentRolePromptField } from "../components/AgentRolePromptField";
 import { InternalAgentAssignmentDialog, type InternalAgentAssignmentKind } from "../components/InternalAgentAssignmentDialog";
 import { PLATFORM_INTERNAL_AGENT_SCOPE, notifyInternalAgentRegistryChanged } from "../model";
@@ -240,6 +242,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   const [editingAgentCode, setEditingAgentCode] = useState<string | null>(null);
   const [restoreBaselines, setRestoreBaselines] = useState<Record<string, WorkspaceInternalAgentRecord>>({});
   const [knowledgeDrafts, setKnowledgeDrafts] = useState<Record<string, string[]>>({});
+  const [workspaceDrafts, setWorkspaceDrafts] = useState<Record<string, string[]>>({});
   const [assignmentDialog, setAssignmentDialog] = useState<{ agentCode: string; workspaceCode: string; kind: InternalAgentAssignmentKind } | null>(null);
   const [internalAgents, setInternalAgents] = useState<WorkspaceInternalAgentRecord[]>([]);
   const [toolDomains, setToolDomains] = useState<ToolCatalogDomainRecord[]>([]);
@@ -360,6 +363,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   useEffect(() => {
     setEditingAgentCode(null);
     setKnowledgeDrafts({});
+    setWorkspaceDrafts({});
     setRestoreBaselines({});
     void refreshWorkspaceData();
   }, [activeWorkspaceCode, category, dataSource, mcpDataSource, scope]);
@@ -554,7 +558,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     if (!row || !draft || isBusy(`internal-save:${agentCode}`) || isBusy(`internal-reset:${agentCode}`)) {
       return;
     }
-    if (!hasDraftChanges(row, draft) && !knowledgeDrafts[agentCode] && !restoreBaselines[agentCode]) {
+    if (!hasDraftChanges(row, draft) && !knowledgeDrafts[agentCode] && !workspaceDrafts[agentCode] && !restoreBaselines[agentCode]) {
       return;
     }
 
@@ -643,7 +647,12 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         await Promise.all(["knowledge-agent-libraries", "knowledge-base", "knowledge-bases", "platform-knowledge-bases", "knowledge-library-agent-grants"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
         setKnowledgeDrafts((current) => { const next = { ...current }; delete next[agentCode]; return next; });
       }
+      if (scope === "platform" && agentCode !== "main-agent" && workspaceDrafts[agentCode]) {
+        await persistAgentWorkspaceGrants(agentCode, workspaceDrafts[agentCode]);
+        await queryClient.invalidateQueries({ queryKey: ["agent-workspace-grants", agentCode] });
+      }
       const hasPendingChanges = await refreshInternalAgent(agentCode, draft);
+      setWorkspaceDrafts((current) => { const next = { ...current }; delete next[agentCode]; return next; });
       notifyInternalAgentRegistryChanged();
       setInternalSaveState(agentCode, hasPendingChanges ? "pending" : "saved");
       if (!hasPendingChanges) {
@@ -730,7 +739,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       {internalAgentsPage && scope === "platform" ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold">{t("pages:platformData.agentDefinitions")}</h2>
-          {allowCreate ? <CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} onCreated={refreshCreatedAgent} /> : null}
+          {allowCreate ? <CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} allowWorkspaceAssignment={scope === "platform"} onCreated={refreshCreatedAgent} /> : null}
         </div>
       ) : <PageHeader title={pageTitle} />}
 
@@ -773,6 +782,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   setInternalDrafts((current) => ({ ...current, [agent.agentCode]: nextDraft }));
                   setInternalSaveState(agent.agentCode, "idle");
                   setKnowledgeDrafts({});
+                  setWorkspaceDrafts({});
                   setRestoreBaselines({});
                   setEditingAgentCode(agent.agentCode);
                 }}>
@@ -808,6 +818,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                 <Field label={internalPageT("definition.name", "Name")}>
                   <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={editingDisabled} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
                 </Field>
+                {scope === "platform" ? <AgentWorkspaceField code={agent.agentCode} name={draft.name} disabled={editingDisabled} selectedCodes={workspaceDrafts[agent.agentCode]} onSelectionChange={(codes) => setWorkspaceDrafts((current) => ({ ...current, [agent.agentCode]: codes }))} /> : null}
                 <AgentRolePromptField key={`${activeWorkspaceCode}:${agent.agentCode}`} workspaceCode={activeWorkspaceCode} disabled={editingDisabled} value={draft.rolePrompt} onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })} />
               </div>
 
@@ -977,7 +988,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
               </div>
               <DialogFooter>
                 <Button variant="outline" disabled={internalBusy} onClick={() => { setEditingAgentCode(null); setAssignmentDialog(null); }}>{internalPageT("definition.cancel", "Cancel")}</Button>
-                <Button disabled={internalBusy || !draft.name.trim() || (!hasDraftChanges(agent, draft) && !knowledgeDrafts[agent.agentCode] && !restoreBaselines[agent.agentCode])} onClick={() => void handleSaveInternalAgent(agent.agentCode)}>{isSaving ? internalPageT("actions.saving", "Saving...") : internalPageT("actions.save", "Save")}</Button>
+                <Button disabled={internalBusy || !draft.name.trim() || (!hasDraftChanges(agent, draft) && !knowledgeDrafts[agent.agentCode] && !workspaceDrafts[agent.agentCode] && !restoreBaselines[agent.agentCode])} onClick={() => void handleSaveInternalAgent(agent.agentCode)}>{isSaving ? internalPageT("actions.saving", "Saving...") : internalPageT("actions.save", "Save")}</Button>
               </DialogFooter>
               </DialogContent>
               </Dialog> : null}

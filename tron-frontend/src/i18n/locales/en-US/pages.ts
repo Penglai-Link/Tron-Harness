@@ -289,7 +289,7 @@ export const pages = {
       "sourceCode": "Source"
     }
   },
-  platformData: {"agentDefinitions": "Agent definitions", "agentAuthorization": "Workspace authorization", "agentAuthorizationHelp": "Assign existing agents to workspaces. Knowledge library access follows the agent authorization.", "noAgentDefinitions": "Create an agent definition first.", "workspace": "Workspace", "selectWorkspace": "Select a workspace", "allWorkspaces": "All workspaces", "assign": "Assign workspaces", "assignTitle": "Assign {{name}} to workspaces", "searchWorkspaces": "Search workspaces", "assignmentHelp": "Only selected workspaces can use this item. Clearing a selection and saving revokes access immediately.", "save": "Save", "cancel": "Cancel", "assignedWorkspaces": "Assigned workspaces", "platformCatalog": "Platform catalog", "spaceAssignments": "Workspace configuration", "unassigned": "Unassigned", "builtinAgent": "Built-in main agent, available in all workspaces"},
+  platformData: {"chooseWorkspaces": "Choose workspaces ({{count}})", "confirm": "Confirm", "retry": "Retry", "loadingWorkspaces": "Loading workspaces...", "draftAssignmentHelp": "Confirm your selection, then save the agent to apply workspace access.", "createdAssignmentPending": "Agent created. Save to finish workspace assignment; retry will not create another agent.", "agentDefinitions": "Agent definitions", "agentAuthorization": "Workspace authorization", "agentAuthorizationHelp": "Assign existing agents to workspaces. Knowledge library access follows the agent authorization.", "noAgentDefinitions": "Create an agent definition first.", "workspace": "Workspace", "selectWorkspace": "Select a workspace", "allWorkspaces": "All workspaces", "assign": "Assign workspaces", "assignTitle": "Assign {{name}} to workspaces", "searchWorkspaces": "Search workspaces", "assignmentHelp": "Only selected workspaces can use this item. Clearing a selection and saving revokes access immediately.", "save": "Save", "cancel": "Cancel", "assignedWorkspaces": "Assigned workspaces", "platformCatalog": "Platform catalog", "spaceAssignments": "Workspace configuration", "unassigned": "Unassigned", "builtinAgent": "Built-in main agent, available in all workspaces"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "Chat not found.", "CHAT_SESSION_MUST_BE_ARCHIVED": "Archive the chat first.", "CHAT_SESSION_RUN_ACTIVE": "The chat is running. Try again later.", "CHAT_SESSION_ARCHIVED": "The chat is archived.", "CHAT_SESSION_DELETE_FAILED": "Deletion failed. Retry this item."},
     cancel: "Cancel",
@@ -1831,6 +1831,9 @@ export const pages = {
       itemLabel: "system agents",
     },
     table: {
+      unavailableLabel: "{{name}} unavailable",
+      manageLabel: "Manage {{name}}",
+      notScanned: "Not scanned",
       catalog: {
         codex: {
           description: "OpenAI Codex CLI agent runtime.",

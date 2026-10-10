@@ -289,7 +289,7 @@ export const pages = {
       "sourceCode": "来源"
     }
   },
-  platformData: {"agentDefinitions": "智能体定义", "agentAuthorization": "空间授权", "agentAuthorizationHelp": "选择已定义的智能体分配给空间；知识库跟随智能体授权，无需单独分配给空间。", "noAgentDefinitions": "请先创建智能体定义。", "workspace": "空间", "selectWorkspace": "请选择空间", "allWorkspaces": "全部空间", "assign": "分配空间", "assignTitle": "分配「{{name}}」给空间", "searchWorkspaces": "搜索空间", "assignmentHelp": "只有选中的空间可以使用。取消勾选并保存后，立即撤销使用权限。", "save": "保存", "cancel": "取消", "assignedWorkspaces": "已分配空间", "platformCatalog": "平台目录", "spaceAssignments": "空间配置", "unassigned": "未分配", "builtinAgent": "内置主智能体，所有空间可用"},
+  platformData: {"chooseWorkspaces": "选择空间（{{count}}）", "confirm": "确认", "retry": "重试", "loadingWorkspaces": "正在加载空间…", "draftAssignmentHelp": "确认选择后，保存智能体才会更新空间使用权限。", "createdAssignmentPending": "智能体已创建，请保存以完成空间授权；重试不会重复创建。", "agentDefinitions": "智能体定义", "agentAuthorization": "空间授权", "agentAuthorizationHelp": "选择已定义的智能体分配给空间；知识库跟随智能体授权，无需单独分配给空间。", "noAgentDefinitions": "请先创建智能体定义。", "workspace": "空间", "selectWorkspace": "请选择空间", "allWorkspaces": "全部空间", "assign": "分配空间", "assignTitle": "分配「{{name}}」给空间", "searchWorkspaces": "搜索空间", "assignmentHelp": "只有选中的空间可以使用。取消勾选并保存后，立即撤销使用权限。", "save": "保存", "cancel": "取消", "assignedWorkspaces": "已分配空间", "platformCatalog": "平台目录", "spaceAssignments": "空间配置", "unassigned": "未分配", "builtinAgent": "内置主智能体，所有空间可用"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "会话不存在。", "CHAT_SESSION_MUST_BE_ARCHIVED": "请先归档会话。", "CHAT_SESSION_RUN_ACTIVE": "会话正在运行，稍后重试。", "CHAT_SESSION_ARCHIVED": "会话已归档。", "CHAT_SESSION_DELETE_FAILED": "删除失败，可重试此项。"},
     cancel: "取消",
@@ -1801,6 +1801,9 @@ export const pages = {
       itemLabel: "系统智能体",
     },
     table: {
+      unavailableLabel: "{{name}} 不可用",
+      manageLabel: "管理 {{name}}",
+      notScanned: "未扫描",
       catalog: {
         codex: {
           description: "OpenAI Codex CLI 智能体运行时。",

@@ -6,8 +6,9 @@ import { TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
 import { usePlatformWorkspaces } from "./PlatformWorkspaceScope";
 
-export function WorkspaceAssignmentDialog({ name, assigned, save, onClose, onSaved }: {
+export function WorkspaceAssignmentDialog({ name, assigned, save, onClose, onSaved, confirmLabel, help }: {
   name: string; assigned: string[]; save: (codes: string[]) => Promise<unknown>; onClose: () => void; onSaved: () => void;
+  confirmLabel?: string; help?: string;
 }) {
   const { t } = useTranslation("pages");
   const query = usePlatformWorkspaces();
@@ -24,9 +25,9 @@ export function WorkspaceAssignmentDialog({ name, assigned, save, onClose, onSav
           })} />{option.label || option.name}
         </label>)}
       </div>
-      <p className="text-sm text-[var(--color-on-surface-variant)]">{t("platformData.assignmentHelp")}</p>
+      <p className="text-sm text-[var(--color-on-surface-variant)]">{help ?? t("platformData.assignmentHelp")}</p>
       {query.error || mutation.error ? <p role="alert">{(query.error ?? mutation.error)?.message}</p> : null}
-      <DialogFooter><Button variant="outline" disabled={mutation.isPending} onClick={onClose}>{t("platformData.cancel")}</Button><Button disabled={query.isLoading || Boolean(query.error) || mutation.isPending} onClick={() => mutation.mutate()}>{t("platformData.save")}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="outline" disabled={mutation.isPending} onClick={onClose}>{t("platformData.cancel")}</Button><Button type="button" disabled={query.isLoading || Boolean(query.error) || mutation.isPending} onClick={() => mutation.mutate()}>{confirmLabel ?? t("platformData.save")}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }
