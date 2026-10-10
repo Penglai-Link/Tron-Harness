@@ -52,3 +52,21 @@ it("shows empty declared contents for a pack with no contributions", async () =>
   mount();
   expect(await screen.findByText("pages:capabilityManagement.emptyContents")).toBeTruthy();
 });
+
+it("renders plugins and extension implementations alongside tools and skills", async () => {
+  vi.mocked(listCapabilityPacks).mockResolvedValue([{ ...pack, contents: [
+    ...pack.contents!,
+    { kind: "Plugin", name: "agent.a2ui", description: "" },
+    { kind: "Implementation", name: "A2uiService", description: "tool: Interactive surfaces" },
+    { kind: "Implementation", name: "A2UI Guidance", description: "skill: Interface instructions" },
+    { kind: "Resource", name: "references/examples.json", description: "Skill examples" },
+  ] }]);
+  mount();
+  expect(await screen.findByText("agent.a2ui")).toBeTruthy();
+  expect(screen.getByText("A2uiService")).toBeTruthy();
+  expect(screen.getByText("tool: Interactive surfaces")).toBeTruthy();
+  expect(screen.getByText("skill: Interface instructions")).toBeTruthy();
+  expect(screen.getByText("references/examples.json")).toBeTruthy();
+  expect(screen.getByText("a2ui_publish")).toBeTruthy();
+  expect(screen.getByText("a2ui-interface")).toBeTruthy();
+});

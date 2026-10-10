@@ -122,6 +122,76 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
                 .map(|tool| content("Tool", tool.tool_name, tool.description)),
         );
     }
+    // Keep detail contributions and the extension catalog on the same source.
+    items.extend(
+        super::pack_extension_implementations()
+            .into_iter()
+            .filter(|implementation| implementation.provider_pack_id == id)
+            .map(|implementation| {
+                content(
+                    "Implementation",
+                    implementation.implementation,
+                    format!(
+                        "{}: {}",
+                        implementation.extension_point, implementation.description
+                    ),
+                )
+            }),
+    );
+    let plugins: &[&str] = match id {
+        "framework.external-agent" => &["framework.external-agent", "framework.loop"],
+        "framework.local.scoped" => &["framework.pty.service", "framework.local.scoped.tools"],
+        "framework.tool-pack.agent-collaboration" => &["tools.agents"],
+        "framework.a2ui" => &["agent.a2ui"],
+        "framework.personai" => &["capability.personai", "framework.tools.discovery"],
+        "framework.web" => &["framework.web.tools"],
+        "framework.media" => &["framework.media.tools"],
+        "tron.harness" => &[
+            "tron.harness.tools",
+            "tron.harness.tool-permissions",
+            "framework.context-assembler",
+        ],
+        _ => &[],
+    };
+    items.extend(plugins.iter().map(|plugin| content("Plugin", *plugin, "")));
+    let resources: &[(&str, &str)] = match id {
+        "framework.a2ui" => &[
+            (
+                "A2uiService",
+                "Shared surface state and interaction service",
+            ),
+            ("references/examples.json", "A2UI skill examples"),
+            ("catalog.json", "Negotiated component catalog index"),
+            ("protocol.json", "A2UI server-to-client protocol schema"),
+            ("common-types.json", "Shared A2UI schema types"),
+            (
+                "components/agent/",
+                "Per-component schemas for the negotiated Agent catalog",
+            ),
+            (
+                "components/minimal/",
+                "Per-component schemas for the negotiated minimal catalog",
+            ),
+        ],
+        "framework.local.scoped" => &[("PtyService", "Shared scoped PTY sessions")],
+        "framework.personai" => &[
+            ("PersonAiConnection", "Account-bound PersonAI connection"),
+            ("PersonAiServices", "PersonAI API clients"),
+            ("PersonAiModels", "PersonAI model catalog"),
+            ("PersonAiModelSync", "Account-bound model synchronization"),
+            ("ModelRuntimeService", "PersonAI model runtime"),
+            (
+                "ModelCatalogRefreshService",
+                "PersonAI model catalog synchronization",
+            ),
+        ],
+        _ => &[],
+    };
+    items.extend(
+        resources
+            .iter()
+            .map(|(name, description)| content("Resource", *name, *description)),
+    );
     items
 }
 
@@ -150,7 +220,70 @@ mod content_tests {
             .iter()
             .find(|pack| pack.id == eliteforge_agent_capability_tools::AGENT_COLLABORATION_PACK)
             .unwrap();
-        assert_eq!(collaboration.contents.len(), 8);
+        assert_eq!(
+            collaboration
+                .contents
+                .iter()
+                .filter(|item| item.kind == "Tool")
+                .count(),
+            8
+        );
+    }
+
+    #[test]
+    fn builtin_details_include_owned_extensions_and_plugins() {
+        let packs = super::super::capability_pack_catalog();
+        let implementations = super::super::pack_extension_implementations();
+        for pack in &packs {
+            for implementation in implementations
+                .iter()
+                .filter(|item| item.provider_pack_id == pack.id)
+            {
+                assert!(
+                    pack.contents
+                        .iter()
+                        .any(|item| item.kind == "Implementation"
+                            && item.name == implementation.implementation
+                            && item
+                                .description
+                                .starts_with(&format!("{}:", implementation.extension_point))),
+                    "{} is missing {}",
+                    pack.id,
+                    implementation.implementation
+                );
+            }
+        }
+        let a2ui = packs
+            .iter()
+            .find(|pack| pack.id == "framework.a2ui")
+            .unwrap();
+        for kind in ["Tool", "Skill", "Plugin", "Implementation", "Resource"] {
+            assert!(a2ui.contents.iter().any(|item| item.kind == kind));
+        }
+        assert_eq!(
+            a2ui.contents
+                .iter()
+                .filter(|item| item.kind == "Implementation")
+                .count(),
+            3
+        );
+        let local = packs
+            .iter()
+            .find(|pack| pack.id == "framework.local.scoped")
+            .unwrap();
+        assert!(
+            !local
+                .contents
+                .iter()
+                .any(|item| item.name.contains("Harness"))
+        );
+        let harness = packs.iter().find(|pack| pack.id == "tron.harness").unwrap();
+        assert!(
+            harness
+                .contents
+                .iter()
+                .any(|item| item.name == "Tron HarnessTools")
+        );
     }
 
     #[test]
@@ -159,10 +292,13 @@ mod content_tests {
             "manifest_version": 1, "id": "test.pack", "name": "Test", "version": "1.0.0", "framework": "*",
             "plugins": ["test.plugin"], "skills": ["skills/demo"], "resources": ["assets/icon.png"],
             "permissions": ["network"], "dependencies": [{"id": "test.base", "version": "^1"}],
-            "pages": [{"id": "test.page", "title": "Demo", "plugin": "test.plugin", "entry": "index.html"}]
+            "pages": [{"id": "test.page", "title": "Demo", "plugin": "test.plugin", "entry": "index.html"}],
+            "extension_points": [{"id": "test.extension", "owner": "test.pack", "version": "1.0.0", "category": "custom", "multiplicity": "multiple"}],
+            "implementations": [{"id": "test.implementation", "extension": "test.extension", "contract": "^1"}],
+            "mcp": [{"id": "test.mcp", "transport": "http", "url": "https://example.com/mcp"}]
         })).unwrap();
         let items = manifest_contents(&manifest);
-        assert_eq!(items.len(), 6);
+        assert_eq!(items.len(), 9);
         for kind in [
             "Plugin",
             "Skill",
@@ -170,6 +306,9 @@ mod content_tests {
             "Permission",
             "Dependency",
             "Page",
+            "Extension",
+            "Implementation",
+            "Mcp",
         ] {
             assert!(items.iter().any(|item| item.kind == kind));
         }

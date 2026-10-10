@@ -170,7 +170,7 @@ pub fn capability_pack_catalog_with_state(
         .collect()
 }
 
-pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
+pub(super) fn pack_extension_implementations() -> Vec<ExtensionImplementationInfo> {
     [
         (
             "model",
@@ -183,10 +183,82 @@ pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
         (
             "tool",
             "Tool",
-            "ScopedLocalToolsPlugin + Tron HarnessTools",
-            "",
+            "ScopedLocalToolsPlugin",
+            eliteforge_agent_official_plugin_tools_local::TOOL_IMPLEMENTATION_DESCRIPTION,
             "framework.local.scoped",
-            "EliteForge / Tron",
+            "EliteForge",
+        ),
+        (
+            "tool",
+            "Tool",
+            "Tron HarnessTools",
+            "Tron business tool provider",
+            "tron.harness",
+            "Tron",
+        ),
+        (
+            "tool-policy",
+            "Tool Policy",
+            "TronToolPolicy",
+            "Platform tool permissions and risk approval",
+            "tron.harness",
+            "Tron",
+        ),
+        (
+            "tool",
+            "Tool",
+            "AgentToolsPlugin",
+            "Child-agent and independent thread tools",
+            "framework.tool-pack.agent-collaboration",
+            "EliteForge",
+        ),
+        (
+            "tool",
+            "Tool",
+            "A2uiService",
+            "Publish, expand and manage interactive surfaces",
+            "framework.a2ui",
+            "EliteForge",
+        ),
+        (
+            "skill",
+            "Skill",
+            "A2UI Guidance",
+            "A2UI interface instructions and reference resources",
+            "framework.a2ui",
+            "EliteForge",
+        ),
+        (
+            "context",
+            "Context",
+            "A2UI Guidance",
+            "Negotiated A2UI catalog and usage guidance",
+            "framework.a2ui",
+            "EliteForge",
+        ),
+        (
+            "tool",
+            "Tool",
+            "PersonAiToolProvider",
+            "Account-bound remote tools",
+            "framework.personai",
+            "EliteForge",
+        ),
+        (
+            "tool",
+            "Tool",
+            "WebToolsPlugin",
+            "Public webpage fetching",
+            "framework.web",
+            "EliteForge",
+        ),
+        (
+            "tool",
+            "Tool",
+            "MediaToolsPlugin",
+            "Scoped image and PDF readers",
+            "framework.media",
+            "EliteForge",
         ),
         (
             "observe",
@@ -202,6 +274,14 @@ pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
             "TronContext + bounded context preparation",
             tron_agent_harness::CONTEXT_IMPLEMENTATION_DESCRIPTION,
             "tron.harness",
+            "Tron",
+        ),
+        (
+            "external-agent",
+            "External Agent",
+            "HostExternalAgent",
+            "Host adapter for external Agent execution and session bridging",
+            "framework.external-agent",
             "Tron",
         ),
         (
@@ -231,19 +311,11 @@ pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
             provider_pack_id,
             provider,
         )| {
-            let description = match extension_point {
-                "tool" => format!(
-                    "{} {}",
-                    eliteforge_agent_official_plugin_tools_local::TOOL_IMPLEMENTATION_DESCRIPTION,
-                    tron_agent_harness::TOOL_IMPLEMENTATION_DESCRIPTION,
-                ),
-                _ => description.to_owned(),
-            };
             ExtensionImplementationInfo {
                 extension_point: extension_point.into(),
                 extension_name: extension_name.into(),
                 implementation: implementation.into(),
-                description,
+                description: description.to_owned(),
                 provider_pack_id: provider_pack_id.into(),
                 provider: provider.into(),
                 effective: true,
@@ -251,6 +323,28 @@ pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
         },
     )
     .collect()
+}
+
+// The extension settings page currently manages these six runtime switches.
+// Pack details also include contributions that have no independent switch.
+pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
+    pack_extension_implementations()
+        .into_iter()
+        .filter(|item| {
+            matches!(
+                (
+                    item.extension_point.as_str(),
+                    item.provider_pack_id.as_str()
+                ),
+                ("model", "framework.model.connection.tron")
+                    | ("tool", "framework.local.scoped")
+                    | ("observe", "tron.tool.audit")
+                    | ("context", "tron.harness")
+                    | ("runtime", "framework.external-agent")
+                    | ("storage", "framework.storage.local")
+            )
+        })
+        .collect()
 }
 
 pub fn extension_implementation_catalog_with_state(
