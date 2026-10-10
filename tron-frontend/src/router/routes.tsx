@@ -608,6 +608,15 @@ const registeredRoutes: AppRoute[] = [
     settingsNav: "Capability Packs",
   },
   {
+    pageId: "settings.capabilityPackDetail",
+    route: "/settings/capability-packs/:packId",
+    activeNav: "Settings",
+    title: "Capability Pack Details",
+    archetype: "settings",
+    layout: "settings",
+    settingsNav: "Capability Packs",
+  },
+  {
     pageId: "settings.capabilityConfiguration",
     route: "/settings/capability-configuration",
     activeNav: "Settings",

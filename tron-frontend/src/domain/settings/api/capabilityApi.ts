@@ -9,6 +9,13 @@ export interface CapabilityPackRecord {
   updatedAt: string | null;
   effective: boolean;
   kind: "capability" | "plugin";
+  contents: CapabilityContentRecord[];
+}
+
+export interface CapabilityContentRecord {
+  kind: string;
+  name: string;
+  description: string;
 }
 
 export interface ExtensionImplementationRecord {

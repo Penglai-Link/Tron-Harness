@@ -1644,6 +1644,13 @@ export const pages = {
     },
   },
   capabilityManagement: {
+    details: "Capability Pack Details",
+    backToPacks: "Back to capability packs",
+    notFound: "This capability pack does not exist or has been removed.",
+    contents: "Provided contents",
+    emptyContents: "This capability pack has no declared contents.",
+    contentKinds: {"Tool": "Tools", "Skill": "Skills", "Resource": "Resources", "Plugin": "Plugins", "Page": "Pages", "Mcp": "MCP services", "Extension": "Extension points", "Implementation": "Implementations", "Dependency": "Dependencies", "Permission": "Permissions", "Runtime": "Runtime", "Context": "Context", "Policy": "Permission policy"},
+
     refresh: "Refresh",
     import: "Import pack",
     importSucceeded: "Capability pack imported.",

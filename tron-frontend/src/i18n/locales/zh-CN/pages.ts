@@ -1617,6 +1617,13 @@ export const pages = {
     },
   },
   capabilityManagement: {
+    details: "能力包详情",
+    backToPacks: "返回能力包",
+    notFound: "能力包不存在或已被移除。",
+    contents: "提供的内容",
+    emptyContents: "此能力包暂无已声明的内容。",
+    contentKinds: {"Tool": "工具", "Skill": "技能", "Resource": "资源", "Plugin": "插件", "Page": "页面", "Mcp": "MCP 服务", "Extension": "扩展点", "Implementation": "扩展实现", "Dependency": "依赖", "Permission": "权限", "Runtime": "运行时", "Context": "上下文", "Policy": "权限策略"},
+
     refresh: "刷新",
     import: "导入能力包",
     importSucceeded: "能力包导入成功。",

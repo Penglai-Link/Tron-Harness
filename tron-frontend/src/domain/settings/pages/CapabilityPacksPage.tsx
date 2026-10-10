@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Package, RefreshCw, Upload } from "lucide-react";
+import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -52,9 +53,9 @@ export function CapabilityPacksPage() {
     {loading && records.length === 0 ? <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("loading")}</p> : null}
     {!loading && !error && records.length === 0 ? <SurfaceCard className="text-sm text-[var(--color-on-surface-variant)]">{pageT("emptyPacks")}</SurfaceCard> : null}
     <div className="grid gap-3 xl:grid-cols-2">
-      {visibleRecords.map((record) => <SurfaceCard data-theme-part="capability-pack-card" key={record.id} className="space-y-4 p-4">
+      {visibleRecords.map((record) => <SurfaceCard data-theme-part="capability-pack-card" key={record.id} className="relative space-y-4 p-4 transition-colors hover:border-[var(--color-outline)]">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container)]"><Package size={18} /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{record.name}</h2><p data-theme-part="capability-pack-id" className="mt-1 break-all font-mono text-xs text-[var(--tron-capability-id-fg,var(--color-on-surface-variant))]">{record.id}</p></div></div>
+          <div className="flex min-w-0 items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container)]"><Package size={18} /></span><div className="min-w-0"><h2 className="truncate text-sm font-semibold"><Link className="after:absolute after:inset-0 after:rounded-lg focus-visible:outline focus-visible:outline-2" to={`/settings/capability-packs/${encodeURIComponent(record.id)}`}>{record.name}</Link></h2><p data-theme-part="capability-pack-id" className="mt-1 break-all font-mono text-xs text-[var(--tron-capability-id-fg,var(--color-on-surface-variant))]">{record.id}</p></div></div>
           <Badge data-theme-part={record.effective ? "capability-status-effective" : "capability-status-inactive"} variant={record.effective ? "success" : "outline"}>{record.effective ? <><CheckCircle2 size={13} className="mr-1" />{pageT("effective")}</> : pageT("inactive")}</Badge>
         </div>
         <p className="min-h-10 text-sm text-[var(--color-on-surface-variant)]">{record.description}</p>
@@ -63,7 +64,7 @@ export function CapabilityPacksPage() {
           <div><dt className="text-[var(--color-on-surface-variant)]">{pageT("provider")}</dt><dd className="mt-1 font-medium">{record.provider}</dd></div>
           <div><dt className="text-[var(--color-on-surface-variant)]">{pageT("updatedAt")}</dt><dd className="mt-1 font-medium">{record.updatedAt ?? "—"}</dd></div>
         </dl>
-        <div className="flex justify-end border-t border-[var(--color-outline-variant)] pt-3"><Button size="sm" variant={record.effective ? "outline" : "default"} disabled={busyId !== null} onClick={() => void togglePack(record)}>{busyId === record.id ? pageT("saving") : record.effective ? pageT("disable") : pageT("enable")}</Button></div>
+        <div className="flex justify-end border-t border-[var(--color-outline-variant)] pt-3"><Button className="relative z-10" size="sm" variant={record.effective ? "outline" : "default"} disabled={busyId !== null} onClick={() => void togglePack(record)}>{busyId === record.id ? pageT("saving") : record.effective ? pageT("disable") : pageT("enable")}</Button></div>
       </SurfaceCard>)}
     </div>
   </div>;

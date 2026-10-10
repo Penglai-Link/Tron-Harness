@@ -1,5 +1,9 @@
 use serde::Serialize;
 
+#[path = "capability_contents.rs"]
+mod contents;
+use contents::{CapabilityContentInfo, builtin_contents, manifest_contents};
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityPackInfo {
@@ -11,6 +15,7 @@ pub struct CapabilityPackInfo {
     pub updated_at: Option<String>,
     pub effective: bool,
     pub kind: String,
+    pub contents: Vec<CapabilityContentInfo>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -33,6 +38,7 @@ pub fn installed_capability_packs(
     let mut packs = capability_pack_catalog();
     for installed in manager.installed().map_err(|error| error.to_string())? {
         packs.push(CapabilityPackInfo {
+            contents: manifest_contents(&installed.manifest),
             id: installed.manifest.id,
             name: installed.manifest.name,
             version: installed.manifest.version.to_string(),
@@ -56,6 +62,7 @@ pub fn install_capability_pack(
         .install_bytes(bytes, InstallPolicy::Development)
         .map_err(|error| error.to_string())?;
     Ok(CapabilityPackInfo {
+        contents: manifest_contents(&installed.manifest),
         id: installed.manifest.id,
         name: installed.manifest.name,
         version: installed.manifest.version.to_string(),
@@ -137,6 +144,7 @@ pub fn capability_pack_catalog() -> Vec<CapabilityPackInfo> {
     .into_iter()
     .map(
         |(id, name, description, provider, version, updated_at)| CapabilityPackInfo {
+            contents: builtin_contents(id),
             id: id.into(),
             name: name.into(),
             version: version.into(),
