@@ -1,3 +1,4 @@
+import { ShinyText } from "@/shared/motion";
 import {
   createContext,
   lazy,
@@ -68,7 +69,7 @@ function FilePanelHost() {
               <Suspense
                 fallback={
                   <div className="flex h-full items-center justify-center text-sm text-[var(--color-on-surface-variant)]">
-                    {t("files.loading")}
+                    <ShinyText>{t("files.loading")}</ShinyText>
                   </div>
                 }
               >

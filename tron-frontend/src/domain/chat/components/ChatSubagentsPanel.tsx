@@ -1,3 +1,4 @@
+import { ShinyText } from "@/shared/motion";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ChevronRight } from "lucide-react";
@@ -18,7 +19,7 @@ export function ChatSubagentsPanel({ sessionCode, workspaceCode }: { sessionCode
   if (item) return <SubagentSession key={`${sessionCode}:${selected}`} parent={sessionCode} workspace={workspaceCode} item={item} onBack={() => setSelected("")} />;
   return <section className="h-full overflow-y-auto p-4" aria-label={t("chat.subagents.title")}>
     {error ? <p role="alert" className="py-3 text-sm text-[var(--color-error)]">{t("chat.subagents.loadFailed")}</p> : null}
-    {loading ? <p role="status" className="py-3 text-sm text-[var(--color-on-surface-variant)]">{t("chat.subagents.loading")}</p> : null}
+    {loading ? <p role="status" className="py-3 text-sm text-[var(--color-on-surface-variant)]"><ShinyText>{t("chat.subagents.loading")}</ShinyText></p> : null}
     {!loading && !error && !items.length ? <p className="py-3 text-sm text-[var(--color-on-surface-variant)]">{t("chat.subagents.empty")}</p> : null}
     <ul className="divide-y divide-[var(--color-outline-variant)]/40">
       {items.map((item) => <li key={item.runId}>

@@ -17,6 +17,7 @@ import { TabBar } from "@/shared/layout/content/TabBar";
 import { useAppShellStore } from "@/store/appShellStore";
 import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 import RightPanelContainer from "./RightPanelContainer";
+import { MotionReveal } from "@/shared/motion";
 
 interface IPanelProps {
   children: ReactNode;
@@ -47,7 +48,7 @@ function EmptyTabWorkspace() {
       className="flex min-h-full items-center justify-center overflow-hidden px-6 py-10"
       data-testid="tron-empty-tab-workspace"
     >
-      <div className="flex w-full max-w-md flex-col items-center animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+      <MotionReveal className="flex w-full max-w-md flex-col items-center">
         <div
           className="w-full space-y-2.5"
           data-testid="tron-empty-tab-shortcuts"
@@ -76,7 +77,7 @@ function EmptyTabWorkspace() {
             </div>
           ))}
         </div>
-      </div>
+      </MotionReveal>
     </section>
   );
 }

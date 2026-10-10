@@ -4,9 +4,10 @@ import type {
 } from "react";
 
 import { cn } from "@/shared/lib/utils";
+import { MotionReveal } from "@/shared/motion";
 
 export function SurfaceCard({ className, ...props }: HTMLAttributes<HTMLElement>) {
-  return <section data-theme-anchor="card" className={cn("min-w-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-[var(--tron-card-padding,1.25rem)] shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))]", className)} {...props} />;
+  return <MotionReveal as="section" data-theme-anchor="card" className={cn("min-w-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-[var(--tron-card-padding,1.25rem)] shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))]", className)} {...props} />;
 }
 
 interface MetricCardProps {
@@ -21,7 +22,7 @@ export function MetricCard({ className, icon, label, trend, value }: MetricCardP
   const hasTrend = Boolean(trend);
 
   return (
-    <div
+    <MotionReveal
       data-theme-anchor="card"
       className={cn(
         "rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-4",
@@ -37,6 +38,6 @@ export function MetricCard({ className, icon, label, trend, value }: MetricCardP
         {icon ? <div className="flex size-9 items-center justify-center rounded-xl bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]">{icon}</div> : null}
       </div>
       {hasTrend ? <p className="mt-3 text-[13px] text-[var(--color-on-surface-variant)]">{trend}</p> : null}
-    </div>
+    </MotionReveal>
   );
 }

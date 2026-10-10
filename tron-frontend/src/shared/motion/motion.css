@@ -1,0 +1,49 @@
+/* React Bits ShinyText sweep. Keep the normal foreground as a readable fallback. */
+.tron-shiny-text {
+  color: inherit;
+}
+
+@supports (background-clip: text) {
+  .tron-shiny-text[data-motion="full"] {
+    background-image: linear-gradient(120deg, currentColor 35%, color-mix(in srgb, currentColor 30%, var(--color-on-surface, currentColor)) 50%, currentColor 65%);
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: tron-bits-shine 2.4s linear infinite;
+  }
+}
+
+@keyframes tron-bits-shine {
+  from { background-position: 100% 50%; }
+  to { background-position: -100% 50%; }
+}
+
+/* Include Base UI portals: their DOM lives outside MotionProvider. */
+:root[data-tron-motion-policy] :is([data-slot="dialog-content"], [data-slot="dialog-overlay"], [data-slot="dropdown-menu-content"], [data-slot="select-popup"], [data-slot="tooltip-content"]) {
+  animation-duration: 180ms;
+}
+
+:root:is([data-tron-motion-policy="off"], [data-tron-motion-policy="reduced"]) :is([data-slot], [data-slot] *, .tron-button),
+:root:is([data-tron-motion-policy="off"], [data-tron-motion-policy="reduced"]) [data-slot]::before,
+:root:is([data-tron-motion-policy="off"], [data-tron-motion-policy="reduced"]) [data-slot]::after {
+  animation: none !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tron-shiny-text[data-motion="full"] {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+@media (forced-colors: active) {
+  .tron-shiny-text[data-motion="full"] {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}

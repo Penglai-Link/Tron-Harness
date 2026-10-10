@@ -22,6 +22,8 @@
     "packages:publish": "changeset publish"
   },
   "dependencies": {
+    "@eliteforge/agent-ui-motion-react": "file:../.agent-deps/agent-ui/packages/motion-react",
+    "gsap": "^3.13.0",
     "@antv/g6": "^5.1.1",
     "@base-ui/react": "^1.6.0",
     "@chenglou/pretext": "^0.0.6",

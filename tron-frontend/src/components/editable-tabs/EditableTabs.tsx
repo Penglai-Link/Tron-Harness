@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { MotionReveal } from "@/shared/motion";
 
 import { EditableTabList } from "./EditableTabList";
 import { TabVisibilityProvider } from "./TabVisibilityContext";
@@ -183,6 +184,7 @@ export function EditableTabs({
               aria-hidden={keepMounted ? !isActive : undefined}
               value={panel.key}
             >
+              <MotionReveal preset="fade" disabled={!isActive} replayKey={isActive ? "active" : "cached"} className="h-full min-h-0">
               {provideTabVisibility ? (
                 <TabVisibilityProvider visible={isActive}>
                   {panel.children}
@@ -190,6 +192,7 @@ export function EditableTabs({
               ) : (
                 panel.children
               )}
+              </MotionReveal>
             </TabsContent>
           );
         })}

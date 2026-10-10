@@ -1,3 +1,4 @@
+import { ShinyText } from "@/shared/motion";
 import { setApiWorkspaceCode } from "@/shared/api/httpClient";
 import { defaultMainAgentWindowState, MAIN_AGENT_WINDOW_STORAGE_KEY } from "@/domain/agent/model/mainAgentWindowState";
 import { LocaleMenu } from "./LocaleMenu";
@@ -906,7 +907,7 @@ export function TronShell({
     return (
       <>
         <div>
-          {workspaceSwitcherLoading ? <p className="mb-2 text-xs text-[var(--color-on-surface-variant)]">{t("shell:workspace.refreshing")}</p> : null}
+          {workspaceSwitcherLoading ? <p role="status" className="mb-2 text-xs text-[var(--color-on-surface-variant)]"><ShinyText>{t("shell:workspace.refreshing")}</ShinyText></p> : null}
           {workspaceTree.length ? (
             <div className="max-h-[min(60vh,24rem)] space-y-1 overflow-y-auto pr-1" role="tree" aria-label={t("shell:workspace.selectorTitle")}>
               {workspaceTree.map((root) => renderWorkspaceTreeNode(root))}
@@ -922,7 +923,7 @@ export function TronShell({
   function renderNavigationDomainSwitcherContent() {
     return (
       <div className="space-y-1" role="listbox" aria-label={t("shell:navigation.selectorTitle")}>
-        {navigationLoading ? <p className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]">{t("shell:navigation.refreshing")}</p> : null}
+        {navigationLoading ? <p role="status" className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]"><ShinyText>{t("shell:navigation.refreshing")}</ShinyText></p> : null}
         {navigationDomains.length ? navigationDomains.map((domain) => {
           const selected = domain.domainCode === selectedDomainCode;
           return (

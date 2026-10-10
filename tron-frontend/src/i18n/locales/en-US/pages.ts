@@ -4499,6 +4499,12 @@ export const pages = {
     },
   },
   settingsAppearance: {
+    motion: "Interface motion",
+    motionSystem: "Follow system",
+    motionReduced: "Reduce motion",
+    motionOff: "Off",
+    motionPreview: "Loading preview…",
+    motionReplay: "Replay",
     onlineSkins: "Online themes",
     marketRefresh: "Refresh",
     marketInstalled: "Theme installed and applied",

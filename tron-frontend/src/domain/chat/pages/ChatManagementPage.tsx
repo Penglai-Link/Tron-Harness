@@ -1,3 +1,4 @@
+import { ShinyText } from "@/shared/motion";
 import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
 import { historyMessages } from "@eliteforge/agent-ui-chat-core";
 import { ChatSubagentsPanel } from "../components/ChatSubagentsPanel";
@@ -2204,7 +2205,7 @@ function QueryStatusLine({
     return (
       <p className="inline-flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
         <LoaderCircle className="animate-spin" size={13} />
-        <span>{loadingText}</span>
+        <ShinyText>{loadingText}</ShinyText>
       </p>
     );
   }

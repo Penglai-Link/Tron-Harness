@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/shared/lib/utils";
+import { ShinyText } from "@/shared/motion";
 
 import type { TableColumnMeta } from "./types";
 
@@ -120,7 +121,7 @@ export function DataTable<T extends RowData>({
         </TableHeader>
         <TableBody>
           {loading && rows.length === 0 ? (
-            <TableRow><TableCell className="px-5 py-8 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={leafColumns.length}>{t("table.loading")}</TableCell></TableRow>
+            <TableRow><TableCell className="px-5 py-8 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={leafColumns.length}><span role="status"><ShinyText>{t("table.loading")}</ShinyText></span></TableCell></TableRow>
           ) : error && rows.length === 0 ? (
             <TableRow><TableCell className="px-5 py-8 text-center text-sm text-[var(--color-error)]" colSpan={leafColumns.length}>{error.message}</TableCell></TableRow>
           ) : rows.length ? (

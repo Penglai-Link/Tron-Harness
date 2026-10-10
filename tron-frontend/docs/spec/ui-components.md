@@ -37,6 +37,34 @@ This document catalogs the reusable primitives in `src/components/ui`. It is the
 | `toast.tsx` | `ToastProvider`, `AnchoredToastProvider`, `toastManager`, `anchoredToastManager`, `ToastPosition`, `ToastProviderProps`, `AnchoredToastProviderProps`, `ToastPrimitive` | Transient feedback and action results |
 | `tooltip.tsx` | `Tooltip`, `TooltipProvider`, `TooltipTrigger`, `TooltipPopup`, `TooltipCreateHandle`, `TooltipPrimitive` | Short contextual help for unfamiliar controls |
 
+## Interface motion
+
+The application wraps its routes with `src/shared/motion/TronMotionProvider.tsx`.
+React Bits adapters register `enter` (AnimatedContent) and `fade` (FadeContent)
+with Agent UI's MotionProvider. Both Tron and Chat/A2UI use the same preference.
+Appearance settings persist `system` (default), `reduced`, or `off` in
+`tron.motion.mode`; system reduction and page visibility update at runtime.
+
+- `MotionReveal` from `@/shared/motion` preserves its native node and children.
+  Use `replayKey` for an explicit view/identity change, never a changing React
+  `key` to replay. Cached routes and editable tabs disable inactive entrances.
+- `SurfaceCard` and `MetricCard` enter on mount. Updating data does not replay.
+- `ShinyText` accepts translated children and inherits the text color. Use it
+  for short loading labels, with a status role on the containing element.
+  Do not animate streaming Markdown or historical messages character by character.
+- Dialog, sheet, select, dropdown, tooltip, button, spinner and skeleton primitives
+  keep their native accessibility and interaction behavior. Portal styles follow
+  the same motion policy through `html[data-tron-motion-policy]`; reduced/off
+  removes their CSS animation and transition duration. No additional labels.
+
+No primitive API changes are required. Layout, focus, drafts and scroll positions
+remain owned by the original components. GSAP restores original inline styles
+after playback and cancels only the adapter's own context on disable/unmount.
+Source attribution and the upstream license are in `src/shared/motion/NOTICE.md`.
+Focused lifecycle tests are in `src/shared/motion/BitsContent.test.tsx` and
+`TronMotionProvider.test.tsx`; keep-alive coverage remains in the route and
+editable-tabs tests. Verify motion, portal policy, theme and both locales in the browser.
+
 ## Usage Example
 
 ```tsx

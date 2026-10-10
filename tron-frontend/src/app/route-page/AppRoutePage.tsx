@@ -7,6 +7,7 @@ import {
   TronShell,
 } from "@/shared";
 import { useTabStore } from "@/store/tabStore";
+import { MotionReveal } from "@/shared/motion";
 import {
   useMemo,
   useEffect,
@@ -158,9 +159,12 @@ export default function AppRoutePage() {
 
       const { Component, route: cachedRoute } = cachedResolved;
       return (
-        <div
+        <MotionReveal
           key={`${cachedTab.tabId}:${cachedTab.revision}`}
           hidden={!isCurrentTab}
+          disabled={!isCurrentTab}
+          preset="fade"
+          replayKey={isCurrentTab ? "active" : "cached"}
           className="h-full"
         >
           <TabPanelRegistryProvider
@@ -173,7 +177,7 @@ export default function AppRoutePage() {
               </Routes>
             </CachedRouteLocationProvider>
           </TabPanelRegistryProvider>
-        </div>
+        </MotionReveal>
       );
     });
   }, [activeTabId, cachedTabsList, search, useActiveLocationSearch]);
@@ -279,11 +283,13 @@ export default function AppRoutePage() {
         contentClassName={route.shellConfig?.contentClassName}
         items={settingsNavigation}
       >
+        <MotionReveal preset="fade" replayKey={pathname} className="h-full">
         <Routes>
           <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute>{ /^(memory|knowledgeGraph)\./.test(route.pageId)
             ? <PlatformWorkspaceScope renderWithoutWorkspace={route.pageId === "memory.index" || route.pageId === "knowledgeGraph.index"}><resolved.Component key={routeRenderKey} /></PlatformWorkspaceScope>
             : <resolved.Component key={routeRenderKey} /> }</SuspendedRoute>} />
         </Routes>
+        </MotionReveal>
       </SettingsShell>
     );
   }

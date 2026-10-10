@@ -4352,6 +4352,12 @@ export const pages = {
     },
   },
   settingsAppearance: {
+    motion: "界面动效",
+    motionSystem: "跟随系统",
+    motionReduced: "减少动态效果",
+    motionOff: "关闭",
+    motionPreview: "正在加载预览…",
+    motionReplay: "重播",
     onlineSkins: "在线主题",
     marketRefresh: "刷新",
     marketInstalled: "主题已安装并启用",
