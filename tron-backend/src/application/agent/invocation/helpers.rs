@@ -69,6 +69,8 @@ pub(super) fn map_agent_error(
         | AgentManagementError::LoopNotFound
         | AgentManagementError::LoopConflict
         | AgentManagementError::LoopInUse
+        | AgentManagementError::BuiltinAgentReadOnly
+        | AgentManagementError::InternalAgentGroupInvalid
         | AgentManagementError::InternalAgentDefinitionInvalid
         | AgentManagementError::ToolPermissionInvalid
         | AgentManagementError::InternalAgentPolicyInvalid => AgentInvocationError::RuntimeFailed(

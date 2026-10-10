@@ -40,6 +40,9 @@ impl AgentManagementService {
         internal_definitions::validate_definition(&command.name, &command.role_prompt)?;
         let mut config = default_config(internal_definitions::internal_agents().remove(0));
         config.agent_code = self.validate_new_agent_code(&command.agent_code)?;
+        config.group_name = self
+            .validate_internal_agent_group("", command.group_name)?
+            .filter(|name| !name.is_empty());
         config.name = command.name.trim().to_owned();
         config.role_prompt = command.role_prompt;
         config.avatar_id = internal_definitions::validate_avatar_id(command.avatar_id.as_deref())?;
@@ -77,13 +80,18 @@ impl AgentManagementService {
         code: &str,
         command: UpdateWorkspaceInternalAgentDefinitionCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        internal_definitions::ensure_editable_definition(code)?;
         if let Some(id) = &command.avatar_id {
             internal_definitions::validate_avatar_id(Some(id))?;
         }
         if let Some(loop_code) = &command.loop_code {
             self.validate_loop_selection(Some(loop_code))?;
         }
+        let group_name = self.validate_internal_agent_group("", command.group_name)?;
         self.change_platform_internal_agent(code, |config| {
+            if let Some(name) = group_name {
+                config.group_name = (!name.is_empty()).then_some(name);
+            }
             if let Some(id) = command.avatar_id {
                 config.avatar_id = id;
             }
@@ -200,13 +208,15 @@ fn platform_view(
     let count = tools.len();
     InternalAgentToolPolicy {
         workspace_code: String::new(),
-        agent_code: config.agent_code,
+        agent_code: config.agent_code.clone(),
         name: config.name,
         description: "Platform internal agent.".into(),
         role_prompt: config.role_prompt,
         loop_code: config.loop_code,
         avatar_id: config.avatar_id,
+        group_name: config.group_name,
         platform_defined: true,
+        built_in: internal_definitions::is_builtin_agent(&config.agent_code),
         source: InternalAgentPolicySource::PlatformDefault,
         tool_assignment_mode: config.tool_assignment_mode,
         mcp_access_mode: config.mcp_access_mode,
@@ -231,6 +241,7 @@ fn default_config(
         role_prompt: definition.role_prompt,
         loop_code: definition.loop_code,
         avatar_id: definition.avatar_id,
+        group_name: definition.group_name,
         tool_assignment_mode: definition.tool_assignment_mode,
         mcp_access_mode: definition.mcp_access_mode,
         tool_exposure_mode: definition.tool_exposure_mode,

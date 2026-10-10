@@ -11,6 +11,7 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { AgentRolePromptField } from "./AgentRolePromptField";
 
 import { AgentAvatarPicker } from "./AgentAvatarPicker";
+import { InternalAgentGroupField } from "./InternalAgentGroupField";
 import { AgentLoopField } from "./AgentLoopField";
 
 export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { workspaceCode: string; onCreated: () => Promise<void> }) {
@@ -21,6 +22,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
   const [name, setName] = useState("");
   const [loopCode, setLoopCode] = useState("builtin.react-loop");
   const [rolePrompt, setRolePrompt] = useState("");
+  const [groupName, setGroupName] = useState("");
   const [avatarId, setAvatarId] = useState("robot");
   const [saving, setSaving] = useState(false);
   const text = (key: string, fallback: string) => t(`pages:workspaceAgents.internal.definition.${key}`, { defaultValue: fallback });
@@ -31,7 +33,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
     if (!codeValid || !name.trim() || saving) return;
     setSaving(true);
     try {
-      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId };
+      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId, groupName };
       if (getServiceDataSource("agent") === "api") {
         await createWorkspaceInternalAgent(workspaceCode, payload);
       } else {
@@ -43,6 +45,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
       setRolePrompt("");
       setLoopCode("builtin.react-loop");
       setAvatarId("robot");
+      setGroupName("");
       notifyInternalAgentRegistryChanged();
       await onCreated();
     } catch (error) {
@@ -69,6 +72,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
           <Field label={text("name", "Name")} required>
             <TextInput aria-label={text("name", "Name")} maxLength={100} required disabled={saving} value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
+          <InternalAgentGroupField workspaceCode={workspaceCode} value={groupName} disabled={saving} onChange={setGroupName} />
           <AgentLoopField value={loopCode} disabled={saving} onChange={setLoopCode} />
           <AgentRolePromptField workspaceCode={workspaceCode} rows={8} disabled={saving} value={rolePrompt} onChange={setRolePrompt} />
           <DialogFooter>

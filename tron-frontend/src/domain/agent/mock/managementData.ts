@@ -218,6 +218,7 @@ const toolSeed: ToolSeed[] = [
 
 type WorkspaceInternalAgentSeed = {
   avatarId?: string;
+  groupName?: string | null;
   loopCode: string;
   rolePrompt: string;
   agentCode: string;
@@ -414,6 +415,8 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     rolePrompt: effective.rolePrompt,
     loopCode: effective.loopCode,
     avatarId: effective.avatarId ?? "robot",
+    groupName: effective.groupName || null,
+    builtIn: workspaceInternalAgentSeed.some((agent) => agent.agentCode === agentCode),
     platformDefined,
     expandedDomainPersistenceMode: effective.expandedDomainPersistenceMode,
     maxSteps: effective.maxSteps,
@@ -470,14 +473,18 @@ export function createWorkspaceInternalAgentMock(workspaceCode: string, payload:
     || scopes.some((scope) => workspaceInternalAgentDefinitions[scope]?.some((agent) => agent.agentCode === agentCode))) {
     throw new Error("Agent code is already in use; choose another code");
   }
-  const agent = { ...workspaceInternalAgentSeed[0], ...payload, agentCode, loopCode: payload.loopCode ?? "builtin.react-loop", name: payload.name.trim(), description: "Workspace internal agent." };
+  const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
+  const agent = { ...workspaceInternalAgentSeed[0], ...payload, groupName, agentCode, loopCode: payload.loopCode ?? "builtin.react-loop", name: payload.name.trim(), description: "Workspace internal agent." };
   workspaceInternalAgentDefinitions[workspaceCode] = [...(workspaceInternalAgentDefinitions[workspaceCode] ?? []), agent];
   return buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode);
 }
 
-export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string; avatarId?: string }) {
-  buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
-  upsertWorkspaceInternalAgentOverride(workspaceCode, { ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode), ...payload, agentCode });
+export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string; avatarId?: string; groupName?: string | null }) {
+  if (buildWorkspaceInternalAgentRecord(workspaceCode, agentCode).builtIn) throw new Error("Built-in agent definitions are read-only");
+  const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
+  const patch = { ...payload, ...(groupName !== undefined ? { groupName } : {}) };
+  if (groupName === undefined) delete patch.groupName;
+  upsertWorkspaceInternalAgentOverride(workspaceCode, { ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode), ...patch, agentCode });
   return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
 }
 
@@ -700,4 +707,22 @@ export function setWorkspaceSystemAgentEnabledMock(
 export function isLoopUsedByAgentMock(loopCode: string) {
   const scopes = new Set([PLATFORM_INTERNAL_AGENT_SCOPE, ...Object.keys(workspaceInternalAgentDefinitions), ...Object.keys(workspaceOverrides)]);
   return [...scopes].some(scope => listWorkspaceInternalAgentRecords(scope).some(agent => agent.loopCode === loopCode));
+}
+
+const internalAgentGroups: Record<string, string[]> = {};
+export function listInternalAgentGroupsMock(workspaceCode: string) {
+  return [...new Set([...(internalAgentGroups[workspaceCode] ?? []), ...listWorkspaceInternalAgentRecords(workspaceCode).flatMap((agent) => agent.groupName ? [agent.groupName] : [])])].sort();
+}
+export function createInternalAgentGroupMock(workspaceCode: string, name: string) {
+  name = name.trim();
+  if (!name || [...name].length > 60 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error("Invalid group name");
+  internalAgentGroups[workspaceCode] = [...new Set([...(internalAgentGroups[workspaceCode] ?? []), name])];
+  return { name };
+}
+
+function validateInternalAgentGroupMock(workspaceCode: string, value: string | null | undefined) {
+  if (value == null) return undefined;
+  const name = value.trim();
+  if (name && !listInternalAgentGroupsMock(workspaceCode).includes(name)) throw new Error("Invalid internal agent group");
+  return name;
 }

@@ -7,6 +7,8 @@ import type { WorkspaceInternalAgentMcpPolicyPayload, WorkspaceInternalAgentPoli
 const fixture = vi.hoisted(() => ({
   record: {} as WorkspaceInternalAgentRecord,
   additionalRecords: [] as WorkspaceInternalAgentRecord[],
+  groups: [] as string[],
+  createGroup: vi.fn(),
   storedTools: [] as string[],
   calls: [] as string[],
   assign: vi.fn(),
@@ -19,6 +21,8 @@ const fixture = vi.hoisted(() => ({
   reset: vi.fn(),
   knowledge: vi.fn(),
 }));
+
+vi.mock("../hooks/useInternalAgentGroups", () => ({ useInternalAgentGroups: () => ({ groups: fixture.groups, isPending: false, error: null, create: fixture.createGroup }) }));
 
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 vi.mock("@/domain/knowledge-base/api/knowledgeBaseApi", () => ({ setAgentKnowledgeLibraries: fixture.knowledge }));
@@ -98,6 +102,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   fixture.calls = [];
   fixture.additionalRecords = [];
+  fixture.groups = [];
+  fixture.createGroup.mockImplementation(async (name: string) => { fixture.groups.push(name.trim()); return name.trim(); });
   fixture.storedTools = [];
   fixture.record = {
     agentCode: "main-agent", name: "Main Agent", description: "Fixture", rolePrompt: "", platformDefined: true,
@@ -291,8 +297,79 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.owl" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "builtin.react-loop", avatarId: "owl" }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "builtin.react-loop", avatarId: "owl", groupName: "" }));
     expect(await screen.findByRole("button", { name: "Edit Reviewer" })).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+});
+
+describe("internal agent groups and built-in read-only view", () => {
+  it("shows collapsible groups with counts and filters by group or search", async () => {
+    fixture.record.groupName = "Engineering";
+    fixture.additionalRecords = [
+      { ...fixture.record, agentCode: "finance", name: "Finance reviewer", groupName: "Finance" },
+      { ...fixture.record, agentCode: "ungrouped", name: "Unsorted", groupName: null },
+    ];
+    render(<WorkspaceAgentsPage category="internal" scope="platform" />);
+    await screen.findByRole("button", { name: "Edit Finance reviewer" });
+    const engineering = screen.getByText("Engineering", { selector: "summary span" }).closest("details")!;
+    expect(within(engineering).getByText("1", { selector: "summary span" })).toBeTruthy();
+    expect(engineering.hasAttribute("open")).toBe(true);
+    fireEvent.click(engineering.querySelector("summary")!);
+    expect(engineering.hasAttribute("open")).toBe(false);
+    fireEvent.change(screen.getByRole("combobox", { name: "Group" }), { target: { value: "group:Finance" } });
+    expect(screen.queryByRole("button", { name: "Edit Main Agent" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit Finance reviewer" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Group" }), { target: { value: "all" } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search agents or groups" }), { target: { value: "Engineering" } });
+    expect(screen.getByRole("button", { name: "Edit Main Agent" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Edit Finance reviewer" })).toBeNull());
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Group" }), { target: { value: "ungrouped" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit Unsorted" })).toBeTruthy());
+  });
+  it("creates a group within the creation dialog and sends the chosen group", async () => {
+    render(<WorkspaceAgentsPage category="internal" scope="platform" />);
+    await screen.findByRole("button", { name: "Edit Main Agent" });
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "grouped" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Grouped" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "New group" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Group name" }), { target: { value: "Engineering" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect((within(dialog).getByRole("combobox", { name: "Group" }) as HTMLSelectElement).value).toBe("group:Engineering"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", expect.objectContaining({ groupName: "Engineering" })));
+  });
+  it("saves group changes and can clear to ungrouped", async () => {
+    fixture.groups = ["Engineering", "Finance"];
+    fixture.record.groupName = "Engineering";
+    render(<WorkspaceAgentsPage category="internal" scope="platform" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Main Agent" }));
+    let dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Group" }), { target: { value: "group:Finance" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledWith("$platform", "main-agent", { groupName: "Finance" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Edit Main Agent" }));
+    dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Group" }), { target: { value: "ungrouped" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenLastCalledWith("$platform", "main-agent", { groupName: "" }));
+  });
+  it("shows an accessible shield and a read-only built-in view", async () => {
+    fixture.record.builtIn = true;
+    render(<WorkspaceAgentsPage category="internal" scope="platform" />);
+    const shield = await screen.findByRole("button", { name: "Built-in agent" });
+    expect(shield.getAttribute("aria-label")).toBe("Built-in agent");
+    fireEvent.click(screen.getByRole("button", { name: "View Main Agent · Built-in agent" }));
+    const dialog = await screen.findByRole("dialog");
+    expect((within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement).disabled).toBe(true);
+    expect((within(dialog).getByRole("combobox", { name: "Group" }) as HTMLSelectElement).disabled).toBe(true);
+    expect(within(dialog).queryByRole("button", { name: "Save" })).toBeNull();
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    expect(fixture.patchDefinition).not.toHaveBeenCalled();
+    expect(fixture.patch).not.toHaveBeenCalled();
   });
 });

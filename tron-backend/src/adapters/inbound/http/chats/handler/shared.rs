@@ -240,6 +240,8 @@ pub(crate) fn resolve_chat_agent_runtime(
             | crate::domain::agent::AgentManagementError::LoopNotFound
             | crate::domain::agent::AgentManagementError::LoopConflict
             | crate::domain::agent::AgentManagementError::LoopInUse
+            | crate::domain::agent::AgentManagementError::BuiltinAgentReadOnly
+            | crate::domain::agent::AgentManagementError::InternalAgentGroupInvalid
             | crate::domain::agent::AgentManagementError::InternalAgentDefinitionInvalid
             | crate::domain::agent::AgentManagementError::InternalAgentPolicyInvalid
             | crate::domain::agent::AgentManagementError::ToolPermissionInvalid

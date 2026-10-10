@@ -1914,6 +1914,20 @@ export const pages = {
     },
     title: "Agents",
     internal: {
+      groups: {
+        "label": "Group",
+        "new": "New group",
+        "name": "Group name",
+        "add": "Add",
+        "ungrouped": "Ungrouped",
+        "all": "All groups",
+        "search": "Search agents or groups",
+        "empty": "No agents match the current filters.",
+        "failed": "Could not load or save groups",
+        "builtIn": "Built-in agent",
+        "view": "View {{name}}",
+        "readOnly": "Built-in agent definitions are read-only."
+},
       avatar: {
         label: 'Avatar',
         robot: 'Robot',

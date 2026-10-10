@@ -110,6 +110,22 @@ impl<'a> SqliteAgentManagementRepositorySql<'a> {
             "CREATE TABLE IF NOT EXISTS platform_tool_permissions(tool_code TEXT PRIMARY KEY, config_json TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS platform_discovered_tools(tool_code TEXT PRIMARY KEY, config_json TEXT NOT NULL);"
         ).map_err(storage_error)?;
+        repository
+            .connection
+            .execute_batch(super::super::migrations::INTERNAL_AGENT_GROUPS_MIGRATION)
+            .map_err(storage_error)?;
+        if !column_exists(
+            &repository.connection,
+            "workspace_internal_agent_definitions",
+            "group_name",
+        )? {
+            repository
+                .connection
+                .execute_batch(
+                    "ALTER TABLE workspace_internal_agent_definitions ADD COLUMN group_name TEXT;",
+                )
+                .map_err(storage_error)?;
+        }
         Ok(repository)
     }
 }

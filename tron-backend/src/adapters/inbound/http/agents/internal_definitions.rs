@@ -23,6 +23,7 @@ pub struct CreateInternalAgentRequest {
     role_prompt: String,
     loop_code: Option<String>,
     avatar_id: Option<String>,
+    group_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -33,6 +34,7 @@ pub struct CreateInternalAgentResponse {
     role_prompt: String,
     loop_code: String,
     avatar_id: String,
+    group_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -42,6 +44,7 @@ pub struct UpdateInternalAgentDefinitionRequest {
     role_prompt: Option<String>,
     loop_code: Option<String>,
     avatar_id: Option<String>,
+    group_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -52,6 +55,7 @@ pub struct UpdateInternalAgentDefinitionResponse {
     role_prompt: String,
     loop_code: String,
     avatar_id: String,
+    group_name: Option<String>,
 }
 
 pub async fn create_internal_agent(
@@ -70,6 +74,7 @@ pub async fn create_internal_agent(
                 role_prompt: request.role_prompt,
                 loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
+                group_name: request.group_name,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?;
@@ -79,6 +84,7 @@ pub async fn create_internal_agent(
         role_prompt: record.role_prompt,
         loop_code: record.loop_code,
         avatar_id: record.avatar_id,
+        group_name: record.group_name,
     })))
 }
 
@@ -98,6 +104,7 @@ pub async fn update_internal_agent_definition(
                 role_prompt: request.role_prompt,
                 loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
+                group_name: request.group_name,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?;
@@ -108,6 +115,7 @@ pub async fn update_internal_agent_definition(
             role_prompt: record.role_prompt,
             loop_code: record.loop_code,
             avatar_id: record.avatar_id,
+            group_name: record.group_name,
         },
     )))
 }
@@ -117,6 +125,16 @@ impl IntoResponse for InternalAgentApiError {
     fn into_response(self) -> Response {
         let descriptor = self.0.internal_definition_descriptor();
         let (status, zh, en) = match descriptor.message_key {
+            "tron.agent.builtin_read_only" => (
+                StatusCode::FORBIDDEN,
+                "内置智能体定义为只读",
+                "Built-in agent definitions are read-only",
+            ),
+            "tron.agent.group_invalid" => (
+                StatusCode::BAD_REQUEST,
+                "分组名称为 1–60 个字符，且必须选择当前范围内已有的分组",
+                "Group names must contain 1–60 characters; select an existing group in this scope",
+            ),
             "tron.agent.tool_permission_invalid" => (
                 StatusCode::BAD_REQUEST,
                 "工具权限配置无效，请检查工具编码和重复项",

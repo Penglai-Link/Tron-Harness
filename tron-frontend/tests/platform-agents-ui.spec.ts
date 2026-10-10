@@ -8,14 +8,23 @@ for (const locale of ["zh-CN", "en-US"] as const) {
   test(`Define, bind knowledge, then authorize workspaces in ${locale}`, async ({ page }, testInfo) => {
     await routeResourceUiShellApi(page); await seedResourceUiShell(page, locale);
     const zh = locale === "zh-CN";
-    const defaults = { avatarId:"robot", description:"", rolePrompt:"", platformDefined:true, source:"PLATFORM_DEFAULT", toolAssignmentMode:"ALL_PLATFORM_TOOLS", mcpAccessMode:"DISABLED", toolExposureMode:"DOMAIN_DISCOVERY", expandedDomainPersistenceMode:"STICKY_EXPANDED", maxSteps:100,maxToolCalls:100,maxParallelToolCalls:4,selectedToolCodes:[],selectedServerCodes:[] };
-    let agents = [{...defaults,agentCode:"main-agent",name:"Main Agent"}];
+    const defaults = { builtIn:false, groupName:null as string | null, avatarId:"robot", description:"", rolePrompt:"", platformDefined:true, source:"PLATFORM_DEFAULT", toolAssignmentMode:"ALL_PLATFORM_TOOLS", mcpAccessMode:"DISABLED", toolExposureMode:"DOMAIN_DISCOVERY", expandedDomainPersistenceMode:"STICKY_EXPANDED", maxSteps:100,maxToolCalls:100,maxParallelToolCalls:4,selectedToolCodes:[],selectedServerCodes:[] };
+    let agents = [{...defaults,builtIn:true,agentCode:"main-agent",name:"Main Agent"}];
+    let groups: string[] = [];
     const calls: string[] = [];
     let libraries: string[] = []; let spaces: string[] = [];
     const ok = (data:unknown) => ({code:"0",message:"ok",data});
     await page.route("**/api/v1/tools**", route => route.fulfill({json:ok([])}));
     await page.route("**/api/v1/agents/**", async route => {
       const url = new URL(route.request().url());
+      if (url.pathname.endsWith("/internal-groups")) {
+        if (route.request().method() === "POST") {
+          const name = route.request().postDataJSON().name.trim();
+          groups = [...new Set([...groups, name])];
+          return route.fulfill({json:ok({name})});
+        }
+        return route.fulfill({json:ok(groups)});
+      }
       if (url.pathname.endsWith("/loops")) return route.fulfill({json:ok(builtinLoops)});
       expect(url.pathname).not.toContain("/workspaces/");
       if (url.pathname.endsWith("/workspace-grants")) {
@@ -47,7 +56,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(page.getByRole("tab")).toHaveCount(2);
     const definitions=page.getByRole("region",{name:zh?"智能体定义":"Agent definitions",exact:true});
     const authorization=page.getByRole("region",{name:zh?"空间授权":"Workspace authorization",exact:true});
-    await expect(definitions.getByRole("button",{name:zh?"编辑 主智能体":"Edit Main Agent",exact:true})).toBeVisible();
+    await expect(definitions.getByRole("button",{name:zh?"查看 主智能体 · 内置智能体":"View Main Agent · Built-in agent",exact:true})).toBeVisible();
     await expect(definitions.getByRole("textbox")).toHaveCount(0);
     await expect(definitions.getByRole("button",{name:zh?"分配空间":"Assign workspaces",exact:true})).toHaveCount(0);
     await expect(authorization.getByRole("textbox")).toHaveCount(0);
@@ -56,6 +65,10 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     const create=page.getByRole("dialog",{name:zh?"创建内部智能体":"New internal agent",exact:true});
     await create.getByRole("textbox",{name:zh?"编码":"Code",exact:true}).fill("reviewer");
     await create.getByRole("textbox",{name:zh?"名称":"Name",exact:true}).fill("Reviewer");
+    await create.getByRole("button",{name:zh?"新增分组":"New group",exact:true}).click();
+    await create.getByRole("textbox",{name:zh?"分组名称":"Group name",exact:true}).fill("Engineering");
+    await create.getByRole("button",{name:zh?"添加":"Add",exact:true}).click();
+    await expect(create.getByRole("combobox",{name:zh?"分组":"Group",exact:true})).toContainText("Engineering");
     const avatarImages = create.locator("fieldset button img");
     await expect(avatarImages).toHaveCount(12);
     for (const image of await avatarImages.all()) {
@@ -84,6 +97,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     const card=definitions.getByRole("button",{name:zh?"编辑 Reviewer":"Edit Reviewer",exact:true});
     await expect(card).toBeVisible();
     expect(agents.find(agent => agent.agentCode === "reviewer")?.avatarId).toBe("fox");
+    expect(agents.find(agent => agent.agentCode === "reviewer")?.groupName).toBe("Engineering");
     await page.screenshot({animations:"disabled",path:testInfo.outputPath(`agent-cards-${locale}.png`)});
     await card.click();
     const reviewer=page.getByRole("dialog",{name:zh?"编辑 Reviewer":"Edit Reviewer",exact:true});

@@ -1885,6 +1885,20 @@ export const pages = {
     },
     title: "智能体",
     internal: {
+      groups: {
+        "label": "分组",
+        "new": "新增分组",
+        "name": "分组名称",
+        "add": "添加",
+        "ungrouped": "未分组",
+        "all": "全部分组",
+        "search": "搜索智能体或分组",
+        "empty": "没有符合条件的智能体",
+        "failed": "分组加载或保存失败",
+        "builtIn": "内置智能体",
+        "view": "查看 {{name}}",
+        "readOnly": "内置智能体定义为只读。"
+},
       avatar: {
         label: '头像',
         robot: '机器人',

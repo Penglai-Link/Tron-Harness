@@ -138,6 +138,16 @@ pub fn agent_agui_error_response(error: AgentAguiStreamError, locale: &str) -> R
 
 pub fn agent_management_error_response(error: AgentManagementError) -> Response {
     let (status, code, message) = match error {
+        AgentManagementError::BuiltinAgentReadOnly => (
+            StatusCode::FORBIDDEN,
+            "101028017",
+            "Built-in agent definitions are read-only".to_owned(),
+        ),
+        AgentManagementError::InternalAgentGroupInvalid => (
+            StatusCode::BAD_REQUEST,
+            "101028016",
+            "Invalid internal agent group".to_owned(),
+        ),
         AgentManagementError::ToolPermissionInvalid => (
             StatusCode::BAD_REQUEST,
             "101028015",

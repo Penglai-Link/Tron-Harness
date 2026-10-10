@@ -65,6 +65,32 @@ fn ensure_internal_agent_code_available(
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
+    fn list_internal_agent_groups(
+        &mut self,
+        scope: &str,
+    ) -> Result<Vec<String>, AgentManagementError> {
+        self.connection
+            .prepare("SELECT name FROM internal_agent_groups WHERE scope_code = ?1 ORDER BY name")
+            .map_err(storage_error)?
+            .query_map([scope], |row| row.get(0))
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
+    }
+    fn save_internal_agent_group(
+        &mut self,
+        scope: &str,
+        name: &str,
+    ) -> Result<(), AgentManagementError> {
+        self.connection
+            .execute(
+                "INSERT OR IGNORE INTO internal_agent_groups(scope_code, name) VALUES (?1, ?2)",
+                params![scope, name],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
     fn list_tool_permissions(
         &mut self,
     ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {
@@ -268,8 +294,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         transaction
             .execute(
                 "INSERT INTO workspace_internal_agent_definitions
-             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id, group_name)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     definition.workspace_code,
                     definition.agent_code,
@@ -278,7 +304,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     timestamp_to_millis(&definition.created_at),
                     timestamp_to_millis(&definition.updated_at),
                     definition.loop_code,
-                    definition.avatar_id
+                    definition.avatar_id,
+                    definition.group_name
                 ],
             )
             .map_err(storage_error)?;
@@ -326,7 +353,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id
+                "SELECT workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id, group_name
              FROM workspace_internal_agent_definitions WHERE workspace_code = ?1
              ORDER BY created_at, agent_code",
             )
@@ -338,6 +365,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     agent_code: row.get(1)?,
                     loop_code: row.get(6)?,
                     avatar_id: row.get(7)?,
+                    group_name: row.get(8)?,
                     name: row.get(2)?,
                     role_prompt: row.get(3)?,
                     created_at: timestamp_from_millis(row.get(4)?),
@@ -355,13 +383,13 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     ) -> Result<(), AgentManagementError> {
         self.connection.execute(
             "INSERT INTO workspace_internal_agent_definitions
-             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id, group_name)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
-             name = excluded.name, role_prompt = excluded.role_prompt, loop_code = excluded.loop_code, avatar_id = excluded.avatar_id, updated_at = excluded.updated_at",
+             name = excluded.name, role_prompt = excluded.role_prompt, loop_code = excluded.loop_code, avatar_id = excluded.avatar_id, group_name = excluded.group_name, updated_at = excluded.updated_at",
             params![definition.workspace_code, definition.agent_code, definition.name,
                 definition.role_prompt, timestamp_to_millis(&definition.created_at),
-                timestamp_to_millis(&definition.updated_at), definition.loop_code, definition.avatar_id],
+                timestamp_to_millis(&definition.updated_at), definition.loop_code, definition.avatar_id, definition.group_name],
         ).map_err(storage_error)?;
         Ok(())
     }
@@ -857,6 +885,34 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepository {
+    fn list_internal_agent_groups(
+        &mut self,
+        scope: &str,
+    ) -> Result<Vec<String>, AgentManagementError> {
+        let scope = scope.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.list_internal_agent_groups(&scope)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn save_internal_agent_group(
+        &mut self,
+        scope: &str,
+        name: &str,
+    ) -> Result<(), AgentManagementError> {
+        let scope = scope.to_owned();
+        let name = name.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .save_internal_agent_group(&scope, &name)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+
     fn list_tool_permissions(
         &mut self,
     ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {
