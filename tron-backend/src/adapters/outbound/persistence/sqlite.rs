@@ -8,7 +8,7 @@ mod chat_repository;
 pub(crate) mod framework_storage;
 mod mcp_repository;
 mod memory_work_domain_repository;
-mod migrations;
+pub(crate) mod schema;
 mod model_repository;
 mod navigation_repository;
 pub(crate) mod project_repository;

@@ -7061,17 +7061,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tron-agent-harness"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "eliteforge-agent-core",
- "eliteforge-agent-official-plugin-tools-local",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "tron-backend"
 version = "0.1.0-SNAPSHOT"
 dependencies = [
@@ -7148,7 +7137,7 @@ dependencies = [
  "tokio-util",
  "tower",
  "tower-http",
- "tron-agent-harness",
+ "tron-harness-capability",
  "umya-spreadsheet",
  "url",
  "utoipa",
@@ -7156,6 +7145,17 @@ dependencies = [
  "webpki-roots 1.0.7",
  "windows-sys 0.59.0",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "tron-harness-capability"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "eliteforge-agent-core",
+ "eliteforge-agent-official-plugin-tools-local",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -104,16 +104,21 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             "Independent external execution with native session ownership and observation events",
         ));
     }
-    if id == "tron.harness" {
+    if id == tron_harness_capability::PACK_ID {
+        items.extend(
+            tron_harness_capability::skill_names()
+                .into_iter()
+                .map(|name| content("Skill", name, "")),
+        );
         items.push(content(
             "Context",
             "TronContext",
-            tron_agent_harness::CONTEXT_IMPLEMENTATION_DESCRIPTION,
+            tron_harness_capability::CONTEXT_IMPLEMENTATION_DESCRIPTION,
         ));
         items.push(content(
             "Policy",
             "Tron tool permissions",
-            tron_agent_harness::TOOL_IMPLEMENTATION_DESCRIPTION,
+            tron_harness_capability::TOOL_IMPLEMENTATION_DESCRIPTION,
         ));
         items.extend(
             crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US")
@@ -216,6 +221,18 @@ mod content_tests {
                 .iter()
                 .any(|item| item.name == "web_fetch" || item.name.starts_with("personai_"))
         );
+        for name in [
+            "tron-theme-spec",
+            "eliteforge-memory-spec",
+            "eliteforge-memory-dreaming",
+        ] {
+            assert!(
+                harness
+                    .contents
+                    .iter()
+                    .any(|item| item.kind == "Skill" && item.name == name)
+            );
+        }
         let collaboration = packs
             .iter()
             .find(|pack| pack.id == eliteforge_agent_capability_tools::AGENT_COLLABORATION_PACK)

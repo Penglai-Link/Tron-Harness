@@ -60,10 +60,15 @@ impl SharedDatabase {
             >,
         > = OnceLock::new();
         if path == ":memory:" {
-            return blocking(
+            let database = blocking(
                 eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(path),
             )
-            .map(|db| Self(Arc::new(db)));
+            .map(|db| Self(Arc::new(db)))?;
+            database.call(
+                |c| super::schema::initialize_business(c),
+                || rusqlite::Error::InvalidQuery,
+            )?;
+            return Ok(database);
         }
         let key = if path.starts_with("file:") {
             path.to_owned()
@@ -94,6 +99,10 @@ impl SharedDatabase {
         let database = Arc::new(blocking(
             eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(&key),
         )?);
+        Self(database.clone()).call(
+            |c| super::schema::initialize_business(c),
+            || rusqlite::Error::InvalidQuery,
+        )?;
         databases.insert(key, Arc::downgrade(&database));
         Ok(Self(database))
     }

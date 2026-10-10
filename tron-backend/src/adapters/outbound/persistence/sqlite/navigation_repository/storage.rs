@@ -1,31 +1,10 @@
 impl<'a> SqliteNavigationRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, NavigationError> {
-        ensure_database_parent(database_url)?;
-
-        connection
-            .execute_batch(NAVIGATION_MIGRATION)
-            .map_err(|error| navigation_migration_error("base navigation", error))?;
-        connection
-            .execute_batch(NAVIGATION_AGENTS_SPLIT_MIGRATION)
-            .map_err(|error| navigation_migration_error("agent navigation split", error))?;
-        connection
-            .execute_batch(CHAT_PANEL_NAVIGATION_MIGRATION)
-            .map_err(|error| navigation_migration_error("chat panel navigation", error))?;
-        connection
-            .execute_batch(NAVIGATION_MENU_TREES_MIGRATION)
-            .map_err(|error| navigation_migration_error("generic menu trees", error))?;
-        connection
-            .execute_batch(include_str!("../../../../../../migrations/20261010_0001_observability_navigation.sql"))
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
             .map_err(storage_error)?;
-        connection
-            .execute_batch(REMOVE_CHATS_NAVIGATION_MIGRATION)
-            .map_err(|error| navigation_migration_error("remove chat page navigation", error))?;
-        connection.execute_batch(include_str!("../../../../../../migrations/20261008_0002_platform_data_navigation.sql"))
-            .map_err(|error| navigation_migration_error("platform data navigation", error))?;
-        Self::apply_child_display_migration(&connection)?;
         Ok(Self { connection })
     }
 
@@ -198,66 +177,6 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
             .map_err(storage_error)
     }
 
-    fn apply_child_display_migration(connection: &Connection) -> Result<(), NavigationError> {
-        connection
-            .execute_batch(
-                "CREATE TABLE IF NOT EXISTS navigation_migration_markers (
-                    migration_key TEXT PRIMARY KEY,
-                    applied_at TEXT NOT NULL
-                );",
-            )
-            .map_err(storage_error)?;
-        let applied = connection
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM navigation_migration_markers WHERE migration_key = ?1)",
-                ["20260922_navigation_menu_item_child_display"],
-                |row| row.get::<_, i64>(0),
-            )
-            .map_err(storage_error)?
-            == 1;
-        if applied {
-            return Ok(());
-        }
-        let mut statement = connection
-            .prepare("PRAGMA table_info(navigation_menu_tree_items)")
-            .map_err(storage_error)?;
-        let has_child_display = statement
-            .query_map([], |row| row.get::<_, String>(1))
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)?
-            .iter()
-            .any(|column| column == "child_display");
-        if !has_child_display {
-            connection
-                .execute_batch(
-                    "ALTER TABLE navigation_menu_tree_items
-                     ADD COLUMN child_display TEXT NOT NULL DEFAULT 'Inline'
-                     CHECK (child_display IN ('Inline', 'Flyout'));",
-                )
-                .map_err(storage_error)?;
-        }
-        connection
-            .execute(
-                "UPDATE navigation_menu_tree_items
-                 SET child_display = 'Flyout'
-                 WHERE tree_id = (SELECT id FROM navigation_menu_trees WHERE tree_code = 'ADVANCED')
-                   AND menu_id IN (
-                     SELECT id FROM navigation_menus
-                     WHERE menu_code IN ('CORE', 'AGENT_OPERATIONS', 'DATA')
-                   )",
-                [],
-            )
-            .map_err(storage_error)?;
-        connection
-            .execute(
-                "INSERT INTO navigation_migration_markers (migration_key, applied_at) VALUES (?1, ?2)",
-                params!["20260922_navigation_menu_item_child_display", current_timestamp()],
-            )
-            .map_err(storage_error)?;
-        Ok(())
-    }
-
     fn next_id_tx(
         tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<
             '_,
@@ -337,11 +256,6 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
     ) -> Result<Option<i64>, NavigationError> {
         parent_menu_code.map(|code| self.connection.query_row("SELECT i.id FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id = i.menu_id WHERE i.tree_id = ?1 AND m.menu_code = ?2", params![tree_id, code], |row| row.get(0)).optional().map_err(storage_error)?.ok_or(NavigationError::InvalidParent)).transpose()
     }
-}
-
-fn navigation_migration_error(stage: &str, error: rusqlite::Error) -> NavigationError {
-    eprintln!("navigation SQLite {stage} initialization failed: {error}");
-    storage_error(error)
 }
 
 fn move_positions_out_of_way(

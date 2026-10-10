@@ -100,7 +100,7 @@ async fn tool_permissions_round_trip_validate_atomically_and_reject_unknown_enum
 
 #[tokio::test]
 async fn discovered_native_mcp_tools_are_listed_in_domains_catalog_and_permissions() {
-    use tron_agent_harness::ToolPermissionSource;
+    use tron_harness_capability::ToolPermissionSource;
     let app = common::app_with_state_setup(common::prepared_config(Default::default()), |s| {
         s.knowledge_bases.stop_ingestion_workers();
         let descriptor = eliteforge_agent_core::ToolDescriptor::new(
@@ -180,7 +180,7 @@ async fn discovered_native_mcp_tools_are_listed_in_domains_catalog_and_permissio
 
 #[test]
 fn tool_permissions_persist_and_failed_full_replace_rolls_back() {
-    use tron_agent_harness::{ToolPermission, ToolPermissionSetting, ToolRisk};
+    use tron_harness_capability::{ToolPermission, ToolPermissionSetting, ToolRisk};
     use tron_backend::{
         adapters::outbound::persistence::sqlite::SqliteAgentManagementRepository,
         application::agent::AgentManagementRepository,
@@ -215,7 +215,7 @@ fn tool_permissions_persist_and_failed_full_replace_rolls_back() {
 #[test]
 fn interactive_input_and_process_stop_keep_their_side_effect_risk() {
     use eliteforge_agent_core::ToolDescriptor;
-    use tron_agent_harness::{ToolRisk, identify_tool_risk};
+    use tron_harness_capability::{ToolRisk, identify_tool_risk};
     for id in ["system.command.task.write", "framework.terminal.write"] {
         let descriptor = ToolDescriptor::new(id, "write", "", json!({}));
         assert_eq!(

@@ -90,7 +90,7 @@ SHELL := /bin/sh
 NPM := npm
 CARGO := cargo
 PYTHON ?= python3
-SKILL_VALIDATOR ?= /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py
+SKILL_VALIDATOR ?= $(if $(strip $(CODEX_HOME)),$(CODEX_HOME),$(HOME)/.codex)/skills/.system/skill-creator/scripts/quick_validate.py
 # Keep local development pointed at the same persistent graph store as the
 # backend runtime defaults.  Pass an explicit GRAPH_STORAGE_PATH to isolate a
 # development instance when needed.
@@ -210,8 +210,8 @@ help:
 	@echo "  make agent-deps          Link TRON_AGENT_FRAMEWORK_DIR and TRON_AGENT_UI_DIR"
 	@echo "  make agent-ui-install    Install shared UI dependencies"
 	@echo "  make agent-ui-build      Build shared UI packages"
-	@echo "  make agent-harness-check Compile Tron harness capability package"
-	@echo "  make agent-harness-test  Test framework assembly and host scope isolation"
+	@echo "  make harness-capability-check Compile the Tron capability package"
+	@echo "  make harness-capability-test  Test framework assembly and host scope isolation"
 	@echo ""
 	@echo "Backend commands:"
 	@echo "  make be-install   Fetch backend dependencies"
@@ -247,7 +247,7 @@ help:
 	@echo "构建缓存：默认当前用户目录下的 rust-cache，自动创建；可用 RUST_CACHE_DIR 覆盖"
 
 .PHONY: _build-cache
-agent-harness-check agent-harness-test be-check be-test be-dev openapi web-build web-dev desktop-build desktop-dev be-ui-acceptance: | _build-cache
+harness-capability-check harness-capability-test agent-capability-check agent-capability-test agent-harness-check agent-harness-test be-check be-test be-dev openapi web-build web-dev desktop-build desktop-dev be-ui-acceptance: | _build-cache
 _build-cache:
 ifeq ($(OS),Windows_NT)
 	@if not exist "$(subst /,\,$(SCCACHE_DIR))\" mkdir "$(subst /,\,$(SCCACHE_DIR))"
@@ -319,7 +319,7 @@ fe-clean:
 be-install:
 	$(CARGO) fetch --manifest-path "$(BACKEND_MANIFEST)"
 
-.PHONY: agent-deps agent-ui-install agent-ui-build agent-harness-check agent-harness-test
+.PHONY: agent-deps agent-ui-install agent-ui-build harness-capability-check harness-capability-test agent-capability-check agent-capability-test agent-harness-check agent-harness-test
 agent-deps:
 	$(NODE) scripts/prepare-agent-dependencies.mjs
 
@@ -329,11 +329,15 @@ agent-ui-install:
 agent-ui-build:
 	$(call RUN_IN_DIR,.agent-deps/agent-ui,$(NPM) run build)
 
-agent-harness-check:
-	$(CARGO) check --manifest-path "$(BACKEND_DIR)/crates/tron-agent-harness/Cargo.toml"
+harness-capability-check:
+	$(CARGO) check --manifest-path "$(BACKEND_DIR)/crates/tron-harness-capability/Cargo.toml"
 
-agent-harness-test:
-	$(CARGO) test --manifest-path "$(BACKEND_DIR)/crates/tron-agent-harness/Cargo.toml" $(TEST)
+harness-capability-test:
+	$(CARGO) test --manifest-path "$(BACKEND_DIR)/crates/tron-harness-capability/Cargo.toml" $(TEST)
+
+# Compatibility aliases for existing local scripts.
+agent-capability-check agent-harness-check: harness-capability-check
+agent-capability-test agent-harness-test: harness-capability-test
 
 .PHONY: be-check
 be-check:
@@ -416,7 +420,6 @@ desktop-build: desktop-clean web-build
 	$(call COPY_FILE,$(BACKEND_DIR)/application.yaml,$(ELECTRON_DIR)/resources/application.yaml)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
 	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
-	$(call COPY_TREE,$(BACKEND_DIR)/resources/native,$(ELECTRON_DIR)/resources/native)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	$(call ASSERT_FILE,$(BACKEND_RELEASE_PATH))
 	$(call COPY_FILE,$(BACKEND_RELEASE_PATH),$(DESKTOP_SIDECAR_PATH))
@@ -431,7 +434,6 @@ desktop-build: desktop-clean web-build
 	cp -- "$(BACKEND_DIR)/application.yaml" "$(ELECTRON_DIR)/resources/application.yaml"
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
 	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
-	$(call COPY_TREE,$(BACKEND_DIR)/resources/native,$(ELECTRON_DIR)/resources/native)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	test -f $(BACKEND_RELEASE_PATH)
 	cp $(BACKEND_RELEASE_PATH) $(DESKTOP_SIDECAR_PATH)
@@ -449,7 +451,6 @@ desktop-dev: install
 	cp -- "$(BACKEND_DIR)/application.yaml" "$(ELECTRON_DIR)/resources/application.yaml"
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
 	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
-	$(call COPY_TREE,$(BACKEND_DIR)/resources/native,$(ELECTRON_DIR)/resources/native)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --bin tron-backend
 	test -f "$(BACKEND_DEBUG_PATH)"
 	cp -- "$(BACKEND_DEBUG_PATH)" "$(DESKTOP_SIDECAR_PATH)"
@@ -472,15 +473,16 @@ desktop-clean:
 
 .PHONY: skill-memory-dreaming-test
 skill-memory-dreaming-test:
-	$(PYTHON) "$(SKILL_VALIDATOR)" tron-skills/eliteforge-memory-dreaming
+	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/eliteforge-memory-dreaming
 
 .PHONY: skill-memory-spec-test
 skill-memory-spec-test:
-	$(PYTHON) "$(SKILL_VALIDATOR)" tron-skills/eliteforge-memory-spec
+	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/eliteforge-memory-spec
 
 .PHONY: skill-theme-test
 skill-theme-test:
-	$(PYTHON) -B tron-skills/tron-theme-spec/scripts/test_theme_pack.py
+	$(PYTHON) "$(SKILL_VALIDATOR)" tron-backend/crates/tron-harness-capability/skills/tron-theme-spec
+	$(PYTHON) -B tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/test_theme_pack.py
 
 # Dedicated real-PTY browser fixture; all state lives in TRON_ACCEPTANCE_DIRECTORY.
 .PHONY: be-ui-acceptance

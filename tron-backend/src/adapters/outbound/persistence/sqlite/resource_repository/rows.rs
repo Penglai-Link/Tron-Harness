@@ -72,63 +72,9 @@ pub(super) fn insert_server_account_record(
     Ok(())
 }
 
-pub(super) fn insert_file_record(
-    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
-    record: &ResourceFileRecord,
-) -> Result<(), ResourceError> {
-    transaction
-        .execute(
-            "INSERT INTO resource_files (
-                workspace_code, resource_code, kind, name, description,
-                file_name, file_extension, byte_size, storage_locator, allow_inheritance,
-                revision, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-            params![
-                record.workspace_code,
-                record.resource_code,
-                record.kind.as_str(),
-                record.name,
-                record.description,
-                record.file_name,
-                record.file_extension,
-                record.byte_size as i64,
-                record.storage_locator,
-                bool_to_int(record.allow_inheritance),
-                record.revision as i64,
-                timestamp_to_millis(&record.created_at),
-                timestamp_to_millis(&record.updated_at),
-            ],
-        )
-        .map_err(storage_error)?;
-    Ok(())
-}
 
-pub(super) fn insert_data_source_record(
-    transaction: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
-    record: &DataSourceConnectionRecord,
-) -> Result<(), ResourceError> {
-    transaction
-        .execute(
-            "INSERT INTO resource_data_source_connections (
-                workspace_code, resource_code, kind, name, description,
-                attributes_json, allow_inheritance, revision, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                record.workspace_code,
-                record.resource_code,
-                record.kind.as_str(),
-                record.name,
-                record.description,
-                value_to_storage(&record.attributes)?,
-                bool_to_int(record.allow_inheritance),
-                record.revision as i64,
-                timestamp_to_millis(&record.created_at),
-                timestamp_to_millis(&record.updated_at),
-            ],
-        )
-        .map_err(storage_error)?;
-    Ok(())
-}
+
+
 
 pub(super) fn file_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceFileRecord> {
     let kind_text: String = row.get(2)?;

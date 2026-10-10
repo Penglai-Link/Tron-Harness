@@ -2,23 +2,6 @@ use super::{RagConfigRepository, RagError, SqliteRagRepositorySql};
 use crate::application::rag::{RagIndexCounts, RagRecordTask};
 use rusqlite::{OptionalExtension, params};
 
-pub(super) fn initialize_operations(connection: &rusqlite::Connection) -> Result<(), RagError> {
-    connection.execute_batch(
-        "CREATE TABLE IF NOT EXISTS rag_record_tasks (
-            id TEXT PRIMARY KEY, user_code TEXT NOT NULL, corpus_id TEXT NOT NULL,
-            state TEXT NOT NULL, payload_json TEXT NOT NULL, updated_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_rag_record_tasks_owner ON rag_record_tasks(user_code, updated_at);
-        CREATE TABLE IF NOT EXISTS rag_graph_evidence (
-            id INTEGER PRIMARY KEY, corpus_id TEXT NOT NULL, source_code TEXT NOT NULL,
-            source_version TEXT NOT NULL, scope_type TEXT NOT NULL, scope_code TEXT NOT NULL,
-            target_code TEXT NOT NULL, text TEXT NOT NULL, metadata TEXT NOT NULL,
-            UNIQUE(corpus_id, source_code, source_version, scope_type, scope_code, target_code)
-        );
-        CREATE INDEX IF NOT EXISTS idx_rag_graph_evidence_source ON rag_graph_evidence(corpus_id, source_code, scope_type, scope_code);"
-    ).map_err(super::storage_error)
-}
-
 impl SqliteRagRepositorySql<'_> {
     pub(super) fn record_task(
         &self,

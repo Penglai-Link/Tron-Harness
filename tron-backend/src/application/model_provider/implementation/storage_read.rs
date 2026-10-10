@@ -1,62 +1,5 @@
 use super::*;
 
-// `models` remains the source of truth for manual-model runtime configuration.
-// This one-time copy gives existing default pointers the unified selection shape
-// without moving models or duplicating their credentials.
-pub(super) fn migrate_legacy_default_model_selections(
-    connection: &Connection,
-) -> Result<(), ModelProviderError> {
-    if sqlite_table_exists(connection, "platform_default_models")? {
-        connection
-            .execute(
-                "INSERT OR IGNORE INTO default_model_selections (
-                    scope_key, workspace_code, model_type, selection_kind, provider_code,
-                    model_code, quality_type, route_code, created_at, updated_at
-                 )
-                 SELECT 'platform', NULL, model_type, 'Fixed', NULL, model_code, NULL, NULL,
-                        updated_at, updated_at
-                 FROM platform_default_models",
-                [],
-            )
-            .map_err(|_| ModelProviderError::Storage)?;
-    }
-    if sqlite_table_exists(connection, "workspace_default_models")? {
-        connection
-            .execute(
-                "INSERT OR IGNORE INTO default_model_selections (
-                    scope_key, workspace_code, model_type, selection_kind, provider_code,
-                    model_code, quality_type, route_code, created_at, updated_at
-                 )
-                 SELECT workspace_code, workspace_code, model_type, 'Fixed', NULL, model_code,
-                        NULL, NULL, updated_at, updated_at
-                 FROM workspace_default_models",
-                [],
-            )
-            .map_err(|_| ModelProviderError::Storage)?;
-    }
-    Ok(())
-}
-
-pub(super) fn sqlite_table_exists(
-    connection: &Connection,
-    table_name: &str,
-) -> Result<bool, ModelProviderError> {
-    sqlite_table_exists_raw(connection, table_name).map_err(|_| ModelProviderError::Storage)
-}
-
-pub(super) fn sqlite_table_exists_raw(
-    connection: &Connection,
-    table_name: &str,
-) -> rusqlite::Result<bool> {
-    connection
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
-            params![table_name],
-            |row| row.get::<_, i64>(0),
-        )
-        .map(|exists| exists != 0)
-}
-
 pub(super) fn normalize_server_base_url(raw: Option<&str>) -> Result<String, ModelProviderError> {
     let candidate = raw
         .map(str::trim)
@@ -129,29 +72,6 @@ pub(super) fn read_person_ai_profile_credentials(
         )
         .optional()
         .map_err(|_| ModelProviderError::Storage)
-}
-
-pub(super) fn migrate_legacy_person_ai_profile_credentials(
-    connection: &Connection,
-) -> Result<(), ModelProviderError> {
-    connection
-        .execute(
-            "INSERT OR IGNORE INTO person_ai_profile_credentials (
-                person_ai_user_id, person_ai_username, server_base_url, credentials_encrypted,
-                status, authorized_at, authorization_expires_at, last_error, updated_at
-             )
-             SELECT person_ai_user_id, COALESCE(person_ai_username, ''), server_base_url,
-                    credentials_encrypted, status, COALESCE(authorized_at, updated_at),
-                    authorization_expires_at, last_error, updated_at
-             FROM provider_connections
-             WHERE provider_code = 'PersonAi'
-               AND person_ai_user_id IS NOT NULL
-               AND TRIM(person_ai_user_id) <> ''
-               AND credentials_encrypted IS NOT NULL",
-            [],
-        )
-        .map_err(|_| ModelProviderError::Storage)?;
-    Ok(())
 }
 
 pub(super) fn read_authorization_session(

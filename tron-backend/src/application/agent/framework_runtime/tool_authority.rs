@@ -233,7 +233,9 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 })?
             {
                 return Ok(fw::ToolPolicyDecision::Deny(
-                    "This tool has no platform permission".into(),
+                    tron_harness_capability::TronToolPolicyLocale::from_run(invocation.run)
+                        .permission_denied_message()
+                        .into(),
                 ));
             }
         }
@@ -262,14 +264,14 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
 pub(crate) struct PlatformPermissionSource(
     pub Option<crate::application::agent::AgentManagementService>,
 );
-impl tron_agent_harness::ToolPermissionSource for PlatformPermissionSource {
+impl tron_harness_capability::ToolPermissionSource for PlatformPermissionSource {
     fn setting(
         &self,
         descriptor: &fw::ToolDescriptor,
-    ) -> Result<tron_agent_harness::ToolPermissionSetting, String> {
+    ) -> Result<tron_harness_capability::ToolPermissionSetting, String> {
         match &self.0 {
-            Some(source) => tron_agent_harness::ToolPermissionSource::setting(source, descriptor),
-            None => Ok(tron_agent_harness::ToolPermissionSetting::default_for(
+            Some(source) => tron_harness_capability::ToolPermissionSource::setting(source, descriptor),
+            None => Ok(tron_harness_capability::ToolPermissionSetting::default_for(
                 &descriptor.id,
             )),
         }
@@ -277,6 +279,6 @@ impl tron_agent_harness::ToolPermissionSource for PlatformPermissionSource {
     fn operation(&self, descriptor: &fw::ToolDescriptor) -> Option<bool> {
         self.0
             .as_ref()
-            .and_then(|s| tron_agent_harness::ToolPermissionSource::operation(s, descriptor))
+            .and_then(|s| tron_harness_capability::ToolPermissionSource::operation(s, descriptor))
     }
 }

@@ -1,5 +1,3 @@
-use std::{fs, path::Path};
-
 use rusqlite::{Connection, params};
 
 use crate::{
@@ -17,8 +15,6 @@ use crate::{
     },
 };
 
-use super::migrations::APPS_MIGRATION;
-
 struct SqliteAppRepositorySql<'a> {
     connection: &'a mut Connection,
 }
@@ -28,52 +24,12 @@ pub struct SqliteAppRepository {
 
 impl<'a> SqliteAppRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, AppError> {
-        ensure_database_parent(database_url)?;
-
-        let mut repository = Self { connection };
-        repository.apply_migrations()?;
-        Ok(repository)
-    }
-
-    fn apply_migrations(&mut self) -> Result<(), AppError> {
-        self.connection
-            .execute_batch(APPS_MIGRATION)
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
             .map_err(storage_error)?;
-        self.ensure_current_schema()
-    }
-
-    fn ensure_current_schema(&mut self) -> Result<(), AppError> {
-        let columns = table_columns(&self.connection, "apps")?;
-        if !columns.iter().any(|column| column == "local_directory") {
-            self.connection
-                .execute(
-                    "ALTER TABLE apps ADD COLUMN local_directory TEXT NOT NULL DEFAULT ''",
-                    [],
-                )
-                .map_err(storage_error)?;
-        }
-        if columns.iter().any(|column| column == "creation_mode")
-            || !apps_schema_allows_mono_runtime_role(&self.connection)?
-        {
-            rebuild_apps_schema(&self.connection)?;
-        }
-        self.connection
-            .execute_batch(
-                "UPDATE apps
-                 SET local_directory = CASE app_code
-                     WHEN 'APP-TRON-CONSOLE' THEN '/workspace/tron/tron-frontend'
-                     WHEN 'APP-TRON-API' THEN '/workspace/tron/tron-backend'
-                     WHEN 'APP-COMPLIANCE-API' THEN '/workspace/apps/compliance-api'
-                     WHEN 'APP-TRON-LEGACY' THEN '/workspace/tron/legacy-console'
-                     ELSE '/workspace/apps/' || lower(replace(replace(app_code, 'APP-', ''), '_', '-'))
-                 END
-                 WHERE trim(local_directory) = '';",
-            )
-            .map_err(storage_error)?;
-        Ok(())
+        Ok(Self { connection })
     }
 }
 
@@ -280,126 +236,8 @@ impl AppRepository for SqliteAppRepositorySql<'_> {
     }
 }
 
-fn ensure_database_parent(database_url: &str) -> Result<(), AppError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| AppError::StorageFailure)?;
-    }
-    Ok(())
-}
-
 fn storage_error(_error: rusqlite::Error) -> AppError {
     AppError::StorageFailure
-}
-
-fn rebuild_apps_schema(connection: &Connection) -> Result<(), AppError> {
-    connection
-        .execute_batch(
-            "PRAGMA foreign_keys=OFF;
-             BEGIN TRANSACTION;
-
-             ALTER TABLE app_tags RENAME TO app_tags_legacy;
-             ALTER TABLE apps RENAME TO apps_legacy;
-
-             CREATE TABLE apps (
-                 id INTEGER PRIMARY KEY,
-                 app_code TEXT NOT NULL UNIQUE,
-                 workspace_code TEXT NOT NULL,
-                 app_name TEXT NOT NULL,
-                 description TEXT NULL,
-                 local_directory TEXT NOT NULL,
-                 runtime_role TEXT NOT NULL CHECK (runtime_role IN ('frontend', 'backend', 'mono')),
-                 repository_url TEXT NULL,
-                 default_branch TEXT NULL,
-                 status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
-                 created_at INTEGER NOT NULL,
-                 updated_at INTEGER NOT NULL,
-                 archived_at INTEGER NULL
-             );
-
-             CREATE TABLE app_tags (
-                 id INTEGER PRIMARY KEY,
-                 app_code TEXT NOT NULL REFERENCES apps(app_code),
-                 tag_name TEXT NOT NULL,
-                 linked_at INTEGER NOT NULL,
-                 UNIQUE (app_code, tag_name)
-             );
-
-             INSERT INTO apps (
-                 id,
-                 app_code,
-                 workspace_code,
-                 app_name,
-                 description,
-                 local_directory,
-                 runtime_role,
-                 repository_url,
-                 default_branch,
-                 status,
-                 created_at,
-                 updated_at,
-                 archived_at
-             )
-             SELECT
-                 id,
-                 app_code,
-                 workspace_code,
-                 app_name,
-                 description,
-                 local_directory,
-                 runtime_role,
-                 repository_url,
-                 default_branch,
-                 status,
-                 created_at,
-                 updated_at,
-                 archived_at
-             FROM apps_legacy;
-
-             INSERT INTO app_tags (id, app_code, tag_name, linked_at)
-             SELECT id, app_code, tag_name, linked_at
-             FROM app_tags_legacy;
-
-             DROP TABLE app_tags_legacy;
-             DROP TABLE apps_legacy;
-
-             CREATE INDEX IF NOT EXISTS idx_apps_workspace_status ON apps(workspace_code, status);
-             CREATE INDEX IF NOT EXISTS idx_apps_workspace_name ON apps(workspace_code, app_name);
-             CREATE INDEX IF NOT EXISTS idx_app_tags_app_code ON app_tags(app_code);
-
-             COMMIT;
-             PRAGMA foreign_keys=ON;",
-        )
-        .map_err(storage_error)?;
-
-    Ok(())
-}
-
-fn apps_schema_allows_mono_runtime_role(connection: &Connection) -> Result<bool, AppError> {
-    let table_sql = connection
-        .query_row(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'apps'",
-            [],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .map_err(storage_error)?
-        .unwrap_or_default();
-    Ok(table_sql.contains("'mono'"))
-}
-
-fn table_columns(connection: &Connection, table_name: &str) -> Result<Vec<String>, AppError> {
-    let mut statement = connection
-        .prepare(&format!("PRAGMA table_info({table_name})"))
-        .map_err(storage_error)?;
-    statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)
 }
 
 impl SqliteAppRepository {

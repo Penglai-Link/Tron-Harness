@@ -73,7 +73,6 @@ impl LocalTelemetry {
             .ok_or(ObservabilityError::Storage)?
             .0
             .clone();
-        super::telemetry_legacy::import(path, store.clone()).await?;
         Ok(Self {
             store,
             runtime,

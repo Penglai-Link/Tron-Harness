@@ -91,8 +91,8 @@ impl FrameworkHost {
             ))
             .capability_pack(eliteforge_agent_capability_tools::agent_collaboration_pack())
             .capability_pack(
-                tron_agent_harness::TronHarness::new(Arc::new(HarnessTools), [])
-                    .with_tool_policy(tron_agent_harness::TronToolPolicy(Arc::new(
+                tron_harness_capability::TronHarness::new(Arc::new(HarnessTools), [])
+                    .with_tool_policy(tron_harness_capability::TronToolPolicy(Arc::new(
                         super::super::tools::PlatformPermissionSource(
                             self.0.agent_management.get().cloned(),
                         ),
@@ -297,7 +297,13 @@ impl FrameworkHost {
         let manager =
             eliteforge_agent_capability_runtime::CapabilityPackManager::new(&self.0.pack_root)
                 .map_err(|e| fw::AgentError::InvalidConfiguration(e.to_string()))?;
-        let mut installed_skills = BTreeMap::new();
+        let mut installed_skills = BTreeMap::from([(
+            tron_harness_capability::PACK_ID.to_owned(),
+            tron_harness_capability::skill_names()
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+        )]);
         for (id, active) in &packs {
             if !active || Self::builtin_pack(id) {
                 continue;

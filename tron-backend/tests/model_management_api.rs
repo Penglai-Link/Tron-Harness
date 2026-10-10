@@ -13,7 +13,7 @@ use axum::{
     response::IntoResponse,
     routing::post,
 };
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tron_backend::config::AppConfig;
@@ -1145,95 +1145,7 @@ async fn workspace_can_disable_platform_models_without_mutating_platform_source(
     );
 }
 
-#[tokio::test]
-async fn cleanup_migration_deletes_legacy_enabled_workspace_platform_shadow_rows() {
-    let database_url = temp_database_url("model-cleanup-explicit-platform-shadow");
-    let config = AppConfig {
-        database_url: database_url.to_string_lossy().into_owned(),
-        ..AppConfig::default()
-    };
-    let source_model_code;
 
-    {
-        let router = app_with_config(config.clone());
-        source_model_code =
-            create_platform_model(&router, "GPT-4o Main", "gpt-4o", "RESPONSES", "TEXT").await;
-    }
-
-    let connection = Connection::open(&database_url).expect("legacy-model test db should open");
-    connection
-        .execute(
-            "INSERT INTO models (
-                id, scope_kind, workspace_code, model_code, display_name, vendor, protocol,
-                model_type, model_capabilities, base_url, api_path, api_key_ref, model_name, enabled,
-                description, thinking_enabled, structured_output_enabled, temperature,
-                max_tokens, top_p, max_retries, last_verified_at,
-                last_verify_status, last_verify_message, source_kind, source_model_code,
-                allow_inheritance, created_at, updated_at
-            ) VALUES (
-                ?1, 'workspace', 'TRON_CORE', ?2, 'GPT-4o Main', 'OpenAI', 'responses',
-                'text', ?3, 'https://api.openai.com/v1', '/responses', 'sk-legacy-shadow', 'gpt-4o', 1,
-                'legacy explicit restore row', 1, 1, 0.2,
-                4096, 1.0, 1, NULL,
-                NULL, NULL, 'platform', ?4,
-                NULL, 1779235200000, 1779235200000
-            )",
-            params![
-                734_600_000_000_000_901_i64,
-                "MODEL-734600000000000901",
-                serde_json::to_string(&json!(["TEXT_GENERATION", "DEEP_THINKING"]))
-                    .expect("legacy shadow capabilities should serialize"),
-                source_model_code,
-            ],
-        )
-        .expect("legacy shadow row should insert");
-    connection
-        .execute(
-            "INSERT INTO workspace_default_models (workspace_code, model_type, model_code, updated_at)
-             VALUES ('TRON_CORE', 'text', 'MODEL-734600000000000901', 1779235200000)
-             ON CONFLICT(workspace_code, model_type)
-             DO UPDATE SET model_code = excluded.model_code, updated_at = excluded.updated_at",
-            [],
-        )
-        .expect("legacy default assignment should insert");
-    drop(connection);
-
-    let router = app_with_config(config.clone());
-
-    let migrated_connection =
-        Connection::open(&database_url).expect("migrated-model test db should reopen");
-    let migrated_shadow_count: i64 = migrated_connection
-        .query_row(
-            "SELECT COUNT(*)
-             FROM models
-             WHERE scope_kind = 'workspace'
-               AND source_kind = 'platform'
-               AND enabled = 1
-               AND model_code = 'MODEL-734600000000000901'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("shadow row count should read");
-    assert_eq!(
-        migrated_shadow_count, 0,
-        "cleanup migration must delete obsolete enabled workspace platform shadow rows",
-    );
-    let migrated_default_count: i64 = migrated_connection
-        .query_row(
-            "SELECT COUNT(*)
-             FROM workspace_default_models
-             WHERE workspace_code = 'TRON_CORE' AND model_type = 'text'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("migrated default assignment count should read");
-    assert_eq!(
-        migrated_default_count, 0,
-        "cleanup migration must delete legacy workspace defaults that referenced removed shadow rows",
-    );
-    drop(migrated_connection);
-    drop(router);
-}
 
 #[tokio::test]
 async fn workspace_platform_verify_uses_visible_platform_model_code() {

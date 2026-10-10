@@ -12,7 +12,7 @@ use tron_backend::{
         workspace::WorkspaceService,
     },
     config::AppConfig,
-    domain::agent::{AgentManagementError, PlatformInternalAgentConfig},
+    domain::agent::AgentManagementError,
 };
 fn service(database: &str) -> AgentManagementService {
     SqliteMcpRepository::connect(database).unwrap();
@@ -205,27 +205,4 @@ fn internal_agent_groups_validate_names_and_builtin_definitions_are_frozen_but_p
         builtin_grants
     );
     assert!(agents.list_platform_internal_agents().unwrap()[0].built_in);
-}
-#[test]
-fn internal_agent_groups_migrate_legacy_definitions_and_json_without_losing_data() {
-    let config = common::prepared_config(AppConfig::default());
-    let connection = rusqlite::Connection::open(&config.database_url).unwrap();
-    connection
-        .execute_batch(include_str!(
-            "../migrations/20261008_0002_create_internal_agent_definitions.sql"
-        ))
-        .unwrap();
-    connection.execute("INSERT INTO workspace_internal_agent_definitions(workspace_code,agent_code,name,role_prompt,created_at,updated_at) VALUES('TRON_CORE','legacy-group','Legacy','Keep me',0,0)", []).unwrap();
-    drop(connection);
-    for _ in 0..2 {
-        let agents = service(&config.database_url);
-        let legacy = agents
-            .workspace_internal_agent_policy("TRON_CORE", "legacy-group")
-            .unwrap();
-        assert_eq!(legacy.group_name, None);
-        assert_eq!(legacy.role_prompt, "Keep me");
-        assert!(!legacy.built_in);
-    }
-    let legacy: PlatformInternalAgentConfig = serde_json::from_value(serde_json::json!({"agentCode":"legacy", "name":"Legacy", "rolePrompt":"Keep", "toolAssignmentMode":"ALL_PLATFORM_TOOLS", "mcpAccessMode":"DISABLED", "toolExposureMode":"DIRECT_LIST", "expandedDomainPersistenceMode":"STICKY_EXPANDED", "maxSteps":10, "maxToolCalls":10, "maxParallelToolCalls":1, "selectedToolCodes":[], "selectedServerCodes":[]})).unwrap();
-    assert_eq!(legacy.group_name, None);
 }

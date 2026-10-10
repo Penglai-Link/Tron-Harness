@@ -1,4 +1,3 @@
-use std::{fs, path::Path};
 
 use rusqlite::{Connection, params};
 
@@ -14,8 +13,6 @@ use crate::{
     },
 };
 
-use super::migrations::SKILL_REGISTRY_MIGRATION;
-
 struct SqliteSkillRegistryRepositorySql<'a> {
     connection: &'a mut Connection,
 }
@@ -25,22 +22,14 @@ pub struct SqliteSkillRegistryRepository {
 
 impl<'a> SqliteSkillRegistryRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, SkillError> {
-        ensure_database_parent(database_url)?;
-
-        let mut repository = Self { connection };
-        repository.apply_migrations()?;
-        Ok(repository)
-    }
-
-    fn apply_migrations(&mut self) -> Result<(), SkillError> {
-        self.connection
-            .execute_batch(SKILL_REGISTRY_MIGRATION)
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
             .map_err(storage_error)?;
-        ensure_workspace_skill_binding_enabled_column(&self.connection)
+        Ok(Self { connection })
     }
+
 }
 
 impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
@@ -331,42 +320,6 @@ fn map_rag_index_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SkillRag
         last_error: row.get(9)?,
         updated_at: timestamp_from_millis(row.get(10)?),
     })
-}
-
-fn ensure_database_parent(database_url: &str) -> Result<(), SkillError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| SkillError::StorageFailure)?;
-    }
-    Ok(())
-}
-
-fn ensure_workspace_skill_binding_enabled_column(
-    connection: &Connection,
-) -> Result<(), SkillError> {
-    let mut statement = connection
-        .prepare("PRAGMA table_info(workspace_skill_bindings)")
-        .map_err(storage_error)?;
-    let has_enabled = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?
-        .into_iter()
-        .any(|name| name == "enabled");
-    if !has_enabled {
-        connection
-            .execute(
-                "ALTER TABLE workspace_skill_bindings ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1",
-                [],
-            )
-            .map_err(storage_error)?;
-    }
-    Ok(())
 }
 
 fn source_type_to_storage(value: SkillSourceType) -> &'static str {

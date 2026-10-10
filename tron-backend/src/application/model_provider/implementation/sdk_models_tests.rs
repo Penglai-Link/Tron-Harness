@@ -796,3 +796,4 @@ async fn personai_tool_context_rejects_logged_out_and_stale_account_snapshots() 
     assert!(state.lock().unwrap().steps.is_empty());
     server.abort();
 }
+use std::collections::HashSet;

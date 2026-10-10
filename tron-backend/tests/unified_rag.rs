@@ -132,7 +132,7 @@ fn range(scope: &str) -> AuthorizedRagRange {
     }
 }
 #[test]
-fn fresh_schema_initializes_only_two_corpora_and_rejects_legacy_without_deletion() {
+fn fresh_schema_initializes_only_two_corpora() {
     let repo = repository();
     let ids: Vec<_> = repo
         .list_corpora()
@@ -141,26 +141,8 @@ fn fresh_schema_initializes_only_two_corpora_and_rejects_legacy_without_deletion
         .map(|row| row.corpus_id)
         .collect();
     assert_eq!(ids, vec!["memory-card", "skill"]);
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("legacy.sqlite");
-    let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch(
-        "CREATE TABLE rag_corpora(id TEXT);INSERT INTO rag_corpora VALUES ('keep-me');",
-    )
-    .unwrap();
-    drop(conn);
-    assert!(matches!(
-        SqliteRagRepository::connect(path.to_str().unwrap()),
-        Err(RagError::SchemaIncompatible)
-    ));
-    let conn = rusqlite::Connection::open(path).unwrap();
-    assert_eq!(
-        conn.query_row("SELECT id FROM rag_corpora", [], |row| row
-            .get::<_, String>(0))
-            .unwrap(),
-        "keep-me"
-    );
 }
+
 #[tokio::test]
 async fn one_ingest_publishes_all_channels_with_original_evidence_and_scope_filtering() {
     let repo = repository();

@@ -1,5 +1,6 @@
-//! Isolated browser acceptance host: real AppState, HTTP routes and PTY service.
-//! No production profile, application database or filesystem content is reused.
+//! 浏览器验收专用后端，由 `make be-ui-acceptance` 启动。
+//! 终端、系统配置和聊天验收使用真实 AppState、HTTP 路由与 PTY 服务。
+//! 测试调用方提供临时目录和端口，身份登记库使用内存中的测试数据。
 #[path = "../tests/common/mod.rs"]
 mod common;
 use tron_backend::config::AppConfig;

@@ -12,10 +12,9 @@ use crate::{
 };
 
 use super::automation_repository_helpers::{
-    column_exists, ensure_database_parent, next_id_in_transaction, row_to_automation,
+    next_id_in_transaction, row_to_automation,
     row_to_execution_record, storage_error, timestamp_to_millis, update_automation_in_transaction,
 };
-use super::migrations::AUTOMATIONS_MIGRATION;
 
 struct SqliteAutomationRepositorySql<'a> {
     connection: &'a mut Connection,
@@ -26,45 +25,12 @@ pub struct SqliteAutomationRepository {
 
 impl<'a> SqliteAutomationRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, AutomationError> {
-        ensure_database_parent(database_url)?;
-
-        let repository = Self { connection };
-        repository
-            .connection
-            .execute_batch(AUTOMATIONS_MIGRATION)
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
             .map_err(storage_error)?;
-        if !column_exists(&repository.connection, "automations", "agent_code")? {
-            repository
-                .connection
-                .execute("ALTER TABLE automations ADD COLUMN agent_code TEXT NOT NULL DEFAULT 'main-agent'", [])
-                .map_err(storage_error)?;
-        }
-        if !column_exists(&repository.connection, "automations", "model_code")? {
-            repository
-                .connection
-                .execute(
-                    "ALTER TABLE automations ADD COLUMN model_code TEXT NULL",
-                    [],
-                )
-                .map_err(storage_error)?;
-        }
-        if !column_exists(
-            &repository.connection,
-            "automation_execution_records",
-            "session_code",
-        )? {
-            repository
-                .connection
-                .execute(
-                    "ALTER TABLE automation_execution_records ADD COLUMN session_code TEXT NULL",
-                    [],
-                )
-                .map_err(storage_error)?;
-        }
-        Ok(repository)
+        Ok(Self { connection })
     }
 }
 

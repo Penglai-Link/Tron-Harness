@@ -300,7 +300,7 @@ async fn automatic_retry_backoff_is_bounded_and_partial_embedding_never_publishe
     service.stop_ingestion_workers();
 }
 #[test]
-fn queue_and_upload_migration_are_additive_and_reconnect_is_idempotent() {
+fn queue_and_upload_initialization_is_idempotent_on_reconnect() {
     let f = Fixture::new();
     let one = SqliteKnowledgeIngestionQueue::connect(&f.state.config.database_url).unwrap();
     let two = SqliteKnowledgeIngestionQueue::connect(&f.state.config.database_url).unwrap();
@@ -384,7 +384,7 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
             kb.id.clone(),
             doc.id.clone(),
             USER.into(),
-            WORKSPACE.into(),
+            "PLATFORM".into(),
             doc.revision,
             doc.resource_revision,
             initial.input_config_hash.clone(),
@@ -626,7 +626,7 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
         kb.id.clone(),
         stale.id.clone(),
         USER.into(),
-        WORKSPACE.into(),
+        "PLATFORM".into(),
         stale.revision,
         stale.resource_revision,
         hash,

@@ -307,7 +307,7 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
     )
     .await;
     let tree_payload = response_json(advanced_tree_after_failed_copy).await;
-    assert_eq!(tree_payload["data"].as_array().map(Vec::len), Some(3));
+    assert_eq!(tree_payload["data"].as_array().map(Vec::len), Some(4));
 }
 
 #[tokio::test]
@@ -448,6 +448,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         "RESOURCE_MANAGEMENT",
         "VARIABLES",
         "DATA",
+        "OBSERVABILITY",
     ] {
         let response = request_json(
             &router,
@@ -624,71 +625,4 @@ async fn chat_panel_is_a_menu_tree_not_a_navigation_domain() {
     )
     .await;
     assert_ne!(add_child.status(), StatusCode::OK);
-}
-
-#[test]
-fn existing_chat_menu_and_assignments_are_removed_on_repository_startup() {
-    use tron_backend::adapters::outbound::persistence::sqlite::SqliteNavigationRepository;
-
-    let directory = tempfile::tempdir().expect("temporary navigation database");
-    let path = directory.path().join("navigation.sqlite3");
-    let database_url = path.to_str().expect("database path");
-    drop(SqliteNavigationRepository::connect(database_url).expect("initialize navigation"));
-    let connection = rusqlite::Connection::open(&path).expect("open existing database");
-    connection.execute_batch(
-        "PRAGMA foreign_keys = ON;
-         INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, icon, enabled, created_at, updated_at)
-         VALUES (734510000000000006, 'CHATS', 'BuiltIn', 'Internal', 'chats.index', 'MessageSquareText', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z');
-         INSERT INTO navigation_menu_translations (id, menu_id, locale, label)
-         VALUES (734530000000000011, 734510000000000006, 'zh-CN', '会话');
-         INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position)
-         VALUES (734520000000000006, 734500000000000001, 734510000000000006, 734520000000000005, 99);
-         INSERT INTO navigation_domain_menu_items (id, domain_id, menu_id, parent_item_id, position)
-         VALUES (734520000000000006, 734500000000000001, 734510000000000006, NULL, 99);"
-    ).expect("seed previous chat menu and both assignment tables");
-    drop(connection);
-    for _ in 0..2 {
-        drop(SqliteNavigationRepository::connect(database_url).expect("reopen navigation"));
-        let connection = rusqlite::Connection::open(&path).expect("inspect migrated database");
-        for table in ["navigation_menus", "navigation_menu_translations", "navigation_menu_tree_items", "navigation_domain_menu_items"] {
-            let column = if table == "navigation_menus" { "id" } else { "menu_id" };
-            let count: i64 = connection.query_row(
-                &format!("SELECT COUNT(*) FROM {table} WHERE {column} = 734510000000000006"),
-                [], |row| row.get(0),
-            ).expect("count obsolete chat menu rows");
-            assert_eq!(count, 0, "{table} must not retain the deleted menu");
-        }
-        let panel_count: i64 = connection.query_row(
-            "SELECT COUNT(*) FROM navigation_menus WHERE menu_code IN ('CHAT_SESSIONS', 'CHAT_NEW_SESSION', 'CHAT_PROJECTS', 'CHAT_RECENTS')",
-            [], |row| row.get(0),
-        ).expect("chat panel menus remain usable");
-        assert_eq!(panel_count, 4);
-        assert!(connection.prepare("PRAGMA foreign_key_check").unwrap().query([]).unwrap().next().unwrap().is_none());
-    }
-}
-
-#[test]
-fn platform_menu_migration_removes_old_entries_and_retains_custom_children() {
-    use tron_backend::adapters::outbound::persistence::sqlite::SqliteNavigationRepository;
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("legacy-navigation.sqlite");
-    let url = path.to_str().unwrap();
-    drop(SqliteNavigationRepository::connect(url).unwrap());
-    let connection = rusqlite::Connection::open(&path).unwrap();
-    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
-    connection.execute_batch(include_str!("../migrations/20260829_0002_create_navigation_management.sql")).unwrap();
-    connection.execute_batch(include_str!("../migrations/20260902_0001_split_workspace_agents_navigation.sql")).unwrap();
-    connection.execute_batch(include_str!("../migrations/20260922_0001_create_navigation_menu_trees.sql")).unwrap();
-    connection.execute_batch("INSERT INTO navigation_menus(id,menu_code,source,menu_type,page_code,icon,enabled,created_at,updated_at) VALUES(900000000000000001,'CUSTOM_EXPERT','Custom','Internal','apps.index','Bot',1,'fixture','fixture');
-        INSERT INTO navigation_menu_tree_items(id,tree_id,menu_id,parent_item_id,position) VALUES(900000000000000002,734500000000000001,900000000000000001,734520000000000007,2);").unwrap();
-    drop(connection);
-    for _ in 0..2 {
-        drop(SqliteNavigationRepository::connect(url).unwrap());
-        let connection = rusqlite::Connection::open(&path).unwrap();
-        let count: i64 = connection.query_row("SELECT COUNT(*) FROM navigation_menus WHERE menu_code IN ('AGENTS','INTERNAL_AGENTS','SYSTEM_AGENTS','MEMORY','KNOWLEDGE_GRAPH','KNOWLEDGE_BASE','RAG')", [], |row| row.get(0)).unwrap();
-        assert_eq!(count, 0);
-        let parent: Option<i64> = connection.query_row("SELECT parent_item_id FROM navigation_menu_tree_items WHERE menu_id=900000000000000001", [], |row| row.get(0)).unwrap();
-        assert_eq!(parent, None);
-        assert!(connection.prepare("PRAGMA foreign_key_check").unwrap().query([]).unwrap().next().unwrap().is_none());
-    }
 }

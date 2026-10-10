@@ -1,7 +1,6 @@
-use std::{fs, path::Path};
 
 use chrono::{DateTime, TimeZone, Utc};
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Row, params};
 
 use crate::{
     domain::automation::{
@@ -13,36 +12,9 @@ use crate::{
     shared::id::SnowflakeId,
 };
 
-pub(super) fn ensure_database_parent(database_url: &str) -> Result<(), AutomationError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| AutomationError::StorageFailure)?;
-    }
-    Ok(())
-}
-
 pub(super) fn storage_error(error: rusqlite::Error) -> AutomationError {
     eprintln!("automation sqlite error: {error}");
     AutomationError::StorageFailure
-}
-
-pub(super) fn column_exists(
-    connection: &Connection,
-    table_name: &str,
-    column_name: &str,
-) -> Result<bool, AutomationError> {
-    let pragma = format!("PRAGMA table_info({table_name})");
-    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    Ok(columns.iter().any(|value| value == column_name))
 }
 
 pub(super) fn next_id_in_transaction(

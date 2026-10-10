@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs, path::Path};
+use std::collections::BTreeMap;
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
@@ -15,11 +15,6 @@ use crate::{
     },
 };
 
-use super::migrations::{
-    MCP_GATEWAY_MIGRATION, MCP_PLATFORM_SERVERS_MIGRATION,
-    MCP_PLATFORM_SERVERS_TRANSPORT_MIGRATION, MCP_WORKSPACE_POLICIES_MIGRATION,
-};
-
 const MCP_GATEWAY_SINGLETON_KEY: &str = "platform";
 
 struct SqliteMcpRepositorySql<'a> {
@@ -31,48 +26,14 @@ pub struct SqliteMcpRepository {
 
 impl<'a> SqliteMcpRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, McpError> {
-        ensure_database_parent(database_url)?;
-
-        let mut repository = Self { connection };
-        repository.apply_migrations()?;
-        Ok(repository)
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
+            .map_err(storage_error)?;
+        Ok(Self { connection })
     }
 
-    fn apply_migrations(&mut self) -> Result<(), McpError> {
-        self.connection
-            .execute_batch("PRAGMA foreign_keys = ON;")
-            .map_err(storage_error)?;
-        self.connection
-            .execute_batch(MCP_GATEWAY_MIGRATION)
-            .map_err(storage_error)?;
-        self.connection
-            .execute_batch(MCP_PLATFORM_SERVERS_MIGRATION)
-            .map_err(storage_error)?;
-        if !self.platform_server_transport_columns_present()? {
-            self.connection
-                .execute_batch(MCP_PLATFORM_SERVERS_TRANSPORT_MIGRATION)
-                .map_err(storage_error)?;
-        }
-        self.connection
-            .execute_batch(MCP_WORKSPACE_POLICIES_MIGRATION)
-            .map_err(storage_error)
-    }
-
-    fn platform_server_transport_columns_present(&self) -> Result<bool, McpError> {
-        let mut statement = self
-            .connection
-            .prepare("PRAGMA table_info(platform_mcp_servers)")
-            .map_err(storage_error)?;
-        let rows = statement
-            .query_map([], |row| row.get::<_, String>(1))
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)?;
-        Ok(rows.iter().any(|column| column == "transport_kind"))
-    }
 }
 
 impl McpRepository for SqliteMcpRepositorySql<'_> {
@@ -365,18 +326,6 @@ fn map_platform_server_row(
         created_at: timestamp_from_millis(row.get(18)?),
         updated_at: timestamp_from_millis(row.get(19)?),
     })
-}
-
-fn ensure_database_parent(database_url: &str) -> Result<(), McpError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| McpError::StorageFailure)?;
-    }
-    Ok(())
 }
 
 fn storage_error(_error: rusqlite::Error) -> McpError {

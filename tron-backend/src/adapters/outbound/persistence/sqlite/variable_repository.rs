@@ -1,4 +1,3 @@
-use std::{fs, path::Path};
 
 use rusqlite::{Connection, params};
 
@@ -11,10 +10,6 @@ use crate::{
     },
 };
 
-use super::migrations::{
-    PLATFORM_VARIABLES_MIGRATION, VARIABLE_SENSITIVE_METADATA_MIGRATION, VARIABLES_MIGRATION,
-};
-
 struct SqliteVariableRepositorySql<'a> {
     connection: &'a mut Connection,
 }
@@ -24,30 +19,14 @@ pub struct SqliteVariableRepository {
 
 impl<'a> SqliteVariableRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, VariableError> {
-        ensure_database_parent(database_url)?;
-
-        let mut repository = Self { connection };
-        repository.apply_migrations()?;
-        Ok(repository)
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
+            .map_err(storage_error)?;
+        Ok(Self { connection })
     }
 
-    fn apply_migrations(&mut self) -> Result<(), VariableError> {
-        self.connection
-            .execute_batch(VARIABLES_MIGRATION)
-            .map_err(storage_error)?;
-        self.connection
-            .execute_batch(PLATFORM_VARIABLES_MIGRATION)
-            .map_err(storage_error)?;
-        if !column_exists(&self.connection, "workspace_variables", "is_sensitive")? {
-            self.connection
-                .execute_batch(VARIABLE_SENSITIVE_METADATA_MIGRATION)
-                .map_err(storage_error)?;
-        }
-        Ok(())
-    }
 }
 
 impl VariableRepository for SqliteVariableRepositorySql<'_> {
@@ -279,18 +258,6 @@ impl VariableRepository for SqliteVariableRepositorySql<'_> {
     }
 }
 
-fn ensure_database_parent(database_url: &str) -> Result<(), VariableError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| VariableError::StorageFailure)?;
-    }
-    Ok(())
-}
-
 fn storage_error(_error: rusqlite::Error) -> VariableError {
     VariableError::StorageFailure
 }
@@ -301,22 +268,6 @@ fn bool_to_int(value: bool) -> i64 {
 
 fn int_to_bool(value: i64) -> bool {
     value != 0
-}
-
-fn column_exists(
-    connection: &Connection,
-    table_name: &str,
-    column_name: &str,
-) -> Result<bool, VariableError> {
-    let mut statement = connection
-        .prepare(&format!("PRAGMA table_info({table_name})"))
-        .map_err(storage_error)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    Ok(columns.iter().any(|column| column == column_name))
 }
 
 impl SqliteVariableRepository {

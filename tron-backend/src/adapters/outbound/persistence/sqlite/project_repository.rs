@@ -1,8 +1,6 @@
-use std::{fs, path::Path};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::migrations::PROJECT_CHAT_CONTEXT_MIGRATION;
 use crate::{
     application::project::ProjectRepository,
     domain::project::{
@@ -20,21 +18,11 @@ pub struct SqliteProjectRepository {
 }
 impl<'a> SqliteProjectRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, ProjectError> {
-        if database_url != ":memory:" && !database_url.starts_with("file:") {
-            if let Some(parent) = Path::new(database_url)
-                .parent()
-                .filter(|parent| !parent.as_os_str().is_empty())
-            {
-                fs::create_dir_all(parent).map_err(|_| ProjectError::StorageFailure)?;
-            }
-        }
-
-        connection
-            .execute_batch(PROJECT_CHAT_CONTEXT_MIGRATION)
-            .map_err(|_| ProjectError::StorageFailure)?;
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
+            .map_err(storage_error)?;
         Ok(Self { connection })
     }
 }

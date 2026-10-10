@@ -7,31 +7,7 @@ impl ModelProviderService {
     ) -> Result<Self, ModelProviderError> {
         let connection=crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(|_|ModelProviderError::Storage)?;
         let (device_id,device_unbound)=connection.call(move |connection| {
-        connection
-            .execute_batch(MODEL_PROVIDER_MIGRATION)
-            .map_err(|_| ModelProviderError::Storage)?;
-        connection
-            .execute_batch(PERSON_AI_PROFILE_CREDENTIALS_MIGRATION)
-            .map_err(|_| ModelProviderError::Storage)?;
-        connection
-            .execute_batch(include_str!(
-                "../../../../migrations/20260917_0001_create_chat_auto_model_routes.sql"
-            ))
-            .map_err(|_| ModelProviderError::Storage)?;
-        migrate_provider_catalog_model_schema(&connection)
-            .map_err(|_| ModelProviderError::Storage)?;
-        remove_legacy_person_ai_embedding_catalog_models(&connection)?;
         trim_provider_sync_runs(&connection, ModelProviderCode::PersonAi)?;
-        migrate_legacy_default_model_selections(&connection)?;
-        migrate_legacy_person_ai_profile_credentials(&connection)?;
-        connection
-            .execute_batch(
-                "CREATE TABLE IF NOT EXISTS person_ai_device_identity (
-                    singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
-                    device_id TEXT NOT NULL
-                )",
-            )
-            .map_err(|_| ModelProviderError::Storage)?;
         let saved_device_id = connection
             .query_row(
                 "SELECT device_id FROM person_ai_device_identity WHERE singleton_id = 1",
@@ -66,14 +42,6 @@ impl ModelProviderService {
                 |row| row.get::<_, bool>(0),
             )
             .map_err(|_| ModelProviderError::Storage)?;
-        if sqlite_table_exists(&connection, "default_model_selections")? {
-            connection
-                .execute(
-                    "DELETE FROM default_model_selections WHERE provider_code = 'PersonAi' AND route_code = 'ChatAuto'",
-                    [],
-                )
-                .map_err(|_| ModelProviderError::Storage)?;
-        }
             Ok((device_id,device_unbound))
         },||ModelProviderError::Storage)?;
         let adapter: Arc<dyn ModelProviderAdapter> = Arc::new(PersonAiAdapter);

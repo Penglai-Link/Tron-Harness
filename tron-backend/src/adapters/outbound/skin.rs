@@ -467,9 +467,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let store = FileSkinStore::new(temp.path().into());
         for bytes in [
-            include_bytes!("../../../../tron-skills/tron-theme-spec/assets/light/skin.json")
+            include_bytes!("../../../crates/tron-harness-capability/skills/tron-theme-spec/assets/light/skin.json")
                 .as_slice(),
-            include_bytes!("../../../../tron-skills/tron-theme-spec/assets/dark/skin.json")
+            include_bytes!("../../../crates/tron-harness-capability/skills/tron-theme-spec/assets/dark/skin.json")
                 .as_slice(),
         ] {
             let skin = store.install(bytes).unwrap();

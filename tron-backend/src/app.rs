@@ -604,5 +604,3 @@ pub fn build_router_with_state(state: AppState) -> Result<Router, AppBootstrapEr
 include!("app/builders.rs");
 
 pub mod telemetry;
-
-mod telemetry_legacy;

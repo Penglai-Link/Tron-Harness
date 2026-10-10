@@ -10,7 +10,6 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-const WORKSPACE_SESSION_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS workspace_session_links (session_id TEXT PRIMARY KEY, workspace_code TEXT NOT NULL, business_json TEXT NOT NULL); CREATE INDEX IF NOT EXISTS workspace_session_links_workspace ON workspace_session_links(workspace_code);";
 pub struct SqliteChatRepository {
     host: FrameworkHost,
 }
@@ -59,7 +58,7 @@ impl SqliteChatRepository {
             host.shared_database()
                 .await
                 .map_err(chat_error)?
-                .call(|c| c.execute_batch(WORKSPACE_SESSION_SCHEMA))
+                .call(|c| super::schema::initialize_business(c))
                 .await
                 .map_err(|_| ChatError::StorageFailure)?;
             Ok(Self { host })
@@ -72,7 +71,7 @@ impl SqliteChatRepository {
         host.shared_database()
             .await
             .map_err(chat_error)?
-            .call(|c| c.execute_batch(WORKSPACE_SESSION_SCHEMA))
+            .call(|c| super::schema::initialize_business(c))
             .await
             .map_err(|_| ChatError::StorageFailure)?;
         let repository = Self { host: host.clone() };

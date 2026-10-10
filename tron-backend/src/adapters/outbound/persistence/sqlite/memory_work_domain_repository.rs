@@ -1,4 +1,3 @@
-use std::{fs, path::Path};
 
 use rusqlite::{Connection, params};
 
@@ -6,8 +5,6 @@ use crate::{
     application::memory::{MemoryError, MemoryWorkDomain, MemoryWorkDomainRepository},
     shared::time::{timestamp_from_millis, timestamp_to_millis},
 };
-
-use super::migrations::MEMORY_WORK_DOMAINS_MIGRATION;
 
 struct SqliteMemoryWorkDomainRepositorySql<'a> {
     connection: &'a mut Connection,
@@ -18,21 +15,14 @@ pub struct SqliteMemoryWorkDomainRepository {
 
 impl<'a> SqliteMemoryWorkDomainRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, MemoryError> {
-        ensure_database_parent(database_url)?;
-
-        let repository = Self { connection };
-        repository.apply_migrations()?;
-        Ok(repository)
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
+            .map_err(storage_error)?;
+        Ok(Self { connection })
     }
 
-    fn apply_migrations(&self) -> Result<(), MemoryError> {
-        self.connection
-            .execute_batch(MEMORY_WORK_DOMAINS_MIGRATION)
-            .map_err(storage_error)
-    }
 }
 
 impl MemoryWorkDomainRepository for SqliteMemoryWorkDomainRepositorySql<'_> {
@@ -123,16 +113,6 @@ fn unique_violation(error: &rusqlite::Error) -> bool {
         rusqlite::Error::SqliteFailure(code, _)
             if code.code == rusqlite::ErrorCode::ConstraintViolation
     )
-}
-
-fn ensure_database_parent(database_url: &str) -> Result<(), MemoryError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent() {
-        fs::create_dir_all(parent).map_err(|error| MemoryError::Storage(error.to_string()))?;
-    }
-    Ok(())
 }
 
 fn storage_error(error: rusqlite::Error) -> MemoryError {

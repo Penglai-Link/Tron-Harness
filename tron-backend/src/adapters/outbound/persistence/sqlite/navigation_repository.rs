@@ -1,7 +1,5 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
-    path::Path,
 };
 
 use rusqlite::{Connection, ErrorCode, OptionalExtension, params};
@@ -17,13 +15,6 @@ use crate::{
         NavigationPage, NavigationTreeItem,
     },
     shared::id::SnowflakeId,
-    shared::time::current_timestamp,
-};
-
-use super::migrations::{
-    CHAT_PANEL_NAVIGATION_MIGRATION, NAVIGATION_AGENTS_SPLIT_MIGRATION,
-    NAVIGATION_MENU_TREES_MIGRATION, NAVIGATION_MIGRATION,
-    REMOVE_CHATS_NAVIGATION_MIGRATION,
 };
 
 const POSITION_WORK_OFFSET: i64 = 1_000_000_000;

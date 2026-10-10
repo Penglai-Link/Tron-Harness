@@ -1,4 +1,0 @@
-interface:
-  display_name: "EliteForge Memory Dreaming"
-  short_description: "Run batch memory dreaming with memory-dream."
-  default_prompt: "Use $eliteforge-memory-dreaming to run memory dreaming with the local memory-dream command."

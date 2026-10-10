@@ -14,8 +14,6 @@ use crate::{
     },
 };
 
-use super::migrations::WORKSPACES_MIGRATION;
-
 pub struct SqliteWorkspaceRepository {
     connection: super::framework_storage::SharedDatabase,
 }
@@ -25,22 +23,9 @@ impl SqliteWorkspaceRepository {
         ensure_database_parent(database_url)?;
         let connection =
             super::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
-        let mut repository = Self { connection };
-        repository.apply_migrations()?;
-        Ok(repository)
+        Ok(Self { connection })
     }
 
-    fn apply_migrations(&mut self) -> Result<(), WorkspaceError> {
-        self.connection.call(
-            move |connection| {
-                connection
-                    .execute_batch(WORKSPACES_MIGRATION)
-                    .map_err(storage_error)?;
-                Ok(())
-            },
-            || WorkspaceError::StorageFailure,
-        )
-    }
 }
 
 impl WorkspaceRepository for SqliteWorkspaceRepository {

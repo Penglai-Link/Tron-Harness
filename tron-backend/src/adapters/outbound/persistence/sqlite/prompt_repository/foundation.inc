@@ -1,6 +1,5 @@
-use std::{fs, path::Path, time::Duration};
 
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, params};
 
 use crate::{
     application::prompt::PromptRepository,
@@ -15,12 +14,6 @@ use crate::{
     },
 };
 
-use super::migrations::{
-    PROMPT_ACTION_CATEGORY_MIGRATION, PROMPT_AGENT_ROLE_CATEGORY_MIGRATION,
-    PROMPT_CATALOG_MIGRATION, PROMPT_VARIABLE_BINDINGS_MIGRATION,
-    PROMPT_VARIABLE_METADATA_MIGRATION, PROMPTS_MIGRATION,
-};
-
 struct SqlitePromptRepositorySql<'a> {
     connection: &'a mut Connection,
 }
@@ -30,22 +23,11 @@ pub struct SqlitePromptRepository {
 
 impl<'a> SqlitePromptRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
-        mut connection: &'a mut Connection,
+        _database_url: &str,
+        connection: &'a mut Connection,
     ) -> Result<Self, PromptError> {
-        ensure_database_parent(database_url)?;
-
-        connection
-            .busy_timeout(Duration::from_secs(5))
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
             .map_err(storage_error)?;
-        connection
-            .execute_batch(PROMPTS_MIGRATION)
-            .map_err(storage_error)?;
-        migrate_prompt_variable_metadata(&mut connection)?;
-        migrate_prompt_catalog(&mut connection)?;
-        migrate_prompt_category(&mut connection)?;
-        migrate_prompt_variable_bindings(&mut connection)?;
-        migrate_prompt_agent_role_category(&mut connection)?;
         Ok(Self { connection })
     }
 }

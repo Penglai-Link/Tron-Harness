@@ -8,7 +8,7 @@ use axum::{
     extract::{State, rejection::JsonRejection},
 };
 use serde::{Deserialize, Serialize};
-use tron_agent_harness::{ToolPermission, ToolPermissionSetting, ToolRisk};
+use tron_harness_capability::{ToolPermission, ToolPermissionSetting, ToolRisk};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

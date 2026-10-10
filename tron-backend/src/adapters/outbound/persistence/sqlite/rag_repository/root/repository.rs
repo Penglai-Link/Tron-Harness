@@ -35,31 +35,11 @@ impl<'a> SqliteRagRepositorySql<'a> {
 
         default_sqlite_extension_context()
             .prepare_connection(&connection)
-            .map_err(storage_error)?;
+            .map_err(|error| {
+                eprintln!("RAG SQLite extension error: {error}");
+                RagError::StorageFailure
+            })?;
         let repository = Self { connection };
-        let legacy:bool=connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='rag_corpora')",[],|row|row.get(0)).map_err(storage_error)?;
-        let versioned:bool=connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='rag_schema_version')",[],|row|row.get(0)).map_err(storage_error)?;
-        if legacy && !versioned {
-            return Err(RagError::SchemaIncompatible);
-        }
-        if versioned {
-            let version: i64 = connection
-                .query_row("SELECT version FROM rag_schema_version", [], |row| {
-                    row.get(0)
-                })
-                .map_err(storage_error)?;
-            if version != 2 {
-                return Err(RagError::SchemaIncompatible);
-            }
-        } else {
-            let tx=crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(connection,rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
-            tx.execute_batch(include_str!(
-                "../../../../../../../migrations/20261008_unified_rag.sql"
-            ))
-            .map_err(storage_error)?;
-            tx.commit().map_err(storage_error)?;
-        }
-        operations::initialize_operations(connection)?;
         for corpus in repository.list_corpora()? {
             repository.ensure_sqlite_runtime_storage_for_corpus(&corpus)?;
         }

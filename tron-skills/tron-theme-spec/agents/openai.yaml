@@ -1,4 +1,0 @@
-interface:
-  display_name: "Tron 主题规范"
-  short_description: "按 Tron 主题包规范制作、校验并打包主题"
-  default_prompt: "用 $tron-theme-spec 制作一个 Tron 主题包，包含按钮状态和数据行样式，并给出导入方法。"

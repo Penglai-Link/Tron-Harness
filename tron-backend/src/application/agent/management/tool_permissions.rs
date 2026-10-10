@@ -2,7 +2,7 @@ use super::*;
 use crate::domain::agent::{ToolAvailabilityState, ToolOperationKind};
 use eliteforge_agent_core::ToolDescriptor;
 use std::collections::{BTreeMap, HashSet};
-use tron_agent_harness::{ToolPermission, ToolPermissionSetting, ToolPermissionSource};
+use tron_harness_capability::{ToolPermission, ToolPermissionSetting, ToolPermissionSource};
 
 impl AgentManagementService {
     pub fn tool_permissions(&self) -> Result<Vec<ToolPermissionSetting>, AgentManagementError> {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "EliteForge 记忆规范"
+  short_description: "读取三域记忆上下文，规范长期记忆的证据、质量、范围及治理边界。"
+  default_prompt: "使用 $eliteforge-memory-spec 读取当前可用的三域记忆，并按当前工具协议处理记忆质量与治理。"

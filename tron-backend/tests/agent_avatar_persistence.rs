@@ -161,25 +161,3 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
     assert_eq!(config.avatar_id, "robot");
     assert_eq!(config.role_prompt, "Keep this role");
 }
-
-#[test]
-fn legacy_workspace_definitions_gain_a_default_avatar_without_losing_fields() {
-    let config = common::prepared_config(AppConfig::default());
-    let connection = rusqlite::Connection::open(&config.database_url).unwrap();
-    connection
-        .execute_batch(include_str!(
-            "../migrations/20261008_0002_create_internal_agent_definitions.sql"
-        ))
-        .unwrap();
-    connection.execute("INSERT INTO workspace_internal_agent_definitions (workspace_code, agent_code, name, role_prompt, created_at, updated_at) VALUES ('TRON_CORE', 'legacy-avatar', 'Legacy agent', 'Preserve these instructions', 0, 0)", []).unwrap();
-    drop(connection);
-    for _ in 0..2 {
-        let agents = service(&config.database_url);
-        let record = agents
-            .workspace_internal_agent_policy("TRON_CORE", "legacy-avatar")
-            .unwrap();
-        assert_eq!(record.avatar_id, "robot");
-        assert_eq!(record.name, "Legacy agent");
-        assert_eq!(record.role_prompt, "Preserve these instructions");
-    }
-}

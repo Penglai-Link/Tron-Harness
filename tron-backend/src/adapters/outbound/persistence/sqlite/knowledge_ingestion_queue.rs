@@ -799,10 +799,7 @@ impl SqliteKnowledgeIngestionQueue {
                 crate::shared::sqlite_extensions::default_sqlite_extension_context()
                     .prepare_connection(c)
                     .map_err(storage)?;
-                c.execute_batch(include_str!(
-                    "../../../../../migrations/20261005_0001_knowledge_ingestion.sql"
-                ))
-                .map_err(storage)
+                Ok(())
             },
             || storage("database worker stopped"),
         )?;

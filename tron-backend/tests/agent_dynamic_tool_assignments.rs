@@ -3,7 +3,7 @@ mod common;
 use axum::http::{Method, StatusCode};
 use common::{authenticated_bearer_token, request_with_headers, response_json};
 use serde_json::json;
-use tron_agent_harness::ToolPermissionSource;
+use tron_harness_capability::ToolPermissionSource;
 
 const TOOL: &str = "framework.fixture.query";
 const PLATFORM: &str = "/api/v1/agents/registry/internal/main-agent";

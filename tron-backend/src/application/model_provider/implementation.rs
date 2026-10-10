@@ -1,7 +1,7 @@
 #[cfg(test)]
 use std::sync::Mutex;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     future::Future,
     pin::Pin,
     sync::{
@@ -50,10 +50,6 @@ use crate::{
     },
 };
 
-const MODEL_PROVIDER_MIGRATION: &str =
-    include_str!("../../../migrations/20260915_0001_create_model_provider_management.sql");
-const PERSON_AI_PROFILE_CREDENTIALS_MIGRATION: &str =
-    include_str!("../../../migrations/20260921_0003_create_person_ai_profile_credentials.sql");
 const PERSON_AI_DEFAULT_SERVER_BASE_URL: &str = "https://personai.chat/person-ai-index";
 const PERSON_AI_CLIENT_NAME: &str = "Tron";
 const PERSON_AI_PRODUCT_CODE: &str = "tron";
@@ -145,7 +141,6 @@ mod storage_write;
 use storage_write::*;
 
 mod utilities;
-pub(crate) use schema::migrate_provider_catalog_model_schema;
 use utilities::*;
 mod authorization;
 mod credentials;
@@ -255,12 +250,6 @@ mod tests {
             .expect("create test cipher"),
         );
         let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(":memory:").unwrap();
-        connection
-            .call(
-                |c| c.execute_batch(MODEL_PROVIDER_MIGRATION),
-                || rusqlite::Error::InvalidQuery,
-            )
-            .unwrap();
         let adapter = Arc::new(UnauthorizedOnceAdapter::default());
         let service = ModelProviderService {
             model_executor: Default::default(),
@@ -778,39 +767,6 @@ mod tests {
     }
 
     #[test]
-    fn legacy_person_ai_connection_is_copied_to_its_profile_credentials() {
-        let connection = Connection::open_in_memory().expect("open provider database");
-        connection
-            .execute_batch(MODEL_PROVIDER_MIGRATION)
-            .expect("create provider schema");
-        connection
-            .execute_batch(PERSON_AI_PROFILE_CREDENTIALS_MIGRATION)
-            .expect("create profile credentials schema");
-        connection
-            .execute(
-                "INSERT INTO provider_connections (
-                    provider_code, person_ai_user_id, person_ai_username, server_base_url,
-                    status, credentials_encrypted, authorized_at, authorization_expires_at,
-                    last_sync_at, last_error, created_at, updated_at
-                 ) VALUES ('PersonAi', 'person-alice', 'alice', 'https://person-ai.invalid',
-                    'Connected', 'enc:v1:legacy', 100, 200, NULL, NULL, 100, 100)",
-                [],
-            )
-            .expect("seed legacy connection");
-
-        migrate_legacy_person_ai_profile_credentials(&connection)
-            .expect("migrate legacy credentials");
-
-        let migrated = read_person_ai_profile_credentials(&connection, "person-alice")
-            .expect("read profile credentials")
-            .expect("migrated profile credentials");
-        assert_eq!(migrated.server_base_url, "https://person-ai.invalid");
-        assert_eq!(migrated.credentials_encrypted, "enc:v1:legacy");
-        assert_eq!(migrated.status, ProviderConnectionStatus::Connected);
-        assert_eq!(migrated.authorization_expires_at, Some(200));
-    }
-
-    #[test]
     fn person_ai_invalid_authorization_key_is_detected_from_remote_error() {
         let error = ModelProviderError::Remote(
             "Person-AI request failed: 服务端解密失败: 授权密钥已失效，请重新登录后再试".into(),
@@ -842,50 +798,11 @@ mod tests {
     }
 
     #[test]
-    fn catalog_schema_adds_point_coefficients_to_legacy_catalogs() {
-        let connection = Connection::open_in_memory().expect("open in-memory database");
-        connection
-            .execute_batch(
-                "CREATE TABLE provider_connections (provider_code TEXT PRIMARY KEY);
-                 CREATE TABLE provider_catalog_models (
-                    provider_code TEXT NOT NULL,
-                    model_code TEXT NOT NULL,
-                    model_name TEXT NOT NULL,
-                    upstream_vendor_code TEXT,
-                    upstream_vendor_name TEXT,
-                    context_window_tokens INTEGER,
-                    status TEXT NOT NULL,
-                    first_seen_at INTEGER NOT NULL,
-                    last_seen_at INTEGER,
-                    updated_at INTEGER NOT NULL,
-                    PRIMARY KEY(provider_code, model_code)
-                );",
-            )
-            .expect("create legacy catalog table");
-
-        migrate_provider_catalog_model_schema(&connection).expect("migrate catalog table");
-
-        let columns = connection
-            .prepare("PRAGMA table_info(provider_catalog_models)")
-            .expect("prepare table metadata")
-            .query_map([], |row| row.get::<_, String>(1))
-            .expect("read table metadata")
-            .collect::<Result<HashSet<_>, _>>()
-            .expect("collect table metadata");
-        assert!(columns.contains("input_coefficient"));
-        assert!(columns.contains("cache_hit_coefficient"));
-        assert!(columns.contains("output_coefficient"));
-        assert!(columns.contains("quality_type"));
-    }
-
-    #[test]
     fn full_catalog_snapshot_updates_and_marks_missing_models_unavailable() {
         let connection = Connection::open_in_memory().expect("open in-memory database");
         connection
-            .execute_batch(MODEL_PROVIDER_MIGRATION)
+            .execute_batch(include_str!("../../../migrations/0001_init.sql"))
             .expect("create provider tables");
-
-        migrate_provider_catalog_model_schema(&connection).expect("migrate catalog identity");
 
         let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection,rusqlite::TransactionBehavior::Immediate).expect("start first snapshot");
         apply_catalog_snapshot(
@@ -936,48 +853,6 @@ mod tests {
         assert!(catalog.iter().any(|model| {
             model.model_code == "retired" && model.status == ProviderCatalogModelStatus::Unavailable
         }));
-    }
-
-    #[test]
-    fn legacy_default_pointers_migrate_into_fixed_selections() {
-        let connection = Connection::open_in_memory().expect("open in-memory database");
-        connection
-            .execute_batch(MODEL_PROVIDER_MIGRATION)
-            .expect("create provider tables");
-        connection
-            .execute_batch(
-                "CREATE TABLE platform_default_models (
-                    model_type TEXT NOT NULL PRIMARY KEY,
-                    model_code TEXT NOT NULL,
-                    updated_at INTEGER NOT NULL
-                 );
-                 CREATE TABLE workspace_default_models (
-                    workspace_code TEXT NOT NULL,
-                    model_type TEXT NOT NULL,
-                    model_code TEXT NOT NULL,
-                    updated_at INTEGER NOT NULL,
-                    PRIMARY KEY (workspace_code, model_type)
-                 );
-                 INSERT INTO platform_default_models VALUES
-                    ('TEXT', 'MODEL-PLATFORM-TEXT', 100),
-                    ('EMBEDDING', 'MODEL-PLATFORM-EMBEDDING', 100);
-                 INSERT INTO workspace_default_models VALUES
-                    ('workspace-1', 'TEXT', 'MODEL-WORKSPACE-TEXT', 200);",
-            )
-            .expect("seed legacy defaults");
-
-        migrate_legacy_default_model_selections(&connection).expect("migrate defaults");
-
-        assert_eq!(
-            effective_default_selection(&connection, "workspace-1", ModelType::Text)
-                .expect("read workspace default"),
-            Some(ModelSelection::fixed("MODEL-WORKSPACE-TEXT"))
-        );
-        assert_eq!(
-            effective_default_selection(&connection, "workspace-1", ModelType::Embedding)
-                .expect("read platform fallback"),
-            Some(ModelSelection::fixed("MODEL-PLATFORM-EMBEDDING"))
-        );
     }
 
     #[test]

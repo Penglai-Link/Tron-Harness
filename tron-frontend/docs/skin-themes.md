@@ -57,10 +57,10 @@ ocean.zip
 - `version`：版本 1 兼容旧主题；版本 2 增加受限的包内 CSS。`mode` 为 `Light` / `Dark`，控制未覆盖变量的基底、深色组件和终端 ANSI 默认配色。
 - `colors` / `layout`：CSS 自定义属性；合并时 `layout` 优先。常用颜色沿用 `packages/chat-theme/src/theme.scss` 的 `--color-*`，运行时将主要语义颜色同步到 shadcn 的 `--primary`、`--background` 等变量；显式声明的 shadcn 变量优先。
 - `layout` 可设置 `--radius`、`--tron-card-radius`、`--tron-control-radius` 和 `--font-sans`。`--tron-system-font-size` 保留给字号设置，皮肤不可覆盖。未消费的变量不会改变界面。
-- 能力包管理和能力配置页消费 `--tron-capability-effective-fg`、`--tron-capability-inactive-fg`、`--tron-capability-id-fg`、`--tron-capability-provider-fg`，并暴露 `data-theme-part="capability-packs-page / capability-pack-card / capability-configuration-page / capability-implementation / capability-provider / capability-status-effective / capability-status-inactive"` 子部件选择器。主题制作说明与变量校验目录见 [tron-theme-spec](../../tron-skills/tron-theme-spec/SKILL.md) 和 [tokens.md](../../tron-skills/tron-theme-spec/references/tokens.md)。
+- 能力包管理和能力配置页消费 `--tron-capability-effective-fg`、`--tron-capability-inactive-fg`、`--tron-capability-id-fg`、`--tron-capability-provider-fg`，并暴露 `data-theme-part="capability-packs-page / capability-pack-card / capability-configuration-page / capability-implementation / capability-provider / capability-status-effective / capability-status-inactive"` 子部件选择器。主题制作说明与变量校验目录见 [tron-theme-spec](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/SKILL.md) 和 [tokens.md](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/tokens.md)。
 - `resources.background`：PNG、JPEG、WebP、GIF；作为工作台及设置页的背景，内容面板保留自身表面色。`resources.font`：WOFF、WOFF2、TTF、OTF。两者都可以为空或 HTTPS URL。本地资源通过受保护的资源接口读取为 Blob URL，切换时撤销 URL 并移除字体。
 - `resources.css`：版本 2 可选 CSS 文件，只能是包内 CSS 路径。CSS 解析后自动限定到 `body[data-tron-app][data-skin="主题ID"]` 子树，只接受颜色、边框、阴影、滤镜、背景、变换、伪元素内容及动画等视觉属性。尺寸、间距、布局、定位和层叠属性会被拒绝；独立特效层可使用定位和尺寸属性。`@import`、其他 at-rule、外部/数据 URL、脚本构造会被拒绝；`url()` 只能引用 ZIP 中的包内文件。CSS 加载错误会指出 CSS 文件和规则。
-- 主题 CSS 可使用普通 CSS 选择器覆盖当前 Tron 页面中的所有匹配组件，例如 `button`、`input`、`[data-theme-part="app-sidebar"]`；规则会自动限定在当前主题页面内，不会影响其他网站内容。应用额外提供固定于视口的 `data-theme-effect-layer="global"` 全局特效层，跨导航页面持续显示，不参与布局、不拦截点击，支持伪元素、关键帧、栅格、暗角、辉光和扫描线。动画遵循系统的减少动态效果设置。组件装饰支持 `app-shell / sidebar / page / panel / card / chat / chat-message / dialog`，详见[锚点协议](../../tron-skills/tron-theme-spec/references/effect-anchors.md)。
+- 主题 CSS 可使用普通 CSS 选择器覆盖当前 Tron 页面中的所有匹配组件，例如 `button`、`input`、`[data-theme-part="app-sidebar"]`；规则会自动限定在当前主题页面内，不会影响其他网站内容。应用额外提供固定于视口的 `data-theme-effect-layer="global"` 全局特效层，跨导航页面持续显示，不参与布局、不拦截点击，支持伪元素、关键帧、栅格、暗角、辉光和扫描线。动画遵循系统的减少动态效果设置。组件装饰支持 `app-shell / sidebar / page / panel / card / chat / chat-message / dialog`，详见[锚点协议](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/effect-anchors.md)。
 
 ```css
 [data-theme-part="app-sidebar"],
@@ -136,13 +136,13 @@ make fe-unit-test TEST=src/shared/theme
 
 ## 主题作者 Skill
 
-仓库提供 [tron-theme-spec](../../tron-skills/tron-theme-spec/SKILL.md)，包含浅/深色模板、[组件变量目录](../../tron-skills/tron-theme-spec/references/tokens.md)、[加载与故障恢复](../../tron-skills/tron-theme-spec/references/format-and-loading.md)，以及纯 Python 标准库校验/打包脚本。
+仓库提供 [tron-theme-spec](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/SKILL.md)，包含浅/深色模板、[组件变量目录](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/tokens.md)、[加载与故障恢复](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/format-and-loading.md)，以及纯 Python 标准库校验/打包脚本。
 
 ```sh
-python3 tron-skills/tron-theme-spec/scripts/theme_pack.py init ./my-theme --id my-theme --name "My Theme" --mode Light
+python3 tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/theme_pack.py init ./my-theme --id my-theme --name "My Theme" --mode Light
 # 编辑 my-theme/skin.json 后：
-python3 tron-skills/tron-theme-spec/scripts/theme_pack.py validate ./my-theme
-python3 tron-skills/tron-theme-spec/scripts/theme_pack.py pack ./my-theme ./my-theme.zip
+python3 tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/theme_pack.py validate ./my-theme
+python3 tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/scripts/theme_pack.py pack ./my-theme ./my-theme.zip
 ```
 
 用户可阅读 SKILL.md 自行制作，也可将整个 `tron-theme-spec/` 目录安装到支持 SKILL.md 的智能体技能目录，再要求智能体制作。Skill 自带模板和校验器，不依赖 Tron 源码所在路径。生成的主题 ZIP 与 Skill 目录是不同交付物；外观页导入的是主题 ZIP。
@@ -170,8 +170,16 @@ python3 tron-skills/tron-theme-spec/scripts/theme_pack.py pack ./my-theme ./my-t
 
 Chromium 实际渲染（Profile/皮肤 HTTP 接口桩）：主按钮 normal/hover/active 分别为 `#245b8a` / `#1b476f` / `#12324f`；禁用色独立生效。数据行高 52px、padding 14px 20px，选中行与 sticky 单元格同色；输入框 focus 边框为 `#ee7700`。离线 ZIP 的真实 PNG/WOFF2 字节通过 Blob/FontFace 成功加载，Portal 弹窗背景和标题字体一致。切回浅色后背景为 none、自定义 FontFace 为 0、动态样式为 1，按钮圆角恢复 4px。Matrix 刷新恢复、390px 页面无横向溢出。未以这些接口桩结果冒充真实账户的桌面端到端测试。
 
-可直接导入 [Ocean 组件级示例](../../tron-skills/tron-theme-spec/assets/ocean-detail/skin.json) 查看按钮和行样式。深浅色模板由真实 Rust FileSkinStore 完成安装/激活验证，目录/ZIP 校验与打包由 Python 测试及 CLI 初始化→打包→校验流程验证。
+可直接导入 [Ocean 组件级示例](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/assets/ocean-detail/skin.json) 查看按钮和行样式。深浅色模板由真实 Rust FileSkinStore 完成安装/激活验证，目录/ZIP 校验与打包由 Python 测试及 CLI 初始化→打包→校验流程验证。
 
+
+## 共享聊天与 A2UI
+
+主题技能现随 `tron-harness-capability` 内嵌分发，源码位于 `tron-backend/crates/tron-harness-capability/skills/`。
+共享聊天使用 `--agent-ui-chat-*-color`，Markdown / 代码使用 `--agent-ui-markdown-*` / `--agent-ui-syntax-*`；旧 `--tron-markdown-*` / `--tron-syntax-*` 不再控制共享 Chat。
+A2UI 控件、QuestionCard、图表及动效使用 `--agent-ui-*` / `--agent-ui-a2ui-*` / `--agent-ui-motion-*`。
+Tron 当前显式配置的出现时长、位移和过渡时间优先于对应通用 CSS 变量；皮肤不能改变用户的关闭或减弱动画偏好。
+完整说明见 [共享 UI 主题契约](../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/agent-ui.md)。
 
 ## 组件锚点运行机制
 

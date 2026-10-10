@@ -12,10 +12,6 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 const CONTROL_DATABASE_ENV: &str = "TRON_BACKEND_CONTROL_DATABASE_URL";
-const PROFILE_REGISTRY_MIGRATION: &str =
-    include_str!("../../../migrations/20260921_0001_create_profile_registry.sql");
-const PROFILE_AVATAR_CACHE_MIGRATION: &str =
-    include_str!("../../../migrations/20260921_0004_create_profile_avatar_cache.sql");
 
 #[derive(Clone)]
 pub struct ProfileRegistryService {
@@ -115,8 +111,7 @@ impl ProfileRegistryService {
         }
         let connection = Connection::open(database_url)?;
         connection.execute_batch("PRAGMA foreign_keys = ON;")?;
-        connection.execute_batch(PROFILE_REGISTRY_MIGRATION)?;
-        connection.execute_batch(PROFILE_AVATAR_CACHE_MIGRATION)?;
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_profiles(&connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
         })

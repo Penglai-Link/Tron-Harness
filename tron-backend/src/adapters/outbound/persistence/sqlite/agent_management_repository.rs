@@ -1,7 +1,5 @@
 mod codecs;
 mod connection;
-#[cfg(test)]
-mod tests;
 
 use rusqlite::{Connection, params, params_from_iter};
 
@@ -20,19 +18,12 @@ use crate::{
 };
 
 use self::codecs::{
-    column_exists, ensure_database_parent, expanded_domain_persistence_mode_from_storage,
+    expanded_domain_persistence_mode_from_storage,
     expanded_domain_persistence_mode_to_storage, mcp_access_mode_from_storage,
     mcp_access_mode_to_storage, runtime_type_from_storage, runtime_type_to_storage, storage_error,
     tool_assignment_mode_from_storage, tool_assignment_mode_to_storage,
     tool_exposure_mode_from_storage, tool_exposure_mode_to_storage,
 };
-
-use super::migrations::{
-    AGENT_MANAGEMENT_INTERNAL_AGENT_LIMITS_MIGRATION,
-    AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION, AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION,
-    AGENT_MANAGEMENT_INTERNAL_AGENT_PARALLEL_LIMIT_MIGRATION,
-};
-use super::migrations::{AGENT_MANAGEMENT_MIGRATION, AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION};
 
 struct SqliteAgentManagementRepositorySql<'a> {
     connection: &'a mut Connection,
@@ -93,7 +84,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
 
     fn list_tool_permissions(
         &mut self,
-    ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {
+    ) -> Result<Vec<tron_harness_capability::ToolPermissionSetting>, AgentManagementError> {
         let mut statement = self
             .connection
             .prepare("SELECT config_json FROM platform_tool_permissions ORDER BY tool_code")
@@ -109,7 +100,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     }
     fn replace_tool_permissions(
         &mut self,
-        settings: &[tron_agent_harness::ToolPermissionSetting],
+        settings: &[tron_harness_capability::ToolPermissionSetting],
     ) -> Result<(), AgentManagementError> {
         let tx = super::framework_storage::business_transaction(
             self.connection,
@@ -915,7 +906,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
 
     fn list_tool_permissions(
         &mut self,
-    ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {
+    ) -> Result<Vec<tron_harness_capability::ToolPermissionSetting>, AgentManagementError> {
         self.connection.call(
             move |connection| {
                 SqliteAgentManagementRepositorySql { connection }.list_tool_permissions()
@@ -925,7 +916,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
     }
     fn replace_tool_permissions(
         &mut self,
-        settings: &[tron_agent_harness::ToolPermissionSetting],
+        settings: &[tron_harness_capability::ToolPermissionSetting],
     ) -> Result<(), AgentManagementError> {
         let settings = settings.to_vec();
         self.connection.call(

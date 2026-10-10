@@ -1,0 +1,4 @@
+interface:
+  display_name: "EliteForge 记忆做梦"
+  short_description: "在授权历史范围内整理记忆候选，依据任务证据完成分层复核与治理。"
+  default_prompt: "使用 $eliteforge-memory-dreaming 按当前 memory-dream 帮助和任务协议处理已授权的历史材料。"

@@ -1,12 +1,14 @@
-# Agent instructions
+# AGENTS.md
 
-## Workflow
+## 工作流
 
-- Use the Makefile targets for build, test, and development commands. Run checks relevant to the task; do not run cleanup unless the task needs it and the target scope is clear.
-- If a default port is occupied, choose an available port and keep frontend and backend configuration aligned.
-- Follow the nearest `AGENTS.md` for frontend or backend work, and consult its linked specifications as relevant to the change.
+- 目前是开发阶段，不需考虑API和数据兼容，数据库只在同一个migration文件上修改
+- 使用 Makefile 定义的指令，完成构建、测试、运行、清理构建缓存等工作
+- 如果默认端口被占用，则自行换一个可用端口再启动，同时保持前后端端口配置一致
+- 注意查看tron-frontend和tron-backend里的嵌套的AGENTS.md
 
-## Shared contracts
+## 开发共识
 
-- Backend JSON responses use `ApiResponse<T>` from `tron-backend/src/response.rs` (`code`, `message`, `data`). Follow each endpoint's declared pagination shape rather than assuming one universal DTO.
-- Follow `$eliteforge-git-feature-oriented-lite-spec` for Git workflows.
+- 后端 JSON 响应统一使用 `ApiResponse<T>` [ `tron-backend/src/response.rs` (`code`, `message`, `data`)]。每个http接口使用独立的DTO定义，不要混用
+- GIT管理遵循 `$eliteforge-git-feature-oriented-lite-spec`
+- 不要在项目内新增技术设计文档、脑爆文档、产品设计文档

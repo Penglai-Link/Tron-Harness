@@ -608,17 +608,7 @@ fn selected_codes(
     Ok(result)
 }
 
-fn ensure_database_parent(database_url: &str) -> Result<(), NavigationError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| NavigationError::StorageFailure)?;
-    }
-    Ok(())
-}
+
 
 fn storage_error(_error: rusqlite::Error) -> NavigationError {
     NavigationError::StorageFailure

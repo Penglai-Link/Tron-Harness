@@ -14,6 +14,7 @@ electron/resources/update-config.json
 .gemini/
 .qwen/
 .claude/
+.playwright-cli/
 
 # logs
 *.log

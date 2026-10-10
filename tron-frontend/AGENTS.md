@@ -1,17 +1,22 @@
-# Frontend instructions
+# 前端说明
 
-Consult the relevant project guidance when a change touches its area:
+## 重要文档
 
-- `docs/spec/DESIGN.md` for visual and interaction design.
-- `docs/tech-stack.md` and `docs/spec/react-coding-spec.md` for architecture and React conventions.
-- `docs/spec/quality-gates.md` for the appropriate checks; normally run `make fe-check` and focused tests.
-- `docs/spec/ui-components.md` when using or changing shared UI primitives.
+必须准守：`docs/前端技术栈.md`
 
-- Before building a page or domain component, check `src/components/ui` and reuse its primitives first.
-- Compose and style existing primitives through their public APIs. Add a domain component only for domain-specific behavior.
-- Add a new primitive only when the existing primitives cannot support the interaction without compromising accessibility or leaking implementation details.
-- When adding or materially changing a primitive under `src/components/ui`, update `docs/spec/ui-components.md` in the same change.
-- Keep the component catalog accurate: verify file paths, primary exports, usage guidance, accessibility behavior, internationalization considerations, and focused tests.
+如果变更涉及以下领域，请查阅相应的项目指南：
 
-- When changing the default sidebar hierarchy, update both `shellNavigation.ts` and the built-in SQLite menu migration; API-backed navigation uses the persisted tree.
-- Chat API, SSE, and attachment requests must use the visible document locale in `Accept-Language`, including requests sent through `@tron/chat-internal-adapter`.
+- 视觉和交互设计：`docs/spec/DESIGN.md`。
+- React 工程约定：和 `docs/spec/前端编码规范.md`。
+- 相应的检查项：`docs/spec/质量检查.md`；通常运行 `make fe-check` 和针对性测试。
+- 使用或修改共享 UI 基础组件时：`docs/spec/界面组件规范.md`。
+
+## 注意点
+
+- 构建页面或领域组件前，先检查 `src/components/ui`，优先复用其中的基础组件。
+- 通过现有基础组件的公开 API 进行组合和样式设置。仅在需要实现领域特定行为时添加领域组件。
+- 只有在现有基础组件无法支持所需交互，且支持该交互不会损害无障碍性或泄露实现细节时，才添加新的基础组件。
+- 在 `src/components/ui` 下新增或实质性修改基础组件时，在同一次变更中更新 `docs/spec/界面组件规范.md`。
+- 保持组件目录准确：核实文件路径、主要导出、使用说明、无障碍行为、国际化注意事项和针对性测试。
+- 修改默认侧边栏层级时，同时更新 `shellNavigation.ts` 和内置 SQLite 菜单迁移；API 驱动的导航使用持久化树。
+- Chat API、SSE 和附件请求必须在 `Accept-Language` 中使用当前可见文档的语言区域，包括通过 `@tron/chat-internal-adapter` 发送的请求。

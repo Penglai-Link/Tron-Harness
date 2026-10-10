@@ -1,0 +1,25 @@
+[package]
+name = "tron-harness-capability"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Keep the harness contract independently testable while the application runtime
+# and its database adapter are migrated. This is a native, in-process package.
+[workspace]
+
+[dependencies]
+async-trait = "0.1"
+eliteforge-agent-core = { path = "../../../.agent-deps/agent-framework/crates/framework/eliteforge-agent-core" }
+eliteforge-agent-official-plugin-tools-local = { path = "../../../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-local" }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+eliteforge-agent-framework = { path = "../../../.agent-deps/agent-framework/crates/framework/eliteforge-agent-framework", default-features = false }
+eliteforge-agent-test-support = { path = "../../../.agent-deps/agent-framework/crates/testing/eliteforge-agent-test-support" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
+
+[build-dependencies]
+eliteforge-agent-core = { path = "../../../.agent-deps/agent-framework/crates/framework/eliteforge-agent-core" }

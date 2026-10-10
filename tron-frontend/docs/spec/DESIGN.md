@@ -1,226 +1,115 @@
----
-name: Tron
-colors:
-  surface: '#fdf8f8'
-  surface-dim: '#ddd9d8'
-  surface-bright: '#fdf8f8'
-  surface-container-lowest: '#ffffff'
-  surface-container-low: '#f7f3f2'
-  surface-container: '#f1edec'
-  surface-container-high: '#ebe7e6'
-  surface-container-highest: '#e5e2e1'
-  on-surface: '#1c1b1b'
-  on-surface-variant: '#444748'
-  inverse-surface: '#313030'
-  inverse-on-surface: '#f4f0ef'
-  outline: '#747878'
-  outline-variant: '#c4c7c7'
-  surface-tint: '#5f5e5e'
-  primary: '#000000'
-  on-primary: '#ffffff'
-  primary-container: '#1c1b1b'
-  on-primary-container: '#858383'
-  accent: '#2f5f9f'
-  on-accent: '#ffffff'
-  accent-container: '#dbe7f7'
-  on-accent-container: '#133761'
-  focus-ring: '#2f5f9f'
-  inverse-primary: '#c8c6c5'
-  secondary: '#5e5e63'
-  on-secondary: '#ffffff'
-  secondary-container: '#e0dfe4'
-  on-secondary-container: '#626267'
-  tertiary: '#000000'
-  on-tertiary: '#ffffff'
-  tertiary-container: '#1c1b1a'
-  on-tertiary-container: '#868382'
-  error: '#ba1a1a'
-  on-error: '#ffffff'
-  error-container: '#ffdad6'
-  on-error-container: '#93000a'
-  success: '#4f6f52'
-  on-success: '#ffffff'
-  success-container: '#e4efe5'
-  on-success-container: '#253927'
-  warning: '#8a6a1f'
-  on-warning: '#ffffff'
-  warning-container: '#f4e8c8'
-  on-warning-container: '#3f2f0b'
-  row-stripe: '#f9f9fb'
-  hover-surface: '#f2f2f7'
-  card-border: '#e5e5e5'
-  primary-fixed: '#e5e2e1'
-  primary-fixed-dim: '#c8c6c5'
-  on-primary-fixed: '#1c1b1b'
-  on-primary-fixed-variant: '#474746'
-  secondary-fixed: '#e3e2e7'
-  secondary-fixed-dim: '#c7c6cb'
-  on-secondary-fixed: '#1a1b1f'
-  on-secondary-fixed-variant: '#46464b'
-  tertiary-fixed: '#e6e2df'
-  tertiary-fixed-dim: '#cac6c4'
-  on-tertiary-fixed: '#1c1b1a'
-  on-tertiary-fixed-variant: '#484645'
-  background: '#fdf8f8'
-  on-background: '#1c1b1b'
-  surface-variant: '#e5e2e1'
-typography:
-  display:
-    fontFamily: Inter
-    fontSize: 40px
-    fontWeight: '600'
-    lineHeight: '1.1'
-    letterSpacing: '0'
-  h1:
-    fontFamily: Inter
-    fontSize: 24px
-    fontWeight: '600'
-    lineHeight: '1.3'
-    letterSpacing: '0'
-  h2:
-    fontFamily: Inter
-    fontSize: 20px
-    fontWeight: '600'
-    lineHeight: '1.3'
-    letterSpacing: '0'
-  body-lg:
-    fontFamily: Inter
-    fontSize: 16px
-    fontWeight: '400'
-    lineHeight: '1.5'
-    letterSpacing: '0'
-  body-md:
-    fontFamily: Inter
-    fontSize: 14px
-    fontWeight: '400'
-    lineHeight: '1.5'
-    letterSpacing: '0'
-  body-sm:
-    fontFamily: Inter
-    fontSize: 13px
-    fontWeight: '400'
-    lineHeight: '1.4'
-    letterSpacing: '0'
-  label-caps:
-    fontFamily: Inter
-    fontSize: 11px
-    fontWeight: '600'
-    lineHeight: '1'
-    letterSpacing: 0.05em
-  tabular:
-    fontFamily: Inter
-    fontSize: 13px
-    fontWeight: '400'
-    lineHeight: '1.4'
-rounded:
-  sm: 0.25rem
-  DEFAULT: 0.5rem
-  md: 0.75rem
-  lg: 1rem
-  xl: 1.5rem
-  full: 9999px
-spacing:
-  base: 4px
-  xs: 4px
-  sm: 8px
-  md: 16px
-  lg: 24px
-  xl: 40px
-  gutter: 16px
-  margin: 24px
-motion:
-  fast: 120ms
-  standard: 180ms
-  slow: 240ms
-  easing: cubic-bezier(0.2, 0, 0, 1)
-breakpoints:
-  sm: 640px
-  md: 768px
-  lg: 960px
-  xl: 1200px
-zIndex:
-  base: 0
-  sticky: 20
-  overlay: 40
-  modal: 60
-  toast: 80
----
+# Tron 界面设计规范
 
-## Brand & Style
+本规范描述当前 Tron 前端的设计约定与实现边界。颜色、尺寸和交互状态以主题文件及组件源码为准；本文中的默认值用于说明现有实现，不应复制为页面中的固定样式。
 
-The design system is rooted in **Apple-like minimalism**, prioritizing clarity, precision, and an unobtrusive aesthetic. It is engineered for the modern enterprise SaaS environment, specifically tailored for Agent Workspaces where high information density must coexist with cognitive ease.
+## 设计目标
 
-The brand personality is **composed, efficient, and sophisticated**. It avoids the "playful" tropes of consumer tech in favor of a "tool-first" mentality. By utilizing expansive whitespace, refined typography, and a monochromatic foundation, the system ensures that the agent's focus remains entirely on the data and the task at hand. The emotional response is one of calm control in a fast-paced work environment.
+界面优先呈现任务、会话和工作区信息。通过清晰的分组、稳定的操作位置和适量留白支持密集信息，减少重复标题、说明和装饰。浅色、Matrix 深色和导入皮肤共享相同的业务结构与操作语义。
 
-## Colors
+## 实现与职责
 
-The palette is strictly curated to eliminate visual noise. The foundation is built on **Apple’s signature off-whites and cool grays**, ensuring the interface feels premium and lightweight.
+```mermaid
+flowchart TD
+  A[应用入口 main.tsx] --> B[共享聊天主题与全局样式]
+  A --> C[ThemeProvider]
+  C --> D[内置主题或导入皮肤]
+  D --> E[skinEngine：变量、字体与资源]
+  E --> F[Tron 基础组件与业务页面]
+  E --> G[共享 Agent UI：聊天与 A2UI]
+  C --> H[TronMotionProvider]
+  H --> F
+  H --> G
+```
 
-- **Primary & Secondary:** We use near-blacks (#1C1B1B) for maximum legibility in text and deep grays (#444748) for secondary metadata.
-- **Accents:** Accent colors are used sparingly. The primary blue is #2F5F9F, a low-saturation professional hue used only for focus rings, critical actions, and active states.
-- **Functional Grays:** A spectrum of light grays defines boundaries without the harshness of solid lines.
-- **Semantic Colors:** Success uses #4F6F52, Warning uses #8A6A1F, and Error uses #BA1A1A. Their container colors are intentionally pale so dense tables remain calm.
+- `src/app/styles/globals.css` 引入 Tailwind CSS 4、组件样式和字体，提供基础样式及主题映射。
+- `src/shared/theme/builtin/light.json`、`matrix-dark.json` 定义内置皮肤；`ThemeProvider.tsx` 管理当前皮肤、字号和外观偏好。
+- `src/shared/theme/skinEngine.ts` 应用皮肤变量和资源；`effectLayers.ts` 管理装饰层及其清理。
+- `src/components/ui` 提供基础控件，`src/shared/layout` 提供应用布局，领域页面组合这些组件。
+- `AgentChatWindow.tsx` 位于 `src/domain/chat/components`，负责 Tron 上下文和数据适配。聊天窗口、流式呈现、队列、停止和回放使用共享 Agent UI 的 `ChatRuntimeWindow`。
 
-## Typography
+## 颜色与主题
 
-This design system employs **Inter** for its exceptional readability and neutral, systematic character. The typographic scale is optimized for information density; while headings are bold and clear, the "Body-SM" and "Tabular" levels are the workhorses of the agent workspace.
+页面使用语义变量和组件公开变量。Tron 语义色使用 `--color-*`，基础组件也使用 `--background`、`--foreground`、`--primary` 等变量。两组变量在内置皮肤中分别声明，不能假定它们的值始终相同。
 
-To maintain an organized feel in dense data views, use **Tabular Figures** for all numerical data. Letter spacing remains non-negative across the runtime UI; large headlines use 0 tracking, while small labels use 0.05em for legibility.
+以下仅为内置浅色皮肤中的部分语义色：
 
-## Layout & Spacing
+| 用途 | 变量 | 浅色默认值 |
+| --- | --- | --- |
+| 页面背景 | `--color-background` | `#fdf8f8` |
+| 浮起表面 | `--color-elevated-surface` | `#ffffff` |
+| 主要文字 | `--color-on-surface` | `#1c1b1b` |
+| 次要文字 | `--color-on-surface-variant` | `#444748` |
+| 强调色 | `--color-accent` | `#2f5f9f` |
+| 焦点色 | `--color-focus-ring` | `#2f5f9f` |
+| 成功、警告、错误 | `--color-success`、`--color-warning`、`--color-error` | `#4f6f52`、`#8a6a1f`、`#ba1a1a` |
 
-The layout philosophy follows a **Fluid Grid with strict 4px/8px increments**. This "soft grid" ensures consistency while allowing the workspace to adapt to the multi-pane nature of agent operations.
+Matrix 深色皮肤使用另一组配色，导入皮肤还可以覆盖组件、聊天和 A2UI 变量。新增页面不得把浅色默认值写死；状态也应通过文字、图标或语义属性表达，不能只依赖颜色。
 
-- **Agent Sidebar:** Fixed at 280px to provide a stable anchor.
-- **Main Canvas:** Fluid, utilizing a 12-column system with 16px gutters.
-- **Density:** High density is achieved not by shrinking text, but by reducing vertical padding in lists (8px) and increasing horizontal margins (24px) to create "breathing room" at the edges of the screen.
+具体控件优先使用 `--tron-button-*`、`--tron-input-*`、`--tron-select-*`、`--tron-table-*`、`--tron-card-*` 等公开变量。共享聊天颜色使用 `--agent-ui-chat-*-color` 入口，Markdown 和代码高亮使用 `--agent-ui-markdown-*`、`--agent-ui-syntax-*`，A2UI 使用 `--agent-ui-a2ui-*`。其他 Agent UI 变量见主题技能中的共享组件说明。不要修改共享库内部派生变量。
 
-By default, the page header section may only contain:
-1. Main title
-2. Action buttons
-3. Tabs
-4. Breadcrumbs
+## 字体与信息密度
 
-The following are prohibited:
-1. Subtitles
-2. Title descriptions
-3. Page instructions
-4. Promotional copy
-5. Explanatory text such as “Used for xxx,” “Supports xxx,” or “You can xxx here”
+默认无衬线字体为 `Inter Variable`。全局样式还引入 Geist，导入皮肤可以加载字体资源，并通过 `--tron-skin-font` 和 `--font-sans` 应用。字体资源的应用与清理由主题引擎负责。
 
-## Elevation & Depth
+系统字号默认值为 `14px`，用户可在外观设置中调整。页面内仍有按用途设置的字号和尺寸，不能声称全部文字都随系统字号等比例缩放。不要用皮肤覆盖用户字号偏好，也不要继续维护一套脱离组件实现的固定标题字号表。
 
-Depth is conveyed through **Tonal Layering and Soft Ambient Shadows**, avoiding heavy borders which can clutter a dense UI.
+正文、标签、辅助信息应有明确层级。数值比较区域可使用等宽数字或 `tabular-nums`；长标识符、代码和路径按内容需求使用等宽字体。调整密度时先优化间距和列布局，再检查可读性与触控范围。
 
-- **Level 0 (Background):** #FDF8F8. The base canvas.
-- **Level 1 (Cards/Surface):** #FFFFFF. Used for the primary workspace containers.
-- **Shadows:** We use a "Natural Light" shadow model. Shadows are highly diffused, with a very low opacity (4-8% Alpha) and no color tinting. They should appear as a subtle lift rather than a distinct drop shadow.
-- **Interactions:** Hover states should utilize a subtle 1px inner stroke or a slight shift in background gray (#F2F2F7) rather than a heavy shadow increase. Motion uses 120ms fast, 180ms standard, and 240ms slow transitions with cubic-bezier(0.2, 0, 0, 1).
+## 布局与响应式
 
-## Responsive & Layering
+应用包含导航侧栏、可编辑标签页、内容区，以及按上下文显示的右侧和底部面板。设置页使用独立布局。页面可根据表格、表单、聊天或图谱选择布局，当前实现没有统一强制的十二列网格。
 
-- **Breakpoints:** sm 640px, md 768px, lg 960px, xl 1200px.
-- **Z-Index:** base 0, sticky 20, overlay 40, modal 60, toast 80.
+`Sidebar` 基础组件默认桌面宽度为 `16rem`，移动抽屉为 `18rem`，图标折叠宽度为 `3rem`；调用方可通过公开配置调整。设置页在 `lg` 下使用 `260px` 侧栏。因此，不应把所有侧栏定义为固定 `280px`。
 
-## Shapes
+Tailwind 使用默认断点，常用 `sm=640px`、`md=768px`、`lg=1024px`、`xl=1280px`。各布局按实际空间切换；侧栏在移动端使用抽屉。表格可横向滚动，面板内容允许收缩，避免长文本挤出按钮或遮挡操作。
 
-The design system utilizes **Rounded** geometry (Level 2). This provides a modern, approachable feel that softens the "industrial" nature of enterprise data.
+间距优先复用已有组件及 Tailwind 尺度。表格与列表按内容密度选择行高和内边距；斑马纹由表格样式及主题控制，不以列数决定是否启用。
 
-- **Standard Elements (Buttons/Inputs):** 0.5rem (8px).
-- **Cards & Containers:** 1rem (16px).
-- **Outer Wrappers:** 1.5rem (24px).
+## 页头与导航
 
-Large radius values are reserved for the primary containers of the workspace, creating a "nested" look that clearly defines different functional areas (e.g., Chat Pane vs. CRM Details).
+页面顶部优先放置导航、操作和必要的标签页。避免副标题、宣传文字、重复说明和“此处可以……”等页面介绍。
 
-## Components
+当前 `PageHeader` 接受 `title`、`actions` 和 `breadcrumbs`，但只渲染面包屑及操作区；两者都为空时返回 `null`，`title` 本身不会显示。不要依靠传入 `title` 生成可见标题。新增可见标题时，先检查应用壳和标签页是否已表达同一信息。
 
-Components focus on utility and "quiet" interaction.
+顶层模块一般不显示面包屑。创建、编辑、详情等子页面按层级提供面包屑，父项可以跳转，当前项显示为文本。标签和导航文案由调用方翻译。
 
-- **Buttons:** Primary buttons are solid dark gray/black with white text. Secondary buttons use a light gray ghost style with no border, becoming visible only on hover.
-- **Breadcrumbs:** Breadcrumb navigation is conditionally displayed only on child-level pages within a primary module. Top-level module pages must not show breadcrumbs. Nested pages such as create, edit, detail, or settings views should show a breadcrumb above the page heading to indicate the relationship between the parent module and the current page. Parent breadcrumb items are interactive links, while the current page item is rendered as non-interactive text.
-- **Cards:** Rounded cards are the primary container. They use a subtle 1px border (#E5E5E5) and a soft level-1 shadow.
-- **Input Fields:** Minimalist design with a 1px light gray border. Focus states use a subtle 2px blue "glow" or a thicker 2px black border.
-- **Chips/Badges:** Small, pill-shaped, and low-contrast. Backgrounds are very light tints of the semantic color with dark text.
-- **Lists:** High-density lists with 8px vertical padding. Use "Zebra striping" with #F9F9FB for rows only when data exceeds 10 columns.
-- **Data Tables:** Borderless rows with a 1px bottom separator. Headers use the "Label-Caps" typography style for clear structural hierarchy.
-- **Agent Feed:** Message bubbles use a soft-gray background for the system/customer and white with a subtle shadow for the agent's own responses.
+## 控件、表面与层级
+
+- 按钮使用现有 `Button` 的 `default`、`outline`、`secondary`、`ghost`、`destructive`、`link` 变体。主操作、危险操作和普通操作保持明确区别。
+- 输入控件分别呈现默认、悬停、焦点、禁用和无效状态；焦点样式由组件公开变量控制。
+- 卡片用于确有分组意义的内容。避免为每段文字增加卡片；`SurfaceCard` 默认圆角为 `8px`，内边距为 `1.25rem`，可由公开变量覆盖。
+- 控件圆角按组件和皮肤定义。按钮与输入常用的圆角回退值为 `4px`；不能把所有控件、卡片和外层容器统一规定为 `8px/16px/24px`。
+- 表格保留语义结构，区分悬停、选中和展开状态。固定列的背景应与所在行一致，不能在滚动时透出下层内容。
+- 弹窗、抽屉、下拉菜单和提示使用现有 Portal 组件，检查遮罩、焦点与滚动行为。
+
+当前层级由各组件实现：例如 Dialog/Sheet 常用 `z-50`，Tooltip 使用 `120`，全局 Toast 容器使用 `130`。项目没有统一落实旧文档中的 `0/20/40/60/80` 层级表；新增浮层需核对真实叠放上下文，避免随意提高层级。
+
+## 聊天与 A2UI
+
+聊天和 A2UI 使用共享 Agent UI 的样式、组件和动效能力，Tron 提供产品上下文、接口适配、翻译与主题变量。消息呈现遵循共享组件的角色与状态，不再规定“系统消息灰色、Agent 消息白色”的固定气泡样式。
+
+结构化提问、图表和其他 A2UI 内容沿用共享组件公开接口。表单字段错误应在字段附近显示；需要用户确认或补充信息时使用相应交互。Toast 用于短暂反馈，不承载所有提示，也不替代持久错误、确认弹窗或聊天中的提问卡片。
+
+## 动效与装饰
+
+`TronMotionProvider` 向共享 `MotionProvider` 注册 React Bits 的 `enter` 和 `fade` 适配器。目前配置为入场时长 `180ms`、位移 `8px`、过渡时长 `120ms`。这组值不代表所有控件的动画时长；Portal 控件和其他效果仍有各自样式。
+
+外观设置保存 `system`、`reduced`、`off` 到 `tron.motion.mode`。共享动效运行时根据偏好、系统减少动效设置和页面可见性调整播放。Portal 通过根元素的 `data-tron-motion-policy` 接收同一策略。适配器配置的优先级高于 CSS 动效变量，皮肤中的时长不保证覆盖宿主配置。
+
+入场动画用于明确的视图切换。数据更新不应重复触发；保活路由和非活动标签页停用入场。不要通过不断改变 React `key` 重播动画，否则会破坏焦点、草稿和滚动位置。
+
+主题装饰依附 `data-theme-anchor` 容器，由运行时生成不接收指针事件、对辅助技术隐藏的装饰层。可用锚点包括 `global`、`app-shell`、`sidebar`、`page`、`panel`、`card`、`chat`、`chat-message`、`dialog`。不要把锚点放在输入框、表格行或外部媒体上；不得让装饰改变内容尺寸、遮挡操作或抢占焦点。
+
+## 国际化与无障碍
+
+支持 `en-US` 和 `zh-CN`。可见文案、控件名称、错误和状态通过翻译资源提供；用户内容、代码、路径和业务标识保持原样。当前部分基础组件仍有英文默认无障碍文案，使用及修改时应核对，不能据本文推断全部组件已经完成双语覆盖。
+
+检查键盘操作、焦点可见性、弹窗焦点返回、表单关联标签及状态播报。图标按钮需有可访问名称。两种语言、两种内置主题、导入皮肤及减少动效模式都应保持操作可用。
+
+## 维护入口
+
+- [前端编码规范](前端编码规范.md)：目录职责、数据接入和国际化约定。
+- [界面组件规范](界面组件规范.md)：基础组件目录、公开接口和主题约定。
+- [质量检查](质量检查.md)：按变更范围执行的检查与证据要求。
+- [主题技能](../../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/SKILL.md)：皮肤格式、公开变量及资源约束。
+- [共享 Agent UI 主题说明](../../../tron-backend/crates/tron-harness-capability/skills/tron-theme-spec/references/agent-ui.md)：聊天、A2UI 和动效的公开主题接口。

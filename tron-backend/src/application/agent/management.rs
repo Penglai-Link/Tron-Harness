@@ -99,12 +99,12 @@ pub trait AgentManagementRepository: Send {
 
     fn list_tool_permissions(
         &mut self,
-    ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {
+    ) -> Result<Vec<tron_harness_capability::ToolPermissionSetting>, AgentManagementError> {
         Ok(vec![])
     }
     fn replace_tool_permissions(
         &mut self,
-        _: &[tron_agent_harness::ToolPermissionSetting],
+        _: &[tron_harness_capability::ToolPermissionSetting],
     ) -> Result<(), AgentManagementError> {
         Err(AgentManagementError::StorageFailure)
     }

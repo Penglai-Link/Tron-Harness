@@ -1,11 +1,11 @@
-# Backend instructions
+# 后端开发说明
 
-Consult `docs/tech-stack.md` for the architecture overview and `docs/spec/rust-coding-spec.md` for Rust implementation rules relevant to the change. Run `make be-check` and focused backend tests.
+修改后端源码前，阅读 [后端技术栈](docs/后端技术栈.md) 和 [后端编码规范](docs/spec/后端编码规范.md)。运行 `make be-check` 和与改动相关的后端测试。
 
-- Unit tests may use `#[cfg(test)]` beside the code; cross-module/API integration tests belong in `tests/`.
-- Resolve filesystem and command execution from the selected application/worktree scope. A missing configured working directory is an error; never fall back to the backend process directory. `default_branch` is configuration, not proof of the checked-out Git branch.
-- Agent command tools use a command string when `args` is omitted; explicit `args` are literal argv. Ordinary commands capture output and become task-ID-backed after 10 seconds; PTYs are for interactive or long-running processes and remain backend-owned, independent of frontend sockets or tabs.
-- Resolve workspace and chat-attachment files through the shared `fileRef`; keep file exports scoped to project paths.
-- `chat_ask_user` answers remain pending until the prior run releases the session; persist the answer summary in the continuation transcript.
-- When creating a Person-AI Rust SDK client, set `X-Product-Code` at client construction so regular and SSE requests inherit it.
-- `cargo fmt` may reformat unrelated files; review the diff and retain only changes in scope.
+- 单元测试可通过 `#[cfg(test)]` 放在实现旁；跨模块测试和 API 集成测试放在 `tests/`。
+- 文件访问和命令执行必须基于已选择的应用或 worktree。配置的工作目录不存在时应报错，不能退回后端进程目录。`default_branch` 只是配置，不能据此判断实际检出的 Git 分支。
+- Agent 命令工具省略 `args` 时按命令字符串解释；显式传入 `args` 时按字面 argv 执行。普通命令先收集输出，超过 10 秒后返回任务 ID；PTY 用于交互式或持续运行的进程，由后端持有，不随前端 socket 或标签页关闭而丢失。
+- 工作区文件和聊天附件通过共享的 `fileRef` 解析；文件导出必须限制在项目路径范围内。
+- `chat_ask_user` 的答案在上一轮运行释放会话前保持待处理状态；续跑时把答案摘要持久化到对话记录。
+- 创建 PersonAI Rust SDK 客户端时设置 `X-Product-Code`，让普通请求和 SSE 请求继承同一产品标识。
+- `cargo fmt` 可能格式化无关文件；检查差异，只保留本次任务范围内的改动。

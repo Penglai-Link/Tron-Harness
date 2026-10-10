@@ -1,5 +1,3 @@
-mod schema;
-use std::{fs, path::Path};
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
@@ -19,8 +17,6 @@ use crate::{
     },
 };
 
-use super::migrations::{TASK_FLOWS_MIGRATION, TASKS_MIGRATION, TASKS_SUPERPOWER_RESET_MIGRATION};
-
 struct SqliteTaskRepositorySql<'a> {
     connection: &'a mut Connection,
 }
@@ -30,56 +26,12 @@ pub struct SqliteTaskRepository {
 
 impl<'a> SqliteTaskRepositorySql<'a> {
     pub fn initialize(
-        database_url: &str,
+        _database_url: &str,
         connection: &'a mut Connection,
     ) -> Result<Self, TaskError> {
-        ensure_database_parent(database_url)?;
-
-        let mut repository = Self { connection };
-        repository
-            .connection
-            .execute_batch(TASKS_MIGRATION)
+        crate::adapters::outbound::persistence::sqlite::schema::initialize_business(connection)
             .map_err(storage_error)?;
-        repository
-            .connection
-            .execute_batch(TASK_FLOWS_MIGRATION)
-            .map_err(storage_error)?;
-        repository.reset_legacy_schema_if_needed()?;
-        let added_execution_result =
-            if !column_exists(&repository.connection, "tasks", "execution_result")? {
-                repository
-                    .connection
-                    .execute(
-                        "ALTER TABLE tasks ADD COLUMN execution_result TEXT NULL",
-                        [],
-                    )
-                    .map_err(storage_error)?;
-                true
-            } else {
-                false
-            };
-        if added_execution_result {
-            repository.migrate_legacy_completed_task_descriptions()?;
-        }
-        if !column_exists(&repository.connection, "tasks", "agent_code")? {
-            repository
-                .connection
-                .execute(
-                    "ALTER TABLE tasks ADD COLUMN agent_code TEXT NOT NULL DEFAULT 'main-agent'",
-                    [],
-                )
-                .map_err(storage_error)?;
-        }
-        if !column_exists(&repository.connection, "tasks", "model_code")? {
-            repository
-                .connection
-                .execute("ALTER TABLE tasks ADD COLUMN model_code TEXT NULL", [])
-                .map_err(storage_error)?;
-        }
-        repository.migrate_priority_extra_high_constraint_if_needed()?;
-        repository.migrate_task_flow_schema()?;
-        repository.assign_default_flow_to_existing_workspaces()?;
-        Ok(repository)
+        Ok(Self { connection })
     }
 
     fn list_code_links(
@@ -411,45 +363,9 @@ fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
     })
 }
 
-fn ensure_database_parent(database_url: &str) -> Result<(), TaskError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
-    }
-    if let Some(parent) = Path::new(database_url).parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent).map_err(|_| TaskError::StorageFailure)?;
-        }
-    }
-    Ok(())
-}
 fn storage_error(error: rusqlite::Error) -> TaskError {
     eprintln!("task sqlite error: {error}");
     TaskError::StorageFailure
-}
-
-fn uses_legacy_task_schema_definition(create_sql: &str) -> bool {
-    ["Backlog", "Todo", "Testing", "BugFix", "Refactor"]
-        .iter()
-        .any(|needle| create_sql.contains(needle))
-}
-
-fn task_priority_constraint_excludes_extra_high(create_sql: &str) -> bool {
-    create_sql.contains("priority TEXT NOT NULL CHECK") && !create_sql.contains("Extra High")
-}
-
-fn column_exists(
-    connection: &Connection,
-    table_name: &str,
-    column_name: &str,
-) -> Result<bool, TaskError> {
-    let pragma = format!("PRAGMA table_info({table_name})");
-    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    Ok(columns.iter().any(|value| value == column_name))
 }
 
 #[cfg(test)]

@@ -123,6 +123,17 @@ impl FrameworkHost {
                 .map_err(map_error)?;
         }
         let mut request = fw::RunRequest::new(&session, input);
+        // Resolve the display language per run, including approval continuations.
+        request.extensions.insert(
+            match crate::shared::locale::SupportedLocale::from_raw(&context.locale) {
+                crate::shared::locale::SupportedLocale::EnUs => {
+                    tron_harness_capability::TronToolPolicyLocale::EnUs
+                }
+                crate::shared::locale::SupportedLocale::ZhCn => {
+                    tron_harness_capability::TronToolPolicyLocale::ZhCn
+                }
+            },
+        );
         if let Some(capabilities) = a2ui_options {
             request
                 .extensions
@@ -231,7 +242,7 @@ impl FrameworkHost {
             summaries: self.summary_store().await.map_err(map_error)?,
             sink,
         });
-        tron_agent_harness::TronRunScope {
+        tron_harness_capability::TronRunScope {
             user_code: context.user_code.clone().unwrap_or_else(|| "system".into()),
             workspace_code: context.workspace_code.clone(),
             session_code: session,

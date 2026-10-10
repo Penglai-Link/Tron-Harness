@@ -72,6 +72,16 @@ impl ModelClient for Client {
                     "skill_read_resource",
                     json!({"name":"review","path":"guide.md"}),
                 ),
+                (6, 0) => ModelResponse::tool_call_with_id(
+                    "tron-theme",
+                    "skill_load",
+                    json!({"name":"tron-theme-spec"}),
+                ),
+                (6, 1) => ModelResponse::tool_call_with_id(
+                    "tron-resource",
+                    "skill_read_resource",
+                    json!({"name":"tron-theme-spec","path":"references/agent-ui.md"}),
+                ),
                 (4, 0) => ModelResponse::tool_call_with_id(
                     "a2ui-skill",
                     "skill_load",
@@ -126,7 +136,7 @@ fn context(mode: u8) -> AgentRunContext {
     // This product DTO grants authority; it supplies no implementation.
     let names: Vec<&str> = if mode == 1 {
         vec![]
-    } else if mode == 0 {
+    } else if mode == 0 || mode == 6 {
         vec!["skill_load", "skill_read_resource"]
     } else {
         vec!["skill_load"]
@@ -151,6 +161,14 @@ async fn run_with_profile(
     mode: u8,
     harness_enabled: bool,
     tools_enabled: bool,
+) -> (crate::domain::agent::AgentRunResult, Arc<Client>, usize) {
+    run_with_profile_and_locale(mode, harness_enabled, tools_enabled, "en-US").await
+}
+async fn run_with_profile_and_locale(
+    mode: u8,
+    harness_enabled: bool,
+    tools_enabled: bool,
+    locale: &str,
 ) -> (crate::domain::agent::AgentRunResult, Arc<Client>, usize) {
     let host = FrameworkHost::temporary(None).unwrap();
     host.set_pack_enabled("tron.harness", harness_enabled)
@@ -210,7 +228,9 @@ async fn run_with_profile(
         .with_framework_host(Some(host.clone()))
         .build()
         .unwrap();
-    let result = agent.run(context(mode)).await.unwrap();
+    let mut context = context(mode);
+    context.locale = locale.into();
+    let result = agent.run(context).await.unwrap();
     assert!(host.close().await.is_success());
     (result, client, selected.load(Ordering::SeqCst))
 }
@@ -476,5 +496,80 @@ async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_i
         }
         drop(requests);
         assert!(host.close().await.is_success());
+    }
+}
+
+#[tokio::test]
+async fn builtin_tron_skills_load_embedded_instructions_and_resources() {
+    let (result, client, _) = run(6).await;
+    assert_eq!(result.final_output, "done");
+    assert_eq!(result.observations.len(), 2);
+    assert!(
+        result.observations[0]
+            .output
+            .contains("Tron 主题规范与制作")
+    );
+    assert!(
+        result.observations[1]
+            .output
+            .contains("共享聊天、A2UI 与动效")
+    );
+    let requests = client.requests.lock().unwrap();
+    assert!(
+        requests[0]
+            .messages
+            .iter()
+            .any(|message| message.content.text().contains("eliteforge-memory-spec"))
+    );
+}
+
+#[tokio::test]
+async fn disabling_tron_pack_hides_embedded_skills() {
+    let (_, client, _) = run_with_profile(6, false, true).await;
+    let requests = client.requests.lock().unwrap();
+    assert!(
+        !requests[0]
+            .messages
+            .iter()
+            .any(|message| message.content.text().contains("tron-theme-spec"))
+    );
+    let results: Vec<_> = requests
+        .last()
+        .unwrap()
+        .messages
+        .iter()
+        .filter(|message| message.role == fw::Role::Tool)
+        .collect();
+    assert_eq!(results.len(), 2);
+    assert!(
+        results
+            .iter()
+            .all(|message| message.tool_result.as_ref().unwrap().is_error)
+    );
+    assert!(
+        results
+            .iter()
+            .all(|message| !message.content.text().contains("Tron 主题规范与制作"))
+    );
+}
+
+#[tokio::test]
+async fn host_passes_normalized_request_locale_to_native_tool_policy() {
+    use tron_harness_capability::TronToolPolicyLocale;
+    for (locale, expected) in [
+        ("en-US", TronToolPolicyLocale::EnUs),
+        ("zh-CN", TronToolPolicyLocale::ZhCn),
+        ("en-GB,en;q=0.9", TronToolPolicyLocale::EnUs),
+        ("fr-FR", TronToolPolicyLocale::ZhCn),
+    ] {
+        let (_, client, _) = run_with_profile_and_locale(0, true, true, locale).await;
+        let requests = client.requests.lock().unwrap();
+        assert!(!requests.is_empty());
+        for request in requests.iter() {
+            assert_eq!(
+                request.extensions.get::<TronToolPolicyLocale>().as_deref(),
+                Some(&expected)
+            );
+        }
     }
 }

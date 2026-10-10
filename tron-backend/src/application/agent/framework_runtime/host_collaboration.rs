@@ -250,7 +250,7 @@ impl Runtime {
                 },
             )),
         );
-        tron_agent_harness::TronRunScope {
+        tron_harness_capability::TronRunScope {
             user_code: context.user_code.clone().unwrap_or_else(|| "system".into()),
             workspace_code: context.workspace_code.clone(),
             session_code: session,

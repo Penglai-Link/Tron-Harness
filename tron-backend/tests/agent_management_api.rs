@@ -1531,7 +1531,11 @@ async fn capability_catalog_exposes_installed_packs_and_extension_implementation
             eliteforge_agent_official_plugin_tools_local::TOOL_IMPLEMENTATION_DESCRIPTION
         )
     );
-    assert!(tool_description.contains(tron_agent_harness::TOOL_IMPLEMENTATION_DESCRIPTION));
+    let harness = packs.iter().find(|pack| pack["id"] == "tron.harness").unwrap();
+    assert!(harness["contents"].as_array().unwrap().iter().any(|item| {
+        item["kind"] == "Policy"
+            && item["description"] == tron_harness_capability::TOOL_IMPLEMENTATION_DESCRIPTION
+    }));
     assert!(extensions.iter().all(|row| row["effective"] == json!(true)));
 
     let disabled = request_with_headers(

@@ -133,10 +133,10 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
 }
 
 #[test]
-fn global_library_grants_are_owner_scoped_validated_atomic_and_migrated_once() {
+fn global_library_grants_are_owner_scoped_validated_atomic_and_persist_on_reconnect() {
     use tron_backend::adapters::outbound::persistence::sqlite::SqliteKnowledgeBaseRepository;
     let f = Fixture::new();
-    let kb = f.service.create(USER, "Legacy", "").unwrap();
+    let kb = f.service.create(USER, "Global", "").unwrap();
     f.service
         .assign_library_agents(USER, &kb.id, &[f.agent.clone()])
         .unwrap();
@@ -156,14 +156,7 @@ fn global_library_grants_are_owner_scoped_validated_atomic_and_migrated_once() {
         f.service.library_agent_grants(USER, &kb.id).unwrap(),
         vec![f.agent.clone()]
     );
-    conn.execute_batch("DROP TRIGGER fail_acl; ALTER TABLE knowledge_bases ADD COLUMN workspace_code TEXT NOT NULL DEFAULT 'TRON_CORE'; UPDATE knowledge_bases SET payload_json=json_set(payload_json,'$.workspaceCode',workspace_code); CREATE TABLE knowledge_base_scoped_agent_grants(knowledge_base_id TEXT,workspace_code TEXT,agent_code TEXT,PRIMARY KEY(knowledge_base_id,workspace_code,agent_code)); CREATE TABLE knowledge_base_workspace_grants(knowledge_base_id TEXT,workspace_code TEXT);").unwrap();
-    for workspace in [WORKSPACE, "COMPLIANCE"] {
-        conn.execute(
-            "INSERT INTO knowledge_base_scoped_agent_grants VALUES(?1,?2,?3)",
-            rusqlite::params![kb.id, workspace, f.agent],
-        )
-        .unwrap();
-    }
+    conn.execute_batch("DROP TRIGGER fail_acl;").unwrap();
     let repository = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
     assert_eq!(repository.grants(&kb.id).unwrap(), vec![f.agent.clone()]);
     let column_exists: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('knowledge_bases') WHERE name='workspace_code')", [], |row| row.get(0)).unwrap();
