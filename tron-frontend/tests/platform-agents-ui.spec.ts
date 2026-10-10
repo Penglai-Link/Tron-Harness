@@ -56,14 +56,29 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     const create=page.getByRole("dialog",{name:zh?"创建内部智能体":"New internal agent",exact:true});
     await create.getByRole("textbox",{name:zh?"编码":"Code",exact:true}).fill("reviewer");
     await create.getByRole("textbox",{name:zh?"名称":"Name",exact:true}).fill("Reviewer");
-    const avatarImages = create.locator("fieldset img");
+    const avatarImages = create.locator("fieldset button img");
     await expect(avatarImages).toHaveCount(12);
     for (const image of await avatarImages.all()) {
       await expect(image).toHaveJSProperty("complete", true);
       expect(await image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
     }
-    await page.screenshot({animations:"disabled",path:testInfo.outputPath(`agent-avatars-${locale}.png`)});
+    await create.getByRole("button",{name:zh?"小龙":"Dragon",exact:true}).click();
+    await expect(create.getByRole("img",{name:zh?"小龙":"Dragon",exact:true})).toBeVisible();
     await create.getByRole("button",{name:zh?"狐狸":"Fox",exact:true}).click();
+    const preview = create.getByRole("img",{name:zh?"狐狸":"Fox",exact:true});
+    await expect(preview).toBeVisible();
+    const previewBounds = (await preview.boundingBox())!;
+    expect(Math.abs(previewBounds.width - previewBounds.height)).toBeLessThan(1);
+    const avatarRail = create.locator("fieldset [data-slot=scroll-area-viewport]");
+    expect((await avatarRail.boundingBox())!.height).toBeCloseTo(previewBounds.height, 0);
+    expect(await avatarRail.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+    await create.locator("fieldset").first().screenshot({animations:"disabled",path:testInfo.outputPath(`agent-avatars-${locale}.png`)});
+    await page.setViewportSize({width:375,height:812});
+    const narrowBounds = (await preview.boundingBox())!;
+    expect(Math.abs(narrowBounds.width - narrowBounds.height)).toBeLessThan(1);
+    expect(narrowBounds.x + narrowBounds.width).toBeLessThan(375);
+    await create.locator("fieldset").first().screenshot({animations:"disabled",path:testInfo.outputPath(`agent-avatars-mobile-${locale}.png`)});
+    await page.setViewportSize({width:1280,height:720});
     await create.getByRole("button",{name:zh?"创建":"New",exact:true}).click();
     await expect(create).toHaveCount(0);
     const card=definitions.getByRole("button",{name:zh?"编辑 Reviewer":"Edit Reviewer",exact:true});
