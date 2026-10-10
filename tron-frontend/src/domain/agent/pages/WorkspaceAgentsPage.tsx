@@ -806,16 +806,14 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                       : agent.source === "workspace_override" ? internalPageT("inheritance.override", "Workspace override")
                         : internalPageT("inheritance.inherited", "Inherited from platform")}</p>
                   {scope !== "platform" && agent.platformDefined && agent.source === "workspace_override" ? <Button variant="outline" size="sm" disabled={internalBusy} onClick={() => void handleRestoreInheritance(agent.agentCode)}>{internalPageT("inheritance.restore", "Restore inheritance")}</Button> : null}
-                  {statusLabel ? (
-                    <p className={statusClassName}>
-                      {statusLabel}
-                    </p>
-                  ) : null}
+                  <p className={`min-h-4 ${statusClassName}`} role="status" aria-live="polite" aria-atomic="true">
+                    {statusLabel}
+                  </p>
                 </div>
               </div>
 
               <div className="mt-3 space-y-3">
-                <AgentLoopField value={draft.loopCode} disabled={internalBusy} onChange={(loopCode) => setInternalDraft(agent.agentCode, { loopCode })} />
+                <AgentLoopField value={draft.loopCode} disabled={editingDisabled} onChange={(loopCode) => setInternalDraft(agent.agentCode, { loopCode })} />
                 <Field label={internalPageT("definition.name", "Name")}>
                   <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={editingDisabled} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
                 </Field>
@@ -825,13 +823,13 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
               <div className="mt-3 grid gap-3 lg:grid-cols-2">
                 <Field className="w-full" label={fieldLabel("mcpAccessMode", "MCP access mode")}
                   actions={draft.mcpAccessMode === "selected_servers" ? (
-                    <Button type="button" size="sm" variant="outline" disabled={internalBusy} onClick={() => openAssignmentDialog(agent.agentCode, "mcp")}>
+                    <Button type="button" size="sm" variant="outline" disabled={editingDisabled} onClick={() => openAssignmentDialog(agent.agentCode, "mcp")}>
                       {internalPageT("assignmentDialog.editServers", "Choose servers ({{count}})", { count: draft.selectedServerCodes.length })}
                     </Button>
                   ) : undefined}>
 
                   <SelectInput
-                    disabled={internalBusy}
+                    disabled={editingDisabled}
                     value={draft.mcpAccessMode}
                     onValueChange={(event) => {
                       if (event === "selected_servers") openAssignmentDialog(agent.agentCode, "mcp");
@@ -853,13 +851,13 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                 </Field>
                 <Field className="w-full" label={fieldLabel("toolAssignmentMode", "Tool assignment mode")}
                   actions={draft.toolAssignmentMode === "selected_tools" ? (
-                    <Button type="button" size="sm" variant="outline" disabled={internalBusy} onClick={() => openAssignmentDialog(agent.agentCode, "tools")}>
+                    <Button type="button" size="sm" variant="outline" disabled={editingDisabled} onClick={() => openAssignmentDialog(agent.agentCode, "tools")}>
                       {internalPageT("assignmentDialog.editTools", "Choose tools ({{count}})", { count: draft.selectedToolCodes.length })}
                     </Button>
                   ) : undefined}>
 
                   <SelectInput
-                    disabled={internalBusy}
+                    disabled={editingDisabled}
                     value={draft.toolAssignmentMode}
                     onValueChange={(event) => {
                       if (event === "selected_tools") openAssignmentDialog(agent.agentCode, "tools");
@@ -876,7 +874,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                     </SelectItem>
                   </SelectInput>
                 </Field>
-                <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={draft.name} disabled={internalBusy} />
+                <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={draft.name} disabled={editingDisabled} />
               </div>
 
               <details className="group mt-3 border-t border-[var(--color-outline-variant)]">
@@ -887,7 +885,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                 <div className="grid gap-3 lg:grid-cols-2">
                   <Field label={fieldLabel("toolExposureMode", "Tool exposure mode", "end")}>
                     <SelectInput
-                      disabled={internalBusy}
+                      disabled={editingDisabled}
                       value={draft.toolExposureMode}
                       onValueChange={(event) => {
                         setInternalDraft(agent.agentCode, {
@@ -905,7 +903,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   </Field>
                   <Field label={fieldLabel("expandedDomainPersistenceMode", "Expanded domain persistence mode")}>
                     <SelectInput
-                      disabled={internalBusy}
+                      disabled={editingDisabled}
                       value={draft.expandedDomainPersistenceMode}
                       onValueChange={(event) => {
                         setInternalDraft(agent.agentCode, {
@@ -969,7 +967,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   key={`${activeWorkspaceCode}:${agent.agentCode}:${assignmentDialog.kind}`}
                   kind={assignmentDialog.kind}
                   agentName={draft.name}
-                  busy={internalBusy}
+                  busy={editingDisabled}
                   initialSelectedCodes={assignmentDialog.kind === "mcp" ? draft.selectedServerCodes : draft.selectedToolCodes}
                   servers={workspaceMcpServers}
                   tools={tools}

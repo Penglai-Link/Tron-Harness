@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ReactNode, SelectHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { ReactNode, SelectHTMLAttributes } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInternalAgentMcpPolicyPayload, WorkspaceInternalAgentPolicyPayload, WorkspaceInternalAgentRecord } from "@/domain/agent/model";
@@ -54,11 +54,11 @@ vi.mock("@/shared", () => ({
   SurfaceCard: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("@/components/ui/toast", () => ({ useToast: () => ({ error: fixture.error, success: vi.fn() }) }));
-vi.mock("@/components/forms", () => ({
+vi.mock("@/components/forms", async () => ({
+  // Exercise the actual Base UI inputs for focus/caret regressions.
+  ...(await vi.importActual<typeof import("@/components/forms")>("@/components/forms")),
   Field: ({ label, children, actions }: { label: ReactNode; children: ReactNode; actions?: ReactNode }) => <div><label>{label}{children}</label>{actions}</div>,
   SelectInput: ({ onValueChange, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { onValueChange: (value: string) => void }) => <select {...props} onChange={(event) => onValueChange(event.currentTarget.value)} />,
-  TextInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-  TextArea: (props: TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
 }));
 vi.mock("@/components/ui/select", () => ({ SelectItem: ({ children, value }: { children: ReactNode; value: string }) => <option value={value}>{children}</option> }));
 vi.mock("@/components/info-tooltip", () => ({ InfoTooltip: () => null }));
@@ -270,6 +270,50 @@ describe("internal agent tool selection autosave", () => {
     expect(fixture.patch).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", { maxSteps: 25 });
     expect(fixture.record.name).toBe("Updated name");
     expect(fixture.record.maxSteps).toBe(25);
+  });
+
+  it.each(["workspace", "platform"] as const)("keeps all controls editable during a %s policy autosave", async (scope) => {
+    let finishSave!: () => void;
+    const response = new Promise<void>((resolve) => { finishSave = resolve; });
+    fixture.patch.mockImplementationOnce(async (_workspace: string, _agent: string, payload: WorkspaceInternalAgentPolicyPayload) => {
+      await response;
+      fixture.record = { ...fixture.record, ...payload };
+      return { ...fixture.record };
+    });
+    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
+    const limit = await screen.findByRole<HTMLInputElement>("spinbutton", { name: "Max total tool calls" });
+    await waitFor(() => expect(limit.disabled).toBe(false));
+    const saveStatus = () => document.querySelector('p[role="status"]');
+    const status = saveStatus();
+    vi.useFakeTimers();
+    limit.focus();
+    fireEvent.change(limit, { target: { value: "486" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(fixture.patch).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(limit);
+    for (const control of [...screen.getAllByRole<HTMLSelectElement>("combobox"), ...screen.getAllByRole<HTMLInputElement>("spinbutton")]) {
+      expect(control.disabled).toBe(false);
+    }
+    expect(saveStatus()).toBe(status);
+
+    // A newer numeric value and a changed select queue behind the current save.
+    fireEvent.change(limit, { target: { value: "487" } });
+    const exposure = screen.getByRole<HTMLSelectElement>("combobox", { name: "Tool exposure mode" });
+    exposure.focus();
+    fireEvent.change(exposure, { target: { value: "domain_discovery" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(fixture.patch).toHaveBeenCalledTimes(1);
+    await act(async () => { finishSave(); });
+    expect(document.activeElement).toBe(exposure);
+    expect(limit.value).toBe("487");
+    expect(exposure.value).toBe("domain_discovery");
+    expect(screen.getByRole("spinbutton", { name: "Max total tool calls" })).toBe(limit);
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(fixture.patch).toHaveBeenLastCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", { maxToolCalls: 487, toolExposureMode: "domain_discovery" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
+    expect(saveStatus()).toBe(status);
+    expect(status?.textContent).toBe("");
+    expect(document.activeElement).toBe(exposure);
   });
 
   it("retains newer typing and focus when autosave fails, then retries on edit", async () => {
