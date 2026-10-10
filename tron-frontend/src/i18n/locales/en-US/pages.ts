@@ -1908,6 +1908,23 @@ export const pages = {
     },
     title: "Agents",
     internal: {
+      avatar: {
+        label: 'Avatar',
+        robot: 'Robot',
+        fox: 'Fox',
+        cat: 'Cat',
+        owl: 'Owl',
+        astronaut: 'Astronaut',
+        wizard: 'Wizard',
+        panda: 'Panda',
+        frog: 'Frog',
+        penguin: 'Penguin',
+        raccoon: 'Raccoon',
+        rabbit: 'Rabbit',
+        dragon: 'Dragon',
+      },
+      editAgent: 'Edit {{name}}',
+
       inheritance: {
         title: "Agent definitions",
         platform: "Platform definition",
@@ -2093,9 +2110,9 @@ export const pages = {
         workspaceDisabled: "Locally disabled",
       },
       status: {
-        error: "Autosave failed. Update again to retry.",
-        pending: "Changes will be saved automatically",
-        saved: "Saved automatically",
+        error: "Save failed. Please retry.",
+        pending: "Unsaved changes",
+        saved: "Saved",
         saving: "Saving...",
       },
       toolSelection: {

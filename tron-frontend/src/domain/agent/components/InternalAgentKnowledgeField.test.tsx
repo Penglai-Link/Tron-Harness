@@ -23,10 +23,10 @@ beforeEach(() => {
   fixture.save.mockResolvedValue({});
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-function setup() {
+function setup(onSelectionChange?: (ids: string[]) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const invalidate = vi.spyOn(client, "invalidateQueries");
-  render(<QueryClientProvider client={client}><InternalAgentKnowledgeField agentCode="main-agent" agentName="Main" disabled={false} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><InternalAgentKnowledgeField agentCode="main-agent" agentName="Main" disabled={false} onSelectionChange={onSelectionChange} /></QueryClientProvider>);
   return { client, invalidate };
 }
 async function open() {
@@ -74,6 +74,16 @@ describe("internal agent knowledge assignments", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
     expect(screen.getByRole("button", { name: "Choose knowledge bases (1)" })).toBeTruthy();
+  });
+  it("returns selection to the editor without writing grants", async () => {
+    const onSelectionChange = vi.fn();
+    setup(onSelectionChange);
+    const dialog = await open();
+    fireEvent.click(within(dialog).getByRole("switch", { name: "Product" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "confirm" }));
+    expect(onSelectionChange).toHaveBeenCalledWith(["a", "b"]);
+    expect(fixture.save).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
   it("refreshes grants when knowledge management invalidates the shared query", async () => {
     const { client } = setup();

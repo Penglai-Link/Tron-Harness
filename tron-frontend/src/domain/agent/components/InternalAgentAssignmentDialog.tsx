@@ -37,7 +37,7 @@ export function InternalAgentAssignmentDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog disablePointerDismissal open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-6xl" closeLabel={pageT("close", "Close")}>
         <DialogHeader>
           <DialogTitle>{kind === "mcp" ? pageT("mcpTitle", "Choose MCP servers") : pageT("toolsTitle", "Choose tools")}</DialogTitle>

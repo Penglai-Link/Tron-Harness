@@ -3752,3 +3752,136 @@ async fn agent_loop_builtin_analysis_joins_roots_and_selects_each_exit() {
         );
     }
 }
+
+#[tokio::test]
+async fn internal_agent_avatars_create_override_restore_and_survive_restart() {
+    let config = AppConfig {
+        database_url: temp_database_url("internal-agent-avatars"),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config.clone());
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let registry = "/api/v1/agents/registry/internal";
+    let defaults = internal_agent_api(
+        &router,
+        &auth,
+        Method::GET,
+        &format!("{registry}/main-agent"),
+        None,
+    )
+    .await;
+    assert_eq!(defaults["avatarId"], "robot");
+    for id in [
+        "robot",
+        "fox",
+        "cat",
+        "owl",
+        "astronaut",
+        "wizard",
+        "panda",
+        "frog",
+        "penguin",
+        "raccoon",
+        "rabbit",
+        "dragon",
+    ] {
+        let created = internal_agent_api(
+            &router,
+            &auth,
+            Method::POST,
+            registry,
+            Some(
+                json!({"agentCode":format!("avatar-{id}"),"name":id,"rolePrompt":"","avatarId":id}),
+            ),
+        )
+        .await;
+        assert_eq!(created["avatarId"], id);
+    }
+    let platform = format!("{registry}/avatar-fox");
+    let workspace = "/api/v1/agents/workspaces/TRON_CORE/internal/avatar-fox";
+    internal_agent_api(
+        &router,
+        &auth,
+        Method::PUT,
+        "/api/v1/agents/registry/avatar-fox/workspace-grants",
+        Some(json!({"workspaceCodes":["TRON_CORE"]})),
+    )
+    .await;
+    let inherited = internal_agent_api(&router, &auth, Method::GET, workspace, None).await;
+    assert_eq!(inherited["avatarId"], "fox");
+    let updated = internal_agent_api(
+        &router,
+        &auth,
+        Method::PATCH,
+        &format!("{workspace}/definition"),
+        Some(json!({"avatarId":"owl"})),
+    )
+    .await;
+    assert_eq!(updated["avatarId"], "owl");
+    internal_agent_api(
+        &router,
+        &auth,
+        Method::PATCH,
+        &format!("{platform}/definition"),
+        Some(json!({"avatarId":"dragon"})),
+    )
+    .await;
+    let local = internal_agent_api(
+        &router,
+        &auth,
+        Method::POST,
+        "/api/v1/agents/workspaces/TRON_CORE/internal",
+        Some(json!({"agentCode":"avatar-local","name":"Local","rolePrompt":"","avatarId":"panda"})),
+    )
+    .await;
+    assert_eq!(local["avatarId"], "panda");
+    drop(router);
+    let router = app_with_config(config);
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    assert_eq!(
+        internal_agent_api(&router, &auth, Method::GET, workspace, None).await["avatarId"],
+        "owl"
+    );
+    assert_eq!(
+        internal_agent_api(&router, &auth, Method::GET, &platform, None).await["avatarId"],
+        "dragon"
+    );
+    assert_eq!(
+        internal_agent_api(
+            &router,
+            &auth,
+            Method::GET,
+            "/api/v1/agents/workspaces/TRON_CORE/internal/avatar-local",
+            None
+        )
+        .await["avatarId"],
+        "panda"
+    );
+    internal_agent_api(
+        &router,
+        &auth,
+        Method::POST,
+        &format!("{workspace}/reset-policy"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(
+        internal_agent_api(&router, &auth, Method::GET, workspace, None).await["avatarId"],
+        "dragon"
+    );
+    for endpoint in [
+        format!("{platform}/definition"),
+        format!("{workspace}/definition"),
+    ] {
+        let response = request_with_locale(
+            &router,
+            Method::PATCH,
+            &endpoint,
+            Some(json!({"avatarId":"../../outside.png"})),
+            &auth,
+            "en-US",
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}

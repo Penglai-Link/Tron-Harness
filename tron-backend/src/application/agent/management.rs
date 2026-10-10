@@ -55,6 +55,7 @@ pub struct CreateWorkspaceInternalAgentCommand {
     pub name: String,
     pub role_prompt: String,
     pub loop_code: Option<String>,
+    pub avatar_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -62,6 +63,7 @@ pub struct UpdateWorkspaceInternalAgentDefinitionCommand {
     pub name: Option<String>,
     pub role_prompt: Option<String>,
     pub loop_code: Option<String>,
+    pub avatar_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]

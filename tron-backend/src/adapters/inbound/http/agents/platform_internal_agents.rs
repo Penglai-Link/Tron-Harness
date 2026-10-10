@@ -29,6 +29,7 @@ pub struct CreatePlatformInternalAgentRequest {
     name: String,
     role_prompt: String,
     loop_code: Option<String>,
+    avatar_id: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -36,6 +37,7 @@ pub struct UpdatePlatformInternalAgentDefinitionRequest {
     name: Option<String>,
     role_prompt: Option<String>,
     loop_code: Option<String>,
+    avatar_id: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -57,6 +59,7 @@ pub struct PlatformInternalAgentView {
     description: String,
     role_prompt: String,
     loop_code: String,
+    avatar_id: String,
     platform_defined: bool,
     source: InternalAgentPolicySource,
     tool_assignment_mode: ToolAssignmentMode,
@@ -80,6 +83,7 @@ impl From<InternalAgentToolPolicy> for PlatformInternalAgentView {
             description: record.description,
             role_prompt: record.role_prompt,
             loop_code: record.loop_code,
+            avatar_id: record.avatar_id,
             platform_defined: record.platform_defined,
             source: record.source,
             tool_assignment_mode: record.tool_assignment_mode,
@@ -160,6 +164,7 @@ pub async fn create_platform_internal_agent(
             name: request.name,
             role_prompt: request.role_prompt,
             loop_code: request.loop_code,
+            avatar_id: request.avatar_id,
         })
         .map_err(|error| InternalAgentApiError(error, auth.locale))?;
     Ok(Json(ApiResponse::success(record.into())))
@@ -180,6 +185,7 @@ pub async fn update_platform_internal_agent_definition(
                 name: request.name,
                 role_prompt: request.role_prompt,
                 loop_code: request.loop_code,
+                avatar_id: request.avatar_id,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale))?;

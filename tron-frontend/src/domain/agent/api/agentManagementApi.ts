@@ -78,6 +78,7 @@ interface WorkspaceInternalAgentRecordApi {
   description: string;
   rolePrompt: string;
   loopCode?: string;
+  avatarId?: string;
   platformDefined: boolean;
   source?: WorkspaceInternalAgentSourceApi;
   mcpAccessMode?: McpAccessModeApi;
@@ -224,6 +225,7 @@ function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRec
     description: record.description,
     rolePrompt: record.rolePrompt ?? "",
     loopCode: record.loopCode || "builtin.react-loop",
+    avatarId: record.avatarId || "robot",
     platformDefined: record.platformDefined ?? record.agentCode === "main-agent",
     expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(record.expandedDomainPersistenceMode),
     mcpAccessMode: normalizeMcpAccessMode(record.mcpAccessMode),
@@ -372,14 +374,14 @@ export function fetchWorkspaceInternalAgents(workspaceCode: string, signal?: Abo
 }
 
 export function createWorkspaceInternalAgent(workspaceCode: string, payload: CreateInternalAgentPayload) {
-  return requestApi<{ agentCode: string; name: string; rolePrompt: string }>(
+  return requestApi<{ agentCode: string; name: string; rolePrompt: string; loopCode: string; avatarId: string }>(
     internalAgentEndpoint("POST /api/v1/agents/workspaces/{workspaceCode}/internal", workspaceCode),
     { pathParams: { workspaceCode }, body: payload },
   );
 }
 
 export function patchWorkspaceInternalAgentDefinition(workspaceCode: string, agentCode: string, payload: UpdateInternalAgentDefinitionPayload) {
-  return requestApi<{ agentCode: string; name: string; rolePrompt: string }>(
+  return requestApi<{ agentCode: string; name: string; rolePrompt: string; loopCode: string; avatarId: string }>(
     internalAgentEndpoint("PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/definition", workspaceCode),
     { pathParams: { workspaceCode, agentCode }, body: payload },
   );

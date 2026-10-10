@@ -185,6 +185,7 @@ fn reviewer(f: &Fixture) {
     f.state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            avatar_id: None,
             loop_code: None,
             agent_code: "reviewer".into(),
             name: "Reviewer".into(),

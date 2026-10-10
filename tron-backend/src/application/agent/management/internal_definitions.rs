@@ -8,6 +8,7 @@ pub(super) struct InternalAgentDefinition {
     pub(super) description: String,
     pub(super) role_prompt: String,
     pub(super) loop_code: String,
+    pub(super) avatar_id: String,
     pub(super) tool_assignment_mode: ToolAssignmentMode,
     pub(super) mcp_access_mode: McpAccessMode,
     pub(super) tool_exposure_mode: ToolExposureMode,
@@ -27,6 +28,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         description: "Primary workspace internal agent with access to platform business tools."
             .to_string(),
         role_prompt: String::new(),
+        avatar_id: "robot".into(),
         loop_code: crate::domain::agent::loop_design::REACT_LOOP_CODE.into(),
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
         mcp_access_mode: McpAccessMode::AllEnabledServers,
@@ -83,6 +85,7 @@ impl AgentManagementService {
                 description: "Platform internal agent.".into(),
                 role_prompt: config.role_prompt,
                 loop_code: config.loop_code,
+                avatar_id: config.avatar_id,
                 tool_assignment_mode: config.tool_assignment_mode,
                 mcp_access_mode: config.mcp_access_mode,
                 tool_exposure_mode: config.tool_exposure_mode,
@@ -115,6 +118,9 @@ impl AgentManagementService {
                 .iter_mut()
                 .find(|definition| definition.agent_code == record.agent_code)
             {
+                if let Some(avatar_id) = record.avatar_id {
+                    definition.avatar_id = avatar_id;
+                }
                 if let Some(name) = record.name {
                     definition.name = name;
                 }
@@ -133,6 +139,7 @@ impl AgentManagementService {
                 definition.loop_code = record
                     .loop_code
                     .unwrap_or_else(|| crate::domain::agent::loop_design::REACT_LOOP_CODE.into());
+                definition.avatar_id = record.avatar_id.unwrap_or_else(|| "robot".into());
                 definition.platform_defined = false;
                 definitions.push(definition);
             }
@@ -156,6 +163,7 @@ impl AgentManagementService {
             name: Some(command.name.trim().to_owned()),
             role_prompt: Some(command.role_prompt),
             loop_code: Some(loop_code),
+            avatar_id: Some(validate_avatar_id(command.avatar_id.as_deref())?),
             created_at: now.clone(),
             updated_at: now,
         };
@@ -170,6 +178,9 @@ impl AgentManagementService {
         agent_code: &str,
         command: UpdateWorkspaceInternalAgentDefinitionCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        if let Some(id) = &command.avatar_id {
+            validate_avatar_id(Some(id))?;
+        }
         if let Some(code) = &command.loop_code {
             self.validate_loop_selection(Some(code))?;
         }
@@ -201,6 +212,9 @@ impl AgentManagementService {
                 loop_code: command
                     .loop_code
                     .or_else(|| saved.as_ref().and_then(|record| record.loop_code.clone())),
+                avatar_id: command
+                    .avatar_id
+                    .or_else(|| saved.as_ref().and_then(|record| record.avatar_id.clone())),
                 created_at,
                 updated_at: now,
             })?;
@@ -228,4 +242,28 @@ pub(super) fn validate_definition(
         return Err(AgentManagementError::InternalAgentDefinitionInvalid);
     }
     Ok(())
+}
+
+// Only built-in asset identifiers are stored, never arbitrary URLs or file paths.
+pub(super) fn validate_avatar_id(id: Option<&str>) -> Result<String, AgentManagementError> {
+    let id = id.unwrap_or("robot");
+    if matches!(
+        id,
+        "robot"
+            | "fox"
+            | "cat"
+            | "owl"
+            | "astronaut"
+            | "wizard"
+            | "panda"
+            | "frog"
+            | "penguin"
+            | "raccoon"
+            | "rabbit"
+            | "dragon"
+    ) {
+        Ok(id.to_owned())
+    } else {
+        Err(AgentManagementError::InternalAgentDefinitionInvalid)
+    }
 }

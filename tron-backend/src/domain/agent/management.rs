@@ -70,6 +70,8 @@ pub struct WorkspaceInternalAgentDefinition {
     pub role_prompt: Option<String>,
     #[serde(default)]
     pub loop_code: Option<String>,
+    #[serde(default)]
+    pub avatar_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -82,6 +84,8 @@ pub struct PlatformInternalAgentConfig {
     pub role_prompt: String,
     #[serde(default = "default_loop_code")]
     pub loop_code: String,
+    #[serde(default = "default_avatar_id")]
+    pub avatar_id: String,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
     pub tool_exposure_mode: ToolExposureMode,
@@ -123,6 +127,8 @@ pub struct InternalAgentToolPolicy {
     pub role_prompt: String,
     #[serde(default = "default_loop_code")]
     pub loop_code: String,
+    #[serde(default = "default_avatar_id")]
+    pub avatar_id: String,
     pub platform_defined: bool,
     pub source: InternalAgentPolicySource,
     pub tool_assignment_mode: ToolAssignmentMode,
@@ -309,4 +315,8 @@ pub struct ToolCatalogRecord {
 
 fn default_loop_code() -> String {
     super::loop_design::REACT_LOOP_CODE.into()
+}
+
+fn default_avatar_id() -> String {
+    "robot".into()
 }

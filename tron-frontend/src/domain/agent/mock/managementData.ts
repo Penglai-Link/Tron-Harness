@@ -217,6 +217,7 @@ const toolSeed: ToolSeed[] = [
 ];
 
 type WorkspaceInternalAgentSeed = {
+  avatarId?: string;
   loopCode: string;
   rolePrompt: string;
   agentCode: string;
@@ -412,6 +413,7 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     description: effective.description,
     rolePrompt: effective.rolePrompt,
     loopCode: effective.loopCode,
+    avatarId: effective.avatarId ?? "robot",
     platformDefined,
     expandedDomainPersistenceMode: effective.expandedDomainPersistenceMode,
     maxSteps: effective.maxSteps,
@@ -473,7 +475,7 @@ export function createWorkspaceInternalAgentMock(workspaceCode: string, payload:
   return buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode);
 }
 
-export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string }) {
+export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string; avatarId?: string }) {
   buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
   upsertWorkspaceInternalAgentOverride(workspaceCode, { ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode), ...payload, agentCode });
   return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);

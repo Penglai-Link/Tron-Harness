@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode, SelectHTMLAttributes } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInternalAgentMcpPolicyPayload, WorkspaceInternalAgentPolicyPayload, WorkspaceInternalAgentRecord } from "@/domain/agent/model";
 
@@ -17,7 +17,11 @@ const fixture = vi.hoisted(() => ({
   patchDefinition: vi.fn(),
   create: vi.fn(),
   reset: vi.fn(),
+  knowledge: vi.fn(),
 }));
+
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
+vi.mock("@/domain/knowledge-base/api/knowledgeBaseApi", () => ({ setAgentKnowledgeLibraries: fixture.knowledge }));
 
 vi.mock("@/domain/agent/api", () => ({
   fetchWorkspaceInternalAgents: vi.fn(async () => [fixture.record, ...fixture.additionalRecords].map((record) => ({ ...record, selectedToolCodes: [...record.selectedToolCodes] }))),
@@ -42,7 +46,10 @@ vi.mock("react-i18next", async () => {
   return {
     ...actual,
     useTranslation: () => ({
-      t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key,
+      t: (key: string, options?: { defaultValue?: string; [key: string]: unknown }) => {
+        const common: Record<string, string> = { "common:save": "Save", "common:cancel": "Cancel", "common:close": "Close", "common:saving": "Saving..." };
+        return (common[key] ?? options?.defaultValue ?? key).replace(/{{(\w+)}}/g, (_, name) => String(options?.[name] ?? name));
+      },
       i18n: { language: "en-US", resolvedLanguage: "en-US" },
     }),
   };
@@ -83,7 +90,7 @@ vi.mock("@/domain/agent/components", () => ({
   </div>,
 }));
 
-vi.mock("../components/InternalAgentKnowledgeField", () => ({ InternalAgentKnowledgeField: ({ agentCode }: {agentCode:string}) => <output aria-label={`Knowledge libraries for ${agentCode}`}>platform</output> }));
+vi.mock("../components/InternalAgentKnowledgeField", () => ({ InternalAgentKnowledgeField: ({ agentCode, onSelectionChange }: {agentCode:string; onSelectionChange?: (ids: string[]) => void}) => <><output aria-label={`Knowledge libraries for ${agentCode}`}>platform</output><button onClick={() => onSelectionChange?.(["kb-shared"])}>Choose knowledge</button></> }));
 
 import { WorkspaceAgentsPage } from "./WorkspaceAgentsPage";
 
@@ -139,397 +146,153 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function chooseSelectedTools(confirm = true) {
-  render(<WorkspaceAgentsPage category="internal" />);
-  const select = await screen.findByRole("combobox", { name: /tool assignment mode/i });
-  await waitFor(() => expect((select as HTMLSelectElement).disabled).toBe(false));
-  fireEvent.change(select, { target: { value: "selected_tools" } });
-  if (confirm) fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+async function openEditor(scope: "workspace" | "platform" = "workspace") {
+  render(<WorkspaceAgentsPage category="internal" scope={scope} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Edit Main Agent" }));
+  return screen.findByRole("dialog", { name: "Edit Main Agent" });
 }
 
-describe("internal agent tool selection autosave", () => {
-  it.each(["workspace", "platform"] as const)("offers role templates in %s editing without permanent help paragraphs", async (scope) => {
-    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
-    await screen.findByRole("textbox", { name: "Role prompt" });
-    expect(screen.getByRole("button", { name: "Role library" })).toBeTruthy();
-    expect(screen.queryByText(/Sets this agent's role and instructions/)).toBeNull();
-    expect(screen.queryByText(/Inherit platform agents or create workspace agents/)).toBeNull();
+function save() { fireEvent.click(screen.getByRole("button", { name: "Save" })); }
+
+describe("internal agent cards and manual editing", () => {
+  it("shows compact cards and opens only the chosen agent", async () => {
+    fixture.additionalRecords = [{ ...fixture.record, agentCode: "reviewer", name: "Reviewer" }];
+    render(<WorkspaceAgentsPage category="internal" />);
+    const card = await screen.findByRole("button", { name: "Edit Reviewer" });
+    expect(card.textContent).toContain("reviewer");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(card);
+    const dialog = await screen.findByRole("dialog", { name: "Edit Reviewer" });
+    expect(within(dialog).getByRole<HTMLInputElement>("textbox", { name: "Name" }).value).toBe("Reviewer");
+    expect(screen.getAllByRole("textbox", { name: "Role prompt" })).toHaveLength(1);
   });
 
-  it("creates a platform definition before workspace authorization", async () => {
+  it.each(["workspace", "platform"] as const)("stages definition, avatar and loop changes until Save in %s", async (scope) => {
+    const dialog = await openEditor(scope);
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Role prompt" }), { target: { value: "Check evidence" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.fox" }));
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Agent Loop" }), { target: { value: "review-flow" } });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 550)); });
+    expect(fixture.patchDefinition).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledExactlyOnceWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", { name: "Reviewer", rolePrompt: "Check evidence", avatarId: "fox", loopCode: "review-flow" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await screen.findByRole("button", { name: "Edit Reviewer" })).toBeTruthy();
+    expect(fixture.patch).not.toHaveBeenCalled();
+  });
+
+  it("cancels drafts without writes and reopens saved values", async () => {
+    const dialog = await openEditor();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Discard me" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Main Agent" }));
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Name" }).value).toBe("Main Agent");
+    expect(fixture.patchDefinition).not.toHaveBeenCalled();
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps the modal and its draft when the backdrop is pressed", async () => {
+    const dialog = await openEditor();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Still editing" } });
+    const backdrop = document.querySelector('[data-slot="dialog-overlay"]')!;
+    fireEvent.pointerDown(backdrop); fireEvent.pointerUp(backdrop); fireEvent.click(backdrop);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(within(dialog).getByRole<HTMLInputElement>("textbox", { name: "Name" }).value).toBe("Still editing");
+    expect(fixture.patchDefinition).not.toHaveBeenCalled();
+  });
+
+  it("persists confirmed tool selection before switching policy on manual Save", async () => {
+    await openEditor();
+    fireEvent.change(screen.getByRole("combobox", { name: /tool assignment mode/i }), { target: { value: "selected_tools" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(fixture.assign).not.toHaveBeenCalled();
+    expect(fixture.patch).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(fixture.assign).toHaveBeenCalledWith("TRON_CORE", "main-agent", []));
+    await waitFor(() => expect(fixture.calls).toEqual(["assign", "policy"]));
+  });
+
+  it("cancels a nested selection without changing the policy", async () => {
+    await openEditor();
+    fireEvent.change(screen.getByRole("combobox", { name: /tool assignment mode/i }), { target: { value: "selected_tools" } });
+    const nested = screen.getAllByRole("dialog").at(-1)!;
+    fireEvent.click(within(nested).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: /tool assignment mode/i }).value).toBe("all_platform_tools");
+    expect(fixture.patch).not.toHaveBeenCalled();
+  });
+
+  it("stages MCP selection until the editor is saved", async () => {
+    await openEditor();
+    fireEvent.change(screen.getByRole("combobox", { name: /MCP access mode/i }), { target: { value: "selected_servers" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(fixture.patchMcp).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(fixture.patchMcp).toHaveBeenCalledWith("TRON_CORE", "main-agent", { mcpAccessMode: "selected_servers" }));
+  });
+
+  it("defers knowledge authorization until Save even without other changes", async () => {
+    await openEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Choose knowledge" }));
+    expect(fixture.knowledge).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(fixture.knowledge).toHaveBeenCalledWith("main-agent", ["kb-shared"]));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patchDefinition).not.toHaveBeenCalled();
+  });
+
+  it("keeps failed saves open with the draft and supports retry", async () => {
+    fixture.patchDefinition.mockRejectedValueOnce(new Error("Storage unavailable"));
+    await openEditor();
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Retry me" } });
+    save();
+    await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("Storage unavailable"));
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Name" }).value).toBe("Retry me");
+    save();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patchDefinition).toHaveBeenCalledTimes(2);
+  });
+
+  it("stages restoring inheritance until Save without recreating overrides", async () => {
+    fixture.record = { ...fixture.record, source: "workspace_override", rolePrompt: "Workspace role" };
+    await openEditor();
+    const api = await import("@/domain/agent/api");
+    vi.mocked(api.fetchWorkspaceInternalAgents).mockResolvedValueOnce([{ ...fixture.record, source: "platform_default", rolePrompt: "Platform role" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Restore inheritance" }));
+    await waitFor(() => expect(screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Role prompt" }).value).toBe("Platform role"));
+    expect(fixture.reset).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(fixture.reset).toHaveBeenCalledWith("TRON_CORE", "main-agent"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patchDefinition).not.toHaveBeenCalled();
+  });
+
+  it("blocks duplicate submission and closing while saving", async () => {
+    let finish!: () => void;
+    fixture.patchDefinition.mockImplementationOnce(async () => { await new Promise<void>((resolve) => { finish = resolve; }); fixture.record.name = "Slow save"; });
+    await openEditor();
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Slow save" } });
+    save();
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Name" }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }).disabled).toBe(true);
+    expect(fixture.patchDefinition).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("creates a platform agent with the chosen built-in avatar", async () => {
     render(<WorkspaceAgentsPage category="internal" scope="platform" />);
-    await screen.findByRole("textbox", { name: "Role prompt" });
+    await screen.findByRole("button", { name: "Edit Main Agent" });
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const dialog = await screen.findByRole("dialog");
-    const { within } = await import("@testing-library/react");
+    expect(within(dialog).getAllByRole("button", { pressed: false })).toHaveLength(11);
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
-    expect((within(dialog).getByRole("button", { name: "New" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "Invalid Code" } });
-    expect(within(dialog).getByRole("textbox", { name: "Code" }).getAttribute("aria-invalid")).toBe("true");
-    expect((within(dialog).getByRole("button", { name: "New" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "Role prompt" }), { target: { value: "Review changes and explain risks." } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.owl" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "Review changes and explain risks.", loopCode: "builtin.react-loop" }));
-    await screen.findByRole("heading", { name: "Reviewer" });
-    expect(screen.getAllByRole("textbox", { name: "Role prompt" })).toHaveLength(2);
-    expect(screen.getByLabelText("Knowledge libraries for main-agent").textContent).toBe("platform");
-    expect(screen.getByLabelText("Knowledge libraries for reviewer").textContent).toBe("platform");
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "builtin.react-loop", avatarId: "owl" }));
+    expect(await screen.findByRole("button", { name: "Edit Reviewer" })).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
-
-  it("offers no agent creation inside a workspace", async () => {
-    render(<WorkspaceAgentsPage category="internal" />);
-    await screen.findByRole("textbox", { name: "Role prompt" });
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
-  });
-
-  it("autosaves name and role together without changing tool policy", async () => {
-    render(<WorkspaceAgentsPage category="internal" />);
-    const name = await screen.findByRole("textbox", { name: "Name" });
-    await waitFor(() => expect((name as HTMLInputElement).disabled).toBe(false));
-    fireEvent.change(name, { target: { value: "Workspace assistant" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Role prompt" }), { target: { value: "Answer using the workspace knowledge base." } });
-    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", { name: "Workspace assistant", rolePrompt: "Answer using the workspace knowledge base." }));
-    expect(fixture.patch).not.toHaveBeenCalled();
-    expect(fixture.record.name).toBe("Workspace assistant");
-    expect(fixture.record.rolePrompt).toBe("Answer using the workspace knowledge base.");
-  });
-
-  it("overrides only the role field when the inherited name is unchanged", async () => {
-    render(<WorkspaceAgentsPage category="internal" />);
-    const role = await screen.findByRole("textbox", { name: "Role prompt" });
-    await waitFor(() => expect((role as HTMLTextAreaElement).disabled).toBe(false));
-    fireEvent.change(role, { target: { value: "Workspace role" } });
-    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", { rolePrompt: "Workspace role" }));
-  });
-
-  it.each(["workspace", "platform"] as const)("keeps focus and saves newer typing after an in-flight %s autosave", async (scope) => {
-    let finishSave!: () => void;
-    const response = new Promise<void>((resolve) => { finishSave = resolve; });
-    fixture.patchDefinition.mockImplementationOnce(async (_workspace: string, _agent: string, payload: { rolePrompt: string }) => {
-      await response;
-      fixture.record = { ...fixture.record, ...payload };
-      return { ...fixture.record };
-    });
-    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
-    const role = await screen.findByRole<HTMLTextAreaElement>("textbox", { name: "Role prompt" });
-    await waitFor(() => expect(role.disabled).toBe(false));
-    vi.useFakeTimers();
-    role.focus();
-    fireEvent.change(role, { target: { value: "First draft" } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(fixture.patchDefinition).toHaveBeenCalledTimes(1);
-    expect(role.disabled).toBe(false);
-    expect(document.activeElement).toBe(role);
-
-    fireEvent.change(role, { target: { value: "First draft with newer text" } });
-    role.setSelectionRange(6, 6);
-    // Typing during a slow save must not start another overlapping request.
-    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
-    expect(fixture.patchDefinition).toHaveBeenCalledTimes(1);
-    await act(async () => { finishSave(); });
-    expect(role.value).toBe("First draft with newer text");
-    expect(document.activeElement).toBe(role);
-    expect(role.selectionStart).toBe(6);
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(fixture.patchDefinition).toHaveBeenCalledTimes(2);
-    expect(fixture.patchDefinition).toHaveBeenLastCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", { rolePrompt: "First draft with newer text" });
-    expect(fixture.record.rolePrompt).toBe(role.value);
-    expect(screen.getByText("Saved automatically")).toBeTruthy();
-    expect(document.activeElement).toBe(role);
-  });
-
-  it("keeps newer name and limit edits when a role autosave finishes", async () => {
-    let finishSave!: () => void;
-    const response = new Promise<void>((resolve) => { finishSave = resolve; });
-    fixture.patchDefinition.mockImplementationOnce(async (_workspace: string, _agent: string, payload: { rolePrompt: string }) => {
-      await response;
-      fixture.record = { ...fixture.record, ...payload };
-      return { ...fixture.record };
-    });
-    render(<WorkspaceAgentsPage category="internal" />);
-    const role = await screen.findByRole<HTMLTextAreaElement>("textbox", { name: "Role prompt" });
-    const name = screen.getByRole<HTMLInputElement>("textbox", { name: "Name" });
-    const limit = screen.getByRole<HTMLInputElement>("spinbutton", { name: "Max steps" });
-    await waitFor(() => expect(role.disabled).toBe(false));
-    vi.useFakeTimers();
-    fireEvent.change(role, { target: { value: "Role draft" } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(name.disabled).toBe(false);
-    expect(limit.disabled).toBe(false);
-    name.focus();
-    fireEvent.change(name, { target: { value: "Updated name" } });
-    fireEvent.change(limit, { target: { value: "25" } });
-    await act(async () => { finishSave(); });
-    expect(name.value).toBe("Updated name");
-    expect(limit.value).toBe("25");
-    expect(document.activeElement).toBe(name);
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(fixture.patchDefinition).toHaveBeenLastCalledWith("TRON_CORE", "main-agent", { name: "Updated name" });
-    expect(fixture.patch).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", { maxSteps: 25 });
-    expect(fixture.record.name).toBe("Updated name");
-    expect(fixture.record.maxSteps).toBe(25);
-  });
-
-  it.each(["workspace", "platform"] as const)("keeps all controls editable during a %s policy autosave", async (scope) => {
-    let finishSave!: () => void;
-    const response = new Promise<void>((resolve) => { finishSave = resolve; });
-    fixture.patch.mockImplementationOnce(async (_workspace: string, _agent: string, payload: WorkspaceInternalAgentPolicyPayload) => {
-      await response;
-      fixture.record = { ...fixture.record, ...payload };
-      return { ...fixture.record };
-    });
-    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
-    const limit = await screen.findByRole<HTMLInputElement>("spinbutton", { name: "Max total tool calls" });
-    await waitFor(() => expect(limit.disabled).toBe(false));
-    const saveStatus = () => document.querySelector('p[role="status"]');
-    const status = saveStatus();
-    vi.useFakeTimers();
-    limit.focus();
-    fireEvent.change(limit, { target: { value: "486" } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(fixture.patch).toHaveBeenCalledTimes(1);
-    expect(document.activeElement).toBe(limit);
-    for (const control of [...screen.getAllByRole<HTMLSelectElement>("combobox"), ...screen.getAllByRole<HTMLInputElement>("spinbutton")]) {
-      expect(control.disabled).toBe(false);
-    }
-    expect(saveStatus()).toBe(status);
-
-    // A newer numeric value and a changed select queue behind the current save.
-    fireEvent.change(limit, { target: { value: "487" } });
-    const exposure = screen.getByRole<HTMLSelectElement>("combobox", { name: "Tool exposure mode" });
-    exposure.focus();
-    fireEvent.change(exposure, { target: { value: "domain_discovery" } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
-    expect(fixture.patch).toHaveBeenCalledTimes(1);
-    await act(async () => { finishSave(); });
-    expect(document.activeElement).toBe(exposure);
-    expect(limit.value).toBe("487");
-    expect(exposure.value).toBe("domain_discovery");
-    expect(screen.getByRole("spinbutton", { name: "Max total tool calls" })).toBe(limit);
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(fixture.patch).toHaveBeenLastCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", { maxToolCalls: 487, toolExposureMode: "domain_discovery" });
-    await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
-    expect(saveStatus()).toBe(status);
-    expect(status?.textContent).toBe("");
-    expect(document.activeElement).toBe(exposure);
-  });
-
-  it("retains newer typing and focus when autosave fails, then retries on edit", async () => {
-    let failSave!: (error: Error) => void;
-    const response = new Promise<void>((_resolve, reject) => { failSave = reject; });
-    fixture.patchDefinition.mockImplementationOnce(async () => { await response; });
-    render(<WorkspaceAgentsPage category="internal" />);
-    const role = await screen.findByRole<HTMLTextAreaElement>("textbox", { name: "Role prompt" });
-    await waitFor(() => expect(role.disabled).toBe(false));
-    vi.useFakeTimers();
-    role.focus();
-    fireEvent.change(role, { target: { value: "First draft" } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    fireEvent.change(role, { target: { value: "Newer draft" } });
-    await act(async () => { failSave(new Error("Save failed")); });
-    expect(role.value).toBe("Newer draft");
-    expect(role.disabled).toBe(false);
-    expect(document.activeElement).toBe(role);
-    expect(fixture.error).toHaveBeenCalledWith("Save failed");
-    expect(screen.getByText("Autosave failed. Update again to retry. Save failed")).toBeTruthy();
-    fireEvent.change(role, { target: { value: "Retried draft" } });
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(fixture.record.rolePrompt).toBe("Retried draft");
-    expect(screen.getByText("Saved automatically")).toBeTruthy();
-  });
-
-  it("restores a platform definition and updates its visible role", async () => {
-    fixture.record.source = "workspace_override";
-    fixture.record.rolePrompt = "Workspace role";
-    render(<WorkspaceAgentsPage category="internal" />);
-    const restore = await screen.findByRole("button", { name: "Restore inheritance" });
-    await waitFor(() => expect((restore as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(restore);
-    await waitFor(() => expect(fixture.reset).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent"));
-    await waitFor(() => expect((screen.getByRole("textbox", { name: "Role prompt" }) as HTMLTextAreaElement).value).toBe("Platform role"));
-    expect(screen.queryByRole("button", { name: "Restore inheritance" })).toBeNull();
-  });
-
-  it("saves platform fields in global scope and offers no workspace reset", async () => {
-    render(<WorkspaceAgentsPage category="internal" scope="platform" />);
-    const role = await screen.findByRole("textbox", { name: "Role prompt" });
-    await waitFor(() => expect((role as HTMLTextAreaElement).disabled).toBe(false));
-    fireEvent.change(role, { target: { value: "Global role" } });
-    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledExactlyOnceWith("$platform", "main-agent", { rolePrompt: "Global role" }));
-    expect(screen.queryByRole("button", { name: "Restore inheritance" })).toBeNull();
-    expect(screen.queryByText("Platform definition")).toBeNull();
-  });
-
-  it("starts from zero tools when switching to selected mode and confirms an empty allowlist", async () => {
-    await chooseSelectedTools();
-    await waitFor(() => expect(fixture.patch).toHaveBeenCalled());
-    expect(fixture.assign).toHaveBeenCalledWith("TRON_CORE", "main-agent", []);
-    expect(fixture.calls).toEqual(["assign", "policy"]);
-    expect(fixture.record.selectedToolCodes).toEqual([]);
-    expect(screen.queryByLabelText("Visible selected tools")).toBeNull();
-  });
-
-  it("persists an explicitly cleared selection as zero authorized tools", async () => {
-    await chooseSelectedTools(false);
-    fireEvent.click(screen.getByRole("button", { name: "Clear selected tools" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    await waitFor(() => expect(fixture.patch).toHaveBeenCalled());
-    expect(fixture.assign).toHaveBeenCalledWith("TRON_CORE", "main-agent", []);
-    expect(fixture.calls).toEqual(["assign", "policy"]);
-    expect(fixture.record.selectedToolCodes).toEqual([]);
-  });
-
-  it("keeps consecutive edits local until confirmation, then saves after the debounce", async () => {
-    fixture.record.toolAssignmentMode = "selected_tools";
-    fixture.record.selectedToolCodes = [];
-    render(<WorkspaceAgentsPage category="internal" />);
-    const select = await screen.findByRole("combobox", { name: /tool assignment mode/i });
-    await waitFor(() => expect((select as HTMLSelectElement).disabled).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: /Choose tools/ }));
-    vi.useFakeTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Select tools consecutively" }));
-    expect(screen.getByLabelText("Visible selected tools").textContent).toBe("bash.exec,fs.read_text");
-    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
-    expect(fixture.assign).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Remove read tool" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(449); });
-    expect(fixture.assign).not.toHaveBeenCalled();
-    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-    expect(fixture.assign).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", ["bash.exec"]);
-    expect(fixture.patch).not.toHaveBeenCalled();
-    expect(fixture.record.selectedToolCodes).toEqual(["bash.exec"]);
-  });
-
-  it.each(["workspace", "platform"] as const)("cancels a new specified-tool selection in %s scope without saving", async (scope) => {
-    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
-    const select = await screen.findByRole("combobox", { name: /tool assignment mode/i });
-    await waitFor(() => expect((select as HTMLSelectElement).disabled).toBe(false));
-    fireEvent.change(select, { target: { value: "selected_tools" } });
-    expect(screen.getByLabelText("Visible selected tools").textContent).toBe("");
-    fireEvent.click(screen.getByRole("button", { name: "Clear selected tools" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect((select as HTMLSelectElement).value).toBe("all_platform_tools");
-    expect(fixture.assign).not.toHaveBeenCalled();
-    expect(fixture.patch).not.toHaveBeenCalled();
-  });
-
-  it.each(["workspace", "platform"] as const)("keeps saved choices when reopening selected tools in %s scope", async (scope) => {
-    fixture.record.toolAssignmentMode = "selected_tools";
-    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
-    const button = await screen.findByRole("button", { name: /Choose tools/ });
-    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(button);
-    expect(screen.getByLabelText("Visible selected tools").textContent).toBe("bash.exec,fs.read_text");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(fixture.assign).not.toHaveBeenCalled();
-  });
-
-  it("preserves another agent's pending draft when an earlier save refreshes", async () => {
-    fixture.record.toolAssignmentMode = "selected_tools";
-    fixture.record.selectedToolCodes = [];
-    fixture.additionalRecords = [{ ...fixture.record, agentCode: "second-agent", name: "Second Agent" }];
-    let completeFirstSave!: () => void;
-    const firstSave = new Promise<void>((resolve) => { completeFirstSave = resolve; });
-    fixture.assign.mockImplementation(async (_workspace: string, agentCode: string, tools: string[]) => {
-      if (agentCode === "main-agent") {
-        await firstSave;
-        // Server canonicalization must remain authoritative for the saved row.
-        fixture.record.selectedToolCodes = ["bash.exec"];
-        return { ...fixture.record };
-      }
-      fixture.additionalRecords[0].selectedToolCodes = [...tools];
-      return { ...fixture.additionalRecords[0] };
-    });
-    render(<WorkspaceAgentsPage category="internal" />);
-    await waitFor(() => {
-      const selects = screen.getAllByRole("combobox", { name: /tool assignment mode/i });
-      expect(selects).toHaveLength(2);
-      expect(selects.every((select) => !(select as HTMLSelectElement).disabled)).toBe(true);
-    });
-    vi.useFakeTimers();
-
-    fireEvent.click(screen.getAllByRole("button", { name: /Choose tools/ })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Select tools consecutively" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-    expect(fixture.assign).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", ["bash.exec", "fs.read_text"]);
-    fireEvent.click(screen.getAllByRole("button", { name: /Choose tools/ })[1]);
-    fireEvent.click(screen.getByRole("button", { name: "Select tools consecutively" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    await act(async () => { completeFirstSave(); await firstSave; });
-
-    expect(fixture.record.selectedToolCodes).toEqual(["bash.exec"]);
-    await act(async () => { await vi.advanceTimersByTimeAsync(449); });
-    expect(fixture.assign).toHaveBeenCalledTimes(1);
-    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-    expect(fixture.assign).toHaveBeenNthCalledWith(2, "TRON_CORE", "second-agent", ["bash.exec", "fs.read_text"]);
-    expect(fixture.additionalRecords[0].selectedToolCodes).toEqual(["bash.exec", "fs.read_text"]);
-    expect(fixture.patch).not.toHaveBeenCalled();
-  });
-
-  it("keeps the previous policy mode when saving assignments fails", async () => {
-    fixture.assign.mockRejectedValue(new Error("assignment storage unavailable"));
-    await chooseSelectedTools();
-    await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("assignment storage unavailable"));
-    expect(fixture.patch).not.toHaveBeenCalled();
-    expect(fixture.record.toolAssignmentMode).toBe("all_platform_tools");
-  });
-});
-
-
-describe("internal agent MCP selection autosave", () => {
-  async function chooseNewServer() {
-    fixture.record.selectedServerCodes = ["old-server"];
-    render(<WorkspaceAgentsPage category="internal" />);
-    const select = await screen.findByRole("combobox", { name: /mcp access mode/i });
-    await waitFor(() => expect((select as HTMLSelectElement).disabled).toBe(false));
-    fireEvent.change(select, { target: { value: "selected_servers" } });
-    fireEvent.click(screen.getByRole("button", { name: "Choose new MCP server" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-  }
-
-  it("dismisses MCP selection without changing the saved mode or assignments", async () => {
-    render(<WorkspaceAgentsPage category="internal" />);
-    const select = await screen.findByRole("combobox", { name: /mcp access mode/i });
-    await waitFor(() => expect((select as HTMLSelectElement).disabled).toBe(false));
-    fireEvent.change(select, { target: { value: "selected_servers" } });
-    fireEvent.click(screen.getByRole("button", { name: "Choose new MCP server" }));
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect((select as HTMLSelectElement).value).toBe("disabled");
-    expect(fixture.assignServers).not.toHaveBeenCalled();
-    expect(fixture.patchMcp).not.toHaveBeenCalled();
-  });
-
-  it("persists the new server assignments before enabling selected-server mode", async () => {
-    await chooseNewServer();
-    await waitFor(() => expect(fixture.patchMcp).toHaveBeenCalled());
-    expect(fixture.assignServers).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", ["new-server"]);
-    expect(fixture.patchMcp).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", { mcpAccessMode: "selected_servers" });
-    expect(fixture.calls).toEqual(["servers", "mcp-policy"]);
-    expect(fixture.record.mcpAccessMode).toBe("selected_servers");
-    expect(fixture.record.selectedServerCodes).toEqual(["new-server"]);
-    expect(screen.queryByLabelText("Visible selected servers")).toBeNull();
-  });
-
-  it("keeps MCP disabled when saving the new server assignments fails", async () => {
-    fixture.assignServers.mockRejectedValue(new Error("server assignment storage unavailable"));
-    await chooseNewServer();
-    await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("server assignment storage unavailable"));
-    expect(fixture.assignServers).toHaveBeenCalledExactlyOnceWith("TRON_CORE", "main-agent", ["new-server"]);
-    expect(fixture.patchMcp).not.toHaveBeenCalled();
-    expect(fixture.record.mcpAccessMode).toBe("disabled");
-    expect(fixture.record.selectedServerCodes).toEqual(["old-server"]);
-  });
-});
-
-it("autosaves Loop selection with the agent definition", async () => {
-  render(<WorkspaceAgentsPage category="internal" />);
-  const select = await screen.findByRole("combobox", {name:"Agent Loop"});
-  fireEvent.change(select,{target:{value:"review-flow"}});
-  await waitFor(()=>expect(fixture.patchDefinition).toHaveBeenCalledWith("TRON_CORE","main-agent",{loopCode:"review-flow"}),{timeout:2500});
 });

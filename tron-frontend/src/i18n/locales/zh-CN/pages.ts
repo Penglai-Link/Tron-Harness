@@ -1879,6 +1879,23 @@ export const pages = {
     },
     title: "智能体",
     internal: {
+      avatar: {
+        label: '头像',
+        robot: '机器人',
+        fox: '狐狸',
+        cat: '眼镜猫',
+        owl: '猫头鹰',
+        astronaut: '宇航员',
+        wizard: '巫师',
+        panda: '熊猫',
+        frog: '青蛙',
+        penguin: '企鹅',
+        raccoon: '浣熊',
+        rabbit: '兔子',
+        dragon: '小龙',
+      },
+      editAgent: '编辑 {{name}}',
+
       inheritance: {
         title: "智能体定义",
         platform: "平台定义",
@@ -2049,9 +2066,9 @@ export const pages = {
         workspaceDisabled: "本地已禁用",
       },
       status: {
-        error: "自动保存失败，再次修改会重试",
-        pending: "修改后将自动保存",
-        saved: "已自动保存",
+        error: "保存失败，请重试",
+        pending: "有未保存的更改",
+        saved: "已保存",
         saving: "正在保存...",
       },
       toolSelection: {

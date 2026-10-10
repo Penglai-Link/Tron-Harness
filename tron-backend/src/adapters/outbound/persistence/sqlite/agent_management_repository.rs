@@ -268,8 +268,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         transaction
             .execute(
                 "INSERT INTO workspace_internal_agent_definitions
-             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     definition.workspace_code,
                     definition.agent_code,
@@ -277,7 +277,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     definition.role_prompt,
                     timestamp_to_millis(&definition.created_at),
                     timestamp_to_millis(&definition.updated_at),
-                    definition.loop_code
+                    definition.loop_code,
+                    definition.avatar_id
                 ],
             )
             .map_err(storage_error)?;
@@ -325,7 +326,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code
+                "SELECT workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id
              FROM workspace_internal_agent_definitions WHERE workspace_code = ?1
              ORDER BY created_at, agent_code",
             )
@@ -336,6 +337,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     workspace_code: row.get(0)?,
                     agent_code: row.get(1)?,
                     loop_code: row.get(6)?,
+                    avatar_id: row.get(7)?,
                     name: row.get(2)?,
                     role_prompt: row.get(3)?,
                     created_at: timestamp_from_millis(row.get(4)?),
@@ -353,13 +355,13 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     ) -> Result<(), AgentManagementError> {
         self.connection.execute(
             "INSERT INTO workspace_internal_agent_definitions
-             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
-             name = excluded.name, role_prompt = excluded.role_prompt, loop_code = excluded.loop_code, updated_at = excluded.updated_at",
+             name = excluded.name, role_prompt = excluded.role_prompt, loop_code = excluded.loop_code, avatar_id = excluded.avatar_id, updated_at = excluded.updated_at",
             params![definition.workspace_code, definition.agent_code, definition.name,
                 definition.role_prompt, timestamp_to_millis(&definition.created_at),
-                timestamp_to_millis(&definition.updated_at), definition.loop_code],
+                timestamp_to_millis(&definition.updated_at), definition.loop_code, definition.avatar_id],
         ).map_err(storage_error)?;
         Ok(())
     }

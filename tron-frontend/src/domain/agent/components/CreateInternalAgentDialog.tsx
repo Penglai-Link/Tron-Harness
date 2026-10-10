@@ -10,6 +10,7 @@ import { notifyInternalAgentRegistryChanged } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { AgentRolePromptField } from "./AgentRolePromptField";
 
+import { AgentAvatarPicker } from "./AgentAvatarPicker";
 import { AgentLoopField } from "./AgentLoopField";
 
 export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { workspaceCode: string; onCreated: () => Promise<void> }) {
@@ -20,6 +21,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
   const [name, setName] = useState("");
   const [loopCode, setLoopCode] = useState("builtin.react-loop");
   const [rolePrompt, setRolePrompt] = useState("");
+  const [avatarId, setAvatarId] = useState("robot");
   const [saving, setSaving] = useState(false);
   const text = (key: string, fallback: string) => t(`pages:workspaceAgents.internal.definition.${key}`, { defaultValue: fallback });
   const codeValid = /^[a-z][a-z0-9_-]{0,63}$/.test(agentCode.trim());
@@ -29,7 +31,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
     if (!codeValid || !name.trim() || saving) return;
     setSaving(true);
     try {
-      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode };
+      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId };
       if (getServiceDataSource("agent") === "api") {
         await createWorkspaceInternalAgent(workspaceCode, payload);
       } else {
@@ -40,6 +42,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
       setName("");
       setRolePrompt("");
       setLoopCode("builtin.react-loop");
+      setAvatarId("robot");
       notifyInternalAgentRegistryChanged();
       await onCreated();
     } catch (error) {
@@ -51,13 +54,14 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated }: { worksp
 
   return <>
     <Button onClick={() => setOpen(true)}>{text("create", "New")}</Button>
-    <Dialog open={open} onOpenChange={(next) => { if (!saving) setOpen(next); }}>
-      <DialogContent className="sm:max-w-xl" closeLabel={text("close", "Close")} showCloseButton={!saving}>
+    <Dialog disablePointerDismissal open={open} onOpenChange={(next, details) => { if (details.reason === "outside-press" || saving) { details.cancel(); return; } setOpen(next); }}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl" closeLabel={text("close", "Close")} showCloseButton={!saving}>
         <DialogHeader>
           <DialogTitle>{text("title", "New internal agent")}</DialogTitle>
           <DialogDescription>{text("description", "Define its role, then select this agent when starting a conversation.")}</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void create(); }}>
+          <AgentAvatarPicker value={avatarId} disabled={saving} onChange={setAvatarId} />
           <Field label={text("code", "Code")} required hint={codeHelp} hintAriaLabel={text("codeHelpAria", "Agent code help")}
             error={agentCode.trim() && !codeValid ? text("codeInvalid", "Use 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter.") : undefined}>
             <TextInput autoFocus aria-label={text("code", "Code")} maxLength={64} required disabled={saving} value={agentCode} onChange={(event) => setAgentCode(event.target.value)} aria-invalid={Boolean(agentCode.trim() && !codeValid)} />

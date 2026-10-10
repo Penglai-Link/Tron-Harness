@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -81,9 +82,14 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { SelectItem } from "@/components/ui/select";
 
+import { AgentAvatar, AgentAvatarPicker } from "../components/AgentAvatarPicker";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { setAgentKnowledgeLibraries } from "@/domain/knowledge-base/api/knowledgeBaseApi";
 import { AgentLoopField } from "../components/AgentLoopField";
 
 interface InternalAgentDraft {
+  avatarId: string;
   loopCode: string;
   name: string;
   rolePrompt: string;
@@ -138,6 +144,7 @@ function hasSameServerCodes(left: string[], right: string[]) {
 
 function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDraft {
   return {
+    avatarId: record.avatarId || "robot",
     name: record.name,
     rolePrompt: record.rolePrompt,
     loopCode: record.loopCode || "builtin.react-loop",
@@ -172,7 +179,8 @@ function mergeSavedDraft(
 
 function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAgentDraft) {
   return (
-    record.name !== draft.name
+    (record.avatarId || "robot") !== draft.avatarId
+    || record.name !== draft.name
     || (record.loopCode || "builtin.react-loop") !== draft.loopCode
     || record.rolePrompt !== draft.rolePrompt
     ||
@@ -228,6 +236,10 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     ?? selectedPrimarySpace?.name
     ?? t("pages:workspaceAgents.workspace.unselected", { defaultValue: "No workspace selected" });
 
+  const queryClient = useQueryClient();
+  const [editingAgentCode, setEditingAgentCode] = useState<string | null>(null);
+  const [restoreBaselines, setRestoreBaselines] = useState<Record<string, WorkspaceInternalAgentRecord>>({});
+  const [knowledgeDrafts, setKnowledgeDrafts] = useState<Record<string, string[]>>({});
   const [assignmentDialog, setAssignmentDialog] = useState<{ agentCode: string; workspaceCode: string; kind: InternalAgentAssignmentKind } | null>(null);
   const [internalAgents, setInternalAgents] = useState<WorkspaceInternalAgentRecord[]>([]);
   const [toolDomains, setToolDomains] = useState<ToolCatalogDomainRecord[]>([]);
@@ -242,8 +254,6 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   const [loading, setLoading] = useState(false);
   const [busyKeys, setBusyKeys] = useState<Record<string, boolean>>({});
   const internalDraftsRef = useRef<Record<string, InternalAgentDraft>>({});
-  const internalSaveTimersRef = useRef<Record<string, number>>({});
-  const internalSaveFlashTimersRef = useRef<Record<string, number>>({});
 
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:workspaceAgents.${key}`, { defaultValue, ...options })
@@ -318,22 +328,6 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     });
   }
 
-  function clearInternalSaveTimer(agentCode: string) {
-    const timer = internalSaveTimersRef.current[agentCode];
-    if (timer) {
-      window.clearTimeout(timer);
-      delete internalSaveTimersRef.current[agentCode];
-    }
-  }
-
-  function clearInternalSaveFlashTimer(agentCode: string) {
-    const timer = internalSaveFlashTimersRef.current[agentCode];
-    if (timer) {
-      window.clearTimeout(timer);
-      delete internalSaveFlashTimersRef.current[agentCode];
-    }
-  }
-
   function setInternalSaveState(agentCode: string, nextState: InternalSaveState) {
     setInternalSaveStates((current) => {
       if (current[agentCode] === nextState) {
@@ -364,39 +358,11 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   }, [systemSearch]);
 
   useEffect(() => {
+    setEditingAgentCode(null);
+    setKnowledgeDrafts({});
+    setRestoreBaselines({});
     void refreshWorkspaceData();
   }, [activeWorkspaceCode, category, dataSource, mcpDataSource, scope]);
-
-  useEffect(() => (
-    () => {
-      Object.keys(internalSaveTimersRef.current).forEach(clearInternalSaveTimer);
-      Object.keys(internalSaveFlashTimersRef.current).forEach(clearInternalSaveFlashTimer);
-    }
-  ), []);
-
-  useEffect(() => {
-    if (!activeWorkspaceCode) {
-      Object.keys(internalSaveTimersRef.current).forEach(clearInternalSaveTimer);
-      return;
-    }
-
-    internalAgents.forEach((agent) => {
-      const agentCode = agent.agentCode;
-      const draft = internalDrafts[agentCode];
-      const saveState = internalSaveStates[agentCode] ?? "idle";
-      const hasChanges = draft ? hasDraftChanges(agent, draft) : false;
-
-      if (!draft || !hasChanges || saveState !== "pending" || isBusy(`internal-save:${agentCode}`) || isBusy(`internal-reset:${agentCode}`) || loading) {
-        clearInternalSaveTimer(agentCode);
-        return;
-      }
-
-      clearInternalSaveTimer(agentCode);
-      internalSaveTimersRef.current[agentCode] = window.setTimeout(() => {
-        void handleSaveInternalAgent(agentCode);
-      }, 450);
-    });
-  }, [activeWorkspaceCode, internalAgents, internalDrafts, internalSaveStates, busyKeys, loading]);
 
   const filteredSystemAgents = systemAgents.filter((record) => {
     const normalizedSearch = debouncedSystemSearch;
@@ -464,7 +430,6 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     internalDraftsRef.current = { ...internalDraftsRef.current, [agentCode]: nextDraft };
     setInternalDrafts((current) => ({ ...current, [agentCode]: nextDraft }));
 
-    clearInternalSaveFlashTimer(agentCode);
     setInternalSaveState(agentCode, hasDraftChanges(baseRecord, nextDraft) ? "pending" : "idle");
   }
 
@@ -502,8 +467,6 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       setInternalSaveStates({});
       setInternalSaveErrors({});
       setBusyKeys({});
-      Object.keys(internalSaveTimersRef.current).forEach(clearInternalSaveTimer);
-      Object.keys(internalSaveFlashTimersRef.current).forEach(clearInternalSaveFlashTimer);
       return;
     }
 
@@ -586,12 +549,12 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   }
 
   async function handleSaveInternalAgent(agentCode: string) {
-    const row = internalAgents.find((item) => item.agentCode === agentCode);
+    const row = restoreBaselines[agentCode] ?? internalAgents.find((item) => item.agentCode === agentCode);
     const draft = internalDraftsRef.current[agentCode];
     if (!row || !draft || isBusy(`internal-save:${agentCode}`) || isBusy(`internal-reset:${agentCode}`)) {
       return;
     }
-    if (!hasDraftChanges(row, draft)) {
+    if (!hasDraftChanges(row, draft) && !knowledgeDrafts[agentCode] && !restoreBaselines[agentCode]) {
       return;
     }
 
@@ -625,13 +588,16 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       ? hasMcpServerChanges(row, draft)
       : false;
 
-    clearInternalSaveTimer(agentCode);
-    clearInternalSaveFlashTimer(agentCode);
     setBusy(`internal-save:${agentCode}`, true);
     setInternalSaveState(agentCode, "saving");
     try {
-      if (row.name !== draft.name || row.rolePrompt !== draft.rolePrompt || (row.loopCode || "builtin.react-loop") !== draft.loopCode) {
+      if (restoreBaselines[agentCode]) {
+        if (dataSource === "api") await resetWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode);
+        else resetWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode);
+      }
+      if (row.name !== draft.name || row.rolePrompt !== draft.rolePrompt || (row.loopCode || "builtin.react-loop") !== draft.loopCode || (row.avatarId || "robot") !== draft.avatarId) {
         const definition = {
+          ...((row.avatarId || "robot") !== draft.avatarId ? { avatarId: draft.avatarId } : {}),
           ...((row.loopCode || "builtin.react-loop") !== draft.loopCode ? { loopCode: draft.loopCode } : {}),
           ...(row.name !== draft.name ? { name: draft.name } : {}),
           ...(row.rolePrompt !== draft.rolePrompt ? { rolePrompt: draft.rolePrompt } : {}),
@@ -672,14 +638,17 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
           patchWorkspaceInternalAgentMcpPolicyMock(activeWorkspaceCode, agentCode, mcpPayload);
         }
       }
+      if (knowledgeDrafts[agentCode]) {
+        await setAgentKnowledgeLibraries(agentCode, knowledgeDrafts[agentCode]);
+        await Promise.all(["knowledge-agent-libraries", "knowledge-base", "knowledge-bases", "platform-knowledge-bases", "knowledge-library-agent-grants"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+        setKnowledgeDrafts((current) => { const next = { ...current }; delete next[agentCode]; return next; });
+      }
       const hasPendingChanges = await refreshInternalAgent(agentCode, draft);
       notifyInternalAgentRegistryChanged();
       setInternalSaveState(agentCode, hasPendingChanges ? "pending" : "saved");
       if (!hasPendingChanges) {
-        internalSaveFlashTimersRef.current[agentCode] = window.setTimeout(() => {
-          setInternalSaveState(agentCode, "idle");
-          delete internalSaveFlashTimersRef.current[agentCode];
-        }, 1600);
+        setEditingAgentCode(null);
+        toast.success(internalPageT("status.saved", "Saved"));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : internalPageT("errors.save", "Internal agent policy update failed");
@@ -692,18 +661,18 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   }
 
   async function handleRestoreInheritance(agentCode: string) {
-    clearInternalSaveTimer(agentCode);
-    clearInternalSaveFlashTimer(agentCode);
     setBusy(`internal-reset:${agentCode}`, true);
     try {
-      if (dataSource === "api") {
-        await resetWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode);
-      } else {
-        resetWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode);
-      }
-      await refreshInternalAgent(agentCode);
-      notifyInternalAgentRegistryChanged();
-      setInternalSaveState(agentCode, "idle");
+      const platformRecords = dataSource === "api"
+        ? await fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE)
+        : listWorkspaceInternalAgentsMock(PLATFORM_INTERNAL_AGENT_SCOPE);
+      const baseline = platformRecords.find((record) => record.agentCode === agentCode);
+      if (!baseline) throw new Error(internalPageT("errors.reset", "Internal policy reset failed"));
+      const draft = draftFromRecord(baseline);
+      setRestoreBaselines((current) => ({ ...current, [agentCode]: baseline }));
+      internalDraftsRef.current = { ...internalDraftsRef.current, [agentCode]: draft };
+      setInternalDrafts((current) => ({ ...current, [agentCode]: draft }));
+      setInternalSaveState(agentCode, "pending");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : internalPageT("errors.reset", "Internal policy reset failed"));
     } finally { setBusy(`internal-reset:${agentCode}`, false); }
@@ -766,7 +735,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       ) : <PageHeader title={pageTitle} />}
 
       {internalAgentsPage ? (
-        <SurfaceCard className="space-y-3 p-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-3">
         {internalAgents.length === 0 ? (
           <p className="px-1 py-2 text-sm text-[var(--color-on-surface-variant)]">
             {internalPageT("empty", "No internal agents found for this workspace.")}
@@ -776,36 +745,54 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         {internalAgents.map((agent) => {
           const draft = internalDrafts[agent.agentCode] ?? draftFromRecord(agent);
           const isSaving = isBusy(`internal-save:${agent.agentCode}`);
-          const editingDisabled = isBusy(`internal-reset:${agent.agentCode}`) || loading;
+          const editingDisabled = isSaving || isBusy(`internal-reset:${agent.agentCode}`) || loading;
           const internalBusy = isSaving || editingDisabled;
           const saveState = internalSaveStates[agent.agentCode] ?? "idle";
 
           let statusLabel = "";
           let statusClassName = "text-[var(--color-on-surface-variant)]";
           if (saveState === "pending") {
-            statusLabel = internalPageT("status.pending", "Changes will be saved automatically");
+            statusLabel = internalPageT("status.pending", "Unsaved changes");
           } else if (saveState === "saving") {
             statusLabel = internalPageT("status.saving", "Saving...");
           } else if (saveState === "saved") {
-            statusLabel = internalPageT("status.saved", "Saved automatically");
+            statusLabel = internalPageT("status.saved", "Saved");
           } else if (saveState === "error") {
-            statusLabel = internalPageT("status.error", "Autosave failed. Update again to retry.");
+            statusLabel = internalPageT("status.error", "Save failed. Please retry.");
             if (internalSaveErrors[agent.agentCode]) statusLabel += ` ${internalSaveErrors[agent.agentCode]}`;
             statusClassName = "text-[var(--color-error)]";
           }
 
           return (
-            <section aria-label={draft.name} data-theme-anchor="card" key={agent.agentCode} className="rounded-2xl bg-[var(--color-surface-container-low)] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2.5">
-                <div>
-                  <h3 className="text-base font-semibold text-[var(--color-on-surface)]">
-                    {translateInternalAgentName(t, agent)}
-                  </h3>
-                  <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-                    {internalPageT("agentCode", "{{code}}", { code: agent.agentCode })}
-                  </p>
-                </div>
-                <div className="min-h-5 text-right text-xs">
+            <Fragment key={agent.agentCode}>
+              <Button variant="outline" disabled={loading} aria-label={internalPageT("editAgent", "Edit {{name}}", { name: translateInternalAgentName(t, agent) })}
+                className="h-auto min-w-0 justify-start gap-4 rounded-xl bg-[var(--color-surface-container-lowest)] p-4 text-left transition-colors motion-reduce:transition-none hover:bg-[var(--color-surface-container-low)]"
+                onClick={() => {
+                  const nextDraft = draftFromRecord(agent);
+                  internalDraftsRef.current = { ...internalDraftsRef.current, [agent.agentCode]: nextDraft };
+                  setInternalDrafts((current) => ({ ...current, [agent.agentCode]: nextDraft }));
+                  setInternalSaveState(agent.agentCode, "idle");
+                  setKnowledgeDrafts({});
+                  setRestoreBaselines({});
+                  setEditingAgentCode(agent.agentCode);
+                }}>
+                <AgentAvatar avatarId={agent.avatarId} className="size-16 shrink-0 rounded-lg" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{translateInternalAgentName(t, agent)}</span>
+                  <span className="mt-1 block truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{agent.agentCode}</span>
+                </span>
+              </Button>
+              {editingAgentCode === agent.agentCode ? <Dialog disablePointerDismissal open onOpenChange={(open, details) => {
+                if (details.reason === "outside-press" || internalBusy) { details.cancel(); return; }
+                if (!open) { setEditingAgentCode(null); setAssignmentDialog(null); }
+              }}>
+              <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl" showCloseButton={!internalBusy} closeLabel={internalPageT("definition.close", "Close")}>
+              <DialogHeader>
+                <DialogTitle>{internalPageT("editAgent", "Edit {{name}}", { name: translateInternalAgentName(t, agent) })}</DialogTitle>
+                <DialogDescription>{internalPageT("agentCode", "{{code}}", { code: agent.agentCode })}</DialogDescription>
+              </DialogHeader>
+              <div className="tron-scrollbar min-h-0 overflow-y-auto px-1 pb-1">
+                {scope !== "platform" || statusLabel ? <div className="text-right text-xs">
                   {scope !== "platform" ? <p className="text-[var(--color-on-surface-variant)]">{!agent.platformDefined ? internalPageT("inheritance.local", "Workspace definition")
                       : agent.source === "workspace_override" ? internalPageT("inheritance.override", "Workspace override")
                         : internalPageT("inheritance.inherited", "Inherited from platform")}</p> : null}
@@ -813,10 +800,10 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   <p className={`min-h-4 ${statusClassName}`} role="status" aria-live="polite" aria-atomic="true">
                     {statusLabel}
                   </p>
-                </div>
-              </div>
+                </div> : null}
 
               <div className="mt-3 space-y-3">
+                <AgentAvatarPicker value={draft.avatarId} disabled={editingDisabled} onChange={(avatarId) => setInternalDraft(agent.agentCode, { avatarId })} />
                 <AgentLoopField value={draft.loopCode} disabled={editingDisabled} onChange={(loopCode) => setInternalDraft(agent.agentCode, { loopCode })} />
                 <Field label={internalPageT("definition.name", "Name")}>
                   <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={editingDisabled} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
@@ -878,7 +865,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                     </SelectItem>
                   </SelectInput>
                 </Field>
-                <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={draft.name} disabled={editingDisabled} />
+                <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={draft.name} disabled={editingDisabled} selectedIds={knowledgeDrafts[agent.agentCode]} onSelectionChange={(ids) => setKnowledgeDrafts((current) => ({ ...current, [agent.agentCode]: ids }))} />
               </div>
 
               <details className="group mt-3 border-t border-[var(--color-outline-variant)]">
@@ -987,10 +974,17 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   }}
                 />
               ) : null}
-            </section>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" disabled={internalBusy} onClick={() => { setEditingAgentCode(null); setAssignmentDialog(null); }}>{internalPageT("definition.cancel", "Cancel")}</Button>
+                <Button disabled={internalBusy || !draft.name.trim() || (!hasDraftChanges(agent, draft) && !knowledgeDrafts[agent.agentCode] && !restoreBaselines[agent.agentCode])} onClick={() => void handleSaveInternalAgent(agent.agentCode)}>{isSaving ? internalPageT("actions.saving", "Saving...") : internalPageT("actions.save", "Save")}</Button>
+              </DialogFooter>
+              </DialogContent>
+              </Dialog> : null}
+            </Fragment>
           );
         })}
-        </SurfaceCard>
+        </div>
       ) : null}
 
       {!internalAgentsPage ? (

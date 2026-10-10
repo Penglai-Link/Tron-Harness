@@ -65,6 +65,7 @@ export interface WorkspaceInternalAgentRecord {
   description: string;
   rolePrompt: string;
   loopCode?: string;
+  avatarId?: string;
   platformDefined: boolean;
   mcpAccessMode: McpAccessMode;
   toolAssignmentMode: ToolAssignmentMode;
@@ -83,12 +84,14 @@ export interface CreateInternalAgentPayload {
   name: string;
   rolePrompt: string;
   loopCode?: string;
+  avatarId?: string;
 }
 
 export interface UpdateInternalAgentDefinitionPayload {
   name?: string;
   rolePrompt?: string;
   loopCode?: string;
+  avatarId?: string;
 }
 
 export interface WorkspaceInternalAgentPolicyPayload {

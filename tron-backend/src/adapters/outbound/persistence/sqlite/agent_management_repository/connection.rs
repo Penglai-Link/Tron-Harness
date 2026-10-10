@@ -86,6 +86,18 @@ impl<'a> SqliteAgentManagementRepositorySql<'a> {
                 )
                 .map_err(storage_error)?;
         }
+        if !column_exists(
+            &repository.connection,
+            "workspace_internal_agent_definitions",
+            "avatar_id",
+        )? {
+            repository
+                .connection
+                .execute_batch(
+                    "ALTER TABLE workspace_internal_agent_definitions ADD COLUMN avatar_id TEXT;",
+                )
+                .map_err(storage_error)?;
+        }
         repository
             .connection
             .execute_batch(super::super::migrations::AGENT_LOOPS_MIGRATION)

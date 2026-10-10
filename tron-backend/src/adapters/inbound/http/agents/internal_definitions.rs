@@ -22,6 +22,7 @@ pub struct CreateInternalAgentRequest {
     name: String,
     role_prompt: String,
     loop_code: Option<String>,
+    avatar_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -31,6 +32,7 @@ pub struct CreateInternalAgentResponse {
     name: String,
     role_prompt: String,
     loop_code: String,
+    avatar_id: String,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +41,7 @@ pub struct UpdateInternalAgentDefinitionRequest {
     name: Option<String>,
     role_prompt: Option<String>,
     loop_code: Option<String>,
+    avatar_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -48,6 +51,7 @@ pub struct UpdateInternalAgentDefinitionResponse {
     name: String,
     role_prompt: String,
     loop_code: String,
+    avatar_id: String,
 }
 
 pub async fn create_internal_agent(
@@ -65,6 +69,7 @@ pub async fn create_internal_agent(
                 name: request.name,
                 role_prompt: request.role_prompt,
                 loop_code: request.loop_code,
+                avatar_id: request.avatar_id,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?;
@@ -73,6 +78,7 @@ pub async fn create_internal_agent(
         name: record.name,
         role_prompt: record.role_prompt,
         loop_code: record.loop_code,
+        avatar_id: record.avatar_id,
     })))
 }
 
@@ -91,6 +97,7 @@ pub async fn update_internal_agent_definition(
                 name: request.name,
                 role_prompt: request.role_prompt,
                 loop_code: request.loop_code,
+                avatar_id: request.avatar_id,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?;
@@ -100,6 +107,7 @@ pub async fn update_internal_agent_definition(
             name: record.name,
             role_prompt: record.role_prompt,
             loop_code: record.loop_code,
+            avatar_id: record.avatar_id,
         },
     )))
 }
@@ -142,8 +150,8 @@ impl IntoResponse for InternalAgentApiError {
             ),
             "tron.agent.definition_invalid" => (
                 StatusCode::BAD_REQUEST,
-                "名称不能为空且不能超过 100 个字符，角色提示词不能超过 64 KB",
-                "Name must contain 1 to 100 characters; role prompt must not exceed 64 KB",
+                "名称为 1–100 个字符，指令不超过 64 KB，头像必须从内置列表选择",
+                "Name must contain 1 to 100 characters; role prompt must not exceed 64 KB; select a built-in avatar",
             ),
             "tron.agent.internal_not_found" => (
                 StatusCode::NOT_FOUND,
