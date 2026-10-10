@@ -23,6 +23,27 @@ describe("getNavigationIcon", () => {
 });
 
 describe("mapNavigationTree", () => {
+  it("resolves the standalone observability menu to its page", () => {
+    const [section] = mapNavigationTree({
+      domainCode: "ADVANCED",
+      locale: "zh-CN",
+      maxDepth: 3,
+      menus: [{
+        children: [],
+        icon: "Activity",
+        label: "可观测",
+        menuCode: "OBSERVABILITY",
+        menuType: "Internal",
+        pageCode: "observability.index",
+        url: null,
+        childDisplay: "Inline",
+      }],
+    });
+
+    expect(section.items[0].href).toBe("/observability");
+    expect(section.items[0].external).toBe(false);
+  });
+
   it("maps backend groups, internal pages, and external links to the shell model", () => {
     const [section] = mapNavigationTree({
       domainCode: "ADVANCED",
