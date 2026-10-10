@@ -201,6 +201,20 @@ impl FrameworkHost {
         }
         self.ensure_open()
             .map_err(AgentInvocationError::RuntimeFailed)?;
+        let trace_guard = self
+            .telemetry()
+            .await
+            .map_err(|_| {
+                crate::application::agent::AgentInvocationError::RuntimeFailed(
+                    "telemetry unavailable".into(),
+                )
+            })?
+            .begin(&context, &mut request)
+            .map_err(|_| {
+                crate::application::agent::AgentInvocationError::RuntimeFailed(
+                    "trace registration failed".into(),
+                )
+            })?;
         let parent = eliteforge_agent_framework::current_continuation_parent();
         let result = if let Some(parent) = parent {
             let started = agent
@@ -240,6 +254,8 @@ impl FrameworkHost {
                 Err(error) => Err(error),
             }
         };
+        trace_guard.finish(&result);
+        drop(trace_guard);
         let native = execution
             .result
             .lock()

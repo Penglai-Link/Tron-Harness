@@ -32,6 +32,7 @@ export interface AppRoute {
 }
 
 const registeredRoutes: AppRoute[] = [
+  { pageId: "observability.index", route: "/observability", activeNav: "Observability", title: "Observability", titleTranslationKey: "observability:title", archetype: "data-table" },
   {
     pageId: "admin.archivedChats",
     route: "/settings/archived-chats",

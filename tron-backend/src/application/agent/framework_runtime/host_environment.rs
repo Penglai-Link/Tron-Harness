@@ -9,7 +9,12 @@ impl FrameworkHost {
         _extensions: &BTreeMap<String, bool>,
     ) -> Result<FrameworkBuilder, String> {
         let mut builder = Framework::builder()
-            .default_models(false)
+            .plugin(
+                self.telemetry()
+                    .await
+                    .map_err(|_| "telemetry initialization failed")?
+                    .plugin()?,
+            )
             .capability_skills_root(self.0.path.with_extension("skills"))
             .plugin(
                 eliteforge_agent_official_plugin_agui::AgUiPlugin::new(

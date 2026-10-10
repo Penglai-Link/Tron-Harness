@@ -11,6 +11,7 @@ pub mod mcp;
 pub mod memory;
 pub mod models;
 pub mod navigation;
+pub mod observability;
 pub mod profiles;
 pub mod projects;
 pub mod prompts;

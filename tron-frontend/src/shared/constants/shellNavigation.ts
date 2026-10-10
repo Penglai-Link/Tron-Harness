@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlarmClock,
   Archive,
   Database,
@@ -24,6 +25,7 @@ export const tronNavigation: TronNavSection[] = [
     items: [
       { label: "Apps", href: "/apps", icon: FolderGit2, translationKey: "shell:nav.items.apps" },
       { label: "Tasks", href: "/tasks", icon: ListTodo, translationKey: "shell:nav.items.tasks" },
+      { label: "Observability", href: "/observability", icon: Activity, translationKey: "observability:title" },
       { label: "Automations", href: "/automations", icon: AlarmClock, translationKey: "shell:nav.items.automations" },
     ],
   },

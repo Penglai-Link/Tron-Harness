@@ -11,6 +11,7 @@ pub mod model;
 pub mod model_provider;
 pub mod model_router;
 pub mod navigation;
+pub mod observability;
 pub mod profile;
 pub mod project;
 pub mod prompt;

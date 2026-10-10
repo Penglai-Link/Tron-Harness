@@ -97,8 +97,6 @@ pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION: &str = include_s
 );
 pub(super) const PROJECT_CHAT_CONTEXT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260911_0001_create_project_chat_context.sql");
-pub(super) const REMOVE_OBSERVABILITY_NAVIGATION_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260926_0001_remove_observability_navigation.sql");
 
 pub(super) const AGENT_LOOPS_MIGRATION: &str =
     include_str!("../../../../../migrations/20261009_0001_create_agent_loops.sql");

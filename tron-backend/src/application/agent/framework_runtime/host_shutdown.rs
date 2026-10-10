@@ -237,6 +237,11 @@ impl FrameworkHost {
         if let Some(framework) = self.0.framework.get() {
             report.merge(framework.close().await);
         }
+        if let Some(telemetry) = self.0.telemetry.get() {
+            if let Err(error) = telemetry.close().await {
+                report.errors.push(error);
+            }
+        }
         report
     }
 }

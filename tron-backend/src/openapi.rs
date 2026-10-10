@@ -19,7 +19,13 @@ use crate::{
         version = env!("CARGO_PKG_VERSION"),
         description = "Tron backend HTTP API. Coverage is added progressively by bounded context."
     ),
-    paths(health, readiness),
+    paths(health, readiness,
+        crate::adapters::inbound::http::observability::query_traces,
+        crate::adapters::inbound::http::observability::get_trace,
+        crate::adapters::inbound::http::observability::get_metrics,
+        crate::adapters::inbound::http::observability::get_runtime,
+        crate::adapters::inbound::http::observability::query_metric_points,
+        crate::adapters::inbound::http::observability::get_export_config),
     components(schemas(
         ApiResponse<HealthData>,
         ApiResponse<ReadinessData>,

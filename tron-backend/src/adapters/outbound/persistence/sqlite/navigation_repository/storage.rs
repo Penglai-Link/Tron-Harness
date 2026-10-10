@@ -18,7 +18,7 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
             .execute_batch(NAVIGATION_MENU_TREES_MIGRATION)
             .map_err(|error| navigation_migration_error("generic menu trees", error))?;
         connection
-            .execute_batch(REMOVE_OBSERVABILITY_NAVIGATION_MIGRATION)
+            .execute_batch(include_str!("../../../../../../migrations/20261010_0001_observability_navigation.sql"))
             .map_err(storage_error)?;
         connection
             .execute_batch(REMOVE_CHATS_NAVIGATION_MIGRATION)

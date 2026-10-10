@@ -11,7 +11,7 @@ mod memory_work_domain_repository;
 mod migrations;
 mod model_repository;
 mod navigation_repository;
-mod project_repository;
+pub(crate) mod project_repository;
 mod prompt_repository;
 mod rag_repository;
 mod resource_repository;

@@ -65,6 +65,8 @@ struct Host {
     config_lock: tokio::sync::Mutex<()>,
     pty: eliteforge_agent_capability_tools::PtyService,
     framework: OnceCell<Framework>,
+    telemetry:
+        OnceCell<crate::app::telemetry::LocalTelemetry>,
     agent: OnceCell<Agent>,
     internal_agents: std::sync::RwLock<BTreeMap<(String, String), Arc<OnceCell<Agent>>>>,
     skills: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
@@ -89,6 +91,43 @@ struct Host {
     _temporary: Option<tempfile::TempDir>,
 }
 impl FrameworkHost {
+    async fn telemetry(
+        &self,
+    ) -> Result<
+        &crate::app::telemetry::LocalTelemetry,
+        crate::application::observability::ObservabilityError,
+    > {
+        self.0
+            .telemetry
+            .get_or_try_init(|| async {
+                crate::app::telemetry::LocalTelemetry::open(
+                    &self.0.path.with_extension("telemetry.sqlite3"),
+                )
+                .await
+            })
+            .await
+    }
+    pub async fn observability(
+        &self,
+    ) -> Result<
+        crate::application::observability::ObservabilityService,
+        crate::application::observability::ObservabilityError,
+    > {
+        self.ensure_open()
+            .map_err(|_| crate::application::observability::ObservabilityError::Storage)?;
+        Ok(self.telemetry().await?.service())
+    }
+
+    pub async fn collector_connection(
+        &self,
+    ) -> Result<
+        crate::application::observability::CollectorConnection,
+        crate::application::observability::ObservabilityError,
+    > {
+        self.ensure_open()
+            .map_err(|_| crate::application::observability::ObservabilityError::Storage)?;
+        Ok(self.telemetry().await?.connection())
+    }
     pub fn bind_agent_management(
         &self,
         service: crate::application::agent::AgentManagementService,
@@ -296,6 +335,7 @@ impl FrameworkHost {
             extension_state: std::sync::RwLock::new(extensions),
             config_lock: tokio::sync::Mutex::new(()),
             framework: OnceCell::new(),
+            telemetry: OnceCell::new(),
             agent: OnceCell::new(),
             internal_agents: Default::default(),
             skills: Default::default(),
@@ -336,6 +376,7 @@ impl FrameworkHost {
             extension_state: std::sync::RwLock::new(BTreeMap::new()),
             config_lock: tokio::sync::Mutex::new(()),
             framework: OnceCell::new(),
+            telemetry: OnceCell::new(),
             agent: OnceCell::new(),
             internal_agents: Default::default(),
             skills: Default::default(),

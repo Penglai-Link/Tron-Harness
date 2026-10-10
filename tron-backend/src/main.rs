@@ -13,6 +13,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(socket_addr).await?;
     let state = AppState::new(config)?;
     let framework = state.agent_framework.clone();
+    framework
+        .observability()
+        .await
+        .map_err(|_| std::io::Error::other("initialize OTel collector"))?;
     let ingestion = state.knowledge_bases.clone();
     let router = build_router_with_state(state)?;
 

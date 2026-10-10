@@ -262,6 +262,12 @@ impl FrameworkHost {
             .attach(&mut request);
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
+        let trace_guard = self
+            .telemetry()
+            .await
+            .map_err(|_| AgentError::InvalidConfiguration("telemetry unavailable".into()))?
+            .begin(&context, &mut request)
+            .map_err(|_| AgentError::InvalidConfiguration("trace registration failed".into()))?;
         let parent = eliteforge_agent_framework::current_continuation_parent();
         let mut result = if let Some(parent) = parent {
             let started = agent
@@ -301,6 +307,8 @@ impl FrameworkHost {
                 Err(error) => Err(error),
             }
         };
+        trace_guard.finish(&result);
+        drop(trace_guard);
         // Multiple terminal DAG nodes produce structured JSON rather than text.
         // Keep every result visible in Tron's text-oriented run/history contract.
         if let Ok(result) = &mut result {
