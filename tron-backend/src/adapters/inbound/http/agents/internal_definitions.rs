@@ -177,11 +177,20 @@ impl IntoResponse for InternalAgentApiError {
                 "Could not save agent configuration",
             ),
         };
+        let message = if self.1.starts_with("en") { en } else { zh };
+        let message = match &self.0 {
+            AgentManagementError::InternalToolUnknown(code)
+            | AgentManagementError::InternalToolAssignmentStale(code)
+            | AgentManagementError::InternalMcpServerAssignmentStale(code) => {
+                format!("{message}: {code}")
+            }
+            _ => message.to_owned(),
+        };
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                message,
             )),
         )
             .into_response()

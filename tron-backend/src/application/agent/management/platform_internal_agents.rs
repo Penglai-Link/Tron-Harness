@@ -25,10 +25,11 @@ impl AgentManagementService {
     pub fn list_platform_internal_agents(
         &self,
     ) -> Result<Vec<InternalAgentToolPolicy>, AgentManagementError> {
+        let tool_codes = self.tool_codes();
         Ok(self
             .platform_internal_agent_configs()?
             .into_iter()
-            .map(platform_view)
+            .map(|config| platform_view(config, &tool_codes))
             .collect())
     }
 
@@ -44,7 +45,7 @@ impl AgentManagementService {
         config.loop_code = self.validate_loop_selection(command.loop_code.as_deref())?;
         self.repository()
             .insert_platform_internal_agent_config(&config)?;
-        Ok(platform_view(config))
+        Ok(platform_view(config, &self.tool_codes()))
     }
 
     fn change_platform_internal_agent(
@@ -66,7 +67,8 @@ impl AgentManagementService {
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
         change(&mut config)?;
         repository.upsert_platform_internal_agent_config(&config)?;
-        Ok(platform_view(config))
+        drop(repository);
+        Ok(platform_view(config, &self.tool_codes()))
     }
 
     pub fn update_platform_internal_agent_definition(
@@ -148,18 +150,20 @@ impl AgentManagementService {
         code: &str,
         tools: Vec<String>,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
-        self.change_platform_internal_agent(code, |config| {
-            let tools = normalize_string_codes(tools);
-            for code in &tools {
-                let tool = BusinessToolCatalog::tool(code, "en-US")
-                    .ok_or_else(|| AgentManagementError::InternalToolUnknown(code.clone()))?;
-                if tool.availability_state != crate::domain::agent::ToolAvailabilityState::Available
-                {
-                    return Err(AgentManagementError::InternalToolAssignmentStale(
-                        code.clone(),
-                    ));
-                }
+        // Dynamic catalog lookups also lock the repository. Validate before the
+        // config mutation acquires its guard, and reject the whole selection on error.
+        let tools = normalize_string_codes(tools);
+        for code in &tools {
+            let tool = self
+                .tool(code, "en-US")
+                .ok_or_else(|| AgentManagementError::InternalToolUnknown(code.clone()))?;
+            if tool.availability_state != crate::domain::agent::ToolAvailabilityState::Available {
+                return Err(AgentManagementError::InternalToolAssignmentStale(
+                    code.clone(),
+                ));
             }
+        }
+        self.change_platform_internal_agent(code, |config| {
             config.selected_tool_codes = tools;
             Ok(())
         })
@@ -177,9 +181,12 @@ impl AgentManagementService {
     }
 }
 
-fn platform_view(config: PlatformInternalAgentConfig) -> InternalAgentToolPolicy {
+fn platform_view(
+    config: PlatformInternalAgentConfig,
+    tool_codes: &[String],
+) -> InternalAgentToolPolicy {
     let tools = if config.tool_assignment_mode == ToolAssignmentMode::AllPlatformTools {
-        BusinessToolCatalog::tool_codes()
+        tool_codes.to_vec()
     } else {
         config.selected_tool_codes
     };

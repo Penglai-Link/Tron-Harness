@@ -307,6 +307,17 @@ impl AgentManagementService {
         })
     }
 
+    fn tool_codes(&self) -> Vec<String> {
+        let mut codes = self
+            .list_tools(None, None, "en-US")
+            .into_iter()
+            .map(|tool| tool.tool_code)
+            .collect::<Vec<_>>();
+        codes.sort_unstable();
+        codes.dedup();
+        codes
+    }
+
     fn active_workspace_detail(
         &self,
         workspace_code: &str,

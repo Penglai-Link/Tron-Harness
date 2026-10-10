@@ -333,6 +333,7 @@ describe("internal agent tool selection autosave", () => {
     expect(role.disabled).toBe(false);
     expect(document.activeElement).toBe(role);
     expect(fixture.error).toHaveBeenCalledWith("Save failed");
+    expect(screen.getByText("Autosave failed. Update again to retry. Save failed")).toBeTruthy();
     fireEvent.change(role, { target: { value: "Retried draft" } });
     await act(async () => { await vi.advanceTimersByTimeAsync(450); });
     expect(fixture.record.rolePrompt).toBe("Retried draft");
@@ -358,14 +359,15 @@ describe("internal agent tool selection autosave", () => {
     fireEvent.change(role, { target: { value: "Global role" } });
     await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledExactlyOnceWith("$platform", "main-agent", { rolePrompt: "Global role" }));
     expect(screen.queryByRole("button", { name: "Restore inheritance" })).toBeNull();
+    expect(screen.queryByText("Platform definition")).toBeNull();
   });
 
-  it("persists the visible all-tools selection when only switching to selected mode", async () => {
+  it("starts from zero tools when switching to selected mode and confirms an empty allowlist", async () => {
     await chooseSelectedTools();
     await waitFor(() => expect(fixture.patch).toHaveBeenCalled());
-    expect(fixture.assign).toHaveBeenCalledWith("TRON_CORE", "main-agent", ["bash.exec", "fs.read_text"]);
+    expect(fixture.assign).toHaveBeenCalledWith("TRON_CORE", "main-agent", []);
     expect(fixture.calls).toEqual(["assign", "policy"]);
-    expect(fixture.record.selectedToolCodes).toEqual(["bash.exec", "fs.read_text"]);
+    expect(fixture.record.selectedToolCodes).toEqual([]);
     expect(screen.queryByLabelText("Visible selected tools")).toBeNull();
   });
 
@@ -406,12 +408,24 @@ describe("internal agent tool selection autosave", () => {
     const select = await screen.findByRole("combobox", { name: /tool assignment mode/i });
     await waitFor(() => expect((select as HTMLSelectElement).disabled).toBe(false));
     fireEvent.change(select, { target: { value: "selected_tools" } });
+    expect(screen.getByLabelText("Visible selected tools").textContent).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "Clear selected tools" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect((select as HTMLSelectElement).value).toBe("all_platform_tools");
     expect(fixture.assign).not.toHaveBeenCalled();
     expect(fixture.patch).not.toHaveBeenCalled();
+  });
+
+  it.each(["workspace", "platform"] as const)("keeps saved choices when reopening selected tools in %s scope", async (scope) => {
+    fixture.record.toolAssignmentMode = "selected_tools";
+    render(<WorkspaceAgentsPage category="internal" scope={scope} />);
+    const button = await screen.findByRole("button", { name: /Choose tools/ });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    expect(screen.getByLabelText("Visible selected tools").textContent).toBe("bash.exec,fs.read_text");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(fixture.assign).not.toHaveBeenCalled();
   });
 
   it("preserves another agent's pending draft when an earlier save refreshes", async () => {

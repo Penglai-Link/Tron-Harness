@@ -231,7 +231,7 @@ impl AgentManagementService {
         for tool_code in tool_codes.drain(..) {
             let trimmed = tool_code.trim().to_string();
             if !trimmed.is_empty() && !normalized.iter().any(|existing| existing == &trimmed) {
-                let Some(tool_definition) = BusinessToolCatalog::tool(&trimmed, "en-US") else {
+                let Some(tool_definition) = self.tool(&trimmed, "en-US") else {
                     return Err(AgentManagementError::InternalToolUnknown(trimmed));
                 };
                 if tool_definition.availability_state
@@ -325,7 +325,7 @@ impl AgentManagementService {
         let tool_codes = self.resolve_internal_agent_tool_codes(workspace_code, agent_code)?;
         Ok(tool_codes
             .into_iter()
-            .filter_map(|tool_code| BusinessToolCatalog::tool(&tool_code, locale))
+            .filter_map(|tool_code| self.tool(&tool_code, locale))
             .collect())
     }
 
@@ -353,8 +353,9 @@ impl AgentManagementService {
         );
         let mode = policy.tool_assignment_mode;
 
+        let registered = self.tool_codes();
         let selected = match mode {
-            ToolAssignmentMode::AllPlatformTools => BusinessToolCatalog::tool_codes(),
+            ToolAssignmentMode::AllPlatformTools => registered.clone(),
             ToolAssignmentMode::SelectedTools
                 if policy
                     .overridden_fields
@@ -372,7 +373,6 @@ impl AgentManagementService {
             }
             ToolAssignmentMode::SelectedTools => definition.selected_tool_codes,
         };
-        let registered = BusinessToolCatalog::tool_codes();
         let mut filtered = selected
             .into_iter()
             .map(|code| code.trim().to_string())

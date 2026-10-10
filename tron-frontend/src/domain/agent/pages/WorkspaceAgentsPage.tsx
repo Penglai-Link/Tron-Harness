@@ -236,6 +236,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   const [systemAgents, setSystemAgents] = useState<WorkspaceSystemAgentRecord[]>([]);
   const [internalDrafts, setInternalDrafts] = useState<Record<string, InternalAgentDraft>>({});
   const [internalSaveStates, setInternalSaveStates] = useState<Record<string, InternalSaveState>>({});
+  const [internalSaveErrors, setInternalSaveErrors] = useState<Record<string, string>>({});
   const [systemSearch, setSystemSearch] = useState("");
   const [debouncedSystemSearch, setDebouncedSystemSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -499,6 +500,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       internalDraftsRef.current = {};
       setInternalDrafts({});
       setInternalSaveStates({});
+      setInternalSaveErrors({});
       setBusyKeys({});
       Object.keys(internalSaveTimersRef.current).forEach(clearInternalSaveTimer);
       Object.keys(internalSaveFlashTimersRef.current).forEach(clearInternalSaveFlashTimer);
@@ -535,6 +537,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         setWorkspaceMcpServers(nextWorkspaceMcpServers);
         updateDraftMap(nextInternalAgents);
         setInternalSaveStates({});
+        setInternalSaveErrors({});
       } else {
         const nextSystemAgents = dataSource === "api"
           ? await fetchWorkspaceSystemAgents(activeWorkspaceCode)
@@ -679,8 +682,10 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         }, 1600);
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : internalPageT("errors.save", "Internal agent policy update failed");
+      setInternalSaveErrors((current) => ({ ...current, [agentCode]: message }));
       setInternalSaveState(agentCode, "error");
-      toast.error(error instanceof Error ? error.message : internalPageT("errors.save", "Internal agent policy update failed"));
+      toast.error(message);
     } finally {
       setBusy(`internal-save:${agentCode}`, false);
     }
@@ -785,6 +790,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
             statusLabel = internalPageT("status.saved", "Saved automatically");
           } else if (saveState === "error") {
             statusLabel = internalPageT("status.error", "Autosave failed. Update again to retry.");
+            if (internalSaveErrors[agent.agentCode]) statusLabel += ` ${internalSaveErrors[agent.agentCode]}`;
             statusClassName = "text-[var(--color-error)]";
           }
 
@@ -800,11 +806,9 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   </p>
                 </div>
                 <div className="min-h-5 text-right text-xs">
-                  <p className="text-[var(--color-on-surface-variant)]">{scope === "platform"
-                    ? internalPageT("inheritance.platform", "Platform definition")
-                    : !agent.platformDefined ? internalPageT("inheritance.local", "Workspace definition")
+                  {scope !== "platform" ? <p className="text-[var(--color-on-surface-variant)]">{!agent.platformDefined ? internalPageT("inheritance.local", "Workspace definition")
                       : agent.source === "workspace_override" ? internalPageT("inheritance.override", "Workspace override")
-                        : internalPageT("inheritance.inherited", "Inherited from platform")}</p>
+                        : internalPageT("inheritance.inherited", "Inherited from platform")}</p> : null}
                   {scope !== "platform" && agent.platformDefined && agent.source === "workspace_override" ? <Button variant="outline" size="sm" disabled={internalBusy} onClick={() => void handleRestoreInheritance(agent.agentCode)}>{internalPageT("inheritance.restore", "Restore inheritance")}</Button> : null}
                   <p className={`min-h-4 ${statusClassName}`} role="status" aria-live="polite" aria-atomic="true">
                     {statusLabel}
@@ -821,7 +825,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
               </div>
 
               <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                <Field className="w-full" label={fieldLabel("mcpAccessMode", "MCP access mode")}
+                <Field className="w-full [&>div:first-child]:min-h-[var(--tron-button-height-sm,1.75rem)]" label={fieldLabel("mcpAccessMode", "MCP access mode")}
                   actions={draft.mcpAccessMode === "selected_servers" ? (
                     <Button type="button" size="sm" variant="outline" disabled={editingDisabled} onClick={() => openAssignmentDialog(agent.agentCode, "mcp")}>
                       {internalPageT("assignmentDialog.editServers", "Choose servers ({{count}})", { count: draft.selectedServerCodes.length })}
@@ -849,7 +853,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                     </SelectItem>
                   </SelectInput>
                 </Field>
-                <Field className="w-full" label={fieldLabel("toolAssignmentMode", "Tool assignment mode")}
+                <Field className="w-full [&>div:first-child]:min-h-[var(--tron-button-height-sm,1.75rem)]" label={fieldLabel("toolAssignmentMode", "Tool assignment mode")}
                   actions={draft.toolAssignmentMode === "selected_tools" ? (
                     <Button type="button" size="sm" variant="outline" disabled={editingDisabled} onClick={() => openAssignmentDialog(agent.agentCode, "tools")}>
                       {internalPageT("assignmentDialog.editTools", "Choose tools ({{count}})", { count: draft.selectedToolCodes.length })}
@@ -968,7 +972,9 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   kind={assignmentDialog.kind}
                   agentName={draft.name}
                   busy={editingDisabled}
-                  initialSelectedCodes={assignmentDialog.kind === "mcp" ? draft.selectedServerCodes : draft.selectedToolCodes}
+                  initialSelectedCodes={assignmentDialog.kind === "mcp"
+                    ? draft.selectedServerCodes
+                    : draft.toolAssignmentMode === "selected_tools" ? draft.selectedToolCodes : []}
                   servers={workspaceMcpServers}
                   tools={tools}
                   toolDomains={toolDomains}
