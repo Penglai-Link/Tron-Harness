@@ -910,7 +910,7 @@ dependencies = [
 [[package]]
 name = "crab-serverapi"
 version = "0.3.0"
-source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=08ba3151f462c75bee4ce4ddb8f6147b2203e8ff#08ba3151f462c75bee4ce4ddb8f6147b2203e8ff"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=3a6453c04b4bafe69ba6a2ede0700f0ad6892f34#3a6453c04b4bafe69ba6a2ede0700f0ad6892f34"
 dependencies = [
  "aes-gcm 0.10.3",
  "async-trait",
