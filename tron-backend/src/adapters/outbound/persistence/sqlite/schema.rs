@@ -113,6 +113,68 @@ mod tests {
     }
 
     #[test]
+    fn agent_loop_references_require_a_persisted_design() {
+        let connection = Connection::open_in_memory().unwrap();
+        initialize_business(&connection).unwrap();
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM agent_loop_designs", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        connection
+            .execute_batch(
+                "INSERT INTO workspace_internal_agent_definitions
+                 (workspace_code, agent_code, created_at, updated_at)
+                 VALUES ('WS', 'WORKSPACE', 0, 0);
+             INSERT INTO platform_internal_agent_configs VALUES ('PLATFORM', '{}');",
+            )
+            .unwrap();
+        for loop_code in [
+            "builtin.react-loop",
+            "builtin.review-workflow",
+            "builtin.analysis-dag",
+            "missing-loop",
+        ] {
+            let config = serde_json::json!({ "loopCode": loop_code }).to_string();
+            for (sql, value) in [
+                (
+                    "INSERT INTO workspace_internal_agent_definitions
+                    (workspace_code, agent_code, created_at, updated_at, loop_code)
+                    VALUES ('WS', 'INVALID', 0, 0, ?1)",
+                    loop_code,
+                ),
+                (
+                    "UPDATE workspace_internal_agent_definitions SET loop_code=?1
+                    WHERE agent_code='WORKSPACE'",
+                    loop_code,
+                ),
+                (
+                    "INSERT INTO platform_internal_agent_configs VALUES ('INVALID', ?1)",
+                    config.as_str(),
+                ),
+                (
+                    "UPDATE platform_internal_agent_configs SET config_json=?1
+                    WHERE agent_code='PLATFORM'",
+                    config.as_str(),
+                ),
+            ] {
+                let error = connection.execute(sql, [value]).unwrap_err();
+                assert!(error.to_string().contains("unknown agent loop"), "{error}");
+            }
+        }
+        connection
+            .execute_batch(
+                "INSERT INTO agent_loop_designs VALUES ('custom-loop', 1, '{}');
+             UPDATE workspace_internal_agent_definitions SET loop_code='custom-loop';
+             UPDATE platform_internal_agent_configs
+                 SET config_json='{\"loopCode\":\"custom-loop\"}';",
+            )
+            .unwrap();
+    }
+
+    #[test]
     fn profile_registry_and_business_databases_initialize_separately() {
         let business = Connection::open_in_memory().unwrap();
         let profiles = Connection::open_in_memory().unwrap();
