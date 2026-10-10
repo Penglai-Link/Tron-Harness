@@ -52,7 +52,7 @@ impl From<fw::SessionHistory> for ReadHistoryResponse {
 
 // The lossless conversation codec is for model resumption. Only its public
 // projection belongs in the transcript; genuine user JSON stays untouched.
-fn public_history_block(block: fw::HistoryContentBlock) -> Option<fw::HistoryContentBlock> {
+pub(super) fn public_history_block(block: fw::HistoryContentBlock) -> Option<fw::HistoryContentBlock> {
     let fw::HistoryContentBlock::Json { value } = &block else {
         return Some(block);
     };

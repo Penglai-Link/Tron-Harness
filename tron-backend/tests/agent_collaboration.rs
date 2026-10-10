@@ -25,6 +25,7 @@ struct Script {
     thread_id: Mutex<Option<String>>,
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
+    child_tool_goal: usize,
 }
 impl ModelClient for Script {
     fn generate<'a>(
@@ -103,6 +104,10 @@ impl ModelClient for Script {
                     "agent_spawn",
                     json!({"agentCode":"reviewer", "task":"child:review"}),
                 ),
+                Some("root:limits") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer", "task":"child:limits"}),
+                ),
                 Some("root:unknown") if results.is_empty() => ModelResponse::tool_call(
                     "agent_spawn",
                     json!({"agentCode":"missing", "task":"child:review"}),
@@ -133,6 +138,17 @@ impl ModelClient for Script {
                 }
                 Some(_) => ModelResponse::final_output(results.join("\n")),
                 None => {
+                    if request
+                        .messages
+                        .iter()
+                        .any(|m| m.content.text() == "child:limits")
+                    {
+                        return Ok(if results.len() < self.child_tool_goal {
+                            ModelResponse::tool_call("thread_list", json!({}))
+                        } else {
+                            ModelResponse::final_output("completed with target limits")
+                        });
+                    }
                     if request
                         .messages
                         .iter()
@@ -174,6 +190,51 @@ impl ModelClient for Script {
         Box::pin(async { Ok(Default::default()) })
     }
 }
+#[tokio::test]
+async fn delegated_child_uses_its_definition_limits_and_stops_at_them() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let management = &f.state.agent_management;
+    let host = f.state.agent_framework.clone();
+    let script = Arc::new(Script {
+        child_tool_goal: 5,
+        ..Default::default()
+    });
+    let agent = ReactAgentBuilder::new(
+        script,
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    for (steps, tools, expected_status, expected_steps, expected_tools) in [
+        (7, 5, "Completed", 6, 5),
+        (4, 5, "StepLimit", 4, 4),
+        (7, 3, "ToolCallLimit", 4, 3),
+    ] {
+        management
+            .update_internal_agent_policy(
+                WORKSPACE,
+                "reviewer",
+                tron_backend::application::agent::UpdateWorkspaceInternalAgentPolicyCommand {
+                    max_steps: Some(steps),
+                    max_tool_calls: Some(tools),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let mut root = context("root:limits");
+        root.limits.max_steps = 3;
+        root.limits.max_tool_calls = 2;
+        let result = agent.run(root).await.unwrap();
+        let child: Value = serde_json::from_str(&result.final_output).unwrap();
+        assert_eq!(child["status"], expected_status, "{child}");
+        assert_eq!(child["steps"], expected_steps, "{child}");
+        assert_eq!(child["tool_calls"], expected_tools, "{child}");
+    }
+    assert!(host.close().await.is_success());
+}
 fn context(prompt: &str) -> AgentRunContext {
     serde_json::from_value(json!({
         "agentCode":"main-agent", "runCode":fw::RunId::new_v4().to_string(), "workspaceCode":WORKSPACE,"userCode":USER,"locale":"en-US","agentKind":"REACT",
@@ -185,7 +246,7 @@ fn reviewer(f: &Fixture) {
     f.state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
-            avatar_id: None,
+            avatar_id: Some("fox".into()),
             loop_code: None,
             agent_code: "reviewer".into(),
             name: "Reviewer".into(),
@@ -225,12 +286,71 @@ async fn collaboration_directory_named_child_and_revocation() {
     .with_framework_host(Some(host.clone()))
     .build()
     .unwrap();
-    let result = agent.run(context("root:spawn")).await.unwrap();
+    let root = context("root:spawn");
+    let root_session = root.run_code.clone();
+    let result = agent.run(root).await.unwrap();
     assert!(
         result.final_output.contains("reviewed by target"),
         "{}",
         result.final_output
     );
+    let children = host.subagents(&root_session, USER).await.unwrap();
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].record.agent_code, "reviewer");
+    assert_eq!(children[0].record.avatar_id.as_deref(), Some("fox"));
+    assert_eq!(children[0].record.task, "child:review");
+    assert_ne!(children[0].record.session_id, root_session);
+    assert_eq!(children[0].run.status, fw::HistoryStatus::Completed);
+    let framework = host.storage_framework().await.unwrap();
+    let parent_history = framework
+        .history()
+        .unwrap()
+        .read_session(&root_session, Default::default())
+        .await
+        .unwrap();
+    assert!(
+        parent_history
+            .runs
+            .iter()
+            .all(|run| run.session_id == root_session)
+    );
+    assert!(
+        !parent_history
+            .records
+            .messages
+            .iter()
+            .any(|message| message.role == fw::Role::User
+                && message.content
+                    == vec![fw::HistoryContentBlock::Text {
+                        text: "child:review".into()
+                    }])
+    );
+    let (_, child_history) = host
+        .subagent_history(&root_session, children[0].record.run_id, USER)
+        .await
+        .unwrap();
+    assert!(
+        child_history
+            .records
+            .messages
+            .iter()
+            .any(|message| message.role == fw::Role::User
+                && message.content
+                    == vec![fw::HistoryContentBlock::Text {
+                        text: "child:review".into()
+                    }])
+    );
+    assert!(
+        host.subagents(&root_session, "OTHER-USER")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        host.subagent_history(&root_session, children[0].record.run_id, "OTHER-USER")
+            .await,
+        Err(fw::StateError::NotFound)
+    ));
     {
         let requests = script.requests.lock().unwrap();
         let first = &requests[0];

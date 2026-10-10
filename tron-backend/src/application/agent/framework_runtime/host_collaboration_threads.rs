@@ -132,8 +132,38 @@ impl AgentCollaborationRuntime for Runtime {
         parent: &fw::RunContext,
     ) -> Result<fw::ChildRunResult, fw::AgentError> {
         let session = format!("tool-child-{}", fw::RunId::new_v4());
-        let (agent, request, prepared) = self.prepare(request, session, None, parent).await?;
+        let (agent, mut request, prepared) = self
+            .prepare(
+                request,
+                session.clone(),
+                None,
+                parent,
+                ExecutionLimits::AgentDefinition,
+            )
+            .await?;
         let host = self.host()?;
+        let owner = parent
+            .extensions
+            .get::<super::super::subagents::SubagentOwner>()
+            .map(|owner| owner.0.clone())
+            .unwrap_or_else(|| parent.session_id.clone());
+        request
+            .extensions
+            .insert(super::super::subagents::SubagentOwner(owner.clone()));
+        let code = prepared
+            .agent_code
+            .clone()
+            .ok_or_else(|| failure("child target missing"))?;
+        let target = self
+            .directory()?
+            .into_iter()
+            .find(|entry| entry.agent_code == code);
+        let name = target
+            .as_ref()
+            .map(|entry| entry.name.clone())
+            .unwrap_or_else(|| code.clone());
+        let avatar_id = target.map(|entry| entry.avatar_id);
+        let task = request.input.text();
         let admission = host.0.config_lock.lock().await;
         host.ensure_open().map_err(failure)?;
         self.authorize(
@@ -142,12 +172,35 @@ impl AgentCollaborationRuntime for Runtime {
                 .as_deref()
                 .ok_or_else(|| failure("child target missing"))?,
         )?;
-        let child = agent.start_child_owned(request, parent).await?;
+        let (child, stream) = agent
+            .start_child_with_output_owned::<eliteforge_agent_official_plugin_agui::AgUiStream>(
+                request, parent,
+            )
+            .await?;
         drop(admission);
         let run_id = child.run_id();
+        host.record_subagent(
+            &owner,
+            super::super::SubagentRecord {
+                run_id,
+                session_id: session,
+                parent_run_id: parent.run_id,
+                agent_code: code,
+                agent_name: name,
+                avatar_id,
+                task,
+                user_code: prepared.user_code.clone(),
+            },
+        )
+        .await?;
+        let presentation = host.presentation_service().map_err(failure)?;
+        let (result, ()) = tokio::join!(
+            child.wait(),
+            super::super::super::presentation::consume_native_agui(stream, &prepared, presentation)
+        );
         Ok(fw::ChildRunResult {
             run_id,
-            result: child.wait().await?,
+            result: result?,
         })
     }
     async fn create_thread(
@@ -163,7 +216,9 @@ impl AgentCollaborationRuntime for Runtime {
             return Err(failure("invalid thread title"));
         }
         let id = format!("thread-{}", fw::RunId::new_v4());
-        let (agent, request, prepared) = self.prepare(request, id.clone(), None, parent).await?;
+        let (agent, request, prepared) = self
+            .prepare(request, id.clone(), None, parent, ExecutionLimits::Request)
+            .await?;
         let (_, completion) = watch::channel(None);
         let thread = Arc::new(Thread {
             context: prepared.clone(),
@@ -236,7 +291,13 @@ impl AgentCollaborationRuntime for Runtime {
             return Err(failure("thread target cannot be changed"));
         }
         let (_, request, _) = self
-            .prepare(request, id.into(), Some(&thread.context), parent)
+            .prepare(
+                request,
+                id.into(),
+                Some(&thread.context),
+                parent,
+                ExecutionLimits::Request,
+            )
             .await?;
         self.launch(
             thread.clone(),
@@ -262,7 +323,13 @@ impl AgentCollaborationRuntime for Runtime {
         }
         let request = thread.agent.answer(id, interaction, value).await?;
         let (_, request, _) = self
-            .prepare(request, id.into(), Some(&thread.context), parent)
+            .prepare(
+                request,
+                id.into(),
+                Some(&thread.context),
+                parent,
+                ExecutionLimits::Request,
+            )
             .await?;
         self.launch(
             thread.clone(),

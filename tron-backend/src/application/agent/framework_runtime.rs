@@ -20,7 +20,7 @@ pub use capability_catalog::{
     extension_implementation_catalog_with_state, install_capability_pack,
     installed_capability_packs,
 };
-pub use host::FrameworkHost;
+pub use host::{FrameworkHost, SubagentRecord, SubagentView};
 
 mod external;
 mod native_sessions;

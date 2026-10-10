@@ -1417,6 +1417,12 @@ export const pages = {
         renameSessionFailed: "重命名会话失败",
       },
     },
+    subagents: {
+      title: "子代理", session: "子代理临时会话", task: "委派任务", back: "返回子代理列表",
+      empty: "当前会话还没有子代理", loading: "加载中…", loadFailed: "读取子代理失败", reasoning: "思考过程",
+      waiting: "子代理正在等待输入，由主代理处理。",
+      statuses: { Running: "运行中", Waiting: "等待输入", Completed: "已完成", Interrupted: "已停止", Failed: "失败", Unknown: "结果未知", Planned: "待执行", Approved: "已批准" },
+    },
     shortTermMemory: {
       workspace: "执行",
       context: "上下文",

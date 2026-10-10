@@ -1439,6 +1439,12 @@ export const pages = {
         renameSessionFailed: "Rename session failed",
       },
     },
+    subagents: {
+      title: "Subagents", session: "Temporary subagent session", task: "Delegated task", back: "Back to subagents",
+      empty: "No subagents in this conversation", loading: "Loading…", loadFailed: "Could not load subagents", reasoning: "Reasoning",
+      waiting: "The subagent is waiting for input from the parent agent.",
+      statuses: { Running: "Running", Waiting: "Waiting for input", Completed: "Completed", Interrupted: "Stopped", Failed: "Failed", Unknown: "Result unknown", Planned: "Pending", Approved: "Approved" },
+    },
     shortTermMemory: {
       workspace: "Execution",
       context: "Context",

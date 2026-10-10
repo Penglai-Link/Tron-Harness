@@ -22,6 +22,9 @@ use tokio::sync::{Mutex, OnceCell};
 mod capability_state;
 #[path = "host_collaboration.rs"]
 pub(super) mod collaboration;
+#[path = "host_subagents.rs"]
+mod subagents;
+pub use subagents::{SubagentRecord, SubagentView};
 #[path = "host_continuation.rs"]
 mod host_continuation;
 #[path = "host_control.rs"]

@@ -1,0 +1,88 @@
+.subagent-avatar {
+  --avatar-state: var(--color-outline-variant);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+}
+
+.subagent-avatar__image {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+.subagent-avatar__ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--avatar-state);
+  border-radius: 50%;
+}
+
+.subagent-avatar[data-status="Running"] .subagent-avatar__ring {
+  border-color: var(--color-outline-variant);
+  border-top-color: var(--color-accent);
+  border-right-color: var(--color-accent);
+  animation: subagent-orbit 2.4s linear infinite;
+}
+
+.subagent-avatar[data-status="Waiting"] {
+  --avatar-state: var(--color-warning);
+}
+
+.subagent-avatar[data-status="Waiting"] .subagent-avatar__ring {
+  animation: subagent-breathe 2s ease-in-out infinite;
+}
+
+.subagent-avatar[data-status="Completed"],
+.subagent-avatar[data-status="Approved"] {
+  --avatar-state: var(--color-success);
+}
+
+.subagent-avatar[data-status="Failed"] {
+  --avatar-state: var(--color-error);
+}
+
+.subagent-avatar[data-status="Interrupted"],
+.subagent-avatar[data-status="Unknown"] {
+  --avatar-state: var(--color-on-surface-variant);
+}
+
+.subagent-avatar[data-status="Interrupted"] .subagent-avatar__image,
+.subagent-avatar[data-status="Unknown"] .subagent-avatar__image {
+  filter: grayscale(0.8);
+  opacity: 0.65;
+}
+
+.subagent-avatar[data-status="Planned"] .subagent-avatar__ring {
+  border-style: dashed;
+}
+
+.subagent-avatar__mark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-surface-container-lowest);
+  border-radius: 50%;
+  background: var(--avatar-state);
+  color: var(--color-on-primary);
+}
+
+@keyframes subagent-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes subagent-breathe {
+  50% { opacity: 0.35; transform: scale(0.94); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subagent-avatar[data-status] .subagent-avatar__ring { animation: none; }
+}

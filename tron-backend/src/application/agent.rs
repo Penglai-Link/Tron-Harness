@@ -14,7 +14,7 @@ pub use execution_context::{
     execution_context_message, project_instructions_message, refresh_execution_context,
 };
 pub use framework_runtime::{
-    CapabilityPackInfo, ExtensionImplementationInfo, FrameworkHost, capability_pack_catalog,
+    CapabilityPackInfo, ExtensionImplementationInfo, FrameworkHost, SubagentRecord, SubagentView, capability_pack_catalog,
     capability_pack_catalog_with_state, extension_implementation_catalog,
     extension_implementation_catalog_with_state, install_capability_pack,
     installed_capability_packs,

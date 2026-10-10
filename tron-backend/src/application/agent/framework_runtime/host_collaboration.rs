@@ -10,6 +10,12 @@ use std::sync::Weak;
 mod threads;
 pub(super) use threads::Threads;
 
+#[derive(Clone, Copy)]
+enum ExecutionLimits {
+    AgentDefinition,
+    Request,
+}
+
 #[derive(Clone)]
 pub(in crate::application::agent::framework_runtime) struct Runtime {
     host: Weak<Host>,
@@ -119,6 +125,7 @@ impl Runtime {
         session: String,
         bound: Option<&AgentRunContext>,
         parent: &fw::RunContext,
+        limits: ExecutionLimits,
     ) -> Result<(Agent, fw::RunRequest, AgentRunContext), fw::AgentError> {
         let host = self.host()?;
         let caller = HostExecution::from_extensions(&parent.extensions)?;
@@ -159,6 +166,7 @@ impl Runtime {
             .map_err(|error| failure(error.message()))?;
         let context = &mut prepared.context;
         context.conversation_code = Some(session.clone());
+        context.stream_key = Some(session.clone());
         context.model = crate::adapters::outbound::model::with_person_ai_conversation(
             context.model.clone(),
             &session,
@@ -180,15 +188,23 @@ impl Runtime {
         request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(failure)?);
         request.model = None;
         request.extensions = fw::Extensions::default();
-        request.limits.max_steps = request
-            .limits
-            .max_steps
-            .min(context.limits.max_steps as usize)
-            .min(parent.limits.max_steps);
-        request.limits.max_tool_calls = request
-            .limits
-            .max_tool_calls
-            .min(context.limits.max_tool_calls as usize);
+        match limits {
+            ExecutionLimits::AgentDefinition => {
+                request.limits.max_steps = context.limits.max_steps as usize;
+                request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
+            }
+            ExecutionLimits::Request => {
+                request.limits.max_steps = request
+                    .limits
+                    .max_steps
+                    .min(context.limits.max_steps as usize)
+                    .min(parent.limits.max_steps);
+                request.limits.max_tool_calls = request
+                    .limits
+                    .max_tool_calls
+                    .min(context.limits.max_tool_calls as usize);
+            }
+        }
         request.limits.max_parallel_tools = context.limits.max_parallel_tool_calls.max(1) as usize;
         request.limits.max_total_tokens = request.limits.max_total_tokens.min(parent.token_ceiling);
         let invocation = host.invocation_config();

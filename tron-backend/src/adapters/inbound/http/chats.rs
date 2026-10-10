@@ -9,6 +9,7 @@ pub mod run_control;
 pub(crate) mod short_term_memory;
 pub(crate) mod stream_task;
 mod terminals;
+mod subagents;
 
 pub(crate) mod workspace_scope;
 
