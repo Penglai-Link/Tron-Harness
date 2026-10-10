@@ -9,11 +9,16 @@ impl AgentManagementService {
             .into_iter()
             .map(default_config)
             .collect::<Vec<_>>();
-        for config in self.repository().list_platform_internal_agent_configs()? {
+        for mut config in self.repository().list_platform_internal_agent_configs()? {
             if let Some(existing) = configs
                 .iter_mut()
                 .find(|existing| existing.agent_code == config.agent_code)
             {
+                if config.agent_code.eq_ignore_ascii_case("main-agent")
+                    && config.role_prompt.trim().is_empty()
+                {
+                    config.role_prompt = internal_definitions::default_main_agent_role_prompt();
+                }
                 *existing = config;
             } else {
                 configs.push(config);
@@ -80,7 +85,6 @@ impl AgentManagementService {
         code: &str,
         command: UpdateWorkspaceInternalAgentDefinitionCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
-        internal_definitions::ensure_editable_definition(code)?;
         if let Some(id) = &command.avatar_id {
             internal_definitions::validate_avatar_id(Some(id))?;
         }

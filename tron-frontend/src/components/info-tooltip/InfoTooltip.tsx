@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
 
 import type { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
@@ -17,20 +16,15 @@ export function InfoTooltip({
   ariaLabel,
   children,
 }: InfoTooltipProps) {
-  const [open, setOpen] = useState(false);
   const title = typeof children === "string" ? children : ariaLabel;
 
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
+    <Tooltip>
       <TooltipTrigger
         type="button"
-        delay={0}
+        delay={500}
         aria-label={ariaLabel}
         title={title}
-        onBlur={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
       >
         <CircleQuestionMark size={14} />
       </TooltipTrigger>

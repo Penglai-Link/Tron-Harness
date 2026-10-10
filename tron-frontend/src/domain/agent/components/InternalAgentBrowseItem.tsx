@@ -12,7 +12,7 @@ export function InternalAgentBrowseItem({ agent, name, disabled, onOpen }: {
   const { t } = useTranslation(["pages"]);
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const builtInLabel = t("pages:workspaceAgents.internal.groups.builtIn", { defaultValue: "Built-in agent" });
-  const action = t(agent.builtIn ? "pages:workspaceAgents.internal.groups.view" : "pages:workspaceAgents.internal.editAgent", { defaultValue: agent.builtIn ? "View {{name}}" : "Edit {{name}}", name });
+  const action = t("pages:workspaceAgents.internal.editAgent", { defaultValue: "Edit {{name}}", name });
   return <div className="relative min-w-0">
     <Button variant="ghost" disabled={disabled} aria-label={agent.builtIn ? `${action} · ${builtInLabel}` : action}
       className="h-auto w-full min-w-0 flex-col gap-2 rounded-xl px-2 py-3 text-center" onClick={onOpen}>

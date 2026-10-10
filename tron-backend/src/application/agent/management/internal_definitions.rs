@@ -1,6 +1,12 @@
 //! Named definitions and per-field platform inheritance.
 use super::*;
 
+pub(super) fn default_main_agent_role_prompt() -> String {
+    crate::domain::prompt::builtin_prompt_text("agent.role.main", "zh-CN")
+        .unwrap_or_default()
+        .to_owned()
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct InternalAgentDefinition {
     pub(super) agent_code: String,
@@ -29,9 +35,9 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         name: "Main Agent".to_string(),
         description: "Primary workspace internal agent with access to platform business tools."
             .to_string(),
-        role_prompt: String::new(),
+        role_prompt: default_main_agent_role_prompt(),
         avatar_id: "robot".into(),
-        group_name: None,
+        group_name: Some("主智能体".into()),
         loop_code: None,
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
         mcp_access_mode: McpAccessMode::AllEnabledServers,

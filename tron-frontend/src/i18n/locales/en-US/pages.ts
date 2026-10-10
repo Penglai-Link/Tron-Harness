@@ -53,7 +53,7 @@ export const pages = {
     "canvasHelp": "Drag ports to connect · Drag canvas to pan",
     "connecting": "Drag to an input port · Escape to cancel",
     connectionErrors: {"cycle": "Connections cannot point to themselves or create a cycle.", "branch": "Branch exits must connect to different nodes.", "edges": "Use unique node IDs and at most 256 connections."},
-    "title": "Loops",
+    "title": "Agent Loop",
     "selection": "Agent Loop",
     "new": "New",
     "refresh": "Refresh",
@@ -289,7 +289,7 @@ export const pages = {
       "sourceCode": "Source"
     }
   },
-  platformData: {"chooseWorkspaces": "Choose workspaces ({{count}})", "confirm": "Confirm", "retry": "Retry", "loadingWorkspaces": "Loading workspaces...", "draftAssignmentHelp": "Confirm your selection, then save the agent to apply workspace access.", "createdAssignmentPending": "Agent created. Save to finish workspace assignment; retry will not create another agent.", "agentDefinitions": "Agent definitions", "agentAuthorization": "Workspace authorization", "agentAuthorizationHelp": "Assign existing agents to workspaces. Knowledge library access follows the agent authorization.", "noAgentDefinitions": "Create an agent definition first.", "workspace": "Workspace", "selectWorkspace": "Select a workspace", "allWorkspaces": "All workspaces", "assign": "Assign workspaces", "assignTitle": "Assign {{name}} to workspaces", "searchWorkspaces": "Search workspaces", "assignmentHelp": "Only selected workspaces can use this item. Clearing a selection and saving revokes access immediately.", "save": "Save", "cancel": "Cancel", "assignedWorkspaces": "Assigned workspaces", "platformCatalog": "Platform catalog", "spaceAssignments": "Workspace configuration", "unassigned": "Unassigned", "builtinAgent": "Built-in main agent, available in all workspaces"},
+  platformData: {"chooseWorkspaces": "Choose workspaces ({{count}})", "confirm": "Confirm", "retry": "Retry", "loadingWorkspaces": "Loading workspaces...", "draftAssignmentHelp": "Confirm your selection, then save the agent to apply workspace access.", "createdAssignmentPending": "Agent created. Save to finish workspace assignment; retry will not create another agent.", "agentDefinitions": "Internal Agents", "agentAuthorization": "Workspace authorization", "agentAuthorizationHelp": "Assign existing agents to workspaces. Knowledge library access follows the agent authorization.", "noAgentDefinitions": "Create an agent definition first.", "workspace": "Workspace", "selectWorkspace": "Select a workspace", "allWorkspaces": "All workspaces", "assign": "Assign workspaces", "assignTitle": "Assign {{name}} to workspaces", "searchWorkspaces": "Search workspaces", "assignmentHelp": "Only selected workspaces can use this item. Clearing a selection and saving revokes access immediately.", "save": "Save", "cancel": "Cancel", "assignedWorkspaces": "Assigned workspaces", "platformCatalog": "Platform catalog", "spaceAssignments": "Workspace configuration", "unassigned": "Unassigned", "builtinAgent": "Built-in main agent, available in all workspaces"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "Chat not found.", "CHAT_SESSION_MUST_BE_ARCHIVED": "Archive the chat first.", "CHAT_SESSION_RUN_ACTIVE": "The chat is running. Try again later.", "CHAT_SESSION_ARCHIVED": "The chat is archived.", "CHAT_SESSION_DELETE_FAILED": "Deletion failed. Retry this item."},
     cancel: "Cancel",
@@ -1851,15 +1851,13 @@ export const pages = {
       },
       disable: "Disable",
       disableLabel: "Disable {{name}}",
-      empty: "No system agents match the current filters.",
+      empty: "No system agents available.",
       enable: "Enable",
       enableLabel: "Enable {{name}}",
       readOnly: "Read only",
-      searchAria: "Search system agents",
-      searchPlaceholder: "Search system agents...",
       title: "System Agents",
     },
-    title: "Agent Management",
+    title: "Agent",
   },
   workspaceAgents: {
     emptyInternalWorkspace: "Select a workspace to manage internal agents.",
@@ -1928,8 +1926,6 @@ export const pages = {
         "empty": "No agents match the current filters.",
         "failed": "Could not load or save groups",
         "builtIn": "Built-in agent",
-        "view": "View {{name}}",
-        "readOnly": "Built-in agent definitions are read-only."
 },
       avatar: {
         label: 'Avatar',

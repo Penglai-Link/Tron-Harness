@@ -91,7 +91,7 @@ import { setAgentKnowledgeLibraries } from "@/domain/knowledge-base/api/knowledg
 import { InternalAgentBrowseItem } from "../components/InternalAgentBrowseItem";
 import { InternalAgentGroupField } from "../components/InternalAgentGroupField";
 import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
-import { groupInternalAgents } from "../model/internalAgentGroups";
+import { groupInternalAgents, internalAgentGroupName } from "../model/internalAgentGroups";
 import { AgentLoopField } from "../components/AgentLoopField";
 
 interface InternalAgentDraft {
@@ -605,7 +605,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     setBusy(`internal-save:${agentCode}`, true);
     setInternalSaveState(agentCode, "saving");
     try {
-      if (!row.builtIn) {
+      if (!row.builtIn || scope === "platform") {
         if (draft.groupName && (row.groupName || "") !== draft.groupName && !catalogGroups.includes(draft.groupName)) await createGroup(draft.groupName);
         if (restoreBaselines[agentCode]) {
           if (dataSource === "api") await resetWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode);
@@ -763,7 +763,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
           <SelectInput aria-label={internalPageT("groups.label", "Group")} className="w-full sm:w-48" value={groupFilter} onValueChange={(value) => setGroupFilter(value || "all")}>
             <SelectItem value="all">{internalPageT("groups.all", "All groups")}</SelectItem>
             <SelectItem value="ungrouped">{internalPageT("groups.ungrouped", "Ungrouped")}</SelectItem>
-            {[...new Set([...catalogGroups, ...internalAgents.flatMap((agent) => agent.groupName ? [agent.groupName] : [])])].sort().map((name) => <SelectItem key={name} value={`group:${name}`}>{name}</SelectItem>)}
+            {[...new Set([...catalogGroups, ...internalAgents.map((agent) => internalAgentGroupName(agent, (item) => translateInternalAgentName(t, item))).filter(Boolean)])].sort().map((name) => <SelectItem key={name} value={`group:${name}`}>{name}</SelectItem>)}
           </SelectInput>
           {allowCreate ? <div className="sm:ml-auto"><CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} allowWorkspaceAssignment={scope === "platform"} onCreated={refreshCreatedAgent} /></div> : null}
         </div>
@@ -783,7 +783,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         {agents.map((agent) => {
           const draft = internalDrafts[agent.agentCode] ?? draftFromRecord(agent);
           const isSaving = isBusy(`internal-save:${agent.agentCode}`);
-          const editingDisabled = Boolean(agent.builtIn) || isSaving || isBusy(`internal-reset:${agent.agentCode}`) || loading;
+          const editingDisabled = (Boolean(agent.builtIn) && scope !== "platform") || isSaving || isBusy(`internal-reset:${agent.agentCode}`) || loading;
           const internalBusy = isSaving || isBusy(`internal-reset:${agent.agentCode}`) || loading;
           const saveState = internalSaveStates[agent.agentCode] ?? "idle";
 
@@ -819,7 +819,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
               }}>
               <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl" showCloseButton={!internalBusy} closeLabel={internalPageT("definition.close", "Close")}>
               <DialogHeader>
-                <DialogTitle>{internalPageT(agent.builtIn ? "groups.view" : "editAgent", agent.builtIn ? "View {{name}}" : "Edit {{name}}", { name: translateInternalAgentName(t, agent) })}</DialogTitle>
+                <DialogTitle>{internalPageT("editAgent", "Edit {{name}}", { name: translateInternalAgentName(t, agent) })}</DialogTitle>
                 <DialogDescription>{internalPageT("agentCode", "{{code}}", { code: agent.agentCode })}</DialogDescription>
               </DialogHeader>
               <div className="tron-scrollbar min-h-0 overflow-y-auto px-1 pb-1">
@@ -834,8 +834,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                 </div> : null}
 
               <div className="mt-3 space-y-3">
-                {agent.builtIn ? <p className="text-sm text-[var(--color-on-surface-variant)]">{internalPageT("groups.readOnly", "Built-in agent definitions are read-only.")}</p> : null}
-                {agent.builtIn ? <AgentAvatar avatarId={draft.avatarId} className="size-24 rounded-full" /> : <AgentAvatarPicker value={draft.avatarId} disabled={editingDisabled} onChange={(avatarId) => setInternalDraft(agent.agentCode, { avatarId })} />}
+                {agent.builtIn && scope !== "platform" ? <AgentAvatar avatarId={draft.avatarId} className="size-24 rounded-full" /> : <AgentAvatarPicker value={draft.avatarId} disabled={editingDisabled} onChange={(avatarId) => setInternalDraft(agent.agentCode, { avatarId })} />}
                 <AgentLoopField value={draft.loopCode} disabled={editingDisabled} onChange={(loopCode) => setInternalDraft(agent.agentCode, { loopCode })} />
                 <Field label={internalPageT("definition.name", "Name")}>
                   <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={editingDisabled} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
@@ -1011,7 +1010,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
               </div>
               <DialogFooter>
                 <Button variant="outline" disabled={internalBusy} onClick={() => { setEditingAgentCode(null); setAssignmentDialog(null); }}>{internalPageT("definition.cancel", "Cancel")}</Button>
-                {(!agent.builtIn || (scope === "platform" && agent.agentCode !== "main-agent")) ? <Button disabled={internalBusy || !draft.name.trim() || (!hasDraftChanges(agent, draft) && !knowledgeDrafts[agent.agentCode] && !workspaceDrafts[agent.agentCode] && !restoreBaselines[agent.agentCode])} onClick={() => void handleSaveInternalAgent(agent.agentCode)}>{isSaving ? internalPageT("actions.saving", "Saving...") : internalPageT("actions.save", "Save")}</Button> : null}
+                {(!agent.builtIn || scope === "platform") ? <Button disabled={internalBusy || !draft.name.trim() || (!hasDraftChanges(agent, draft) && !knowledgeDrafts[agent.agentCode] && !workspaceDrafts[agent.agentCode] && !restoreBaselines[agent.agentCode])} onClick={() => void handleSaveInternalAgent(agent.agentCode)}>{isSaving ? internalPageT("actions.saving", "Saving...") : internalPageT("actions.save", "Save")}</Button> : null}
               </DialogFooter>
               </DialogContent>
               </Dialog> : null}

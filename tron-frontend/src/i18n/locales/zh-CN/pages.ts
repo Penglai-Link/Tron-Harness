@@ -53,7 +53,7 @@ export const pages = {
     "canvasHelp": "拖动端口连线 · 拖动画布平移",
     "connecting": "拖到输入端口 · Esc 取消",
     connectionErrors: {"cycle": "连线不能指向自身或形成循环。", "branch": "分支的两个出口须连接不同节点。", "edges": "节点编码须唯一，连线最多 256 条。"},
-    "title": "Loop 管理",
+    "title": "智能体循环",
     "selection": "Agent Loop",
     "new": "创建",
     "refresh": "刷新",
@@ -289,7 +289,7 @@ export const pages = {
       "sourceCode": "来源"
     }
   },
-  platformData: {"chooseWorkspaces": "选择空间（{{count}}）", "confirm": "确认", "retry": "重试", "loadingWorkspaces": "正在加载空间…", "draftAssignmentHelp": "确认选择后，保存智能体才会更新空间使用权限。", "createdAssignmentPending": "智能体已创建，请保存以完成空间授权；重试不会重复创建。", "agentDefinitions": "智能体定义", "agentAuthorization": "空间授权", "agentAuthorizationHelp": "选择已定义的智能体分配给空间；知识库跟随智能体授权，无需单独分配给空间。", "noAgentDefinitions": "请先创建智能体定义。", "workspace": "空间", "selectWorkspace": "请选择空间", "allWorkspaces": "全部空间", "assign": "分配空间", "assignTitle": "分配「{{name}}」给空间", "searchWorkspaces": "搜索空间", "assignmentHelp": "只有选中的空间可以使用。取消勾选并保存后，立即撤销使用权限。", "save": "保存", "cancel": "取消", "assignedWorkspaces": "已分配空间", "platformCatalog": "平台目录", "spaceAssignments": "空间配置", "unassigned": "未分配", "builtinAgent": "内置主智能体，所有空间可用"},
+  platformData: {"chooseWorkspaces": "选择空间（{{count}}）", "confirm": "确认", "retry": "重试", "loadingWorkspaces": "正在加载空间…", "draftAssignmentHelp": "确认选择后，保存智能体才会更新空间使用权限。", "createdAssignmentPending": "智能体已创建，请保存以完成空间授权；重试不会重复创建。", "agentDefinitions": "内部智能体", "agentAuthorization": "空间授权", "agentAuthorizationHelp": "选择已定义的智能体分配给空间；知识库跟随智能体授权，无需单独分配给空间。", "noAgentDefinitions": "请先创建智能体定义。", "workspace": "空间", "selectWorkspace": "请选择空间", "allWorkspaces": "全部空间", "assign": "分配空间", "assignTitle": "分配「{{name}}」给空间", "searchWorkspaces": "搜索空间", "assignmentHelp": "只有选中的空间可以使用。取消勾选并保存后，立即撤销使用权限。", "save": "保存", "cancel": "取消", "assignedWorkspaces": "已分配空间", "platformCatalog": "平台目录", "spaceAssignments": "空间配置", "unassigned": "未分配", "builtinAgent": "内置主智能体，所有空间可用"},
   archivedChats: {
     errors: {"CHAT_SESSION_NOT_FOUND": "会话不存在。", "CHAT_SESSION_MUST_BE_ARCHIVED": "请先归档会话。", "CHAT_SESSION_RUN_ACTIVE": "会话正在运行，稍后重试。", "CHAT_SESSION_ARCHIVED": "会话已归档。", "CHAT_SESSION_DELETE_FAILED": "删除失败，可重试此项。"},
     cancel: "取消",
@@ -1821,15 +1821,13 @@ export const pages = {
       },
       disable: "禁用",
       disableLabel: "禁用 {{name}}",
-      empty: "当前筛选下没有匹配的系统智能体。",
+      empty: "暂无系统智能体。",
       enable: "启用",
       enableLabel: "启用 {{name}}",
       readOnly: "只读",
-      searchAria: "搜索系统智能体",
-      searchPlaceholder: "搜索系统智能体...",
       title: "系统智能体",
     },
-    title: "智能体管理",
+    title: "智能体",
   },
   workspaceAgents: {
     emptyInternalWorkspace: "请选择一个工作区来管理内部智能体。",
@@ -1899,8 +1897,6 @@ export const pages = {
         "empty": "没有符合条件的智能体",
         "failed": "分组加载或保存失败",
         "builtIn": "内置智能体",
-        "view": "查看 {{name}}",
-        "readOnly": "内置智能体定义为只读。"
 },
       avatar: {
         label: '头像',

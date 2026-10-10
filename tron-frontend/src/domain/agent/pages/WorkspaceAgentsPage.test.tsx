@@ -109,7 +109,7 @@ beforeEach(() => {
   fixture.createGroup.mockImplementation(async (name: string) => { fixture.groups.push(name.trim()); return name.trim(); });
   fixture.storedTools = [];
   fixture.record = {
-    agentCode: "main-agent", name: "Main Agent", description: "Fixture", rolePrompt: "", platformDefined: true,
+    agentCode: "main-agent", name: "Main Agent", description: "Fixture", rolePrompt: "", groupName: "主智能体", platformDefined: true,
     mcpAccessMode: "disabled", toolAssignmentMode: "all_platform_tools", toolExposureMode: "direct_list",
     expandedDomainPersistenceMode: "sticky_expanded", maxSteps: 10, maxToolCalls: 10, maxParallelToolCalls: 1,
     selectedServerCodes: [], selectedToolCodes: ["bash.exec", "fs.read_text"], source: "platform_default",
@@ -361,7 +361,7 @@ describe("internal agent cards and manual editing", () => {
   });
 });
 
-describe("internal agent groups and built-in read-only view", () => {
+describe("internal agent groups and built-in platform editing", () => {
   it("shows collapsible groups with counts and filters by group or search", async () => {
     fixture.record.groupName = "Engineering";
     fixture.additionalRecords = [
@@ -416,27 +416,28 @@ describe("internal agent groups and built-in read-only view", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(fixture.patchDefinition).toHaveBeenLastCalledWith("$platform", "main-agent", { groupName: "" }));
   });
-  it("shows an accessible shield and a read-only built-in view", async () => {
+  it("shows an accessible shield and allows editing built-in platform definitions", async () => {
     fixture.record.builtIn = true;
     render(<WorkspaceAgentsPage category="internal" scope="platform" />);
     const shield = await screen.findByRole("button", { name: "Built-in agent" });
     expect(shield.getAttribute("aria-label")).toBe("Built-in agent");
-    fireEvent.click(screen.getByRole("button", { name: "View Main Agent · Built-in agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Main Agent · Built-in agent" }));
     const dialog = await screen.findByRole("dialog");
-    expect((within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement).disabled).toBe(true);
-    expect((within(dialog).getByRole("combobox", { name: "Group" }) as HTMLSelectElement).disabled).toBe(true);
-    expect(within(dialog).queryByRole("button", { name: "Save" })).toBeNull();
+    expect((within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement).disabled).toBe(false);
+    expect((within(dialog).getByRole("combobox", { name: "Group" }) as HTMLSelectElement).disabled).toBe(false);
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Edited Main Agent" } });
+    save();
+    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledWith("$platform", "main-agent", { name: "Edited Main Agent" }));
     fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
-    expect(fixture.patchDefinition).not.toHaveBeenCalled();
     expect(fixture.patch).not.toHaveBeenCalled();
   });
-  it("keeps built-in definitions read-only while saving independent platform workspace grants", async () => {
+  it("allows built-in definitions and saves their platform workspace grants", async () => {
     fixture.record = { ...fixture.record, agentCode: "builtin-reviewer", builtIn: true };
     render(<WorkspaceAgentsPage category="internal" scope="platform" />);
-    fireEvent.click(await screen.findByRole("button", { name: "View Main Agent · Built-in agent" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Main Agent · Built-in agent" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole<HTMLInputElement>("textbox", { name: "Name" }).disabled).toBe(true);
-    expect(within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Group" }).disabled).toBe(true);
+    expect(within(dialog).getByRole<HTMLInputElement>("textbox", { name: "Name" }).disabled).toBe(false);
+    expect(within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Group" }).disabled).toBe(false);
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     save();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

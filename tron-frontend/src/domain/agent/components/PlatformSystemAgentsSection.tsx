@@ -1,8 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   RefreshCcw,
@@ -27,7 +23,6 @@ import type {
   PlatformSystemAgentRecord,
 } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { SearchField } from "@/components/search-field";
 import {
   useLocaleFormatters,
 } from "@/shared";
@@ -56,29 +51,12 @@ export function PlatformSystemAgentsSection() {
   const { formatDateTime, formatNumber } = useLocaleFormatters();
   const dataSource = getServiceDataSource("agent");
   const [systemAgents, setSystemAgents] = useState<PlatformSystemAgentRecord[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const [scanning, setScanning] = useState(false);
   const [rowBusyCode, setRowBusyCode] = useState("");
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:settingsAgents.${key}`, { defaultValue, ...options })
   );
 
-  const filteredAgents = useMemo(() => {
-    const normalizedSearch = searchQuery.trim().toLowerCase();
-    if (!normalizedSearch) {
-      return systemAgents;
-    }
-
-    return systemAgents.filter((record) => (
-      [
-        record.name,
-        record.agentCode,
-        record.description,
-        record.source,
-        record.status,
-      ].join(" ").toLowerCase().includes(normalizedSearch)
-    ));
-  }, [searchQuery, systemAgents]);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const selectedAgent = systemAgents.find((agent) => agent.agentCode === selectedCode);
   async function loadPage() {
@@ -154,7 +132,6 @@ export function PlatformSystemAgentsSection() {
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-base font-semibold">{pageT("table.title", "System Agents")}</h2>
       <div className="flex flex-wrap items-center gap-3">
-        <SearchField ariaLabel={pageT("table.searchAria", "Search system agents")} className="w-full sm:w-60" placeholder={pageT("table.searchPlaceholder", "Search system agents...")} value={searchQuery} onChange={setSearchQuery} />
         <Button variant="secondary" disabled={scanning || Boolean(rowBusyCode)} aria-busy={scanning} onClick={() => void handleScan()}>
           <RefreshCcw size={16} aria-hidden="true" />
           {scanning ? pageT("actions.scanning", "Scanning...") : pageT("actions.scan", "Scan")}
@@ -162,14 +139,14 @@ export function PlatformSystemAgentsSection() {
       </div>
     </div>
     <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
-      {filteredAgents.map((agent) => <Button key={agent.agentCode} variant="ghost" aria-label={pageT("table.manageLabel", "Manage {{name}}", { name: agent.name })}
+      {systemAgents.map((agent) => <Button key={agent.agentCode} variant="ghost" aria-label={pageT("table.manageLabel", "Manage {{name}}", { name: agent.name })}
         className="group h-auto min-w-0 flex-col gap-2 rounded-xl px-2 py-4 text-center whitespace-normal" onClick={() => setSelectedCode(agent.agentCode)}>
         <span className="transition-transform duration-150 motion-reduce:transition-none group-hover:scale-105"><SystemAgentAvatar code={agent.agentCode} name={agent.name} /></span>
         <span className="block w-full truncate text-sm font-medium">{agent.name}</span>
         <span className="block w-full truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{agent.agentCode}</span>
       </Button>)}
     </div>
-    {!filteredAgents.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("table.empty", "No system agents match the current filters.")}</p> : null}
+    {!systemAgents.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("table.empty", "No system agents available.")}</p> : null}
     {selectedAgent ? <Dialog disablePointerDismissal open onOpenChange={(open, details) => {
       if (details.reason === "outside-press" || rowBusyCode === selectedAgent.agentCode) { details.cancel(); return; }
       if (!open) setSelectedCode(null);

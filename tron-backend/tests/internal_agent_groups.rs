@@ -139,7 +139,7 @@ fn internal_agent_groups_persist_and_follow_definition_inheritance_without_chang
     let agents = service(&config.database_url);
     assert_eq!(
         agents.list_internal_agent_groups("").unwrap(),
-        vec!["Empty group", "Engineering"]
+        vec!["Empty group", "Engineering", "主智能体"]
     );
     let local = agents
         .workspace_internal_agent_policy("TRON_CORE", "local-grouped")
@@ -153,7 +153,7 @@ fn internal_agent_groups_persist_and_follow_definition_inheritance_without_chang
     );
 }
 #[test]
-fn internal_agent_groups_validate_names_and_builtin_definitions_are_frozen_but_policies_are_independent()
+fn internal_agent_groups_validate_names_and_builtin_definitions_are_platform_editable()
  {
     let config = common::prepared_config(AppConfig::default());
     let agents = service(&config.database_url);
@@ -174,10 +174,9 @@ fn internal_agent_groups_validate_names_and_builtin_definitions_are_frozen_but_p
         },
         UpdateWorkspaceInternalAgentDefinitionCommand::default(),
     ] {
-        assert!(matches!(
-            agents.update_platform_internal_agent_definition("main-agent", command.clone()),
-            Err(AgentManagementError::BuiltinAgentReadOnly)
-        ));
+        agents
+            .update_platform_internal_agent_definition("main-agent", command.clone())
+            .unwrap();
         assert!(matches!(
             agents.update_internal_agent_definition("TRON_CORE", "MAIN-AGENT", command),
             Err(AgentManagementError::BuiltinAgentReadOnly)

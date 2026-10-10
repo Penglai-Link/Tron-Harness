@@ -15,6 +15,7 @@ import type {
   WorkspaceSystemAgentRecord,
 } from "@/domain/agent/model";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
+import { agentRolePromptSeeds } from "@/domain/prompt/mock/agentRolePromptSeeds";
 import { listPlatformMcpServersMock, listEffectiveEnabledWorkspaceMcpServerCodesMock } from "@/domain/mcp/mock";
 
 const scanBaseMs = Date.parse("2026-05-29T09:30:00Z");
@@ -237,10 +238,11 @@ type WorkspaceInternalAgentSeed = {
 
 const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
   {
-    rolePrompt: "",
+    rolePrompt: agentRolePromptSeeds.find((seed) => seed.promptCode === "ROLE_MAIN_AGENT")?.translations["zh-CN"].promptBody ?? "",
     loopCode: "",
     agentCode: "main-agent",
     description: "Primary platform internal agent used for workspace chat runtime policy.",
+    groupName: "主智能体",
     expandedDomainPersistenceMode: "sticky_expanded",
     maxSteps: 100,
     maxToolCalls: 100,
