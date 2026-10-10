@@ -32,7 +32,7 @@ pub struct CreateInternalAgentResponse {
     agent_code: String,
     name: String,
     role_prompt: String,
-    loop_code: String,
+    loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
 }
@@ -53,7 +53,7 @@ pub struct UpdateInternalAgentDefinitionResponse {
     agent_code: String,
     name: String,
     role_prompt: String,
-    loop_code: String,
+    loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
 }

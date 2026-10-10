@@ -23,7 +23,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   const [open, setOpen] = useState(false);
   const [agentCode, setAgentCode] = useState("");
   const [name, setName] = useState("");
-  const [loopCode, setLoopCode] = useState("builtin.react-loop");
+  const [loopCode, setLoopCode] = useState("");
   const [rolePrompt, setRolePrompt] = useState("");
   const [groupName, setGroupName] = useState("");
   const { groups, create: createGroup } = useInternalAgentGroups(workspaceCode);
@@ -40,6 +40,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
     if (!codeValid || !name.trim() || saving) return;
     setSaving(true);
     try {
+      if (!loopCode) throw new Error(text("loopRequired", "Select an agent loop"));
       const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId, groupName };
       // Keep the created identity if assignment fails so retry cannot create twice.
       if (!createdAgentCode) {
@@ -58,7 +59,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
       setAgentCode("");
       setName("");
       setRolePrompt("");
-      setLoopCode("builtin.react-loop");
+      setLoopCode("");
       setAvatarId("robot");
       setGroupName("");
       setWorkspaceCodes([]);
@@ -72,7 +73,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   }
 
   return <>
-    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setRolePrompt(""); setAvatarId("robot"); setLoopCode("builtin.react-loop"); setWorkspaceCodes([]); setGroupName(""); setOpen(true); }}>{text("create", "New")}</Button>
+    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setRolePrompt(""); setAvatarId("robot"); setLoopCode(""); setWorkspaceCodes([]); setGroupName(""); setOpen(true); }}>{text("create", "New")}</Button>
     <Dialog disablePointerDismissal open={open} onOpenChange={(next, details) => { if (details.reason === "outside-press" || saving) { details.cancel(); return; } setOpen(next); }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl" closeLabel={text("close", "Close")} showCloseButton={!saving}>
         <DialogHeader>
@@ -95,7 +96,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
           <AgentRolePromptField workspaceCode={workspaceCode} rows={8} disabled={definitionDisabled} value={rolePrompt} onChange={setRolePrompt} />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>{text("cancel", "Cancel")}</Button>
-            <Button type="submit" disabled={saving || !codeValid || !name.trim()}>{saving ? text("saving", "Saving...") : createdAgentCode ? t("pages:platformData.save") : text("create", "New")}</Button>
+            <Button type="submit" disabled={saving || !codeValid || !name.trim() || !loopCode}>{saving ? text("saving", "Saving...") : createdAgentCode ? t("pages:platformData.save") : text("create", "New")}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

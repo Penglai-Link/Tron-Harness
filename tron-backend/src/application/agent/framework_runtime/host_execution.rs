@@ -164,7 +164,12 @@ impl FrameworkHost {
                     )
                     .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
                 let design = management
-                    .loop_design(&policy.loop_code)
+                    .loop_design(
+                        policy
+                            .loop_code
+                            .as_deref()
+                            .ok_or_else(|| AgentError::InvalidConfiguration("agent loop is not configured".into()))?,
+                    )
                     .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
                 request.extensions.insert(design);
             }

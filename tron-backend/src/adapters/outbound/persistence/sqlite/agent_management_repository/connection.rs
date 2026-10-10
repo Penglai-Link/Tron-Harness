@@ -106,6 +106,10 @@ impl<'a> SqliteAgentManagementRepositorySql<'a> {
             .connection
             .execute_batch(super::super::migrations::BUILTIN_WORKFLOW_LOOPS_MIGRATION)
             .map_err(storage_error)?;
+        repository
+            .connection
+            .execute_batch(super::super::migrations::REMOVE_BUILTIN_AGENT_LOOPS_MIGRATION)
+            .map_err(storage_error)?;
         repository.connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS platform_tool_permissions(tool_code TEXT PRIMARY KEY, config_json TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS platform_discovered_tools(tool_code TEXT PRIMARY KEY, config_json TEXT NOT NULL);"

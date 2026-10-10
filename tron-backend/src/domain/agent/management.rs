@@ -68,7 +68,7 @@ pub struct WorkspaceInternalAgentDefinition {
     pub agent_code: String,
     pub name: Option<String>,
     pub role_prompt: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loop_code: Option<String>,
     #[serde(default)]
     pub avatar_id: Option<String>,
@@ -84,8 +84,8 @@ pub struct PlatformInternalAgentConfig {
     pub agent_code: String,
     pub name: String,
     pub role_prompt: String,
-    #[serde(default = "default_loop_code")]
-    pub loop_code: String,
+    #[serde(default)]
+    pub loop_code: Option<String>,
     #[serde(default = "default_avatar_id")]
     pub avatar_id: String,
     #[serde(default)]
@@ -129,8 +129,8 @@ pub struct InternalAgentToolPolicy {
     pub name: String,
     pub description: String,
     pub role_prompt: String,
-    #[serde(default = "default_loop_code")]
-    pub loop_code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loop_code: Option<String>,
     #[serde(default = "default_avatar_id")]
     pub avatar_id: String,
     #[serde(default)]
@@ -321,10 +321,6 @@ pub struct ToolCatalogRecord {
     pub module_owner: String,
     pub availability_state: ToolAvailabilityState,
     pub sample_result_summary: String,
-}
-
-fn default_loop_code() -> String {
-    super::loop_design::REACT_LOOP_CODE.into()
 }
 
 fn default_avatar_id() -> String {

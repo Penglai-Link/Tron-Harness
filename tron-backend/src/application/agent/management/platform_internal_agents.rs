@@ -46,7 +46,7 @@ impl AgentManagementService {
         config.name = command.name.trim().to_owned();
         config.role_prompt = command.role_prompt;
         config.avatar_id = internal_definitions::validate_avatar_id(command.avatar_id.as_deref())?;
-        config.loop_code = self.validate_loop_selection(command.loop_code.as_deref())?;
+        config.loop_code = Some(self.validate_loop_selection(command.loop_code.as_deref())?);
         self.repository()
             .insert_platform_internal_agent_config(&config)?;
         Ok(platform_view(config, &self.tool_codes()))
@@ -96,7 +96,7 @@ impl AgentManagementService {
                 config.avatar_id = id;
             }
             if let Some(loop_code) = command.loop_code {
-                config.loop_code = loop_code;
+                config.loop_code = Some(loop_code);
             }
             if let Some(name) = command.name {
                 config.name = name.trim().to_owned();

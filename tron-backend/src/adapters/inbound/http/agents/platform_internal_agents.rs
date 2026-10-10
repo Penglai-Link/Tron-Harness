@@ -60,7 +60,7 @@ pub struct PlatformInternalAgentView {
     name: String,
     description: String,
     role_prompt: String,
-    loop_code: String,
+    loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
     platform_defined: bool,

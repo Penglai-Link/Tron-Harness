@@ -64,7 +64,7 @@ export interface WorkspaceInternalAgentRecord {
   name: string;
   description: string;
   rolePrompt: string;
-  loopCode?: string;
+  loopCode?: string | null;
   avatarId?: string;
   groupName?: string | null;
   platformDefined: boolean;
@@ -85,7 +85,7 @@ export interface CreateInternalAgentPayload {
   agentCode: string;
   name: string;
   rolePrompt: string;
-  loopCode?: string;
+  loopCode?: string | null;
   avatarId?: string;
   groupName?: string | null;
 }
@@ -93,7 +93,7 @@ export interface CreateInternalAgentPayload {
 export interface UpdateInternalAgentDefinitionPayload {
   name?: string;
   rolePrompt?: string;
-  loopCode?: string;
+  loopCode?: string | null;
   avatarId?: string;
   groupName?: string | null;
 }

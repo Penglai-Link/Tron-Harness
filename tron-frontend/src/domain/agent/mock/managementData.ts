@@ -238,7 +238,7 @@ type WorkspaceInternalAgentSeed = {
 const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
   {
     rolePrompt: "",
-    loopCode: "builtin.react-loop",
+    loopCode: "",
     agentCode: "main-agent",
     description: "Primary platform internal agent used for workspace chat runtime policy.",
     expandedDomainPersistenceMode: "sticky_expanded",
@@ -474,7 +474,7 @@ export function createWorkspaceInternalAgentMock(workspaceCode: string, payload:
     throw new Error("Agent code is already in use; choose another code");
   }
   const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
-  const agent = { ...workspaceInternalAgentSeed[0], ...payload, groupName, agentCode, loopCode: payload.loopCode ?? "builtin.react-loop", name: payload.name.trim(), description: "Workspace internal agent." };
+  const agent = { ...workspaceInternalAgentSeed[0], ...payload, groupName, agentCode, loopCode: payload.loopCode ?? "", name: payload.name.trim(), description: "Workspace internal agent." };
   workspaceInternalAgentDefinitions[workspaceCode] = [...(workspaceInternalAgentDefinitions[workspaceCode] ?? []), agent];
   return buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode);
 }

@@ -71,8 +71,8 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
         &app,
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/loop-agent/definition",
-        Some(json!({"loopCode":"builtin.react-loop"})),
-        StatusCode::OK,
+        Some(json!({"loopCode":null})),
+        StatusCode::NOT_FOUND,
     )
     .await;
     let mut update = design();
@@ -130,7 +130,7 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
         StatusCode::OK,
     )
     .await;
-    assert_eq!(overridden["data"]["loopCode"], "builtin.react-loop");
+    assert_eq!(overridden["data"]["loopCode"], "review-flow");
     let reset = call(
         &restarted,
         Method::POST,
@@ -144,8 +144,8 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
         &restarted,
         Method::PATCH,
         "/api/v1/agents/registry/internal/loop-agent/definition",
-        Some(json!({"loopCode":"builtin.react-loop"})),
-        StatusCode::OK,
+        Some(json!({"loopCode":null})),
+        StatusCode::NOT_FOUND,
     )
     .await;
     call(
@@ -154,14 +154,6 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
         "/api/v1/agents/loops/review-flow",
         None,
         StatusCode::OK,
-    )
-    .await;
-    call(
-        &restarted,
-        Method::DELETE,
-        "/api/v1/agents/loops/builtin.react-loop",
-        None,
-        StatusCode::CONFLICT,
     )
     .await;
 }
@@ -244,7 +236,7 @@ async fn loop_rejects_invalid_graphs_references_and_duplicate_identity() {
 }
 
 #[tokio::test]
-async fn builtin_workflows_are_immutable_and_bindable_at_both_scopes() {
+async fn loop_catalog_is_user_managed_and_has_no_builtin_definitions() {
     let config = common::prepared_config(AppConfig::default());
     let app = common::app_with_state_setup(config.clone(), |s| {
         s.knowledge_bases.stop_ingestion_workers()
@@ -257,99 +249,7 @@ async fn builtin_workflows_are_immutable_and_bindable_at_both_scopes() {
         StatusCode::OK,
     )
     .await;
-    assert_eq!(catalog["data"].as_array().unwrap().len(), 3);
-    for (index, code) in ["builtin.review-workflow", "builtin.analysis-dag"]
-        .iter()
-        .enumerate()
-    {
-        let builtin = catalog["data"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|d| d["loopCode"] == *code)
-            .unwrap();
-        let mut copy = builtin.clone();
-        copy["loopCode"] = json!(format!("builtin-copy-{index}"));
-        copy.as_object_mut().unwrap().remove("version");
-        copy.as_object_mut().unwrap().remove("updatedAt");
-        // A custom copy goes through the same graph/Framework validation as any authored loop.
-        call(
-            &app,
-            Method::POST,
-            "/api/v1/agents/loops",
-            Some(copy.clone()),
-            StatusCode::OK,
-        )
-        .await;
-        copy["loopCode"] = json!(code);
-        call(
-            &app,
-            Method::POST,
-            "/api/v1/agents/loops",
-            Some(copy.clone()),
-            StatusCode::CONFLICT,
-        )
-        .await;
-        copy.as_object_mut().unwrap().remove("loopCode");
-        copy["expectedVersion"] = json!(1);
-        call(
-            &app,
-            Method::PUT,
-            &format!("/api/v1/agents/loops/{code}"),
-            Some(copy),
-            StatusCode::CONFLICT,
-        )
-        .await;
-        call(
-            &app,
-            Method::DELETE,
-            &format!("/api/v1/agents/loops/{code}"),
-            None,
-            StatusCode::CONFLICT,
-        )
-        .await;
-        let agent_code = format!("builtin-agent-{index}");
-        let agent = call(&app, Method::POST, "/api/v1/agents/registry/internal", Some(json!({"agentCode":agent_code,"name":"Builtin agent","rolePrompt":"Role","loopCode":code})), StatusCode::OK).await;
-        assert_eq!(agent["data"]["loopCode"], *code);
-        call(
-            &app,
-            Method::PUT,
-            &format!("/api/v1/agents/registry/{agent_code}/workspace-grants"),
-            Some(json!({"workspaceCodes":["TRON_CORE"]})),
-            StatusCode::OK,
-        )
-        .await;
-        let policy = call(
-            &app,
-            Method::GET,
-            &format!("/api/v1/agents/workspaces/TRON_CORE/internal/{agent_code}"),
-            None,
-            StatusCode::OK,
-        )
-        .await;
-        assert_eq!(policy["data"]["loopCode"], *code);
-        let other = if index == 0 {
-            "builtin.analysis-dag"
-        } else {
-            "builtin.review-workflow"
-        };
-        call(
-            &app,
-            Method::PATCH,
-            &format!("/api/v1/agents/workspaces/TRON_CORE/internal/{agent_code}/definition"),
-            Some(json!({"loopCode":other})),
-            StatusCode::OK,
-        )
-        .await;
-        call(
-            &app,
-            Method::PATCH,
-            &format!("/api/v1/agents/registry/internal/{agent_code}/definition"),
-            Some(json!({"loopCode":other})),
-            StatusCode::OK,
-        )
-        .await;
-    }
+    assert!(catalog["data"].as_array().unwrap().is_empty());
     let restarted =
         common::app_with_state_setup(config, |s| s.knowledge_bases.stop_ingestion_workers());
     let policy = call(
@@ -360,5 +260,5 @@ async fn builtin_workflows_are_immutable_and_bindable_at_both_scopes() {
         StatusCode::OK,
     )
     .await;
-    assert_eq!(policy["data"]["loopCode"], "builtin.analysis-dag");
+    assert!(policy["data"].get("loopCode").is_none());
 }

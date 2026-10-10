@@ -28,7 +28,6 @@ export interface LoopDesign {
   maxParallelNodes: number;
   updatedAt: number;
 }
-export const REACT_LOOP_CODE = "builtin.react-loop";
 export const LOOP_DESIGNS_CHANGED = "tron:loop-designs-changed";
 export function newLoopDesign(): LoopDesign {
   return {

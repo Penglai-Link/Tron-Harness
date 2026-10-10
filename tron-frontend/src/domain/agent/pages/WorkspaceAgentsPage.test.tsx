@@ -45,7 +45,7 @@ vi.mock("@/domain/agent/api", () => ({
   disableWorkspaceSystemAgent: vi.fn(),
   enableWorkspaceSystemAgent: vi.fn(),
 }));
-vi.mock("@/domain/agent/hooks/useLoopDesignList", () => ({ useLoopDesignList: () => ({ designs: [{loopCode:"builtin.react-loop",name:"ReAct",kind:"React"},{loopCode:"review-flow",name:"Review",kind:"Workflow"}], loading:false,error:null }) }));
+vi.mock("@/domain/agent/hooks/useLoopDesignList", () => ({ useLoopDesignList: () => ({ designs: [{loopCode:"review-flow",name:"Review",kind:"Workflow"}], loading:false,error:null }) }));
 vi.mock("@/domain/mcp", () => ({ fetchWorkspaceMcpServers: vi.fn(async () => []), fetchPlatformMcpServers: vi.fn(async () => []), listPlatformMcpServersMock: vi.fn(() => []), listWorkspaceMcpServersMock: vi.fn(() => []) }));
 vi.mock("@/shared/api/serviceConfig", () => ({ getServiceDataSource: () => "api" }));
 vi.mock("react-i18next", async () => {
@@ -301,7 +301,7 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.owl" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "builtin.react-loop", avatarId: "owl", groupName: "" }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "review-flow", avatarId: "owl", groupName: "" }));
     expect(await screen.findByRole("button", { name: "Edit Reviewer" })).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(fixture.workspaceGrants).toHaveBeenCalledWith("reviewer", ["TRON_CORE"]);

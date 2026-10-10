@@ -7,7 +7,7 @@ pub(super) struct InternalAgentDefinition {
     pub(super) name: String,
     pub(super) description: String,
     pub(super) role_prompt: String,
-    pub(super) loop_code: String,
+    pub(super) loop_code: Option<String>,
     pub(super) avatar_id: String,
     pub(super) group_name: Option<String>,
     pub(super) tool_assignment_mode: ToolAssignmentMode,
@@ -32,7 +32,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         role_prompt: String::new(),
         avatar_id: "robot".into(),
         group_name: None,
-        loop_code: crate::domain::agent::loop_design::REACT_LOOP_CODE.into(),
+        loop_code: None,
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
         mcp_access_mode: McpAccessMode::AllEnabledServers,
         tool_exposure_mode: ToolExposureMode::DomainDiscovery,
@@ -134,7 +134,7 @@ impl AgentManagementService {
                     definition.name = name;
                 }
                 if let Some(code) = record.loop_code {
-                    definition.loop_code = code;
+                    definition.loop_code = Some(code);
                 }
                 if let Some(prompt) = record.role_prompt {
                     definition.role_prompt = prompt;
@@ -145,9 +145,7 @@ impl AgentManagementService {
                 definition.name = record.name.unwrap_or_default();
                 definition.description = "Workspace internal agent.".into();
                 definition.role_prompt = record.role_prompt.unwrap_or_default();
-                definition.loop_code = record
-                    .loop_code
-                    .unwrap_or_else(|| crate::domain::agent::loop_design::REACT_LOOP_CODE.into());
+                definition.loop_code = record.loop_code;
                 definition.avatar_id = record.avatar_id.unwrap_or_else(|| "robot".into());
                 definition.group_name = record.group_name.filter(|name| !name.is_empty());
                 definition.platform_defined = false;

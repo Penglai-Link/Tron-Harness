@@ -2,14 +2,13 @@ import { useTranslation } from "react-i18next";
 import { Field, SelectInput } from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
 import { useLoopDesignList } from "../hooks/useLoopDesignList";
-import { REACT_LOOP_CODE } from "../model/LoopModel";
 import { loopName } from "../model/builtinLoops";
 export function AgentLoopField({
   value,
   onChange,
   disabled,
 }: {
-  value?: string;
+  value?: string | null;
   onChange: (code: string) => void;
   disabled?: boolean;
 }) {
@@ -20,17 +19,17 @@ export function AgentLoopField({
       <SelectInput
         aria-label={t("agentLoops.selection", { defaultValue: "Agent Loop" })}
         disabled={disabled || loading || Boolean(error)}
-        value={value || REACT_LOOP_CODE}
+        value={value || ""}
         onValueChange={(code) => {
           if (code) onChange(code);
         }}
       >
-        {(designs.length
-          ? designs
-          : [{ loopCode: REACT_LOOP_CODE, name: "ReAct", kind: "React" }]
-        ).map((d) => (
+        <SelectItem value="" disabled>
+          {t("agentLoops.selectPlaceholder", { defaultValue: "Select an agent loop" })}
+        </SelectItem>
+        {designs.map((d) => (
           <SelectItem key={d.loopCode} value={d.loopCode}>
-            {loopName(d, t)} · {t(`agentLoops.kinds.${d.kind}`)}
+            {loopName(d)} · {t(`agentLoops.kinds.${d.kind}`)}
           </SelectItem>
         ))}
       </SelectInput>

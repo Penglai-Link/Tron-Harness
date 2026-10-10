@@ -3664,13 +3664,15 @@ async fn agent_loop_dag_preserves_all_terminal_outputs() {
 }
 
 #[tokio::test]
-async fn agent_loop_builtin_review_runs_all_three_stages() {
+async fn agent_loop_custom_workflow_runs_all_stages() {
     let server = recording_model_server().await;
     let router = app();
     let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"builtin-review","name":"Review","rolePrompt":"BUILTIN_ROLE","loopCode":"builtin.review-workflow"}))).await;
+    let design = serde_json::json!({"loopCode":"review-three","name":"Review","kind":"Workflow","version":0,"updatedAt":0,"maxParallelNodes":1,"edges":[],"nodes":[{"id":"draft","kind":"Model","instructions":"Draft stage","join":"Selected","condition":null},{"id":"review","kind":"Model","instructions":"Review stage","join":"Selected","condition":null},{"id":"finalize","kind":"Model","instructions":"Finalize stage","join":"Selected","condition":null}]});
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(design)).await;
+    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"custom-review","name":"Review","rolePrompt":"CUSTOM_ROLE","loopCode":"review-three"}))).await;
     let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
-        "prompt":"Draft a proposal.","workspaceCode":"TRON_CORE","agentCode":"builtin-review",
+        "prompt":"Draft a proposal.","workspaceCode":"TRON_CORE","agentCode":"custom-review",
         "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
     }))).await;
     assert_eq!(result["stepCount"], 3);
@@ -3680,7 +3682,7 @@ async fn agent_loop_builtin_review_runs_all_three_stages() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|d| d["loopCode"] == "builtin.review-workflow")
+        .find(|d| d["loopCode"] == "review-three")
         .unwrap();
     let requests = server.requests.lock().unwrap();
     assert_eq!(requests.len(), 3);
@@ -3695,15 +3697,17 @@ async fn agent_loop_builtin_review_runs_all_three_stages() {
         assert!(
             requests[index]["messages"]
                 .to_string()
-                .contains("BUILTIN_ROLE")
+                .contains("CUSTOM_ROLE")
         );
     }
 }
 
 #[tokio::test]
-async fn agent_loop_builtin_analysis_joins_roots_and_selects_each_exit() {
+async fn agent_loop_custom_analysis_joins_roots_and_selects_each_exit() {
+    let app_config = AppConfig { database_url: temp_database_url("custom-analysis-loop"), ..AppConfig::default() };
     for approved in [true, false] {
         let response = |content: String| json!({"choices":[{"message":{"role":"assistant","content":content}}]});
+        let design = serde_json::json!({"loopCode":"analysis-dag","name":"Analysis","kind":"Dag","version":0,"updatedAt":0,"maxParallelNodes":2,"nodes":[{"id":"solution","kind":"Model","instructions":"Solution analysis","join":"Selected","condition":null},{"id":"risks","kind":"Model","instructions":"Risk analysis","join":"Selected","condition":null},{"id":"decision","kind":"Model","instructions":"Decision stage","join":"All","condition":null},{"id":"route","kind":"Branch","instructions":"","join":"Selected","condition":{"sourceNode":"decision","pointer":"/approved","equals":true,"matchTarget":"action","elseTarget":"clarify"}},{"id":"action","kind":"Model","instructions":"Action stage","join":"All","condition":null},{"id":"clarify","kind":"Model","instructions":"Clarification stage","join":"All","condition":null}],"edges":[{"from":"solution","to":"decision"},{"from":"risks","to":"decision"},{"from":"decision","to":"route"},{"from":"route","to":"action"},{"from":"route","to":"clarify"},{"from":"decision","to":"action"},{"from":"decision","to":"clarify"}]});
         let server = scripted_model_server(vec![
             response("BUILTIN_ANALYSIS_FIRST".into()),
             response("BUILTIN_ANALYSIS_SECOND".into()),
@@ -3711,11 +3715,12 @@ async fn agent_loop_builtin_analysis_joins_roots_and_selects_each_exit() {
             response(format!("FINAL_{approved}")),
         ])
         .await;
-        let router = app();
+        let router = app_with_config(app_config.clone());
         let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-        internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"builtin-analysis","name":"Analysis","rolePrompt":"BUILTIN_ROLE","loopCode":"builtin.analysis-dag"}))).await;
+        internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(design.clone())).await;
+        internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"custom-analysis","name":"Analysis","rolePrompt":"CUSTOM_ROLE","loopCode":"analysis-dag"}))).await;
         let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
-            "prompt":"Review a proposal.","workspaceCode":"TRON_CORE","agentCode":"builtin-analysis",
+            "prompt":"Review a proposal.","workspaceCode":"TRON_CORE","agentCode":"custom-analysis",
             "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
         }))).await;
         assert_eq!(result["stepCount"], 4);
@@ -3726,7 +3731,7 @@ async fn agent_loop_builtin_analysis_joins_roots_and_selects_each_exit() {
             .as_array()
             .unwrap()
             .iter()
-            .find(|d| d["loopCode"] == "builtin.analysis-dag")
+            .find(|d| d["loopCode"] == "analysis-dag")
             .unwrap();
         let requests = server.requests.lock().unwrap();
         assert_eq!(requests.len(), 4);
@@ -3917,7 +3922,7 @@ async fn internal_agent_group_api_persists_catalog_and_guards_builtin_definition
             json!({"groupName":"Engineering"}),
             json!({"name":"changed"}),
             json!({"avatarId":"fox"}),
-            json!({"loopCode":"builtin.react-loop"}),
+            json!({"loopCode":"missing-loop"}),
         ] {
             let denied = request_with_locale(
                 &router,

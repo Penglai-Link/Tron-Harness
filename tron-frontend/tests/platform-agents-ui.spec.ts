@@ -1,4 +1,3 @@
-import builtinLoops from "../../shared/agent-loops.json" with { type: "json" };
 import { test, expect } from "@playwright/test";
 import { routeResourceUiShellApi, seedResourceUiShell, startResourceUiFrontend, stopResourceUiFrontend, type ResourceUiFrontend } from "./support/resource-ui-harness";
 let frontend: ResourceUiFrontend | undefined;
@@ -25,7 +24,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
         }
         return route.fulfill({json:ok(groups)});
       }
-      if (url.pathname.endsWith("/loops")) return route.fulfill({json:ok(builtinLoops)});
+      if (url.pathname.endsWith("/loops")) return route.fulfill({json:ok([])});
       expect(url.pathname).not.toContain("/workspaces/");
       if (url.pathname.endsWith("/workspace-grants")) {
         const builtin = url.pathname.includes("/builtin-inspector/");

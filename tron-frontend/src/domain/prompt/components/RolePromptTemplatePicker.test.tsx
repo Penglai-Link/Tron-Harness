@@ -8,6 +8,9 @@ import type { PromptRecord } from "@/domain/prompt/model";
 import { localizedPromptContent } from "@/domain/prompt/model/promptLocalization";
 import { RolePromptTemplatePicker } from "./RolePromptTemplatePicker";
 import { CreateInternalAgentDialog } from "@/domain/agent/components/CreateInternalAgentDialog";
+vi.mock("@/domain/agent/hooks/useLoopDesignList", () => ({
+  useLoopDesignList: () => ({ designs: [{ loopCode: "review-flow", name: "Review", kind: "Workflow" }], loading: false, error: null }),
+}));
 
 const fixture = vi.hoisted(() => ({
   source: "mock", platformPage: vi.fn(), workspacePage: vi.fn(),
@@ -145,6 +148,7 @@ describe("role prompt templates", () => {
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     fireEvent.change(await screen.findByRole("textbox", { name: "Name" }), { target: { value: "My role" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Code" }), { target: { value: "my-role" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Agent Loop" }), { target: { value: "review-flow" } });
     fireEvent.click(screen.getByRole("button", { name: "Choose template" }));
     await selectExplorer();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -152,7 +156,7 @@ describe("role prompt templates", () => {
     expect((role as HTMLTextAreaElement).value).toBe(record.promptBody);
     fireEvent.change(role, { target: { value: "Edited template instructions" } });
     fireEvent.click(screen.getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith(workspaceCode, { agentCode: "my-role", name: "My role", loopCode: "builtin.react-loop", rolePrompt: "Edited template instructions" }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith(workspaceCode, { agentCode: "my-role", name: "My role", rolePrompt: "Edited template instructions", loopCode: "review-flow", avatarId: "robot", groupName: "" }));
     if (workspaceCode === "$platform") {
       expect(fixture.platformPage).toHaveBeenCalled();
       expect(fixture.workspacePage).not.toHaveBeenCalled();

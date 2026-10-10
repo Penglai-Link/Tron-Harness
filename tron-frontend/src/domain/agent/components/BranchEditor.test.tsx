@@ -7,7 +7,7 @@ import {
 } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { builtinLoopDesigns, copyLoopDesign } from "../model/builtinLoops";
+import { copyLoopDesign } from "../model/builtinLoops";
 import { validateLoop } from "../model/loopValidation";
 import type { BranchCondition } from "../model/LoopModel";
 import { BranchEditor } from "./BranchEditor";
@@ -40,7 +40,29 @@ vi.mock("@/components/ui/select", () => ({
 afterEach(cleanup);
 const invalid = vi.fn();
 function Harness() {
-  const design = builtinLoopDesigns().find((d) => d.kind === "Dag")!;
+  const design = {
+    loopCode: "approval-flow",
+    name: "Approval flow",
+    kind: "Dag" as const,
+    version: 1,
+    updatedAt: 0,
+    maxParallelNodes: 2,
+    edges: [
+      { from: "solution", to: "decision" },
+      { from: "risks", to: "decision" },
+      { from: "decision", to: "route" },
+      { from: "route", to: "action" },
+      { from: "route", to: "clarify" },
+    ],
+    nodes: [
+      { id: "solution", kind: "Model" as const, instructions: "Solution", join: "Selected" as const, condition: null },
+      { id: "risks", kind: "Model" as const, instructions: "Risks", join: "Selected" as const, condition: null },
+      { id: "decision", kind: "Model" as const, instructions: "Decision", join: "All" as const, condition: null },
+      { id: "route", kind: "Branch" as const, instructions: "", join: "Selected" as const, condition: { sourceNode: "decision", pointer: "/approved", equals: true, matchTarget: "action", elseTarget: "clarify" } },
+      { id: "action", kind: "Model" as const, instructions: "Action", join: "All" as const, condition: null },
+      { id: "clarify", kind: "Model" as const, instructions: "Clarify", join: "All" as const, condition: null },
+    ],
+  };
   const [condition, setCondition] = useState<BranchCondition>(
     design.nodes.find((n) => n.kind === "Branch")!.condition!,
   );
@@ -103,16 +125,22 @@ describe("Branch configuration", () => {
     expect(saved().equals).toBeNull();
     expect(invalid).toHaveBeenLastCalledWith(false);
   });
-  it("copies both built-in canvases into valid independent custom designs", () => {
-    for (const builtin of builtinLoopDesigns().filter(
-      (d) => d.kind !== "React",
-    )) {
-      const copy = copyLoopDesign(builtin, "My flow");
-      copy.loopCode = "my-flow";
-      expect(validateLoop(copy)).toBeNull();
-      expect(copy.version).toBe(0);
-      copy.nodes[0].instructions = "Edited";
-      expect(builtin.nodes[0].instructions).not.toBe("Edited");
-    }
+  it("copies an authored design into an independent draft", () => {
+    const source = {
+      loopCode: "approval-flow",
+      name: "Approval flow",
+      kind: "Workflow" as const,
+      version: 1,
+      updatedAt: 1,
+      maxParallelNodes: 1,
+      edges: [],
+      nodes: [{ id: "stage-1", kind: "Model" as const, instructions: "Review", join: "Selected" as const, condition: null }],
+    };
+    const copy = copyLoopDesign(source, "My flow");
+    copy.loopCode = "my-flow";
+    expect(validateLoop(copy)).toBeNull();
+    expect(copy.version).toBe(0);
+    copy.nodes[0].instructions = "Edited";
+    expect(source.nodes[0].instructions).toBe("Review");
   });
 });

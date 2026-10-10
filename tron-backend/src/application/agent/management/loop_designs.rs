@@ -138,9 +138,7 @@ fn valid_code(code: &str) -> bool {
 }
 impl AgentManagementService {
     pub fn list_loop_designs(&self) -> Result<Vec<LoopDesign>, AgentManagementError> {
-        let mut designs = LoopDesign::builtins();
-        designs.extend(self.repository().list_loop_designs()?);
-        Ok(designs)
+        self.repository().list_loop_designs()
     }
     pub fn loop_design(&self, code: &str) -> Result<LoopDesign, AgentManagementError> {
         self.list_loop_designs()?
@@ -152,7 +150,7 @@ impl AgentManagementService {
         &self,
         code: Option<&str>,
     ) -> Result<String, AgentManagementError> {
-        let code = code.unwrap_or(REACT_LOOP_CODE);
+        let code = code.ok_or(AgentManagementError::LoopNotFound)?;
         self.loop_design(code)?;
         Ok(code.into())
     }
@@ -161,9 +159,6 @@ impl AgentManagementService {
         mut design: LoopDesign,
         expected_version: u32,
     ) -> Result<LoopDesign, AgentManagementError> {
-        if is_builtin_loop(&design.loop_code) {
-            return Err(AgentManagementError::LoopConflict);
-        }
         design.version = expected_version
             .checked_add(1)
             .ok_or(AgentManagementError::LoopInvalid)?;
@@ -175,9 +170,6 @@ impl AgentManagementService {
         Ok(design)
     }
     pub fn delete_loop_design(&self, code: &str) -> Result<(), AgentManagementError> {
-        if is_builtin_loop(code) {
-            return Err(AgentManagementError::LoopInUse);
-        }
         self.repository().delete_loop_design(code)
     }
 }

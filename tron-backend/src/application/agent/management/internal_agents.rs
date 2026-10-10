@@ -46,11 +46,7 @@ impl AgentManagementService {
                 role_prompt: definition.role_prompt,
                 avatar_id: definition.avatar_id,
                 group_name: definition.group_name,
-                loop_code: if definition.loop_code.is_empty() {
-                    crate::domain::agent::loop_design::REACT_LOOP_CODE.into()
-                } else {
-                    definition.loop_code
-                },
+                loop_code: definition.loop_code,
                 platform_defined: definition.platform_defined,
                 built_in: definition.built_in,
                 source: (override_policy.is_some()

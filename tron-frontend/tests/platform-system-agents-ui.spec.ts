@@ -1,4 +1,3 @@
-import builtinLoops from "../../shared/agent-loops.json" with { type: "json" };
 import { test, expect } from "@playwright/test";
 import { routeResourceUiShellApi, seedResourceUiShell, startResourceUiFrontend, stopResourceUiFrontend, type ResourceUiFrontend } from "./support/resource-ui-harness";
 
@@ -24,7 +23,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await page.route("**/api/v1/agents/**", async route => {
       const url = new URL(route.request().url());
       expect(url.pathname).not.toContain("/workspaces/");
-      if (url.pathname.endsWith("/loops")) return route.fulfill({ json: ok(builtinLoops) });
+      if (url.pathname.endsWith("/loops")) return route.fulfill({ json: ok([]) });
       if (url.pathname.endsWith("/workspace-grants")) {
         if (route.request().method() === "PUT") { assigned = route.request().postDataJSON().workspaceCodes; calls.push("authorize"); }
         return route.fulfill({ json: ok({ workspaceCodes: assigned }) });

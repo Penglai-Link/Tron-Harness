@@ -155,7 +155,7 @@ function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDra
     groupName: record.groupName || "",
     name: record.name,
     rolePrompt: record.rolePrompt,
-    loopCode: record.loopCode || "builtin.react-loop",
+    loopCode: record.loopCode || "",
     expandedDomainPersistenceMode: record.expandedDomainPersistenceMode,
     maxSteps: record.maxSteps,
     maxToolCalls: record.maxToolCalls,
@@ -190,7 +190,7 @@ function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAg
     (record.groupName || "") !== draft.groupName
     || (record.avatarId || "robot") !== draft.avatarId
     || record.name !== draft.name
-    || (record.loopCode || "builtin.react-loop") !== draft.loopCode
+    || (record.loopCode || "") !== draft.loopCode
     || record.rolePrompt !== draft.rolePrompt
     ||
     record.toolAssignmentMode !== draft.toolAssignmentMode
@@ -611,11 +611,11 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
           if (dataSource === "api") await resetWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode);
           else resetWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode);
         }
-        if ((row.groupName || "") !== draft.groupName || row.name !== draft.name || row.rolePrompt !== draft.rolePrompt || (row.loopCode || "builtin.react-loop") !== draft.loopCode || (row.avatarId || "robot") !== draft.avatarId) {
+        if ((row.groupName || "") !== draft.groupName || row.name !== draft.name || row.rolePrompt !== draft.rolePrompt || (row.loopCode || "") !== draft.loopCode || (row.avatarId || "robot") !== draft.avatarId) {
           const definition = {
             ...((row.groupName || "") !== draft.groupName ? { groupName: draft.groupName } : {}),
             ...((row.avatarId || "robot") !== draft.avatarId ? { avatarId: draft.avatarId } : {}),
-            ...((row.loopCode || "builtin.react-loop") !== draft.loopCode ? { loopCode: draft.loopCode } : {}),
+            ...((row.loopCode || "") !== draft.loopCode ? { loopCode: draft.loopCode } : {}),
             ...(row.name !== draft.name ? { name: draft.name } : {}),
             ...(row.rolePrompt !== draft.rolePrompt ? { rolePrompt: draft.rolePrompt } : {}),
           };

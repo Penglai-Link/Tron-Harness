@@ -74,11 +74,15 @@ impl AgentLoop for ConfiguredLoop {
                     state.context.agent_code.as_deref().unwrap_or("main-agent"),
                 )
                 .map_err(|e| invalid(format!("{e:?}")))?;
+            let loop_code = policy
+                .loop_code
+                .as_deref()
+                .ok_or_else(|| invalid("agent loop is not configured"))?;
             management
-                .loop_design(&policy.loop_code)
+                .loop_design(loop_code)
                 .map_err(|e| invalid(format!("{e:?}")))?
         } else {
-            LoopDesign::react()
+            return Err(invalid("agent loop is not configured"));
         };
         match design.kind {
             LoopKind::React => {
