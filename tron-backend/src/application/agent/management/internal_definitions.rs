@@ -9,6 +9,7 @@ pub(super) struct InternalAgentDefinition {
     pub(super) role_prompt: String,
     pub(super) loop_code: String,
     pub(super) avatar_id: String,
+    pub(super) group_name: Option<String>,
     pub(super) tool_assignment_mode: ToolAssignmentMode,
     pub(super) mcp_access_mode: McpAccessMode,
     pub(super) tool_exposure_mode: ToolExposureMode,
@@ -19,6 +20,7 @@ pub(super) struct InternalAgentDefinition {
     pub(super) selected_tool_codes: Vec<String>,
     pub(super) selected_server_codes: Vec<String>,
     pub(super) platform_defined: bool,
+    pub(super) built_in: bool,
 }
 
 pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
@@ -29,6 +31,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             .to_string(),
         role_prompt: String::new(),
         avatar_id: "robot".into(),
+        group_name: None,
         loop_code: crate::domain::agent::loop_design::REACT_LOOP_CODE.into(),
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
         mcp_access_mode: McpAccessMode::AllEnabledServers,
@@ -40,6 +43,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         selected_tool_codes: vec![],
         selected_server_codes: vec![],
         platform_defined: true,
+        built_in: true,
     }]
 }
 
@@ -80,12 +84,14 @@ impl AgentManagementService {
             .platform_internal_agent_configs()?
             .into_iter()
             .map(|config| InternalAgentDefinition {
+                built_in: is_builtin_agent(&config.agent_code),
                 agent_code: config.agent_code,
                 name: config.name,
                 description: "Platform internal agent.".into(),
                 role_prompt: config.role_prompt,
                 loop_code: config.loop_code,
                 avatar_id: config.avatar_id,
+                group_name: config.group_name,
                 tool_assignment_mode: config.tool_assignment_mode,
                 mcp_access_mode: config.mcp_access_mode,
                 tool_exposure_mode: config.tool_exposure_mode,
@@ -118,6 +124,9 @@ impl AgentManagementService {
                 .iter_mut()
                 .find(|definition| definition.agent_code == record.agent_code)
             {
+                if let Some(group_name) = record.group_name {
+                    definition.group_name = (!group_name.is_empty()).then_some(group_name);
+                }
                 if let Some(avatar_id) = record.avatar_id {
                     definition.avatar_id = avatar_id;
                 }
@@ -140,7 +149,9 @@ impl AgentManagementService {
                     .loop_code
                     .unwrap_or_else(|| crate::domain::agent::loop_design::REACT_LOOP_CODE.into());
                 definition.avatar_id = record.avatar_id.unwrap_or_else(|| "robot".into());
+                definition.group_name = record.group_name.filter(|name| !name.is_empty());
                 definition.platform_defined = false;
+                definition.built_in = false;
                 definitions.push(definition);
             }
         }
@@ -156,6 +167,7 @@ impl AgentManagementService {
         validate_definition(&command.name, &command.role_prompt)?;
         let loop_code = self.validate_loop_selection(command.loop_code.as_deref())?;
         let agent_code = self.validate_new_agent_code(&command.agent_code)?;
+        let group_name = self.validate_internal_agent_group(workspace_code, command.group_name)?;
         let now = current_timestamp();
         let definition = WorkspaceInternalAgentDefinition {
             workspace_code: workspace_code.to_owned(),
@@ -164,6 +176,7 @@ impl AgentManagementService {
             role_prompt: Some(command.role_prompt),
             loop_code: Some(loop_code),
             avatar_id: Some(validate_avatar_id(command.avatar_id.as_deref())?),
+            group_name,
             created_at: now.clone(),
             updated_at: now,
         };
@@ -178,6 +191,7 @@ impl AgentManagementService {
         agent_code: &str,
         command: UpdateWorkspaceInternalAgentDefinitionCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        ensure_editable_definition(agent_code)?;
         if let Some(id) = &command.avatar_id {
             validate_avatar_id(Some(id))?;
         }
@@ -188,6 +202,7 @@ impl AgentManagementService {
         let name = command.name.clone().unwrap_or(current.name);
         let role_prompt = command.role_prompt.clone().unwrap_or(current.role_prompt);
         validate_definition(&name, &role_prompt)?;
+        let group_name = self.validate_internal_agent_group(workspace_code, command.group_name)?;
         let now = current_timestamp();
         let saved = self
             .repository()
@@ -215,6 +230,8 @@ impl AgentManagementService {
                 avatar_id: command
                     .avatar_id
                     .or_else(|| saved.as_ref().and_then(|record| record.avatar_id.clone())),
+                group_name: group_name
+                    .or_else(|| saved.as_ref().and_then(|record| record.group_name.clone())),
                 created_at,
                 updated_at: now,
             })?;
@@ -265,5 +282,19 @@ pub(super) fn validate_avatar_id(id: Option<&str>) -> Result<String, AgentManage
         Ok(id.to_owned())
     } else {
         Err(AgentManagementError::InternalAgentDefinitionInvalid)
+    }
+}
+
+/// Identity comes from the authoritative built-in registry, never a naming convention.
+pub(super) fn is_builtin_agent(code: &str) -> bool {
+    internal_agents()
+        .iter()
+        .any(|definition| definition.agent_code.eq_ignore_ascii_case(code))
+}
+pub(super) fn ensure_editable_definition(code: &str) -> Result<(), AgentManagementError> {
+    if is_builtin_agent(code) {
+        Err(AgentManagementError::BuiltinAgentReadOnly)
+    } else {
+        Ok(())
     }
 }

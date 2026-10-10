@@ -45,12 +45,14 @@ impl AgentManagementService {
                 description: definition.description,
                 role_prompt: definition.role_prompt,
                 avatar_id: definition.avatar_id,
+                group_name: definition.group_name,
                 loop_code: if definition.loop_code.is_empty() {
                     crate::domain::agent::loop_design::REACT_LOOP_CODE.into()
                 } else {
                     definition.loop_code
                 },
                 platform_defined: definition.platform_defined,
+                built_in: definition.built_in,
                 source: (override_policy.is_some()
                     || !definition.platform_defined
                     || self
@@ -271,7 +273,7 @@ impl AgentManagementService {
             .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
         let agent_code = definition.agent_code.as_str();
-        if definition.platform_defined {
+        if definition.platform_defined && !definition.built_in {
             self.repository()
                 .delete_workspace_internal_agent_definition(workspace_code, agent_code)?;
         }

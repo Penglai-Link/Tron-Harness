@@ -88,9 +88,14 @@ import { AgentAvatar, AgentAvatarPicker } from "../components/AgentAvatarPicker"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { setAgentKnowledgeLibraries } from "@/domain/knowledge-base/api/knowledgeBaseApi";
+import { InternalAgentBrowseItem } from "../components/InternalAgentBrowseItem";
+import { InternalAgentGroupField } from "../components/InternalAgentGroupField";
+import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
+import { groupInternalAgents } from "../model/internalAgentGroups";
 import { AgentLoopField } from "../components/AgentLoopField";
 
 interface InternalAgentDraft {
+  groupName: string;
   avatarId: string;
   loopCode: string;
   name: string;
@@ -147,6 +152,7 @@ function hasSameServerCodes(left: string[], right: string[]) {
 function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDraft {
   return {
     avatarId: record.avatarId || "robot",
+    groupName: record.groupName || "",
     name: record.name,
     rolePrompt: record.rolePrompt,
     loopCode: record.loopCode || "builtin.react-loop",
@@ -181,7 +187,8 @@ function mergeSavedDraft(
 
 function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAgentDraft) {
   return (
-    (record.avatarId || "robot") !== draft.avatarId
+    (record.groupName || "") !== draft.groupName
+    || (record.avatarId || "robot") !== draft.avatarId
     || record.name !== draft.name
     || (record.loopCode || "builtin.react-loop") !== draft.loopCode
     || record.rolePrompt !== draft.rolePrompt
@@ -252,6 +259,9 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   const [internalDrafts, setInternalDrafts] = useState<Record<string, InternalAgentDraft>>({});
   const [internalSaveStates, setInternalSaveStates] = useState<Record<string, InternalSaveState>>({});
   const [internalSaveErrors, setInternalSaveErrors] = useState<Record<string, string>>({});
+  const [internalSearch, setInternalSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState("all");
+  const { groups: catalogGroups, create: createGroup } = useInternalAgentGroups(category === "internal" ? activeWorkspaceCode : "");
   const [systemSearch, setSystemSearch] = useState("");
   const [debouncedSystemSearch, setDebouncedSystemSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -535,7 +545,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       ? await fetchWorkspaceInternalAgents(activeWorkspaceCode)
       : listWorkspaceInternalAgentsMock(activeWorkspaceCode);
     const savedAgent = nextInternalAgents.find((agent) => agent.agentCode === agentCode);
-    if (!savedAgent) return;
+    if (!savedAgent) throw new Error(internalPageT("errors.save", "Internal agent policy update failed"));
 
     // Other rows may have pending edits while this row's save is in flight.
     // Apply the authoritative response only to the row whose save completed.
@@ -595,63 +605,67 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     setBusy(`internal-save:${agentCode}`, true);
     setInternalSaveState(agentCode, "saving");
     try {
-      if (restoreBaselines[agentCode]) {
-        if (dataSource === "api") await resetWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode);
-        else resetWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode);
-      }
-      if (row.name !== draft.name || row.rolePrompt !== draft.rolePrompt || (row.loopCode || "builtin.react-loop") !== draft.loopCode || (row.avatarId || "robot") !== draft.avatarId) {
-        const definition = {
-          ...((row.avatarId || "robot") !== draft.avatarId ? { avatarId: draft.avatarId } : {}),
-          ...((row.loopCode || "builtin.react-loop") !== draft.loopCode ? { loopCode: draft.loopCode } : {}),
-          ...(row.name !== draft.name ? { name: draft.name } : {}),
-          ...(row.rolePrompt !== draft.rolePrompt ? { rolePrompt: draft.rolePrompt } : {}),
-        };
-        if (dataSource === "api") {
-          await patchWorkspaceInternalAgentDefinition(activeWorkspaceCode, agentCode, definition);
-        } else {
-          patchWorkspaceInternalAgentDefinitionMock(activeWorkspaceCode, agentCode, definition);
+      if (!row.builtIn) {
+        if (draft.groupName && (row.groupName || "") !== draft.groupName && !catalogGroups.includes(draft.groupName)) await createGroup(draft.groupName);
+        if (restoreBaselines[agentCode]) {
+          if (dataSource === "api") await resetWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode);
+          else resetWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode);
         }
-      }
-      // Persist the visible selection before changing its policy mode. The all-tools
-      // response is an effective list, so it may differ from stored assignments.
-      if (shouldSaveTools) {
-        if (dataSource === "api") {
-          await updateWorkspaceInternalAgentToolAssignments(activeWorkspaceCode, agentCode, draft.selectedToolCodes);
-        } else {
-          updateWorkspaceInternalAgentToolAssignmentsMock(activeWorkspaceCode, agentCode, draft.selectedToolCodes);
+        if ((row.groupName || "") !== draft.groupName || row.name !== draft.name || row.rolePrompt !== draft.rolePrompt || (row.loopCode || "builtin.react-loop") !== draft.loopCode || (row.avatarId || "robot") !== draft.avatarId) {
+          const definition = {
+            ...((row.groupName || "") !== draft.groupName ? { groupName: draft.groupName } : {}),
+            ...((row.avatarId || "robot") !== draft.avatarId ? { avatarId: draft.avatarId } : {}),
+            ...((row.loopCode || "builtin.react-loop") !== draft.loopCode ? { loopCode: draft.loopCode } : {}),
+            ...(row.name !== draft.name ? { name: draft.name } : {}),
+            ...(row.rolePrompt !== draft.rolePrompt ? { rolePrompt: draft.rolePrompt } : {}),
+          };
+          if (dataSource === "api") {
+            await patchWorkspaceInternalAgentDefinition(activeWorkspaceCode, agentCode, definition);
+          } else {
+            patchWorkspaceInternalAgentDefinitionMock(activeWorkspaceCode, agentCode, definition);
+          }
         }
-      }
-      if (Object.keys(payload).length > 0) {
-        if (dataSource === "api") {
-          await patchWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode, payload);
-        } else {
-          patchWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode, payload);
+        // Persist the visible selection before changing its policy mode. The all-tools
+        // response is an effective list, so it may differ from stored assignments.
+        if (shouldSaveTools) {
+          if (dataSource === "api") {
+            await updateWorkspaceInternalAgentToolAssignments(activeWorkspaceCode, agentCode, draft.selectedToolCodes);
+          } else {
+            updateWorkspaceInternalAgentToolAssignmentsMock(activeWorkspaceCode, agentCode, draft.selectedToolCodes);
+          }
         }
-      }
-      if (shouldSaveServers) {
-        if (dataSource === "api") {
-          await updateWorkspaceInternalAgentMcpServerAssignments(activeWorkspaceCode, agentCode, draft.selectedServerCodes);
-        } else {
-          updateWorkspaceInternalAgentMcpServerAssignmentsMock(activeWorkspaceCode, agentCode, draft.selectedServerCodes);
+        if (Object.keys(payload).length > 0) {
+          if (dataSource === "api") {
+            await patchWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode, payload);
+          } else {
+            patchWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode, payload);
+          }
         }
-      }
-      if (Object.keys(mcpPayload).length > 0) {
-        if (dataSource === "api") {
-          await patchWorkspaceInternalAgentMcpPolicy(activeWorkspaceCode, agentCode, mcpPayload);
-        } else {
-          patchWorkspaceInternalAgentMcpPolicyMock(activeWorkspaceCode, agentCode, mcpPayload);
+        if (shouldSaveServers) {
+          if (dataSource === "api") {
+            await updateWorkspaceInternalAgentMcpServerAssignments(activeWorkspaceCode, agentCode, draft.selectedServerCodes);
+          } else {
+            updateWorkspaceInternalAgentMcpServerAssignmentsMock(activeWorkspaceCode, agentCode, draft.selectedServerCodes);
+          }
         }
-      }
-      if (knowledgeDrafts[agentCode]) {
-        await setAgentKnowledgeLibraries(agentCode, knowledgeDrafts[agentCode]);
-        await Promise.all(["knowledge-agent-libraries", "knowledge-base", "knowledge-bases", "platform-knowledge-bases", "knowledge-library-agent-grants"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
-        setKnowledgeDrafts((current) => { const next = { ...current }; delete next[agentCode]; return next; });
+        if (Object.keys(mcpPayload).length > 0) {
+          if (dataSource === "api") {
+            await patchWorkspaceInternalAgentMcpPolicy(activeWorkspaceCode, agentCode, mcpPayload);
+          } else {
+            patchWorkspaceInternalAgentMcpPolicyMock(activeWorkspaceCode, agentCode, mcpPayload);
+          }
+        }
+        if (knowledgeDrafts[agentCode]) {
+          await setAgentKnowledgeLibraries(agentCode, knowledgeDrafts[agentCode]);
+          await Promise.all(["knowledge-agent-libraries", "knowledge-base", "knowledge-bases", "platform-knowledge-bases", "knowledge-library-agent-grants"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+        }
       }
       if (scope === "platform" && agentCode !== "main-agent" && workspaceDrafts[agentCode]) {
         await persistAgentWorkspaceGrants(agentCode, workspaceDrafts[agentCode]);
         await queryClient.invalidateQueries({ queryKey: ["agent-workspace-grants", agentCode] });
       }
       const hasPendingChanges = await refreshInternalAgent(agentCode, draft);
+      setKnowledgeDrafts((current) => { const next = { ...current }; delete next[agentCode]; return next; });
       setWorkspaceDrafts((current) => { const next = { ...current }; delete next[agentCode]; return next; });
       notifyInternalAgentRegistryChanged();
       setInternalSaveState(agentCode, hasPendingChanges ? "pending" : "saved");
@@ -739,23 +753,38 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
       {internalAgentsPage && scope === "platform" ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold">{t("pages:platformData.agentDefinitions")}</h2>
-          {allowCreate ? <CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} allowWorkspaceAssignment={scope === "platform"} onCreated={refreshCreatedAgent} /> : null}
         </div>
       ) : <PageHeader title={pageTitle} />}
 
       {internalAgentsPage ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-3">
-        {internalAgents.length === 0 ? (
+        <div className="space-y-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchField ariaLabel={internalPageT("groups.search", "Search agents or groups")} placeholder={internalPageT("groups.search", "Search agents or groups")} className="min-w-0 grow basis-full sm:basis-0 sm:max-w-[360px]" value={internalSearch} onChange={setInternalSearch} />
+          <SelectInput aria-label={internalPageT("groups.label", "Group")} className="w-full sm:w-48" value={groupFilter} onValueChange={(value) => setGroupFilter(value || "all")}>
+            <SelectItem value="all">{internalPageT("groups.all", "All groups")}</SelectItem>
+            <SelectItem value="ungrouped">{internalPageT("groups.ungrouped", "Ungrouped")}</SelectItem>
+            {[...new Set([...catalogGroups, ...internalAgents.flatMap((agent) => agent.groupName ? [agent.groupName] : [])])].sort().map((name) => <SelectItem key={name} value={`group:${name}`}>{name}</SelectItem>)}
+          </SelectInput>
+          {allowCreate ? <div className="sm:ml-auto"><CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} allowWorkspaceAssignment={scope === "platform"} onCreated={refreshCreatedAgent} /></div> : null}
+        </div>
+        {groupInternalAgents(internalAgents, internalSearch, groupFilter, (agent) => translateInternalAgentName(t, agent)).length === 0 ? (
           <p className="px-1 py-2 text-sm text-[var(--color-on-surface-variant)]">
-            {internalPageT("empty", "No internal agents found for this workspace.")}
+            {internalPageT("groups.empty", "No agents match the current filters.")}
           </p>
         ) : null}
 
-        {internalAgents.map((agent) => {
+        {groupInternalAgents(internalAgents, internalSearch, groupFilter, (agent) => translateInternalAgentName(t, agent)).map(({ name: groupName, agents }) => <details key={`${activeWorkspaceCode}:${groupName}`} open className="group/section border-t border-[var(--color-outline-variant)] pt-3">
+          <summary className="mb-3 flex cursor-pointer list-none items-center gap-2 text-sm font-medium marker:hidden [&::-webkit-details-marker]:hidden">
+            <ChevronDown aria-hidden="true" size={16} className="-rotate-90 transition-transform group-open/section:rotate-0" />
+            <span className="min-w-0 truncate" title={groupName || undefined}>{groupName || internalPageT("groups.ungrouped", "Ungrouped")}</span>
+            <span className="text-xs font-normal text-[var(--color-on-surface-variant)]">{agents.length}</span>
+          </summary>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,128px),1fr))] gap-x-4 gap-y-5">
+        {agents.map((agent) => {
           const draft = internalDrafts[agent.agentCode] ?? draftFromRecord(agent);
           const isSaving = isBusy(`internal-save:${agent.agentCode}`);
-          const editingDisabled = isSaving || isBusy(`internal-reset:${agent.agentCode}`) || loading;
-          const internalBusy = isSaving || editingDisabled;
+          const editingDisabled = Boolean(agent.builtIn) || isSaving || isBusy(`internal-reset:${agent.agentCode}`) || loading;
+          const internalBusy = isSaving || isBusy(`internal-reset:${agent.agentCode}`) || loading;
           const saveState = internalSaveStates[agent.agentCode] ?? "idle";
 
           let statusLabel = "";
@@ -774,31 +803,23 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
 
           return (
             <Fragment key={agent.agentCode}>
-              <Button variant="outline" disabled={loading} aria-label={internalPageT("editAgent", "Edit {{name}}", { name: translateInternalAgentName(t, agent) })}
-                className="h-auto min-w-0 justify-start gap-4 rounded-xl bg-[var(--color-surface-container-lowest)] p-4 text-left transition-colors motion-reduce:transition-none hover:bg-[var(--color-surface-container-low)]"
-                onClick={() => {
-                  const nextDraft = draftFromRecord(agent);
-                  internalDraftsRef.current = { ...internalDraftsRef.current, [agent.agentCode]: nextDraft };
-                  setInternalDrafts((current) => ({ ...current, [agent.agentCode]: nextDraft }));
-                  setInternalSaveState(agent.agentCode, "idle");
-                  setKnowledgeDrafts({});
-                  setWorkspaceDrafts({});
-                  setRestoreBaselines({});
-                  setEditingAgentCode(agent.agentCode);
-                }}>
-                <AgentAvatar avatarId={agent.avatarId} className="size-16 shrink-0 rounded-lg" />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold">{translateInternalAgentName(t, agent)}</span>
-                  <span className="mt-1 block truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{agent.agentCode}</span>
-                </span>
-              </Button>
+              <InternalAgentBrowseItem agent={agent} name={translateInternalAgentName(t, agent)} disabled={loading} onOpen={() => {
+                const nextDraft = draftFromRecord(agent);
+                internalDraftsRef.current = { ...internalDraftsRef.current, [agent.agentCode]: nextDraft };
+                setInternalDrafts((current) => ({ ...current, [agent.agentCode]: nextDraft }));
+                setInternalSaveState(agent.agentCode, "idle");
+                setKnowledgeDrafts({});
+                setWorkspaceDrafts({});
+                setRestoreBaselines({});
+                setEditingAgentCode(agent.agentCode);
+              }} />
               {editingAgentCode === agent.agentCode ? <Dialog disablePointerDismissal open onOpenChange={(open, details) => {
                 if (details.reason === "outside-press" || internalBusy) { details.cancel(); return; }
                 if (!open) { setEditingAgentCode(null); setAssignmentDialog(null); }
               }}>
               <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl" showCloseButton={!internalBusy} closeLabel={internalPageT("definition.close", "Close")}>
               <DialogHeader>
-                <DialogTitle>{internalPageT("editAgent", "Edit {{name}}", { name: translateInternalAgentName(t, agent) })}</DialogTitle>
+                <DialogTitle>{internalPageT(agent.builtIn ? "groups.view" : "editAgent", agent.builtIn ? "View {{name}}" : "Edit {{name}}", { name: translateInternalAgentName(t, agent) })}</DialogTitle>
                 <DialogDescription>{internalPageT("agentCode", "{{code}}", { code: agent.agentCode })}</DialogDescription>
               </DialogHeader>
               <div className="tron-scrollbar min-h-0 overflow-y-auto px-1 pb-1">
@@ -806,19 +827,21 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                   {scope !== "platform" ? <p className="text-[var(--color-on-surface-variant)]">{!agent.platformDefined ? internalPageT("inheritance.local", "Workspace definition")
                       : agent.source === "workspace_override" ? internalPageT("inheritance.override", "Workspace override")
                         : internalPageT("inheritance.inherited", "Inherited from platform")}</p> : null}
-                  {scope !== "platform" && agent.platformDefined && agent.source === "workspace_override" ? <Button variant="outline" size="sm" disabled={internalBusy} onClick={() => void handleRestoreInheritance(agent.agentCode)}>{internalPageT("inheritance.restore", "Restore inheritance")}</Button> : null}
+                  {scope !== "platform" && !agent.builtIn && agent.platformDefined && agent.source === "workspace_override" ? <Button variant="outline" size="sm" disabled={internalBusy} onClick={() => void handleRestoreInheritance(agent.agentCode)}>{internalPageT("inheritance.restore", "Restore inheritance")}</Button> : null}
                   <p className={`min-h-4 ${statusClassName}`} role="status" aria-live="polite" aria-atomic="true">
                     {statusLabel}
                   </p>
                 </div> : null}
 
               <div className="mt-3 space-y-3">
-                <AgentAvatarPicker value={draft.avatarId} disabled={editingDisabled} onChange={(avatarId) => setInternalDraft(agent.agentCode, { avatarId })} />
+                {agent.builtIn ? <p className="text-sm text-[var(--color-on-surface-variant)]">{internalPageT("groups.readOnly", "Built-in agent definitions are read-only.")}</p> : null}
+                {agent.builtIn ? <AgentAvatar avatarId={draft.avatarId} className="size-24 rounded-full" /> : <AgentAvatarPicker value={draft.avatarId} disabled={editingDisabled} onChange={(avatarId) => setInternalDraft(agent.agentCode, { avatarId })} />}
                 <AgentLoopField value={draft.loopCode} disabled={editingDisabled} onChange={(loopCode) => setInternalDraft(agent.agentCode, { loopCode })} />
                 <Field label={internalPageT("definition.name", "Name")}>
                   <TextInput aria-label={internalPageT("definition.name", "Name")} maxLength={100} disabled={editingDisabled} value={draft.name} onChange={(event) => setInternalDraft(agent.agentCode, { name: event.target.value })} />
                 </Field>
-                {scope === "platform" ? <AgentWorkspaceField code={agent.agentCode} name={draft.name} disabled={editingDisabled} selectedCodes={workspaceDrafts[agent.agentCode]} onSelectionChange={(codes) => setWorkspaceDrafts((current) => ({ ...current, [agent.agentCode]: codes }))} /> : null}
+                {scope === "platform" ? <AgentWorkspaceField code={agent.agentCode} name={draft.name} disabled={internalBusy} selectedCodes={workspaceDrafts[agent.agentCode]} onSelectionChange={(codes) => setWorkspaceDrafts((current) => ({ ...current, [agent.agentCode]: codes }))} /> : null}
+                <InternalAgentGroupField workspaceCode={activeWorkspaceCode} value={draft.groupName} disabled={editingDisabled} onChange={(groupName) => setInternalDraft(agent.agentCode, { groupName })} />
                 <AgentRolePromptField key={`${activeWorkspaceCode}:${agent.agentCode}`} workspaceCode={activeWorkspaceCode} disabled={editingDisabled} value={draft.rolePrompt} onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })} />
               </div>
 
@@ -876,7 +899,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                     </SelectItem>
                   </SelectInput>
                 </Field>
-                <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={draft.name} disabled={editingDisabled} selectedIds={knowledgeDrafts[agent.agentCode]} onSelectionChange={(ids) => setKnowledgeDrafts((current) => ({ ...current, [agent.agentCode]: ids }))} />
+                <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={draft.name} disabled={editingDisabled} selectedIds={knowledgeDrafts[agent.agentCode]} onSelectionChange={agent.builtIn ? undefined : (ids) => setKnowledgeDrafts((current) => ({ ...current, [agent.agentCode]: ids }))} />
               </div>
 
               <details className="group mt-3 border-t border-[var(--color-outline-variant)]">
@@ -988,13 +1011,15 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
               </div>
               <DialogFooter>
                 <Button variant="outline" disabled={internalBusy} onClick={() => { setEditingAgentCode(null); setAssignmentDialog(null); }}>{internalPageT("definition.cancel", "Cancel")}</Button>
-                <Button disabled={internalBusy || !draft.name.trim() || (!hasDraftChanges(agent, draft) && !knowledgeDrafts[agent.agentCode] && !workspaceDrafts[agent.agentCode] && !restoreBaselines[agent.agentCode])} onClick={() => void handleSaveInternalAgent(agent.agentCode)}>{isSaving ? internalPageT("actions.saving", "Saving...") : internalPageT("actions.save", "Save")}</Button>
+                {(!agent.builtIn || (scope === "platform" && agent.agentCode !== "main-agent")) ? <Button disabled={internalBusy || !draft.name.trim() || (!hasDraftChanges(agent, draft) && !knowledgeDrafts[agent.agentCode] && !workspaceDrafts[agent.agentCode] && !restoreBaselines[agent.agentCode])} onClick={() => void handleSaveInternalAgent(agent.agentCode)}>{isSaving ? internalPageT("actions.saving", "Saving...") : internalPageT("actions.save", "Save")}</Button> : null}
               </DialogFooter>
               </DialogContent>
               </Dialog> : null}
             </Fragment>
           );
         })}
+          </div>
+        </details>)}
         </div>
       ) : null}
 

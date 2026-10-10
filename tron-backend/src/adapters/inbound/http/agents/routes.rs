@@ -21,6 +21,8 @@ use super::handler::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/agents/registry/internal-groups", get(super::internal_groups::list_platform).post(super::internal_groups::create_platform))
+        .route("/api/v1/agents/workspaces/{workspace_code}/internal-groups", get(super::internal_groups::list_workspace).post(super::internal_groups::create_workspace))
         .route("/api/v1/agents/loops", get(super::loop_designs::list).post(super::loop_designs::create))
         .route("/api/v1/agents/loops/{loop_code}", put(super::loop_designs::update).delete(super::loop_designs::delete))
         .route("/api/v1/agents/registry/{agent_code}/workspace-grants", get(super::workspace_grants::list).put(super::workspace_grants::replace))

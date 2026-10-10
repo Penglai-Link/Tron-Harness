@@ -1,6 +1,7 @@
 mod internal_agents;
 mod internal_definition_error;
 mod internal_definitions;
+mod internal_groups;
 pub(crate) mod loop_designs;
 mod platform_internal_agents;
 mod system_agents;
@@ -56,6 +57,8 @@ pub struct CreateWorkspaceInternalAgentCommand {
     pub role_prompt: String,
     pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
+    /// Missing keeps the current group on update; an empty string clears it.
+    pub group_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -64,6 +67,8 @@ pub struct UpdateWorkspaceInternalAgentDefinitionCommand {
     pub role_prompt: Option<String>,
     pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
+    /// Missing keeps the current group on update; an empty string clears it.
+    pub group_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -82,6 +87,16 @@ pub struct ResolvedAgentRuntime {
 const MAIN_AGENT_CODE: &str = "main-agent";
 
 pub trait AgentManagementRepository: Send {
+    fn list_internal_agent_groups(
+        &mut self,
+        scope: &str,
+    ) -> Result<Vec<String>, AgentManagementError>;
+    fn save_internal_agent_group(
+        &mut self,
+        scope: &str,
+        name: &str,
+    ) -> Result<(), AgentManagementError>;
+
     fn list_tool_permissions(
         &mut self,
     ) -> Result<Vec<tron_agent_harness::ToolPermissionSetting>, AgentManagementError> {

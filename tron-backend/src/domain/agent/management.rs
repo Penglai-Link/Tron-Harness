@@ -72,6 +72,8 @@ pub struct WorkspaceInternalAgentDefinition {
     pub loop_code: Option<String>,
     #[serde(default)]
     pub avatar_id: Option<String>,
+    #[serde(default)]
+    pub group_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -86,6 +88,8 @@ pub struct PlatformInternalAgentConfig {
     pub loop_code: String,
     #[serde(default = "default_avatar_id")]
     pub avatar_id: String,
+    #[serde(default)]
+    pub group_name: Option<String>,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
     pub tool_exposure_mode: ToolExposureMode,
@@ -129,7 +133,11 @@ pub struct InternalAgentToolPolicy {
     pub loop_code: String,
     #[serde(default = "default_avatar_id")]
     pub avatar_id: String,
+    #[serde(default)]
+    pub group_name: Option<String>,
     pub platform_defined: bool,
+    #[serde(default)]
+    pub built_in: bool,
     pub source: InternalAgentPolicySource,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
@@ -256,6 +264,8 @@ pub struct RuntimeAdapterCapabilityRecord {
 pub enum AgentManagementError {
     InvalidWorkspace,
     InternalAgentDefinitionInvalid,
+    InternalAgentGroupInvalid,
+    BuiltinAgentReadOnly,
     LoopInvalid,
     LoopNotFound,
     LoopConflict,

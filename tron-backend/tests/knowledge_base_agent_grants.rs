@@ -213,6 +213,7 @@ async fn platform_agent_knowledge_configuration_precedes_space_authorization() {
             agent_code: "platform-reader".into(),
             name: "Reader".into(),
             role_prompt: "Read documents".into(),
+            group_name: None,
         })
         .unwrap();
     let library = f.service.create(USER, "Global library", "").unwrap();

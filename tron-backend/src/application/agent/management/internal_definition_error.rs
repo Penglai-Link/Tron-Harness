@@ -8,6 +8,8 @@ pub struct ApplicationErrorDescriptor {
 impl AgentManagementError {
     pub fn internal_definition_descriptor(&self) -> ApplicationErrorDescriptor {
         let (code, message_key) = match self {
+            Self::BuiltinAgentReadOnly => ("101028017", "tron.agent.builtin_read_only"),
+            Self::InternalAgentGroupInvalid => ("101028016", "tron.agent.group_invalid"),
             Self::ToolPermissionInvalid => ("101028015", "tron.agent.tool_permission_invalid"),
             Self::LoopInvalid => ("101028011", "tron.agent.loop_invalid"),
             Self::LoopNotFound => ("101028012", "tron.agent.loop_not_found"),

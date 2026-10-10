@@ -11,6 +11,8 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { AgentRolePromptField } from "./AgentRolePromptField";
 
 import { AgentAvatarPicker } from "./AgentAvatarPicker";
+import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
+import { InternalAgentGroupField } from "./InternalAgentGroupField";
 import { AgentLoopField } from "./AgentLoopField";
 import { AgentWorkspaceField } from "./AgentWorkspaceField";
 import { persistAgentWorkspaceGrants } from "../hooks/agentWorkspaceGrants";
@@ -23,6 +25,8 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   const [name, setName] = useState("");
   const [loopCode, setLoopCode] = useState("builtin.react-loop");
   const [rolePrompt, setRolePrompt] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const { groups, create: createGroup } = useInternalAgentGroups(workspaceCode);
   const [avatarId, setAvatarId] = useState("robot");
   const [saving, setSaving] = useState(false);
   const [workspaceCodes, setWorkspaceCodes] = useState<string[]>([]);
@@ -36,9 +40,10 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
     if (!codeValid || !name.trim() || saving) return;
     setSaving(true);
     try {
-      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId };
+      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId, groupName };
       // Keep the created identity if assignment fails so retry cannot create twice.
       if (!createdAgentCode) {
+        if (groupName && !groups.includes(groupName)) await createGroup(groupName);
         if (getServiceDataSource("agent") === "api") {
           await createWorkspaceInternalAgent(workspaceCode, payload);
         } else {
@@ -46,15 +51,16 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
         }
         setCreatedAgentCode(payload.agentCode);
         notifyInternalAgentRegistryChanged();
-        await onCreated();
       }
       if (allowWorkspaceAssignment) await persistAgentWorkspaceGrants(createdAgentCode ?? payload.agentCode, workspaceCodes);
+      await onCreated();
       setOpen(false);
       setAgentCode("");
       setName("");
       setRolePrompt("");
       setLoopCode("builtin.react-loop");
       setAvatarId("robot");
+      setGroupName("");
       setWorkspaceCodes([]);
       setCreatedAgentCode(null);
       notifyInternalAgentRegistryChanged();
@@ -66,7 +72,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   }
 
   return <>
-    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setRolePrompt(""); setAvatarId("robot"); setLoopCode("builtin.react-loop"); setWorkspaceCodes([]); setOpen(true); }}>{text("create", "New")}</Button>
+    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setRolePrompt(""); setAvatarId("robot"); setLoopCode("builtin.react-loop"); setWorkspaceCodes([]); setGroupName(""); setOpen(true); }}>{text("create", "New")}</Button>
     <Dialog disablePointerDismissal open={open} onOpenChange={(next, details) => { if (details.reason === "outside-press" || saving) { details.cancel(); return; } setOpen(next); }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl" closeLabel={text("close", "Close")} showCloseButton={!saving}>
         <DialogHeader>
@@ -84,6 +90,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
           </Field>
           {allowWorkspaceAssignment ? <AgentWorkspaceField name={name} disabled={saving} selectedCodes={workspaceCodes} onSelectionChange={setWorkspaceCodes} /> : null}
           {createdAgentCode ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:platformData.createdAssignmentPending")}</p> : null}
+          <InternalAgentGroupField workspaceCode={workspaceCode} value={groupName} disabled={definitionDisabled} onChange={setGroupName} />
           <AgentLoopField value={loopCode} disabled={definitionDisabled} onChange={setLoopCode} />
           <AgentRolePromptField workspaceCode={workspaceCode} rows={8} disabled={definitionDisabled} value={rolePrompt} onChange={setRolePrompt} />
           <DialogFooter>

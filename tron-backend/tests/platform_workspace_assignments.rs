@@ -32,6 +32,7 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
             agent_code: "knowledge-expert".into(),
             name: "Expert".into(),
             role_prompt: "Help".into(),
+            group_name: None,
         })
         .unwrap()
         .agent_code;
@@ -188,6 +189,7 @@ async fn platform_agent_assignment_controls_catalog_and_runtime() {
             agent_code: "shared-expert".into(),
             name: "Expert".into(),
             role_prompt: "Help".into(),
+            group_name: None,
         })
         .unwrap();
     assert!(

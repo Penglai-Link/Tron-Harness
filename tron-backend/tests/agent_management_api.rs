@@ -743,14 +743,15 @@ async fn startup_scan_loads_system_agent_models_and_rescan_refreshes_models() {
 }
 
 #[tokio::test]
-async fn main_agent_definition_guides_main_and_task_runs_without_legacy_defaults() {
+async fn legacy_main_agent_guidance_still_drives_runs_while_definition_api_is_read_only() {
     let codex_command = temp_command_path("codex-main");
     let opencode_command = temp_command_path("opencode-main");
     write_fake_command(&codex_command);
     write_fake_command(&opencode_command);
 
     let model_server = recording_model_server().await;
-    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let config = common::prepared_config(test_config(&codex_command, &opencode_command));
+    let app = app_with_config(config.clone());
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
 
@@ -765,15 +766,27 @@ async fn main_agent_definition_guides_main_and_task_runs_without_legacy_defaults
     .await;
     assert_eq!(removed.status(), StatusCode::NOT_FOUND);
     let guidance = "Calm, terse, and surgical. Summarize the workspace problem before acting.";
-    let updated = internal_agent_api(
+    let denied = request_with_locale(
         &app,
-        &authorization,
         Method::PATCH,
         "/api/v1/agents/registry/internal/main-agent/definition",
         Some(json!({"rolePrompt":guidance})),
+        &authorization,
+        "en-US",
     )
     .await;
-    assert_eq!(updated["rolePrompt"], guidance);
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    let mut legacy = internal_agent_api(
+        &app,
+        &authorization,
+        Method::GET,
+        "/api/v1/agents/registry/internal/main-agent",
+        None,
+    )
+    .await;
+    legacy["rolePrompt"] = json!(guidance);
+    let connection = rusqlite::Connection::open(&config.database_url).unwrap();
+    connection.execute("INSERT INTO platform_internal_agent_configs(agent_code, config_json) VALUES('main-agent',?1)", [legacy.to_string()]).unwrap();
     let saved = internal_agent_api(
         &app,
         &authorization,
@@ -837,7 +850,8 @@ async fn main_agent_definition_guides_main_and_task_runs_without_legacy_defaults
     let main_messages = recorded_requests[0]["messages"]
         .as_array()
         .expect("main-agent messages should be an array");
-    assert_eq!(main_messages.len(), 4, "{main_messages:?}");
+    // Discovery and agent-directory context may add messages. Check the
+    // guidance contract instead of fixing the total message count.
     assert_eq!(main_messages[0]["role"], json!("system"));
     let main_guidance = main_messages[0]["content"]
         .as_str()
@@ -859,7 +873,6 @@ async fn main_agent_definition_guides_main_and_task_runs_without_legacy_defaults
     let task_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("task-agent messages should be an array");
-    assert_eq!(task_messages.len(), 3);
     assert!(
         serde_json::to_string(task_messages)
             .unwrap()
@@ -871,14 +884,8 @@ async fn main_agent_definition_guides_main_and_task_runs_without_legacy_defaults
         json!("Investigate latency for task.")
     );
 
-    internal_agent_api(
-        &app,
-        &authorization,
-        Method::PATCH,
-        "/api/v1/agents/registry/internal/main-agent/definition",
-        Some(json!({"rolePrompt":""})),
-    )
-    .await;
+    legacy["rolePrompt"] = json!("");
+    connection.execute("UPDATE platform_internal_agent_configs SET config_json=?1 WHERE agent_code='main-agent'", [legacy.to_string()]).unwrap();
     let cleared = request_with_locale(
         &app, Method::POST, "/api/v1/agents/runs",
         Some(json!({"prompt":"Check blank instructions.","workspaceCode":"TRON_CORE",
@@ -3884,4 +3891,70 @@ async fn internal_agent_avatars_create_override_restore_and_survive_restart() {
         .await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
+}
+
+#[tokio::test]
+async fn internal_agent_group_api_persists_catalog_and_guards_builtin_definition_writes() {
+    let router = app();
+    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    for scope in ["registry", "workspaces/TRON_CORE"] {
+        let endpoint = format!("/api/v1/agents/{scope}/internal-groups");
+        let created = internal_agent_api(
+            &router,
+            &auth,
+            Method::POST,
+            &endpoint,
+            Some(json!({"name":" Engineering "})),
+        )
+        .await;
+        assert_eq!(created["name"], "Engineering");
+        assert_eq!(
+            internal_agent_api(&router, &auth, Method::GET, &endpoint, None).await,
+            json!(["Engineering"])
+        );
+        let definition = format!("/api/v1/agents/{scope}/internal/main-agent/definition");
+        for body in [
+            json!({"groupName":"Engineering"}),
+            json!({"name":"changed"}),
+            json!({"avatarId":"fox"}),
+            json!({"loopCode":"builtin.react-loop"}),
+        ] {
+            let denied = request_with_locale(
+                &router,
+                Method::PATCH,
+                &definition,
+                Some(body),
+                &auth,
+                "en-US",
+            )
+            .await;
+            assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+            let denied = response_json(denied).await;
+            assert_eq!(denied["code"], "101028017");
+            assert!(denied["data"].is_object());
+        }
+    }
+    let created = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/registry/internal", Some(json!({"agentCode":"group-api","name":"Group API","rolePrompt":"","groupName":"Engineering"}))).await;
+    assert_eq!(created["groupName"], "Engineering");
+    assert_eq!(created["builtIn"], false);
+    let cleared = internal_agent_api(
+        &router,
+        &auth,
+        Method::PATCH,
+        "/api/v1/agents/registry/internal/group-api/definition",
+        Some(json!({"groupName":""})),
+    )
+    .await;
+    assert!(cleared["groupName"].is_null());
+    let invalid = request_with_locale(
+        &router,
+        Method::POST,
+        "/api/v1/agents/registry/internal-groups",
+        Some(json!({"name":""})),
+        &auth,
+        "zh-CN",
+    )
+    .await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response_json(invalid).await["code"], "101028016");
 }

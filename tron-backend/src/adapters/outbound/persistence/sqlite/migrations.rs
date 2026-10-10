@@ -103,3 +103,6 @@ pub(super) const AGENT_LOOPS_MIGRATION: &str =
 
 pub(super) const BUILTIN_WORKFLOW_LOOPS_MIGRATION: &str =
     include_str!("../../../../../migrations/20261009_0002_builtin_workflow_loops.sql");
+
+pub(super) const INTERNAL_AGENT_GROUPS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20261010_0001_create_internal_agent_groups.sql");

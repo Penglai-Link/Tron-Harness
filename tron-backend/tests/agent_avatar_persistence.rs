@@ -52,6 +52,7 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
                 role_prompt: String::new(),
                 loop_code: None,
                 avatar_id: Some(avatar.into()),
+                group_name: None,
             })
             .unwrap();
         assert_eq!(created.avatar_id, avatar);
@@ -94,6 +95,7 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
                 role_prompt: String::new(),
                 loop_code: None,
                 avatar_id: Some("panda".into()),
+                group_name: None,
             },
         )
         .unwrap();

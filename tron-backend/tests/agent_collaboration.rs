@@ -251,6 +251,7 @@ fn reviewer(f: &Fixture) {
             agent_code: "reviewer".into(),
             name: "Reviewer".into(),
             role_prompt: "REVIEWER_ROLE: inspect changes and report concrete findings.".into(),
+            group_name: None,
         })
         .unwrap();
     f.state
