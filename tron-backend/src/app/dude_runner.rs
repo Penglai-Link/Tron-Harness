@@ -165,3 +165,30 @@ pub(super) fn start(state: AppState) {
         }
     });
 }
+
+pub(super) struct MemoryNotifications(pub crate::application::dude::DudeService);
+impl crate::application::dude_memory::DudeMemoryNotifications for MemoryNotifications {
+    fn publish(
+        &self,
+        n: crate::application::dude_memory::MemoryNotice,
+    ) -> Result<(), crate::domain::dude_memory::DudeMemoryError> {
+        self.0
+            .notify(crate::application::dude::NotificationInput {
+                dedup_key: format!("{}:{}:{}", n.kind, n.related_code, n.message),
+                dude_code: Some(n.dude_code.clone()),
+                title: n.kind.into(),
+                body: n.message.clone(),
+                category: "Skill".into(),
+                target: serde_json::json!({"candidateCode":n.related_code}),
+            })
+            .map_err(|_| {
+                crate::domain::dude_memory::DudeMemoryError::Storage(
+                    "Dude notification persistence failed".into(),
+                )
+            })?;
+        if n.kind == "SkillRevisionRequested" {
+            self.0.publish_event(crate::application::dude::DudeEventInput{dude_code:n.dude_code,source:DudeEventSource::ThreadFeedback,dedup_key:format!("skill-revision:{}:{}",n.related_code,n.message),session_code:None,task_code:None,workspace_code:None,payload:serde_json::json!({"candidateCode":n.related_code,"content":n.message}),available_at:chrono::Utc::now().timestamp_millis()}).map_err(|_|crate::domain::dude_memory::DudeMemoryError::Storage("Dude notification persistence failed".into()))?;
+        }
+        Ok(())
+    }
+}

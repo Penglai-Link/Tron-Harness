@@ -96,6 +96,7 @@ pub type AppMemoryService = MemoryService<Arc<Mutex<SqliteRagRepository>>, Defau
 
 #[derive(Clone)]
 pub struct AppState {
+    pub dude_memory: crate::application::dude_memory::DudeMemoryService,
     pub dudes: crate::application::dude::DudeService,
     pub config: AppConfig,
     _temporary_database: Option<Arc<tempfile::TempDir>>,
@@ -517,6 +518,10 @@ impl AppState {
         let dudes=crate::application::dude::DudeService::new(
             crate::adapters::outbound::persistence::sqlite::SqliteDudeRepository::connect(&config.database_url).expect("Dude storage"),agent_management.clone());
         dudes.bootstrap().expect("Dude defaults");
+        let dude_memory=crate::application::dude_memory::DudeMemoryService::new(
+          crate::adapters::outbound::persistence::sqlite::SqliteDudeMemoryRepository::connect(&config.database_url).expect("Dude memory storage"),skills.clone(),std::path::Path::new(&config.skills_registry_root).join(".dude-candidates"));
+        dude_memory.set_notifications(Arc::new(dude_runner::MemoryNotifications(dudes.clone())));
+
         let readiness = AppReadiness::validated_ready();
         let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
             config.application_config_path.clone(),
@@ -530,6 +535,7 @@ impl AppState {
             crate::adapters::outbound::skin::FileSkinStore::new(skin_root),
         ));
         Ok(Self {
+            dude_memory,
             dudes,
             config,
             _temporary_database: temporary_database,

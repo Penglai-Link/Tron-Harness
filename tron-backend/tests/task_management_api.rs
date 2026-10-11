@@ -10,6 +10,29 @@ use tron_backend::config::AppConfig;
 use common::{app_with_config, authenticated_request, response_json};
 
 #[tokio::test]
+async fn tasks_reject_unknown_dude_owner_on_create_and_list() {
+    let router = task_app("unknown-dude");
+    let response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/tasks",
+        Some(json!({
+            "title": "Prepare report", "ownerDudeCode": "missing-dude"
+        })),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/tasks?ownerDudeCode=missing-dude",
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn platform_general_tasks_have_nullable_workspace_and_clearable_deadline() {
     let router = task_app("platform-general");
     let response = authenticated_request(
