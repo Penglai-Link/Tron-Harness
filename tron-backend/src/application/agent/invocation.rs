@@ -155,6 +155,21 @@ impl AgentInvocationService {
         self.short_term_memory.clone()
     }
 
+    pub(crate) fn collaboration_harness(
+        &self,
+    ) -> Result<super::runtime::ReactAgent, crate::domain::agent::AgentError> {
+        super::ReactAgentBuilder::new(
+            self.model_client.clone(),
+            self.tool_registry.clone(),
+            self.event_bus.clone(),
+        )
+        .with_framework_host(self.framework_host.clone())
+        .with_directory_inspector(self.directory_inspector.clone())
+        .with_short_term_memory(self.short_term_memory.clone())
+        .with_auto_model_router(self.auto_model_router.clone())
+        .build()
+    }
+
     pub(crate) fn run_context_builder(&self) -> AgentRunContextBuilder {
         AgentRunContextBuilder::new(
             self.workspaces.clone(),
