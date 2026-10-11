@@ -49,6 +49,8 @@ pub struct MemoryBatch {
     pub status: MemoryBatchStatus,
     pub sources: Vec<MemorySource>,
     pub memory_receipts: Vec<MemoryWriteReceipt>,
+    #[serde(default)]
+    pub consolidation_plan: Option<serde_json::Value>,
     pub summary: Option<String>,
     pub revision: u32,
     pub created_at: i64,
