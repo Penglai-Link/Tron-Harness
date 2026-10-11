@@ -189,7 +189,7 @@ impl AgentInvocationService {
     }
 
     pub(crate) fn run_context_builder(&self) -> AgentRunContextBuilder {
-        AgentRunContextBuilder::new(
+        let builder = AgentRunContextBuilder::new(
             self.workspaces.clone(),
             self.apps.clone(),
             self.variables.clone(),
@@ -203,7 +203,11 @@ impl AgentInvocationService {
             self.auto_model_route.clone(),
             self.directory_inspector.clone(),
         )
-        .with_execution_identity(self.platform_scope, self.collaboration_owner.clone())
+        .with_execution_identity(self.platform_scope, self.collaboration_owner.clone());
+        match &self.auto_model_router {
+            Some(router) => builder.with_model_router(router.clone()),
+            None => builder,
+        }
     }
 
     pub async fn generate_stateless_model(
