@@ -28,6 +28,7 @@ pub(super) mod collaboration;
 #[path = "host_subagents.rs"]
 mod subagents;
 pub use subagents::{SubagentRecord, SubagentView};
+pub use collaboration::{ThreadFeedback, ThreadFeedbackSink};
 #[path = "host_continuation.rs"]
 mod host_continuation;
 #[path = "host_control.rs"]
@@ -99,6 +100,7 @@ struct Host {
     collaboration_builder:
         OnceCell<std::sync::Weak<crate::application::agent::AgentRunContextBuilder>>,
     collaboration_threads: collaboration::Threads,
+    thread_feedback: OnceCell<Arc<dyn ThreadFeedbackSink>>,
     _temporary: Option<tempfile::TempDir>,
 }
 impl FrameworkHost {
@@ -655,6 +657,7 @@ impl FrameworkHost {
             agent_management: OnceCell::new(),
             collaboration_builder: OnceCell::new(),
             collaboration_threads: Default::default(),
+            thread_feedback: OnceCell::new(),
             _temporary: None,
         }))
     }
@@ -700,6 +703,7 @@ impl FrameworkHost {
             agent_management: OnceCell::new(),
             collaboration_builder: OnceCell::new(),
             collaboration_threads: Default::default(),
+            thread_feedback: OnceCell::new(),
             _temporary: Some(directory),
         })))
     }

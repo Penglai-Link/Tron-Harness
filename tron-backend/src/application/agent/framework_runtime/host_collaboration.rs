@@ -9,6 +9,7 @@ use std::sync::Weak;
 #[path = "host_collaboration_threads.rs"]
 mod threads;
 pub(super) use threads::Threads;
+pub use threads::{ThreadFeedback, ThreadFeedbackSink};
 
 #[derive(Clone, Copy)]
 enum ExecutionLimits {
@@ -107,10 +108,23 @@ impl Runtime {
     pub fn directory(
         &self,
     ) -> Result<Vec<crate::domain::agent::InternalAgentToolPolicy>, fw::AgentError> {
-        self.builder
-            .agent_management()
-            .list_workspace_internal_agents(&self.context.workspace_code)
-            .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))
+        let management = self.builder.agent_management();
+        if self.context.workspace_code.is_empty() {
+            management
+                .list_platform_internal_agents()
+                .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))?
+                .into_iter()
+                .map(|agent| {
+                    management
+                        .platform_internal_agent_policy(&agent.agent_code)
+                        .map_err(|error| failure(format!("Agent policy load failed: {error:?}")))
+                })
+                .collect()
+        } else {
+            management
+                .list_workspace_internal_agents(&self.context.workspace_code)
+                .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))
+        }
     }
     fn authorize(&self, code: &str) -> Result<String, fw::AgentError> {
         self.directory()?
@@ -169,10 +183,16 @@ impl Runtime {
         // Collaboration uses native sessions; no product chat or checkpoint is fabricated.
         let mut prepared = self
             .builder
+            .clone()
+            .with_execution_identity(
+                base.workspace_code.is_empty(),
+                caller_context.collaboration_owner.clone(),
+            )
             .prepare(command, base.user_code.clone(), Some(base.locale.clone()))
             .await
             .map_err(|error| failure(error.message()))?;
         let context = &mut prepared.context;
+        context.collaboration_owner = caller_context.collaboration_owner.clone();
         context.conversation_code = Some(session.clone());
         context.stream_key = Some(session.clone());
         context.model = crate::adapters::outbound::model::with_person_ai_conversation(
@@ -195,6 +215,52 @@ impl Runtime {
         // Capture the active caller tool span before SDK-owned tasks are started.
         let trace_parent = opentelemetry::Context::current();
         request.extensions.insert(eliteforge_agent_official_plugin_otel::TraceParent(trace_parent));
+        // Ownership is derived from the trusted caller, never tool arguments.
+        let mut host_context = parent
+            .host_context()
+            .unwrap_or_else(|| serde_json::json!({}));
+        if let Some(metadata) = host_context.as_object_mut() {
+            metadata.insert(
+                "collaborationOwner".into(),
+                serde_json::to_value(&context.collaboration_owner).map_err(failure)?,
+            );
+        } else {
+            return Err(failure("host collaboration context must be an object"));
+        }
+        request.host_context = Some(host_context);
+        request.message_provenance = Some(fw::MessageProvenance {
+            sender: fw::MessageSender {
+                kind: if caller_context
+                    .collaboration_owner
+                    .as_ref()
+                    .is_some_and(|owner| {
+                        owner.kind == "DUDE"
+                            && caller_context.agent_code.as_deref() == Some(owner.code.as_str())
+                    }) {
+                    "DUDE"
+                } else {
+                    "AGENT"
+                }
+                .into(),
+                id: caller_context.agent_code.clone(),
+                display_name: caller_context.agent_code.clone(),
+                avatar_url: None,
+            },
+            source: Some("THREAD".into()),
+            correlation: Some(
+                serde_json::json!({"originSessionCode": parent.session_id, "initiatorAgentCode": caller_context.agent_code}),
+            ),
+        });
+        request.assistant_provenance = Some(fw::MessageProvenance {
+            sender: fw::MessageSender {
+                kind: "AGENT".into(),
+                id: Some(code.clone()),
+                display_name: Some(code.clone()),
+                avatar_url: None,
+            },
+            source: Some("THREAD".into()),
+            correlation: None,
+        });
         match limits {
             ExecutionLimits::AgentDefinition => {
                 request.limits.max_steps = context.limits.max_steps as usize;
