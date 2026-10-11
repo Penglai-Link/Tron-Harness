@@ -106,7 +106,7 @@ fn thread_access_requires_root_owner_and_scope_but_allows_other_sessions_of_same
     assert!(!record.authorized_owner("", Some("other-profile"), &record.owner));
 }
 
-struct CompletionModel;
+struct CompletionModel(Arc<std::sync::atomic::AtomicUsize>);
 #[async_trait::async_trait]
 impl fw::ChatModel for CompletionModel {
     async fn generate(
@@ -115,13 +115,14 @@ impl fw::ChatModel for CompletionModel {
         _: fw::ChatRequest,
         _: &dyn fw::ChatStream,
     ) -> Result<fw::ChatResponse, fw::ModelError> {
+        self.0.fetch_add(1, Ordering::AcqRel);
         Ok(fw::ChatResponse {
             content: fw::Content::text("completed delegated work"),
             ..Default::default()
         })
     }
 }
-async fn recovery_agent(host: &FrameworkHost) -> Agent {
+async fn recovery_agent(host: &FrameworkHost, calls: Arc<std::sync::atomic::AtomicUsize>) -> Agent {
     let artifacts = host.0.path.with_extension("artifacts");
     std::fs::create_dir_all(&artifacts).unwrap();
     let agent = eliteforge_agent_test_support::TestBuilder::new()
@@ -134,7 +135,7 @@ async fn recovery_agent(host: &FrameworkHost) -> Agent {
         ))
         .plugin(fw::ModelConnectionPlugin::new(fw::ModelConnection::new(
             "fixture",
-            Arc::new(CompletionModel),
+            Arc::new(CompletionModel(calls)),
             vec![fw::ModelDescriptor::new("complete")],
         )))
         .plugin(
@@ -159,7 +160,8 @@ async fn restart_reconciles_real_native_run_completion_and_does_not_reexecute_mo
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("recovery.sqlite3");
     let host = FrameworkHost::persistent(&path, None);
-    let agent = recovery_agent(&host).await;
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let agent = recovery_agent(&host, calls.clone()).await;
     let mut thread = record("thread-native");
     thread.summary.status = fw::ThreadStatus::Running;
     thread.completion = None;
@@ -174,7 +176,7 @@ async fn restart_reconciles_real_native_run_completion_and_does_not_reexecute_mo
     drop(agent);
     drop(host);
     let host = FrameworkHost::persistent(&path, None);
-    let _agent = recovery_agent(&host).await;
+    let _agent = recovery_agent(&host, calls.clone()).await;
     let sink = Arc::new(Sink {
         fail: AtomicBool::new(false),
         events: Default::default(),
@@ -182,6 +184,7 @@ async fn restart_reconciles_real_native_run_completion_and_does_not_reexecute_mo
     host.set_thread_feedback_sink(sink.clone()).unwrap();
     assert_eq!(host.recover_collaboration_threads().await.unwrap(), 1);
     assert_eq!(host.recover_collaboration_threads().await.unwrap(), 0);
+    assert_eq!(calls.load(Ordering::Acquire), 1);
     let stored = host.thread_record("thread-native").await.unwrap().unwrap();
     assert_eq!(stored.summary.status, fw::ThreadStatus::Completed);
     let events = sink.events.lock().unwrap();
