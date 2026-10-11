@@ -71,6 +71,15 @@ test.beforeAll(async () => {
     await new Promise(resolveDelay => setTimeout(resolveDelay, 250));
   }
   if (!ready) throw new Error(logs);
+  // Configure an executable loop through the same public management API as an
+  // existing user. This fixture tests parallel execution, not bootstrap policy.
+  await request("POST", "/api/v1/agents/loops", {
+    loopCode: "dude-acceptance-react", name: "Dude acceptance React", kind: "React",
+    nodes: [], edges: [], maxParallelNodes: 1,
+  });
+  const main = (await request("GET", "/api/v1/dudes")).find((dude: { isMain: boolean }) => dude.isMain);
+  if (!main) throw new Error("default main Dude missing");
+  await request("PATCH", `/api/v1/dudes/${main.dudeCode}`, { loopCode: "dude-acceptance-react" });
   await request("POST", "/api/v1/admin/platform/models", {
     displayName: "Dude Acceptance", vendor: "OpenAI", protocol: "OPENAI_COMPATIBLE", modelType: "TEXT", modelCapabilities: ["TEXT_GENERATION"],
     baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiPath: "/chat/completions", apiKeyRef: "synthetic-acceptance", modelName: "acceptance-model", enabled: true,
