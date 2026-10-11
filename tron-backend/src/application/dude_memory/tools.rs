@@ -114,7 +114,7 @@ impl Tool for MemorySkillTool {
                 .service
                 .begin_skill_authoring(user, &input.batch_code, &input.skill_name, session)
                 .map_err(map)?;
-            json!({"candidate":result.candidate,"creatorMarkdown":result.creator_markdown})
+            json!({"candidate":result.candidate,"creatorMarkdown":result.creator_markdown,"creatorFiles":result.creator_files})
         };
         Ok(ToolExecutionResult::observation(ToolObservation {
             tool_name: self.name().into(),
