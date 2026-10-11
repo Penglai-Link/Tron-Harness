@@ -652,3 +652,6 @@ async fn subagents_and_threads_use_target_auto_pool_instead_of_parent_auto_pool(
         assert!(host.close().await.is_success());
     }
 }
+
+#[path = "support/dude_thread_intervention.rs"]
+mod dude_intervention;
