@@ -143,7 +143,11 @@ impl Runtime {
                 record.completion = Some((fw::ThreadStatus::Failed, Err(error.to_string())));
                 record.feedback_pending = record.owner.kind == "DUDE";
                 host.persist_thread(&mut record, false).await?;
-                thread.state.lock().unwrap().record = record;
+                let mut state = thread.state.lock().unwrap();
+                state.summary = record.summary.clone();
+                let (_, completion) = watch::channel(record.completion.clone());
+                state.completion = completion;
+                state.record = record;
                 return Err(error);
             }
         };
@@ -160,6 +164,7 @@ impl Runtime {
         let origin = parent.cloned();
         let returned = summary.clone();
         let feedback_host = host.clone();
+        let execution_sequence = thread.state.lock().unwrap().record.execution_sequence;
         // Move the RunHandle into its background owner before another await.
         // Cancelling the initiating tool/Run must not cancel this independent Thread.
         crate::app::telemetry::spawn_traced(async move {
@@ -189,22 +194,26 @@ impl Runtime {
             };
             let _transition = thread.transition.lock().await;
             let mut record = thread.state.lock().unwrap().record.clone();
-            record.summary.status = status.clone();
-            record.completion = Some((
-                status.clone(),
-                result
-                    .as_ref()
-                    .map(Clone::clone)
-                    .map_err(ToString::to_string),
-            ));
-            record.feedback_pending = record.owner.kind == "DUDE";
-            // Completion and pending feedback are one durable write. Sink failure is retried.
-            if let Err(error) = feedback_host.persist_thread(&mut record, false).await {
-                tracing::error!(thread_code = %record.summary.thread_id, %error, "persist Thread completion failed; native run remains authoritative");
-            } else {
-                let mut state = thread.state.lock().unwrap();
-                state.summary.status = status.clone();
-                state.record = record;
+            if record.execution_sequence == execution_sequence
+                && record.summary.latest_run_id == Some(run_id)
+            {
+                record.summary.status = status.clone();
+                record.completion = Some((
+                    status.clone(),
+                    result
+                        .as_ref()
+                        .map(Clone::clone)
+                        .map_err(ToString::to_string),
+                ));
+                record.feedback_pending = record.owner.kind == "DUDE";
+                // Completion and pending feedback are one durable write. Sink failure is retried.
+                if let Err(error) = feedback_host.persist_thread(&mut record, false).await {
+                    tracing::error!(thread_code = %record.summary.thread_id, %error, "persist Thread completion failed; native run remains authoritative");
+                } else {
+                    let mut state = thread.state.lock().unwrap();
+                    state.summary.status = status.clone();
+                    state.record = record;
+                }
             }
             if let Err(error) = feedback_host.flush_thread_feedback().await {
                 tracing::warn!(%error, "Thread feedback remains pending");
