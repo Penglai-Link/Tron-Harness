@@ -7,7 +7,7 @@ export function NotificationLauncher() {
   const { t } = useTranslation("pages");
   const query = useQuery({ queryKey: notificationQueryKey, queryFn: ({ signal }) => listNotifications(signal), refetchInterval: 15000 });
   const unread = query.data?.filter(item => item.readAt === null && item.archivedAt === null).length ?? 0;
-  return <Button variant="ghost" size="sm" render={<Link to="/notifications" />} aria-label={t("notifications.unreadCount", { count: unread })}>
+  return <Button variant="ghost" size="sm" nativeButton={false} render={<Link to="/notifications" />} aria-label={t("notifications.unreadCount", { count: unread })}>
     {t("notifications.title")}{unread > 0 ? <span className="rounded-full bg-[var(--color-accent)] px-1.5 text-xs text-[var(--color-on-primary)]">{unread}</span> : null}
   </Button>;
 }

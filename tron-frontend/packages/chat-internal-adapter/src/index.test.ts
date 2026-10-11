@@ -54,14 +54,15 @@ afterEach(() => {
 });
 
 describe("createInternalChatAdapter", () => {
-  it("scopes every chat transport to its bound workspace, including SSE and binary attachments", async () => {
-    const fixture = sessionFixture();
+  it.each([{workspaceCode:"TRON_CORE",ownerDudeCode:null}, {workspaceCode:null,ownerDudeCode:"main-dude"}])("scopes every chat transport including SSE and binary attachments ($workspaceCode / $ownerDudeCode)", async (scope) => {
+    const fixture = {...sessionFixture(), ...scope};
     const attachment = { id: "FILE-1", kind: "file", fileName: "note.txt", contentType: "text/plain", summary: "note", metadata: {} };
     const result = { session: fixture, messages: [], run: { runCode: "RUN-1", workspaceCode: fixture.workspaceCode, status: "COMPLETED", finalOutput: "done", stepCount: 1 } };
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       // The backend requires scope outside the JSON body, including read requests.
-      expect(headers.get("X-Workspace-Code")).toBe("TRON_CORE");
+      expect(headers.get("X-Workspace-Code")).toBe(scope.workspaceCode);
+      expect(headers.get("X-Dude-Code")).toBe(scope.ownerDudeCode);
       expect(headers.get("Accept-Language")).toBe("zh-CN");
       expect(headers.get("Authorization")).toBe("Bearer scoped-token");
       if (url.endsWith("/stream")) return new Response(`data: ${JSON.stringify({ type: "RUN_FINISHED", productCompletion: true, result })}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
@@ -76,11 +77,12 @@ describe("createInternalChatAdapter", () => {
     });
     globalThis.fetch = fetchMock as typeof fetch;
     const adapter = createInternalChatAdapter({
-      workspaceCode: "TRON_CORE", baseUrl: "https://internal.example.com",
+      workspaceCode: scope.workspaceCode, baseUrl: "https://internal.example.com",
       getAccessToken: () => "scoped-token",
-      getHeaders: () => ({ "Accept-Language": "zh-CN", "X-Workspace-Code": "OTHER" }),
+      getHeaders: () => ({ "Accept-Language": "zh-CN", ...(scope.ownerDudeCode ? {"X-Dude-Code":scope.ownerDudeCode} : {"X-Workspace-Code":"OTHER"}) }),
     });
-    await adapter.createSession({ workspaceCode: fixture.workspaceCode });
+    if (scope.workspaceCode) await adapter.createSession({ workspaceCode: fixture.workspaceCode });
+    await adapter.loadHistory?.(fixture.sessionCode, {limit:20,cursor:null});
     await adapter.loadMessages(fixture.sessionCode);
     await adapter.loadAguiEvents(fixture.sessionCode);
     await adapter.loadProtocolEvents?.(fixture.sessionCode);
@@ -95,7 +97,7 @@ describe("createInternalChatAdapter", () => {
     await adapter.uploadAttachment?.(fixture, { file: new File(["note"], "note.txt") });
     await adapter.downloadAttachment?.(fixture, attachment);
     await adapter.deleteSession(fixture.sessionCode);
-    expect(fetchMock).toHaveBeenCalledTimes(15);
+    expect(fetchMock).toHaveBeenCalledTimes(scope.workspaceCode ? 16 : 15);
     const actionCall = fetchMock.mock.calls.find(([url])=>url.includes("/a2ui/actions/stream"))!;
     expect(JSON.parse(String(actionCall[1]?.body))).toMatchObject({actionId:"action-1",surfaceInstanceId:"surface-instance",expectedRevision:2,metadata:{a2uiClientDataModel:{surfaces:{search:{query:"q"}}}}});
   });
