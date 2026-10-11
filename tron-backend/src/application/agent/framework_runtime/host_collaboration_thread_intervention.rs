@@ -15,7 +15,10 @@ impl FrameworkHost {
             .thread_record(id)
             .await?
             .filter(|record| {
-                !record.closed && record.owner.kind == "DUDE" && record.owner.code == dude
+                !record.closed
+                    && record.owner.kind == "DUDE"
+                    && record.owner.code == dude
+                    && record.user_code.as_deref() == Some(user)
             })
             .ok_or_else(|| failure("thread not found"))?;
         // Platform route authenticates the human. Keep the original owner and authorization scope.
@@ -40,7 +43,6 @@ impl FrameworkHost {
             context: prepared.context,
         };
         let thread = runtime.thread(id).await?;
-        let _ = user; // The trusted human identity is carried in provenance, never ownership.
         Ok((runtime, thread))
     }
     pub async fn dude_thread_send(

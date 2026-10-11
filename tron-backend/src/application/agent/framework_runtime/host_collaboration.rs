@@ -141,7 +141,7 @@ impl Runtime {
         parent: &fw::RunContext,
         limits: ExecutionLimits,
     ) -> Result<(Agent, fw::RunRequest, AgentRunContext), fw::AgentError> {
-        let host = self.host()?;
+        self.host()?;
         let caller = HostExecution::from_extensions(&parent.extensions)?;
         let caller_context = caller.state.lock().await.context.clone();
         if caller_context.workspace_code != self.context.workspace_code
