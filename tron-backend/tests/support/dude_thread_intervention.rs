@@ -307,6 +307,9 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         .dude_thread_history("main-agent", &id, Default::default())
         .await
         .unwrap();
+    let response = serde_json::to_value(&history.records.interactions[0]).unwrap();
+    assert_eq!(response["responseProvenance"]["sender"]["kind"], "HUMAN");
+    assert_eq!(response["responseProvenance"]["sender"]["id"], USER);
     let input = history
         .records
         .messages
