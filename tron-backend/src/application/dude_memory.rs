@@ -12,4 +12,7 @@ pub use collector::DudeMemorySourceCollector;
 mod tools;
 pub use tools::{dude_memory_tool_definitions, register_dude_memory_tools};
 mod runner;
-pub use runner::{DudeMemoryAgentRuntime, DudeMemoryRunner, NativeDudeMemoryAgentRuntime};
+pub use runner::{
+    CallbackDudeMemorySessionFactory, DudeMemoryAgentRuntime, DudeMemoryRunner,
+    DudeMemorySessionFactory, MemorySessionFuture, NativeDudeMemoryAgentRuntime,
+};
