@@ -11,6 +11,7 @@ use crate::{
 pub struct SkillAuthoringContext {
     pub candidate: SkillCandidate,
     pub creator_markdown: Option<String>,
+    pub creator_files: Vec<SkillArtifactFile>,
 }
 impl DudeMemoryService {
     pub fn begin_skill_authoring(
@@ -19,6 +20,22 @@ impl DudeMemoryService {
         batch_code: &str,
         skill_name: &str,
         session: &str,
+    ) -> Result<SkillAuthoringContext, DudeMemoryError> {
+        let batch = self.get_batch(user, batch_code)?;
+        let sources = batch
+            .sources
+            .iter()
+            .map(|source| source.source_code.clone())
+            .collect::<Vec<_>>();
+        self.begin_skill_authoring_for_sources(user, batch_code, skill_name, session, &sources)
+    }
+    pub fn begin_skill_authoring_for_sources(
+        &self,
+        user: &str,
+        batch_code: &str,
+        skill_name: &str,
+        session: &str,
+        source_codes: &[String],
     ) -> Result<SkillAuthoringContext, DudeMemoryError> {
         if skill_name == "skill-creator"
             || skill_name.is_empty()
@@ -43,15 +60,35 @@ impl DudeMemoryService {
                     c.status,
                     SkillCandidateStatus::RevisionRequested
                         | SkillCandidateStatus::WaitingDependency
+                        | SkillCandidateStatus::Authoring
                 )
         }) {
             return Ok(SkillAuthoringContext {
                 candidate,
                 creator_markdown: None,
+                creator_files: Vec::new(),
             });
         }
-        // An unchanged rejected experience is suppressed even if a later batch repeats it.
-        let evidence: Vec<SkillEvidence> = batch.sources.iter().map(SkillEvidence::from).collect();
+        if source_codes.is_empty()
+            || source_codes.iter().any(|code| {
+                !batch
+                    .sources
+                    .iter()
+                    .any(|source| source.source_code == *code)
+            })
+        {
+            return Err(DudeMemoryError::Invalid(
+                "Skill evidence must identify sources in the current batch".into(),
+            ));
+        }
+        // Only this experience's evidence participates in rejection deduplication. Unrelated
+        // new conversations in the batch cannot make a rejected experience appear new.
+        let evidence: Vec<SkillEvidence> = batch
+            .sources
+            .iter()
+            .filter(|source| source_codes.contains(&source.source_code))
+            .map(SkillEvidence::from)
+            .collect();
         if let Some(candidate) = repository.list_candidates(user)?.into_iter().find(|c| {
             c.skill_name == skill_name
                 && c.status == SkillCandidateStatus::Rejected
@@ -60,6 +97,7 @@ impl DudeMemoryService {
             return Ok(SkillAuthoringContext {
                 candidate,
                 creator_markdown: None,
+                creator_files: Vec::new(),
             });
         }
         let installed_files = installed_artifact(&self.skills, skill_name)?;
@@ -101,17 +139,17 @@ impl DudeMemoryService {
         candidate.author_session_code = session.into();
         candidate.updated_at = now();
         let creator = load_creator(&self.skills);
-        let markdown = match creator {
-            Ok((receipt, markdown)) => {
+        let (markdown, creator_files) = match creator {
+            Ok((receipt, markdown, files)) => {
                 candidate.creator = Some(receipt);
                 candidate.status = SkillCandidateStatus::Authoring;
                 candidate.last_error = None;
-                Some(markdown)
+                (Some(markdown), files)
             }
             Err(error) => {
                 candidate.status = SkillCandidateStatus::WaitingDependency;
                 candidate.last_error = Some(error.to_string());
-                None
+                (None, Vec::new())
             }
         };
         repository.save_candidate(previous.as_ref(), &candidate)?;
@@ -126,6 +164,7 @@ impl DudeMemoryService {
         Ok(SkillAuthoringContext {
             candidate,
             creator_markdown: markdown,
+            creator_files,
         })
     }
     /// This host tool must be called from the author session that received the installed skill-creator instructions.
@@ -144,7 +183,7 @@ impl DudeMemoryService {
         {
             return Err(DudeMemoryError::Conflict);
         }
-        let (creator, _) = load_creator(&self.skills)?;
+        let (creator, _, _) = load_creator(&self.skills)?;
         if previous.creator.as_ref() != Some(&creator) {
             return Err(DudeMemoryError::Dependency(
                 "skill-creator changed; reload it before authoring".into(),
@@ -168,10 +207,28 @@ impl DudeMemoryService {
         std::fs::create_dir_all(&self.staging_root)
             .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
         let stage = self.staging_root.join(format!(
-            "{}-{}",
-            candidate.candidate_code, candidate.revision
+            "{}-{}-{}",
+            candidate.candidate_code, candidate.revision, candidate.artifact_hash
         ));
-        materialize_artifact(&stage, &candidate.files)?;
+        // Publish a complete stage atomically. A crash before the record CAS may leave the
+        // same immutable stage behind; retry reuses it only when its bytes still match.
+        if stage.exists() {
+            if artifact_hash(&read_artifact(&stage)?)? != candidate.artifact_hash {
+                return Err(DudeMemoryError::Conflict);
+            }
+        } else {
+            let temporary = tempfile::tempdir_in(&self.staging_root)
+                .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+            let artifact = temporary.path().join("artifact");
+            materialize_artifact(&artifact, &candidate.files)?;
+            if let Err(error) = std::fs::rename(&artifact, &stage) {
+                if !stage.exists()
+                    || artifact_hash(&read_artifact(&stage)?)? != candidate.artifact_hash
+                {
+                    return Err(DudeMemoryError::Storage(error.to_string()));
+                }
+            }
+        }
         self.repository
             .lock()
             .unwrap()
@@ -199,6 +256,70 @@ impl DudeMemoryService {
             )?;
         }
         Ok(candidate)
+    }
+    /// Installation and retrieval indexing are distinct recoverable steps. The Skill center
+    /// owns the index state; the candidate only keeps a retry marker and user-visible error.
+    pub async fn index_installed(
+        &self,
+        candidate: &SkillCandidate,
+        rag: crate::app::AppRagService,
+    ) -> Result<SkillCandidate, DudeMemoryError> {
+        if candidate.status != SkillCandidateStatus::Installed {
+            return Ok(candidate.clone());
+        }
+        let index = crate::application::skill::SkillRagIndexService::new(self.skills.clone(), rag)
+            .index_registry_skill(&candidate.skill_name)
+            .await;
+        let failure = match index {
+            Err(error) => Some(error.to_string()),
+            Ok(summary)
+                if summary.vector_status == crate::domain::skill::SkillRagIndexStatus::Failed
+                    || summary.graph_status
+                        == crate::domain::skill::SkillRagIndexStatus::Failed =>
+            {
+                Some(
+                    summary
+                        .last_error
+                        .unwrap_or_else(|| "Skill retrieval index failed".into()),
+                )
+            }
+            Ok(_) => None,
+        };
+        let mut repository = self.repository.lock().unwrap();
+        let previous = repository.get_candidate(&candidate.candidate_code)?;
+        check_request(
+            &previous,
+            &candidate.user_code,
+            candidate.revision,
+            &candidate.artifact_hash,
+        )?;
+        if previous.status != SkillCandidateStatus::Installed {
+            return Err(DudeMemoryError::Conflict);
+        }
+        let mut next = previous.clone();
+        next.last_error = failure.map(|error| format!("Skill index pending: {error}"));
+        if next.last_error != previous.last_error {
+            next.updated_at = now();
+            repository.save_candidate(Some(&previous), &next)?;
+            drop(repository);
+            if let Some(error) = &next.last_error {
+                self.notify(
+                    &next,
+                    "SkillIndexFailed",
+                    format!(
+                        "Skill {} is installed; retrieval indexing will retry: {error}",
+                        next.skill_name
+                    ),
+                )?;
+            } else if previous.last_error.is_some() {
+                self.notify(
+                    &next,
+                    "SkillIndexRecovered",
+                    format!("Skill {} retrieval index is ready", next.skill_name),
+                )?;
+            }
+        }
+        Ok(next)
     }
     pub fn approve(
         &self,
@@ -303,6 +424,14 @@ impl DudeMemoryService {
             candidate.reason = Some(text);
         }
         repository.save_candidate(Some(&previous), &candidate)?;
+        drop(repository);
+        if !revise {
+            self.notify(
+                &candidate,
+                "SkillRejected",
+                format!("Skill {} candidate was rejected", candidate.skill_name),
+            )?;
+        }
         Ok(candidate)
     }
     pub fn retry_install(
@@ -346,7 +475,10 @@ impl DudeMemoryService {
         match installed {
             Ok(()) => {
                 candidate.status = SkillCandidateStatus::Installed;
-                candidate.last_error = None;
+                candidate.last_error = Some(
+                    "Skill index pending: Installation committed; retrieval index not confirmed"
+                        .into(),
+                );
             }
             Err(error) => {
                 candidate.status = SkillCandidateStatus::InstallFailed;
@@ -396,7 +528,7 @@ fn check_request(
 }
 fn load_creator(
     skills: &SkillRegistryService,
-) -> Result<(CreatorReceipt, String), DudeMemoryError> {
+) -> Result<(CreatorReceipt, String, Vec<SkillArtifactFile>), DudeMemoryError> {
     let creator = skills
         .get_registry_skill("skill-creator")
         .map_err(|_| DudeMemoryError::Dependency("skill-creator is not installed".into()))?;
@@ -407,15 +539,50 @@ fn load_creator(
     }
     let files = read_artifact(std::path::Path::new(&creator.registry_path))?;
     let content_hash = artifact_hash(&files)?;
+    // Instructions and receipt must come from the same filesystem snapshot. Registry
+    // display metadata may lag behind a user's direct file edit until the next scan.
+    let markdown = files
+        .iter()
+        .find(|file| file.path == "SKILL.md")
+        .and_then(|file| super::artifacts::artifact_bytes(file).ok())
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .ok_or_else(|| {
+            DudeMemoryError::Dependency("skill-creator has no readable SKILL.md".into())
+        })?;
+    let frontmatter = markdown
+        .strip_prefix("---\n")
+        .and_then(|text| text.split_once("\n---"))
+        .and_then(|(yaml, _)| serde_yaml::from_str::<serde_yaml::Value>(yaml).ok())
+        .ok_or_else(|| {
+            DudeMemoryError::Dependency("skill-creator frontmatter is invalid".into())
+        })?;
+    if frontmatter["name"].as_str() != Some("skill-creator") {
+        return Err(DudeMemoryError::Dependency(
+            "loaded skill-creator artifact has a different name".into(),
+        ));
+    }
+    let version = frontmatter
+        .get("version")
+        .or_else(|| {
+            frontmatter
+                .get("metadata")
+                .and_then(|metadata| metadata.get("version"))
+        })
+        .and_then(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .or_else(|| value.as_i64().map(|value| value.to_string()))
+        })
+        .unwrap_or_else(|| content_hash.clone());
     Ok((
         CreatorReceipt {
             skill_name: "skill-creator".into(),
-            version: creator
-                .declared_version
-                .unwrap_or_else(|| content_hash.clone()),
+            version,
             content_hash,
         },
-        creator.skill_markdown,
+        markdown,
+        files,
     ))
 }
 fn installed_artifact(

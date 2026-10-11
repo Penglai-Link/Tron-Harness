@@ -617,6 +617,26 @@ mod shared_transaction_tests {
         }
     }
     #[test]
+    fn ordinary_archived_history_excludes_dude_work_even_in_same_workspace() {
+        let (_directory, mut repository) = fixture();
+        let mut user = session("archived-user");
+        user.status = ChatSessionStatus::Archived;
+        repository.create_session(&user).unwrap();
+        let mut dude = session("archived-dude");
+        dude.status = ChatSessionStatus::Archived;
+        dude.source_code = Some("__dude:main-dude".into());
+        repository.create_session(&dude).unwrap();
+        let (items, total) = repository
+            .list_archived_sessions(Some("ws-a"), 0, 100)
+            .unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(items[0].session_code, user.session_code);
+        let (_, total) = repository.list_archived_sessions(None, 0, 100).unwrap();
+        assert_eq!(total, 1);
+        assert!(repository.get_session("archived-dude").is_ok());
+    }
+
+    #[test]
     fn workspace_link_failure_rolls_back_framework_session_and_events() {
         let (_directory, mut repository) = fixture();
         let framework = blocking(repository.framework()).unwrap();

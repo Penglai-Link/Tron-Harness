@@ -79,7 +79,17 @@ pub async fn send_message(
         )
         .await
     {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Ok(result) => {
+            if result.session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:"))
+                && result.run.status != "AWAITING_USER_INPUT"
+            {
+                if let Err(error) = state.dudes.resolve_awaiting_input(&session_code, &result.run.final_output) {
+                    tracing::error!("Dude human response resolution: {error}");
+                    return chat_send_error_response(ChatSendError::Agent(crate::application::agent::AgentInvocationError::RuntimeFailed(error.to_string())));
+                }
+            }
+            Json(ApiResponse::success(result)).into_response()
+        },
         Err(error) => chat_send_error_response(error),
     }
 }
@@ -211,6 +221,7 @@ pub(crate) async fn stream_message_command(
     let llm_runtime = state.llm_runtime.clone();
     let a2ui_action_id = request.a2ui_action_id.clone();
     let a2ui_host = state.agent_framework.clone();
+    let dudes = state.dudes.clone();
     let run_task = AuthHolder::spawn(async move {
         let result = chats
             .send_message_stream(
@@ -225,7 +236,18 @@ pub(crate) async fn stream_message_command(
             )
             .await;
         let completion = match result {
-            Ok(result) => ChatStreamCompletion::Success(result),
+            Ok(result) => {
+                if result.session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:"))
+                    && result.run.status != "AWAITING_USER_INPUT"
+                {
+                    match dudes.resolve_awaiting_input(&session_code_for_task, &result.run.final_output) {
+                        Ok(()) => ChatStreamCompletion::Success(result),
+                        Err(error) => ChatStreamCompletion::Error { code: "101031004".into(), message: error.to_string() },
+                    }
+                } else {
+                    ChatStreamCompletion::Success(result)
+                }
+            },
             Err(error) => {
                 let code = chat_send_error_code(&error).to_string();
                 let message = chat_send_error_message(error);

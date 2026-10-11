@@ -2,13 +2,73 @@ use super::internal_agents::normalize_string_codes;
 use super::*;
 
 impl AgentManagementService {
+    /// Definition identity is independent from the workspace containing work.
+    pub fn is_dude_definition(&self, agent_code: &str) -> Result<bool, AgentManagementError> {
+        Ok(self
+            .repository()
+            .list_dude_codes()?
+            .iter()
+            .any(|code| code == agent_code))
+    }
+
+    /// Fresh installations start with a runnable main Agent. Saved choices remain authoritative.
+    pub fn initialize_default_main_loop(&self) -> Result<(), AgentManagementError> {
+        if self
+            .repository()
+            .list_platform_internal_agent_configs()?
+            .iter()
+            .any(|c| c.agent_code == "main-agent")
+        {
+            return Ok(());
+        }
+        let code = "default-react";
+        if self.loop_design(code).is_err() {
+            self.save_loop_design(
+                crate::domain::agent::loop_design::LoopDesign {
+                    loop_code: code.into(),
+                    name: "默认 ReAct".into(),
+                    kind: crate::domain::agent::loop_design::LoopKind::React,
+                    version: 0,
+                    nodes: vec![],
+                    edges: vec![],
+                    max_parallel_nodes: 1,
+                    updated_at: 0,
+                },
+                0,
+            )?;
+        }
+        let mut config = default_config(internal_definitions::internal_agents().remove(0));
+        config.loop_code = Some(code.into());
+        self.repository()
+            .insert_platform_internal_agent_config(&config)
+    }
+
     /// Initialize an independent Dude with a full copy of generic Agent policy.
-    pub fn initialize_dude_definition(&self, code:&str, name:&str, role_prompt:Option<String>) -> Result<(),AgentManagementError> {
-        let configs=self.platform_internal_agent_configs()?;
-        if configs.iter().any(|c|c.agent_code==code){return Ok(())}
-        let mut config=configs.into_iter().find(|c|c.agent_code=="main-agent").ok_or(AgentManagementError::InternalAgentNotFound)?;
-        config.agent_code=code.into();config.name=name.into();if let Some(prompt)=role_prompt{config.role_prompt=prompt}
-        self.repository().insert_platform_internal_agent_config(&config)
+    pub fn initialize_dude_definition(
+        &self,
+        code: &str,
+        name: &str,
+        role_prompt: Option<String>,
+    ) -> Result<(), AgentManagementError> {
+        let configs = self.platform_internal_agent_configs()?;
+        if configs.iter().any(|c| c.agent_code == code) {
+            return self
+                .repository()
+                .copy_initial_agent_skills("main-agent", code);
+        }
+        let mut config = configs
+            .into_iter()
+            .find(|c| c.agent_code == "main-agent")
+            .ok_or(AgentManagementError::InternalAgentNotFound)?;
+        config.agent_code = code.into();
+        config.name = name.into();
+        if let Some(prompt) = role_prompt {
+            config.role_prompt = prompt
+        }
+        self.repository()
+            .insert_platform_internal_agent_config(&config)?;
+        self.repository()
+            .copy_initial_agent_skills("main-agent", code)
     }
 
     pub(super) fn platform_internal_agent_configs(
@@ -39,10 +99,16 @@ impl AgentManagementService {
     pub fn list_platform_internal_agents(
         &self,
     ) -> Result<Vec<InternalAgentToolPolicy>, AgentManagementError> {
-        let dudes=self.repository().list_dude_codes()?;
-        Ok(self.all_platform_internal_agents()?.into_iter().filter(|p|!dudes.contains(&p.agent_code)).collect())
+        let dudes = self.repository().list_dude_codes()?;
+        Ok(self
+            .all_platform_internal_agents()?
+            .into_iter()
+            .filter(|p| !dudes.contains(&p.agent_code))
+            .collect())
     }
-    pub fn all_platform_internal_agents(&self)->Result<Vec<InternalAgentToolPolicy>,AgentManagementError>{
+    pub fn all_platform_internal_agents(
+        &self,
+    ) -> Result<Vec<InternalAgentToolPolicy>, AgentManagementError> {
         let tool_codes = self.tool_codes();
         Ok(self
             .platform_internal_agent_configs()?
@@ -51,10 +117,10 @@ impl AgentManagementService {
             .collect())
     }
 
-    pub fn create_platform_internal_agent(
+    pub fn prepare_platform_internal_agent(
         &self,
         command: CreateWorkspaceInternalAgentCommand,
-    ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+    ) -> Result<PlatformInternalAgentConfig, AgentManagementError> {
         internal_definitions::validate_definition(&command.name, &command.role_prompt)?;
         let mut config = default_config(internal_definitions::internal_agents().remove(0));
         config.agent_code = self.validate_new_agent_code(&command.agent_code)?;
@@ -67,6 +133,13 @@ impl AgentManagementService {
         config.candidate_model_codes =
             internal_definitions::normalize_candidate_model_codes(command.candidate_model_codes)?;
         config.loop_code = Some(self.validate_loop_selection(command.loop_code.as_deref())?);
+        Ok(config)
+    }
+    pub fn create_platform_internal_agent(
+        &self,
+        command: CreateWorkspaceInternalAgentCommand,
+    ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        let config = self.prepare_platform_internal_agent(command)?;
         self.repository()
             .insert_platform_internal_agent_config(&config)?;
         Ok(platform_view(config, &self.tool_codes()))
@@ -74,6 +147,14 @@ impl AgentManagementService {
 
     pub fn delete_platform_internal_agent(&self, code: &str) -> Result<(), AgentManagementError> {
         let code = code.trim();
+        if self
+            .repository()
+            .list_dude_codes()?
+            .iter()
+            .any(|d| d.eq_ignore_ascii_case(code))
+        {
+            return Err(AgentManagementError::PlatformAgentReadOnly);
+        }
         if internal_definitions::is_builtin_agent(code) {
             return Err(AgentManagementError::BuiltinAgentReadOnly);
         }

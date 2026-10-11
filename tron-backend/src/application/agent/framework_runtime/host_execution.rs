@@ -123,6 +123,66 @@ impl FrameworkHost {
                 .map_err(map_error)?;
         }
         let mut request = fw::RunRequest::new(&session, input);
+        let memory = context.short_term_memory.as_ref();
+        let runtime_input = memory.filter(|input| input.input_kind != "USER_PROMPT");
+        let source = runtime_input
+            .and_then(|input| input.input_metadata.as_ref())
+            .and_then(|metadata| metadata.get("source"))
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| runtime_input.map(|input| input.input_kind.as_str()))
+            .unwrap_or("UserMessage");
+        request.message_provenance = Some(fw::MessageProvenance {
+            sender: fw::MessageSender {
+                kind: if runtime_input.is_some() {
+                    "SYSTEM"
+                } else {
+                    "HUMAN"
+                }
+                .into(),
+                id: if runtime_input.is_some() {
+                    Some(source.into())
+                } else {
+                    context.user_code.clone()
+                },
+                display_name: Some(
+                    match source {
+                        "Heartbeat" => "系统心跳",
+                        "TaskReminder" => "任务提醒",
+                        "ThreadFeedback" => "Thread 反馈",
+                        "UserMessage" => "你",
+                        _ => "记忆整理",
+                    }
+                    .into(),
+                ),
+                avatar_url: None,
+            },
+            source: Some(source.into()),
+            correlation: runtime_input.and_then(|input| input.input_metadata.clone()),
+        });
+        let agent_code = context
+            .agent_code
+            .clone()
+            .unwrap_or_else(|| "main-agent".into());
+        request.assistant_provenance = Some(fw::MessageProvenance {
+            sender: fw::MessageSender {
+                kind: if context.uses_platform_agent_definition()
+                    && context
+                        .collaboration_owner
+                        .as_ref()
+                        .is_some_and(|owner| owner.kind == "DUDE")
+                {
+                    "DUDE"
+                } else {
+                    "AGENT"
+                }
+                .into(),
+                id: Some(agent_code.clone()),
+                display_name: Some(agent_code),
+                avatar_url: None,
+            },
+            source: Some("AgentResponse".into()),
+            correlation: None,
+        });
         // Resolve the display language per run, including approval continuations.
         request.extensions.insert(
             match crate::shared::locale::SupportedLocale::from_raw(&context.locale) {

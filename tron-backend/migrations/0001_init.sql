@@ -1357,6 +1357,17 @@ INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, po
     (734550200000000003, 734500000000000002, 734550000000000003, 734550200000000001, 1, 'Inline'),
     (734550200000000004, 734500000000000002, 734550000000000004, 734550200000000001, 2, 'Inline');
 
+-- Always-on workspace navigation.
+INSERT INTO navigation_menus (id,menu_code,source,menu_type,page_code,url,icon,enabled,created_at,updated_at) VALUES
+(734560000000000001,'DUDES','BuiltIn','Internal','dudes.index',NULL,'Bot',1,'2026-10-11T00:00:00Z','2026-10-11T00:00:00Z'),
+(734560000000000002,'NOTIFICATIONS','BuiltIn','Internal','notifications.index',NULL,'Bell',1,'2026-10-11T00:00:00Z','2026-10-11T00:00:00Z');
+INSERT INTO navigation_menu_translations(id,menu_id,locale,label) VALUES
+(734560100000000001,734560000000000001,'zh-CN','Dude（好兄弟）'),(734560100000000002,734560000000000001,'en-US','Dude'),
+(734560100000000003,734560000000000002,'zh-CN','通知'),(734560100000000004,734560000000000002,'en-US','Notifications');
+INSERT INTO navigation_menu_tree_items(id,tree_id,menu_id,parent_item_id,position,child_display) VALUES
+(734560200000000001,734500000000000001,734560000000000001,734520000000000005,0,'Inline'),
+(734560200000000002,734500000000000001,734560000000000002,NULL,3,'Inline');
+
 -- task_flows
 INSERT INTO task_flows (flow_code, name, created_at, updated_at) VALUES
     ('DEFAULT', '默认流程', CAST(strftime('%s', 'now') AS INTEGER) * 1000, CAST(strftime('%s', 'now') AS INTEGER) * 1000);

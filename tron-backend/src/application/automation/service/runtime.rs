@@ -36,6 +36,32 @@ impl AutomationRuntime {
         Ok(())
     }
 
+    pub(super) fn register_builtin_interval(
+        &self,
+        target: BuiltinScheduleTarget,
+        period: Duration,
+        enqueue: Arc<dyn Fn() + Send + Sync>,
+    ) -> Result<(), AutomationError> {
+        if period.is_zero() {
+            return Err(AutomationError::InvalidCron);
+        }
+        let key = target.registry_key();
+        self.unregister(key);
+        let handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(period);
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                enqueue();
+            }
+        });
+        self.jobs
+            .lock()
+            .expect("automation scheduler registry mutex poisoned")
+            .insert(key.into(), handle);
+        Ok(())
+    }
+
     pub(super) fn unregister(&self, automation_code: &str) {
         if let Some(handle) = self
             .jobs
@@ -96,5 +122,38 @@ async fn run_scheduled_automation(
             AutomationTriggerSource::Scheduler,
             Some(format_timestamp(scheduled_at)),
         );
+    }
+}
+
+#[cfg(test)]
+mod builtin_target_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn builtin_target_uses_existing_registry_and_replaces_prior_schedule() {
+        let runtime = AutomationRuntime::new();
+        let ticked = Arc::new(tokio::sync::Notify::new());
+        let tick = ticked.clone();
+        runtime
+            .register_builtin_interval(
+                BuiltinScheduleTarget::DudeHeartbeat,
+                Duration::from_secs(60),
+                Arc::new(move || tick.notify_one()),
+            )
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), ticked.notified())
+            .await
+            .unwrap();
+        assert_eq!(runtime.snapshot(), vec!["builtin:dude-heartbeat"]);
+        runtime
+            .register_builtin_interval(
+                BuiltinScheduleTarget::DudeHeartbeat,
+                Duration::from_secs(60),
+                Arc::new(|| {}),
+            )
+            .unwrap();
+        assert_eq!(runtime.snapshot().len(), 1);
+        runtime.unregister(BuiltinScheduleTarget::DudeHeartbeat.registry_key());
+        assert!(runtime.snapshot().is_empty());
     }
 }

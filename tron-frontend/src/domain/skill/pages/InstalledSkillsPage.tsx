@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SkillCandidatesPanel } from "../components/SkillCandidatesPanel";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table";
 import { SearchField } from "@/components/search-field";
@@ -31,11 +33,33 @@ import {
 import type {
   RegistrySkillRecord,
 } from "@/domain/skill/model";
+import { listDudes } from "@/domain/dude/api/dudeApi";
 import { fetchWorkspaceInternalAgents } from "@/domain/agent/api/agentManagementApi";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
 import { DisabledResourceReason } from "@/domain/agent/components/InternalAgentSkillField";
 
 export function InstalledSkillsPage() {
+  const { t } = useTranslation("pages");
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "approvals" || params.has("candidateCode") ? "approvals" : "installed";
+  return (
+    <Tabs value={tab} onValueChange={(value) => setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (value === "approvals") next.set("tab", "approvals");
+      else { next.delete("tab"); next.delete("candidateCode"); }
+      return next;
+    })}>
+      <TabsList variant="line">
+        <TabsTrigger value="installed">{t("skillCandidates.installedTab")}</TabsTrigger>
+        <TabsTrigger value="approvals">{t("skillCandidates.approvalsTab")}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="installed"><InstalledSkillList /></TabsContent>
+      <TabsContent value="approvals"><SkillCandidatesPanel /></TabsContent>
+    </Tabs>
+  );
+}
+
+function InstalledSkillList() {
   const { t } = useTranslation("pages");
   const navigate = useNavigate();
   const toast = useToast();
@@ -303,11 +327,12 @@ function SkillAgentGrants({
   async function load() {
     setLoading(true);
     try {
-      const [a, g] = await Promise.all([
+      const [a, g, dudes] = await Promise.all([
         fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE),
         fetchSkillAgents(skill.skillName),
+        listDudes(),
       ]);
-      setAgents(a);
+      setAgents([...a, ...dudes.map(dude => ({ agentCode: dude.dudeCode, name: dude.name }))]);
       setSelected(g.agentCodes);
       setError("");
     } catch (e) {

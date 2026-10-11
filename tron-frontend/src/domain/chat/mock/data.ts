@@ -353,6 +353,7 @@ export function setMockChatSessionGoal(input: SetChatSessionGoalInput): ChatSess
   const session = sessions.find((item) => item.sessionCode === input.sessionCode);
   if (!session) throw new Error("chat session was not found");
   if (!input.objective.trim()) throw new Error("goal objective is required");
+  if (session.workspaceCode === null) throw new Error("Mock workspace goals require a workspace");
   const now = new Date().toISOString();
   const goalCode = `GOAL-MOCK-${Date.now()}`;
   const goal: ChatSessionGoalView = {

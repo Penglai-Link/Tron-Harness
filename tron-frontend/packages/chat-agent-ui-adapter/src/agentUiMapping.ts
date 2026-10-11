@@ -23,7 +23,7 @@ function isMappedSession(session: Ui.ChatSession): session is MappedSession {
   const host = session.metadata?.tron;
   return typeof host === "object" && host !== null
     && "sessionCode" in host && host.sessionCode === session.sessionId
-    && "workspaceCode" in host && typeof host.workspaceCode === "string";
+    && "workspaceCode" in host && (typeof host.workspaceCode === "string" || host.workspaceCode === null);
 }
 
 export function fromUiSession(session: Ui.ChatSession): ChatSession {
@@ -87,7 +87,7 @@ export function toUiInput(input: SendChatMessageInput): MappedInput {
 function isMappedInput(input: Ui.SendChatMessageInput): input is MappedInput {
   const host = input.metadata?.tron;
   return typeof host === "object" && host !== null && "workspaceCode" in host
-    && typeof host.workspaceCode === "string";
+    && (typeof host.workspaceCode === "string" || host.workspaceCode === null);
 }
 export function fromUiInput(input: Ui.SendChatMessageInput): SendChatMessageInput {
   if (!isMappedInput(input)) throw new Error("Chat input is missing its Tron host context");

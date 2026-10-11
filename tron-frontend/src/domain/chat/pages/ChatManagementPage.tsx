@@ -5572,7 +5572,7 @@ export function ChatManagementPage() {
     return [
       { key: "workspace", label: <><WorkspaceTabState goal={snapshot.goal} running={snapshot.workspaceGoalRunning} /><span>{t("chat.shortTermMemory.workspaceTab")}</span></>, closable: false, children: rightPanel },
       { key: "context", label: t("chat.shortTermMemory.shortTermMemoryTab"), closable: false, children: <ChatSessionContextPanel snapshot={snapshot} onCreateCompaction={handleCreateCompactionForRightPanel} /> },
-      { key: "subagents", label: t("chat.subagents.title"), closable: false, children: <ChatSubagentsPanel key={snapshot.session.sessionCode} sessionCode={snapshot.session.sessionCode} workspaceCode={snapshot.session.workspaceCode} /> },
+      { key: "subagents", label: t("chat.subagents.title"), closable: false, children: snapshot.session.workspaceCode ? <ChatSubagentsPanel key={snapshot.session.sessionCode} sessionCode={snapshot.session.sessionCode} workspaceCode={snapshot.session.workspaceCode} /> : null },
     ];
   }, [activeSession?.sessionCode, handleCreateCompactionForRightPanel, rightPanel, rightPanelSnapshots, t]);
   const downloadPendingAttachment = useCallback(

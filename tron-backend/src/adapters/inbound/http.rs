@@ -30,3 +30,5 @@ pub mod person_ai;
 pub mod knowledge_bases;
 
 pub mod dudes;
+
+pub mod skill_candidates;

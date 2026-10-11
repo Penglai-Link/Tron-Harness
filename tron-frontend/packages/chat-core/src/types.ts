@@ -23,15 +23,17 @@ export interface ChatModelSelection {
 }
 
 export interface ChatSession {
-  id: number;
+  id: number | string;
   sessionCode: string;
-  workspaceCode: string;
+  workspaceCode: string | null;
   userCode?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
   sourceType?: string | null;
   agentCode?: string | null;
   systemAgentSessionId?: string | null;
+  ownerDudeCode?: string | null;
+  purpose?: string | null;
   title: string;
   status: ChatSessionStatus;
   lastRunCode?: string | null;
@@ -49,7 +51,7 @@ export interface ChatSessionGroup {
 }
 
 export interface CreateChatSessionInput {
-  workspaceCode: string;
+  workspaceCode: string | null;
   title?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
@@ -69,6 +71,7 @@ export interface ChatMessage {
   role: ChatMessageRole;
   channel: ChatMessageChannel;
   actor: string;
+  provenance?: import("@eliteforge/agent-ui-chat-core").MessageProvenance;
   content: string;
   attachments?: ChatMessageAttachment[];
   inputTokens?: number | null;
@@ -113,7 +116,7 @@ export interface ChatTokenUsage {
 export interface ChatRunSummary {
   runCode: string;
   conversationCode?: string | null;
-  workspaceCode: string;
+  workspaceCode: string | null;
   reasoningEffort?: ReasoningEffort | null;
   status: "COMPLETED" | "AWAITING_USER_INPUT";
   finalOutput: string;
@@ -249,7 +252,7 @@ export interface ChatWorkRailLabels {
 
 export interface SendChatMessageInput {
   content: string;
-  workspaceCode: string;
+  workspaceCode: string | null;
   pageContext?: {
     title: string;
     path: string;

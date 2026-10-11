@@ -23,7 +23,7 @@ export const shell = {
   },
   assistant: {
     body: "上下文助理入口当前已打开。后续 Step 3 页面可以在这里绑定路由级提示。",
-    title: "Main Agent",
+    title: "\u5e73\u53f0\u4e3b Dude \u5bf9\u8bdd",
   },
   chatSidebar: {
     confirmations: {
@@ -75,6 +75,8 @@ export const shell = {
   },
   nav: {
     items: {
+      dudes: "Dude（好兄弟）",
+      notifications: "通知",
       agents: "智能体",
       apps: "应用",
       auditLogs: "审计日志",

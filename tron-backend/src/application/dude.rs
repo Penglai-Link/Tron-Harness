@@ -1,4 +1,5 @@
 //! Dude orchestration ports; the host retains execution independently of UI streams.
+mod tools;
 use crate::application::agent::{
     AgentManagementService, CreateWorkspaceInternalAgentCommand,
     UpdateWorkspaceInternalAgentDefinitionCommand,
@@ -7,8 +8,15 @@ use crate::domain::agent::InternalAgentToolPolicy;
 use crate::domain::dude::*;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
+pub use tools::register_dude_tools;
 
 pub trait DudeRepository: Send {
+    fn create(
+        &mut self,
+        dude: &Dude,
+        definition: &crate::domain::agent::PlatformInternalAgentConfig,
+    ) -> Result<(), DudeError>;
+
     fn list(&mut self) -> Result<Vec<Dude>, DudeError>;
     fn save(&mut self, dude: &Dude) -> Result<(), DudeError>;
     fn delete(&mut self, code: &str) -> Result<(), DudeError>;
@@ -26,13 +34,37 @@ pub trait DudeRepository: Send {
         status: DudeEventStatus,
         result: &str,
         now: i64,
+        notify: bool,
     ) -> Result<(), DudeError>;
     fn attach_session(&mut self, id: &str, token: &str, session: &str) -> Result<(), DudeError>;
+    fn renew(&mut self, event: &DudeEvent, now: i64, lease_ms: i64) -> Result<(), DudeError>;
+    fn retry(
+        &mut self,
+        event: &DudeEvent,
+        now: i64,
+        delay_ms: i64,
+        error: &str,
+    ) -> Result<(), DudeError>;
+    fn resolve_awaiting_input(
+        &mut self,
+        session: &str,
+        summary: &str,
+        now: i64,
+    ) -> Result<(), DudeError>;
     fn schedule_heartbeats(&mut self, now: i64) -> Result<(), DudeError>;
     fn notify(
         &mut self,
         notification: &PlatformNotification,
     ) -> Result<PlatformNotification, DudeError>;
+    /// Persist the new notice and retire prior actionable notices in one unit.
+    fn notify_replacing(
+        &mut self,
+        notification: &PlatformNotification,
+        prior_kinds: &[String],
+    ) -> Result<PlatformNotification, DudeError> {
+        let _ = prior_kinds;
+        self.notify(notification)
+    }
     fn notifications(&mut self) -> Result<Vec<PlatformNotification>, DudeError>;
     fn update_notification(
         &mut self,
@@ -141,11 +173,11 @@ impl DudeService {
         }
         let definition = self
             .management
-            .create_platform_internal_agent(command.definition)
+            .prepare_platform_internal_agent(command.definition)
             .map_err(|_| DudeError::Invalid)?;
         let now = chrono::Utc::now().timestamp_millis();
         let dude = Dude {
-            dude_code: definition.agent_code,
+            dude_code: definition.agent_code.clone(),
             kind: command.kind,
             enabled: command.enabled,
             heartbeat_minutes: command.heartbeat_minutes,
@@ -154,7 +186,7 @@ impl DudeService {
             created_at: now,
             updated_at: now,
         };
-        self.repo()?.save(&dude)?;
+        self.repo()?.create(&dude, &definition)?;
         Ok(dude)
     }
     pub fn update(&self, code: &str, command: UpdateDudeCommand) -> Result<Dude, DudeError> {
@@ -254,7 +286,13 @@ impl DudeService {
                         if let Some(task) = &input.task_code {
                             (DudeSessionPurpose::Task, task.clone())
                         } else {
-                            (DudeSessionPurpose::Feedback, input.dedup_key.clone())
+                            (
+                                DudeSessionPurpose::Feedback,
+                                input.payload["threadCode"]
+                                    .as_str()
+                                    .map(|id| format!("thread:{id}"))
+                                    .unwrap_or_else(|| input.dedup_key.clone()),
+                            )
                         }
                     }
                     DudeEventSource::Heartbeat => {
@@ -307,12 +345,33 @@ impl DudeService {
         result: &str,
         now: i64,
     ) -> Result<(), DudeError> {
+        self.finish_with_notification(
+            event,
+            status,
+            result,
+            now,
+            event.source != DudeEventSource::Heartbeat,
+        )
+    }
+    pub fn finish_with_notification(
+        &self,
+        event: &DudeEvent,
+        status: DudeEventStatus,
+        result: &str,
+        now: i64,
+        notify: bool,
+    ) -> Result<(), DudeError> {
         self.repo()?.finish(
             &event.event_id,
             event.lease_token.as_deref().ok_or(DudeError::Conflict)?,
             status,
             result,
             now,
+            notify
+                || matches!(
+                    status,
+                    DudeEventStatus::Failed | DudeEventStatus::AwaitingInput
+                ),
         )
     }
     pub fn attach_session(&self, event: &DudeEvent, session: &str) -> Result<(), DudeError> {
@@ -322,23 +381,53 @@ impl DudeService {
             session,
         )
     }
+    pub fn renew(&self, event: &DudeEvent, now: i64, lease_ms: i64) -> Result<(), DudeError> {
+        self.repo()?.renew(event, now, lease_ms)
+    }
+    pub fn retry(
+        &self,
+        event: &DudeEvent,
+        now: i64,
+        delay_ms: i64,
+        error: &str,
+    ) -> Result<(), DudeError> {
+        self.repo()?.retry(event, now, delay_ms, error)
+    }
+    pub fn resolve_awaiting_input(&self, session: &str, summary: &str) -> Result<(), DudeError> {
+        self.repo()?
+            .resolve_awaiting_input(session, summary, chrono::Utc::now().timestamp_millis())
+    }
     pub fn schedule_heartbeats(&self, now: i64) -> Result<(), DudeError> {
         self.repo()?.schedule_heartbeats(now)
     }
     pub fn notify(&self, input: NotificationInput) -> Result<PlatformNotification, DudeError> {
-        self.repo()?.notify(&PlatformNotification {
-            id: eliteforge_agent_core::SessionRecord::new("").id,
-            dedup_key: input.dedup_key,
-            dude_code: input.dude_code,
-            title: input.title,
-            body: input.body,
-            category: input.category,
-            target: input.target,
-            read_at: None,
-            resolved_at: None,
-            archived_at: None,
-            created_at: chrono::Utc::now().timestamp_millis(),
-        })
+        self.notify_replacing(input, &[])
+    }
+    pub fn notify_replacing(
+        &self,
+        input: NotificationInput,
+        prior_kinds: &[&str],
+    ) -> Result<PlatformNotification, DudeError> {
+        let prior_kinds = prior_kinds
+            .iter()
+            .map(|kind| (*kind).to_owned())
+            .collect::<Vec<_>>();
+        self.repo()?.notify_replacing(
+            &PlatformNotification {
+                id: eliteforge_agent_core::SessionRecord::new("").id,
+                dedup_key: input.dedup_key,
+                dude_code: input.dude_code,
+                title: input.title,
+                body: input.body,
+                category: input.category,
+                target: input.target,
+                read_at: None,
+                resolved_at: None,
+                archived_at: None,
+                created_at: chrono::Utc::now().timestamp_millis(),
+            },
+            &prior_kinds,
+        )
     }
     pub fn notifications(&self) -> Result<Vec<PlatformNotification>, DudeError> {
         self.repo()?.notifications()
@@ -356,3 +445,6 @@ impl DudeService {
 
 mod runtime;
 pub use runtime::{DudeDispatcher, DudeExecutionOutcome, DudeExecutor};
+
+mod errors;
+pub use errors::{ApplicationErrorDescriptor, error_descriptor};

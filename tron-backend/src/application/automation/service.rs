@@ -36,6 +36,20 @@ use self::{projection::*, runtime::AutomationRuntime};
 
 pub const DEFAULT_AUTOMATION_AGENT_CODE: &str = "main-agent";
 
+/// Platform targets reuse the automation scheduler without creating a user
+/// automation or a user-owned chat. The callback may only enqueue durable work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinScheduleTarget {
+    DudeHeartbeat,
+}
+impl BuiltinScheduleTarget {
+    fn registry_key(self) -> &'static str {
+        match self {
+            Self::DudeHeartbeat => "builtin:dude-heartbeat",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CreateAutomationCommand {
     pub workspace_code: String,
@@ -131,6 +145,16 @@ impl AutomationService {
             event_bus,
             execution_runner: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn register_builtin_interval(
+        &self,
+        target: BuiltinScheduleTarget,
+        period: Duration,
+        enqueue: Arc<dyn Fn() + Send + Sync>,
+    ) -> Result<(), AutomationError> {
+        self.runtime
+            .register_builtin_interval(target, period, enqueue)
     }
 
     pub fn set_execution_runner(&self, runner: Arc<dyn AutomationExecutionRunner>) {

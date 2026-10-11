@@ -32,7 +32,15 @@ impl DudeMemoryService {
                 }
             }
         }
-        let sources: Vec<_> = unique.into_values().collect();
+        let mut source_bytes = 0;
+        let sources: Vec<_> = unique
+            .into_values()
+            .take_while(|source| {
+                source_bytes += source.excerpt.len();
+                source_bytes <= 128 * 1024
+            })
+            .take(64)
+            .collect();
         if sources.is_empty() {
             return Ok(None);
         }
@@ -44,6 +52,7 @@ impl DudeMemoryService {
             status: MemoryBatchStatus::Prepared,
             sources,
             memory_receipts: Vec::new(),
+            consolidation_plan: None,
             summary: None,
             revision: 1,
             created_at: now(),
@@ -85,6 +94,72 @@ impl DudeMemoryService {
         repository.save_batch(Some(&previous), &batch, false)?;
         Ok(batch)
     }
+    pub fn cursor_snapshot(
+        &self,
+        user: &str,
+        dude: &str,
+    ) -> Result<BTreeMap<String, String>, DudeMemoryError> {
+        self.repository.lock().unwrap().cursor_versions(user, dude)
+    }
+    pub fn get_batch(&self, user: &str, code: &str) -> Result<MemoryBatch, DudeMemoryError> {
+        let batch = self.repository.lock().unwrap().get_batch(code)?;
+        if batch.user_code != user {
+            return Err(DudeMemoryError::NotFound);
+        }
+        Ok(batch)
+    }
+    pub fn record_plan(
+        &self,
+        user: &str,
+        code: &str,
+        session: &str,
+        plan: serde_json::Value,
+    ) -> Result<MemoryBatch, DudeMemoryError> {
+        let mut repository = self.repository.lock().unwrap();
+        let previous = repository.get_batch(code)?;
+        if previous.user_code != user
+            || previous.session_code.as_deref() != Some(session)
+            || previous.status != MemoryBatchStatus::Running
+        {
+            return Err(DudeMemoryError::Conflict);
+        }
+        if previous.consolidation_plan.is_some() {
+            return Ok(previous);
+        }
+        let mut next = previous.clone();
+        next.consolidation_plan = Some(plan);
+        next.revision += 1;
+        next.updated_at = now();
+        repository.save_batch(Some(&previous), &next, false)?;
+        Ok(next)
+    }
+    pub fn record_memory_receipt(
+        &self,
+        user: &str,
+        code: &str,
+        session: &str,
+        receipt: MemoryWriteReceipt,
+    ) -> Result<MemoryBatch, DudeMemoryError> {
+        let mut repository = self.repository.lock().unwrap();
+        let previous = repository.get_batch(code)?;
+        if previous.user_code != user
+            || previous.session_code.as_deref() != Some(session)
+            || previous.status != MemoryBatchStatus::Running
+        {
+            return Err(DudeMemoryError::Conflict);
+        }
+        if previous.memory_receipts.iter().any(|old| {
+            old.semantic_key == receipt.semantic_key && old.workspace_code == receipt.workspace_code
+        }) {
+            return Ok(previous);
+        }
+        let mut next = previous.clone();
+        next.memory_receipts.push(receipt);
+        next.revision += 1;
+        next.updated_at = now();
+        repository.save_batch(Some(&previous), &next, false)?;
+        Ok(next)
+    }
     pub fn list_batches(
         &self,
         user: &str,
@@ -124,13 +199,6 @@ impl DudeMemoryService {
             {
                 return Err(DudeMemoryError::Invalid(
                     "memory writes must retain their workspace and source evidence".into(),
-                ));
-            }
-            if receipt.claim_kind == MemoryClaimKind::Inference
-                && receipt.conflict_with_memory_code.is_some()
-            {
-                return Err(DudeMemoryError::Invalid(
-                    "an inference cannot replace conflicting established memory".into(),
                 ));
             }
         }

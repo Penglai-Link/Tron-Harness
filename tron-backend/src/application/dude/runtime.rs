@@ -1,5 +1,5 @@
 //! Bounded parallel event workers. Independent sessions never share a run lock.
-use super::{DudeService, NotificationInput};
+use super::DudeService;
 use crate::domain::dude::*;
 use std::sync::{
     Arc,
@@ -12,6 +12,12 @@ pub trait DudeExecutor: Send + Sync {
         event: DudeEvent,
         session: DudeSession,
     ) -> Result<DudeExecutionOutcome, DudeError>;
+    /// Inspect durable native state before any retry. None proves no run was admitted.
+    async fn recover(&self, _event: &DudeEvent) -> Result<Option<DudeExecutionOutcome>, DudeError> {
+        Err(DudeError::Runtime(
+            "Execution needs recovery; verify previous external actions before continuing".into(),
+        ))
+    }
 }
 pub struct DudeExecutionOutcome {
     pub summary: String,
@@ -42,16 +48,10 @@ impl DudeDispatcher {
             let permits = Arc::new(tokio::sync::Semaphore::new(4));
             loop {
                 interval.tick().await;
-                if let Err(e) = worker
-                    .service
-                    .schedule_heartbeats(chrono::Utc::now().timestamp_millis())
-                {
-                    tracing::error!("Dude schedule: {e}");
-                }
                 while let Ok(permit) = permits.clone().try_acquire_owned() {
                     let event = match worker
                         .service
-                        .claim(chrono::Utc::now().timestamp_millis(), 3_600_000)
+                        .claim(chrono::Utc::now().timestamp_millis(), 90_000)
                     {
                         Ok(Some(e)) => e,
                         Ok(None) => break,
@@ -72,7 +72,7 @@ impl DudeDispatcher {
     /// One bounded dispatch is also used by integration tests and embedded hosts.
     pub async fn dispatch_once(&self, now: i64) -> Result<bool, DudeError> {
         self.service.schedule_heartbeats(now)?;
-        let Some(event) = self.service.claim(now, 3_600_000)? else {
+        let Some(event) = self.service.claim(now, 90_000)? else {
             return Ok(false);
         };
         self.execute_claimed(event).await;
@@ -125,12 +125,58 @@ impl DudeDispatcher {
             Ok(s) => match self.service.attach_session(&event, &s.session_code) {
                 Ok(()) => {
                     event.session_code = Some(s.session_code.clone());
-                    self.executor.execute(event.clone(), s).await
+                    if event.attempts > 1 {
+                        match self.executor.recover(&event).await {
+                            Ok(Some(outcome)) => {
+                                return self.finish_outcome(event, Ok(outcome)).await;
+                            }
+                            Err(error) => return self.finish_outcome(event, Err(error)).await,
+                            Ok(None) => {}
+                        }
+                    }
+                    let execute = self.executor.execute(event.clone(), s);
+                    tokio::pin!(execute);
+                    let mut renew = tokio::time::interval(std::time::Duration::from_secs(20));
+                    renew.tick().await;
+                    loop {
+                        tokio::select! {
+                            result = &mut execute => break result,
+                            _ = renew.tick() => {
+                                if let Err(error) = self.service.renew(&event, chrono::Utc::now().timestamp_millis(), 90_000) {
+                                    tracing::error!("Dude event lease could not renew: {error}");
+                                }
+                            }
+                        }
+                    }
                 }
                 Err(e) => Err(e),
             },
             Err(e) => Err(e),
         };
+        if let Err(error) = &result {
+            if event.attempts < 3 && matches!(self.executor.recover(&event).await, Ok(None)) {
+                let delay = 5_000 * i64::from(event.attempts.max(1)).pow(2);
+                if self
+                    .service
+                    .retry(
+                        &event,
+                        chrono::Utc::now().timestamp_millis(),
+                        delay,
+                        &error.to_string(),
+                    )
+                    .is_ok()
+                {
+                    return;
+                }
+            }
+        }
+        self.finish_outcome(event, result).await;
+    }
+    async fn finish_outcome(
+        &self,
+        event: DudeEvent,
+        result: Result<DudeExecutionOutcome, DudeError>,
+    ) {
         let (status, summary, notify) = match result {
             Ok(o) => (
                 if o.awaiting_input {
@@ -143,17 +189,15 @@ impl DudeDispatcher {
             ),
             Err(e) => (DudeEventStatus::Failed, e.to_string(), true),
         };
-        if let Err(e) = self.service.finish(
+        if let Err(e) = self.service.finish_with_notification(
             &event,
             status,
             &summary,
             chrono::Utc::now().timestamp_millis(),
+            notify,
         ) {
             tracing::error!("Dude completion fence: {e}");
             return;
-        }
-        if notify {
-            let _=self.service.notify(NotificationInput{dedup_key:format!("event:{}:{status:?}",event.event_id),dude_code:Some(event.dude_code),title:match status{DudeEventStatus::Failed=>"Dude 工作需要处理",DudeEventStatus::AwaitingInput=>"Dude 需要你的回答",_=>"Dude 已完成工作"}.into(),body:summary,category:format!("{status:?}"),target:serde_json::json!({"sessionCode":event.session_code,"taskCode":event.task_code,"eventId":event.event_id})});
         }
     }
 }

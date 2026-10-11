@@ -18,9 +18,9 @@ export type ChatMessageRole = "USER" | "ASSISTANT";
 export type ChatMessageChannel = "MAIN_AGENT" | "TASK_AGENT";
 
 export interface ChatSession {
-  id: number;
+  id: number | string;
   sessionCode: string;
-  workspaceCode: string;
+  workspaceCode: string | null;
   projectCode?: string | null;
   userCode?: string | null;
   appCode?: string | null;
@@ -48,7 +48,7 @@ export interface ChatSessionGroup {
 }
 
 export interface CreateChatSessionInput {
-  workspaceCode: string;
+  workspaceCode: string | null;
   projectCode?: string | null;
   title?: string | null;
   appCode?: string | null;
@@ -68,6 +68,7 @@ export interface ChatMessage {
   role: ChatMessageRole;
   channel: ChatMessageChannel;
   actor: string;
+  provenance?: import("@eliteforge/agent-ui-chat-core").MessageProvenance;
   content: string;
   attachments?: ChatMessageAttachment[];
   inputTokens?: number | null;
@@ -153,7 +154,7 @@ export interface ChatUsageAuditSnapshot {
 export interface ChatRunSummary {
   runCode: string;
   conversationCode?: string | null;
-  workspaceCode: string;
+  workspaceCode: string | null;
   reasoningEffort?: ReasoningEffort | null;
   status: "COMPLETED" | "AWAITING_USER_INPUT";
   finalOutput: string;
@@ -186,7 +187,7 @@ export interface ChatMessageAttachment {
 
 export interface SendChatMessageInput {
   content: string;
-  workspaceCode: string;
+  workspaceCode: string | null;
   appCode?: string | null;
   taskCode?: string | null;
   agentCode?: string | null;
@@ -240,7 +241,7 @@ export type ChatSessionTodoStatus = "pending" | "in_progress" | "completed" | "c
 export type ChatSessionTodoPriority = "high" | "medium" | "low";
 
 export interface ChatSessionTodo {
-  id: number;
+  id: number | string;
   todoCode: string;
   sessionCode: string;
   workspaceCode: string;
@@ -281,7 +282,7 @@ export type ChatSessionGoalStatus =
   | "CLEARED";
 
 export interface ChatSessionGoal {
-  id: number;
+  id: number | string;
   goalCode: string;
   sessionCode: string;
   workspaceCode: string;

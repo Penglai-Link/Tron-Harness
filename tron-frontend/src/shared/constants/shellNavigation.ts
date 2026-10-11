@@ -1,4 +1,6 @@
 import {
+  Bot,
+  Bell,
   ScrollText,
   Activity,
   LayoutDashboard,
@@ -25,6 +27,8 @@ export const tronNavigation: TronNavSection[] = [
     label: "Core",
     translationKey: "shell:nav.sections.core",
     items: [
+      { label: "Dude", href: "/dudes", icon: Bot, translationKey: "shell:nav.items.dudes" },
+      { label: "Notifications", href: "/notifications", icon: Bell, translationKey: "shell:nav.items.notifications" },
       {
         label: "Apps",
         href: "/apps",

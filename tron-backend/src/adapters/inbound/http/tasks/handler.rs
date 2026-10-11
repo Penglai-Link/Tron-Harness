@@ -138,7 +138,9 @@ pub async fn list_tasks(
     Query(query): Query<TaskListQuery>,
 ) -> Response {
     if let Some(owner) = query.owner_dude_code.as_deref() {
-        if state.dudes.get(owner).is_err() { return task_error_response(TaskError::InvalidRequest); }
+        if state.dudes.get(owner).is_err() {
+            return task_error_response(TaskError::InvalidRequest);
+        }
     }
     match state.tasks.list_tasks(query) {
         Ok(page) => Json(ApiResponse::success(page)).into_response(),
@@ -151,7 +153,9 @@ pub async fn create_task(
     Json(request): Json<CreateTaskRequest>,
 ) -> Response {
     if let Some(owner) = request.owner_dude_code.as_deref() {
-        if state.dudes.get(owner).is_err() { return task_error_response(TaskError::InvalidRequest); }
+        if state.dudes.get(owner).is_err() {
+            return task_error_response(TaskError::InvalidRequest);
+        }
     }
     match state.tasks.create_task(request.into()) {
         Ok(detail) => (StatusCode::CREATED, Json(ApiResponse::success(detail))).into_response(),

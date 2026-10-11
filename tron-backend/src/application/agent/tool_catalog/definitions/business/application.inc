@@ -259,3 +259,26 @@ fn task_delete_definition() -> ToolCatalogDefinition {
 fn task_restore_definition() -> ToolCatalogDefinition {
     task_code_definition("task.restore", ToolOperationKind::Command)
 }
+
+fn dude_notify_definition() -> ToolCatalogDefinition {
+    definition(
+        "dude.notify",
+        "dude",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.dude.notify.description",
+            json!([{ "title": "Need your decision", "body": "Choose the deployment window.", "threadCode": "thread-id" }]),
+            json!({
+                "type": "object",
+                "required": ["title", "body"],
+                "properties": {
+                    "title": {"type":"string","minLength":1,"maxLength":200},
+                    "body": {"type":"string","minLength":1,"maxLength":8000},
+                    "threadCode": {"type":"string","minLength":1},
+                    "taskCode": {"type":"string","minLength":1}
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}

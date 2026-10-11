@@ -41,7 +41,7 @@ export interface InternalAdapterOptions {
 }
 
 export interface InternalChatAdapterOptions extends InternalAdapterOptions {
-  workspaceCode: string;
+  workspaceCode: string | null;
 }
 
 interface AguiEventSnapshot {
@@ -65,7 +65,7 @@ async function requestHeaders(options: InternalAdapterOptions, workspaceCode?: s
 }
 
 export function createInternalChatAdapter(options: InternalChatAdapterOptions): ChatAdapter {
-  const workspaceCode = options.workspaceCode.trim();
+  const workspaceCode = options.workspaceCode?.trim() ?? "";
   const transport = createFetchTransport({
     baseUrl: options.baseUrl,
     traceRequests: true,

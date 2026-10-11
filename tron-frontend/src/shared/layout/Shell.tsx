@@ -34,6 +34,7 @@ import {
 import { fetchWorkspaceSwitcher } from "@/domain/admin/api";
 import { fetchNavigationDomains, fetchNavigationMenuTree } from "@/domain/navigation/api";
 import { useAuthSession } from "@/domain/auth";
+import { NotificationLauncher } from "@/domain/notification/components/NotificationLauncher";
 import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -1136,6 +1137,7 @@ export function TronShell({
               </div>
               <div className="flex shrink-0 items-center gap-[12px]">
                 {renderedTopbarActions}
+                <NotificationLauncher />
                 <Button className={cn("hidden min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
                   <Bot size={17} aria-hidden="true" />
                 </Button>

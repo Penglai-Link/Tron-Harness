@@ -40,6 +40,7 @@ use session_summary::{
 pub struct AgentInvocationService {
     platform_scope: bool,
     collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
+    runtime_input: Option<(String, serde_json::Value)>,
     workspaces: WorkspaceService,
     apps: AppService,
     variables: VariableService,
@@ -78,6 +79,7 @@ impl AgentInvocationService {
         Self {
             platform_scope: false,
             collaboration_owner: None,
+            runtime_input: None,
             workspaces,
             apps,
             variables,
@@ -111,6 +113,22 @@ impl AgentInvocationService {
     ) -> Self {
         self.collaboration_owner = Some(owner);
         self
+    }
+
+    /// Host-only input identity. Public chat payloads cannot impersonate a scheduler or a Dude.
+    pub(crate) fn with_runtime_input(
+        mut self,
+        kind: impl Into<String>,
+        metadata: serde_json::Value,
+    ) -> Self {
+        self.runtime_input = Some((kind.into(), metadata));
+        self
+    }
+
+    pub(crate) fn runtime_input_actor(&self) -> Option<&str> {
+        self.runtime_input
+            .as_ref()
+            .and_then(|(_, metadata)| metadata.get("source").and_then(serde_json::Value::as_str))
     }
 
     pub fn with_framework_host(mut self, host: super::FrameworkHost) -> Self {
@@ -245,12 +263,23 @@ impl AgentInvocationService {
 
     async fn invoke_with_stream(
         &self,
-        command: AgentInvocationCommand,
+        mut command: AgentInvocationCommand,
         user_code: Option<String>,
         locale: Option<String>,
         sink: Option<ModelStreamSink>,
         reservation: Option<ActiveRunGuard>,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
+        if let Some((kind, metadata)) = &self.runtime_input {
+            command.transcript_input_kind = Some(kind.clone());
+            let mut merged = command
+                .transcript_input_metadata
+                .take()
+                .unwrap_or_else(|| serde_json::json!({}));
+            if let (Some(target), Some(source)) = (merged.as_object_mut(), metadata.as_object()) {
+                target.extend(source.clone());
+            }
+            command.transcript_input_metadata = Some(merged);
+        }
         let runtime_registry = AgentRuntimeRegistry::new(
             self.model_client.clone(),
             self.tool_registry.clone(),

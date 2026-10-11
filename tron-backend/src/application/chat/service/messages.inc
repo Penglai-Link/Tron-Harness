@@ -127,7 +127,7 @@ impl ChatService {
                 (!command.resume.is_empty()).then(|| run_code.clone()),
                 ChatMessageRole::User,
                 channel,
-                "User",
+                agent.runtime_input_actor().unwrap_or("User"),
                 &transcript_user_content,
                 attachments.clone(),
                 None,

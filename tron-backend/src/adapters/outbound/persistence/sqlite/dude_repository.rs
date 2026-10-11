@@ -42,6 +42,21 @@ fn load_events(
         .collect()
 }
 impl DudeRepository for SqliteDudeRepository {
+    fn create(
+        &mut self,
+        d: &Dude,
+        definition: &crate::domain::agent::PlatformInternalAgentConfig,
+    ) -> Result<(), DudeError> {
+        let (d, definition) = (d.clone(), definition.clone());
+        self.call(move|c|{
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            tx.execute("INSERT INTO platform_internal_agent_configs(agent_code,config_json) VALUES(?1,?2)",params![definition.agent_code,encode(&definition)?]).map_err(storage)?;
+            tx.execute("INSERT INTO agent_workspace_grant_policies(agent_code) VALUES(?1)",[&d.dude_code]).map_err(storage)?;
+            tx.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at,is_main) VALUES(?1,?2,?3,?4,?5,0)",params![d.dude_code,encode(&d)?,d.enabled,d.heartbeat_minutes,d.created_at+i64::from(d.heartbeat_minutes)*60000]).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
+    }
+
     fn list(&mut self) -> Result<Vec<Dude>, DudeError> {
         self.call(|c| {
             let mut q = c
@@ -60,7 +75,7 @@ impl DudeRepository for SqliteDudeRepository {
     }
     fn save(&mut self, d: &Dude) -> Result<(), DudeError> {
         let d = d.clone();
-        self.call(move|c|{c.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at,is_main) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(dude_code) DO UPDATE SET record_json=excluded.record_json,enabled=excluded.enabled,heartbeat_minutes=excluded.heartbeat_minutes",params![d.dude_code,encode(&d)?,d.enabled,d.heartbeat_minutes,d.updated_at+i64::from(d.heartbeat_minutes)*60000,d.is_main]).map_err(storage)?;Ok(())})
+        self.call(move|c|{c.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at,is_main) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(dude_code) DO UPDATE SET record_json=excluded.record_json,enabled=excluded.enabled,heartbeat_minutes=excluded.heartbeat_minutes,next_heartbeat_at=CASE WHEN dudes.heartbeat_minutes!=excluded.heartbeat_minutes OR (dudes.enabled=0 AND excluded.enabled=1) THEN excluded.next_heartbeat_at ELSE dudes.next_heartbeat_at END",params![d.dude_code,encode(&d)?,d.enabled,d.heartbeat_minutes,d.updated_at+i64::from(d.heartbeat_minutes)*60000,d.is_main]).map_err(storage)?;Ok(())})
     }
     fn delete(&mut self, code: &str) -> Result<(), DudeError> {
         let code = code.to_owned();
@@ -125,7 +140,7 @@ impl DudeRepository for SqliteDudeRepository {
     }
     fn claim(&mut self, now: i64, lease_ms: i64) -> Result<Option<DudeEvent>, DudeError> {
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
- let json:Option<String>=tx.query_row("SELECT e.record_json FROM dude_events e JOIN dudes d USING(dude_code) WHERE (d.enabled=1 OR e.source='UserMessage') AND e.available_at<=?1 AND (e.status='Queued' OR (e.status='Running' AND e.lease_until<?1)) AND NOT EXISTS(SELECT 1 FROM dude_events busy WHERE busy.session_code=e.session_code AND e.session_code IS NOT NULL AND ((busy.status='Running' AND busy.lease_until>=?1) OR (busy.status='AwaitingInput' AND e.source!='UserMessage'))) ORDER BY e.available_at,e.rowid LIMIT 1",[now],|r|r.get(0)).optional().map_err(storage)?;
+ let json:Option<String>=tx.query_row("SELECT e.record_json FROM dude_events e JOIN dudes d USING(dude_code) WHERE (d.enabled=1 OR e.source='UserMessage') AND e.available_at<=?1 AND (e.status='Queued' OR (e.status='Running' AND e.lease_until<?1)) AND NOT EXISTS(SELECT 1 FROM dude_events busy WHERE busy.session_code=e.session_code AND e.session_code IS NOT NULL AND ((busy.status='Running' AND busy.lease_until>=?1) OR (busy.status='AwaitingInput' AND e.source!='UserMessage'))) AND NOT EXISTS(SELECT 1 FROM dude_events busy WHERE json_extract(d.record_json,'$.kind')='Memory' AND e.source!='UserMessage' AND busy.dude_code=e.dude_code AND busy.event_id!=e.event_id AND busy.status='Running' AND busy.lease_until>=?1 AND busy.source!='UserMessage') ORDER BY e.available_at,e.rowid LIMIT 1",[now],|r|r.get(0)).optional().map_err(storage)?;
  let Some(json)=json else {return Ok(None)};let mut e:DudeEvent=decode(json)?;e.status=DudeEventStatus::Running;e.lease_token=Some(eliteforge_agent_core::SessionRecord::new("").id);e.lease_until=Some(now+lease_ms.max(1000));e.attempts+=1;
  tx.execute("UPDATE dude_events SET status='Running',lease_until=?2,lease_token=?3,attempts=?4,record_json=?5 WHERE event_id=?1",params![e.event_id,e.lease_until,e.lease_token,e.attempts,encode(&e)?]).map_err(storage)?;tx.commit().map_err(storage)?;Ok(Some(e))})
     }
@@ -136,13 +151,66 @@ impl DudeRepository for SqliteDudeRepository {
         status: DudeEventStatus,
         result: &str,
         now: i64,
+        notify: bool,
     ) -> Result<(), DudeError> {
         let (id, token, result) = (id.to_owned(), token.to_owned(), result.to_owned());
-        self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![id,token,now],|r|r.get(0)).optional().map_err(storage)?;let mut e:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;e.status=status;e.result=Some(result);e.lease_until=None;e.lease_token=None;if tx.execute("UPDATE dude_events SET status=?3,lease_until=NULL,lease_token=NULL,record_json=?4 WHERE event_id=?1 AND lease_token=?2",params![id,token,format!("{status:?}"),encode(&e)?]).map_err(storage)?!=1{return Err(DudeError::Conflict)}tx.commit().map_err(storage)})
+        self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![id,token,now],|r|r.get(0)).optional().map_err(storage)?;let mut e:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;e.status=status;e.result=Some(result);e.lease_until=None;e.lease_token=None;if tx.execute("UPDATE dude_events SET status=?3,lease_until=NULL,lease_token=NULL,record_json=?4 WHERE event_id=?1 AND lease_token=?2",params![id,token,format!("{status:?}"),encode(&e)?]).map_err(storage)?!=1{return Err(DudeError::Conflict)}
+if notify {if let Some(n)=e.completion_notification(status,e.result.as_deref().unwrap_or(""),now){tx.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(dedup_key) DO NOTHING",params![n.id,n.dedup_key,encode(&n)?,n.created_at]).map_err(storage)?;}}
+tx.commit().map_err(storage)})
     }
     fn attach_session(&mut self, id: &str, token: &str, session: &str) -> Result<(), DudeError> {
         let (id, token, session) = (id.to_owned(), token.to_owned(), session.to_owned());
         self.call(move|c|{let json:Option<String>=c.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running'",params![id,token],|r|r.get(0)).optional().map_err(storage)?;let mut e:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;e.session_code=Some(session.clone());c.execute("UPDATE dude_events SET session_code=?3,record_json=?4 WHERE event_id=?1 AND lease_token=?2",params![id,token,session,encode(&e)?]).map_err(storage)?;Ok(())})
+    }
+    fn renew(&mut self, event: &DudeEvent, now: i64, lease_ms: i64) -> Result<(), DudeError> {
+        let event = event.clone();
+        self.call(move |c| {
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![event.event_id,event.lease_token,now],|r|r.get(0)).optional().map_err(storage)?;
+            let mut record:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;
+            record.lease_until=Some(now+lease_ms);
+            tx.execute("UPDATE dude_events SET lease_until=?2,record_json=?3 WHERE event_id=?1",params![record.event_id,record.lease_until,encode(&record)?]).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
+    }
+    fn retry(
+        &mut self,
+        event: &DudeEvent,
+        now: i64,
+        delay_ms: i64,
+        error: &str,
+    ) -> Result<(), DudeError> {
+        let event = event.clone();
+        let error = error.to_owned();
+        self.call(move|c| {
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![event.event_id,event.lease_token,now],|r|r.get(0)).optional().map_err(storage)?;
+            let mut record:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;
+            record.status=DudeEventStatus::Queued;record.available_at=now+delay_ms;record.lease_until=None;record.lease_token=None;record.result=Some(error);
+            tx.execute("UPDATE dude_events SET status='Queued',available_at=?2,lease_until=NULL,lease_token=NULL,record_json=?3 WHERE event_id=?1",params![record.event_id,record.available_at,encode(&record)?]).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
+    }
+    fn resolve_awaiting_input(
+        &mut self,
+        session: &str,
+        summary: &str,
+        now: i64,
+    ) -> Result<(), DudeError> {
+        let session = session.to_owned();
+        let summary = summary.to_owned();
+        self.call(move|c|{
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let rows={let mut q=tx.prepare("SELECT record_json FROM dude_events WHERE session_code=?1 AND status='AwaitingInput'").map_err(storage)?;q.query_map([&session],|r|r.get::<_,String>(0)).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?};
+            for json in rows {
+                let mut event:DudeEvent=decode(json)?;event.status=DudeEventStatus::Completed;event.result=Some(summary.clone());
+                tx.execute("UPDATE dude_events SET status='Completed',record_json=?2 WHERE event_id=?1",params![event.event_id,encode(&event)?]).map_err(storage)?;
+                let key=format!("event:{}:AwaitingInput",event.event_id);
+                let notification:Option<String>=tx.query_row("SELECT record_json FROM platform_notifications WHERE dedup_key=?1",[&key],|r|r.get(0)).optional().map_err(storage)?;
+                if let Some(json)=notification {let mut n:PlatformNotification=decode(json)?;n.resolved_at=Some(now);tx.execute("UPDATE platform_notifications SET record_json=?2 WHERE dedup_key=?1",params![key,encode(&n)?]).map_err(storage)?;}
+            }
+            tx.commit().map_err(storage)
+        })
     }
     fn schedule_heartbeats(&mut self, now: i64) -> Result<(), DudeError> {
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let rows={let mut q=tx.prepare("SELECT dude_code,heartbeat_minutes,next_heartbeat_at FROM dudes WHERE enabled=1 AND next_heartbeat_at<=?1").map_err(storage)?;q.query_map([now],|r|Ok((r.get::<_,String>(0)?,r.get::<_,u32>(1)?,r.get::<_,i64>(2)?))).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?};
@@ -155,6 +223,37 @@ impl DudeRepository for SqliteDudeRepository {
         let n = n.clone();
         self.call(move|c|{c.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(dedup_key) DO NOTHING",params![n.id,n.dedup_key,encode(&n)?,n.created_at]).map_err(storage)?;decode(c.query_row("SELECT record_json FROM platform_notifications WHERE dedup_key=?1",[n.dedup_key],|r|r.get(0)).map_err(storage)?)})
     }
+    fn notify_replacing(
+        &mut self,
+        notification: &PlatformNotification,
+        prior_kinds: &[String],
+    ) -> Result<PlatformNotification, DudeError> {
+        let (notification, prior_kinds) = (notification.clone(), prior_kinds.to_vec());
+        self.call(move |connection| {
+            let tx = business_transaction(connection, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            if let Some(candidate) = notification.target["candidateCode"].as_str() {
+                let prior = {
+                    let mut query = tx.prepare("SELECT record_json FROM platform_notifications WHERE json_extract(record_json,'$.target.candidateCode')=?1").map_err(storage)?;
+                    query.query_map([candidate], |row| row.get::<_,String>(0)).map_err(storage)?
+                        .collect::<Result<Vec<_>,_>>().map_err(storage)?
+                };
+                for json in prior {
+                    let mut old: PlatformNotification = decode(json)?;
+                    if old.category == "Skill" && old.dude_code == notification.dude_code
+                        && old.dedup_key != notification.dedup_key && old.resolved_at.is_none()
+                        && prior_kinds.contains(&old.title) {
+                        old.resolved_at = Some(notification.created_at);
+                        tx.execute("UPDATE platform_notifications SET record_json=?2 WHERE notification_id=?1",params![old.id,encode(&old)?]).map_err(storage)?;
+                    }
+                }
+            }
+            tx.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(dedup_key) DO NOTHING",params![notification.id,notification.dedup_key,encode(&notification)?,notification.created_at]).map_err(storage)?;
+            let result = decode(tx.query_row("SELECT record_json FROM platform_notifications WHERE dedup_key=?1",[&notification.dedup_key],|row|row.get(0)).map_err(storage)?)?;
+            tx.commit().map_err(storage)?;
+            Ok(result)
+        })
+    }
+
     fn notifications(&mut self) -> Result<Vec<PlatformNotification>, DudeError> {
         self.call(|c|{let mut q=c.prepare("SELECT record_json FROM platform_notifications ORDER BY created_at DESC LIMIT 500").map_err(storage)?;q.query_map([],|r|r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect()})
     }
@@ -185,5 +284,82 @@ impl DudeRepository for SqliteDudeRepository {
             .map_err(storage)?;
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod notification_lifecycle_tests {
+    use super::*;
+
+    fn notice(id: &str, candidate: &str, kind: &str) -> PlatformNotification {
+        PlatformNotification {
+            id: id.into(),
+            dedup_key: id.into(),
+            dude_code: Some("memory-dude".into()),
+            title: kind.into(),
+            body: "Action".into(),
+            category: "Skill".into(),
+            target: serde_json::json!({"candidateCode":candidate}),
+            read_at: None,
+            archived_at: None,
+            resolved_at: None,
+            created_at: 100,
+        }
+    }
+    #[test]
+    fn skill_transition_retires_only_related_action_preserving_read_and_archive() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repository =
+            SqliteDudeRepository::connect(directory.path().join("dude.sqlite").to_str().unwrap())
+                .unwrap();
+        repository
+            .notify(&notice("pending", "candidate-a", "SkillPendingApproval"))
+            .unwrap();
+        repository
+            .notify(&notice("other", "candidate-b", "SkillPendingApproval"))
+            .unwrap();
+        repository
+            .update_notification("pending", true, true, 110)
+            .unwrap();
+        let mut installed = notice("installed", "candidate-a", "SkillInstalled");
+        installed.created_at = 120;
+        repository
+            .notify_replacing(&installed, &["SkillPendingApproval".into()])
+            .unwrap();
+        // Replayed callbacks must not generate another notification or clear resolution.
+        repository
+            .notify_replacing(&installed, &["SkillPendingApproval".into()])
+            .unwrap();
+        let all = repository.notifications().unwrap();
+        assert_eq!(all.len(), 3);
+        let pending = all.iter().find(|n| n.id == "pending").unwrap();
+        assert_eq!(
+            (pending.read_at, pending.archived_at, pending.resolved_at),
+            (Some(110), Some(110), Some(120))
+        );
+        assert_eq!(
+            all.iter().find(|n| n.id == "other").unwrap().resolved_at,
+            None
+        );
+    }
+    #[test]
+    fn failed_success_notice_does_not_partially_resolve_pending_action() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repository =
+            SqliteDudeRepository::connect(directory.path().join("dude.sqlite").to_str().unwrap())
+                .unwrap();
+        repository
+            .notify(&notice("pending", "candidate-a", "SkillPendingApproval"))
+            .unwrap();
+        repository.call(|c| c.execute_batch("CREATE TRIGGER reject_notice BEFORE INSERT ON platform_notifications BEGIN SELECT RAISE(ABORT,'test failure'); END;").map_err(storage)).unwrap();
+        assert!(
+            repository
+                .notify_replacing(
+                    &notice("installed", "candidate-a", "SkillInstalled"),
+                    &["SkillPendingApproval".into()]
+                )
+                .is_err()
+        );
+        assert_eq!(repository.notifications().unwrap()[0].resolved_at, None);
     }
 }
