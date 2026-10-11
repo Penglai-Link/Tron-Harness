@@ -12,25 +12,7 @@ pub(super) struct PlatformDudeExecutor {
 }
 impl PlatformDudeExecutor {
     fn agent(&self) -> AgentInvocationService {
-        let s = &self.state;
-        AgentInvocationService::new(
-            s.workspaces.clone(),
-            s.apps.clone(),
-            s.variables.clone(),
-            s.skills.clone(),
-            s.agent_management.clone(),
-            s.agent_runs.clone(),
-            s.mcp.clone(),
-            s.event_bus.clone(),
-            s.agent_model_client.clone(),
-            s.agent_tool_registry.clone(),
-            s.runtime_http_client.clone(),
-        )
-        .with_framework_host(s.agent_framework.clone())
-        .with_active_runs(s.active_runs.clone())
-        .with_short_term_memory(s.short_term_memory.clone())
-        .with_prompt_service(s.prompts.clone())
-        .with_platform_scope()
+        self.state.dude_invocation_service()
     }
 }
 #[async_trait::async_trait]
@@ -40,6 +22,98 @@ impl DudeExecutor for PlatformDudeExecutor {
         event: DudeEvent,
         session: DudeSession,
     ) -> Result<DudeExecutionOutcome, DudeError> {
+        let dude = self.state.dudes.get(&event.dude_code)?;
+        if dude.kind == DudeKind::Memory
+            && matches!(
+                event.source,
+                DudeEventSource::Heartbeat
+                    | DudeEventSource::MemoryBatch
+                    | DudeEventSource::ThreadFeedback
+            )
+        {
+            let profile = self
+                .state
+                .profiles
+                .current_context()
+                .map_err(|e| DudeError::Runtime(e.to_string()))?;
+            let user = profile.person_ai_user_id;
+            let router = crate::application::model_router::AgentModelRouter::new(
+                self.state.models.clone(),
+                self.state.model_providers.clone(),
+            )
+            .with_agent_management(self.state.agent_management.clone());
+            let runner = crate::application::dude_memory::DudeMemoryRunner::new(
+                self.state.dude_memory.clone(),
+                self.state.memory.clone(),
+                self.state.agent_framework.clone(),
+                self.agent(),
+                router,
+                Arc::new(MemorySessionFactory {
+                    dudes: self.state.dudes.clone(),
+                    chats: self.state.chats.clone(),
+                }),
+            );
+            runner
+                .resume_candidates(&event.dude_code, &user, dude.memory_auto_approve)
+                .await
+                .map_err(|e| DudeError::Runtime(e.to_string()))?;
+            let Some(batch) = runner
+                .prepare_wakeup(&event.dude_code, &user)
+                .await
+                .map_err(|e| DudeError::Runtime(e.to_string()))?
+            else {
+                return Ok(DudeExecutionOutcome {
+                    summary: String::new(),
+                    awaiting_input: false,
+                    notify: false,
+                });
+            };
+            let batch_session = self.state.dudes.resolve_session(
+                &event.dude_code,
+                DudeSessionPurpose::MemoryBatch,
+                &batch.batch_code,
+                None,
+            )?;
+            self.state
+                .dudes
+                .attach_session(&event, &batch_session.session_code)?;
+            self.state
+                .chats
+                .ensure_dude_session(&batch_session, Some(user.clone()))
+                .map_err(|_| DudeError::Storage)?;
+            let batch = runner
+                .execute_batch(
+                    &user,
+                    &batch.batch_code,
+                    &batch_session.session_code,
+                    dude.memory_auto_approve,
+                )
+                .await
+                .map_err(|e| DudeError::Runtime(e.to_string()))?;
+            return Ok(DudeExecutionOutcome {
+                summary: batch.summary.unwrap_or_default(),
+                awaiting_input: false,
+                notify: false,
+            });
+        }
+        if event.source == DudeEventSource::Heartbeat
+            && self.state.dudes.get(&event.dude_code)?.kind != DudeKind::Memory
+        {
+            let actionable = self
+                .state
+                .tasks
+                .due_dude_tasks(chrono::Utc::now().timestamp_millis())
+                .map_err(|_| DudeError::Storage)?
+                .into_iter()
+                .any(|t| t.owner_dude_code.as_deref() == Some(&event.dude_code));
+            if !actionable {
+                return Ok(DudeExecutionOutcome {
+                    summary: String::new(),
+                    awaiting_input: false,
+                    notify: false,
+                });
+            }
+        }
         if event.source == DudeEventSource::TaskReminder {
             if let Some(code) = &event.task_code {
                 let version = event.payload["scheduleVersion"].as_i64().unwrap_or(0);
@@ -61,9 +135,15 @@ impl DudeExecutor for PlatformDudeExecutor {
                     .map_err(|_| DudeError::Storage)?;
             }
         }
+        let run_user = self
+            .state
+            .profiles
+            .current_context()
+            .map_err(|e| DudeError::Runtime(e.to_string()))?
+            .person_ai_user_id;
         self.state
             .chats
-            .ensure_dude_session(&session, None)
+            .ensure_dude_session(&session, Some(run_user.clone()))
             .map_err(|_| DudeError::Storage)?;
         let router = crate::application::model_router::AgentModelRouter::new(
             self.state.models.clone(),
@@ -74,6 +154,9 @@ impl DudeExecutor for PlatformDudeExecutor {
             .resolve_initial("", &session.session_code, &event.dude_code, None)
             .map_err(DudeError::Runtime)?;
         let prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
+        if event.source != DudeEventSource::UserMessage {
+            prompt.push_str(&format!("\n事件数据：{}", event.payload));
+        }
         let agent = self
             .agent()
             .with_auto_model_route(Some(route), Some(router))
@@ -112,7 +195,7 @@ impl DudeExecutor for PlatformDudeExecutor {
                     resume: vec![],
                 },
                 model,
-                None,
+                Some(run_user),
                 Some("zh-CN".into()),
                 None,
                 agent,
@@ -127,7 +210,43 @@ impl DudeExecutor for PlatformDudeExecutor {
         })
     }
 }
+pub(super) struct ThreadFeedbackBridge(pub crate::application::dude::DudeService);
+#[async_trait::async_trait]
+impl crate::application::agent::ThreadFeedbackSink for ThreadFeedbackBridge {
+    async fn publish(
+        &self,
+        feedback: crate::application::agent::ThreadFeedback,
+    ) -> Result<(), String> {
+        if feedback.owner.kind != "DUDE" {
+            return Ok(());
+        }
+        let input = crate::application::dude::DudeEventInput {
+            dude_code: feedback.owner.code.clone(),
+            source: DudeEventSource::ThreadFeedback,
+            dedup_key: feedback.event_key.clone(),
+            session_code: self
+                .0
+                .session(&feedback.origin_session_code)
+                .ok()
+                .flatten()
+                .filter(|s| {
+                    s.dude_code == feedback.owner.code
+                        && s.purpose != DudeSessionPurpose::Interactive
+                })
+                .map(|s| s.session_code),
+            task_code: feedback.owner.task_code.clone(),
+            workspace_code: None,
+            payload: serde_json::json!({"threadCode":feedback.thread_code,"originSessionCode":feedback.origin_session_code,"status":feedback.status,"result":feedback.result,"error":feedback.error,"content":format!("处理 Thread {} 的反馈。基于结果继续所属工作，必要时提出需要用户处理的决定。",feedback.thread_code)}),
+            available_at: chrono::Utc::now().timestamp_millis(),
+        };
+        self.0.publish_event(input).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+}
 pub(super) fn start(state: AppState) {
+    let _ = state
+        .agent_framework
+        .set_thread_feedback_sink(Arc::new(ThreadFeedbackBridge(state.dudes.clone())));
     let dispatcher = crate::application::dude::DudeDispatcher::new(
         state.dudes.clone(),
         Arc::new(PlatformDudeExecutor {
@@ -139,6 +258,9 @@ pub(super) fn start(state: AppState) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
         loop {
             interval.tick().await;
+            if let Err(error) = state.agent_framework.recover_collaboration_threads().await {
+                tracing::error!("Dude Thread recovery: {error}");
+            }
             let now = chrono::Utc::now().timestamp_millis();
             match state.tasks.due_dude_tasks(now) {
                 Ok(tasks) => {
@@ -190,5 +312,34 @@ impl crate::application::dude_memory::DudeMemoryNotifications for MemoryNotifica
             self.0.publish_event(crate::application::dude::DudeEventInput{dude_code:n.dude_code,source:DudeEventSource::ThreadFeedback,dedup_key:format!("skill-revision:{}:{}",n.related_code,n.message),session_code:None,task_code:None,workspace_code:None,payload:serde_json::json!({"candidateCode":n.related_code,"content":n.message}),available_at:chrono::Utc::now().timestamp_millis()}).map_err(|_|crate::domain::dude_memory::DudeMemoryError::Storage("Dude notification persistence failed".into()))?;
         }
         Ok(())
+    }
+}
+
+struct MemorySessionFactory {
+    dudes: crate::application::dude::DudeService,
+    chats: crate::application::chat::ChatService,
+}
+#[async_trait::async_trait]
+impl crate::application::dude_memory::DudeMemorySessionFactory for MemorySessionFactory {
+    async fn author_session(
+        &self,
+        dude: &str,
+        user: &str,
+        batch: &str,
+        skill: &str,
+    ) -> Result<String, crate::domain::dude_memory::DudeMemoryError> {
+        let session = self
+            .dudes
+            .resolve_session(
+                dude,
+                DudeSessionPurpose::SkillAuthoring,
+                &format!("{batch}:{skill}"),
+                None,
+            )
+            .map_err(|e| crate::domain::dude_memory::DudeMemoryError::Storage(e.to_string()))?;
+        self.chats
+            .ensure_dude_session(&session, Some(user.into()))
+            .map_err(|e| crate::domain::dude_memory::DudeMemoryError::Storage(e.to_string()))?;
+        Ok(session.session_code)
     }
 }

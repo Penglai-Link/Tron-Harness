@@ -9,6 +9,12 @@ use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 pub trait DudeRepository: Send {
+    fn create(
+        &mut self,
+        dude: &Dude,
+        definition: &crate::domain::agent::PlatformInternalAgentConfig,
+    ) -> Result<(), DudeError>;
+
     fn list(&mut self) -> Result<Vec<Dude>, DudeError>;
     fn save(&mut self, dude: &Dude) -> Result<(), DudeError>;
     fn delete(&mut self, code: &str) -> Result<(), DudeError>;
@@ -141,11 +147,11 @@ impl DudeService {
         }
         let definition = self
             .management
-            .create_platform_internal_agent(command.definition)
+            .prepare_platform_internal_agent(command.definition)
             .map_err(|_| DudeError::Invalid)?;
         let now = chrono::Utc::now().timestamp_millis();
         let dude = Dude {
-            dude_code: definition.agent_code,
+            dude_code: definition.agent_code.clone(),
             kind: command.kind,
             enabled: command.enabled,
             heartbeat_minutes: command.heartbeat_minutes,
@@ -154,7 +160,7 @@ impl DudeService {
             created_at: now,
             updated_at: now,
         };
-        self.repo()?.save(&dude)?;
+        self.repo()?.create(&dude, &definition)?;
         Ok(dude)
     }
     pub fn update(&self, code: &str, command: UpdateDudeCommand) -> Result<Dude, DudeError> {
@@ -254,7 +260,13 @@ impl DudeService {
                         if let Some(task) = &input.task_code {
                             (DudeSessionPurpose::Task, task.clone())
                         } else {
-                            (DudeSessionPurpose::Feedback, input.dedup_key.clone())
+                            (
+                                DudeSessionPurpose::Feedback,
+                                input.payload["threadCode"]
+                                    .as_str()
+                                    .map(|id| format!("thread:{id}"))
+                                    .unwrap_or_else(|| input.dedup_key.clone()),
+                            )
                         }
                     }
                     DudeEventSource::Heartbeat => {
@@ -356,3 +368,6 @@ impl DudeService {
 
 mod runtime;
 pub use runtime::{DudeDispatcher, DudeExecutionOutcome, DudeExecutor};
+
+mod errors;
+pub use errors::{ApplicationErrorDescriptor, error_descriptor};

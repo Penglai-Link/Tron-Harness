@@ -33,6 +33,19 @@ pub fn routes() -> Router<AppState> {
             get(sessions).post(resolve_session),
         )
         .route("/api/v1/dudes/{code}/events", get(events))
+        .route("/api/v1/dudes/{code}/threads", get(threads))
+        .route(
+            "/api/v1/dudes/{code}/threads/{thread}/messages",
+            post(thread_message),
+        )
+        .route(
+            "/api/v1/dudes/{code}/threads/{thread}/answer",
+            post(thread_answer),
+        )
+        .route(
+            "/api/v1/dudes/{code}/threads/{thread}/history/query",
+            post(thread_history),
+        )
         .route("/api/v1/notifications", get(notifications))
         .route("/api/v1/notifications/{id}", patch(update_notification))
 }
@@ -45,17 +58,41 @@ impl From<DudeError> for DudeApiError {
 }
 impl IntoResponse for DudeApiError {
     fn into_response(self) -> Response {
-        let (status, code) = match self.0 {
-            DudeError::NotFound => (StatusCode::NOT_FOUND, "101018001"),
-            DudeError::Invalid => (StatusCode::BAD_REQUEST, "101018002"),
-            DudeError::Conflict => (StatusCode::CONFLICT, "101018003"),
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, "101018004"),
+        let descriptor = error_descriptor(&self.0);
+        let (status, zh, en) = match descriptor.message_key {
+            "tron.dude.not_found" => (
+                StatusCode::NOT_FOUND,
+                "Dude 或关联记录不存在",
+                "Dude or related record was not found",
+            ),
+            "tron.dude.request_invalid" => (
+                StatusCode::BAD_REQUEST,
+                "Dude 配置或请求无效",
+                "Dude configuration or request is invalid",
+            ),
+            "tron.dude.state_changed" => (
+                StatusCode::CONFLICT,
+                "Dude 状态已变化，请刷新后重试",
+                "Dude state changed; refresh and retry",
+            ),
+            "tron.dude.storage_failed" => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Dude 存储操作失败",
+                "Dude storage operation failed",
+            ),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Dude 运行失败，请查看工作记录",
+                "Dude execution failed; inspect its work history",
+            ),
         };
+        let english = crate::shared::auth_holder::AuthHolder::get()
+            .is_some_and(|c| c.locale.to_ascii_lowercase().starts_with("en"));
         (
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
-                code,
-                self.0.to_string(),
+                descriptor.code,
+                if english { en } else { zh },
             )),
         )
             .into_response()
@@ -438,4 +475,203 @@ async fn update_notification(
 ) -> Result<Json<ApiResponse<EmptyData>>, DudeApiError> {
     s.dudes.update_notification(&id, r.read, r.archived)?;
     Ok(Json(ApiResponse::protocol_success(EmptyData {})))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListDudeThreadResponse {
+    thread_code: String,
+    session_code: String,
+    title: Option<String>,
+    status: String,
+    latest_run_code: Option<String>,
+    closed: bool,
+    agent_code: String,
+    origin_session_code: String,
+    task_code: Option<String>,
+}
+async fn threads(
+    State(s): State<AppState>,
+    Path(code): Path<String>,
+) -> Result<Json<ApiResponse<Vec<ListDudeThreadResponse>>>, DudeApiError> {
+    s.dudes.get(&code)?;
+    let records = s
+        .agent_framework
+        .dude_thread_catalog(&code)
+        .await
+        .map_err(|e| DudeError::Runtime(e.to_string()))?;
+    Ok(Json(ApiResponse::protocol_success(
+        records
+            .into_iter()
+            .map(|t| ListDudeThreadResponse {
+                session_code: t.summary.thread_id.clone(),
+                thread_code: t.summary.thread_id,
+                title: t.summary.title,
+                status: format!("{:?}", t.summary.status),
+                latest_run_code: t.summary.latest_run_id.map(|r| r.to_string()),
+                closed: t.closed,
+                agent_code: t.agent_code,
+                origin_session_code: t.origin_session_code,
+                task_code: t.task_code,
+            })
+            .collect(),
+    )))
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReadDudeThreadHistoryRequest {
+    pub size: usize,
+    pub cursor: Option<eliteforge_agent_core::HistoryCursor>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadDudeThreadHistoryResponse {
+    session_id: String,
+    version: String,
+    next_cursor: Option<eliteforge_agent_core::HistoryCursor>,
+    runs: Vec<eliteforge_agent_core::HistoryRun>,
+    records: eliteforge_agent_core::HistoryRecords,
+    pending_interactions: Vec<eliteforge_agent_core::HistoryInteraction>,
+    active_runs: Vec<eliteforge_agent_core::HistoryRun>,
+}
+async fn thread_history(
+    State(s): State<AppState>,
+    Path((code, thread)): Path<(String, String)>,
+    Json(r): Json<ReadDudeThreadHistoryRequest>,
+) -> Result<Json<ApiResponse<ReadDudeThreadHistoryResponse>>, DudeApiError> {
+    verify_thread(&s, &code, &thread).await?;
+    if r.size == 0 || r.size > 100 {
+        return Err(DudeError::Invalid.into());
+    }
+    let mut h = s
+        .agent_framework
+        .dude_thread_history(
+            &code,
+            &thread,
+            eliteforge_agent_core::HistoryQuery {
+                limit: r.size,
+                cursor: r.cursor,
+            },
+        )
+        .await
+        .map_err(|e| DudeError::Runtime(e.to_string()))?;
+    for message in &mut h.records.messages {
+        message.content = message
+            .content
+            .drain(..)
+            .filter_map(crate::adapters::inbound::http::chats::history::public_history_block)
+            .collect();
+    }
+    Ok(Json(ApiResponse::protocol_success(
+        ReadDudeThreadHistoryResponse {
+            session_id: h.session_id,
+            version: h.version,
+            next_cursor: h.next_cursor,
+            runs: h.runs,
+            records: h.records,
+            pending_interactions: h.pending_interactions,
+            active_runs: h.active_runs,
+        },
+    )))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SendDudeThreadMessageRequest {
+    pub content: String,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendDudeThreadMessageResponse {
+    thread_code: String,
+    status: String,
+    latest_run_code: Option<String>,
+}
+async fn thread_message(
+    State(s): State<AppState>,
+    auth: RequestAuthContext,
+    Path((code, thread)): Path<(String, String)>,
+    Json(r): Json<SendDudeThreadMessageRequest>,
+) -> Result<Json<ApiResponse<SendDudeThreadMessageResponse>>, DudeApiError> {
+    verify_thread(&s, &code, &thread).await?;
+    if r.content.trim().is_empty() || r.content.len() > 1024 * 1024 {
+        return Err(DudeError::Invalid.into());
+    }
+    let summary = s
+        .agent_framework
+        .dude_thread_send(
+            &code,
+            &thread,
+            &r.content,
+            &auth.user().user_code,
+            &auth.locale,
+            &s.dude_invocation_service(),
+        )
+        .await
+        .map_err(|e| DudeError::Runtime(e.to_string()))?;
+    Ok(Json(ApiResponse::protocol_success(
+        SendDudeThreadMessageResponse {
+            thread_code: summary.thread_id,
+            status: format!("{:?}", summary.status),
+            latest_run_code: summary.latest_run_id.map(|r| r.to_string()),
+        },
+    )))
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AnswerDudeThreadRequest {
+    pub interaction_id: String,
+    pub value: serde_json::Value,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnswerDudeThreadResponse {
+    thread_code: String,
+    status: String,
+    latest_run_code: Option<String>,
+}
+async fn thread_answer(
+    State(s): State<AppState>,
+    auth: RequestAuthContext,
+    Path((code, thread)): Path<(String, String)>,
+    Json(r): Json<AnswerDudeThreadRequest>,
+) -> Result<Json<ApiResponse<AnswerDudeThreadResponse>>, DudeApiError> {
+    verify_thread(&s, &code, &thread).await?;
+    let interaction = eliteforge_agent_core::RunId::parse_str(&r.interaction_id)
+        .map_err(|_| DudeError::Invalid)?;
+    let summary = s
+        .agent_framework
+        .dude_thread_answer(
+            &code,
+            &thread,
+            interaction,
+            r.value,
+            &auth.user().user_code,
+            &auth.locale,
+            &s.dude_invocation_service(),
+        )
+        .await
+        .map_err(|e| DudeError::Runtime(e.to_string()))?;
+    Ok(Json(ApiResponse::protocol_success(
+        AnswerDudeThreadResponse {
+            thread_code: summary.thread_id,
+            status: format!("{:?}", summary.status),
+            latest_run_code: summary.latest_run_id.map(|r| r.to_string()),
+        },
+    )))
+}
+
+async fn verify_thread(state: &AppState, dude: &str, thread: &str) -> Result<(), DudeError> {
+    state.dudes.get(dude)?;
+    if !state
+        .agent_framework
+        .dude_thread_catalog(dude)
+        .await
+        .map_err(|e| DudeError::Runtime(e.to_string()))?
+        .iter()
+        .any(|t| t.summary.thread_id == thread)
+    {
+        return Err(DudeError::NotFound);
+    }
+    Ok(())
 }

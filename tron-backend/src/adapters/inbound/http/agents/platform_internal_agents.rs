@@ -342,7 +342,7 @@ pub async fn get_platform_internal_agent(
 ) -> Result<Json<ApiResponse<GetPlatformInternalAgentResponse>>, InternalAgentApiError> {
     let record = state
         .agent_management
-        .list_platform_internal_agents()
+        .all_platform_internal_agents()
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?
         .into_iter()
         .find(|agent| agent.agent_code.eq_ignore_ascii_case(&code))

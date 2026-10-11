@@ -56,9 +56,24 @@ fn ensure_internal_agent_code_available(
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
-    fn list_dude_codes(&mut self)->Result<Vec<String>,AgentManagementError>{
-        let mut q=self.connection.prepare("SELECT dude_code FROM dudes").map_err(storage_error)?;
-        q.query_map([],|r|r.get(0)).map_err(storage_error)?.collect::<Result<Vec<_>,_>>().map_err(storage_error)
+    fn copy_initial_agent_skills(
+        &mut self,
+        from: &str,
+        to: &str,
+    ) -> Result<(), AgentManagementError> {
+        self.connection.execute("INSERT INTO agent_skill_assignments(agent_code,skill_name,enabled) SELECT ?2,skill_name,enabled FROM agent_skill_assignments WHERE agent_code=?1 ON CONFLICT(agent_code,skill_name) DO NOTHING",params![from,to]).map_err(storage_error)?;
+        Ok(())
+    }
+
+    fn list_dude_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
+        let mut q = self
+            .connection
+            .prepare("SELECT dude_code FROM dudes")
+            .map_err(storage_error)?;
+        q.query_map([], |r| r.get(0))
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
     }
 
     fn replace_workspace_resource_assignments(
@@ -1090,7 +1105,27 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepository {
-    fn list_dude_codes(&mut self)->Result<Vec<String>,AgentManagementError>{self.connection.call(move|connection|SqliteAgentManagementRepositorySql{connection}.list_dude_codes(),||AgentManagementError::StorageFailure)}
+    fn copy_initial_agent_skills(
+        &mut self,
+        from: &str,
+        to: &str,
+    ) -> Result<(), AgentManagementError> {
+        let (from, to) = (from.to_owned(), to.to_owned());
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .copy_initial_agent_skills(&from, &to)
+            },
+            || AgentManagementError::StorageFailure,
+        )
+    }
+
+    fn list_dude_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
+        self.connection.call(
+            move |connection| SqliteAgentManagementRepositorySql { connection }.list_dude_codes(),
+            || AgentManagementError::StorageFailure,
+        )
+    }
 
     fn replace_workspace_resource_assignments(
         &mut self,

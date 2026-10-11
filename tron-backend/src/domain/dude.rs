@@ -27,6 +27,7 @@ pub enum DudeSessionPurpose {
     Task,
     Feedback,
     MemoryBatch,
+    SkillAuthoring,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
