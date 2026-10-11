@@ -240,7 +240,9 @@ impl McpService {
         access_mode: McpAccessMode,
         selected_server_codes: &[String],
     ) -> Result<Vec<PlatformMcpServerRecord>, McpError> {
-        self.ensure_active_workspace(workspace_code)?;
+        if !workspace_code.is_empty() {
+            self.ensure_active_workspace(workspace_code)?;
+        }
         if matches!(access_mode, McpAccessMode::Disabled) {
             return Ok(Vec::new());
         }
@@ -250,11 +252,14 @@ impl McpService {
             .lock()
             .expect("MCP repository mutex poisoned")
             .list_platform_servers()?;
-        let policies = self
-            .repository
-            .lock()
-            .expect("MCP repository mutex poisoned")
-            .list_workspace_server_policies(Some(workspace_code.trim()))?;
+        let policies = if workspace_code.is_empty() {
+            Vec::new()
+        } else {
+            self.repository
+                .lock()
+                .expect("MCP repository mutex poisoned")
+                .list_workspace_server_policies(Some(workspace_code.trim()))?
+        };
         let policies_by_server: HashMap<_, _> = policies
             .into_iter()
             .map(|policy| (policy.server_code.clone(), policy))

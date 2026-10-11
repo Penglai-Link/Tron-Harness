@@ -184,6 +184,7 @@ mod tests {
 
     fn context_with_tools(tools: Vec<EffectiveTool>) -> AgentRunContext {
         AgentRunContext {
+            collaboration_owner: None,
             agent_code: None,
             auto_model_route: None,
             conversation_code: Some("SESSION-1".into()),

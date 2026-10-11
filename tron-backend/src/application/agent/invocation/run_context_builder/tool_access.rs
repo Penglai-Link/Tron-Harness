@@ -37,18 +37,25 @@ impl AgentRunContextBuilder {
         let mut tools = requested_tools;
         let mut effective_tools = tools.clone();
         let mut tool_exposure = AgentToolExposureState::default();
-        let internal_agents = self
-            .management
-            .list_workspace_internal_agents(workspace_code)
-            .map_err(|error| map_agent_error(agent_code, error))?;
+        let internal_agents = if workspace_code.is_empty() {
+            self.management.list_platform_internal_agents()
+        } else {
+            self.management
+                .list_workspace_internal_agents(workspace_code)
+        }
+        .map_err(|error| map_agent_error(agent_code, error))?;
         let internal_agent_policy = if internal_agents
             .iter()
             .any(|policy| policy.agent_code.eq_ignore_ascii_case(agent_code))
         {
             Some(
-                self.management
-                    .workspace_internal_agent_policy(workspace_code, agent_code)
-                    .map_err(|error| map_agent_error(agent_code, error))?,
+                if workspace_code.is_empty() {
+                    self.management.platform_internal_agent_policy(agent_code)
+                } else {
+                    self.management
+                        .workspace_internal_agent_policy(workspace_code, agent_code)
+                }
+                .map_err(|error| map_agent_error(agent_code, error))?,
             )
         } else {
             None
@@ -58,21 +65,24 @@ impl AgentRunContextBuilder {
             // Saved policy owns internal-agent authority. Request DTOs only narrow
             // that authority by name; their descriptions/schemas are never trusted.
             // An empty request keeps the legacy contract: use the saved policy.
-            let effective_tool_records = self
-                .management
-                .resolve_internal_agent_effective_tool_definitions(
-                    workspace_code,
-                    agent_code,
-                    locale,
-                )
-                .map_err(|error| map_agent_error(agent_code, error))?
-                .into_iter()
-                .filter(|tool| tool.availability_state == ToolAvailabilityState::Available)
-                .filter(|tool| {
-                    requested_tool_names.is_empty()
-                        || requested_tool_names.contains(&tool.tool_name)
-                })
-                .collect::<Vec<_>>();
+            let effective_tool_records = if workspace_code.is_empty() {
+                self.management
+                    .resolve_platform_agent_effective_tool_definitions(agent_code, locale)
+            } else {
+                self.management
+                    .resolve_internal_agent_effective_tool_definitions(
+                        workspace_code,
+                        agent_code,
+                        locale,
+                    )
+            }
+            .map_err(|error| map_agent_error(agent_code, error))?
+            .into_iter()
+            .filter(|tool| tool.availability_state == ToolAvailabilityState::Available)
+            .filter(|tool| {
+                requested_tool_names.is_empty() || requested_tool_names.contains(&tool.tool_name)
+            })
+            .collect::<Vec<_>>();
             match policy.tool_exposure_mode {
                 ToolExposureMode::DirectList => {
                     tools = effective_tool_records

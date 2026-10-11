@@ -4,6 +4,7 @@ mod internal_definitions;
 mod internal_groups;
 pub(crate) mod loop_designs;
 mod platform_internal_agents;
+mod platform_runtime;
 mod system_agents;
 mod tool_permissions;
 mod workspace_grants;

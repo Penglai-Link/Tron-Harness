@@ -99,6 +99,8 @@ pub(crate) struct PreparedAgentRun {
 
 #[derive(Clone)]
 pub(crate) struct AgentRunContextBuilder {
+    platform_scope: bool,
+    collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
     workspaces: WorkspaceService,
     apps: AppService,
     variables: VariableService,
@@ -116,6 +118,16 @@ pub(crate) struct AgentRunContextBuilder {
 }
 
 impl AgentRunContextBuilder {
+    pub(crate) fn with_execution_identity(
+        mut self,
+        platform_scope: bool,
+        owner: Option<crate::domain::agent::AgentCollaborationOwner>,
+    ) -> Self {
+        self.platform_scope = platform_scope;
+        self.collaboration_owner = owner;
+        self
+    }
+
     pub(crate) fn with_model_router(
         mut self,
         router: crate::application::model_router::AgentModelRouter,
@@ -151,6 +163,8 @@ impl AgentRunContextBuilder {
         >,
     ) -> Self {
         Self {
+            platform_scope: false,
+            collaboration_owner: None,
             workspaces,
             apps,
             variables,
@@ -199,32 +213,46 @@ impl AgentRunContextBuilder {
             .ok_or(AgentInvocationError::PromptRequired)?;
         let workspace_code = requested_workspace_code
             .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .ok_or(AgentInvocationError::WorkspaceRequired)?;
-        let workspace = self
-            .workspaces
-            .get_workspace(&workspace_code)
-            .map_err(|_| AgentInvocationError::WorkspaceInvalid)?;
-        if workspace.status != WorkspaceStatus::Active {
-            return Err(AgentInvocationError::WorkspaceInvalid);
-        }
-
+            .filter(|value| !value.is_empty());
+        let workspace = if let Some(code) = workspace_code.as_deref() {
+            let workspace = self
+                .workspaces
+                .get_workspace(code)
+                .map_err(|_| AgentInvocationError::WorkspaceInvalid)?;
+            if workspace.status != WorkspaceStatus::Active {
+                return Err(AgentInvocationError::WorkspaceInvalid);
+            }
+            Some(workspace)
+        } else if self.platform_scope {
+            None
+        } else {
+            return Err(AgentInvocationError::WorkspaceRequired);
+        };
+        // Empty internal scope denotes absence; it is never looked up as a Workspace.
+        let workspace_code = workspace
+            .as_ref()
+            .map(|workspace| workspace.workspace_code.as_str())
+            .unwrap_or("");
         let app = requested_app_code
             .as_deref()
-            .map(|app_code| self.apps.get_app(app_code))
+            .map(|code| self.apps.get_app(code))
             .transpose()
             .map_err(|_| AgentInvocationError::WorkspaceInvalid)?;
-        if let Some(app) = &app
-            && app.workspace_code != workspace.workspace_code
+        if app
+            .as_ref()
+            .is_some_and(|app| app.workspace_code != workspace_code)
         {
             return Err(AgentInvocationError::WorkspaceInvalid);
         }
-
-        let resolved_agent = resolve_invocation_agent(
-            &self.management,
-            &workspace.workspace_code,
-            requested_agent_code,
-        )?;
+        let resolved_agent = if workspace.is_some() {
+            resolve_invocation_agent(&self.management, workspace_code, requested_agent_code)?
+        } else {
+            self.management
+                .resolve_platform_agent_runtime(requested_agent_code.as_deref())
+                .map_err(|error| {
+                    map_agent_error(requested_agent_code.as_deref().unwrap_or(""), error)
+                })?
+        };
         let model =
             resolve_invocation_model(&resolved_agent, requested_model, requested_system_model_id)?;
         let model_code = model.model_code.clone();
@@ -235,7 +263,7 @@ impl AgentRunContextBuilder {
             .map_err(|_| AgentInvocationError::RuntimeFailed("runCode must be a UUID".into()))?;
         let leases = self.tool_registry.framework_lease_guard(&run_code);
         let mut tool_access = self.resolve_tool_access(
-            &workspace.workspace_code,
+            workspace_code,
             &resolved_agent.agent_code,
             &locale,
             requested_tools,
@@ -252,18 +280,20 @@ impl AgentRunContextBuilder {
                 })
                 .unwrap_or_default()
         });
-        let variables = self
-            .variables
-            .runtime_variables(&workspace.workspace_code)
-            .map_err(AgentInvocationError::RuntimeVariableResolutionFailed)?
-            .into_iter()
-            .map(|variable| EffectiveVariable {
-                key: variable.key,
-                value: variable.value,
-                source: variable.source,
-                sensitive: variable.is_sensitive,
-            })
-            .collect::<Vec<_>>();
+        let variables = if workspace.is_some() {
+            self.variables.runtime_variables(workspace_code)
+        } else {
+            self.variables.platform_runtime_variables()
+        }
+        .map_err(AgentInvocationError::RuntimeVariableResolutionFailed)?
+        .into_iter()
+        .map(|variable| EffectiveVariable {
+            key: variable.key,
+            value: variable.value,
+            source: variable.source,
+            sensitive: variable.is_sensitive,
+        })
+        .collect::<Vec<_>>();
         let variable_values = variables
             .iter()
             .map(|variable| (variable.key.clone(), variable.value.clone()))
@@ -291,7 +321,7 @@ impl AgentRunContextBuilder {
             &McpWarningPublishContext {
                 run_code: &run_code,
                 conversation_code: requested_conversation_code.as_deref(),
-                workspace_code: &workspace.workspace_code,
+                workspace_code: workspace_code,
                 user_code: user_code.as_deref(),
                 agent_kind,
                 model: &model,
@@ -323,16 +353,20 @@ impl AgentRunContextBuilder {
         let mut prompt_prefix_sources = Vec::new();
         let empty_runtime_prompt_values = HashMap::new();
         if matches!(resolved_agent.runtime_type, AgentRuntimeType::React) {
-            if let Some(guidance) = self
-                .management
-                .current_internal_agent_guidance(
-                    &workspace.workspace_code,
-                    &resolved_agent.agent_code,
-                )
-                .map_err(|_| {
-                    AgentInvocationError::RuntimeFailed("internal agent config load failed".into())
-                })?
-            {
+            let guidance = if workspace.is_some() {
+                self.management
+                    .current_internal_agent_guidance(workspace_code, &resolved_agent.agent_code)
+            } else {
+                self.management
+                    .platform_internal_agent_policy(&resolved_agent.agent_code)
+                    .map(|policy| {
+                        (!policy.role_prompt.trim().is_empty()).then_some(policy.role_prompt)
+                    })
+            }
+            .map_err(|_| {
+                AgentInvocationError::RuntimeFailed("internal agent config load failed".into())
+            })?;
+            if let Some(guidance) = guidance {
                 messages.push(AgentMessage::system(guidance));
                 prompt_prefix_sources.push(None);
             }
@@ -411,11 +445,12 @@ impl AgentRunContextBuilder {
         let requested_system_agent_session_id =
             normalize_optional(requested_system_agent_session_id);
         let mut context = AgentRunContext {
+            collaboration_owner: self.collaboration_owner.clone(),
             agent_code: Some(resolved_agent.agent_code.clone()),
             auto_model_route: self.auto_model_route.clone(),
             conversation_code: requested_conversation_code.clone(),
             run_code: run_code.clone(),
-            workspace_code: workspace.workspace_code.clone(),
+            workspace_code: workspace_code.to_owned(),
             user_code: user_code.clone(),
             locale,
             request_id: None,

@@ -31,10 +31,13 @@ impl AgentModelRouter {
         self.management
             .as_ref()
             .map(|management| {
-                management
-                    .workspace_internal_agent_policy(workspace, agent)
-                    .map(|policy| policy.candidate_model_codes)
-                    .map_err(|error| format!("Agent model candidates lookup failed: {error:?}"))
+                if workspace.is_empty() {
+                    management.platform_internal_agent_policy(agent)
+                } else {
+                    management.workspace_internal_agent_policy(workspace, agent)
+                }
+                .map(|policy| policy.candidate_model_codes)
+                .map_err(|error| format!("Agent model candidates lookup failed: {error:?}"))
             })
             .unwrap_or_else(|| Ok(Vec::new()))
     }
