@@ -205,9 +205,12 @@ impl Runtime {
         let mut command: AgentInvocationCommand = serde_json::from_value(serde_json::json!({
             "prompt": preparation_prompt, "workspaceCode": base.workspace_code, "conversationCode": session,
             "agentCode": code, "model": model,
-            "supportsUserInputRequests": caller_context.collaboration_owner.as_ref().is_some_and(|owner| owner.kind == "DUDE"),
         }))
         .map_err(failure)?;
+        command.supports_user_input_requests = caller_context
+            .collaboration_owner
+            .as_ref()
+            .is_some_and(|owner| owner.kind == "DUDE");
         command.run_code = request
             .resume
             .as_ref()
