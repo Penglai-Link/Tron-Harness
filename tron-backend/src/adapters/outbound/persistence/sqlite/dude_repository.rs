@@ -125,7 +125,7 @@ impl DudeRepository for SqliteDudeRepository {
     }
     fn claim(&mut self, now: i64, lease_ms: i64) -> Result<Option<DudeEvent>, DudeError> {
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
- let json:Option<String>=tx.query_row("SELECT e.record_json FROM dude_events e JOIN dudes d USING(dude_code) WHERE (d.enabled=1 OR e.source='UserMessage') AND e.available_at<=?1 AND (e.status='Queued' OR (e.status='Running' AND e.lease_until<?1)) AND NOT EXISTS(SELECT 1 FROM dude_events busy WHERE busy.session_code=e.session_code AND e.session_code IS NOT NULL AND ((busy.status='Running' AND busy.lease_until>=?1) OR (busy.status='AwaitingInput' AND e.source!='UserMessage'))) ORDER BY e.available_at,e.rowid LIMIT 1",[now],|r|r.get(0)).optional().map_err(storage)?;
+ let json:Option<String>=tx.query_row("SELECT e.record_json FROM dude_events e JOIN dudes d USING(dude_code) WHERE (d.enabled=1 OR e.source='UserMessage') AND e.available_at<=?1 AND (e.status='Queued' OR (e.status='Running' AND e.lease_until<?1)) AND NOT EXISTS(SELECT 1 FROM dude_events busy WHERE busy.session_code=e.session_code AND e.session_code IS NOT NULL AND ((busy.status='Running' AND busy.lease_until>=?1) OR (busy.status='AwaitingInput' AND e.source!='UserMessage'))) AND NOT EXISTS(SELECT 1 FROM dude_events busy WHERE json_extract(d.record_json,'$.kind')='Memory' AND e.source!='UserMessage' AND busy.dude_code=e.dude_code AND busy.event_id!=e.event_id AND busy.status='Running' AND busy.lease_until>=?1 AND busy.source!='UserMessage') ORDER BY e.available_at,e.rowid LIMIT 1",[now],|r|r.get(0)).optional().map_err(storage)?;
  let Some(json)=json else {return Ok(None)};let mut e:DudeEvent=decode(json)?;e.status=DudeEventStatus::Running;e.lease_token=Some(eliteforge_agent_core::SessionRecord::new("").id);e.lease_until=Some(now+lease_ms.max(1000));e.attempts+=1;
  tx.execute("UPDATE dude_events SET status='Running',lease_until=?2,lease_token=?3,attempts=?4,record_json=?5 WHERE event_id=?1",params![e.event_id,e.lease_until,e.lease_token,e.attempts,encode(&e)?]).map_err(storage)?;tx.commit().map_err(storage)?;Ok(Some(e))})
     }
@@ -136,15 +136,66 @@ impl DudeRepository for SqliteDudeRepository {
         status: DudeEventStatus,
         result: &str,
         now: i64,
+        notify: bool,
     ) -> Result<(), DudeError> {
         let (id, token, result) = (id.to_owned(), token.to_owned(), result.to_owned());
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![id,token,now],|r|r.get(0)).optional().map_err(storage)?;let mut e:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;e.status=status;e.result=Some(result);e.lease_until=None;e.lease_token=None;if tx.execute("UPDATE dude_events SET status=?3,lease_until=NULL,lease_token=NULL,record_json=?4 WHERE event_id=?1 AND lease_token=?2",params![id,token,format!("{status:?}"),encode(&e)?]).map_err(storage)?!=1{return Err(DudeError::Conflict)}
-if let Some(n)=e.completion_notification(status,e.result.as_deref().unwrap_or(""),now){tx.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(dedup_key) DO NOTHING",params![n.id,n.dedup_key,encode(&n)?,n.created_at]).map_err(storage)?;}
+if notify {if let Some(n)=e.completion_notification(status,e.result.as_deref().unwrap_or(""),now){tx.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(dedup_key) DO NOTHING",params![n.id,n.dedup_key,encode(&n)?,n.created_at]).map_err(storage)?;}}
 tx.commit().map_err(storage)})
     }
     fn attach_session(&mut self, id: &str, token: &str, session: &str) -> Result<(), DudeError> {
         let (id, token, session) = (id.to_owned(), token.to_owned(), session.to_owned());
         self.call(move|c|{let json:Option<String>=c.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running'",params![id,token],|r|r.get(0)).optional().map_err(storage)?;let mut e:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;e.session_code=Some(session.clone());c.execute("UPDATE dude_events SET session_code=?3,record_json=?4 WHERE event_id=?1 AND lease_token=?2",params![id,token,session,encode(&e)?]).map_err(storage)?;Ok(())})
+    }
+    fn renew(&mut self, event: &DudeEvent, now: i64, lease_ms: i64) -> Result<(), DudeError> {
+        let event = event.clone();
+        self.call(move |c| {
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![event.event_id,event.lease_token,now],|r|r.get(0)).optional().map_err(storage)?;
+            let mut record:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;
+            record.lease_until=Some(now+lease_ms);
+            tx.execute("UPDATE dude_events SET lease_until=?2,record_json=?3 WHERE event_id=?1",params![record.event_id,record.lease_until,encode(&record)?]).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
+    }
+    fn retry(
+        &mut self,
+        event: &DudeEvent,
+        now: i64,
+        delay_ms: i64,
+        error: &str,
+    ) -> Result<(), DudeError> {
+        let event = event.clone();
+        let error = error.to_owned();
+        self.call(move|c| {
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![event.event_id,event.lease_token,now],|r|r.get(0)).optional().map_err(storage)?;
+            let mut record:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;
+            record.status=DudeEventStatus::Queued;record.available_at=now+delay_ms;record.lease_until=None;record.lease_token=None;record.result=Some(error);
+            tx.execute("UPDATE dude_events SET status='Queued',available_at=?2,lease_until=NULL,lease_token=NULL,record_json=?3 WHERE event_id=?1",params![record.event_id,record.available_at,encode(&record)?]).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
+    }
+    fn resolve_awaiting_input(
+        &mut self,
+        session: &str,
+        summary: &str,
+        now: i64,
+    ) -> Result<(), DudeError> {
+        let session = session.to_owned();
+        let summary = summary.to_owned();
+        self.call(move|c|{
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let rows={let mut q=tx.prepare("SELECT record_json FROM dude_events WHERE session_code=?1 AND status='AwaitingInput'").map_err(storage)?;q.query_map([&session],|r|r.get::<_,String>(0)).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?};
+            for json in rows {
+                let mut event:DudeEvent=decode(json)?;event.status=DudeEventStatus::Completed;event.result=Some(summary.clone());
+                tx.execute("UPDATE dude_events SET status='Completed',record_json=?2 WHERE event_id=?1",params![event.event_id,encode(&event)?]).map_err(storage)?;
+                let key=format!("event:{}:AwaitingInput",event.event_id);
+                let notification:Option<String>=tx.query_row("SELECT record_json FROM platform_notifications WHERE dedup_key=?1",[&key],|r|r.get(0)).optional().map_err(storage)?;
+                if let Some(json)=notification {let mut n:PlatformNotification=decode(json)?;n.resolved_at=Some(now);tx.execute("UPDATE platform_notifications SET record_json=?2 WHERE dedup_key=?1",params![key,encode(&n)?]).map_err(storage)?;}
+            }
+            tx.commit().map_err(storage)
+        })
     }
     fn schedule_heartbeats(&mut self, now: i64) -> Result<(), DudeError> {
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let rows={let mut q=tx.prepare("SELECT dude_code,heartbeat_minutes,next_heartbeat_at FROM dudes WHERE enabled=1 AND next_heartbeat_at<=?1").map_err(storage)?;q.query_map([now],|r|Ok((r.get::<_,String>(0)?,r.get::<_,u32>(1)?,r.get::<_,i64>(2)?))).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?};

@@ -26,8 +26,23 @@ pub trait DudeRepository: Send {
         status: DudeEventStatus,
         result: &str,
         now: i64,
+        notify: bool,
     ) -> Result<(), DudeError>;
     fn attach_session(&mut self, id: &str, token: &str, session: &str) -> Result<(), DudeError>;
+    fn renew(&mut self, event: &DudeEvent, now: i64, lease_ms: i64) -> Result<(), DudeError>;
+    fn retry(
+        &mut self,
+        event: &DudeEvent,
+        now: i64,
+        delay_ms: i64,
+        error: &str,
+    ) -> Result<(), DudeError>;
+    fn resolve_awaiting_input(
+        &mut self,
+        session: &str,
+        summary: &str,
+        now: i64,
+    ) -> Result<(), DudeError>;
     fn schedule_heartbeats(&mut self, now: i64) -> Result<(), DudeError>;
     fn notify(
         &mut self,
@@ -307,12 +322,33 @@ impl DudeService {
         result: &str,
         now: i64,
     ) -> Result<(), DudeError> {
+        self.finish_with_notification(
+            event,
+            status,
+            result,
+            now,
+            event.source != DudeEventSource::Heartbeat,
+        )
+    }
+    pub fn finish_with_notification(
+        &self,
+        event: &DudeEvent,
+        status: DudeEventStatus,
+        result: &str,
+        now: i64,
+        notify: bool,
+    ) -> Result<(), DudeError> {
         self.repo()?.finish(
             &event.event_id,
             event.lease_token.as_deref().ok_or(DudeError::Conflict)?,
             status,
             result,
             now,
+            notify
+                || matches!(
+                    status,
+                    DudeEventStatus::Failed | DudeEventStatus::AwaitingInput
+                ),
         )
     }
     pub fn attach_session(&self, event: &DudeEvent, session: &str) -> Result<(), DudeError> {
@@ -321,6 +357,22 @@ impl DudeService {
             event.lease_token.as_deref().ok_or(DudeError::Conflict)?,
             session,
         )
+    }
+    pub fn renew(&self, event: &DudeEvent, now: i64, lease_ms: i64) -> Result<(), DudeError> {
+        self.repo()?.renew(event, now, lease_ms)
+    }
+    pub fn retry(
+        &self,
+        event: &DudeEvent,
+        now: i64,
+        delay_ms: i64,
+        error: &str,
+    ) -> Result<(), DudeError> {
+        self.repo()?.retry(event, now, delay_ms, error)
+    }
+    pub fn resolve_awaiting_input(&self, session: &str, summary: &str) -> Result<(), DudeError> {
+        self.repo()?
+            .resolve_awaiting_input(session, summary, chrono::Utc::now().timestamp_millis())
     }
     pub fn schedule_heartbeats(&self, now: i64) -> Result<(), DudeError> {
         self.repo()?.schedule_heartbeats(now)

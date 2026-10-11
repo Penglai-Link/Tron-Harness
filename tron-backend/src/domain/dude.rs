@@ -118,9 +118,6 @@ impl DudeEvent {
         summary: &str,
         now: i64,
     ) -> Option<PlatformNotification> {
-        if self.source == DudeEventSource::Heartbeat && status == DudeEventStatus::Completed {
-            return None;
-        }
         Some(PlatformNotification {
             id: format!("notification:{}:{status:?}", self.event_id),
             dedup_key: format!("event:{}:{status:?}", self.event_id),

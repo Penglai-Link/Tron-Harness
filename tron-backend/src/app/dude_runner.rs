@@ -35,6 +35,41 @@ impl PlatformDudeExecutor {
 }
 #[async_trait::async_trait]
 impl DudeExecutor for PlatformDudeExecutor {
+    async fn recover(&self, event: &DudeEvent) -> Result<Option<DudeExecutionOutcome>, DudeError> {
+        let framework = self
+            .state
+            .agent_framework
+            .storage_framework()
+            .await
+            .map_err(|error| DudeError::Runtime(error.to_string()))?;
+        let store = framework
+            .sessions()
+            .map_err(|error| DudeError::Runtime(error.to_string()))?
+            .store;
+        let run_id = eliteforge_agent_core::RunId::parse_str(&event.event_id)
+            .map_err(|_| DudeError::Invalid)?;
+        match store.get_run(run_id).await {
+            Ok(run) => {
+                if let Some(result) = run.result {
+                    if matches!(
+                        result.status,
+                        eliteforge_agent_core::RunStatus::Completed
+                            | eliteforge_agent_core::RunStatus::AwaitingInput
+                    ) {
+                        return Ok(Some(DudeExecutionOutcome {
+                            summary: result.output,
+                            awaiting_input: result.status
+                                == eliteforge_agent_core::RunStatus::AwaitingInput,
+                            notify: event.source != DudeEventSource::Heartbeat,
+                        }));
+                    }
+                }
+                Err(DudeError::Runtime("Dude execution was interrupted. Inspect its tools and external results before continuing the task.".into()))
+            }
+            Err(eliteforge_agent_core::StateError::NotFound) => Ok(None),
+            Err(error) => Err(DudeError::Runtime(error.to_string())),
+        }
+    }
     async fn execute(
         &self,
         event: DudeEvent,
@@ -76,6 +111,7 @@ impl DudeExecutor for PlatformDudeExecutor {
         let prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
         let agent = self
             .agent()
+            .with_runtime_input(format!("DUDE_{:?}", event.source).to_uppercase(), serde_json::json!({"source":format!("{:?}",event.source),"eventId":event.event_id,"ownerDudeCode":event.dude_code,"taskCode":event.task_code}))
             .with_auto_model_route(Some(route), Some(router))
             .with_collaboration_owner(AgentCollaborationOwner {
                 kind: "DUDE".into(),
@@ -91,7 +127,7 @@ impl DudeExecutor for PlatformDudeExecutor {
                 crate::application::chat::SendChatMessageCommand {
                     a2ui_action_id: None,
                     a2ui_metadata: None,
-                    run_code: None,
+                    run_code: Some(event.event_id.clone()),
                     content: Some(prompt),
                     workspace_code: None,
                     app_code: None,
