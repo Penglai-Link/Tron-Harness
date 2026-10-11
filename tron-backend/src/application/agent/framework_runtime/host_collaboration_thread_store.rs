@@ -20,6 +20,7 @@ pub(super) struct ThreadRecord {
     pub feedback_pending: bool,
     pub revision: u64,
     pub run_admitted_at_ms: u64,
+    pub execution_sequence: u64,
 }
 impl ThreadRecord {
     pub fn authorized(&self, context: &AgentRunContext) -> bool {
@@ -123,7 +124,10 @@ impl FrameworkHost {
         let feedback = if next.feedback_pending {
             next.completion.as_ref().and_then(|(status, result)| {
                 next.summary.latest_run_id.map(|run_id| ThreadFeedback {
-                    event_key: format!("thread:{}:{}:finished", next.summary.thread_id, run_id),
+                    event_key: format!(
+                        "thread:{}:{}:{}:finished",
+                        next.summary.thread_id, run_id, next.execution_sequence
+                    ),
                     owner: next.owner.clone(),
                     thread_code: next.summary.thread_id.clone(),
                     origin_session_code: next.origin_session_code.clone(),
