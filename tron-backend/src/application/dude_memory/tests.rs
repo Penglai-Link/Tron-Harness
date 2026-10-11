@@ -568,7 +568,24 @@ fn dude_memory_rejection_dedup_uses_selected_experience_evidence_only() {
     // A host retry can redeliver an old evidence snapshot with unrelated new messages.
     let mut redelivered = batch.clone();
     redelivered.batch_code = "redelivered-batch".into();
-    redelivered.sources[1].version = "v2".into();
+    // prepare_batch stores sources in identity order, which differs from the input
+    // order. Change the unrelated record by identity, never by vector position.
+    redelivered
+        .sources
+        .iter_mut()
+        .find(|source| source.source_code == "unrelated-chat")
+        .unwrap()
+        .version = "v2".into();
+    let selected_evidence: Vec<SkillEvidence> = redelivered
+        .sources
+        .iter()
+        .filter(|source| source.source_code == "verified-experience")
+        .map(SkillEvidence::from)
+        .collect();
+    assert_eq!(
+        selected_evidence, pending.evidence,
+        "the rejected experience itself must be unchanged"
+    );
     service
         .repository
         .lock()
