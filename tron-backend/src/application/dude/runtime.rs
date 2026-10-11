@@ -42,12 +42,6 @@ impl DudeDispatcher {
             let permits = Arc::new(tokio::sync::Semaphore::new(4));
             loop {
                 interval.tick().await;
-                if let Err(e) = worker
-                    .service
-                    .schedule_heartbeats(chrono::Utc::now().timestamp_millis())
-                {
-                    tracing::error!("Dude schedule: {e}");
-                }
                 while let Ok(permit) = permits.clone().try_acquire_owned() {
                     let event = match worker
                         .service

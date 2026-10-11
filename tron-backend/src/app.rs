@@ -546,6 +546,13 @@ impl AppState {
             agent_management.clone(),
         );
         dudes.bootstrap().expect("Dude defaults");
+        crate::application::dude::register_dude_tools(
+            agent_tool_registry.as_ref(),
+            dudes.clone(),
+            tasks.clone(),
+            agent_framework.clone(),
+        )
+        .expect("Dude tools should register");
         let dude_memory = crate::application::dude_memory::DudeMemoryService::new(
             crate::adapters::outbound::persistence::sqlite::SqliteDudeMemoryRepository::connect(
                 &config.database_url,

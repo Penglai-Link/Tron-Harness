@@ -70,6 +70,11 @@ pub(super) struct ToolCatalogDefinition {
 pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
     vec![
         ToolDomainDefinition {
+            domain_code: "dude",
+            name_i18n_key: "agent.toolCatalog.domains.dude.name",
+            description_i18n_key: "agent.toolCatalog.domains.dude.description",
+        },
+        ToolDomainDefinition {
             domain_code: "rag",
             name_i18n_key: "agent.toolCatalog.domains.rag.name",
             description_i18n_key: "agent.toolCatalog.domains.rag.description",

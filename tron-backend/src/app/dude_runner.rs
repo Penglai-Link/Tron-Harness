@@ -96,24 +96,6 @@ impl DudeExecutor for PlatformDudeExecutor {
                 notify: false,
             });
         }
-        if event.source == DudeEventSource::Heartbeat
-            && self.state.dudes.get(&event.dude_code)?.kind != DudeKind::Memory
-        {
-            let actionable = self
-                .state
-                .tasks
-                .due_dude_tasks(chrono::Utc::now().timestamp_millis())
-                .map_err(|_| DudeError::Storage)?
-                .into_iter()
-                .any(|t| t.owner_dude_code.as_deref() == Some(&event.dude_code));
-            if !actionable {
-                return Ok(DudeExecutionOutcome {
-                    summary: String::new(),
-                    awaiting_input: false,
-                    notify: false,
-                });
-            }
-        }
         if event.source == DudeEventSource::TaskReminder {
             if let Some(code) = &event.task_code {
                 let version = event.payload["scheduleVersion"].as_i64().unwrap_or(0);
@@ -151,11 +133,22 @@ impl DudeExecutor for PlatformDudeExecutor {
         )
         .with_agent_management(self.state.agent_management.clone());
         let (model, route) = router
-            .resolve_initial("", &session.session_code, &event.dude_code, None)
+            .resolve_initial(
+                session.workspace_code.as_deref().unwrap_or(""),
+                &session.session_code,
+                &event.dude_code,
+                None,
+            )
             .map_err(DudeError::Runtime)?;
-        let prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
+        let mut prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
         if event.source != DudeEventSource::UserMessage {
             prompt.push_str(&format!("\n事件数据：{}", event.payload));
+        }
+        if event.source == DudeEventSource::ThreadFeedback {
+            prompt.push_str("\n处理 Thread 反馈时，先读取 result.interactions。若已有上下文足以回答，调用 thread_answer，使用实际 thread_id、interaction_id 和符合 response_schema 的 answer；不要给等待回答的 Thread 发送普通消息。若需要用户补充事实或作决定，调用 dude_notify 通知用户并指向此 Thread，保留等待状态。任务完成后更新对应 task 状态。没有实际进展时保持安静。");
+        }
+        if event.source == DudeEventSource::Heartbeat {
+            prompt.push_str("\n按你的角色检查需要主动推进的事项。已由任务调度触发的工作在对应 Task 会话运行；不要在心跳会话重复执行这些任务。仅在发现实际变化、需要决策或取得有用结果时通过 dude_notify 通知；无变化保持安静。");
         }
         let agent = self
             .agent()
@@ -244,6 +237,22 @@ impl crate::application::agent::ThreadFeedbackSink for ThreadFeedbackBridge {
     }
 }
 pub(super) fn start(state: AppState) {
+    let heartbeat_dudes = state.dudes.clone();
+    state
+        .automations
+        .register_builtin_interval(
+            crate::application::automation::BuiltinScheduleTarget::DudeHeartbeat,
+            std::time::Duration::from_secs(2),
+            Arc::new(move || {
+                if let Err(error) =
+                    heartbeat_dudes.schedule_heartbeats(chrono::Utc::now().timestamp_millis())
+                {
+                    tracing::error!("Dude heartbeat scheduling: {error}");
+                }
+            }),
+        )
+        .expect("Dude heartbeat scheduler should initialize");
+
     let _ = state
         .agent_framework
         .set_thread_feedback_sink(Arc::new(ThreadFeedbackBridge(state.dudes.clone())));
@@ -296,7 +305,7 @@ impl crate::application::dude_memory::DudeMemoryNotifications for MemoryNotifica
     ) -> Result<(), crate::domain::dude_memory::DudeMemoryError> {
         self.0
             .notify(crate::application::dude::NotificationInput {
-                dedup_key: format!("{}:{}:{}", n.kind, n.related_code, n.message),
+                dedup_key: format!("{}:{}:{}", n.related_code, n.revision, n.kind),
                 dude_code: Some(n.dude_code.clone()),
                 title: n.kind.into(),
                 body: n.message.clone(),
@@ -309,7 +318,7 @@ impl crate::application::dude_memory::DudeMemoryNotifications for MemoryNotifica
                 )
             })?;
         if n.kind == "SkillRevisionRequested" {
-            self.0.publish_event(crate::application::dude::DudeEventInput{dude_code:n.dude_code,source:DudeEventSource::ThreadFeedback,dedup_key:format!("skill-revision:{}:{}",n.related_code,n.message),session_code:None,task_code:None,workspace_code:None,payload:serde_json::json!({"candidateCode":n.related_code,"content":n.message}),available_at:chrono::Utc::now().timestamp_millis()}).map_err(|_|crate::domain::dude_memory::DudeMemoryError::Storage("Dude notification persistence failed".into()))?;
+            self.0.publish_event(crate::application::dude::DudeEventInput{dude_code:n.dude_code,source:DudeEventSource::ThreadFeedback,dedup_key:format!("skill-revision:{}:{}",n.related_code,n.revision),session_code:None,task_code:None,workspace_code:None,payload:serde_json::json!({"candidateCode":n.related_code,"content":n.message}),available_at:chrono::Utc::now().timestamp_millis()}).map_err(|_|crate::domain::dude_memory::DudeMemoryError::Storage("Dude notification persistence failed".into()))?;
         }
         Ok(())
     }

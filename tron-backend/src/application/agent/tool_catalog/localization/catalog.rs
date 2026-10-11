@@ -2,6 +2,17 @@ use super::*;
 
 pub(super) fn translate_en_us(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.dude.name" => "Dude",
+        "agent.toolCatalog.domains.dude.description" => {
+            "Dude-owned background work and platform notifications."
+        }
+        "agent.toolCatalog.tools.dude.notify.name" => "Notify the user",
+        "agent.toolCatalog.tools.dude.notify.description" => {
+            "Publish a durable platform notification when a Dude needs a human decision, encounters a blocker, or has a meaningful result. Stay quiet on idle checks. Dude identity and session are server-owned; optional task and Thread targets must belong to this Dude."
+        }
+        "agent.toolCatalog.tools.dude.notify.sampleResultSummary" => {
+            "Returns the persisted notification, deduplicated by runtime invocation identity."
+        }
         "agent.toolCatalog.domains.rag.name" => "RAG",
         "agent.toolCatalog.domains.rag.description" => {
             "Search authorized knowledge, memory and skills for original evidence."
@@ -303,6 +314,15 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
 
 pub(super) fn translate_zh_cn(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.dude.name" => "Dude",
+        "agent.toolCatalog.domains.dude.description" => "Dude 的后台工作与平台通知。",
+        "agent.toolCatalog.tools.dude.notify.name" => "通知用户",
+        "agent.toolCatalog.tools.dude.notify.description" => {
+            "Dude 需要用户决策、遇到阻碍或取得实际结果时，发布持久化平台通知。无变化的检查保持安静。Dude 身份和会话由服务端确定；任务和 Thread 必须属于当前 Dude。"
+        }
+        "agent.toolCatalog.tools.dude.notify.sampleResultSummary" => {
+            "返回按运行时调用标识去重的持久化通知。"
+        }
         "agent.toolCatalog.domains.rag.name" => "RAG",
         "agent.toolCatalog.domains.rag.description" => "检索已授权知识库、记忆和技能的原文证据。",
         "agent.toolCatalog.tools.rag.search.name" => "检索证据",

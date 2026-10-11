@@ -26,6 +26,9 @@ pub(super) fn definition(
 
 fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
     match (tool_code, suffix) {
+        ("dude.notify", "name") => "agent.toolCatalog.tools.dude.notify.name",
+        ("dude.notify", "description") => "agent.toolCatalog.tools.dude.notify.description",
+        ("dude.notify", "sampleResultSummary") => "agent.toolCatalog.tools.dude.notify.sampleResultSummary",
         ("workspace.page", "name") => "agent.toolCatalog.tools.workspace.page.name",
         ("workspace.page", "description") => "agent.toolCatalog.tools.workspace.page.description",
         ("workspace.page", "sampleResultSummary") => {
