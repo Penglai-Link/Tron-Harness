@@ -28,7 +28,7 @@ pub fn register_dude_memory_tools(
 }
 pub fn dude_memory_tool_definitions() -> Vec<EffectiveTool> {
     vec![
-        EffectiveTool {tool_name:"dude_skill_begin".into(),domain_code:Some("dude-memory".into()),description:"Load the installed enabled skill-creator instructions and create or resume an experience Skill candidate. You must use these instructions before submitting the artifact. Only the owning memory Dude can invoke this tool.".into(),input_schema:json!({"type":"object","required":["batchCode","skillName"],"properties":{"batchCode":{"type":"string"},"skillName":{"type":"string"}},"additionalProperties":false}),skill_name:None,required_variable_keys:vec![]},
+        EffectiveTool {tool_name:"dude_skill_begin".into(),domain_code:Some("dude-memory".into()),description:"Load the installed enabled skill-creator instructions and create or resume an experience Skill candidate. You must use these instructions before submitting the artifact. Only the owning memory Dude can invoke this tool.".into(),input_schema:json!({"type":"object","required":["batchCode","skillName","sourceCodes"],"properties":{"batchCode":{"type":"string"},"skillName":{"type":"string"},"sourceCodes":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}),skill_name:None,required_variable_keys:vec![]},
         EffectiveTool {tool_name:"dude_skill_submit".into(),domain_code:Some("dude-memory".into()),description:"Submit a complete Skill artifact from the author session that loaded skill-creator. All files are staged, executable behavioral checks run, and only a passing exact revision can enter approval/install.".into(),input_schema:json!({"type":"object","required":["candidateCode","files","behaviorChecks"],"properties":{"candidateCode":{"type":"string"},"files":{"type":"array","items":{"type":"object","required":["path","content","encoding"],"properties":{"path":{"type":"string"},"content":{"type":"string"},"encoding":{"enum":["Utf8","Base64"]}},"additionalProperties":false}},"behaviorChecks":{"type":"array","items":{"type":"object","required":["name","program","args"],"properties":{"name":{"type":"string"},"program":{"enum":["python3","node","bash","sh"]},"args":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}}},"additionalProperties":false}),skill_name:None,required_variable_keys:vec![]},
     ]
 }
@@ -42,6 +42,7 @@ struct MemorySkillTool {
 struct BeginInput {
     batch_code: String,
     skill_name: String,
+    source_codes: Vec<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -112,7 +113,13 @@ impl Tool for MemorySkillTool {
             }
             let result = self
                 .service
-                .begin_skill_authoring(user, &input.batch_code, &input.skill_name, session)
+                .begin_skill_authoring_for_sources(
+                    user,
+                    &input.batch_code,
+                    &input.skill_name,
+                    session,
+                    &input.source_codes,
+                )
                 .map_err(map)?;
             json!({"candidate":result.candidate,"creatorMarkdown":result.creator_markdown,"creatorFiles":result.creator_files})
         };

@@ -397,11 +397,12 @@ impl DudeMemoryRunner {
             )
             .await?;
         let session = author_session.as_str();
-        let context = self.service.begin_skill_authoring(
+        let context = self.service.begin_skill_authoring_for_sources(
             user,
             &batch.batch_code,
             &experience.skill_name,
             session,
+            &experience.source_codes,
         )?;
         let Some(creator) = context.creator_markdown else {
             return Ok(());

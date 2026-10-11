@@ -403,3 +403,183 @@ fn dude_memory_artifacts_reject_traversal_and_binary_hash_is_encoding_independen
     }];
     assert_eq!(artifact_hash(&a).unwrap(), artifact_hash(&b).unwrap());
 }
+
+#[test]
+fn dude_memory_candidate_reconciles_complete_stage_left_before_record_commit() {
+    let (root, service) = fixture();
+    install_creator(root.path(), &service);
+    let batch = prepared(&service);
+    let context = service
+        .begin_skill_authoring(
+            "user",
+            &batch.batch_code,
+            "normalize-labels",
+            "author-session",
+        )
+        .unwrap();
+    let files = artifact("normalize-labels", true);
+    let hash = artifact_hash(&files).unwrap();
+    std::fs::create_dir_all(root.path().join("staging")).unwrap();
+    // Simulate a process stop after atomic stage publication but before candidate CAS.
+    materialize_artifact(
+        &root
+            .path()
+            .join("staging")
+            .join(format!("{}-1-{hash}", context.candidate.candidate_code)),
+        &files,
+    )
+    .unwrap();
+    let reopened = DudeMemoryService::new(
+        SqliteDudeMemoryRepository::connect(root.path().join("state.sqlite").to_str().unwrap())
+            .unwrap(),
+        service.skills.clone(),
+        root.path().join("staging"),
+    );
+    let submitted = reopened
+        .submit_candidate(
+            "user",
+            &context.candidate.candidate_code,
+            "author-session",
+            files,
+            behavior(),
+            false,
+        )
+        .unwrap();
+    assert_eq!(submitted.status, SkillCandidateStatus::PendingApproval);
+    assert_eq!(submitted.artifact_hash, hash);
+    assert_eq!(submitted.revision, 1);
+}
+#[test]
+fn dude_memory_creator_changes_invalidate_loaded_author_receipt() {
+    let (root, service) = fixture();
+    install_creator(root.path(), &service);
+    let batch = prepared(&service);
+    let first = service
+        .begin_skill_authoring(
+            "user",
+            &batch.batch_code,
+            "normalize-labels",
+            "author-session",
+        )
+        .unwrap();
+    let creator = root
+        .path()
+        .join("registry/.agents/skills/skill-creator/SKILL.md");
+    let mut markdown = std::fs::read_to_string(&creator).unwrap();
+    markdown.push_str("New required validation rule.\n");
+    std::fs::write(&creator, markdown).unwrap();
+    service.skills.rescan_registry().unwrap();
+    assert!(matches!(
+        service.submit_candidate(
+            "user",
+            &first.candidate.candidate_code,
+            "author-session",
+            artifact("normalize-labels", true),
+            behavior(),
+            true
+        ),
+        Err(DudeMemoryError::Dependency(_))
+    ));
+    assert_eq!(
+        service
+            .get_candidate("user", &first.candidate.candidate_code)
+            .unwrap()
+            .status,
+        SkillCandidateStatus::Authoring
+    );
+    let reloaded = service
+        .begin_skill_authoring(
+            "user",
+            &batch.batch_code,
+            "normalize-labels",
+            "author-session",
+        )
+        .unwrap();
+    assert_ne!(first.candidate.creator, reloaded.candidate.creator);
+    assert!(
+        reloaded
+            .creator_markdown
+            .unwrap()
+            .contains("New required validation rule")
+    );
+    assert!(!reloaded.creator_files.is_empty());
+}
+#[test]
+fn dude_memory_rejection_dedup_uses_selected_experience_evidence_only() {
+    let (root, service) = fixture();
+    install_creator(root.path(), &service);
+    let batch = service
+        .prepare_batch(
+            "memory-dude",
+            "user",
+            vec![
+                source("w-a", "verified-experience", "v1"),
+                source("w-a", "unrelated-chat", "v1"),
+            ],
+        )
+        .unwrap()
+        .unwrap();
+    let context = service
+        .begin_skill_authoring_for_sources(
+            "user",
+            &batch.batch_code,
+            "normalize-labels",
+            "author-session",
+            &["verified-experience".into()],
+        )
+        .unwrap();
+    assert_eq!(context.candidate.evidence.len(), 1);
+    let pending = service
+        .submit_candidate(
+            "user",
+            &context.candidate.candidate_code,
+            "author-session",
+            artifact("normalize-labels", true),
+            behavior(),
+            false,
+        )
+        .unwrap();
+    service
+        .reject(
+            "user",
+            &pending.candidate_code,
+            pending.revision,
+            &pending.artifact_hash,
+            "Too narrow".into(),
+        )
+        .unwrap();
+    service
+        .attach_batch_session("user", &batch.batch_code, "batch-session")
+        .unwrap();
+    service
+        .complete_batch(
+            "user",
+            &batch.batch_code,
+            "batch-session",
+            vec![],
+            "Complete".into(),
+        )
+        .unwrap();
+    // A host retry can redeliver an old evidence snapshot with unrelated new messages.
+    let mut redelivered = batch.clone();
+    redelivered.batch_code = "redelivered-batch".into();
+    redelivered.sources[1].version = "v2".into();
+    service
+        .repository
+        .lock()
+        .unwrap()
+        .save_batch(None, &redelivered, false)
+        .unwrap();
+    let suppressed = service
+        .begin_skill_authoring_for_sources(
+            "user",
+            &redelivered.batch_code,
+            "normalize-labels",
+            "new-author-session",
+            &["verified-experience".into()],
+        )
+        .unwrap();
+    assert_eq!(suppressed.candidate.candidate_code, pending.candidate_code);
+    assert_eq!(suppressed.candidate.status, SkillCandidateStatus::Rejected);
+    assert!(suppressed.creator_markdown.is_none());
+}
