@@ -68,12 +68,17 @@ impl AgentLoop for ConfiguredLoop {
         } else if let Some(management) = &self.0 {
             let host = HostExecution::from_extensions(&request.extensions)?;
             let state = host.state.lock().await;
-            let policy = management
-                .workspace_internal_agent_policy(
+            let policy = if state.context.workspace_code.is_empty() {
+                management.platform_internal_agent_policy(
+                    state.context.agent_code.as_deref().unwrap_or("main-agent"),
+                )
+            } else {
+                management.workspace_internal_agent_policy(
                     &state.context.workspace_code,
                     state.context.agent_code.as_deref().unwrap_or("main-agent"),
                 )
-                .map_err(|e| invalid(format!("{e:?}")))?;
+            }
+            .map_err(|e| invalid(format!("{e:?}")))?;
             let loop_code = policy
                 .loop_code
                 .as_deref()

@@ -168,12 +168,17 @@ impl FrameworkHost {
             .map_err(|e| map_error(e.into()))?;
         if request.resume.is_none() {
             if let Some(management) = self.0.agent_management.get() {
-                let policy = management
-                    .workspace_internal_agent_policy(
+                let policy = if context.workspace_code.is_empty() {
+                    management.platform_internal_agent_policy(
+                        context.agent_code.as_deref().unwrap_or("main-agent"),
+                    )
+                } else {
+                    management.workspace_internal_agent_policy(
                         &context.workspace_code,
                         context.agent_code.as_deref().unwrap_or("main-agent"),
                     )
-                    .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
+                }
+                .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
                 let design = management
                     .loop_design(policy.loop_code.as_deref().ok_or_else(|| {
                         AgentError::InvalidConfiguration("agent loop is not configured".into())

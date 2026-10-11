@@ -199,7 +199,12 @@ fn normalized_optional(value: Option<String>) -> Option<String> {
 }
 
 fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand) -> String {
-    let selected = if session.last_run_code.is_some() {
+    let selected = if session.last_run_code.is_some()
+        || session
+            .source_code
+            .as_deref()
+            .is_some_and(|source| source.starts_with("__dude:"))
+    {
         session.agent_code.clone()
     } else {
         normalized_optional(request.agent_code.clone()).or(session.agent_code.clone())
@@ -213,50 +218,59 @@ pub(crate) fn resolve_chat_agent_runtime(
     request: &SendChatMessageCommand,
 ) -> Result<ResolvedAgentRuntime, ChatSendError> {
     let effective_agent_code = effective_agent_code(session, request);
-    state
-        .agent_management
-        .resolve_workspace_agent_runtime(
+    let runtime = if session.workspace_code.is_empty()
+        && session
+            .source_code
+            .as_deref()
+            .is_some_and(|source| source.starts_with("__dude:"))
+    {
+        state
+            .agent_management
+            .resolve_platform_agent_runtime(Some(effective_agent_code.as_str()))
+    } else {
+        state.agent_management.resolve_workspace_agent_runtime(
             &session.workspace_code,
             Some(effective_agent_code.as_str()),
         )
-        .map_err(|error| match error {
-            crate::domain::agent::AgentManagementError::InvalidWorkspace => {
-                ChatSendError::Chat(ChatError::WorkspaceForbidden)
-            }
-            crate::domain::agent::AgentManagementError::SystemAgentNotFound => {
-                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
-                    "agent `{effective_agent_code}` was not found"
-                )))
-            }
-            crate::domain::agent::AgentManagementError::SystemAgentUnavailable => {
-                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
-                    "agent `{effective_agent_code}` is unavailable or disabled for this workspace"
-                )))
-            }
-            crate::domain::agent::AgentManagementError::InternalAgentNotFound
-            | crate::domain::agent::AgentManagementError::InternalAgentCodeInvalid
-            | crate::domain::agent::AgentManagementError::InternalAgentCodeConflict
-            | crate::domain::agent::AgentManagementError::LoopInvalid
-            | crate::domain::agent::AgentManagementError::LoopNotFound
-            | crate::domain::agent::AgentManagementError::LoopConflict
-            | crate::domain::agent::AgentManagementError::LoopInUse
-            | crate::domain::agent::AgentManagementError::BuiltinAgentReadOnly
-            | crate::domain::agent::AgentManagementError::PlatformAgentReadOnly
-            | crate::domain::agent::AgentManagementError::InternalAgentGroupInvalid
-            | crate::domain::agent::AgentManagementError::InternalAgentDefinitionInvalid
-            | crate::domain::agent::AgentManagementError::InternalAgentPolicyInvalid
-            | crate::domain::agent::AgentManagementError::ToolPermissionInvalid
-            | crate::domain::agent::AgentManagementError::InternalMcpServerAssignmentStale(_)
-            | crate::domain::agent::AgentManagementError::InternalToolAssignmentStale(_)
-            | crate::domain::agent::AgentManagementError::InternalToolUnknown(_) => {
-                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
-                    "agent `{effective_agent_code}` is not available for this workspace"
-                )))
-            }
-            crate::domain::agent::AgentManagementError::StorageFailure => ChatSendError::Agent(
-                AgentInvocationError::RuntimeFailed("agent runtime resolution failed".into()),
-            ),
-        })
+    };
+    runtime.map_err(|error| match error {
+        crate::domain::agent::AgentManagementError::InvalidWorkspace => {
+            ChatSendError::Chat(ChatError::WorkspaceForbidden)
+        }
+        crate::domain::agent::AgentManagementError::SystemAgentNotFound => {
+            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
+                "agent `{effective_agent_code}` was not found"
+            )))
+        }
+        crate::domain::agent::AgentManagementError::SystemAgentUnavailable => {
+            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
+                "agent `{effective_agent_code}` is unavailable or disabled for this workspace"
+            )))
+        }
+        crate::domain::agent::AgentManagementError::InternalAgentNotFound
+        | crate::domain::agent::AgentManagementError::InternalAgentCodeInvalid
+        | crate::domain::agent::AgentManagementError::InternalAgentCodeConflict
+        | crate::domain::agent::AgentManagementError::LoopInvalid
+        | crate::domain::agent::AgentManagementError::LoopNotFound
+        | crate::domain::agent::AgentManagementError::LoopConflict
+        | crate::domain::agent::AgentManagementError::LoopInUse
+        | crate::domain::agent::AgentManagementError::BuiltinAgentReadOnly
+        | crate::domain::agent::AgentManagementError::PlatformAgentReadOnly
+        | crate::domain::agent::AgentManagementError::InternalAgentGroupInvalid
+        | crate::domain::agent::AgentManagementError::InternalAgentDefinitionInvalid
+        | crate::domain::agent::AgentManagementError::InternalAgentPolicyInvalid
+        | crate::domain::agent::AgentManagementError::ToolPermissionInvalid
+        | crate::domain::agent::AgentManagementError::InternalMcpServerAssignmentStale(_)
+        | crate::domain::agent::AgentManagementError::InternalToolAssignmentStale(_)
+        | crate::domain::agent::AgentManagementError::InternalToolUnknown(_) => {
+            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
+                "agent `{effective_agent_code}` is not available for this workspace"
+            )))
+        }
+        crate::domain::agent::AgentManagementError::StorageFailure => ChatSendError::Agent(
+            AgentInvocationError::RuntimeFailed("agent runtime resolution failed".into()),
+        ),
+    })
 }
 
 pub(crate) fn prepare_send_model(
@@ -276,7 +290,14 @@ pub(crate) fn prepare_send_model(
                     && selection.route_code
                         == Some(crate::domain::model_provider::ProviderRouteCode::ChatAuto))
         });
-        if is_auto {
+        if is_auto
+            || (session.workspace_code.is_empty()
+                && request.model_selection.is_none()
+                && request
+                    .model_code
+                    .as_deref()
+                    .is_none_or(|code| code.trim().is_empty()))
+        {
             let router = crate::application::model_router::AgentModelRouter::new(
                 state.models.clone(),
                 state.model_providers.clone(),
