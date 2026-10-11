@@ -15,6 +15,10 @@ pub trait ChatRepository: Send {
             .into_iter()
             .filter(|session| {
                 session.status == crate::domain::chat::ChatSessionStatus::Archived
+                    && !session
+                        .source_code
+                        .as_deref()
+                        .is_some_and(|source| source.starts_with("__dude:"))
                     && workspace_code.is_none_or(|code| session.workspace_code == code)
             })
             .collect::<Vec<_>>();

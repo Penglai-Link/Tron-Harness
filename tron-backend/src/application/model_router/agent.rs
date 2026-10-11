@@ -31,7 +31,11 @@ impl AgentModelRouter {
         self.management
             .as_ref()
             .map(|management| {
-                if workspace.is_empty() {
+                if workspace.is_empty()
+                    || management
+                        .is_dude_definition(agent)
+                        .map_err(|error| format!("Agent kind lookup failed: {error:?}"))?
+                {
                     management.platform_internal_agent_policy(agent)
                 } else {
                     management.workspace_internal_agent_policy(workspace, agent)

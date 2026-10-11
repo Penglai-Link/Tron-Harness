@@ -38,7 +38,7 @@ impl AgentRunContextBuilder {
         let mut effective_tools = tools.clone();
         let mut tool_exposure = AgentToolExposureState::default();
         let internal_agents = if self.platform_scope || workspace_code.is_empty() {
-            self.management.list_platform_internal_agents()
+            self.management.all_platform_internal_agents()
         } else {
             self.management
                 .list_workspace_internal_agents(workspace_code)

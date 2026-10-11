@@ -1,4 +1,5 @@
 //! Dude orchestration ports; the host retains execution independently of UI streams.
+mod tools;
 use crate::application::agent::{
     AgentManagementService, CreateWorkspaceInternalAgentCommand,
     UpdateWorkspaceInternalAgentDefinitionCommand,
@@ -7,6 +8,7 @@ use crate::domain::agent::InternalAgentToolPolicy;
 use crate::domain::dude::*;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
+pub use tools::register_dude_tools;
 
 pub trait DudeRepository: Send {
     fn create(

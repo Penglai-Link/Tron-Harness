@@ -2,6 +2,15 @@ use super::internal_agents::normalize_string_codes;
 use super::*;
 
 impl AgentManagementService {
+    /// Definition identity is independent from the workspace containing work.
+    pub fn is_dude_definition(&self, agent_code: &str) -> Result<bool, AgentManagementError> {
+        Ok(self
+            .repository()
+            .list_dude_codes()?
+            .iter()
+            .any(|code| code == agent_code))
+    }
+
     /// Fresh installations start with a runnable main Agent. Saved choices remain authoritative.
     pub fn initialize_default_main_loop(&self) -> Result<(), AgentManagementError> {
         if self
