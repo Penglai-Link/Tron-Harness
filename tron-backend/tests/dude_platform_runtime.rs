@@ -3,6 +3,10 @@ mod common;
 #[path = "support/candidate_model_fixture.rs"]
 mod models;
 
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
 use eliteforge_agent_core as fw;
 use serde_json::json;
 use std::{
@@ -12,6 +16,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::Notify;
+use tower::ServiceExt;
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteDudeRepository,
     app::AppState,
@@ -148,7 +153,7 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         ..AppConfig::default()
     });
     let mut captured = None;
-    let _router = common::app_with_state_setup(config, |state| captured = Some(state.clone()));
+    let router = common::app_with_state_setup(config, |state| captured = Some(state.clone()));
     let state = captured.unwrap();
     state.knowledge_bases.stop_ingestion_workers();
     models::seed_loop(&state);
@@ -164,7 +169,6 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
             candidate_model_codes: vec![],
         })
         .unwrap();
-
     // Create the same durable product projection used by real Dude sessions.
     // In particular, DudeSession has no user field: the native chat link is the
     // authority that separates profiles during memory collection.
@@ -181,6 +185,14 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
             updated_at: 1,
         })
         .unwrap();
+    let mut other_owner = repository
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|d| d.dude_code == "acceptance-dude")
+        .unwrap();
+    other_owner.dude_code = "acceptance-other-dude".into();
+    repository.save(&other_owner).unwrap();
     for (session, user) in [
         ("acceptance-interactive", "USR-AUTH-0001"),
         ("acceptance-task", "USR-AUTH-0001"),
@@ -189,7 +201,11 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         let persisted = repository
             .resolve_session(&DudeSession {
                 session_code: session.into(),
-                dude_code: "acceptance-dude".into(),
+                dude_code: if session == "acceptance-foreign-profile" {
+                    "acceptance-other-dude".into()
+                } else {
+                    "acceptance-dude".into()
+                },
                 purpose: DudeSessionPurpose::Task,
                 correlation_key: session.into(),
                 title: session.into(),
@@ -251,7 +267,13 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         .unwrap()
         .unwrap();
     assert_eq!(foreground.final_output, "foreground-completed");
-    service(&state, model.clone(), "acceptance-foreign-profile")
+    let foreign = service(&state, model.clone(), "acceptance-foreign-profile")
+        .with_collaboration_owner(AgentCollaborationOwner {
+            kind: "DUDE".into(),
+            code: "acceptance-other-dude".into(),
+            origin_session_code: Some("acceptance-foreign-profile".into()),
+            task_code: None,
+        })
         .invoke(
             command("acceptance-foreign-profile", "foreign-profile-work"),
             Some("USR-OTHER-PROFILE".into()),
@@ -259,6 +281,43 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         )
         .await
         .unwrap();
+    let token = common::authenticated_bearer_token(&router).await;
+    for (uri, expected) in [
+        (
+            format!("/api/v1/agents/runs/{}", foreground.run_code),
+            StatusCode::OK,
+        ),
+        (
+            format!("/api/v1/agents/runs/{}", foreign.run_code),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            format!(
+                "/api/v1/agents/runs/{}?sessionCode=acceptance-interactive",
+                foreign.run_code
+            ),
+            StatusCode::NOT_FOUND,
+        ),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(&uri)
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("x-dude-code", "acceptance-dude")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = common::response_json(response).await;
+        assert_eq!(
+            status, expected,
+            "authoritative run ownership for {uri}: {body}"
+        );
+    }
     let framework = state.agent_framework.storage_framework().await.unwrap();
     for (session, expected) in [
         ("acceptance-interactive", "foreground-completed"),
