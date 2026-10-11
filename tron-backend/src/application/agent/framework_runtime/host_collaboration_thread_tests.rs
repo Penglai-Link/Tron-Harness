@@ -105,3 +105,89 @@ fn thread_access_requires_root_owner_and_scope_but_allows_other_sessions_of_same
     assert!(!record.authorized_owner("workspace", Some("profile"), &record.owner));
     assert!(!record.authorized_owner("", Some("other-profile"), &record.owner));
 }
+
+struct CompletionModel;
+#[async_trait::async_trait]
+impl fw::ChatModel for CompletionModel {
+    async fn generate(
+        &self,
+        _: &str,
+        _: fw::ChatRequest,
+        _: &dyn fw::ChatStream,
+    ) -> Result<fw::ChatResponse, fw::ModelError> {
+        Ok(fw::ChatResponse {
+            content: fw::Content::text("completed delegated work"),
+            ..Default::default()
+        })
+    }
+}
+async fn recovery_agent(host: &FrameworkHost) -> Agent {
+    let artifacts = host.0.path.with_extension("artifacts");
+    std::fs::create_dir_all(&artifacts).unwrap();
+    let agent = eliteforge_agent_test_support::TestBuilder::new()
+        .default_models(false)
+        .plugin(eliteforge_agent_framework::ModelRuntimePlugin::new(
+            eliteforge_agent_framework::ModelRuntime::new(
+                eliteforge_agent_framework::ModelRuntimeUpdate::new("", 0, vec![]),
+            )
+            .unwrap(),
+        ))
+        .plugin(fw::ModelConnectionPlugin::new(fw::ModelConnection::new(
+            "fixture",
+            Arc::new(CompletionModel),
+            vec![fw::ModelDescriptor::new("complete")],
+        )))
+        .plugin(
+            eliteforge_agent_official_plugin_storage_local::LocalStoragePlugin::new(
+                &host.0.path,
+                artifacts,
+            )
+            .with_database(host.shared_database().await.unwrap()),
+        )
+        .build()
+        .await
+        .unwrap();
+    host.0
+        .framework
+        .get_or_try_init(|| async { Ok::<_, fw::AgentError>(agent.framework()) })
+        .await
+        .unwrap();
+    agent
+}
+#[tokio::test]
+async fn restart_reconciles_real_native_run_completion_and_does_not_reexecute_model() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("recovery.sqlite3");
+    let host = FrameworkHost::persistent(&path, None);
+    let agent = recovery_agent(&host).await;
+    let mut thread = record("thread-native");
+    thread.summary.status = fw::ThreadStatus::Running;
+    thread.completion = None;
+    thread.feedback_pending = false;
+    host.persist_thread(&mut thread, true).await.unwrap();
+    let mut request = fw::RunRequest::new("thread-native", "do work");
+    request.run_id = thread.summary.latest_run_id;
+    request.model = Some(fw::ModelRef::new("fixture", "complete"));
+    let result = agent.run(request).await.unwrap();
+    assert_eq!(result.output, "completed delegated work");
+    // Simulate exit after the native result commits but before the host callback writes.
+    drop(agent);
+    drop(host);
+    let host = FrameworkHost::persistent(&path, None);
+    let _agent = recovery_agent(&host).await;
+    let sink = Arc::new(Sink {
+        fail: AtomicBool::new(false),
+        events: Default::default(),
+    });
+    host.set_thread_feedback_sink(sink.clone()).unwrap();
+    assert_eq!(host.recover_collaboration_threads().await.unwrap(), 1);
+    assert_eq!(host.recover_collaboration_threads().await.unwrap(), 0);
+    let stored = host.thread_record("thread-native").await.unwrap().unwrap();
+    assert_eq!(stored.summary.status, fw::ThreadStatus::Completed);
+    let events = sink.events.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].result.as_ref().unwrap().output,
+        "completed delegated work"
+    );
+}
