@@ -32,10 +32,14 @@ pub trait DudeMemoryAgentRuntime: Send + Sync {
 #[derive(Clone)]
 pub struct NativeDudeMemoryAgentRuntime {
     invocation: AgentInvocationService,
+    router: crate::application::model_router::AgentModelRouter,
 }
 impl NativeDudeMemoryAgentRuntime {
-    pub fn new(invocation: AgentInvocationService) -> Self {
-        Self { invocation }
+    pub fn new(
+        invocation: AgentInvocationService,
+        router: crate::application::model_router::AgentModelRouter,
+    ) -> Self {
+        Self { invocation, router }
     }
 }
 #[async_trait]
@@ -47,12 +51,17 @@ impl DudeMemoryAgentRuntime for NativeDudeMemoryAgentRuntime {
         session: &str,
         prompt: String,
     ) -> Result<String, DudeMemoryError> {
+        let (model, route) = self
+            .router
+            .resolve_initial("", session, dude, None)
+            .map_err(invalid)?;
         let invocation = self
             .invocation
             .clone()
             .with_platform_scope()
+            .with_auto_model_route(Some(route), Some(self.router.clone()))
             .with_collaboration_owner(AgentCollaborationOwner {
-                kind: "Dude".into(),
+                kind: "DUDE".into(),
                 code: dude.into(),
                 origin_session_code: Some(session.into()),
                 task_code: None,
@@ -70,7 +79,7 @@ impl DudeMemoryAgentRuntime for NativeDudeMemoryAgentRuntime {
                     app_code: None,
                     execution_scope_override: None,
                     task_code: None,
-                    model: None,
+                    model: Some(model),
                     limits: Some(AgentRunLimits {
                         max_steps: 12,
                         max_tool_calls: 20,
@@ -157,12 +166,13 @@ impl DudeMemoryRunner {
         memory: AppMemoryService,
         host: FrameworkHost,
         invocation: AgentInvocationService,
+        router: crate::application::model_router::AgentModelRouter,
     ) -> Self {
         Self::with_agent(
             service,
             memory,
             host,
-            Arc::new(NativeDudeMemoryAgentRuntime::new(invocation)),
+            Arc::new(NativeDudeMemoryAgentRuntime::new(invocation, router)),
         )
     }
     pub fn with_agent(
