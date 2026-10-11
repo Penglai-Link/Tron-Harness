@@ -27,3 +27,11 @@ it("shows the points warning and retries refresh without creating another Dude",
   expect(create).toHaveBeenCalledOnce(); expect(update).toHaveBeenCalledWith("buddy", expect.objectContaining({ name: "Buddy" }));
   expect(screen.queryByLabelText("pointsBudget")).toBeNull();
 });
+
+it("names each background switch once and keeps help outside its accessible name", () => {
+  render(<DudeEditorDialog dude={{dudeCode:"memory",name:"Memory",rolePrompt:"",loopCode:"main",avatarId:"robot",candidateModelCodes:[],enabled:true,heartbeatMinutes:30,memoryAutoApprove:false,kind:"Memory",isMain:false,createdAt:0,updatedAt:0}} onClose={vi.fn()} onSaved={vi.fn()} />);
+  const background = screen.getByRole("switch", {name:"dude.backgroundEnabled"});
+  const approval = screen.getByRole("switch", {name:"dude.autoApprove"});
+  expect(background.getAttribute("aria-checked")).toBe("true");
+  expect(approval.getAttribute("aria-describedby")).toBeTruthy();
+});
