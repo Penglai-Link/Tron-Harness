@@ -94,7 +94,7 @@ test("robot opens the persistent platform conversation while task work runs in p
   await page.setViewportSize({ width: 1440, height: 1000 });
   await seedResourceUiShell(page, "en-US"); await routeActiveProfileApi(page);
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
-  await page.goto(`${frontend!.baseUrl}/chats`);
+  await page.goto(`${frontend!.baseUrl}/settings/agents`);
   const resolveResponse = page.waitForResponse(response => response.url().endsWith("/api/v1/dudes/main/session") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Platform main Dude conversation", exact: true }).click();
   const session = (await (await resolveResponse).json()).data;
