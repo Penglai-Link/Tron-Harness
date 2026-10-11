@@ -125,7 +125,11 @@ export function MainAgentChatWindow({
   );
 
   const handleSessionChange = useCallback((nextSession: ChatSession | null) => {
-    setPersistedSession(nextSession);
+    // Chat completion returns a generic Session; Dude ownership is resolved by
+    // the platform endpoint and must survive updates to that same conversation.
+    setPersistedSession(current => current && nextSession?.sessionCode === current.sessionCode
+      ? { ...nextSession, ownerDudeCode: current.ownerDudeCode, purpose: current.purpose }
+      : nextSession);
   }, []);
 
   const windowConfig = useMemo(() => ({

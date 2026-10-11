@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ChatSession, SendChatMessageInput } from "@tron/chat-core";
 import { MainAgentChatWindow } from "./MainAgentChatWindow";
@@ -39,6 +39,22 @@ it("resolves again after reopening so a changed main Dude takes effect without r
   render(<MainAgentChatWindow workspaceCode="beta" windowState={windowState} onWindowStateChange={vi.fn()} />);
   await screen.findByText("replacement-session");
   expect(resolve).toHaveBeenCalledTimes(2);
+});
+it("keeps Dude authorization after generic chat completions and AskUser resumes", async () => {
+  resolve.mockResolvedValue(session);
+  render(<MainAgentChatWindow windowState={windowState} onWindowStateChange={vi.fn()} />);
+  await screen.findByText("platform-session");
+  const { ownerDudeCode: _owner, purpose: _purpose, ...completion } = session;
+  for (const lastRunStatus of ["AWAITING_USER_INPUT", "COMPLETED"]) {
+    const props = lastProps.current as { onSessionChange: (value: ChatSession) => void };
+    await act(async () => props.onSessionChange({ ...completion, lastRunStatus }));
+    const headers = adapter.mock.calls.at(-1)![0].getHeaders();
+    expect(headers.get("X-Dude-Code")).toBe("main-dude");
+    expect(headers.has("X-Workspace-Code")).toBe(false);
+    expect((lastProps.current as {initialSession: ChatSession}).initialSession).toMatchObject({
+      ownerDudeCode: "main-dude", purpose: "Interactive", lastRunStatus,
+    });
+  }
 });
 it("keeps resolution failures visible and never opens a fallback workspace session", async () => {
   resolve.mockRejectedValue(new Error("Platform session unavailable"));

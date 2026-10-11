@@ -14,6 +14,7 @@ let provider: Server | undefined;
 let directory = "";
 let api = "";
 let foregroundStarted = false;
+let questionIssued = false;
 let releaseForeground = () => {};
 let backendLogs = "";
 const evidence = new WeakMap<Page, { errors: string[]; messages: string[]; chatRequests: unknown[]; chatResponses: { status: number; url: string; body: string }[] }>();
@@ -105,6 +106,13 @@ test.beforeAll(async () => {
       purpose: summaryRequest ? "conversation_summary" : "chat",
       foreground: input.includes("acceptance-foreground-hold"), background: input.includes("acceptance-background-work"),
       messageCount: payload.messages?.length ?? 0, lastMessage: JSON.stringify(payload.messages?.at(-1) ?? null).slice(0, 2000) });
+    if (payload.stream && !summaryRequest && input.includes("acceptance-askuser") && !questionIssued) {
+      questionIssued = true;
+      response.writeHead(200, { "Content-Type": "text/event-stream" });
+      response.write(`data: ${JSON.stringify({ id: "dude-question", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "dude-question-call", type: "function", function: { name: "chat_ask_user", arguments: JSON.stringify({ intro: "Choose the acceptance target", questions: [{ question: "Which target should I use?", options: [{ label: "Acceptance Local" }, { label: "Acceptance Remote" }] }] }) } }] }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 } })}\n\n`);
+      response.end("data: [DONE]\n\n");
+      return;
+    }
     if (payload.stream && !summaryRequest && input.includes("acceptance-foreground-hold")) {
       foregroundStarted = true;
       await new Promise<void>(resolveGate => { releaseForeground = resolveGate; });
@@ -118,7 +126,7 @@ test.beforeAll(async () => {
     // framework's UTF-8 byte bound without splitting a multibyte character.
     const answer = summaryRequest
       ? JSON.stringify({ summary: summary.slice(0, summaryRequest.summary_max_utf8_bytes) })
-      : input.includes("acceptance-background-work") ? "dude-background-finished" : input.includes("acceptance-foreground-hold") ? "dude-foreground-finished" : "Dude acceptance summary";
+      : input.includes("acceptance-background-work") ? "dude-background-finished" : input.includes("acceptance-foreground-hold") ? "dude-foreground-finished" : input.includes("acceptance-askuser") ? "dude-askuser-resumed" : "Dude acceptance summary";
     const usage = { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 };
     if (payload.stream) {
       response.writeHead(200, { "Content-Type": "text/event-stream" });
@@ -179,6 +187,38 @@ test.afterAll(async () => {
   await stopResourceUiFrontend(frontend); await stopManagedProcess(backend);
   await new Promise<void>(closed => provider ? provider.close(() => closed()) : closed());
   if (directory) await rm(directory, { recursive: true, force: true });
+});
+
+test("main Dude answers AskUser and continues chatting without selecting a workspace", async ({ page }) => {
+  test.setTimeout(120_000);
+  await seedResourceUiShell(page, "en-US"); await routeAcceptanceProfile(page);
+  await page.goto(`${frontend!.baseUrl}/notifications`);
+  const resolved = page.waitForResponse(response => response.url().endsWith("/api/v1/dudes/main/session") && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Platform main Dude conversation", exact: true }).click();
+  const session = (await (await resolved).json()).data;
+  expect(session.workspaceCode).toBeNull();
+  const input = page.locator('[data-theme-part="chat-input"]');
+  await input.fill("acceptance-askuser: ask me to choose a target");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByText("Acceptance Local", { exact: true }).click({ timeout: 60_000 });
+  await expect(page.getByRole("radio", { name: /Acceptance Local/ })).toBeChecked();
+  const resumed = page.waitForResponse(response => response.request().method() === "POST"
+    && response.url().includes(`/api/v1/chats/sessions/${session.sessionCode}/user-input-requests/`));
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  const response = await resumed;
+  expect(response.request().headers()["x-dude-code"]).toBe(session.ownerDudeCode);
+  expect(response.status()).toBe(200);
+  expect(await response.text()).not.toContain("RUN_ERROR");
+  await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).toContainText("dude-askuser-resumed");
+  await input.fill("Continue after answering");
+  const continued = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === `/api/v1/chats/sessions/${session.sessionCode}/messages/stream`);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const continuation = await continued;
+  expect(continuation.request().headers()["x-dude-code"]).toBe(session.ownerDudeCode);
+  expect(continuation.status()).toBe(200);
+  expect(await continuation.text()).not.toContain("RUN_ERROR");
+  expect(evidence.get(page)!.errors).toEqual([]);
 });
 
 test("robot opens the persistent platform conversation while task work runs in parallel", async ({ page }, testInfo) => {
