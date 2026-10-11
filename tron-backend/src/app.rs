@@ -438,7 +438,7 @@ impl AppState {
                 mcp.clone(),
                 event_bus.clone(),
                 agent_tool_registry.clone(),
-                None,
+                Some(short_term_memory.clone()),
                 Some(prompts.clone()),
                 None,
                 Some(Arc::new(
