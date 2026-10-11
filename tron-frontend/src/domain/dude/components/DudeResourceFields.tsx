@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
 import { InfoTooltip } from "@/components/info-tooltip";
 import {
-  fetchWorkspaceInternalAgent, fetchToolDomains, listTools,
+  fetchToolDomains, listTools,
   patchWorkspaceInternalAgentPolicy, patchWorkspaceInternalAgentMcpPolicy,
   updateWorkspaceInternalAgentToolAssignments, updateWorkspaceInternalAgentMcpServerAssignments,
 } from "@/domain/agent/api";
+import { getDudeResources } from "../api/dudeApi";
 import { PLATFORM_INTERNAL_AGENT_SCOPE, notifyInternalAgentRegistryChanged } from "@/domain/agent/model";
 import type { WorkspaceInternalAgentRecord, WorkspaceInternalAgentPolicyPayload, PlatformToolRecord, ToolCatalogDomainRecord } from "@/domain/agent/model";
 import { InternalAgentAssignmentDialog, type InternalAgentAssignmentKind } from "@/domain/agent/components/InternalAgentAssignmentDialog";
@@ -64,7 +65,7 @@ export const DudeResourceFields = forwardRef<DudeResourceFieldsHandle, DudeResou
     setLoading(true); setRecord(null); setDraft(null); setError("");
     setSkillDraft(undefined); setKnowledgeDraft(undefined); setAssignment(null);
     void Promise.all([
-      fetchWorkspaceInternalAgent(PLATFORM_INTERNAL_AGENT_SCOPE, dudeCode, controller.signal),
+      getDudeResources(dudeCode, controller.signal),
       fetchToolDomains(controller.signal), listTools({}, controller.signal), fetchPlatformMcpServers({}, controller.signal),
     ]).then(([agent, nextDomains, nextTools, nextServers]) => {
       if (controller.signal.aborted) return;

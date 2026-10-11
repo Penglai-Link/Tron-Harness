@@ -33,6 +33,7 @@ import {
 import type {
   RegistrySkillRecord,
 } from "@/domain/skill/model";
+import { listDudes } from "@/domain/dude/api/dudeApi";
 import { fetchWorkspaceInternalAgents } from "@/domain/agent/api/agentManagementApi";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
 import { DisabledResourceReason } from "@/domain/agent/components/InternalAgentSkillField";
@@ -326,11 +327,12 @@ function SkillAgentGrants({
   async function load() {
     setLoading(true);
     try {
-      const [a, g] = await Promise.all([
+      const [a, g, dudes] = await Promise.all([
         fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE),
         fetchSkillAgents(skill.skillName),
+        listDudes(),
       ]);
-      setAgents(a);
+      setAgents([...a, ...dudes.map(dude => ({ agentCode: dude.dudeCode, name: dude.name }))]);
       setSelected(g.agentCodes);
       setError("");
     } catch (e) {
