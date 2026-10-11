@@ -10,7 +10,7 @@ use store::{ThreadRecord, owner};
 mod feedback;
 #[path = "host_collaboration_thread_intervention.rs"]
 mod intervention;
-pub use feedback::{ThreadFeedback, ThreadFeedbackSink};
+pub use feedback::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
 
 pub(in crate::application::agent::framework_runtime::host) type Threads =
     RwLock<BTreeMap<String, Arc<Thread>>>;

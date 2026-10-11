@@ -28,7 +28,7 @@ pub(super) mod collaboration;
 #[path = "host_subagents.rs"]
 mod subagents;
 pub use subagents::{SubagentRecord, SubagentView};
-pub use collaboration::{ThreadFeedback, ThreadFeedbackSink};
+pub use collaboration::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
 #[path = "host_continuation.rs"]
 mod host_continuation;
 #[path = "host_control.rs"]
