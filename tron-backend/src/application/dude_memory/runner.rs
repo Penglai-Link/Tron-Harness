@@ -458,10 +458,17 @@ impl DudeMemoryRunner {
         } else {
             proposal.workspace_code.clone()
         };
-        let semantic_key = format!(
-            "dude-memory:{}:{}",
-            proposal.workspace_code, proposal.semantic_key
-        );
+        let semantic_key = if proposal.scope == ProposalScope::User {
+            format!(
+                "dude-memory:user:{}:{}",
+                batch.user_code, proposal.semantic_key
+            )
+        } else {
+            format!(
+                "dude-memory:space:{}:{}",
+                proposal.workspace_code, proposal.semantic_key
+            )
+        };
         let digest = hex::encode(Sha256::digest(semantic_key.as_bytes()));
         let source_code = format!(
             "memory-{}-{}",
