@@ -120,7 +120,7 @@ impl fw::ChatModel for CompletionModel {
     ) -> Result<fw::ChatResponse, fw::ModelError> {
         self.0.fetch_add(1, Ordering::AcqRel);
         Ok(fw::ChatResponse {
-            content: fw::Content::text("completed delegated work"),
+            content: "completed delegated work".into(),
             ..Default::default()
         })
     }
