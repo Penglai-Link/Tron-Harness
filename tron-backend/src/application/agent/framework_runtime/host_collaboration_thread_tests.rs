@@ -87,6 +87,7 @@ async fn stale_thread_writer_cannot_overwrite_latest_state_and_close_keeps_histo
     assert_eq!(stored.agent_code, "coder");
     assert_eq!(host.dude_threads("other-dude").await.unwrap().len(), 0);
     assert_eq!(host.dude_threads("main-dude").await.unwrap().len(), 1);
+    assert!(host.dude_thread_catalog("main-dude").await.unwrap()[0].closed);
     let json = serde_json::to_string(&stored).unwrap();
     assert!(!json.contains("apiKey"));
     assert!(!json.contains("variables"));

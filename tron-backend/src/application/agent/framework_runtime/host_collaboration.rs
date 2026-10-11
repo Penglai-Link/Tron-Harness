@@ -9,7 +9,7 @@ use std::sync::Weak;
 #[path = "host_collaboration_threads.rs"]
 mod threads;
 pub(super) use threads::Threads;
-pub use threads::{ThreadFeedback, ThreadFeedbackSink};
+pub use threads::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
 
 #[derive(Clone, Copy)]
 enum ExecutionLimits {

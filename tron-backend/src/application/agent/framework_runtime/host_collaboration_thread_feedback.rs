@@ -14,6 +14,16 @@ pub struct ThreadFeedback {
     pub result: Option<fw::ThreadResult>,
     pub error: Option<String>,
 }
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DudeThreadCatalogItem {
+    pub summary: fw::ThreadSummary,
+    pub agent_code: String,
+    pub closed: bool,
+    pub origin_session_code: String,
+    pub task_code: Option<String>,
+}
+
 #[async_trait::async_trait]
 pub trait ThreadFeedbackSink: Send + Sync {
     /// Implementations durably enqueue idempotently by event_key before returning.
@@ -32,6 +42,24 @@ impl FrameworkHost {
             .into_iter()
             .filter(|record| record.owner.kind == "DUDE" && record.owner.code == dude_code)
             .map(|record| record.summary)
+            .collect())
+    }
+    pub async fn dude_thread_catalog(
+        &self,
+        dude_code: &str,
+    ) -> Result<Vec<DudeThreadCatalogItem>, fw::AgentError> {
+        Ok(self
+            .thread_records()
+            .await?
+            .into_iter()
+            .filter(|record| record.owner.kind == "DUDE" && record.owner.code == dude_code)
+            .map(|record| DudeThreadCatalogItem {
+                summary: record.summary,
+                agent_code: record.agent_code,
+                closed: record.closed,
+                origin_session_code: record.origin_session_code,
+                task_code: record.owner.task_code,
+            })
             .collect())
     }
     /// Closed Threads keep their native history; ordinary user chat APIs cannot resolve them.
