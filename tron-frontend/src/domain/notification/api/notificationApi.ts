@@ -15,8 +15,8 @@ export function notificationTarget(notification: PlatformNotification): string |
   if (dude) {
     const query = new URLSearchParams({ dude });
     if (typeof target.threadCode === "string") { query.set("thread", target.threadCode); query.set("tab", "work"); }
-    else if (typeof target.taskCode === "string") { query.set("task", target.taskCode); query.set("tab", "tasks"); }
     else if (typeof target.sessionCode === "string") { query.set("session", target.sessionCode); query.set("tab", "history"); }
+    else if (typeof target.taskCode === "string") { query.set("task", target.taskCode); query.set("tab", "tasks"); }
     return `/dudes?${query}`;
   }
   return null;
