@@ -619,13 +619,25 @@ mod shared_transaction_tests {
     #[test]
     fn ordinary_archived_history_excludes_dude_work_even_in_same_workspace() {
         let (_directory, mut repository) = fixture();
-        let mut user = session("archived-user");
-        user.status = ChatSessionStatus::Archived;
+        let user = session("archived-user");
         repository.create_session(&user).unwrap();
         let mut dude = session("archived-dude");
-        dude.status = ChatSessionStatus::Archived;
         dude.source_code = Some("__dude:main-dude".into());
         repository.create_session(&dude).unwrap();
+        // Native sessions are created Active; exercise the actual archive lifecycle
+        // rather than assigning a status only to the product projection fixture.
+        for code in [&user.session_code, &dude.session_code] {
+            repository
+                .update_session_status(code, ChatSessionStatus::Archived, "")
+                .unwrap();
+        }
+        let persisted = repository.list_sessions().unwrap();
+        assert_eq!(persisted.len(), 2);
+        assert!(
+            persisted
+                .iter()
+                .all(|session| session.status == ChatSessionStatus::Archived)
+        );
         let (items, total) = repository
             .list_archived_sessions(Some("ws-a"), 0, 100)
             .unwrap();
