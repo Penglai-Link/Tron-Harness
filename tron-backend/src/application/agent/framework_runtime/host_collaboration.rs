@@ -135,7 +135,7 @@ impl Runtime {
     }
     async fn prepare(
         &self,
-        mut request: fw::RunRequest,
+        request: fw::RunRequest,
         session: String,
         bound: Option<&AgentRunContext>,
         parent: &fw::RunContext,
@@ -146,10 +146,42 @@ impl Runtime {
         let caller_context = caller.state.lock().await.context.clone();
         if caller_context.workspace_code != self.context.workspace_code
             || caller_context.user_code != self.context.user_code
+            || caller_context
+                .collaboration_owner
+                .as_ref()
+                .map(|owner| (&owner.kind, &owner.code))
+                != self
+                    .context
+                    .collaboration_owner
+                    .as_ref()
+                    .map(|owner| (&owner.kind, &owner.code))
         {
             return Err(failure("collaboration caller scope changed"));
         }
-        let base = bound.unwrap_or(&caller_context);
+        self.prepare_owned(
+            request,
+            session,
+            bound.unwrap_or(&caller_context),
+            &caller_context,
+            caller.harness.clone(),
+            Some(parent),
+            limits,
+            None,
+        )
+        .await
+    }
+    async fn prepare_owned(
+        &self,
+        mut request: fw::RunRequest,
+        session: String,
+        base: &AgentRunContext,
+        caller_context: &AgentRunContext,
+        harness: ReactAgent,
+        parent: Option<&fw::RunContext>,
+        limits: ExecutionLimits,
+        sender: Option<fw::MessageSender>,
+    ) -> Result<(Agent, fw::RunRequest, AgentRunContext), fw::AgentError> {
+        let host = self.host()?;
         let code = request
             .agent_code
             .take()
@@ -169,7 +201,7 @@ impl Runtime {
         let (model, route) = router
             .resolve_initial(&base.workspace_code, &session, &code, None)
             .map_err(failure)?;
-        let harness = caller.harness.clone().framework_with_model_router(router);
+        let harness = harness.framework_with_model_router(router);
         let mut command: AgentInvocationCommand = serde_json::from_value(serde_json::json!({
             "prompt": preparation_prompt, "workspaceCode": base.workspace_code,
             "agentCode": code, "model": model,
@@ -217,7 +249,7 @@ impl Runtime {
         request.extensions.insert(eliteforge_agent_official_plugin_otel::TraceParent(trace_parent));
         // Ownership is derived from the trusted caller, never tool arguments.
         let mut host_context = parent
-            .host_context()
+            .and_then(fw::RunContext::host_context)
             .unwrap_or_else(|| serde_json::json!({}));
         if let Some(metadata) = host_context.as_object_mut() {
             metadata.insert(
@@ -229,7 +261,7 @@ impl Runtime {
         }
         request.host_context = Some(host_context);
         request.message_provenance = Some(fw::MessageProvenance {
-            sender: fw::MessageSender {
+            sender: sender.unwrap_or_else(|| fw::MessageSender {
                 kind: if caller_context
                     .collaboration_owner
                     .as_ref()
@@ -245,10 +277,10 @@ impl Runtime {
                 id: caller_context.agent_code.clone(),
                 display_name: caller_context.agent_code.clone(),
                 avatar_url: None,
-            },
+            }),
             source: Some("THREAD".into()),
             correlation: Some(
-                serde_json::json!({"originSessionCode": parent.session_id, "initiatorAgentCode": caller_context.agent_code}),
+                serde_json::json!({"originSessionCode": parent.map(|parent| &parent.session_id), "initiatorAgentCode": caller_context.agent_code}),
             ),
         });
         request.assistant_provenance = Some(fw::MessageProvenance {
@@ -271,7 +303,7 @@ impl Runtime {
                     .limits
                     .max_steps
                     .min(context.limits.max_steps as usize)
-                    .min(parent.limits.max_steps);
+                    .min(parent.map_or(usize::MAX, |parent| parent.limits.max_steps));
                 request.limits.max_tool_calls = request
                     .limits
                     .max_tool_calls
@@ -279,7 +311,10 @@ impl Runtime {
             }
         }
         request.limits.max_parallel_tools = context.limits.max_parallel_tool_calls.max(1) as usize;
-        request.limits.max_total_tokens = request.limits.max_total_tokens.min(parent.token_ceiling);
+        request.limits.max_total_tokens = request
+            .limits
+            .max_total_tokens
+            .min(parent.map_or(u64::MAX, |parent| parent.token_ceiling));
         let invocation = host.invocation_config();
         request.limits.model_timeout = Duration::from_secs(invocation.agent_model_timeout_seconds);
         request.limits.run_timeout = Duration::from_secs(
