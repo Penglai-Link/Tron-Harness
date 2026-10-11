@@ -303,15 +303,45 @@ impl crate::application::dude_memory::DudeMemoryNotifications for MemoryNotifica
         &self,
         n: crate::application::dude_memory::MemoryNotice,
     ) -> Result<(), crate::domain::dude_memory::DudeMemoryError> {
+        let retire: &[&str] = match n.kind {
+            "SkillPendingApproval" | "SkillInstalled" | "SkillRejected" => &[
+                "SkillDependencyMissing",
+                "SkillValidationFailed",
+                "SkillPendingApproval",
+                "SkillRevisionRequested",
+                "SkillInstallFailed",
+            ],
+            "SkillValidationFailed" => &[
+                "SkillDependencyMissing",
+                "SkillPendingApproval",
+                "SkillRevisionRequested",
+                "SkillValidationFailed",
+            ],
+            "SkillRevisionRequested" => &[
+                "SkillPendingApproval",
+                "SkillValidationFailed",
+                "SkillDependencyMissing",
+            ],
+            "SkillInstallFailed" => &[
+                "SkillPendingApproval",
+                "SkillRevisionRequested",
+                "SkillInstallFailed",
+            ],
+            "SkillIndexRecovered" => &["SkillIndexFailed"],
+            _ => &[],
+        };
         self.0
-            .notify(crate::application::dude::NotificationInput {
-                dedup_key: format!("{}:{}:{}", n.related_code, n.revision, n.kind),
-                dude_code: Some(n.dude_code.clone()),
-                title: n.kind.into(),
-                body: n.message.clone(),
-                category: "Skill".into(),
-                target: serde_json::json!({"candidateCode":n.related_code}),
-            })
+            .notify_replacing(
+                crate::application::dude::NotificationInput {
+                    dedup_key: format!("{}:{}:{}", n.related_code, n.revision, n.kind),
+                    dude_code: Some(n.dude_code.clone()),
+                    title: n.kind.into(),
+                    body: n.message.clone(),
+                    category: "Skill".into(),
+                    target: serde_json::json!({"candidateCode":n.related_code}),
+                },
+                retire,
+            )
             .map_err(|_| {
                 crate::domain::dude_memory::DudeMemoryError::Storage(
                     "Dude notification persistence failed".into(),

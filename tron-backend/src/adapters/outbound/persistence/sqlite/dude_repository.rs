@@ -172,6 +172,37 @@ tx.commit().map_err(storage)})
         let n = n.clone();
         self.call(move|c|{c.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(dedup_key) DO NOTHING",params![n.id,n.dedup_key,encode(&n)?,n.created_at]).map_err(storage)?;decode(c.query_row("SELECT record_json FROM platform_notifications WHERE dedup_key=?1",[n.dedup_key],|r|r.get(0)).map_err(storage)?)})
     }
+    fn notify_replacing(
+        &mut self,
+        notification: &PlatformNotification,
+        prior_kinds: &[String],
+    ) -> Result<PlatformNotification, DudeError> {
+        let (notification, prior_kinds) = (notification.clone(), prior_kinds.to_vec());
+        self.call(move |connection| {
+            let tx = business_transaction(connection, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            if let Some(candidate) = notification.target["candidateCode"].as_str() {
+                let prior = {
+                    let mut query = tx.prepare("SELECT record_json FROM platform_notifications WHERE json_extract(record_json,'$.target.candidateCode')=?1").map_err(storage)?;
+                    query.query_map([candidate], |row| row.get::<_,String>(0)).map_err(storage)?
+                        .collect::<Result<Vec<_>,_>>().map_err(storage)?
+                };
+                for json in prior {
+                    let mut old: PlatformNotification = decode(json)?;
+                    if old.category == "Skill" && old.dude_code == notification.dude_code
+                        && old.dedup_key != notification.dedup_key && old.resolved_at.is_none()
+                        && prior_kinds.contains(&old.title) {
+                        old.resolved_at = Some(notification.created_at);
+                        tx.execute("UPDATE platform_notifications SET record_json=?2 WHERE notification_id=?1",params![old.id,encode(&old)?]).map_err(storage)?;
+                    }
+                }
+            }
+            tx.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(dedup_key) DO NOTHING",params![notification.id,notification.dedup_key,encode(&notification)?,notification.created_at]).map_err(storage)?;
+            let result = decode(tx.query_row("SELECT record_json FROM platform_notifications WHERE dedup_key=?1",[&notification.dedup_key],|row|row.get(0)).map_err(storage)?)?;
+            tx.commit().map_err(storage)?;
+            Ok(result)
+        })
+    }
+
     fn notifications(&mut self) -> Result<Vec<PlatformNotification>, DudeError> {
         self.call(|c|{let mut q=c.prepare("SELECT record_json FROM platform_notifications ORDER BY created_at DESC LIMIT 500").map_err(storage)?;q.query_map([],|r|r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect()})
     }
@@ -202,5 +233,82 @@ tx.commit().map_err(storage)})
             .map_err(storage)?;
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod notification_lifecycle_tests {
+    use super::*;
+
+    fn notice(id: &str, candidate: &str, kind: &str) -> PlatformNotification {
+        PlatformNotification {
+            id: id.into(),
+            dedup_key: id.into(),
+            dude_code: Some("memory-dude".into()),
+            title: kind.into(),
+            body: "Action".into(),
+            category: "Skill".into(),
+            target: serde_json::json!({"candidateCode":candidate}),
+            read_at: None,
+            archived_at: None,
+            resolved_at: None,
+            created_at: 100,
+        }
+    }
+    #[test]
+    fn skill_transition_retires_only_related_action_preserving_read_and_archive() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repository =
+            SqliteDudeRepository::connect(directory.path().join("dude.sqlite").to_str().unwrap())
+                .unwrap();
+        repository
+            .notify(&notice("pending", "candidate-a", "SkillPendingApproval"))
+            .unwrap();
+        repository
+            .notify(&notice("other", "candidate-b", "SkillPendingApproval"))
+            .unwrap();
+        repository
+            .update_notification("pending", true, true, 110)
+            .unwrap();
+        let mut installed = notice("installed", "candidate-a", "SkillInstalled");
+        installed.created_at = 120;
+        repository
+            .notify_replacing(&installed, &["SkillPendingApproval".into()])
+            .unwrap();
+        // Replayed callbacks must not generate another notification or clear resolution.
+        repository
+            .notify_replacing(&installed, &["SkillPendingApproval".into()])
+            .unwrap();
+        let all = repository.notifications().unwrap();
+        assert_eq!(all.len(), 3);
+        let pending = all.iter().find(|n| n.id == "pending").unwrap();
+        assert_eq!(
+            (pending.read_at, pending.archived_at, pending.resolved_at),
+            (Some(110), Some(110), Some(120))
+        );
+        assert_eq!(
+            all.iter().find(|n| n.id == "other").unwrap().resolved_at,
+            None
+        );
+    }
+    #[test]
+    fn failed_success_notice_does_not_partially_resolve_pending_action() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repository =
+            SqliteDudeRepository::connect(directory.path().join("dude.sqlite").to_str().unwrap())
+                .unwrap();
+        repository
+            .notify(&notice("pending", "candidate-a", "SkillPendingApproval"))
+            .unwrap();
+        repository.call(|c| c.execute_batch("CREATE TRIGGER reject_notice BEFORE INSERT ON platform_notifications BEGIN SELECT RAISE(ABORT,'test failure'); END;").map_err(storage)).unwrap();
+        assert!(
+            repository
+                .notify_replacing(
+                    &notice("installed", "candidate-a", "SkillInstalled"),
+                    &["SkillPendingApproval".into()]
+                )
+                .is_err()
+        );
+        assert_eq!(repository.notifications().unwrap()[0].resolved_at, None);
     }
 }
