@@ -230,3 +230,104 @@ async fn changing_main_dude_keeps_each_dudes_existing_conversation_and_blocks_ma
     let listed = dudes(&fixture.router).await;
     assert_eq!(listed.iter().filter(|d| d["isMain"] == true).count(), 1);
 }
+
+#[tokio::test]
+async fn dude_tasks_use_the_task_module_start_before_due_and_invalidate_stale_reminders() {
+    let fixture = Fixture::new();
+    let main = dudes(&fixture.router)
+        .await
+        .into_iter()
+        .find(|dude| dude["isMain"] == true)
+        .unwrap();
+    let code = main["dudeCode"].as_str().unwrap();
+    let now = chrono::Utc::now().timestamp_millis();
+    let due = now + 3 * 86_400_000;
+    let task = data(&fixture.router, Method::POST, "/api/v1/tasks", Some(json!({
+        "workspaceCode":null, "ownerDudeCode":code,
+        "title":"Prepare the release report", "description":"Collect evidence and prepare the report",
+        "dueAt":due, "priority":"Medium", "taskType":"General", "sourceType":"Internal",
+        "assigneeUserCodes":[], "agentCodes":[], "appCodes":[]
+    }))).await;
+    assert!(task["workspaceCode"].is_null());
+    assert_eq!(task["ownerDudeCode"], code);
+    let planned = task["plannedStartAt"]
+        .as_i64()
+        .expect("internal early-start policy");
+    assert!(
+        planned > now && planned < due,
+        "work must be scheduled before the deadline"
+    );
+    let task_code = task["taskCode"].as_str().unwrap();
+    let owned = data(
+        &fixture.router,
+        Method::GET,
+        &format!("/api/v1/tasks?ownerDudeCode={code}&size=200"),
+        None,
+    )
+    .await;
+    assert!(
+        owned["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["taskCode"] == task_code)
+    );
+    let ordinary = data(
+        &fixture.router,
+        Method::GET,
+        "/api/v1/tasks?workspaceCode=TRON_CORE",
+        None,
+    )
+    .await;
+    assert!(
+        ordinary["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["taskCode"] != task_code)
+    );
+
+    let mut task_service = None;
+    let _second_router =
+        common::app_with_state_setup(common::prepared_config(fixture.config.clone()), |state| {
+            task_service = Some(state.tasks.clone())
+        });
+    let tasks = task_service.unwrap();
+    let version = task["scheduleVersion"]
+        .as_i64()
+        .expect("persistent task schedule version");
+    assert!(tasks.claim_dude_task(task_code, version, planned).unwrap());
+    assert!(
+        tasks
+            .dude_task_reminder_is_current(task_code, version + 1)
+            .unwrap()
+    );
+    data(
+        &fixture.router,
+        Method::PATCH,
+        &format!("/api/v1/tasks/{task_code}"),
+        Some(json!({"dueAt":due + 86_400_000})),
+    )
+    .await;
+    assert!(
+        !tasks
+            .dude_task_reminder_is_current(task_code, version + 1)
+            .unwrap(),
+        "rescheduling must invalidate already-enqueued reminders"
+    );
+    data(
+        &fixture.router,
+        Method::POST,
+        &format!("/api/v1/tasks/{task_code}/archive"),
+        None,
+    )
+    .await;
+    assert!(
+        tasks
+            .due_dude_tasks(i64::MAX)
+            .unwrap()
+            .iter()
+            .all(|item| item.task_code != task_code),
+        "cancelling must invalidate future reminders"
+    );
+}
