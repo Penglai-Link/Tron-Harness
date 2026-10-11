@@ -352,7 +352,8 @@ fn memory_context(record: &ThreadRecord) -> AgentRunContext {
         "shortTermMemory":{"sessionCode":record.summary.thread_id,"inputCode":"input","inputKind":"USER_PROMPT","promptPrefix":[],"todoEnabled":false}
     })).unwrap()
 }
-#[tokio::test]
+// Exercise synchronous STM adapters on the same runtime flavor as production native execution.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn native_thread_stm_scope_and_family_come_from_durable_owner_without_user_chat_link() {
     use crate::application::short_term_memory::{ShortTermMemoryConfig, ShortTermMemoryService};
     let host = FrameworkHost::temporary(None).unwrap();
