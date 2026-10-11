@@ -94,6 +94,13 @@ impl DudeMemoryService {
         repository.save_batch(Some(&previous), &batch, false)?;
         Ok(batch)
     }
+    pub fn cursor_snapshot(
+        &self,
+        user: &str,
+        dude: &str,
+    ) -> Result<BTreeMap<String, String>, DudeMemoryError> {
+        self.repository.lock().unwrap().cursor_versions(user, dude)
+    }
     pub fn get_batch(&self, user: &str, code: &str) -> Result<MemoryBatch, DudeMemoryError> {
         let batch = self.repository.lock().unwrap().get_batch(code)?;
         if batch.user_code != user {
