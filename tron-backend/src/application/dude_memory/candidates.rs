@@ -219,6 +219,70 @@ impl DudeMemoryService {
         }
         Ok(candidate)
     }
+    /// Installation and retrieval indexing are distinct recoverable steps. The Skill center
+    /// owns the index state; the candidate only keeps a retry marker and user-visible error.
+    pub async fn index_installed(
+        &self,
+        candidate: &SkillCandidate,
+        rag: crate::app::AppRagService,
+    ) -> Result<SkillCandidate, DudeMemoryError> {
+        if candidate.status != SkillCandidateStatus::Installed {
+            return Ok(candidate.clone());
+        }
+        let index = crate::application::skill::SkillRagIndexService::new(self.skills.clone(), rag)
+            .index_registry_skill(&candidate.skill_name)
+            .await;
+        let failure = match index {
+            Err(error) => Some(error.to_string()),
+            Ok(summary)
+                if summary.vector_status == crate::domain::skill::SkillRagIndexStatus::Failed
+                    || summary.graph_status
+                        == crate::domain::skill::SkillRagIndexStatus::Failed =>
+            {
+                Some(
+                    summary
+                        .last_error
+                        .unwrap_or_else(|| "Skill retrieval index failed".into()),
+                )
+            }
+            Ok(_) => None,
+        };
+        let mut repository = self.repository.lock().unwrap();
+        let previous = repository.get_candidate(&candidate.candidate_code)?;
+        check_request(
+            &previous,
+            &candidate.user_code,
+            candidate.revision,
+            &candidate.artifact_hash,
+        )?;
+        if previous.status != SkillCandidateStatus::Installed {
+            return Err(DudeMemoryError::Conflict);
+        }
+        let mut next = previous.clone();
+        next.last_error = failure.map(|error| format!("Skill index pending: {error}"));
+        if next.last_error != previous.last_error {
+            next.updated_at = now();
+            repository.save_candidate(Some(&previous), &next)?;
+            drop(repository);
+            if let Some(error) = &next.last_error {
+                self.notify(
+                    &next,
+                    "SkillIndexFailed",
+                    format!(
+                        "Skill {} is installed; retrieval indexing will retry: {error}",
+                        next.skill_name
+                    ),
+                )?;
+            } else if previous.last_error.is_some() {
+                self.notify(
+                    &next,
+                    "SkillIndexRecovered",
+                    format!("Skill {} retrieval index is ready", next.skill_name),
+                )?;
+            }
+        }
+        Ok(next)
+    }
     pub fn approve(
         &self,
         user: &str,
@@ -365,7 +429,10 @@ impl DudeMemoryService {
         match installed {
             Ok(()) => {
                 candidate.status = SkillCandidateStatus::Installed;
-                candidate.last_error = None;
+                candidate.last_error = Some(
+                    "Skill index pending: Installation committed; retrieval index not confirmed"
+                        .into(),
+                );
             }
             Err(error) => {
                 candidate.status = SkillCandidateStatus::InstallFailed;

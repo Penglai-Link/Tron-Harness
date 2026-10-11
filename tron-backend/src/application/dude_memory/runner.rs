@@ -320,6 +320,14 @@ impl DudeMemoryRunner {
     ) -> Result<(), DudeMemoryError> {
         let candidates = self.service.list_candidates(user)?;
         for candidate in candidates.into_iter().filter(|c| c.dude_code == dude) {
+            if candidate.status == SkillCandidateStatus::Installed
+                && candidate
+                    .last_error
+                    .as_deref()
+                    .is_some_and(|e| e.starts_with("Skill index pending:"))
+            {
+                self.index_installed(&candidate).await;
+            }
             if matches!(
                 candidate.status,
                 SkillCandidateStatus::Approved | SkillCandidateStatus::Installing
@@ -424,18 +432,12 @@ impl DudeMemoryRunner {
         Ok(())
     }
     async fn index_installed(&self, candidate: &SkillCandidate) {
-        if candidate.status == SkillCandidateStatus::Installed {
-            // Uses the same index service as the existing Skill center installation endpoint.
-            let rag = self.memory.rag_service();
-            if let Err(error) = crate::application::skill::SkillRagIndexService::new(
-                self.service.skills.clone(),
-                rag,
-            )
-            .index_registry_skill(&candidate.skill_name)
+        if let Err(error) = self
+            .service
+            .index_installed(candidate, self.memory.rag_service())
             .await
-            {
-                tracing::warn!(%error,"Skill index needs retry");
-            }
+        {
+            tracing::warn!(%error,"Skill index checkpoint needs retry");
         }
     }
     async fn write_memory(
