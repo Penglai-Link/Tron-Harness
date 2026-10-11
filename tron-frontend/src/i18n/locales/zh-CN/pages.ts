@@ -50,6 +50,7 @@ export const pages = {
   "plannedStart": "计划开始",
   "nextFollowup": "下次跟进",
   "viewWork": "查看工作",
+  "viewTraces": "查看链路",
   "cancelTask": "取消任务",
   "noTasks": "暂无任务。",
   "noWork": "暂无后台工作记录。",

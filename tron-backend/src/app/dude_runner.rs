@@ -57,6 +57,75 @@ impl DudeExecutor for PlatformDudeExecutor {
         event: DudeEvent,
         session: DudeSession,
     ) -> Result<DudeExecutionOutcome, DudeError> {
+        use opentelemetry::{
+            Context, KeyValue,
+            trace::{FutureExt, Status, TraceContextExt},
+        };
+        use tracing::Instrument;
+
+        let telemetry = self
+            .state
+            .agent_framework
+            .telemetry()
+            .await
+            .map_err(|error| DudeError::Runtime(format!("Dude tracing unavailable: {error:?}")))?;
+        // A durable wakeup is a new operation, even if dispatch was initiated by
+        // an HTTP request or another Dude. Never inherit the worker's context.
+        let guard = telemetry.begin_operation(
+            "tron.dude.execute",
+            &Context::new(),
+            vec![
+                KeyValue::new("tron.dude.code", event.dude_code.clone()),
+                KeyValue::new("tron.dude.event.id", event.event_id.clone()),
+                KeyValue::new("tron.dude.event.source", format!("{:?}", event.source)),
+                KeyValue::new("tron.dude.event.attempt", i64::from(event.attempts)),
+                KeyValue::new("tron.session.code", session.session_code.clone()),
+                KeyValue::new("tron.agent.code", event.dude_code.clone()),
+                KeyValue::new(
+                    "tron.workspace.code",
+                    session.workspace_code.clone().unwrap_or_default(),
+                ),
+                KeyValue::new(
+                    "tron.task.code",
+                    event.task_code.clone().unwrap_or_default(),
+                ),
+            ],
+        );
+        let context = guard.0.clone();
+        let ids = context.span().span_context().clone();
+        let log_span = tracing::info_span!("dude.execute", trace_id=%ids.trace_id(), span_id=%ids.span_id(),
+            dude_code=%event.dude_code, event_id=%event.event_id);
+        let result = async {
+            tracing::info!("Dude execution started");
+            let result = self.execute_inner(event, session).await;
+            if result.is_err() {
+                context
+                    .span()
+                    .set_status(Status::error("Dude execution failed"));
+                tracing::error!("Dude execution failed");
+            } else {
+                tracing::info!("Dude execution finished");
+            }
+            result
+        }
+        .instrument(log_span)
+        .with_context(context.clone())
+        .await;
+        guard.complete(match &result {
+            Ok(outcome) if outcome.awaiting_input => "waiting",
+            Ok(_) => "completed",
+            Err(_) => "error",
+        });
+        result
+    }
+}
+
+impl PlatformDudeExecutor {
+    async fn execute_inner(
+        &self,
+        event: DudeEvent,
+        session: DudeSession,
+    ) -> Result<DudeExecutionOutcome, DudeError> {
         let dude = self.state.dudes.get(&event.dude_code)?;
         if dude.kind == DudeKind::Memory
             && matches!(

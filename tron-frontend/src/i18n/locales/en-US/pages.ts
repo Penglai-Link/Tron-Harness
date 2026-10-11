@@ -50,6 +50,7 @@ export const pages = {
   "plannedStart": "Planned start",
   "nextFollowup": "Next follow-up",
   "viewWork": "View work",
+  "viewTraces": "View traces",
   "cancelTask": "Cancel task",
   "noTasks": "No tasks yet.",
   "noWork": "No background activity yet.",

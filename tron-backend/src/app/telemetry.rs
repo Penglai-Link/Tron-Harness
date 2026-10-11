@@ -183,9 +183,30 @@ impl LocalTelemetry {
             &context.run_code,
             context.agent_code.as_deref().unwrap_or("main-agent"),
         )?;
+        let mut dude_attributes: BTreeMap<String, String> = BTreeMap::new();
+        if let Some(owner) = context
+            .collaboration_owner
+            .as_ref()
+            .filter(|owner| owner.kind == "DUDE")
+        {
+            dude_attributes.insert("tron.dude.code".into(), owner.code.clone());
+            if let Some(task) = &owner.task_code {
+                dude_attributes.insert("tron.task.code".into(), task.clone());
+            }
+            if let Some(origin) = &owner.origin_session_code {
+                dude_attributes.insert("tron.dude.origin.session.code".into(), origin.clone());
+            }
+            if let Some(memory) = &context.short_term_memory {
+                dude_attributes.insert("tron.dude.input.kind".into(), memory.input_kind.clone());
+            }
+        }
+        for (key, value) in &dude_attributes {
+            root.span()
+                .set_attribute(KeyValue::new(key.clone(), value.clone()));
+        }
         request.extensions.insert(TraceParent(root.clone()));
         tracing::info!(trace_id=%root.span().span_context().trace_id(), span_id=%root.span().span_context().span_id(), workspace_code=%context.workspace_code, session_code=%request.session_id, agent_code=context.agent_code.as_deref().unwrap_or("main-agent"), "Agent run started");
-        Ok(TraceGuard::tracked(root, self.store.clone(), BTreeMap::new()))
+        Ok(TraceGuard::tracked(root, self.store.clone(), dude_attributes))
     }
     pub async fn close(&self) -> Result<(), String> {
         let report = self

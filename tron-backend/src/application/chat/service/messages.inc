@@ -143,7 +143,7 @@ impl ChatService {
             let user_message_content = content.clone();
             let title_run_code = run_code.clone();
             let title_fallback_model = resolved_model.clone();
-            tokio::spawn(async move {
+            crate::app::telemetry::spawn_traced(async move {
                 chat_service
                     .try_generate_manual_session_title(
                         &session_code,

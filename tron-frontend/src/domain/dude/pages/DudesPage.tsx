@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useTabVisibility } from "@/components/editable-tabs";
@@ -24,7 +24,7 @@ function SessionChat({ session, readOnly, title }: { session: ChatSession; readO
   const adapter = useMemo(() => createInternalChatAdapter({ workspaceCode: session.workspaceCode, getAccessToken: getApiAccessToken, getHeaders: () => { const headers = applyCurrentLocaleHeader(new Headers()); if (session.ownerDudeCode) headers.set("X-Dude-Code", session.ownerDudeCode); return headers; } }), [session.workspaceCode, session.ownerDudeCode]);
   const config = useMemo(() => ({ agentCode: session.agentCode ?? undefined, disabledInput: readOnly, showSessionList: false, showNewSession: false, floating: false, title, workRailLabels, historyLabels, inputPlaceholder: t("dude.messagePlaceholder") }), [session.agentCode, readOnly, title, workRailLabels, historyLabels, t]);
   const createSendInput = (current: ChatSession, content: string, attachments: NonNullable<SendChatMessageInput["attachments"]>): SendChatMessageInput => ({ content, workspaceCode: current.workspaceCode, agentCode: current.agentCode, attachments, clientCapabilities: { userInputRequests: true }, modelSelection: { kind: "Auto" } });
-  return <div className="h-[min(72dvh,850px)] min-h-96"><AgentChatWindow adapter={adapter} config={config} initialSession={session} currentUserDisplayName={auth.session?.user.displayName ?? ""} createSendInput={createSendInput} /></div>;
+  return <div className="space-y-2"><div className="flex justify-end"><Link className={buttonVariants({ size: "sm", variant: "ghost" })} to={`/settings/observability/traces?sessionCode=${encodeURIComponent(session.sessionCode)}`}>{t("dude.viewTraces")}</Link></div><div className="h-[min(72dvh,850px)] min-h-96"><AgentChatWindow adapter={adapter} config={config} initialSession={session} currentUserDisplayName={auth.session?.user.displayName ?? ""} createSendInput={createSendInput} /></div></div>;
 }
 export function DudesPage() {
   const { t, i18n } = useTranslation("pages"); const [search, setSearch] = useSearchParams(); const visible = useTabVisibility();

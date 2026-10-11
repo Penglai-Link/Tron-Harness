@@ -196,9 +196,16 @@ test("robot opens the persistent platform conversation while task work runs in p
   const input = page.locator('[data-theme-part="chat-input"]');
   let backgroundSession = "";
   await input.fill("acceptance-foreground-hold: continue discussing this with me");
+  const sentRequest = page.waitForRequest(outgoing => outgoing.method() === "POST"
+    && new URL(outgoing.url()).pathname === `/api/v1/chats/sessions/${session.sessionCode}/messages/stream`);
   // History can still be loading while the composer accepts a draft. The Send
   // button waits for session readiness; an immediate Enter can be ignored then.
   await page.getByRole("button", { name: "Send", exact: true }).click();
+  const sent = await sentRequest;
+  const traceparent = sent.headers()["traceparent"];
+  expect(traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+  expect(sent.headers()["x-dude-code"]).toBe(session.ownerDudeCode);
+  const [, foregroundTrace, browserSpanId] = traceparent.split("-");
   try {
     // Native startup includes persisted context and resource preparation. The
     // controlled provider stays held throughout background task completion.
@@ -214,6 +221,40 @@ test("robot opens the persistent platform conversation while task work runs in p
     await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).not.toContainText("dude-foreground-finished");
   } finally { releaseForeground(); }
   await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).toContainText("dude-foreground-finished");
+  // Query actual local telemetry exported by the browser and native runtime.
+  // A trace header alone would not prove that SDK-owned tasks kept the context.
+  let foregroundDetail: any;
+  await expect.poll(async () => {
+    try {
+      foregroundDetail = await request("GET", `/api/v1/observability/traces/${foregroundTrace}`);
+      const spans = foregroundDetail.spans;
+      return spans.some((span: any) => span.spanId === browserSpanId && span.attributes["service.name"] === "tron-frontend")
+        && spans.some((span: any) => span.parentSpanId === browserSpanId && span.attributes["http.request.method"] === "POST")
+        && spans.some((span: any) => span.name === "tron.session.run")
+        && spans.some((span: any) => span.name === "agent.model");
+    } catch { return false; }
+  }, { timeout: 30_000 }).toBe(true);
+  expect(foregroundDetail.trace.sessionCode).toBe(session.sessionCode);
+  expect(foregroundDetail.trace.workspaceCode).toBe("");
+  expect(foregroundDetail.spans.find((span: any) => span.name === "tron.session.run").attributes["tron.dude.code"]).toBe(session.ownerDudeCode);
+  let backgroundDetail: any;
+  await expect.poll(async () => {
+    const traces = await request("POST", "/api/v1/observability/traces/query", { sessionCode: backgroundSession, current: 1, size: 15 });
+    for (const trace of traces.records) {
+      const detail = await request("GET", `/api/v1/observability/traces/${trace.traceId}`);
+      if (detail.spans.some((span: any) => span.name === "tron.dude.execute") && detail.spans.some((span: any) => span.name === "agent.model")) {
+        backgroundDetail = detail; return true;
+      }
+    }
+    return false;
+  }, { timeout: 30_000 }).toBe(true);
+  expect(backgroundDetail.trace.traceId).not.toBe(foregroundTrace);
+  const eventSpan = backgroundDetail.spans.find((span: any) => span.name === "tron.dude.execute");
+  expect(eventSpan.parentSpanId).toBeNull();
+  expect(eventSpan.attributes["tron.dude.event.source"]).toBe("TaskReminder");
+  expect(eventSpan.attributes["tron.dude.code"]).toBe(session.ownerDudeCode);
+  expect(backgroundDetail.spans.find((span: any) => span.name === "tron.session.run").parentSpanId).toBe(eventSpan.spanId);
+  await writeFile(testInfo.outputPath("dude-traces.json"), JSON.stringify({ foreground: foregroundDetail, background: backgroundDetail }, null, 2));
   await page.getByRole("button", { name: "Platform main Dude conversation", exact: true }).click();
   const secondResolve = page.waitForResponse(response => response.url().endsWith("/api/v1/dudes/main/session") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Platform main Dude conversation", exact: true }).click();
@@ -233,8 +274,26 @@ test("robot opens the persistent platform conversation while task work runs in p
   const workHistory = page.getByRole("region", { name: "Chat transcript", exact: true });
   await expect(workHistory).toContainText("dude-background-finished");
   await expect(workHistory).not.toContainText("dude-foreground-finished");
+  const traceLink = page.getByRole("link", { name: "View traces", exact: true });
+  await expect(traceLink).toHaveAttribute("href", `/settings/observability/traces?sessionCode=${backgroundSession}`);
   expect(errors).toEqual([]);
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("dude-notification-work-history.png") });
+  const traceQuery = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname === "/api/v1/observability/traces/query"
+    && response.request().postDataJSON()?.sessionCode === backgroundSession);
+  await traceLink.click();
+  const queryResponse = await traceQuery;
+  expect(queryResponse.request().postDataJSON().workspaceCode).toBeNull();
+  expect((await queryResponse.json()).data.records.some((trace: any) => trace.traceId === backgroundDetail.trace.traceId)).toBe(true);
+  await expect(page.getByRole("button", { name: backgroundDetail.trace.traceId, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: backgroundDetail.trace.traceId, exact: true }).click();
+  await expect(page.getByRole("button", { name: /^tron\.dude\.execute\s/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^agent\.model\s/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Waterfall", exact: true }).locator("canvas")).toBeVisible();
+  await page.getByRole("button", { name: /^tron\.dude\.execute\s/ }).click();
+  await expect(page.getByText("tron.dude.event.source", { exact: true })).toBeVisible();
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("dude-trace-explorer.png") });
+  expect(errors).toEqual([]);
 });
 
 test("Dude creation stays in agent management with a clear consumption notice", async ({ page }, testInfo) => {

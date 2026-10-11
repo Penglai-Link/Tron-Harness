@@ -84,9 +84,9 @@ impl ModelClient for HumanScript {
                                 let part = &value["tronMessagePart"];
                                 part["type"] == "context"
                                     && part["kind"] == "session_family_context"
-                                    && part["text"]
-                                        .as_str()
-                                        .is_some_and(|text| text.contains("trusted-dude-family-note"))
+                                    && part["text"].as_str().is_some_and(|text| {
+                                        text.contains("trusted-dude-family-note")
+                                    })
                             }
                             _ => false,
                         }),
@@ -410,4 +410,39 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
     assert_eq!(catalog[0].task_code.as_deref(), Some("dude-task"));
     assert_eq!(catalog[0].agent_code, "reviewer");
     assert!(host.close().await.is_success());
+    let telemetry = rusqlite::Connection::open(
+        std::path::Path::new(&f.state.config.database_url).with_extension("telemetry.sqlite3"),
+    )
+    .unwrap();
+    let spans = telemetry
+        .prepare("SELECT data FROM ef_telemetry_spans")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .map(|row| serde_json::from_str::<fw::TelemetrySpan>(&row.unwrap()).unwrap())
+        .collect::<Vec<_>>();
+    let create = spans
+        .iter()
+        .find(|span| {
+            span.name == "agent.tool"
+                && span
+                    .attributes
+                    .get("gen_ai.tool.name")
+                    .is_some_and(|name| name == "thread_create")
+        })
+        .expect("real Dude dispatch produces a tool span");
+    let thread_run = spans
+        .iter()
+        .find(|span| {
+            span.name == "agent.run"
+                && span.trace_id == create.trace_id
+                && span.parent_span_id.as_deref() == Some(&create.span_id)
+        })
+        .expect("detached Thread inherits the actual dispatching tool span");
+    assert!(
+        spans
+            .iter()
+            .any(|span| span.name == "agent.model" && span.trace_id == thread_run.trace_id),
+        "Thread reasoning remains queryable in the same persisted trace after parent exit"
+    );
 }
