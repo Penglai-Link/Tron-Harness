@@ -132,7 +132,12 @@ fn service(state: &AppState, model: Arc<ControlledModel>, session: &str) -> Agen
     })
 }
 
-#[tokio::test]
+// The application uses Tokio's multithread runtime: its synchronous SQLite
+// bridge may block_in_place while an async Framework transaction owns the gate.
+// A current_thread harness would block the sole executor, unlike production.
+// Parallelism remains proven by the explicit held model call below, not by the
+// worker count or by allowing the foreground response to finish early.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn platform_short_term_memory_runs_background_while_foreground_is_still_answering() {
     let directory = tempfile::tempdir().unwrap();
     let config = common::prepared_config(AppConfig {
@@ -173,6 +178,7 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
     // In particular, DudeSession has no user field: the native chat link is the
     // authority that separates profiles during memory collection.
     let mut repository = SqliteDudeRepository::connect(&state.config.database_url).unwrap();
+    let now = chrono::Utc::now().timestamp_millis();
     repository
         .save(&Dude {
             dude_code: "acceptance-dude".into(),
@@ -181,8 +187,10 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
             heartbeat_minutes: 30,
             memory_auto_approve: false,
             is_main: false,
-            created_at: 1,
-            updated_at: 1,
+            // Keep unrelated scheduled heartbeat work outside this fixture's
+            // execution window; epoch timestamps would make it immediately due.
+            created_at: now,
+            updated_at: now,
         })
         .unwrap();
     let mut other_owner = repository
@@ -206,12 +214,19 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
                 } else {
                     "acceptance-dude".into()
                 },
-                purpose: DudeSessionPurpose::Task,
+                // General background work needs no invented task identity.
+                // Real task scheduling and bindings have separate API/browser
+                // acceptance; Task purpose must refer to a persisted task.
+                purpose: if session == "acceptance-interactive" {
+                    DudeSessionPurpose::Interactive
+                } else {
+                    DudeSessionPurpose::Feedback
+                },
                 correlation_key: session.into(),
                 title: session.into(),
                 workspace_code: None,
-                created_at: 1,
-                updated_at: 1,
+                created_at: now,
+                updated_at: now,
             })
             .unwrap();
         assert_eq!(persisted.session_code, session);
