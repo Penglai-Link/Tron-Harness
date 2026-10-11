@@ -1,15 +1,6 @@
 import { type ComponentProps, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  AlertCircle,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Plus,
-  Regex,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertCircle, Regex } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
@@ -256,9 +247,7 @@ function SchemaPropertyRow({
     )}
     >
       <div className="flex min-h-12 min-w-0 flex-wrap items-center gap-[12px] px-3 py-2 sm:flex-nowrap">
-        <button aria-label={expanded ? tr("actions.collapse", "Collapse {{code}}", { code: name }) : tr("actions.expand", "Expand {{code}}", { code: name })} className="shrink-0 text-[var(--color-on-surface-variant)]" type="button" onClick={() => setExpanded((current) => !current)}>
-          {expanded ? <ChevronDown aria-hidden="true" size={17} /> : <ChevronRight aria-hidden="true" size={17} />}
-        </button>
+        <button aria-label={expanded ? tr("actions.collapse", "Collapse {{code}}", { code: name }) : tr("actions.expand", "Expand {{code}}", { code: name })} className="shrink-0 text-[var(--color-on-surface-variant)]" type="button" onClick={() => setExpanded((current) => !current)}>{expanded ? tr("actions.collapse", "Collapse {{code}}", { code: name }) : tr("actions.expand", "Expand {{code}}", { code: name })}</button>
         <div className="flex min-w-0 flex-1 basis-[calc(100%-26px)] items-center gap-[12px] sm:basis-auto">
           {editingName && !readOnly ? (
             <DenseTextInput
@@ -314,12 +303,10 @@ function SchemaPropertyRow({
             <Button
               aria-label={tr("actions.remove", "Remove {{code}}", { code: name })}
               className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-              size="icon-sm"
+              size="sm"
               variant="ghost"
               onClick={onRemove}
-            >
-              <X aria-hidden="true" size={15} />
-            </Button>
+            >{tr("actions.remove", "Remove {{code}}", { code: name })}</Button>
           ) : null}
         </div>
       </div>
@@ -332,8 +319,8 @@ function SchemaPropertyRow({
           {schema.format === "tron-variable-ref" ? <Badge variant="warning">tron-variable-ref</Badge> : null}
           <SchemaNodeEditor depth={depth + 1} formatOptions={formatOptions} readOnly={readOnly} schema={value} onChange={onSchemaChange} />
           {!readOnly ? <div className="flex justify-end gap-1">
-            <Button aria-label={tr("actions.moveUp", "Move {{code}} up", { code: name })} disabled={readOnly || index === 0} size="icon-sm" variant="ghost" onClick={() => onMove(-1)}><ChevronUp aria-hidden="true" size={13} /></Button>
-            <Button aria-label={tr("actions.moveDown", "Move {{code}} down", { code: name })} disabled={readOnly || index === siblingCount - 1} size="icon-sm" variant="ghost" onClick={() => onMove(1)}><ChevronDown aria-hidden="true" size={13} /></Button>
+            <Button aria-label={tr("actions.moveUp", "Move {{code}} up", { code: name })} disabled={readOnly || index === 0} size="sm" variant="ghost" onClick={() => onMove(-1)}>{tr("actions.moveUp", "Move {{code}} up", { code: name })}</Button>
+            <Button aria-label={tr("actions.moveDown", "Move {{code}} down", { code: name })} disabled={readOnly || index === siblingCount - 1} size="sm" variant="ghost" onClick={() => onMove(1)}>{tr("actions.moveDown", "Move {{code}} down", { code: name })}</Button>
           </div> : null}
         </div>
       ) : null}
@@ -411,8 +398,8 @@ function ObjectPropertiesEditor({ depth, formatOptions, onChange, readOnly, root
   const additionalProperties = schema.additionalProperties !== false;
   const objectFooter = (
     <div className={cn("flex flex-wrap items-center gap-[12px]", !root && "pt-1")}>
-      <Button disabled={readOnly} size="sm" variant={root ? "default" : "outline"} onClick={() => addProperty(false)}><Plus aria-hidden="true" size={14} />{tr("actions.add", "Add field")}</Button>
-      <Button disabled={readOnly} size="sm" variant="ghost" onClick={() => addProperty(true)}><Regex aria-hidden="true" size={14} />{tr("actions.addPattern", "Add pattern")}</Button>
+      <Button disabled={readOnly} size="sm" variant={root ? "default" : "outline"} onClick={() => addProperty(false)}>{tr("actions.add", "Add field")}</Button>
+      <Button disabled={readOnly} size="sm" variant="ghost" onClick={() => addProperty(true)}>{tr("actions.addPattern", "Add pattern")}</Button>
       <button
         aria-pressed={additionalProperties}
         className={cn("h-8 rounded-xl px-3 text-[12px] font-medium", additionalProperties ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}
@@ -510,12 +497,12 @@ function CombinatorConstraints({ depth, formatOptions, onChange, readOnly, schem
         <div className="rounded-xl border border-[var(--color-outline-variant)] p-3" key={`${combinator}-${index}`}>
           <div className="mb-3 flex items-center justify-between gap-3">
             <span className="text-[13px] font-medium">{tr("combinator.option", "Schema {{value}}", { value: index + 1 })}</span>
-            <div className="flex items-center gap-1"><SchemaTypeSelect compact readOnly={readOnly} schema={option} onChange={(type) => updateOptions(options.map((item, itemIndex) => itemIndex === index ? replaceSchemaType(item, type) : item))} /><Button aria-label={tr("combinator.remove", "Remove schema {{value}}", { value: index + 1 })} disabled={readOnly} size="icon-sm" variant="ghost" onClick={() => updateOptions(options.filter((_, itemIndex) => itemIndex !== index))}><Trash2 aria-hidden="true" size={14} /></Button></div>
+            <div className="flex items-center gap-1"><SchemaTypeSelect compact readOnly={readOnly} schema={option} onChange={(type) => updateOptions(options.map((item, itemIndex) => itemIndex === index ? replaceSchemaType(item, type) : item))} /><Button aria-label={tr("combinator.remove", "Remove schema {{value}}", { value: index + 1 })} disabled={readOnly} size="sm" variant="ghost" onClick={() => updateOptions(options.filter((_, itemIndex) => itemIndex !== index))}>{tr("combinator.remove", "Remove schema {{value}}", { value: index + 1 })}</Button></div>
           </div>
           <SchemaNodeEditor depth={depth + 1} formatOptions={formatOptions} readOnly={readOnly} schema={option} onChange={(next) => updateOptions(options.map((item, itemIndex) => itemIndex === index ? next : item))} />
         </div>
       ))}
-      <Button disabled={readOnly} size="sm" variant="outline" onClick={() => updateOptions([...options, createSchemaForType("string")])}><Plus aria-hidden="true" size={14} />{tr("combinator.add", "Add schema")}</Button>
+      <Button disabled={readOnly} size="sm" variant="outline" onClick={() => updateOptions([...options, createSchemaForType("string")])}>{tr("combinator.add", "Add schema")}</Button>
     </div>
   );
 }

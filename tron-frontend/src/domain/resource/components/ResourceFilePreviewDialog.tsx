@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Maximize2, Minimize2, X } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ResourceFilePreview } from "./ResourceFilePreview";
@@ -30,11 +30,11 @@ export function ResourceFilePreviewDialog({ workspaceCode, resourceCode, fileNam
         <DialogTitle className="min-w-0 break-words">{fileName}</DialogTitle>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setFullscreen(current => !current)} aria-label={fullscreenLabel}>
-            {fullscreen ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
+
             {fullscreenLabel}
           </Button>
-          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label={t("resourceEditor.preview.close")} />}>
-            <X size={16} aria-hidden="true" />
+          <DialogClose render={<Button variant="ghost" size="sm" aria-label={t("resourceEditor.preview.close")} />}>
+            {t("resourceEditor.preview.close")}
           </DialogClose>
         </div>
       </DialogHeader>

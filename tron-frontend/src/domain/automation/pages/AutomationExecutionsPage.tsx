@@ -9,12 +9,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  ExternalLink,
-  MoreHorizontal,
-  RefreshCcw,
-  Trash2,
-} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -165,7 +159,7 @@ export function AutomationExecutionsPage() {
                     {pt("Conversation")}
                   </p>
                   <Button size="sm" type="button" variant="ghost" onClick={() => navigate(chatSessionDetailHref(selectedSessionCode))}>
-                    <ExternalLink size={14} aria-hidden="true" />
+
                     {pt("Open session")}
                   </Button>
                 </div>
@@ -326,7 +320,7 @@ export function AutomationExecutionsPage() {
             variant="secondary"
             onClick={handleRefreshExecutions}
           >
-            <RefreshCcw className={executionsLoading ? "animate-spin" : undefined} size={15} aria-hidden="true" />
+
             {pt("Refresh")}
           </Button>
         )}
@@ -444,16 +438,14 @@ export function AutomationExecutionsPage() {
                       aria-haspopup="menu"
                       aria-label={pt("Open actions for {{code}}", { code: row.executionCode })}
                       disabled={busy}
-                      size="icon"
+                      size="sm"
                       type="button"
                       variant="ghost"
                       onClick={(event) => {
                         event.stopPropagation();
                         toggleExecutionRowMenu(row, event.currentTarget);
                       }}
-                    >
-                      <MoreHorizontal size={16} aria-hidden="true" />
-                    </Button>
+                    >{pt("Open actions for {{code}}", { code: row.executionCode })}</Button>
                   );
                 },
               },
@@ -477,7 +469,7 @@ export function AutomationExecutionsPage() {
               disabled={!openExecutionMenuRow.sessionCode}
               onClick={() => handleOpenExecutionSession(openExecutionMenuRow)}
             >
-              <ExternalLink size={14} aria-hidden="true" />
+
               {pt("Open session")}
             </button>
             <button
@@ -487,7 +479,7 @@ export function AutomationExecutionsPage() {
               disabled={executionRowBusyKey === `delete:${openExecutionMenuRow.executionCode}`}
               onClick={() => requestDeleteExecution(openExecutionMenuRow)}
             >
-              <Trash2 size={14} aria-hidden="true" />
+
               {pt("Delete")}
             </button>
           </div>,

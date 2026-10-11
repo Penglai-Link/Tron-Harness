@@ -1,6 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff } from "lucide-react";
 
 import { Field, TextArea, TextInput } from "@/components/forms";
 import { Badge } from "@/components/ui/badge";
@@ -133,17 +132,14 @@ export function SensitiveRevealIconButton({
   return (
     <Button
       type="button"
-      size="icon"
+      size="sm"
       variant="ghost"
       aria-label={`${label} ${variableKey}`}
       title={label}
       onClick={onClick}
-    >
-      {revealed ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
-    </Button>
+    >{`${label} ${variableKey}`}</Button>
   );
 }
-
 
 export function SensitiveDataCheckbox({
   checked,

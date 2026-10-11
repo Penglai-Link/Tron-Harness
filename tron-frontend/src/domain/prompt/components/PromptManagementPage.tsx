@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { MoreHorizontal, Plus, RefreshCcw, Trash2 } from "lucide-react";
 
 import { DataTable } from "@/components/data-table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -158,7 +157,7 @@ export function PromptManagementPage() {
       if (action === "EDIT") return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); navigate(editHref(record), { state: getReturnLocationState() }); }}>{pt("actions.edit", "Edit")}</DropdownMenuItem>;
       if (action === "DUPLICATE") return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); void duplicatePrompt(record); }}>{pt("actions.duplicate", "Duplicate")}</DropdownMenuItem>;
       if (action === "SET_ENABLED") return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); void toggleEnabled(record); }}>{record.enabled ? pt("actions.disable", "Disable") : pt("actions.enable", "Enable")}</DropdownMenuItem>;
-      return <DropdownMenuItem key={action} variant="destructive" onClick={(event) => { event.stopPropagation(); setConfirmTarget(record); }}><Trash2 aria-hidden="true" />{pt("actions.delete", "Delete")}</DropdownMenuItem>;
+      return <DropdownMenuItem key={action} variant="destructive" onClick={(event) => { event.stopPropagation(); setConfirmTarget(record); }}>{pt("actions.delete", "Delete")}</DropdownMenuItem>;
     });
   }
 
@@ -169,10 +168,10 @@ export function PromptManagementPage() {
         actions={(
           <>
             <Button variant="outline" disabled={loading} onClick={refresh}>
-              <RefreshCcw size={15} aria-hidden="true" />
+
               {pt("actions.refresh", "Refresh")}
             </Button>
-            <Button onClick={() => navigate("/settings/prompts/new", { state: getReturnLocationState() })}><Plus size={15} aria-hidden="true" />{pt("actions.new", "New")}</Button>
+            <Button onClick={() => navigate("/settings/prompts/new", { state: getReturnLocationState() })}>{pt("actions.new", "New")}</Button>
           </>
         )}
       />
@@ -203,7 +202,7 @@ export function PromptManagementPage() {
             { id: "variables", header: pt("fields.variables", "Variables"), render: (record) => <Badge variant="info">{record.variables.length}</Badge> },
             { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge variant={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
             { id: "updated", header: pt("fields.updated", "Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
-            { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
+            { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>{pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })}</Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
           ]}
         />
       </SurfaceCard>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, RefreshCcw } from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -120,7 +120,7 @@ export function ModelProvidersPage() {
               }}
             >
               {t("modelProviders.actions.manage")}
-              <ArrowRight size={14} aria-hidden="true" />
+
             </Button>
           </div>
         ),
@@ -139,11 +139,7 @@ export function ModelProvidersPage() {
             variant="secondary"
             onClick={() => void load()}
           >
-            {loading ? (
-              <Spinner size={16} aria-hidden="true" />
-            ) : (
-              <RefreshCcw size={16} aria-hidden="true" />
-            )}
+
             {t("modelProviders.actions.refresh")}
           </Button>
         }

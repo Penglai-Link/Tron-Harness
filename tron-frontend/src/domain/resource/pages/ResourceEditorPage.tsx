@@ -6,14 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Download,
-  Eye,
-  FileUp,
-  Pencil,
-  Save,
-  Trash2,
-} from "lucide-react";
+
 import {
   useLocation,
   useNavigate,
@@ -482,18 +475,18 @@ export function ResourceEditorPage() {
                     {editorT("actions.cancel", "Cancel")}
                   </Button>
                   <Button disabled={saving || !name.trim()} size="lg" onClick={() => { void save(); }}>
-                    <Save aria-hidden="true" size={15} />
+
                     {editorT("actions.saveActive", "Save")}
                   </Button>
                 </>
               ) : inherited ? null : (
                 <>
                   <Button size="lg" variant="outline" onClick={() => setEditing(true)}>
-                    <Pencil aria-hidden="true" size={15} />
+
                     {editorT("actions.edit", "Edit")}
                   </Button>
                   <Button size="lg" variant="outline" onClick={() => setDeleteOpen(true)}>
-                    <Trash2 aria-hidden="true" size={15} />
+
                     {editorT("actions.delete", "Delete resource")}
                   </Button>
                 </>
@@ -620,7 +613,7 @@ export function ResourceEditorPage() {
                   {editorT("actions.cancel", "Cancel")}
                 </Button>
                 <Button disabled={saveDisabled} size="lg" onClick={() => { void save(); }}>
-                  <Save aria-hidden="true" size={15} />
+
                   {editorT("actions.create", "Create")}
                 </Button>
               </>
@@ -641,18 +634,18 @@ export function ResourceEditorPage() {
                   {editorT("actions.cancel", "Cancel")}
                 </Button>
                 <Button disabled={saving || !name.trim()} size="lg" onClick={() => { void save(); }}>
-                  <Save aria-hidden="true" size={15} />
+
                   {editorT("actions.saveActive", "Save")}
                 </Button>
               </>
             ) : inherited ? null : (
               <>
                 <Button size="lg" variant="outline" onClick={() => setEditing(true)}>
-                  <Pencil aria-hidden="true" size={15} />
+
                   {editorT("actions.edit", "Edit")}
                 </Button>
                 <Button size="lg" variant="outline" onClick={() => setDeleteOpen(true)}>
-                  <Trash2 aria-hidden="true" size={15} />
+
                   {editorT("actions.delete", "Delete resource")}
                 </Button>
               </>
@@ -749,7 +742,7 @@ export function ResourceEditorPage() {
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <FileUp aria-hidden="true" size={15} />
+
                 {editorT("file.chooseFile", "Choose a file")}
               </Button>
               {stagedFile ? (
@@ -768,11 +761,11 @@ export function ResourceEditorPage() {
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{loadedResource.file.fileName}</span>
                   <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">{formatByteSize(loadedResource.file.byteSize)}</span>
                   <Button size="sm" type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
-                    <Eye aria-hidden="true" size={14} />
+
                     {editorT("file.preview", "Preview")}
                   </Button>
                   <Button size="sm" type="button" variant="outline" onClick={() => { void downloadCurrentFile(); }}>
-                    <Download aria-hidden="true" size={14} />
+
                     {editorT("file.download", "Download")}
                   </Button>
                 </div>
@@ -790,7 +783,7 @@ export function ResourceEditorPage() {
               />
               {!inherited ? (
                 <Button disabled={saving} type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                  <FileUp aria-hidden="true" size={15} />
+
                   {editorT("file.replace", "Replace file")}
                 </Button>
               ) : null}

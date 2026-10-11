@@ -5,16 +5,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
-import {
-  Edit3,
-  MoreHorizontal,
-  Plus,
-  Power,
-  PowerOff,
-  RefreshCcw,
-  ShieldCheck,
-  Trash2,
-} from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 
 import {
@@ -278,11 +269,11 @@ export function PlatformMcpServersPage() {
         actions={(
           <>
             <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={() => void refreshPage()}>
-              <RefreshCcw size={16} aria-hidden="true" />
+
               {loading ? pageT("actions.refreshing", "Refreshing...") : pageT("actions.refresh", "Refresh")}
             </Button>
             <Button onClick={() => navigate("/settings/mcp-servers/new")}>
-              <Plus size={16} aria-hidden="true" />
+
               {pageT("actions.new", "New")}
             </Button>
           </>
@@ -419,7 +410,7 @@ export function PlatformMcpServersPage() {
                 return (
                   <div className="flex justify-end">
                     <Button
-                      size="icon"
+                      size="sm"
                       variant="ghost"
                       aria-label={pageT("table.actions.open", "Open actions for {{name}}", { name: row.name })}
                       aria-expanded={isMenuOpen}
@@ -428,9 +419,7 @@ export function PlatformMcpServersPage() {
                         event.stopPropagation();
                         toggleRowMenu(row, event.currentTarget);
                       }}
-                    >
-                      <MoreHorizontal size={16} aria-hidden="true" />
-                    </Button>
+                    >{pageT("table.actions.open", "Open actions for {{name}}", { name: row.name })}</Button>
                   </div>
                 );
               },
@@ -454,7 +443,7 @@ export function PlatformMcpServersPage() {
                 navigate(`/settings/mcp-servers/edit?serverCode=${encodeURIComponent(openMenuRow.serverCode)}`);
               }}
             >
-              <Edit3 size={16} aria-hidden="true" />
+
               {pageT("table.actions.edit", "Edit")}
             </button>
             <button
@@ -462,7 +451,7 @@ export function PlatformMcpServersPage() {
               type="button"
               onClick={() => void handleVerify(openMenuRow)}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
+
               {pageT("table.actions.verify", "Verify")}
             </button>
             <button
@@ -470,7 +459,7 @@ export function PlatformMcpServersPage() {
               type="button"
               onClick={() => void handleToggleEnabled(openMenuRow)}
             >
-              {openMenuRow.enabled ? <PowerOff size={16} aria-hidden="true" /> : <Power size={16} aria-hidden="true" />}
+
               {openMenuRow.enabled ? pageT("table.actions.disable", "Disable") : pageT("table.actions.enable", "Enable")}
             </button>
             <button
@@ -478,7 +467,7 @@ export function PlatformMcpServersPage() {
               type="button"
               onClick={() => void handleDelete(openMenuRow)}
             >
-              <Trash2 size={16} aria-hidden="true" />
+
               {pageT("table.actions.delete", "Delete")}
             </button>
           </div>,

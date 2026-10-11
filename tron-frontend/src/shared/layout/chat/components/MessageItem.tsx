@@ -1,4 +1,3 @@
-import { Archive, Icon, LoaderCircle } from "lucide-react";
 import { memo, useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -7,7 +6,7 @@ import type { ChatSession } from "@/domain/chat/model";
 import { cn } from "@/shared/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { useTabStore } from "@/store/tabStore";
-import IconButton from "./IconButton";
+import ActionButton from "./ActionButton";
 import Item from "./Item";
 
 const MessageItem = ({
@@ -101,7 +100,7 @@ const MessageItem = ({
               running ? "opacity-100" : "",
             )}
           >
-            <IconButton
+            <ActionButton
               needHover
               className="shrink-0 hidden group-hover/session:block"
               onClick={(event) => {
@@ -110,15 +109,15 @@ const MessageItem = ({
                 void archive();
               }}
               disabled={archiving || running}
-              icon={Archive}
+              aria-label={t("common:actions.archive", "Archive")}
             />
             {running ? (
-              <IconButton
+              <ActionButton
                 needHover
                 className="shrink-0 items-center justify-center pointer-events-none"
               >
-                <LoaderCircle size={14} className="animate-spin" />
-              </IconButton>
+                {t("common:status.running", "Running")}
+              </ActionButton>
             ) : null}
           </div>
         </>

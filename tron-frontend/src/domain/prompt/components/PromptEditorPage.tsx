@@ -11,13 +11,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  Clipboard,
-  LoaderCircle,
-  Maximize2,
-  Save,
-  X,
-} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
@@ -633,7 +626,7 @@ export function PromptEditorPage({
                       disabled={editorLocked || !form.displayName.trim() || !form.promptBody.trim()}
                       aria-busy={translating}
                     >
-                      {translating ? <LoaderCircle size={16} className="mr-1 animate-spin" aria-hidden="true" /> : null}
+
                       {translating ? pt("actions.translating", "Translating...") : pt("actions.translate", "Translate and sync")}
                     </Button>
                   )}
@@ -647,7 +640,7 @@ export function PromptEditorPage({
                 aria-busy={submitting}
                 onClick={() => void savePrompt()}
               >
-                <Save size={16} aria-hidden="true" />
+
                 {submitting ? pt("actions.saving", "Saving...") : pt("actions.save", "Save")}
               </Button>
             </>
@@ -682,7 +675,7 @@ export function PromptEditorPage({
                 <Field label={pt("fields.promptCode", "Prompt code")}>
                   <div className="relative w-full min-w-0">
                     <ReadOnlyValue className="pr-12 font-mono">{record?.promptCode ?? promptCode}</ReadOnlyValue>
-                    <Button className="absolute right-1 top-1/2 -translate-y-1/2" size="icon" variant="ghost" disabled={loading || submitting || translating} aria-label={pt("aria.copyPromptCode", "Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("messages.codeCopied", "Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
+                    <Button className="absolute right-1 top-1/2 -translate-y-1/2" size="sm" variant="ghost" disabled={loading || submitting || translating} aria-label={pt("aria.copyPromptCode", "Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("messages.codeCopied", "Prompt code copied")); }}>{pt("aria.copyPromptCode", "Copy prompt code")}</Button>
                   </div>
                 </Field>
               ) : categoryField}
@@ -727,7 +720,7 @@ export function PromptEditorPage({
                   aria-label={pt("aria.promptBodyFullscreen", "Open prompt body fullscreen")}
                   onClick={() => setPromptBodyFullscreenOpen(true)}
                 >
-                  <Maximize2 size={14} aria-hidden="true" />
+
                   {pt("actions.fullscreen", "Fullscreen")}
                 </Button>
               </div>
@@ -880,7 +873,7 @@ export function PromptEditorPage({
             <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("fields.promptBody", "Prompt body")}</h2>
               <Button
-                size="icon"
+                size="sm"
                 type="button"
                 variant="ghost"
                 aria-label={pt("aria.closePromptBodyFullscreen", "Close prompt body fullscreen")}
@@ -888,9 +881,7 @@ export function PromptEditorPage({
                   setPromptBodyFullscreenOpen(false);
                   setPromptVariablePickerTrigger(null);
                 }}
-              >
-                <X size={16} aria-hidden="true" />
-              </Button>
+              >{pt("aria.closePromptBodyFullscreen", "Close prompt body fullscreen")}</Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               {isReadOnlyDetail ? (

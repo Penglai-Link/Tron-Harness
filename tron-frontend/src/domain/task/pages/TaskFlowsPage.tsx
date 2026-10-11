@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, RefreshCcw, Trash2 } from "lucide-react";
+
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 
@@ -67,8 +67,8 @@ export function TaskFlowsPage() {
         title={flowT("title", "Task Flows")}
         actions={(
           <>
-            <Button disabled={loading} variant="secondary" onClick={() => void refresh()}><RefreshCcw size={16} />{flowT("actions.refresh", "Refresh")}</Button>
-            <Button onClick={() => navigate("/settings/task-flows/new")}><Plus size={16} />{flowT("actions.new", "New")}</Button>
+            <Button disabled={loading} variant="secondary" onClick={() => void refresh()}>{flowT("actions.refresh", "Refresh")}</Button>
+            <Button onClick={() => navigate("/settings/task-flows/new")}>{flowT("actions.new", "New")}</Button>
           </>
         )}
       />
@@ -85,10 +85,10 @@ export function TaskFlowsPage() {
               <Button
                 aria-label={t("pages:tasks.taskFlows.aria.deleteFlow", "Delete {{name}}", { name: taskFlowDisplayName(flow, flowT) })}
                 disabled={flow.flowCode === "DEFAULT"}
-                size="icon"
+                size="sm"
                 variant="ghost"
                 onClick={(event) => { event.stopPropagation(); setFlowToDelete(flow); }}
-              ><Trash2 size={16} /></Button>
+              >{t("pages:tasks.taskFlows.aria.deleteFlow", "Delete {{name}}", { name: taskFlowDisplayName(flow, flowT) })}</Button>
             ),
           },
         ]}

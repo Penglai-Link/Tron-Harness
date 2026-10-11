@@ -3,7 +3,6 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { FileText } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +40,7 @@ export function AuditLogsPage() {
         title={t("pages:admin.audit.title", "Audit Logs")}
         actions={
           <Button variant="secondary" onClick={() => setNotice(t("pages:admin.audit.exported", "{{count}} audit rows exported", { count: filteredRows.length }))}>
-            <FileText size={15} />
+
             {t("pages:admin.audit.export", "Export")}
           </Button>
         }

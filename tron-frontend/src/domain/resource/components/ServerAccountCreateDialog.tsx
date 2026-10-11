@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+
 import { toastManager } from "@/components/ui/toast";
 import { createServerAccountConnection } from "@/domain/resource/api";
 import type { ManagedResourceRecord } from "@/domain/resource/hooks";
@@ -139,7 +139,7 @@ export function ServerAccountCreateDialog({
           <DialogFooter>
             <Button disabled={submitting} type="button" variant="outline" onClick={() => onOpenChange(false)}>{pageT("actions.cancel")}</Button>
             <Button disabled={submitting || !serverCode} type="submit">
-              {submitting ? <Spinner /> : null}
+
               {submitting ? pageT("actions.creating") : pageT("actions.create")}
             </Button>
           </DialogFooter>

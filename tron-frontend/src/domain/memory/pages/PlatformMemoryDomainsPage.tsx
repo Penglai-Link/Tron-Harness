@@ -6,11 +6,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import {
-  Boxes,
-  MoreHorizontal,
-  Save,
-} from "lucide-react";
+import { Boxes } from "lucide-react";
 
 import {
   createMemoryDomain,
@@ -255,7 +251,7 @@ function DomainEditorDialog({
           <DialogFooter className="m-0 shrink-0 flex-row justify-end gap-[12px] rounded-none border-0 bg-transparent p-0">
             <Button type="button" size="lg" variant="outline" onClick={onClose}>{t("pages:memoryDomains.actions.cancel", "Cancel")}</Button>
             <Button type="button" size="lg" disabled={submitting} aria-busy={submitting} onClick={onSubmit}>
-              <Save size={16} aria-hidden="true" />
+
               {submitting ? t("pages:memoryDomains.actions.saving", "Saving...") : t("pages:memoryDomains.actions.save", "Save")}
             </Button>
           </DialogFooter>
@@ -595,7 +591,7 @@ export function PlatformMemoryDomainsPage() {
               render: (row) => (
                 <div className="flex justify-end">
                   <Button
-                    size="icon"
+                    size="sm"
                     variant="ghost"
                     aria-expanded={openRowMenu?.domainCode === row.domainCode}
                     aria-label={`Open actions for ${row.domainCode}`}
@@ -604,9 +600,7 @@ export function PlatformMemoryDomainsPage() {
                       event.stopPropagation();
                       toggleRowMenu(row, event.currentTarget);
                     }}
-                  >
-                    <MoreHorizontal size={16} aria-hidden="true" />
-                  </Button>
+                  >{`Open actions for ${row.domainCode}`}</Button>
                 </div>
               ),
             },

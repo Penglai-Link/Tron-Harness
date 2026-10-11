@@ -1,15 +1,6 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ChevronRight,
-  File as FileIcon,
-  FilePlus2,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { File as FileIcon, Folder, FolderOpen } from "lucide-react";
 
 import {
   ContextMenu,
@@ -94,20 +85,14 @@ function FileTreeNode({
               {isDir ? (
                 <button
                   type="button"
-                  className="flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
+                  className="flex w-auto shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
+                  aria-label={isExpanded ? t("common:actions.collapse", "Collapse") : t("common:actions.expand", "Expand")}
                   aria-expanded={isExpanded}
                   onClick={(event) => {
                     event.stopPropagation();
                     onToggleDir(path);
                   }}
-                >
-                  <ChevronRight
-                    size={14}
-                    className={cn("transition-transform", isExpanded && "rotate-90")}
-                    aria-hidden="true"
-                  />
-                </button>
+                >{isExpanded ? t("common:actions.collapse", "Collapse") : t("common:actions.expand", "Expand")}</button>
               ) : (
                 <span className="block size-5 shrink-0" aria-hidden="true" />
               )}
@@ -120,22 +105,22 @@ function FileTreeNode({
           {isDir ? (
             <>
               <ContextMenuItem onClick={() => onAction("createFile", path, entry)}>
-                <FilePlus2 size={14} className="mr-2" aria-hidden="true" />
+
                 {t("files.createFile")}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => onAction("createDirectory", path, entry)}>
-                <FolderPlus size={14} className="mr-2" aria-hidden="true" />
+
                 {t("files.createDirectory")}
               </ContextMenuItem>
               <ContextMenuSeparator />
             </>
           ) : null}
           <ContextMenuItem onClick={() => onAction("rename", path, entry)}>
-            <Pencil size={14} className="mr-2" aria-hidden="true" />
+
             {t("files.rename")}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => onAction("delete", path, entry)}>
-            <Trash2 size={14} className="mr-2" aria-hidden="true" />
+
             {t("files.delete")}
           </ContextMenuItem>
         </ContextMenuContent>

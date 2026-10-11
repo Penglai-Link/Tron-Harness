@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ChevronDown,
-  FilePlus2,
-  FolderOpen,
-  FolderPlus,
-  Save,
-} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -33,8 +26,6 @@ import { useFileTabsStore } from "@/store/fileTabsStore";
 import { electronFs, fsErrorCode } from "@/shared/fs/electronFs";
 import { isBinaryExtension } from "@/shared/fs/binaryGuard";
 import type { FsEditor, FsEntry } from "@/shared/fs/types";
-import { IntelliJIdeaIcon } from "@/shared/icons/IntelliJIdeaIcon";
-import { VscodeIcon } from "@/shared/icons/VscodeIcon";
 
 import { CodeEditor } from "./CodeEditor";
 import { FileTree, type FileTreeAction } from "./FileTree";
@@ -377,7 +368,7 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
             <p className="text-[var(--color-on-surface-variant)]">{t("files.emptyDescription")}</p>
             <div className="flex flex-col gap-2">
               <Button variant="outline" type="button" onClick={() => void handlePick()}>
-                <FolderOpen aria-hidden="true" />
+
                 {t("files.openFolder")}
               </Button>
             </div>
@@ -397,32 +388,28 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
         </span>
         <div className="flex shrink-0 items-center gap-0.5">
           <Button
-            size="icon-sm"
+            size="sm"
             variant="ghost"
             type="button"
             title={t("files.openFolder")}
             aria-label={t("files.openFolder")}
             onClick={() => void handlePick()}
-          >
-            <FolderOpen size={14} aria-hidden="true" />
-          </Button>
+          >{t("files.openFolder")}</Button>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <Button
-                  size="icon-sm"
+                  size="sm"
                   variant="ghost"
                   type="button"
                   title={t("files.openOptions")}
                   aria-label={t("files.openOptions")}
-                >
-                  <ChevronDown size={13} aria-hidden="true" />
-                </Button>
+                >{t("files.openOptions")}</Button>
               }
             />
             <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-56">
               <DropdownMenuItem onClick={() => void handlePick()}>
-                <FolderOpen size={14} aria-hidden="true" />
+
                 <span>{t("files.openFolder")}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -431,7 +418,7 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
                 title={t("files.noFolderSelected")}
                 onClick={() => void openInEditor("vscode")}
               >
-                <VscodeIcon size={14} className="text-muted-foreground" aria-hidden="true" />
+
                 <span>{t("files.openInVscode")}</span>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -439,7 +426,7 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
                 title={t("files.noFolderSelected")}
                 onClick={() => void openInEditor("idea")}
               >
-                <IntelliJIdeaIcon size={14} className="text-muted-foreground" aria-hidden="true" />
+
                 <span>{t("files.openInIdea")}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -451,25 +438,21 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
         <ResizablePanel defaultSize="280px" minSize="20px" className="flex min-w-0 flex-col">
           <div className="flex h-10 items-center gap-1 border-b border-[var(--color-outline-variant)] px-2">
             <Button
-              size="icon-sm"
+              size="sm"
               variant="ghost"
               type="button"
               title={t("files.createFile")}
               aria-label={t("files.createFile")}
               onClick={() => handleAction("createFile", "", { name: "", isDir: false, isFile: true, isSymlink: false, size: 0 })}
-            >
-              <FilePlus2 size={14} aria-hidden="true" />
-            </Button>
+            >{t("files.createFile")}</Button>
             <Button
-              size="icon-sm"
+              size="sm"
               variant="ghost"
               type="button"
               title={t("files.createDirectory")}
               aria-label={t("files.createDirectory")}
               onClick={() => handleAction("createDirectory", "", { name: "", isDir: true, isFile: false, isSymlink: false, size: 0 })}
-            >
-              <FolderPlus size={14} aria-hidden="true" />
-            </Button>
+            >{t("files.createDirectory")}</Button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <FileTree
@@ -507,7 +490,7 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
                 disabled={!isDirty || readOnly}
                 onClick={() => void handleSave()}
               >
-                <Save size={14} aria-hidden="true" />
+
                 {t("files.confirm")}
               </Button>
             ) : null}

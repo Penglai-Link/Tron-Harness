@@ -1,28 +1,22 @@
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LucideIcon } from "lucide-react";
 
-interface IconButtonProps {
+interface ActionButtonProps {
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  size?: number;
   className?: string;
   disabled?: boolean;
   children?: React.ReactNode;
-  icon?: LucideIcon;
   needHover?: boolean;
   "aria-label"?: string;
 }
 
-const IconButton = ({
+const ActionButton = ({
   disabled,
-  size = 16,
   className,
   children,
-  icon: Icon,
   needHover,
   onClick,
   ...rest
-}: IconButtonProps) => {
+}: ActionButtonProps) => {
   return (
     <button
       disabled={disabled}
@@ -30,10 +24,9 @@ const IconButton = ({
       className={cn(`flex gap-1 items-center p-0 ${needHover ? 'opacity-60 hover:opacity-100' : ''}`, className)}
       {...rest}
     >
-      {Icon && <Icon size={size} />}
-      {children}
+      {children ?? rest["aria-label"]}
     </button>
   );
 };
 
-export default IconButton;
+export default ActionButton;

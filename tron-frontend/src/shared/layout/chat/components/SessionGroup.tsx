@@ -1,14 +1,13 @@
-import { ChevronDown, ChevronRight, Folder, FolderOpen, Pin } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/shared/lib/utils";
 import { useState } from "react";
 import type { ChatSession } from "@/domain/chat/model";
 import type { ProjectRecord } from "@/domain/project";
-import { Button } from "@/components/ui/button";
+
 import MessageItem from "./MessageItem";
 import ActionsMenu from "./ActionsMenu";
 import CreateByProject from "./CreateByProject";
-import IconButton from "./IconButton";
+import ActionButton from "./ActionButton";
 import Item from "./Item";
 
 const sessionListPageSize = 5;
@@ -49,17 +48,16 @@ const SessionGroup = ({
           "group/project flex mb-1 pl-2 w-full min-w-0 items-center gap-1",
         )}
         left={
-          <IconButton
+          <ActionButton
             className="flex min-w-0 flex-1 items-center text-left justify-start truncate"
             onClick={() => {
               onSelect(project.projectCode);
               setOpen((value) => !value);
             }}
           >
-            {pinned ? <Pin aria-hidden="true" className="shrink-0 text-[var(--color-primary)]" size={13} /> : null}
-            {open ? <FolderOpen aria-hidden="true" className="shrink-0" size={16} /> : <Folder aria-hidden="true" className="shrink-0" size={16} />}
+
             <span className="truncate">{project.name}</span>
-          </IconButton>
+          </ActionButton>
         }
         right={
           <div className="flex shrink-0 gap-2 items-center opacity-0 pointer-events-none group-hover/project:opacity-100 group-hover/project:pointer-events-auto has-[button[data-popup-open]]:opacity-100 has-[button[data-popup-open]]:pointer-events-auto">

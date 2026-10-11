@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, MoreHorizontal, Plus, RefreshCcw } from "lucide-react";
+
 import { useNavigate } from "react-router";
 
 import { DataTable } from "@/components/data-table";
@@ -239,8 +239,8 @@ export function NavigationDomainsPage() {
       <PageHeader
         title={text("domains.title", "菜单领域", "Navigation Domains")}
         actions={<>
-          <Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RefreshCcw size={16} aria-hidden="true" />{text("actions.refresh", "刷新", "Refresh")}</Button>
-          <Button onClick={openCreate}><Plus size={16} aria-hidden="true" />{text("actions.newDomain", "新建领域", "New domain")}</Button>
+          <Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}>{text("actions.refresh", "刷新", "Refresh")}</Button>
+          <Button onClick={openCreate}>{text("actions.newDomain", "新建领域", "New domain")}</Button>
         </>}
       />
 
@@ -302,35 +302,29 @@ export function NavigationDomainsPage() {
               return (
                 <div className="flex justify-end gap-1">
                   <Button
-                    size="icon"
+                    size="sm"
                     variant="ghost"
                     aria-label={text("aria.moveDomainUp", `上移 ${row.domainCode}`, `Move ${row.domainCode} up`)}
                     title={text("aria.moveDomainUp", `上移 ${row.domainCode}`, `Move ${row.domainCode} up`)}
                     disabled={reordering || rowIndex <= 0}
                     onClick={() => void moveDomain(row, -1)}
-                  >
-                    <ArrowUp size={16} aria-hidden="true" />
-                  </Button>
+                  >{text("aria.moveDomainUp", `上移 ${row.domainCode}`, `Move ${row.domainCode} up`)}</Button>
                   <Button
-                    size="icon"
+                    size="sm"
                     variant="ghost"
                     aria-label={text("aria.moveDomainDown", `下移 ${row.domainCode}`, `Move ${row.domainCode} down`)}
                     title={text("aria.moveDomainDown", `下移 ${row.domainCode}`, `Move ${row.domainCode} down`)}
                     disabled={reordering || rowIndex < 0 || rowIndex >= records.length - 1}
                     onClick={() => void moveDomain(row, 1)}
-                  >
-                    <ArrowDown size={16} aria-hidden="true" />
-                  </Button>
+                  >{text("aria.moveDomainDown", `下移 ${row.domainCode}`, `Move ${row.domainCode} down`)}</Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
                         <Button
-                          size="icon"
+                          size="sm"
                           variant="ghost"
                           aria-label={text("aria.domainActions", `打开 ${row.domainCode} 操作`, `Open actions for ${row.domainCode}`)}
-                        >
-                          <MoreHorizontal size={16} aria-hidden="true" />
-                        </Button>
+                        >{text("aria.domainActions", `打开 ${row.domainCode} 操作`, `Open actions for ${row.domainCode}`)}</Button>
                       }
                     />
                     <DropdownMenuContent align="end" className="w-36">

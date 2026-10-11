@@ -19,7 +19,7 @@ import {
 import { DEFAULT_TAB_ID, useTabStore, type CachedTabInfo } from "@/store/tabStore";
 import { FILE_TAB_KEY_PREFIX, useFileTabsStore } from "@/store/fileTabsStore";
 import { isDesktopHost } from "@/shared/desktop/DesktopBridge";
-import { FolderOpen, Globe, Plus } from "lucide-react";
+
 import { useFilePanelTarget } from "./FilePanelHostProvider";
 import { useTabPanelRegistry } from "./TabPanelRegistry";
 
@@ -61,7 +61,7 @@ function EmptyPanelContent({ onAddFile, onAddWeb }: EmptyPanelContentProps) {
             variant="outline"
             className="w-full flex items-center justify-start"
           >
-            <FolderOpen aria-hidden="true" />
+
             {t("files.panelTitle")}
           </Button>
         ) : null}
@@ -74,7 +74,7 @@ function EmptyPanelContent({ onAddFile, onAddWeb }: EmptyPanelContentProps) {
             variant="outline"
             className="w-full flex items-center justify-start"
           >
-            <Globe aria-hidden="true" />
+
             {t("content.browser")}
           </Button>
         ) : null}
@@ -261,23 +261,21 @@ const RightPanelTabs = memo(function RightPanelTabs({
             render={
               <Button
                 aria-label={t("content.addTab")}
-                size="icon-sm"
+                size="sm"
                 type="button"
                 variant="ghost"
-              >
-                <Plus aria-hidden="true" />
-              </Button>
+              >{t("content.addTab")}</Button>
             }
           />
           <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-44">
             {isDesktop && !panelConfig?.rightPanelBrowserOnly ? (
               <DropdownMenuItem onClick={handleOpenFileTab}>
-                <FolderOpen size={14} aria-hidden="true" />
+
                 <span>{t("content.newFileTab")}</span>
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuItem onClick={createWebTab}>
-              <Globe size={14} aria-hidden="true" />
+
               <span>{t("content.newWebTab")}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, RefreshCcw } from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -250,7 +250,7 @@ export function ModelProviderCatalogPage() {
                 )
               }
             >
-              <ArrowLeft size={16} aria-hidden="true" />
+
               {t("modelProviders.actions.backToConnection")}
             </Button>
             <Button
@@ -258,11 +258,7 @@ export function ModelProviderCatalogPage() {
               variant="secondary"
               onClick={() => void load(true)}
             >
-              {loading ? (
-                <Spinner size={16} aria-hidden="true" />
-              ) : (
-                <RefreshCcw size={16} aria-hidden="true" />
-              )}
+
               {t("modelProviders.actions.refresh")}
             </Button>
           </>

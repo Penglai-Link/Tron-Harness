@@ -13,14 +13,6 @@ import {
 } from "react-router";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-import {
-  Edit3,
-  Maximize2,
-  Play,
-  X,
-  Plus,
-  Save,
-} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
@@ -385,7 +377,7 @@ export function TaskDetailsPage() {
                   <TextInput aria-label={pageT("detail.newSubtaskTitle", "New subtask title")} value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
                 </Field>
               </div>
-              <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />{pageT("detail.addSubtask", "Add Subtask")}</Button>
+              <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}>{pageT("detail.addSubtask", "Add Subtask")}</Button>
             </>
           ) : null}
         </div>
@@ -793,9 +785,7 @@ export function TaskDetailsPage() {
                 variant="ghost"
                 aria-label={pageT("aria.openDescription", "Open description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(true)}
-              >
-                <Maximize2 size={14} aria-hidden="true" />
-              </Button>
+              >{pageT("aria.openDescription", "Open description fullscreen")}</Button>
             </div>
             {detailEditable ? (
               <TextArea aria-label={pageT("detail.descriptionAria", "Task detail description")} className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
@@ -813,9 +803,7 @@ export function TaskDetailsPage() {
                 aria-label={pageT("detail.openExecutionResultFullscreen", "Open execution result fullscreen")}
                 disabled={!task.executionResult}
                 onClick={() => setExecutionResultFullscreenOpen(true)}
-              >
-                <Maximize2 size={14} aria-hidden="true" />
-              </Button>
+              >{pageT("detail.openExecutionResultFullscreen", "Open execution result fullscreen")}</Button>
             </div>
             <MarkdownContent ariaLabel={pageT("detail.executionResultMarkdownAria", "Task execution result markdown")} className="max-h-80 overflow-y-auto pr-2" content={task.executionResult} />
           </div>
@@ -837,14 +825,12 @@ export function TaskDetailsPage() {
                 </p>
               </div>
               <Button
-                size="icon"
+                size="sm"
                 type="button"
                 variant="ghost"
                 aria-label={pageT("aria.closeDescription", "Close description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(false)}
-              >
-                <X size={16} aria-hidden="true" />
-              </Button>
+              >{pageT("aria.closeDescription", "Close description fullscreen")}</Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               {detailEditable ? (
@@ -878,14 +864,12 @@ export function TaskDetailsPage() {
                 <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">{pageT("detail.executionResultHint", "Preview the final agent reply recorded for this task execution.")}</p>
               </div>
               <Button
-                size="icon"
+                size="sm"
                 type="button"
                 variant="ghost"
                 aria-label={pageT("detail.closeExecutionResultFullscreen", "Close execution result fullscreen")}
                 onClick={() => setExecutionResultFullscreenOpen(false)}
-              >
-                <X size={16} aria-hidden="true" />
-              </Button>
+              >{pageT("detail.closeExecutionResultFullscreen", "Close execution result fullscreen")}</Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               <div className="h-full overflow-y-auto pr-1">

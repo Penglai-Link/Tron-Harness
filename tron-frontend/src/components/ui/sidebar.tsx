@@ -23,7 +23,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -267,7 +266,7 @@ function SidebarTrigger({
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
       variant="ghost"
-      size="icon-sm"
+      size="sm"
       className={cn("hover:bg-sidebar-accent", className)}
       onClick={(event) => {
         onClick?.(event)
@@ -275,8 +274,8 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      {isOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
-      <span className="sr-only">Toggle Sidebar</span>
+
+      <span>{props["aria-label"] ?? "Toggle Sidebar"}</span>
     </Button>
   )
 }

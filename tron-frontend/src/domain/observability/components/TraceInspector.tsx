@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Copy, ExternalLink } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -61,12 +61,10 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
-            size="icon"
+            size="sm"
             aria-label={t("copyTraceId")}
             onClick={() => void copy()}
-          >
-            <Copy />
-          </Button>
+          >{t("copyTraceId")}</Button>
           <Button
             variant="secondary"
             nativeButton={false}
@@ -74,7 +72,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
               <Link to={`/chats/${encodeURIComponent(trace.sessionCode)}`} />
             }
           >
-            <ExternalLink />
+
             {t("openSession")}
           </Button>
           <InfoTooltip ariaLabel={t("help")}>{t("metricsHelp")}</InfoTooltip>

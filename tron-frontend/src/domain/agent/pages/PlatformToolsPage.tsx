@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight } from "lucide-react";
 
 import type { PlatformToolRecord, ToolCatalogDomainRecord } from "@/domain/agent/model";
 import { DataTable } from "@/components/data-table";
@@ -151,7 +150,7 @@ export function PlatformToolsPage() {
               id: "domain",
               header: pageT("domains.columns.domainCode", "Domain"),
               width: "18%",
-              render: (row) => <Button variant="ghost" aria-expanded={expandedDomainCodes.has(row.domainCode)} aria-label={`${row.domainCode}: ${row.name}`} onClick={(event) => { event.stopPropagation(); toggleDomain(row.domainCode); }} className="flex items-center gap-2 font-medium text-[var(--color-on-surface)]"><ChevronRight className={expandedDomainCodes.has(row.domainCode) ? "rotate-90 transition-transform" : "transition-transform"} size={16} aria-hidden="true" />{row.domainCode}</Button>,
+              render: (row) => <Button variant="ghost" aria-expanded={expandedDomainCodes.has(row.domainCode)} aria-label={`${row.domainCode}: ${row.name}`} onClick={(event) => { event.stopPropagation(); toggleDomain(row.domainCode); }} className="flex items-center gap-2 font-medium text-[var(--color-on-surface)]">{row.domainCode}</Button>,
             },
             {
               id: "description",

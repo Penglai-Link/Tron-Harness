@@ -8,14 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import {
-  ChevronDown,
-  CircleAlert,
-  FileUp,
-  LoaderCircle,
-  Upload,
-  X,
-} from "lucide-react";
+import { ChevronDown, CircleAlert, FileUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
@@ -295,9 +288,7 @@ export function QuickResourceUploadDialog({
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{quickT("title")}</h2>
           </div>
-          <Button aria-label={quickT("actions.close")} disabled={submitting} size="icon-sm" type="button" variant="ghost" onClick={close}>
-            <X aria-hidden="true" size={16} />
-          </Button>
+          <Button aria-label={quickT("actions.close")} disabled={submitting} size="sm" type="button" variant="ghost" onClick={close}>{quickT("actions.close")}</Button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -441,7 +432,7 @@ export function QuickResourceUploadDialog({
             type="button"
             onClick={() => { void submit(); }}
           >
-            {submitting ? <LoaderCircle aria-hidden="true" className="animate-spin" size={15} /> : requiresEditor && onContinueInEditor ? null : <Upload aria-hidden="true" size={15} />}
+
             {submitting ? quickT("actions.creating") : requiresEditor && onContinueInEditor ? quickT("actions.continue") : quickT("actions.create")}
           </Button>
         </footer>

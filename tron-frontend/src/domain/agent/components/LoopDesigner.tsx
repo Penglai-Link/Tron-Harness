@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, ArrowUp, ArrowDown, Trash2 } from "lucide-react";
+
 import { Field, SelectInput, TextInput, TextArea } from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -255,7 +255,7 @@ export function LoopDesigner() {
           disabled={busy || loading || Boolean(error)}
           onClick={() => select(newLoopDesign())}
         >
-          <Plus size={16} />
+
           {t("agentLoops.new")}
         </Button>
       </div>
@@ -478,7 +478,7 @@ export function LoopDesigner() {
                       disabled={builtin || draft.nodes.length >= 64}
                       onClick={() => add("Model")}
                     >
-                      <Plus size={14} />
+
                       {t("agentLoops.addModel")}
                     </Button>
                   ) : null}
@@ -520,13 +520,11 @@ export function LoopDesigner() {
                                   patch({ nodes });
                                   setSelected(selected + offset);
                                 }}
-                              >
-                                {offset < 0 ? (
-                                  <ArrowUp size={16} />
-                                ) : (
-                                  <ArrowDown size={16} />
-                                )}
-                              </Button>
+                              >{t(
+                                  offset < 0
+                                    ? "agentLoops.moveUp"
+                                    : "agentLoops.moveDown",
+                                )}</Button>
                             ))
                           : null}
                         <Button
@@ -535,7 +533,7 @@ export function LoopDesigner() {
                           size="sm"
                           onClick={removeNode}
                         >
-                          <Trash2 size={14} />
+
                           {t("agentLoops.removeNode")}
                         </Button>
                       </div>

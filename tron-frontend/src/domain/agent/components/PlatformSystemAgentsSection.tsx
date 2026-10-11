@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  RefreshCcw,
-} from "lucide-react";
 
 import {
   disablePlatformSystemAgent,
@@ -133,7 +130,7 @@ export function PlatformSystemAgentsSection() {
       <h2 className="text-base font-semibold">{pageT("table.title", "System Agents")}</h2>
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="secondary" disabled={scanning || Boolean(rowBusyCode)} aria-busy={scanning} onClick={() => void handleScan()}>
-          <RefreshCcw size={16} aria-hidden="true" />
+
           {scanning ? pageT("actions.scanning", "Scanning...") : pageT("actions.scan", "Scan")}
         </Button>
       </div>

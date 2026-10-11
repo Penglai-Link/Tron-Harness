@@ -4,11 +4,27 @@ export const common = {
     description: "The page failed to load or encountered an error. Open another page, or refresh to try again. Refreshing will discard unsaved changes.",
   },
   actions: {
+    back: "Go back",
+    forward: "Go forward",
+    open: "Open",
+    disableInspection: "Disable inspection",
+    enableInspection: "Enable inspection",
+
+    closeTab: "Close tab",
+    help: "Help",
+    archive: "Archive",
+    collapse: "Collapse",
+    create: "Create",
+    expand: "Expand",
+    more: "More",
+    remove: "Remove",
+
     close: "Close",
     logout: "Log out",
     refresh: "Refresh",
     signIn: "Sign In",
   },
+  status: { running: "Running" },
   dialogSelect: {
     cancel: "Cancel",
     confirm: "OK",

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router";
-import { Globe, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -265,7 +264,7 @@ export function ProfileSelectionPage() {
             title={t("common:locale.label")}
             onClick={() => void changeLocale(nextLocale)}
           >
-            <Globe className="size-4 text-[var(--color-on-surface-variant)]" aria-hidden="true" />
+
             <span>{currentLocale === "zh-CN" ? t("common:locale.shortSimplifiedChinese") : t("common:locale.english")}</span>
           </button>
         </header>
@@ -336,14 +335,12 @@ export function ProfileSelectionPage() {
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
+                size="sm"
                 className="ml-auto shrink-0 text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)]"
                 aria-label={t("personAiProfiles.remove.ariaLabel")}
                 title={t("personAiProfiles.remove.ariaLabel")}
                 onClick={(event) => { event.stopPropagation(); setError(null); setProfileToRemove(profile); }}
-              >
-                <Trash2 className="size-4" />
-              </Button>
+              >{t("personAiProfiles.remove.ariaLabel")}</Button>
             </div>
             ))}
             <Button

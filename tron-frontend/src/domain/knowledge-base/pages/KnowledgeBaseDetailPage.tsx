@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { KnowledgeDocumentChunksDialog } from "../components/KnowledgeDocumentChunksDialog";
-import { MoreHorizontal } from "lucide-react";
+
 import { PageHeader, SurfaceCard } from "@/shared";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -220,7 +220,7 @@ function KnowledgeDetail({ id }: { id: string }) {
           </TableCell>
           <TableCell>{number(doc.chunkCount)}</TableCell>
           <TableCell className="text-right"><DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon" disabled={busy} aria-label={t("knowledgeLibrary.documentActions", { name: doc.fileName })}><MoreHorizontal size={16} aria-hidden="true" /></Button>} />
+            <DropdownMenuTrigger render={<Button variant="ghost" size="sm" disabled={busy} aria-label={t("knowledgeLibrary.documentActions", { name: doc.fileName })}>{t("knowledgeLibrary.documentActions", { name: doc.fileName })}</Button>} />
             <DropdownMenuContent align="end">
               {inProgress(doc) ? <Tooltip><TooltipTrigger render={<span className="block cursor-not-allowed" />}><DropdownMenuItem disabled className="data-disabled:opacity-35">{text("settings")}</DropdownMenuItem></TooltipTrigger><TooltipContent side="left">{text("settingsDisabledProcessing")}</TooltipContent></Tooltip> : <DropdownMenuItem onClick={() => setSelected(doc)}>{text("settings")}</DropdownMenuItem>}
               <DropdownMenuItem onClick={() => operation.mutate({ type: "download", document: doc })}>{text("downloadAction")}</DropdownMenuItem>

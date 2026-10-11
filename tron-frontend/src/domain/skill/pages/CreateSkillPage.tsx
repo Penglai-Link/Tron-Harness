@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { ExternalLink } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -688,7 +687,7 @@ export function CreateSkillPage() {
                             target="_blank"
                             className={buttonVariants({ size: "sm", variant: "secondary" })}
                           >
-                            <ExternalLink size={15} aria-hidden="true" />
+
                             Open
                           </a>
                         ) : null}

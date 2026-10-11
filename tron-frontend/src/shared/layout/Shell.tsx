@@ -22,17 +22,7 @@ import {
   writeFloatingState,
   type ChatFloatingState,
 } from "@tron/chat-core";
-import {
-  Bot,
-  ChevronDown,
-  ChevronsUpDown,
-  MoreHorizontal,
-  PanelBottomClose,
-  PanelBottomOpen,
-  PanelRightClose,
-  PanelRightOpen,
-  Settings2,
-} from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 import {
   useLocation,
@@ -46,10 +36,7 @@ import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWind
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { tronNavigation } from "@/shared/constants/shellNavigation";
-import {
-  getEmptyWorkspaceSwitcher,
-  getWorkspaceSwitcherMock,
-} from "@/shared/constants/workspaceSpaces";
+import { getWorkspaceSwitcherMock } from "@/shared/constants/workspaceSpaces";
 import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/i18n";
@@ -85,7 +72,6 @@ import RightPanelContainer from "./content/RightPanelContainer";
 import { TronSidebar } from "./TronSidebar";
 import { ChatSidebarPanel } from "./chat";
 import { useTabPanelRegistry } from "./content/TabPanelRegistry";
-
 
 interface TronShellProps {
   activeItem?: string;
@@ -873,14 +859,12 @@ export function TronShell({
         <div className="flex items-center gap-1" style={{ paddingLeft: `${nestingLevel * 8}px` }}>
           {hasChildren ? (
             <button
-              className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-menu-hover-surface)] hover:text-[var(--color-on-surface)]"
+              className="flex w-auto shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-menu-hover-surface)] hover:text-[var(--color-on-surface)]"
               type="button"
               aria-label={`${expanded ? "Collapse" : "Expand"} ${workspacePathLabel}`}
               aria-expanded={expanded}
               onClick={() => toggleWorkspaceExpanded(space.workspaceCode)}
-            >
-              <ChevronDown className={cn("transition-transform", expanded ? "rotate-180" : "-rotate-90")} size={14} aria-hidden="true" />
-            </button>
+            >{`${expanded ? "Collapse" : "Expand"} ${workspacePathLabel}`}</button>
           ) : (
             <span className="block size-0 shrink-0" aria-hidden="true" />
           )}
@@ -996,7 +980,7 @@ export function TronShell({
                 {email ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{email}</span> : null}
                 {!email && personAiPlan ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{personAiPlan}</span> : null}
               </span>
-              <ChevronsUpDown className="shrink-0 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
+
             </>
           )}
         </button>
@@ -1027,14 +1011,12 @@ export function TronShell({
                 </span>
               </a>
               <button
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]"
+                className="inline-flex w-auto shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]"
                 type="button"
                 aria-label={t("shell:aria.openSystemSettings")}
                 title={t("shell:aria.openSystemSettings")}
                 onClick={openSystemSettings}
-              >
-                <Settings2 size={16} aria-hidden="true" />
-              </button>
+              >{t("shell:aria.openSystemSettings")}</button>
               {userMenuContent ? <div className="shrink-0">{userMenuContent}</div> : null}
             </div>
             {authSession ? (
@@ -1083,7 +1065,7 @@ export function TronShell({
           ) : (
             <span className="min-w-0 truncate">{domainName}</span>
           )}
-          <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)]", compact ? "hidden" : "")} size={16} aria-hidden="true" />
+
         </button>
         {utilityPanel === "domain" ? (
           <div
@@ -1120,10 +1102,10 @@ export function TronShell({
           <header className="fixed inset-x-0 top-0 z-[60] h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
             <div className="flex h-full items-center justify-between gap-4">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <SidebarTrigger aria-label={t("shell:aria.openNavigation")} className="-ml-3 size-9 cursor-pointer md:hidden" />
+                <SidebarTrigger aria-label={t("shell:aria.openNavigation")} className="-ml-3 h-9 w-auto cursor-pointer md:hidden" />
                 <SidebarTrigger
                   aria-label={sidebarCollapsed ? t("shell:aria.openNavigation") : t("shell:aria.closeNavigation")}
-                  className="-ml-3 hidden size-9 cursor-pointer md:flex"
+                  className="-ml-3 hidden h-9 w-auto cursor-pointer md:flex"
                 />
                 <button
                   ref={workspaceTriggerRef}
@@ -1138,30 +1120,26 @@ export function TronShell({
                   title={selectedWorkspacePathLabel}
                 >
                   <span className="truncate">{selectedWorkspacePathLabel}</span>
-                  <ChevronDown size={15} aria-hidden="true" />
+
                 </button>
               </div>
               <div className="flex shrink-0 items-center gap-[12px]">
                 {renderedTopbarActions}
-                <Button className={cn("hidden min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
-                  <Bot size={17} aria-hidden="true" />
-                </Button>
+                <Button className={cn("hidden min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="sm" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>{t("shell:assistant.title")}</Button>
                 <div ref={topbarToolsMenuContainerRef} className="relative min-[900px]:hidden">
                   <Button
-                    size="icon"
+                    size="sm"
                     type="button"
                     variant="ghost"
                     aria-expanded={topbarToolsMenuOpen}
                     aria-haspopup="menu"
                     aria-label={t("shell:aria.moreActions")}
                     onClick={() => setTopbarToolsMenuOpen((open) => !open)}
-                  >
-                    <MoreHorizontal size={18} aria-hidden="true" />
-                  </Button>
+                  >{t("shell:aria.moreActions")}</Button>
                   {topbarToolsMenuOpen ? (
                     <div ref={topbarToolsMenuRef} className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
                       <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
-                        <Bot size={16} aria-hidden="true" />
+
                         {t("shell:assistant.title")}
                       </button>
                     </div>
@@ -1174,19 +1152,17 @@ export function TronShell({
                       ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]"
                       : "",
                   )}
-                  size="icon"
+                  size="sm"
                   type="button"
                   variant="ghost"
                   aria-label={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}
                   aria-expanded={showBottomPanel}
                   onClick={toggleBottomPanel}
-                >
-                  {showBottomPanel ? <PanelBottomClose size={17} /> : <PanelBottomOpen size={17} />}
-                </Button>
+                >{t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}</Button>
                 <>
                   <Button
                     className="lg:hidden"
-                    size="icon"
+                    size="sm"
                     type="button"
                     variant="ghost"
                     aria-controls="tron-mobile-right-sidebar"
@@ -1194,12 +1170,10 @@ export function TronShell({
                     aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
                     data-testid="tron-mobile-right-sidebar-toggle"
                     onClick={toggleRightSidebarPanel}
-                  >
-                    {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
-                  </Button>
+                  >{rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}</Button>
                   <Button
                     className="hidden lg:flex"
-                    size="icon"
+                    size="sm"
                     type="button"
                     variant="ghost"
                     aria-controls="tron-mobile-right-sidebar"
@@ -1207,9 +1181,7 @@ export function TronShell({
                     aria-label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
                     data-testid="tron-mobile-right-sidebar-toggle"
                     onClick={toggleRightSidebarPanel}
-                  >
-                    {rightPanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
-                  </Button>
+                  >{rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}</Button>
                   </>
               </div>
             </div>

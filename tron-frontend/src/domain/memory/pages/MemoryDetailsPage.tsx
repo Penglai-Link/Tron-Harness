@@ -8,15 +8,6 @@ import {
   useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
-import {
-  Archive,
-  Ban,
-  Check,
-  Copy,
-  Edit3,
-  Save,
-  X,
-} from "lucide-react";
 
 import {
   MemoryFormFields,
@@ -221,30 +212,30 @@ export function MemoryDetailsPage() {
         actions={editing ? (
           <>
             <Button variant="secondary" disabled={submitting} onClick={cancelEdit}>
-              <X size={16} aria-hidden="true" />
+
               {t("pages:memory.actions.cancel", "Cancel")}
             </Button>
             <Button disabled={submitting || !form?.title.trim()} aria-busy={submitting} onClick={saveMemory}>
-              <Save size={16} aria-hidden="true" />
+
               {submitting ? t("pages:memory.actions.saving", "Saving...") : t("pages:memory.actions.save", "Save")}
             </Button>
           </>
         ) : (
           <>
             <Button variant="secondary" onClick={() => navigate(detailHref("edit"))}>
-              <Edit3 size={16} aria-hidden="true" />
+
               {t("pages:memory.actions.edit", "Edit")}
             </Button>
             <Button variant="secondary" onClick={() => void copyMemoryCode()}>
-              {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+
               {copied ? t("pages:memory.actions.copied", "Copied") : t("pages:memory.actions.copyCode", "Copy code")}
             </Button>
             <Button variant="ghost" onClick={() => setConfirmAction("archive")}>
-              <Archive size={16} aria-hidden="true" />
+
               {t("pages:memory.actions.archive", "Archive")}
             </Button>
             <Button variant="ghost" onClick={() => setConfirmAction("disable")}>
-              <Ban size={16} aria-hidden="true" />
+
               {t("pages:memory.actions.disable", "Disable")}
             </Button>
           </>

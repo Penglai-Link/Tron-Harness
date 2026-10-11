@@ -131,3 +131,22 @@
     border-radius: var(--tron-select-radius, var(--tron-input-radius, var(--tron-control-radius, 4px)));
   }
 }
+
+/* Tron uses text actions in the shared chat renderer as well. The library's
+   accessible names also label its icon-only send, stop, copy and close controls. */
+[class*="ef-chat"] button svg {
+  display: none;
+}
+.ef-chat :is(.ef-chat__icon-button, .ef-chat__button_send, .ef-chat__jump, .ef-chat__image-preview-close, .ef-chat__runtime-attachment-remove),
+.ef-chat-window .ef-chat-window__control {
+  width: auto;
+  min-width: max-content;
+  /* The shared send control declares icon sizing with !important. */
+  padding: 0.25rem 0.625rem !important;
+  font-size: 0.875rem !important;
+  border-radius: var(--tron-button-radius, 4px);
+}
+.ef-chat :is(.ef-chat__icon-button, .ef-chat__button_send, .ef-chat__jump, .ef-chat__image-preview-close, .ef-chat__runtime-attachment-remove)::after,
+.ef-chat-window .ef-chat-window__control::after {
+  content: attr(aria-label);
+}

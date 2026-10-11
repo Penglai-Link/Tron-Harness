@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Save, Trash2 } from "lucide-react";
+
 import { useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 
@@ -92,7 +92,7 @@ export function TaskFlowEditorPage() {
       <PageHeader
         breadcrumbs={[{ label: flowT("title", "Task Flows"), href: "/settings/task-flows" }]}
         title={editing ? flowT("editor.editTitle", "Edit task flow") : flowT("editor.createTitle", "Create task flow")}
-        actions={<Button disabled={loading || saving} onClick={() => void save()}><Save size={16} />{flowT("actions.save", "Save")}</Button>}
+        actions={<Button disabled={loading || saving} onClick={() => void save()}>{flowT("actions.save", "Save")}</Button>}
       />
       <div className="max-w-4xl space-y-4">
         <SurfaceCard className="grid gap-4 p-5 md:grid-cols-2">
@@ -100,13 +100,13 @@ export function TaskFlowEditorPage() {
           <Field label={flowT("editor.name", "Name")}><TextInput value={name} onChange={(event) => setName(event.target.value)} /></Field>
         </SurfaceCard>
         <SurfaceCard className="p-5">
-          <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">{flowT("editor.statuses", "Statuses")}</h2><Button size="sm" variant="secondary" onClick={() => setStatuses((current) => [...current.slice(0, -1), { statusCode: "", name: "", required: false }, current[current.length - 1]])}><Plus size={14} />{flowT("actions.addStatus", "Add")}</Button></div>
+          <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">{flowT("editor.statuses", "Statuses")}</h2><Button size="sm" variant="secondary" onClick={() => setStatuses((current) => [...current.slice(0, -1), { statusCode: "", name: "", required: false }, current[current.length - 1]])}>{flowT("actions.addStatus", "Add")}</Button></div>
           <div className="space-y-2">
             {statuses.map((status, index) => (
               <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] gap-2" key={`${status.statusCode}-${index}`}>
                 <TextInput disabled={status.required} placeholder={flowT("editor.statusCode", "Status code")} value={status.statusCode} onChange={(event) => updateStatus(index, "statusCode", event.target.value)} />
                 <TextInput disabled={status.required} placeholder={flowT("editor.statusName", "Status name")} value={status.required ? taskFlowStatusDisplayName(status, flowT) : status.name} onChange={(event) => updateStatus(index, "name", event.target.value)} />
-                <Button aria-label={flowT("aria.deleteStatus", "Delete status")} disabled={status.required} size="icon" variant="ghost" onClick={() => setStatuses((current) => current.filter((_, currentIndex) => currentIndex !== index))}><Trash2 size={16} /></Button>
+                <Button aria-label={flowT("aria.deleteStatus", "Delete status")} disabled={status.required} size="sm" variant="ghost" onClick={() => setStatuses((current) => current.filter((_, currentIndex) => currentIndex !== index))}>{flowT("aria.deleteStatus", "Delete status")}</Button>
               </div>
             ))}
           </div>

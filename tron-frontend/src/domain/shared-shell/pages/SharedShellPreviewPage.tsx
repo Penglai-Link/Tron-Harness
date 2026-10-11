@@ -2,12 +2,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  Activity,
-  Filter,
-  Plus,
-  ShieldCheck,
-} from "lucide-react";
+import { Activity, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +23,6 @@ import { useToast } from "@/components/ui/toast";
 import { sharedShellPreviewRows } from "@/domain/shared-shell/constants";
 import { AuthUserMenuPanel } from "@/domain/auth";
 import { SelectItem } from "@/components/ui/select";
-
 
 export function SharedShellPreviewPage() {
   const { t } = useTranslation(["pages"]);
@@ -92,7 +86,7 @@ export function SharedShellPreviewPage() {
               {t("pages:sharedShell.actions.export", "Export Scan")}
             </Button>
             <Button onClick={() => setNotice("New resource command triggered")}>
-              <Plus size={16} aria-hidden="true" />
+
               {t("pages:sharedShell.actions.newResource", "New Resource")}
             </Button>
           </>

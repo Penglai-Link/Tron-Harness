@@ -10,14 +10,18 @@ vi.mock("@/domain/admin/api", () => ({ fetchWorkspaceOptions: vi.fn(async () => 
   { workspaceCode: "alpha", name: "Alpha" }, { workspaceCode: "beta", name: "Beta" },
 ]) }));
 vi.mock("@/store/authStore", () => ({ useAuthStore: (select: (state: unknown) => unknown) => select({ session: { user: { userCode: "owner" } } }) }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...await importOriginal<typeof import("react-i18next")>(),
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 function mount(code = "expert") {
+  vi.stubEnv("VITE_TRON_AGENT_DATA_SOURCE", "api");
   request.mockImplementation(async (endpoint: string) => endpoint.startsWith("GET") ? { workspaceCodes: ["alpha"] } : {});
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <AgentWorkspaceAssignment code={code} name="Expert" />
   </QueryClientProvider>);
 }
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllEnvs(); });
 it("loads saved assignments and submits only the selected spaces", async () => {
   mount();
   expect(request).not.toHaveBeenCalled();

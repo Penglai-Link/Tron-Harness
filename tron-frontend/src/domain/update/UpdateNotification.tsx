@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, ExternalLink, RefreshCw, X } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -97,9 +97,7 @@ export function UpdateNotification() {
                 className="rounded-md p-1 text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
                 type="button"
                 onClick={() => setDismissed(true)}
-              >
-                <X size={15} aria-hidden="true" />
-              </button>
+              >{t("update.actions.dismiss")}</button>
             ) : null}
           </div>
 
@@ -122,19 +120,19 @@ export function UpdateNotification() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {status.type === "updateAvailable" ? (
                 <Button size="sm" onClick={() => void handleDownload()}>
-                  <Download size={14} aria-hidden="true" />
+
                   {t("update.actions.download")}
                 </Button>
               ) : null}
               {isDownloaded ? (
                 <Button size="sm" onClick={() => void handleApply()}>
-                  <ExternalLink size={14} aria-hidden="true" />
+
                   {t("update.actions.install")}
                 </Button>
               ) : null}
               {isError ? (
                 <Button size="sm" variant="secondary" onClick={() => void handleRetry()}>
-                  <RefreshCw size={14} aria-hidden="true" />
+
                   {t("update.actions.retry")}
                 </Button>
               ) : null}

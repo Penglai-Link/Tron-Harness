@@ -6,13 +6,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import {
-  Archive,
-  ExternalLink,
-  MoreHorizontal,
-  Pencil,
-  RotateCcw,
-} from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -85,13 +79,11 @@ function AppActions({
         render={
           <Button
             aria-label={pageT("aria.actionsFor", { name: app.name })}
-            size="icon"
+            size="sm"
             type="button"
             variant="ghost"
             onClick={(event) => event.stopPropagation()}
-          >
-            <MoreHorizontal size={16} aria-hidden="true" />
-          </Button>
+          >{pageT("aria.actionsFor", { name: app.name })}</Button>
         }
       />
       <DropdownMenuContent align="end" onClick={stopRowNavigation}>

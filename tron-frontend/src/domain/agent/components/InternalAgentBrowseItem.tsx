@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ShieldCheck, Trash2 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "./AgentAvatarPicker";
@@ -10,7 +9,6 @@ export function InternalAgentBrowseItem({ agent, name, disabled, canDelete = fal
   agent: WorkspaceInternalAgentRecord; name: string; disabled: boolean; canDelete?: boolean; onOpen: () => void; onDelete?: () => void;
 }) {
   const { t } = useTranslation(["pages"]);
-  const [tooltipOpen, setTooltipOpen] = useState(false);
   const builtInLabel = t("pages:workspaceAgents.internal.groups.builtIn", { defaultValue: "Built-in agent" });
   const action = t("pages:workspaceAgents.internal.editAgent", { defaultValue: "Edit {{name}}", name });
   return <div className="relative min-w-0">
@@ -22,17 +20,15 @@ export function InternalAgentBrowseItem({ agent, name, disabled, canDelete = fal
         <span className="mt-1 block truncate font-mono text-xs text-[var(--color-on-surface-variant)]" title={agent.agentCode}>{agent.agentCode}</span>
       </span>
     </Button>
-    {canDelete && onDelete ? <Button type="button" variant="ghost" size="icon-sm" disabled={disabled}
+    {canDelete && onDelete ? <Button type="button" variant="ghost" size="sm" disabled={disabled}
       aria-label={t("pages:workspaceAgents.internal.groups.deleteAgent", { defaultValue: "Delete {{name}}", name })}
       title={t("pages:workspaceAgents.internal.groups.deleteAgent", { defaultValue: "Delete {{name}}", name })}
-      className="absolute right-1 top-1 text-[var(--color-error)]" onClick={onDelete}>
-      <Trash2 aria-hidden="true" />
-    </Button> : null}
-    {agent.builtIn ? <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
-      <TooltipTrigger aria-label={builtInLabel} delay={0}
-        className="absolute left-[calc(50%+1.5rem)] top-[5.25rem] flex size-6 items-center justify-center rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface-variant)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-        onFocus={() => setTooltipOpen(true)} onBlur={() => setTooltipOpen(false)}>
-        <ShieldCheck size={14} aria-hidden="true" />
+      className="absolute right-1 top-1 text-[var(--color-error)]" onClick={onDelete}>{t("pages:workspaceAgents.internal.groups.deleteAgent", { defaultValue: "Delete {{name}}", name })}</Button> : null}
+    {agent.builtIn ? <Tooltip>
+      <TooltipTrigger aria-label={builtInLabel}
+        className="absolute left-1 top-1 flex h-6 px-1 text-xs items-center justify-center rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface-variant)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+>
+        {builtInLabel}
       </TooltipTrigger>
       <TooltipContent>{builtInLabel}</TooltipContent>
     </Tooltip> : null}

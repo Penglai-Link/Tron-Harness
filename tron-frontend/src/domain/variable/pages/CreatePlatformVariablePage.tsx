@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Save } from "lucide-react";
 
 import { createPlatformVariable } from "@/domain/variable/api";
 import { createPlatformVariableRecord } from "@/domain/variable/mock/data";
@@ -64,7 +63,7 @@ export function CreatePlatformVariablePage() {
           <>
             <Button variant="secondary" onClick={() => navigate("/settings/variables")}>{t("pages:variables.actions.cancel", "Cancel")}</Button>
             <Button disabled={submitting || !form.key.trim()} aria-busy={submitting} onClick={() => void saveVariable()}>
-              <Save size={16} aria-hidden="true" />
+
               {submitting ? t("pages:variables.actions.saving", "Saving...") : t("pages:variables.actions.save", "Save")}
             </Button>
           </>

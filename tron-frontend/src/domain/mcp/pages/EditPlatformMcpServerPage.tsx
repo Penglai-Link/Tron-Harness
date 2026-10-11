@@ -8,10 +8,6 @@ import {
   useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
-import {
-  Save,
-  ShieldCheck,
-} from "lucide-react";
 
 import {
   fetchPlatformMcpServers,
@@ -239,7 +235,7 @@ export function EditPlatformMcpServerPage() {
               aria-busy={verifying}
               onClick={() => void verifyDraft()}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
+
               {verifying ? t("pages:mcp.actions.verifying", "Verifying...") : t("pages:mcp.actions.verify", "Verify")}
             </Button>
             <Button
@@ -247,7 +243,7 @@ export function EditPlatformMcpServerPage() {
               aria-busy={submitting}
               onClick={() => void saveServer()}
             >
-              <Save size={16} aria-hidden="true" />
+
               {submitting ? t("pages:mcp.actions.saving", "Saving...") : t("pages:mcp.actions.save", "Save")}
             </Button>
           </>

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight } from "lucide-react";
 
 import { SelectInput, TextArea, TextInput } from "@/components/forms";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -90,7 +89,7 @@ export function SystemConfigTable() {
             type="button"
             onClick={() => setExpanded((current) => !current)}
           >
-            <ChevronRight className={`size-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
+
             <span>{t("settingsGeneral.systemConfig.title")}</span>
           </button>
           <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.help")}>{t("settingsGeneral.systemConfig.description")}</InfoTooltip>
@@ -121,7 +120,7 @@ export function SystemConfigTable() {
                   <span>{t(`settingsGeneral.systemConfig.categories.${group}.label`, { defaultValue: group })}</span>
                   <span className="flex items-center gap-[12px] text-xs font-normal text-[var(--color-on-surface-variant)]">
                     {t("settingsGeneral.systemConfig.itemCount", { count: items.length })}
-                    <ChevronRight className={`size-4 transition-transform ${expandedGroups.has(group) ? "rotate-90" : ""}`} />
+
                   </span>
                 </button>
               </h3>

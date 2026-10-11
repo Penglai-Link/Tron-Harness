@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+
 import { toastManager } from "@/components/ui/toast";
 import {
   createDataSourceConnection,
@@ -377,7 +377,7 @@ export function DataSourceCreateDialog({
           <DialogFooter>
             <Button disabled={submitting} type="button" variant="outline" onClick={() => onOpenChange(false)}>{pageT("actions.cancel")}</Button>
             <Button disabled={submitting} type="submit">
-              {submitting ? <Spinner /> : null}
+
               {submitting ? pageT("actions.verifying") : pageT("actions.createAndVerify")}
             </Button>
           </DialogFooter>

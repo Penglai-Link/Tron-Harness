@@ -1,4 +1,4 @@
-import { ChevronDown, Folder, FolderPlus, X } from "lucide-react";
+import { Folder } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppOptions } from "@/domain/app";
@@ -137,11 +137,11 @@ export function ProjectCreateDialog({
                   ) : null}
                   <Button
                     className="shrink-0 w-auto"
-                    size="icon"
+                    size="sm"
                     variant="link"
                     onClick={() => toggleApp(app.appCode)}
                   >
-                    <X size={16} />
+                    {t("common:actions.remove", "Remove")}
                   </Button>
                 </div>
               ))}
@@ -153,15 +153,9 @@ export function ProjectCreateDialog({
                       type="button"
                       variant="link"
                     >
-                      <FolderPlus
-                        aria-hidden="true"
-                        className="size-4 text-muted-foreground"
-                      />
+
                       <span className="flex-1 text-left">{t("shell:chatSidebar.projectDialog.addApp")}</span>
-                      <ChevronDown
-                        aria-hidden="true"
-                        className="size-4 text-muted-foreground"
-                      />
+
                     </Button>
                   }
                 />

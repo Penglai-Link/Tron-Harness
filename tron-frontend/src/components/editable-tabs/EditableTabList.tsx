@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ export function EditableTabList({
   onClose,
   className,
 }: EditableTabListProps) {
+  const { t } = useTranslation("common");
   return (
     <div className={cn("flex w-full min-w-0 items-center bg-muted", className)}>
       <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
@@ -38,9 +39,7 @@ export function EditableTabList({
             renderAddTrigger ? (
               renderAddTrigger({ onAdd })
             ) : (
-              <Button aria-label="Add tab" onClick={onAdd} size="icon-sm" type="button" variant="ghost">
-                <Plus aria-hidden="true" />
-              </Button>
+              <Button aria-label={t("content.addTab", "Add tab")} onClick={onAdd} size="sm" type="button" variant="ghost">{t("content.addTab", "Add tab")}</Button>
             )
           ) : null}
         </TabsList>

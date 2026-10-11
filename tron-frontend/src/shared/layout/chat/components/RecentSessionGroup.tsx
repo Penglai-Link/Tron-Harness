@@ -1,8 +1,7 @@
-import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import MessageItem from "./MessageItem";
-import IconButton from "./IconButton";
+import ActionButton from "./ActionButton";
 import Item from "./Item";
 import type { ChatSession } from "@/domain/chat/model";
 import { Button } from "@/components/ui/button";
@@ -41,11 +40,11 @@ export default function RecentSessionGroup({
           </button>
         }
         right={
-          <IconButton
+          <ActionButton
             className={
-              open ? "transition-transform" : "-rotate-90 transition-transform"
+              "shrink-0"
             }
-            icon={ChevronDown}
+            aria-label={t(open ? "common:actions.collapse" : "common:actions.expand", open ? "Collapse" : "Expand")}
             onClick={(event) => {
               event.stopPropagation();
               setOpen((value) => !value);

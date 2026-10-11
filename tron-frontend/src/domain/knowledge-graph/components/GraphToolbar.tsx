@@ -1,12 +1,3 @@
-import {
-  Maximize2,
-  Minimize2,
-  Minus,
-  Plus,
-  RefreshCw,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -326,7 +317,7 @@ export function GraphToolbar({
               aria-label={pageT("toolbar.filters.toggleAria", "Toggle graph filters")}
               onClick={() => setFiltersOpen((current) => !current)}
             >
-              <SlidersHorizontal size={15} aria-hidden="true" />
+
               <span className="hidden sm:inline">{pageT("toolbar.filters.label", "Filters")}</span>
               {activeFilterCount ? (
                 <span className="rounded-full bg-[var(--color-primary)] px-1.5 font-mono text-[10px] text-[var(--color-on-primary)]">
@@ -335,35 +326,27 @@ export function GraphToolbar({
               ) : null}
             </Button>
             <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-[12px]">
-              <Button className="size-8 sm:size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomIn", "Zoom in")} title={pageT("toolbar.zoomIn", "Zoom in")} onClick={() => onZoomChange(10)}>
-                <Plus size={16} aria-hidden="true" />
-              </Button>
-              <Button className="size-8 sm:size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomOut", "Zoom out")} title={pageT("toolbar.zoomOut", "Zoom out")} onClick={() => onZoomChange(-10)}>
-                <Minus size={16} aria-hidden="true" />
-              </Button>
+              <Button className="w-auto sm:w-auto" size="sm" variant="ghost" type="button" aria-label={pageT("toolbar.zoomIn", "Zoom in")} title={pageT("toolbar.zoomIn", "Zoom in")} onClick={() => onZoomChange(10)}>{pageT("toolbar.zoomIn", "Zoom in")}</Button>
+              <Button className="w-auto sm:w-auto" size="sm" variant="ghost" type="button" aria-label={pageT("toolbar.zoomOut", "Zoom out")} title={pageT("toolbar.zoomOut", "Zoom out")} onClick={() => onZoomChange(-10)}>{pageT("toolbar.zoomOut", "Zoom out")}</Button>
               <Button
-                className="size-8 sm:size-9"
-                size="icon"
+                className="w-auto sm:w-auto"
+                size="sm"
                 variant={fullscreenActive ? "secondary" : "ghost"}
                 type="button"
                 aria-label={fullscreenActive ? pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen") : pageT("toolbar.fullscreen.openAria", "Open graph fullscreen")}
                 title={fullscreenActive ? pageT("toolbar.fullscreen.exit", "Exit fullscreen") : pageT("toolbar.fullscreen.open", "Fullscreen")}
                 onClick={onToggleFullscreen}
-              >
-                {fullscreenActive ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
-              </Button>
+              >{fullscreenActive ? pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen") : pageT("toolbar.fullscreen.openAria", "Open graph fullscreen")}</Button>
               <Button
-                className="size-8 sm:size-9"
-                size="icon"
+                className="w-auto sm:w-auto"
+                size="sm"
                 variant="ghost"
                 type="button"
                 aria-label={pageT("actions.refresh", "Refresh graph")}
                 title={pageT("actions.refresh", "Refresh graph")}
                 disabled={!namespace || refreshing}
                 onClick={onRefresh}
-              >
-                <RefreshCw className={refreshing ? "animate-spin" : undefined} size={16} aria-hidden="true" />
-              </Button>
+              >{pageT("actions.refresh", "Refresh graph")}</Button>
             </div>
           </div>
         </div>
@@ -380,7 +363,7 @@ export function GraphToolbar({
               onClick={() => toggleRelationship(relationship)}
             >
               {relationship}
-              <X size={12} aria-hidden="true" />
+
             </button>
           ))}
           {activeLabelFacets.map((facet) => (
@@ -391,7 +374,7 @@ export function GraphToolbar({
               onClick={() => toggleLabel(facet.value)}
             >
               {facet.label}
-              <X size={12} aria-hidden="true" />
+
             </button>
           ))}
         </div>

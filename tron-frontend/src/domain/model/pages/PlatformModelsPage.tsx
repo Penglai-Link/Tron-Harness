@@ -6,11 +6,6 @@ import {
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import {
-  MoreHorizontal,
-  Plus,
-  RefreshCcw,
-} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -261,11 +256,11 @@ export function PlatformModelsPage() {
         actions={(
           <>
             <Button variant="secondary" disabled={loading} onClick={() => void refreshPlatformModels()}>
-              <RefreshCcw size={16} aria-hidden="true" />
+
               {loading ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
             </Button>
             <Button onClick={() => navigate("/settings/models/new")}>
-              <Plus size={16} aria-hidden="true" />
+
               {pageT("actions.new", "New")}
             </Button>
           </>
@@ -326,7 +321,7 @@ export function PlatformModelsPage() {
               return (
                 <div className="flex justify-end">
                   <Button
-                    size="icon"
+                    size="sm"
                     variant="ghost"
                     aria-label={pageT("aria.openActions", "Open actions for {{name}}", { name: row.displayName })}
                     aria-expanded={isMenuOpen}
@@ -336,9 +331,7 @@ export function PlatformModelsPage() {
                       event.stopPropagation();
                       toggleRowMenu(row, event.currentTarget);
                     }}
-                  >
-                    <MoreHorizontal size={16} aria-hidden="true" />
-                  </Button>
+                  >{pageT("aria.openActions", "Open actions for {{name}}", { name: row.displayName })}</Button>
                 </div>
               );
             },

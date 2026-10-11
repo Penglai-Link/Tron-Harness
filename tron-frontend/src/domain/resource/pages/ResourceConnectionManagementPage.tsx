@@ -1,12 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import {
-  MoreHorizontal,
-  Plus,
-  RefreshCcw,
-  Trash2,
-} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+
 import { toastManager } from "@/components/ui/toast";
 import {
   DataSourceCreateDialog,
@@ -266,13 +260,11 @@ export function ResourceConnectionManagementPage({
                 render={(
                   <Button
                     aria-label={pageT("columns.actions")}
-                    size="icon"
+                    size="sm"
                     variant="ghost"
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
-                  >
-                    <MoreHorizontal aria-hidden="true" size={16} />
-                  </Button>
+                  >{pageT("columns.actions")}</Button>
                 )}
               />
               <DropdownMenuContent align="end">
@@ -297,7 +289,7 @@ export function ResourceConnectionManagementPage({
                     setDeleteTarget(row.original);
                   }}
                 >
-                  <Trash2 aria-hidden="true" />
+
                   {pageT("actions.delete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -382,15 +374,13 @@ export function ResourceConnectionManagementPage({
               onClick={() => {
                 void resourceTable.refresh();
               }}
-            >
-              <RefreshCcw aria-hidden="true" size={15} />
-            </Button>
+            >{pageT("actions.refresh")}</Button>
             <Button
               disabled={!workspace}
               size="lg"
               onClick={() => setCreateOpen(true)}
             >
-              <Plus aria-hidden="true" size={15} />
+
               {pageT(`${kind}.createAction`)}
             </Button>
           </>
@@ -487,7 +477,7 @@ export function ResourceConnectionManagementPage({
                 void confirmDelete();
               }}
             >
-              {deleting ? <Spinner /> : null}
+
               {pageT("actions.delete")}
             </Button>
           </DialogFooter>

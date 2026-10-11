@@ -5,11 +5,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import {
-  Maximize2,
-  Save,
-  X,
-} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
@@ -296,9 +291,7 @@ export function CreateTaskPage() {
                 variant="ghost"
                 aria-label={pageT("aria.openDescription", "Open description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(true)}
-              >
-                <Maximize2 size={14} aria-hidden="true" />
-              </Button>
+              >{pageT("aria.openDescription", "Open description fullscreen")}</Button>
             </div>
             <TextArea
               aria-label={pageT("aria.description", "Task description")}
@@ -326,14 +319,12 @@ export function CreateTaskPage() {
                 </p>
               </div>
               <Button
-                size="icon"
+                size="sm"
                 type="button"
                 variant="ghost"
                 aria-label={pageT("aria.closeDescription", "Close description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(false)}
-              >
-                <X size={16} aria-hidden="true" />
-              </Button>
+              >{pageT("aria.closeDescription", "Close description fullscreen")}</Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               <TextArea

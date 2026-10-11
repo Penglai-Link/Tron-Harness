@@ -9,14 +9,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  Edit3,
-  Save,
-  ShieldCheck,
-  Trash2,
-  X,
-  Zap,
-} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -334,11 +326,11 @@ export function PlatformModelDetailsPage() {
               aria-busy={verifying}
               onClick={() => void runVerify()}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
+
               {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
             </Button>
             <Button variant="secondary" disabled={submitting || verifying} onClick={resetDraft}>
-              <X size={16} aria-hidden="true" />
+
               {pageT("actions.cancel", "Cancel")}
             </Button>
             <Button
@@ -346,32 +338,32 @@ export function PlatformModelDetailsPage() {
               aria-busy={submitting}
               onClick={() => void saveModel()}
             >
-              <Save size={16} aria-hidden="true" />
+
               {submitting ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
             </Button>
           </>
         ) : (
           <>
             <Button variant="secondary" onClick={() => setEditing(true)}>
-              <Edit3 size={16} aria-hidden="true" />
+
               {pageT("actions.edit", "Edit")}
             </Button>
             <Button variant="secondary" disabled={verifying} aria-busy={verifying} onClick={() => void runVerify()}>
-              <ShieldCheck size={16} aria-hidden="true" />
+
               {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
             </Button>
             {!selectedRecord.isDefault && selectedRecord.enabled ? (
               <Button variant="secondary" disabled={submitting || verifying} onClick={() => void makeDefault()}>
-                <Save size={16} aria-hidden="true" />
+
                 {pageT("actions.setDefault", "Set Default")}
               </Button>
             ) : null}
             <Button variant="secondary" onClick={() => void toggleEnabled()}>
-              <Zap size={16} aria-hidden="true" />
+
               {selectedRecord.enabled ? pageT("actions.disable", "Disable") : pageT("actions.enable", "Enable")}
             </Button>
             <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
-              <Trash2 size={16} aria-hidden="true" />
+
               {deleting ? pageT("actions.deleting", "Deleting...") : pageT("actions.delete", "Delete")}
             </Button>
           </>

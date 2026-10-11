@@ -5,9 +5,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import {
-  MoreHorizontal
-} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -481,11 +478,7 @@ export function ModelRegistryPage() {
                 return (
                   <div className="flex justify-end">
                     <DropdownMenu>
-                      <DropdownMenuTrigger disabled={isBusy} aria-label={pageT("aria.openActions", "Open actions for {{name}}", { name: row.displayName })} onClick={(event) => event.stopPropagation()}>
-                        <MoreHorizontal onClick={(event) => {
-                          event.stopPropagation();
-                        }} size={16} aria-hidden="true" />
-                      </DropdownMenuTrigger>
+                      <DropdownMenuTrigger disabled={isBusy} aria-label={pageT("aria.openActions", "Open actions for {{name}}", { name: row.displayName })} onClick={(event) => event.stopPropagation()}>{t("common:actions.more")}</DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44">
                         {row.enabled && !row.isDefault ? (
                           <DropdownMenuItem

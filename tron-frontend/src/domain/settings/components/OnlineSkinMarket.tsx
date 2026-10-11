@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Download, Palette } from "lucide-react";
+import { Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useTheme } from "@/shared";
@@ -47,7 +47,7 @@ export function OnlineSkinMarket({ onUninstall }: { onUninstall: (skin: Skin) =>
         variant="ghost"
         onClick={() => setExpanded((value) => !value)}
       >
-        <ChevronDown aria-hidden="true" className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+
         <span>{t("settingsAppearance.onlineSkins")}</span>
       </Button>
       {expanded ? (
@@ -78,7 +78,7 @@ export function OnlineSkinMarket({ onUninstall }: { onUninstall: (skin: Skin) =>
                     {installed ? <>
                       <Button variant="outline" size="sm" disabled={loading || selected} onClick={() => void activate(installed.id)}>{t(selected ? "settingsAppearance.marketActive" : "settingsAppearance.marketApply")}</Button>
                       <Button variant="ghost" size="sm" disabled={loading} onClick={() => onUninstall(installed)}>{t("settingsAppearance.confirmUninstall")}</Button>
-                    </> : <Button variant="outline" size="sm" disabled={loading} onClick={() => void install(item.id)}><Download aria-hidden="true" />{t("settingsAppearance.marketInstall")}</Button>}
+                    </> : <Button variant="outline" size="sm" disabled={loading} onClick={() => void install(item.id)}>{t("settingsAppearance.marketInstall")}</Button>}
                   </div>
                 </div>
               </article>;

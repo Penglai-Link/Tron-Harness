@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  Database,
-  ExternalLink,
-  History,
-  Link2,
-  RefreshCcw,
-  Unplug,
-} from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+
 import { useToast } from "@/components/ui/toast";
 import { PageHeader, SurfaceCard, useLocaleFormatters } from "@/shared";
 import {
@@ -260,7 +253,7 @@ export function ModelProviderDetailsPage() {
                 )
               }
             >
-              <Database size={16} aria-hidden="true" />
+
               {t("modelProviders.actions.remoteModels")}
             </Button>
             <Button
@@ -271,7 +264,7 @@ export function ModelProviderDetailsPage() {
                 )
               }
             >
-              <History size={16} aria-hidden="true" />
+
               {t("modelProviders.actions.syncHistory")}
             </Button>
             <Button
@@ -279,11 +272,7 @@ export function ModelProviderDetailsPage() {
               variant="secondary"
               onClick={() => void load()}
             >
-              {loading ? (
-                <Spinner size={16} aria-hidden="true" />
-              ) : (
-                <RefreshCcw size={16} aria-hidden="true" />
-              )}
+
               {t("modelProviders.actions.refresh")}
             </Button>
           </>
@@ -309,11 +298,7 @@ export function ModelProviderDetailsPage() {
               size="sm"
               onClick={() => void beginAuthorization()}
             >
-              {busy === "authorize" ? (
-                <Spinner size={14} aria-hidden="true" />
-              ) : (
-                <Link2 size={14} aria-hidden="true" />
-              )}
+
               {connectionReady
                 ? t("modelProviders.actions.reauthorize")
                 : t("modelProviders.actions.authorize")}
@@ -324,11 +309,7 @@ export function ModelProviderDetailsPage() {
               variant="secondary"
               onClick={() => void syncNow()}
             >
-              {busy === "sync" ? (
-                <Spinner size={14} aria-hidden="true" />
-              ) : (
-                <RefreshCcw size={14} aria-hidden="true" />
-              )}
+
               {t("modelProviders.actions.syncNow")}
             </Button>
             <Button
@@ -337,7 +318,7 @@ export function ModelProviderDetailsPage() {
               variant="secondary"
               onClick={() => setDisconnectOpen(true)}
             >
-              <Unplug size={14} aria-hidden="true" />
+
               {t("modelProviders.actions.disconnect")}
             </Button>
           </div>
@@ -365,7 +346,7 @@ export function ModelProviderDetailsPage() {
                   )
                 }
               >
-                <ExternalLink size={14} aria-hidden="true" />
+
                 {t("modelProviders.actions.openAuthorizationPage")}
               </Button>
               <Button
@@ -374,9 +355,7 @@ export function ModelProviderDetailsPage() {
                 variant="secondary"
                 onClick={() => void pollAuthorization()}
               >
-                {busy === "poll" ? (
-                  <Spinner size={14} aria-hidden="true" />
-                ) : null}
+
                 {t("modelProviders.actions.checkAuthorization")}
               </Button>
             </div>

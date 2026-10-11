@@ -1,10 +1,11 @@
+import { useTranslation } from "react-i18next";
 import type { MouseEvent } from "react";
 
 import { TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import type { EditableTab } from "./types";
-import { X } from "lucide-react";
+
 import { Button } from "../ui/button";
 
 interface EditableTabTriggerProps {
@@ -13,6 +14,7 @@ interface EditableTabTriggerProps {
 }
 
 export function EditableTabTrigger({ tab, onClose }: EditableTabTriggerProps) {
+  const { t } = useTranslation("common");
   const handleClose = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -39,14 +41,12 @@ export function EditableTabTrigger({ tab, onClose }: EditableTabTriggerProps) {
       </TabsTrigger>
       {tab.closable !== false ? (
         <Button
-          aria-label="Close tab"
-          size="icon-sm"
+          aria-label={t("actions.closeTab", "Close tab")}
+          size="sm"
           variant="ghost"
           className="flex-shrink-0"
           onClick={handleClose}
-        >
-          <X size={12} aria-hidden="true" />
-        </Button>
+        >{t("actions.close", "Close")}</Button>
       ) : null}
     </div>
   );

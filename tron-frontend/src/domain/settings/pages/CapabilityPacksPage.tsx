@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Package, RefreshCw, Upload } from "lucide-react";
+import { CheckCircle2, Package } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 
@@ -125,7 +125,7 @@ export function CapabilityPacksPage() {
               disabled={busyId !== null}
               onClick={() => importInputRef.current?.click()}
             >
-              <Upload size={15} />
+
               {pageT("import")}
             </Button>
             <Button
@@ -134,7 +134,7 @@ export function CapabilityPacksPage() {
               onClick={() => void load()}
               disabled={loading}
             >
-              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+
               {pageT("refresh")}
             </Button>
           </div>

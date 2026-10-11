@@ -5,7 +5,6 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Sparkles } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -169,9 +168,9 @@ export function TaskExecutionModelSelect({
           disabled={disabled || options.length === 0}
           title={selectedModelLabel}
         >
-          <Sparkles aria-hidden="true" className="shrink-0 text-[var(--color-on-surface-variant)]" size={15} />
+
           <span className="min-w-0 flex-1 truncate text-left">{selectedModelLabel}</span>
-          <ChevronDown aria-hidden="true" className="shrink-0 text-[var(--color-on-surface-variant)]" size={15} />
+
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"

@@ -1,11 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Braces,
-  KeyRound,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Braces, KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
@@ -319,7 +314,7 @@ function AdditionalPropertiesEditor({
         </div>
         {!readOnly ? (
           <Button size="sm" variant="ghost" onClick={addProperty}>
-            <Plus aria-hidden="true" size={14} />
+
             {t("jsonSchemaForm.addProperty", { defaultValue: "Add property" })}
           </Button>
         ) : null}
@@ -350,12 +345,10 @@ function AdditionalPropertiesEditor({
               <Button
                 aria-label={t("jsonSchemaForm.removeProperty", { defaultValue: "Remove property" })}
                 className="mt-0.5"
-                size="icon-sm"
+                size="sm"
                 variant="ghost"
                 onClick={() => onChange(Object.fromEntries(entries.filter(([entryName]) => entryName !== name)))}
-              >
-                <Trash2 aria-hidden="true" size={14} />
-              </Button>
+              >{t("jsonSchemaForm.removeProperty", { defaultValue: "Remove property" })}</Button>
             ) : null}
           </div>
         ))}
@@ -473,7 +466,7 @@ function ArrayValueEditor({
             variant="ghost"
             onClick={() => onChange([...arrayValue, neutralValue(itemSchema)])}
           >
-            <Plus aria-hidden="true" size={14} />
+
             {t("jsonSchemaForm.addItem", { defaultValue: "Add item" })}
           </Button>
         ) : null}
@@ -506,12 +499,10 @@ function ArrayValueEditor({
                 <Button
                   aria-label={t("jsonSchemaForm.removeItem", { defaultValue: "Remove item {{index}}", index: index + 1 })}
                   disabled={schema.minItems !== undefined && arrayValue.length <= schema.minItems}
-                  size="icon-sm"
+                  size="sm"
                   variant="ghost"
                   onClick={() => onChange(arrayValue.filter((_, entryIndex) => entryIndex !== index))}
-                >
-                  <Trash2 aria-hidden="true" size={14} />
-                </Button>
+                >{t("jsonSchemaForm.removeItem", { defaultValue: "Remove item {{index}}", index: index + 1 })}</Button>
               ) : null}
             </div>
           );

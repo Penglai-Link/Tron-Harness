@@ -1,11 +1,13 @@
 "use client"
 
+import { useEffect, useId, useSyncExternalStore } from "react"
+
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
 
 function TooltipProvider({
-  delay = 0,
+  delay = 350,
   ...props
 }: TooltipPrimitive.Provider.Props) {
   return (
@@ -17,12 +19,41 @@ function TooltipProvider({
   )
 }
 
-function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+// A single owner also covers independently nested providers and portaled surfaces.
+let activeTooltip: string | null = null
+const tooltipListeners = new Set<() => void>()
+function setActiveTooltip(id: string | null) {
+  activeTooltip = id
+  tooltipListeners.forEach((listener) => listener())
+}
+function subscribeTooltip(listener: () => void) {
+  tooltipListeners.add(listener)
+  return () => { tooltipListeners.delete(listener) }
 }
 
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+function Tooltip({ onOpenChange, ...props }: Omit<TooltipPrimitive.Root.Props, "open" | "defaultOpen">) {
+  const id = useId()
+  const active = useSyncExternalStore(subscribeTooltip, () => activeTooltip, () => null)
+  useEffect(() => () => {
+    if (activeTooltip === id) setActiveTooltip(null)
+  }, [id])
+  return <TooltipPrimitive.Root {...props} open={active === id}
+    onOpenChange={(open, details) => {
+      // Focus restoration and dialog autofocus must never open a hint.
+      if (open && details.reason !== "trigger-hover") {
+        details.cancel()
+        return
+      }
+      onOpenChange?.(open, details)
+      if (details.isCanceled) return
+      if (open) setActiveTooltip(id)
+      else if (activeTooltip === id) setActiveTooltip(null)
+    }} />
+}
+
+function TooltipTrigger({ delay = 350, closeDelay = 150, ...props }: TooltipPrimitive.Trigger.Props) {
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props}
+    delay={delay} closeDelay={closeDelay} title={undefined} />
 }
 
 function TooltipContent({
@@ -51,7 +82,7 @@ function TooltipContent({
           data-slot="tooltip-content"
           role="tooltip"
           className={cn(
-            "z-[120] inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "z-[120] inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
             className
           )}
           {...props}

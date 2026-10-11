@@ -24,7 +24,7 @@ createRoot(root).render(
     <RenderErrorBoundary fullScreen>
     <ToastProvider position="top-center">
       <AnchoredToastProvider>
-        <TooltipProvider delay={0}>
+        <TooltipProvider>
           <QueryProvider>
             <App />
           </QueryProvider>

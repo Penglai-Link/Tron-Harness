@@ -1,4 +1,3 @@
-import { ChevronRight, Languages } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,10 +17,10 @@ export function LocaleMenu() {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger render={<Button id="tron-locale-select" variant="ghost" className="h-9 w-full min-w-0 justify-start gap-2 px-2.5" />}>
-        <Languages aria-hidden="true" />
+
         <span className="shrink-0">{t("common:locale.label")}</span>
         <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">{selected ? t(selected.labelKey) : currentLocale}</span>
-        <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
+
       </DropdownMenuTrigger>
       <DropdownMenuContent data-tron-locale-menu side="right" align="end" sideOffset={8} className="w-56 max-w-[calc(100vw-2rem)]">
         <DropdownMenuRadioGroup value={currentLocale} onValueChange={(value) => {

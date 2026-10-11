@@ -1,4 +1,4 @@
-import { TriangleAlert } from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { KnowledgeDocument } from "../model/KnowledgeLibraryModel";
@@ -26,7 +26,7 @@ export function KnowledgeDocumentName({ document }: { document: KnowledgeDocumen
         aria-label={t("knowledgeLibrary.documentWarnings", { name: document.fileName })}
         render={<button type="button" className="mt-0.5 shrink-0 cursor-help rounded-sm text-[var(--color-warning)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" />}
       >
-        <TriangleAlert size={16} aria-hidden="true" />
+        {t("common:actions.help", "Help")}
       </TooltipTrigger>
       <TooltipContent side="top" align="start" className="max-w-sm whitespace-normal break-words">
         <div className="space-y-2 text-left">

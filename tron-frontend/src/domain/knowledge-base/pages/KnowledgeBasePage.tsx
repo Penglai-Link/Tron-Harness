@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+
 import { PageHeader, SurfaceCard } from "@/shared";
 import { Field, TextInput, TextArea } from "@/components/forms";
 import { Button } from "@/components/ui/button";
@@ -74,7 +74,7 @@ function KnowledgeCatalog() {
           <TableCell>{new Intl.NumberFormat(i18n.resolvedLanguage).format(item.documentCount)}</TableCell>
           <TableCell>{new Intl.NumberFormat(i18n.resolvedLanguage).format(item.authorizedAgentCount ?? 0)}</TableCell>
           <TableCell className="text-right" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon" disabled={deletion.isPending} aria-label={t("knowledgeLibrary.libraryActions", { name: item.name })}><MoreHorizontal size={16} aria-hidden="true" /></Button>} />
+            <DropdownMenuTrigger render={<Button variant="ghost" size="sm" disabled={deletion.isPending} aria-label={t("knowledgeLibrary.libraryActions", { name: item.name })}>{t("knowledgeLibrary.libraryActions", { name: item.name })}</Button>} />
             <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
               <DropdownMenuItem onClick={() => setAgentAssignment(item)}>{text("grants")}</DropdownMenuItem>
               {item.documentCount > 0 ? <Tooltip><TooltipTrigger render={<span className="block cursor-not-allowed" />}><DropdownMenuItem disabled variant="destructive" className="data-disabled:opacity-35">{text("deleteAction")}</DropdownMenuItem></TooltipTrigger><TooltipContent side="left">{text("libraryDeleteRequiresEmpty")}</TooltipContent></Tooltip> : <DropdownMenuItem variant="destructive" onClick={(event) => { event.stopPropagation(); setDeleteTarget(item); }}>{text("deleteAction")}</DropdownMenuItem>}

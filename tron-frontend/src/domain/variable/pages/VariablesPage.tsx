@@ -6,7 +6,6 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { MoreHorizontal } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -126,7 +125,6 @@ export function VariablesPage() {
     if (mode) params.set("mode", mode);
     navigate(`/variables/detail?${params.toString()}`);
   }
-
 
   async function removeVariableRow(record: VariableRecord) {
     if (
@@ -360,15 +358,13 @@ export function VariablesPage() {
                 <DropdownMenuTrigger
                   render={(
                     <Button
-                      size="icon"
+                      size="sm"
                       variant="ghost"
                       aria-label={pageT("aria.actionsFor", "Open actions for {{key}}", { key: row.original.key })}
                       disabled={isBusy}
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
-                    >
-                      <MoreHorizontal size={16} aria-hidden="true" />
-                    </Button>
+                    >{pageT("aria.actionsFor", "Open actions for {{key}}", { key: row.original.key })}</Button>
                   )}
                 />
                 <DropdownMenuContent align="end" className="w-36">

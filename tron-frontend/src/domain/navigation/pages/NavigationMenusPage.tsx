@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ExternalLink, FilePlus2, Pencil, Plus, RefreshCcw, Trash2 } from "lucide-react";
+import { ExternalLink, FilePlus2 } from "lucide-react";
 
 import { DataTable } from "@/components/data-table";
 import { Field, SelectInput, TextInput, ToggleSwitch } from "@/components/forms";
@@ -241,7 +241,7 @@ export function NavigationMenusPage() {
 
   return (
     <>
-      <PageHeader title={text("menus.title", "菜单定义", "Menu Definitions")} actions={<><Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RefreshCcw size={16} aria-hidden="true" />{text("actions.refresh", "刷新", "Refresh")}</Button><Button onClick={openCreate}><Plus size={16} aria-hidden="true" />{text("actions.newMenu", "新建菜单", "New menu")}</Button></>} />
+      <PageHeader title={text("menus.title", "菜单定义", "Menu Definitions")} actions={<><Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}>{text("actions.refresh", "刷新", "Refresh")}</Button><Button onClick={openCreate}>{text("actions.newMenu", "新建菜单", "New menu")}</Button></>} />
 
       <ModalDialog open={Boolean(editor)} title={editor ? (editingCode ? text("menus.edit", "编辑菜单", "Edit menu") : text("menus.create", "新建菜单", "New menu")) : ""} className="max-h-[88vh] max-w-2xl overflow-y-auto">
         {editor ? (
@@ -286,7 +286,7 @@ export function NavigationMenusPage() {
           { id: "source", header: text("columns.source", "来源", "Source"), render: (row) => <Badge variant={row.source === "BuiltIn" ? "info" : "default"}>{row.source === "BuiltIn" ? text("status.builtIn", "内置", "Built-in") : text("status.custom", "自定义", "Custom")}</Badge> },
           { id: "target", header: text("columns.target", "目标", "Target"), render: (row) => <span className="max-w-52 truncate font-mono text-xs">{row.pageCode ?? row.url ?? "—"}</span> },
           { id: "status", header: text("columns.status", "状态", "Status"), headerClassName: "text-center", cellClassName: "text-center", render: (row) => <div className="flex justify-center"><ToggleSwitch ariaLabel={text("aria.toggleMenu", row.enabled ? `禁用 ${row.menuCode}` : `启用 ${row.menuCode}`, row.enabled ? `Disable ${row.menuCode}` : `Enable ${row.menuCode}`)} checked={row.enabled} disabled={row.source === "BuiltIn" || updatingCode === row.menuCode} onCheckedChange={() => void toggleMenuEnabled(row)} /></div> },
-          { id: "actions", header: text("columns.actions", "操作", "Actions"), align: "right", render: (row) => <div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={text("aria.editMenu", `编辑 ${row.menuCode}`, `Edit ${row.menuCode}`)} onClick={() => openEdit(row)}><Pencil size={16} aria-hidden="true" /></Button>{row.source === "Custom" ? <Button size="icon" variant="ghost" aria-label={text("aria.deleteMenu", `删除 ${row.menuCode}`, `Delete ${row.menuCode}`)} disabled={deletingCode === row.menuCode} onClick={() => setMenuToDelete(row)}><Trash2 size={16} aria-hidden="true" /></Button> : null}</div> },
+          { id: "actions", header: text("columns.actions", "操作", "Actions"), align: "right", render: (row) => <div className="flex justify-end gap-1"><Button size="sm" variant="ghost" aria-label={text("aria.editMenu", `编辑 ${row.menuCode}`, `Edit ${row.menuCode}`)} onClick={() => openEdit(row)}>{text("aria.editMenu", `编辑 ${row.menuCode}`, `Edit ${row.menuCode}`)}</Button>{row.source === "Custom" ? <Button size="sm" variant="ghost" aria-label={text("aria.deleteMenu", `删除 ${row.menuCode}`, `Delete ${row.menuCode}`)} disabled={deletingCode === row.menuCode} onClick={() => setMenuToDelete(row)}>{text("aria.deleteMenu", `删除 ${row.menuCode}`, `Delete ${row.menuCode}`)}</Button> : null}</div> },
         ]}
       />
 

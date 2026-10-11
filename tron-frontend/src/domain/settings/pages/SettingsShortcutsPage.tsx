@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { X } from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -157,7 +157,7 @@ export function SettingsShortcutsPage() {
                       {binding ? (
                         <Button
                           aria-label={pageT("actions.clear", { label })}
-                          size="icon-sm"
+                          size="sm"
                           type="button"
                           variant="ghost"
                           onClick={() => {
@@ -166,9 +166,7 @@ export function SettingsShortcutsPage() {
                               setCapturingAction(null);
                             }
                           }}
-                        >
-                          <X aria-hidden="true" size={15} />
-                        </Button>
+                        >{pageT("actions.clear", { label })}</Button>
                       ) : null}
                     </ItemActions>
                   </Item>

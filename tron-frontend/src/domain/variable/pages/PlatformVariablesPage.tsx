@@ -7,11 +7,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
-import {
-  MoreHorizontal,
-  Plus,
-  RefreshCcw,
-} from "lucide-react";
 
 import {
   deletePlatformVariable,
@@ -258,11 +253,11 @@ export function PlatformVariablesPage() {
         actions={(
           <>
             <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={() => void refreshPlatformVariables()}>
-              <RefreshCcw size={16} aria-hidden="true" />
+
               {loading ? pageT("actions.refreshing", "Refreshing...") : pageT("actions.refresh", "Refresh")}
             </Button>
             <Button onClick={() => navigate("/settings/variables/new")}>
-              <Plus size={16} aria-hidden="true" />
+
               {pageT("actions.new", "New")}
             </Button>
           </>
@@ -384,7 +379,7 @@ export function PlatformVariablesPage() {
                 return (
                   <div className="flex justify-end">
                     <Button
-                      size="icon"
+                      size="sm"
                       variant="ghost"
                       aria-label={pageT("aria.actionsFor", "Open actions for {{key}}", { key: row.key })}
                       aria-expanded={isMenuOpen}
@@ -393,9 +388,7 @@ export function PlatformVariablesPage() {
                         event.stopPropagation();
                         toggleRowMenu(row, event.currentTarget);
                       }}
-                    >
-                      <MoreHorizontal size={16} aria-hidden="true" />
-                    </Button>
+                    >{pageT("aria.actionsFor", "Open actions for {{key}}", { key: row.key })}</Button>
                   </div>
                 );
               },

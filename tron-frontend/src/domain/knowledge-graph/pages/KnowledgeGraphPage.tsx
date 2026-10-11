@@ -3,7 +3,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Minimize2 } from "lucide-react";
+
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
@@ -281,15 +281,13 @@ export function GraphPage() {
           {canvasPanel}
           <Button
             className="absolute right-4 top-4 z-40 bg-[var(--color-elevated-surface)]/90 shadow-[0_10px_28px_rgba(15,23,42,0.10)] backdrop-blur-sm"
-            size="icon"
+            size="sm"
             variant="ghost"
             type="button"
             aria-label={pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen")}
             title={pageT("toolbar.fullscreen.exit", "Exit fullscreen")}
             onClick={() => setGraphFullscreenActive(false)}
-          >
-            <Minimize2 size={16} aria-hidden="true" />
-          </Button>
+          >{pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen")}</Button>
         </div>,
         document.body,
       ) : (

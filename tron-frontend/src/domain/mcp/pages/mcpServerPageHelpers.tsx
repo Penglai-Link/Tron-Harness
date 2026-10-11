@@ -1,7 +1,3 @@
-import {
-  Plus,
-  Trash2,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -414,13 +410,11 @@ function KeyValueListSection({
               )))}
             />
             <Button
-              size="icon"
+              size="sm"
               variant="ghost"
               aria-label={`Remove ${label.toLowerCase()} row ${index + 1}`}
               onClick={() => onChange(rows.length > 1 ? rows.filter((_, rowIndex) => rowIndex !== index) : [{ key: "", value: "" }])}
-            >
-              <Trash2 size={16} aria-hidden="true" />
-            </Button>
+            >{`Remove ${label.toLowerCase()} row ${index + 1}`}</Button>
           </div>
         ))}
       </div>
@@ -428,7 +422,7 @@ function KeyValueListSection({
         variant="secondary"
         onClick={() => onChange([...rows, { key: "", value: "" }])}
       >
-        <Plus size={16} aria-hidden="true" />
+
         {t("pages:mcp.form.add", "Add {{label}}", { label: addLabel })}
       </Button>
     </div>
@@ -471,18 +465,16 @@ function StringListSection({
               )))}
             />
             <Button
-              size="icon"
+              size="sm"
               variant="ghost"
               aria-label={`Remove ${label.toLowerCase()} item ${index + 1}`}
               onClick={() => onChange(rows.length > 1 ? rows.filter((_, rowIndex) => rowIndex !== index) : [{ value: "" }])}
-            >
-              <Trash2 size={16} aria-hidden="true" />
-            </Button>
+            >{`Remove ${label.toLowerCase()} item ${index + 1}`}</Button>
           </div>
         ))}
       </div>
       <Button variant="secondary" onClick={() => onChange([...rows, { value: "" }])}>
-        <Plus size={16} aria-hidden="true" />
+
         {t("pages:mcp.form.add", "Add {{label}}", { label: addLabel })}
       </Button>
     </div>

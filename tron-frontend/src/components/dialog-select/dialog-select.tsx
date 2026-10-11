@@ -2,14 +2,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsUpDown,
-  Search,
-  X,
-} from "lucide-react";
+import { ChevronsUpDown, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -264,10 +257,10 @@ export function DialogSelect(props: DialogSelectProps) {
             <DialogTitle>{title ?? ariaLabel}</DialogTitle>
             <DialogClose
               render={
-                <Button aria-label="Close" size="icon-sm" variant="ghost" />
+                <Button aria-label={t("common:actions.close")} size="sm" variant="ghost" />
               }
             >
-              <X aria-hidden="true" size={16} />
+              {t("common:actions.close")}
             </DialogClose>
           </div>
 
@@ -325,7 +318,7 @@ export function DialogSelect(props: DialogSelectProps) {
                           >
                             {isSelected ? (
                               multiple ? (
-                                <Check className="size-3" strokeWidth={3} />
+                                null
                               ) : (
                                 <span className="size-1.5 rounded-full bg-primary-foreground" />
                               )
@@ -354,9 +347,9 @@ export function DialogSelect(props: DialogSelectProps) {
                   </span>
                   <div className="flex items-center gap-1">
                     <Button
-                      aria-label="Previous page"
+                      aria-label={t("pagination.previousPage")}
                       disabled={resolvedPage <= 1}
-                      size="icon-sm"
+                      size="sm"
                       variant="ghost"
                       onClick={() => {
                         if (controlledPagination) {
@@ -365,16 +358,14 @@ export function DialogSelect(props: DialogSelectProps) {
                           setInternalPage(resolvedPage - 1);
                         }
                       }}
-                    >
-                      <ChevronLeft aria-hidden="true" size={14} />
-                    </Button>
+                    >{t("pagination.previousPage")}</Button>
                     <span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground">
                       {resolvedPage} / {resolvedPageCount}
                     </span>
                     <Button
-                      aria-label="Next page"
+                      aria-label={t("pagination.nextPage")}
                       disabled={resolvedPage >= resolvedPageCount}
-                      size="icon-sm"
+                      size="sm"
                       variant="ghost"
                       onClick={() => {
                         if (controlledPagination) {
@@ -383,9 +374,7 @@ export function DialogSelect(props: DialogSelectProps) {
                           setInternalPage(resolvedPage + 1);
                         }
                       }}
-                    >
-                      <ChevronRight aria-hidden="true" size={14} />
-                    </Button>
+                    >{t("pagination.nextPage")}</Button>
                   </div>
                 </div>
               ) : null}
@@ -416,12 +405,10 @@ export function DialogSelect(props: DialogSelectProps) {
                       </span>
                       <Button
                         aria-label={`${removeLabel} ${item.label}`}
-                        size="icon-sm"
+                        size="sm"
                         variant="ghost"
                         onClick={() => removeValue(item.value)}
-                      >
-                        <X aria-hidden="true" size={14} />
-                      </Button>
+                      >{`${removeLabel} ${item.label}`}</Button>
                     </div>
                   ))}
                   {pendingItems.length === 0 ? (

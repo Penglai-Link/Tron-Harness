@@ -6,67 +6,16 @@ import { useTabPanelScopeId } from "@/shared/layout/content/TabPanelRegistry";
 import { AgentTerminalToolCard, AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
 import { openAgentTerminalFromLiveResult } from "../terminal/store";
 import { SessionApplicationsPanel } from "@/domain/chat/components/SessionApplicationsPanel";
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import {
-  AlarmClock,
-  ArrowDown,
-  Archive,
-  BookmarkPlus,
-  Bot,
-  BrainCircuit,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  CircleAlert,
-  CircleDot,
-  Copy,
-  Ellipsis,
-  Eraser,
-  Hammer,
-  ListTodo,
-  LoaderCircle,
-  MessageCircleQuestionMark,
-  MessageSquareText,
-  Pause,
-  Pencil,
-  Paperclip,
-  Play,
-  Plus,
-  RefreshCw,
-  Send,
-  Sparkles,
-  Square,
-  Terminal,
-  UserRound,
-  type LucideIcon,
-  X,
-} from "lucide-react";
+import { AlarmClock, Bot, CheckCircle2, CircleAlert, CircleDot, ListTodo, LoaderCircle, MessageCircleQuestionMark, MessageSquareText, Pause, Paperclip, UserRound, type LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { MarkdownContent } from "@/components/markdown-content";
-import {
-  useWorkspaceSpaces,
-  useTabPanelConfig,
-  useDismissibleLayer,
-  useOpenRightSidebar,
-  PageView,
-  useTheme,
-  type TargetPageFrameInspectionResult,
-  useRightPanelTabs,
-} from "@/shared";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useWorkspaceSpaces, useTabPanelConfig, useDismissibleLayer, useOpenRightSidebar, useTheme, type TargetPageFrameInspectionResult, useRightPanelTabs } from "@/shared";
+
 import { useToast } from "@/components/ui/toast";
 import { MarkdownLink } from "@/components/markdown-link";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
@@ -339,13 +288,11 @@ function ChatAttachmentChip({
         ) : null}
         <Button
           aria-label={t("chat.management.composer.removeAttachment", { label })}
-          size="icon"
+          size="sm"
           variant="outline"
-          className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
+          className="absolute right-1 top-1 h-6 w-auto rounded-full bg-[var(--color-on-surface)] px-2 text-[var(--color-surface)]"
           onClick={onRemove}
-        >
-          <X size={14} />
-        </Button>
+        >{t("common:actions.remove")}</Button>
       </div>
     );
   }
@@ -364,13 +311,11 @@ function ChatAttachmentChip({
       </span>
       <Button
         aria-label={t("chat.management.composer.removeAttachment", { label })}
-        size="icon"
+        size="sm"
         variant="outline"
-        className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
+        className="absolute right-1 top-1 h-6 w-auto rounded-full bg-[var(--color-on-surface)] px-2 text-[var(--color-surface)]"
         onClick={onRemove}
-      >
-        <X size={14} />
-      </Button>
+      >{t("common:actions.remove")}</Button>
     </div>
   );
 }
@@ -2181,7 +2126,7 @@ function stoppedAguiEvents(sessionCode: string, runCodes: Iterable<string>): Cha
 
 function iconButtonClass(active = false) {
   return cn(
-    "inline-flex flex-none size-8 items-center justify-center rounded-md border border-transparent text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex flex-none min-h-8 px-2 items-center justify-center rounded-md border border-transparent text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50",
     active && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
   );
 }
@@ -2218,7 +2163,7 @@ function QueryStatusLine({
         </div>
         {status.retry ? (
           <button className={smallActionButtonClass()} type="button" onClick={status.retry}>
-            <RefreshCw size={13} />
+
             <span className="ml-1.5">{retryText}</span>
           </button>
         ) : null}
@@ -2262,7 +2207,7 @@ function SessionActionMenu({
     <div className="relative">
       <button
         ref={triggerRef}
-        className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+        className="inline-flex w-auto items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
         type="button"
         aria-label={t("chat.management.sidebar.openActionsAria", { title: session.title })}
         aria-expanded={open}
@@ -2271,9 +2216,7 @@ function SessionActionMenu({
           event.stopPropagation();
           setOpen((value) => !value);
         }}
-      >
-        <Ellipsis size={16} />
-      </button>
+      >{t("common:actions.more")}</button>
       {open ? (
         <div
           ref={menuRef}
@@ -2656,9 +2599,7 @@ function ContextOverviewPanel({
             title={t("chat.shortTermMemory.createCheckpoint")}
             type="button"
             onClick={onCreateCompaction}
-          >
-            {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <BookmarkPlus size={15} />}
-          </button>
+          >{t("chat.shortTermMemory.createCheckpoint")}</button>
         </div>
       </div>
       <div className="flex min-w-0 items-baseline justify-between gap-3">
@@ -3117,7 +3058,7 @@ function RightWorkspaceSidebar({
             type="button"
             onClick={() => void onSave()}
           >
-            {goalBusy ? <LoaderCircle className="animate-spin" size={13} /> : <CheckCircle2 size={13} />}
+
             <span className="ml-1.5">{goalBusy ? t("chat.shortTermMemory.savingGoal") : savingLabel}</span>
           </button>
           {showCancel ? (
@@ -3127,7 +3068,7 @@ function RightWorkspaceSidebar({
               type="button"
               onClick={onCancel}
             >
-              <X size={13} />
+
               <span className="ml-1.5">{t("chat.shortTermMemory.cancelEditGoal")}</span>
             </button>
           ) : null}
@@ -3148,7 +3089,7 @@ function RightWorkspaceSidebar({
             type="button"
             onClick={() => runGoalCommand(onPauseGoal)}
           >
-            <Pause size={13} />
+
             <span className="ml-1.5">{t("chat.shortTermMemory.pauseGoal")}</span>
           </button>
         ) : null}
@@ -3159,7 +3100,7 @@ function RightWorkspaceSidebar({
             type="button"
             onClick={() => runGoalCommand(onResumeGoal)}
           >
-            <Play size={13} />
+
             <span className="ml-1.5">{t("chat.shortTermMemory.resumeGoal")}</span>
           </button>
         ) : null}
@@ -3170,7 +3111,7 @@ function RightWorkspaceSidebar({
             type="button"
             onClick={() => runGoalCommand(onCancelGoal)}
           >
-            <X size={13} />
+
             <span className="ml-1.5">{t("chat.shortTermMemory.cancelGoal")}</span>
           </button>
         ) : null}
@@ -3181,7 +3122,7 @@ function RightWorkspaceSidebar({
             type="button"
             onClick={() => runGoalCommand(onClearGoal)}
           >
-            <Eraser size={13} />
+
             <span className="ml-1.5">{t("chat.shortTermMemory.clearGoal")}</span>
           </button>
         ) : null}
@@ -3192,7 +3133,7 @@ function RightWorkspaceSidebar({
             type="button"
             onClick={startGoalCreate}
           >
-            <Plus size={13} />
+
             <span className="ml-1.5">{t("chat.shortTermMemory.newGoal")}</span>
           </button>
         ) : null}
@@ -3216,7 +3157,7 @@ function RightWorkspaceSidebar({
                 type="button"
                 onClick={startGoalEdit}
               >
-                <Pencil size={13} />
+
                 <span className="ml-1.5">{t("chat.shortTermMemory.editGoal")}</span>
               </button>
             ) : null}
@@ -3562,9 +3503,9 @@ function ChatModelSelector({
           disabled={disabled}
           title={selectedModelLabel}
         >
-          <Sparkles aria-hidden="true" size={14} />
+
           <span className="truncate">{selectedModelLabel}</span>
-          <ChevronDown aria-hidden="true" size={14} />
+
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
@@ -3673,9 +3614,9 @@ function ChatAgentSelector({
           disabled={disabled}
           title={locked ? t("chat.management.agentSelector.locked") : undefined}
         >
-          <Bot aria-hidden="true" size={14} />
+
           <span className="truncate">{loading ? t("chat.management.agentSelector.loading") : selectedAgent?.name ?? t("chat.management.agentSelector.mainAgent")}</span>
-          <ChevronDown aria-hidden="true" size={14} />
+
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-72 min-w-[180px] max-w-[260px] overflow-y-auto p-1.5" side="top" sideOffset={8}>
           {agents.map((agent) => (
@@ -3689,7 +3630,7 @@ function ChatAgentSelector({
                 onSelect(agent.agentCode);
               }}
             >
-              {agent.agentCode === selectedAgentCode ? <Check aria-hidden="true" className="absolute right-2 top-2 size-4" /> : null}
+
               <span className="block min-w-0 truncate font-medium">{agent.name}</span>
               <span className="mt-0.5 block min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">
                 {agent.agentCode}
@@ -3739,41 +3680,6 @@ function SessionSidebar({
   const [editingSessionCode, setEditingSessionCode] = useState("");
   const [renameDraft, setRenameDraft] = useState("");
   const { t } = useTranslation("pages");
-  const [collapsedTooltip, setCollapsedTooltip] = useState<{
-    agentLabel: string;
-    sessionTitle: string;
-    top: number;
-  } | null>(null);
-  const collapsedTooltipTimerRef = useRef<number | null>(null);
-  const sidebarRef = useRef<HTMLElement | null>(null);
-
-  function clearCollapsedTooltipTimer() {
-    if (collapsedTooltipTimerRef.current === null) return;
-    window.clearTimeout(collapsedTooltipTimerRef.current);
-    collapsedTooltipTimerRef.current = null;
-  }
-
-  function hideCollapsedTooltip() {
-    clearCollapsedTooltipTimer();
-    setCollapsedTooltip(null);
-  }
-
-  function showCollapsedTooltip(trigger: HTMLButtonElement, session: ChatSession) {
-    clearCollapsedTooltipTimer();
-    const triggerRect = trigger.getBoundingClientRect();
-    const sidebarRect = sidebarRef.current?.getBoundingClientRect();
-    const top = sidebarRect
-      ? triggerRect.top - sidebarRect.top + triggerRect.height / 2
-      : trigger.offsetTop + trigger.offsetHeight / 2;
-    collapsedTooltipTimerRef.current = window.setTimeout(() => {
-      setCollapsedTooltip({
-        agentLabel: sessionAgentTagLabel(session.agentCode),
-        sessionTitle: session.title,
-        top,
-      });
-    }, 120);
-  }
-
   function startInlineRename(session: ChatSession) {
     setEditingSessionCode(session.sessionCode);
     setRenameDraft(session.title);
@@ -3814,11 +3720,7 @@ function SessionSidebar({
     return items;
   }, [groups]);
 
-  useEffect(() => () => clearCollapsedTooltipTimer(), []);
 
-  useEffect(() => {
-    if (!collapsed) hideCollapsedTooltip();
-  }, [collapsed]);
 
   function renderSessionRow(session: ChatSession) {
     const editing = editingSessionCode === session.sessionCode;
@@ -3893,7 +3795,6 @@ function SessionSidebar({
 
   return (
     <aside
-      ref={sidebarRef}
       data-testid="chat-session-sidebar"
       className={cn(
         "relative h-full shrink-0 overflow-visible bg-[var(--color-surface-container-lowest)] shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200",
@@ -3910,46 +3811,27 @@ function SessionSidebar({
               title={t("chat.management.sidebar.newSession")}
               disabled={creatingSession}
               onClick={onCreateSession}
-            >
-              <Plus size={17} />
-            </button>
+            >{t("chat.management.sidebar.newSession")}</button>
           </div>
           <div className="mx-auto mt-4 h-px w-6 bg-[rgba(15,23,42,0.06)]" />
           <div className="mt-3 flex flex-1 flex-col items-center gap-1 overflow-y-auto">
             {activeFlatSessions.map((session) => (
-              <button
-                className={iconButtonClass(activeSessionCode === session.sessionCode)}
-                key={session.sessionCode}
-                type="button"
-                aria-label={t("chat.management.sidebar.openAria", { title: session.title })}
-                onClick={() => onSessionSelect(session, activeSourceTab)}
-                onMouseEnter={(event) => showCollapsedTooltip(event.currentTarget, session)}
-                onMouseLeave={hideCollapsedTooltip}
-                onFocus={(event) => showCollapsedTooltip(event.currentTarget, session)}
-                onBlur={hideCollapsedTooltip}
-              >
-                {pendingUserInputSessionCodes.has(session.sessionCode) ? (
-                  <MessageCircleQuestionMark className="text-[var(--color-focus-ring)]" size={17} />
-                ) : (
-                  <MessageSquareText className={sessionAgentIconTone(session.agentCode)} size={17} />
-                )}
-              </button>
+              <Tooltip key={session.sessionCode}>
+                <TooltipTrigger render={<button type="button" />}
+                  className={iconButtonClass(activeSessionCode === session.sessionCode)}
+                  aria-label={t("chat.management.sidebar.openAria", { title: session.title })}
+                  onClick={() => onSessionSelect(session, activeSourceTab)}
+                >{t("chat.management.sidebar.openAria", { title: session.title })}</TooltipTrigger>
+                <TooltipContent side="right">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide">{sessionAgentTagLabel(session.agentCode)}</p>
+                    <p className="max-w-[220px] break-words">{session.title}</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             ))}
           </div>
-          {collapsedTooltip ? (
-            <div
-              className="pointer-events-none absolute left-full z-40 ml-2 -translate-y-1/2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1.5 text-xs text-[var(--color-on-surface)] shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
-              style={{ top: collapsedTooltip.top }}
-              role="tooltip"
-            >
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
-                {collapsedTooltip.agentLabel}
-              </p>
-              <p className="max-w-[220px] truncate text-xs text-[var(--color-on-surface)]">
-                {collapsedTooltip.sessionTitle}
-              </p>
-            </div>
-          ) : null}
+
         </div>
       ) : (
         <>
@@ -3966,9 +3848,7 @@ function SessionSidebar({
                 title={t("chat.management.sidebar.newSession")}
                 disabled={creatingSession}
                 onClick={onCreateSession}
-              >
-                <Plus size={17} />
-              </button>
+              >{t("chat.management.sidebar.newSession")}</button>
             </div>
           </div>
           <div className="h-[calc(100%-3.5rem)] overflow-y-auto px-3 py-4">
@@ -3991,8 +3871,8 @@ function SessionSidebar({
                     title={t(tab.labelKey)}
                     onClick={() => onSourceTabSelect(tab.id)}
                   >
-                    <TabIcon size={17} strokeWidth={2.2} />
-                    <span className="sr-only">{t(tab.labelKey)}</span>
+
+                    <span className="">{t(tab.labelKey)}</span>
                   </button>
                 );
               })}
@@ -4025,7 +3905,7 @@ function SessionSidebar({
                     }}
                   >
                     <span>{group.taskTitle}</span>
-                    {closed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+
                   </button>
                   {!closed ? (
                     <div className="space-y-1">
@@ -4093,14 +3973,12 @@ function ChatBubble({
               />
               <button
                 aria-label={t("chat.management.bubble.editMessage")}
-                className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
+                className="inline-flex w-auto items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
                 disabled={!message.content || !onEditMessage}
                 title={t("chat.management.bubble.editMessage")}
                 type="button"
                 onClick={() => void handleEditMessage()}
-              >
-                <Pencil size={14} />
-              </button>
+              >{t("chat.management.bubble.editMessage")}</button>
             </>
           ) : null}
           <span className="text-xs text-[var(--color-on-surface-variant)]">{formatTime(message.createdAt)}</span>
@@ -4168,14 +4046,14 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
       >
         <div className="flex min-w-0 items-start gap-[12px]">
           <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] transition group-hover:bg-[var(--color-surface-container-low)] group-hover:text-[var(--color-on-surface)]">
-            <BrainCircuit className={card.ended ? undefined : "animate-pulse"} size={16} />
+
           </span>
           <span className={cn("min-w-0 flex-1 line-clamp-2 text-sm leading-5", card.ended ? undefined : "animate-pulse")}>
             {headerSummary}
           </span>
         </div>
         <span className="mt-0.5 shrink-0 text-[var(--color-on-surface-variant)]">
-          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+
         </span>
       </button>
       {expanded ? (
@@ -4240,14 +4118,12 @@ function CopyValueButton({
   return (
     <button
       aria-label={ariaLabel}
-      className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
+      className="inline-flex w-auto items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
       disabled={!value.trim()}
       title={title}
       type="button"
       onClick={() => void handleCopy()}
-    >
-      {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
-    </button>
+    >{ariaLabel}</button>
   );
 }
 
@@ -4316,8 +4192,8 @@ function CompactToolRow({
             {typeof stepNumber === "number"
               ? stepNumber
               : complete
-                ? <CheckCircle2 size={14} />
-                : <Hammer className="animate-pulse" size={14} />}
+                ? null
+                : null}
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-[12px]">
@@ -4329,7 +4205,7 @@ function CompactToolRow({
           </div>
         </div>
         <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+
         </span>
       </button>
       {expanded ? (
@@ -4347,7 +4223,7 @@ function CompactToolRow({
                     type="button"
                     onClick={() => setParametersExpanded((current) => !current)}
                   >
-                    {parametersExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+
                     <span>{t("chat.management.tool.parameters")}</span>
                   </button>
                   <CopyValueButton ariaLabel={t("chat.management.tool.copyParameters")} title={t("chat.management.tool.copyParameters")} value={parametersText} />
@@ -4429,14 +4305,14 @@ function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
       >
         <span className="flex min-w-0 items-center gap-[12px]">
           <span className="inline-flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] transition group-hover:bg-[var(--color-surface-container-low)] group-hover:text-[var(--color-on-surface)]">
-            <Terminal className={hasRunningTool ? "animate-pulse" : undefined} size={15} />
+
           </span>
           <span className="truncate font-medium">
             {t("chat.management.tool.ranCommands", { count: toolCount })}
           </span>
         </span>
         <span className="shrink-0 text-[var(--color-on-surface-variant)]">
-          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+
         </span>
       </button>
       {expanded ? (
@@ -5085,7 +4961,6 @@ export function ChatManagementPage() {
   useEffect(() => {
     setCurrentSearchText(routerSearchText);
   }, [routerSearchText]);
-
 
   function scrollToLatestMessage(behavior: ScrollBehavior = "auto") {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
@@ -5737,14 +5612,12 @@ export function ChatManagementPage() {
         <Button
           aria-label={t("chat.management.composer.uploadAttachment")}
           disabled={(!activeSession && !isDraft) || creatingSession || attachmentUploadPending}
-          size="icon"
+          size="sm"
           title={attachmentUploadPending ? t("chat.management.composer.uploading") : t("chat.management.composer.uploadAttachment")}
           type="button"
           variant="ghost"
           onClick={() => attachmentFileInputRef.current?.click()}
-        >
-          <Paperclip aria-hidden="true" />
-        </Button>
+        >{t("chat.management.composer.uploadAttachment")}</Button>
         <div className="min-w-0 max-w-[9.5rem] shrink">
           <ChatAgentSelector
             locked={agentSelectionLocked}
@@ -5771,9 +5644,9 @@ export function ChatManagementPage() {
               aria-label={t("common:reasoningEffort.chatLabel", "Reasoning effort")}
               className="inline-flex h-8 flex-none items-center gap-[12px] rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
             >
-              <BrainCircuit aria-hidden="true" className="size-3.5 shrink-0" />
+
               <span className="min-w-0 truncate">{selectedReasoningEffortLabel}</span>
-              <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
+
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" sideOffset={8}>
               {selectedModelDefaultReasoningEffort ? null : (
@@ -5781,7 +5654,7 @@ export function ChatManagementPage() {
                   className="relative pr-8"
                   onClick={() => setSelectedReasoningEffort(null)}
                 >
-                  {selectedReasoningEffortControlValue === modelDefaultReasoningEffortValue ? <Check aria-hidden="true" className="absolute right-2 size-4" /> : null}
+
                   {selectedReasoningEffortDefaultLabel}
                 </DropdownMenuItem>
               )}
@@ -5795,7 +5668,7 @@ export function ChatManagementPage() {
                       option.value === selectedModelDefaultReasoningEffort ? null : option.value as ReasoningEffort,
                     )}
                   >
-                    {selected ? <Check aria-hidden="true" className="absolute right-2 size-4" /> : null}
+
                     {option.label}
                   </DropdownMenuItem>
                 );
@@ -6933,7 +6806,6 @@ export function ChatManagementPage() {
     }
     openDraftChatTab();
   }
-
 
   async function handleArchiveSession(session: ChatSession) {
     const returnSourceTab = requestedSourceTab ?? activeSourceTab;

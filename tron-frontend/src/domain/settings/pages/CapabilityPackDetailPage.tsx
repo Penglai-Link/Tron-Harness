@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Package, RefreshCw } from "lucide-react";
+import { Package } from "lucide-react";
 import { Link, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 
@@ -42,8 +42,8 @@ export function CapabilityPackDetailPage() {
       { label: t("shell:settings.items.capabilityPacks"), href: "/settings/capability-packs" },
       { label: record?.name ?? pageT("details") },
     ]} actions={<div className="flex gap-2">
-      <Link className={buttonVariants({ variant: "outline", size: "sm" })} to="/settings/capability-packs"><ArrowLeft size={15} />{pageT("backToPacks")}</Link>
-      <Button variant="outline" size="sm" disabled={loading} onClick={() => setRevision((value) => value + 1)}><RefreshCw size={15} className={loading ? "animate-spin" : ""} />{pageT("refresh")}</Button>
+      <Link className={buttonVariants({ variant: "outline", size: "sm" })} to="/settings/capability-packs">{pageT("backToPacks")}</Link>
+      <Button variant="outline" size="sm" disabled={loading} onClick={() => setRevision((value) => value + 1)}>{pageT("refresh")}</Button>
     </div>} />
     {loading ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{pageT("loading")}</p> : error ? <SurfaceCard role="alert" className="text-sm text-[var(--color-error)]">{pageT("loadFailed")}: {error}</SurfaceCard> : !record ? <SurfaceCard>{pageT("notFound")}</SurfaceCard> : <>
       <SurfaceCard className="space-y-4">

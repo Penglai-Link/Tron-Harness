@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import { MoreHorizontal } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { toastManager, useToast } from "@/components/ui/toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -73,9 +73,7 @@ export function RagDefinitionTab({ corpora, onSaved, onIngestion }: { corpora: R
           <TableCell className="text-right">
             <DropdownMenu>
               <DropdownMenuTrigger render={
-                <Button variant="ghost" size="icon" aria-label={t("ragUnified.corpusActions", { name: corpus.kind === "builtin" ? t(`ragUnified.builtins.${corpus.id}`) : corpus.name })}>
-                  <MoreHorizontal size={16} aria-hidden="true" />
-                </Button>
+                <Button variant="ghost" size="sm" aria-label={t("ragUnified.corpusActions", { name: corpus.kind === "builtin" ? t(`ragUnified.builtins.${corpus.id}`) : corpus.name })}>{t("ragUnified.corpusActions", { name: corpus.kind === "builtin" ? t(`ragUnified.builtins.${corpus.id}`) : corpus.name })}</Button>
               } />
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => open(corpus)}>{t("ragUnified.configure")}</DropdownMenuItem>

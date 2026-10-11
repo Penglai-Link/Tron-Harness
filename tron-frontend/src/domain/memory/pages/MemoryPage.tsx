@@ -1,15 +1,6 @@
 import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Boxes,
-  Check,
-  ChevronDown,
-  Database,
-  MoreHorizontal,
-  Plus,
-  RefreshCcw,
-  UserRound,
-} from "lucide-react";
+import { Boxes, Database, UserRound } from "lucide-react";
 
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
 
@@ -33,13 +24,9 @@ import type {
   MemorySearchTarget,
 } from "@/domain/memory/model";
 import { archiveMemoryFragment } from "@/domain/memory/mock/data";
-import { Field, SelectInput } from "@/components/forms";
+import { SelectInput } from "@/components/forms";
 import { SearchField } from "@/components/search-field";
-import {
-  PageHeader,
-  SurfaceCard,
-  useTabPanelConfig,
-} from "@/shared";
+import { useTabPanelConfig } from "@/shared";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,7 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
-import { cn } from "@/shared/lib/utils";
+
 import { SelectItem } from "@/components/ui/select";
 import { useTranslation } from "react-i18next";
 
@@ -390,13 +377,11 @@ function MemoryRecordsTable({
               render={
                 <Button
                   aria-label={t("pages:memory.aria.actionsFor", "Open actions for {{title}}", { title: row.original.title })}
-                  size="icon"
+                  size="sm"
                   variant="ghost"
                   onClick={(event) => event.stopPropagation()}
                   onKeyDown={(event) => event.stopPropagation()}
-                >
-                  <MoreHorizontal size={16} aria-hidden="true" />
-                </Button>
+                >{t("pages:memory.aria.actionsFor", "Open actions for {{title}}", { title: row.original.title })}</Button>
               }
             />
             <DropdownMenuContent align="end" className="w-44">

@@ -1,13 +1,6 @@
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Plus,
-  GitBranch,
-  ZoomIn,
-  ZoomOut,
-  Maximize,
-  Trash2,
-} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import type { LoopDesign } from "../model/LoopModel";
 import { loopNodeName } from "../model/builtinLoops";
@@ -235,11 +228,7 @@ export function DagLoopCanvas({
                 disabled={disabled || design.nodes.length >= 64}
                 onClick={() => onAdd(kind, center())}
               >
-                {kind === "Model" ? (
-                  <Plus size={14} />
-                ) : (
-                  <GitBranch size={14} />
-                )}
+
                 {t(
                   kind === "Model"
                     ? "agentLoops.addModel"
@@ -253,7 +242,7 @@ export function DagLoopCanvas({
           {edge !== null && design.edges[edge] ? (
             <Button
               type="button"
-              size="icon-sm"
+              size="sm"
               variant="ghost"
               disabled={disabled}
               aria-label={t("agentLoops.removeEdge")}
@@ -261,40 +250,32 @@ export function DagLoopCanvas({
                 onDisconnect(edge);
                 setEdge(null);
               }}
-            >
-              <Trash2 size={14} />
-            </Button>
+            >{t("agentLoops.removeEdge")}</Button>
           ) : null}
           <Button
             type="button"
-            size="icon-sm"
+            size="sm"
             variant="ghost"
             aria-label={t("agentLoops.zoomOut")}
             onClick={() => zoom(1 / 1.2)}
-          >
-            <ZoomOut size={14} />
-          </Button>
+          >{t("agentLoops.zoomOut")}</Button>
           <span className="w-10 text-center text-xs text-[var(--color-on-surface-variant)]">
             {Math.round(camera.zoom * 1000) / 10}%
           </span>
           <Button
             type="button"
-            size="icon-sm"
+            size="sm"
             variant="ghost"
             aria-label={t("agentLoops.zoomIn")}
             onClick={() => zoom(1.2)}
-          >
-            <ZoomIn size={14} />
-          </Button>
+          >{t("agentLoops.zoomIn")}</Button>
           <Button
             type="button"
-            size="icon-sm"
+            size="sm"
             variant="ghost"
             aria-label={t("agentLoops.fitCanvas")}
             onClick={fit}
-          >
-            <Maximize size={14} />
-          </Button>
+          >{t("agentLoops.fitCanvas")}</Button>
         </div>
       </div>
       <div

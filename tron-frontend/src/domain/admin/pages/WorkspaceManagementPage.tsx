@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, FolderTree, Plus, RefreshCcw, Save, Trash2, RotateCcw } from "lucide-react";
+import { FolderTree } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,17 +68,13 @@ function TreeNode({
     <div>
       <div className={`group flex min-w-0 items-center gap-1 rounded-md border-s-2 py-1 pe-1 ps-0 transition-colors ${selected ? "border-[var(--color-accent)] bg-[var(--color-surface-container-high)]" : "border-transparent hover:bg-[var(--color-surface-container)]"}`}>
         {record.children.length ? (
-          <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" onClick={onToggle} aria-label={expanded ? labels.collapse : labels.expand} aria-expanded={expanded}>
-            {expanded ? <ChevronDown /> : <ChevronRight />}
-          </Button>
+          <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onToggle} aria-label={expanded ? labels.collapse : labels.expand} aria-expanded={expanded}>{expanded ? labels.collapse : labels.expand}</Button>
         ) : <span aria-hidden="true" className="inline-block size-8 shrink-0" />}
         <button type="button" aria-current={selected ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left" onClick={onSelect}>
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{record.name}</span>
           <span className="hidden max-w-28 truncate font-mono text-xs text-[var(--color-on-surface-variant)] xl:block">{record.workspaceCode}</span>
         </button>
-        <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-[var(--color-on-surface-variant)]" onClick={onCreateChild} aria-label={labels.createChild}>
-          <Plus />
-        </Button>
+        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-[var(--color-on-surface-variant)]" onClick={onCreateChild} aria-label={labels.createChild}>{labels.createChild}</Button>
       </div>
     </div>
   );
@@ -240,11 +236,11 @@ export function WorkspaceManagementPage() {
         <h1 className="text-lg font-semibold tracking-tight">{t("workspaceManagement.title")}</h1>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => void loadTree()} disabled={loading}>
-            <RefreshCcw aria-hidden="true" className={loading ? "animate-spin" : undefined} />
+
             {t("workspaceManagement.refresh")}
           </Button>
           <Button onClick={() => prepareCreate(null)}>
-            <Plus aria-hidden="true" />
+
             {t("workspaceManagement.createWorkspace")}
           </Button>
         </div>
@@ -317,11 +313,11 @@ export function WorkspaceManagementPage() {
               ) : null}
 
               <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-[var(--color-outline-variant)] pt-4">
-                <Button onClick={save} disabled={saving}><Save aria-hidden="true" />{mode === "create" ? t("workspaceManagement.create") : t("workspaceManagement.save")}</Button>
+                <Button onClick={save} disabled={saving}>{mode === "create" ? t("workspaceManagement.create") : t("workspaceManagement.save")}</Button>
                 {mode === "edit" && detail && detail.parentWorkspaceCode !== parentCode ? <Button variant="outline" onClick={move} disabled={saving}>{t("workspaceManagement.move")}</Button> : null}
                 {mode === "edit" && detail ? (
                   <Button variant={detail.status === "Active" ? "destructive" : "outline"} onClick={changeStatus} disabled={saving}>
-                    {detail.status === "Active" ? <><Trash2 aria-hidden="true" />{t("workspaceManagement.archive")}</> : <><RotateCcw aria-hidden="true" />{t("workspaceManagement.restore")}</>}
+                    {detail.status === "Active" ? <>{t("workspaceManagement.archive")}</> : <>{t("workspaceManagement.restore")}</>}
                   </Button>
                 ) : null}
               </div>

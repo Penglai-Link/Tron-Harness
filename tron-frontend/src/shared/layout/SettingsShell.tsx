@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ArrowLeft,
   ChevronDown,
   ChevronRight,
   type LucideIcon,
@@ -123,7 +122,6 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
             </div>
           </div>
           <Link to={returnTo} className={buttonVariants({ variant: "secondary" })}>
-            <ArrowLeft size={16} aria-hidden="true" />
             {t("shell:settings.back")}
           </Link>
         </div>

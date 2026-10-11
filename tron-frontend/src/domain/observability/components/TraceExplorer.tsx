@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { RefreshCcw, Search } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/data-table";
@@ -121,9 +121,7 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
               onClick={refresh}
               disabled={!workspaceCode || list.isFetching}
             >
-              <RefreshCcw
-                className={list.isFetching ? "animate-spin" : undefined}
-              />
+
               {t("refresh")}
             </Button>
           </>
@@ -197,7 +195,7 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
               maxLength={128}
             />
             <Button type="submit" disabled={!workspaceCode}>
-              <Search />
+
               {t("search")}
             </Button>
             {(sessionCode || traceId) && (

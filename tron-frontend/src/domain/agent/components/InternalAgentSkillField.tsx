@@ -25,13 +25,10 @@ import {
 import type { RegistrySkillRecord } from "@/domain/skill/model";
 
 export function DisabledResourceReason({ reason }: { reason?: string | null }) {
-  const [open, setOpen] = useState(false);
   return reason ? (
-    <Tooltip open={open} onOpenChange={setOpen}>
+    <Tooltip>
       <TooltipTrigger
         type="button"
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
         aria-label={reason}
         className="text-xs text-[var(--color-on-surface-variant)]"
       >

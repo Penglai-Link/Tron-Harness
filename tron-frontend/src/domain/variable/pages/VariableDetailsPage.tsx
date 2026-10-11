@@ -8,13 +8,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  Edit3,
-  Save,
-  Trash2,
-  Undo2,
-  X,
-} from "lucide-react";
 
 import {
   createVariable,
@@ -298,11 +291,11 @@ export function VariableDetailsPage() {
         actions={editing ? (
           <>
             <Button variant="secondary" disabled={submitting} onClick={exitEditing}>
-              <X size={16} aria-hidden="true" />
+
               {t("pages:variables.actions.cancel", "Cancel")}
             </Button>
             <Button disabled={submitting || !form.key.trim()} aria-busy={submitting} onClick={() => void saveVariable()}>
-              <Save size={16} aria-hidden="true" />
+
               {submitting ? t("pages:variables.actions.saving", "Saving...") : t("pages:variables.actions.save", "Save")}
             </Button>
           </>
@@ -310,19 +303,19 @@ export function VariableDetailsPage() {
           <>
             {selectedRecord.sourceKind === "Inherited" ? (
               <Button variant="secondary" onClick={beginOverride}>
-                <Undo2 size={16} aria-hidden="true" />
+
                 {t("pages:variables.actions.override", "Override")}
               </Button>
             ) : null}
             {isWorkspaceVariableEditable(selectedRecord) ? (
               <Button variant="secondary" onClick={beginEdit}>
-                <Edit3 size={16} aria-hidden="true" />
+
                 {t("pages:variables.actions.edit", "Edit")}
               </Button>
             ) : null}
             {isWorkspaceVariableRemovable(selectedRecord) ? (
               <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeVariable()}>
-                <Trash2 size={16} aria-hidden="true" />
+
                 {deleting ? t("pages:variables.actions.deleting", "Deleting...") : (selectedRecord.sourceKind === "Override" ? t("pages:variables.actions.revert", "Revert") : t("pages:variables.actions.delete", "Delete"))}
               </Button>
             ) : null}

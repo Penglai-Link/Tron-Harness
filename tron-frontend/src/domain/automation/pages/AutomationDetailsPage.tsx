@@ -9,17 +9,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  Archive,
-  Edit3,
-  ListChecks,
-  Maximize2,
-  Pause,
-  Play,
-  Save,
-  StepForward,
-  X,
-} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -403,7 +392,7 @@ export function AutomationDetailsPage() {
                   void handleStatusChange("Active");
                 }}
               >
-                <Play size={14} aria-hidden="true" />
+
                 {pt("Activate")}
               </Button>
               <Button
@@ -414,26 +403,26 @@ export function AutomationDetailsPage() {
                   void handleStatusChange("Paused");
                 }}
               >
-                <Pause size={14} aria-hidden="true" />
+
                 {pt("Pause")}
               </Button>
             </div>
             <Button variant="secondary" onClick={() => navigate(automationExecutionsHref(automation.automationCode || automationCode))}>
-              <ListChecks size={15} aria-hidden="true" />
+
               {pt("Execution instances")}
             </Button>
             <Button disabled={executionBusy || archived} variant="secondary" onClick={handleExecute}>
-              <Play size={15} aria-hidden="true" />
+
               {executionBusy ? pt("Running...") : pt("Run Now")}
             </Button>
             {archived ? (
               <Button disabled={archiveBusy} variant="secondary" onClick={handleRestore}>
-                <StepForward size={15} aria-hidden="true" />
+
                 {archiveBusy ? pt("Restoring...") : pt("Restore")}
               </Button>
             ) : (
               <Button disabled={archiveBusy} variant="secondary" onClick={handleArchive}>
-                <Archive size={15} aria-hidden="true" />
+
                 {archiveBusy ? pt("Archiving...") : pt("Archive")}
               </Button>
             )}
@@ -441,13 +430,13 @@ export function AutomationDetailsPage() {
               <>
                 <Button variant="secondary" onClick={resetDraft}>{pt("Cancel")}</Button>
                 <Button disabled={!detailDirty || saving || archived || !selectedModelOptionCode} aria-busy={saving} onClick={() => void saveDetail()}>
-                  <Save size={15} aria-hidden="true" />
+
                   {saving ? pt("Saving...") : pt("Save")}
                 </Button>
               </>
             ) : (
               <Button disabled={archived} variant="secondary" onClick={() => setEditing(true)}>
-                <Edit3 size={15} aria-hidden="true" />
+
                 {pt("Edit")}
               </Button>
             )}
@@ -516,7 +505,7 @@ export function AutomationDetailsPage() {
             <div className="flex flex-wrap items-center justify-between gap-[12px]">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pt("Prompt body")}</span>
               <Button size="sm" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
-                <Maximize2 size={15} aria-hidden="true" />
+
                 {pt("Fullscreen")}
               </Button>
             </div>
@@ -576,9 +565,7 @@ export function AutomationDetailsPage() {
                     : pt("Preview the rendered prompt that the scheduler will dispatch for this automation.")}
                 </p>
               </div>
-              <Button size="icon" type="button" variant="ghost" aria-label={pt("Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>
-                <X size={16} aria-hidden="true" />
-              </Button>
+              <Button size="sm" type="button" variant="ghost" aria-label={pt("Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>{pt("Close prompt fullscreen")}</Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               {editing ? (

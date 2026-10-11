@@ -9,9 +9,6 @@ import {
   useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
-import {
-  Edit3,
-} from "lucide-react";
 
 import {
   fetchPlatformMcpServer,
@@ -181,7 +178,7 @@ export function PlatformMcpServerDetailsPage() {
         actions={(
           <>
             <Button variant="secondary" onClick={() => navigate(`/settings/mcp-servers/edit?serverCode=${encodeURIComponent(record.serverCode)}`)}>
-              <Edit3 size={16} aria-hidden="true" />
+
               {t("pages:mcp.actions.edit", "Edit")}
             </Button>
           </>

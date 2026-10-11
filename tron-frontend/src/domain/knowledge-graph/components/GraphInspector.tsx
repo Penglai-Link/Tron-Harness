@@ -1,4 +1,3 @@
-import { Copy, ExternalLink, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -59,9 +58,7 @@ export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: Gr
             <Badge variant={node.properties.status === "ACTIVE" ? "success" : "info"}>{formatValue(node.properties.status ?? "ACTIVE")}</Badge>
           </div>
         </div>
-        <Button size="icon" variant="ghost" type="button" aria-label={pageT("inspector.closeAria", "Close node inspector")} onClick={onClose}>
-          <X size={16} aria-hidden="true" />
-        </Button>
+        <Button size="sm" variant="ghost" type="button" aria-label={pageT("inspector.closeAria", "Close node inspector")} onClick={onClose}>{pageT("inspector.closeAria", "Close node inspector")}</Button>
       </div>
 
       <section className="space-y-2">
@@ -148,15 +145,15 @@ export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: Gr
 
       <div className="grid grid-cols-1 gap-[12px] sm:grid-cols-2 lg:grid-cols-1">
         <Button type="button" variant="secondary" onClick={() => onExpandNode(node.nodeCode)}>
-          <ExternalLink size={16} aria-hidden="true" />
+
           {pageT("inspector.actions.expand", "Expand Node")}
         </Button>
         <Button type="button">
-          <ExternalLink size={16} aria-hidden="true" />
+
           {pageT("inspector.actions.open", "Open Node")}
         </Button>
         <Button type="button" variant="secondary">
-          <Copy size={16} aria-hidden="true" />
+
           {pageT("inspector.actions.copyNodeCode", "Copy node_code")}
         </Button>
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, ExternalLink, RefreshCw } from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -74,7 +74,7 @@ export function UpdateSettingsCard() {
           <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">{t("settingsGeneral.update.title")}</h2>
         </div>
         <Button disabled={checking || status.type === "downloading"} size="sm" variant="secondary" onClick={() => void handleCheck()}>
-          <RefreshCw className={checking ? "animate-spin" : ""} size={14} aria-hidden="true" />
+
           {checking ? t("update.actions.checking") : t("update.actions.check")}
         </Button>
       </div>
@@ -93,13 +93,13 @@ export function UpdateSettingsCard() {
 
       {status.type === "updateAvailable" ? (
         <Button size="sm" onClick={() => void handleDownload()}>
-          <Download size={14} aria-hidden="true" />
+
           {t("update.actions.download")}
         </Button>
       ) : null}
       {status.type === "downloaded" ? (
         <Button size="sm" onClick={() => void handleApply()}>
-          <ExternalLink size={14} aria-hidden="true" />
+
           {t("update.actions.install")}
         </Button>
       ) : null}

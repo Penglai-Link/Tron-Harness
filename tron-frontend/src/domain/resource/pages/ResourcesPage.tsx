@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router";
-import { MoreHorizontal, RefreshCcw, Trash2, Upload } from "lucide-react";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -273,13 +273,13 @@ export function ResourcesPage() {
                         aria-label={pageT("actions.forResource", {
                           name: row.original.name,
                         })}
-                        size="icon"
+                        size="sm"
                         variant="ghost"
                         onClick={(event) => event.stopPropagation()}
                         onKeyDown={(event) => event.stopPropagation()}
-                      >
-                        <MoreHorizontal aria-hidden="true" size={16} />
-                      </Button>
+                      >{pageT("actions.forResource", {
+                          name: row.original.name,
+                        })}</Button>
                     )}
                   />
                   <DropdownMenuContent align="end">
@@ -299,7 +299,7 @@ export function ResourcesPage() {
                           setDeleteTarget(row.original);
                         }}
                       >
-                        <Trash2 aria-hidden="true" size={16} />
+
                         {pageT("actions.delete")}
                       </DropdownMenuItem>
                     ) : null}
@@ -451,15 +451,13 @@ export function ResourcesPage() {
               onClick={() => {
                 void resourceTable.refresh();
               }}
-            >
-              <RefreshCcw aria-hidden="true" size={15} />
-            </Button>
+            >{pageT("actions.refresh")}</Button>
             <Button
               disabled={!activeWorkspace}
               size="lg"
               onClick={() => setQuickUploadOpen(true)}
             >
-              <Upload aria-hidden="true" size={15} />
+
               {pageT("actions.quickUpload")}
             </Button>
           </>

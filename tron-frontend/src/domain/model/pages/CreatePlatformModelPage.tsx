@@ -5,10 +5,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import {
-  Save,
-  ShieldCheck,
-} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -143,7 +139,7 @@ export function CreatePlatformModelPage() {
               aria-busy={verifying}
               onClick={() => void saveModel({ verifyAfterCreate: true })}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
+
               {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
             </Button>
             <Button
@@ -151,7 +147,7 @@ export function CreatePlatformModelPage() {
               aria-busy={submitting}
               onClick={() => void saveModel()}
             >
-              <Save size={16} aria-hidden="true" />
+
               {submitting ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
             </Button>
           </>

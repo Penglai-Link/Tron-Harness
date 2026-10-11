@@ -1,7 +1,7 @@
 import { OnlineSkinMarket } from "./OnlineSkinMarket";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Trash2, Upload } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -48,7 +48,7 @@ export function SkinSettings() {
           <InfoTooltip ariaLabel={t("settingsAppearance.skinHint")}>{t("settingsAppearance.skinHint")}</InfoTooltip>
         </div>
         <Button variant="outline" disabled={loading} onClick={() => input.current?.click()}>
-          <Upload aria-hidden="true" />{t("settingsAppearance.importSkin")}
+          {t("settingsAppearance.importSkin")}
         </Button>
         <input ref={input} type="file" accept=".zip,.json" className="hidden" aria-label={t("settingsAppearance.importSkin")}
           onChange={(event) => {
@@ -74,7 +74,7 @@ export function SkinSettings() {
           return <div key={skin.id} data-theme-anchor="card" className="relative min-w-0">
             <Button variant="outline" aria-label={label(skin)} aria-pressed={selected}
               disabled={loading} onClick={() => void select(skin.id)}
-              className="h-auto w-full min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-lg p-0 text-left aria-pressed:border-ring aria-pressed:ring-1 aria-pressed:ring-ring">
+              className="h-auto w-full min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-lg px-2 text-left aria-pressed:border-ring aria-pressed:ring-1 aria-pressed:ring-ring">
               <span className="flex h-28 gap-3 p-3" style={{ background, color: foreground }} aria-hidden="true">
                 <span className="flex w-1/4 flex-col gap-2 rounded p-2" style={{ background: surface }}>
                   <span className="h-2 w-3/4 rounded" style={{ background: accent }} />
@@ -89,20 +89,18 @@ export function SkinSettings() {
               </span>
               <span className="flex min-w-0 items-center justify-between gap-2 px-3 py-2.5">
                 <span className="truncate">{label(skin)}</span>
-                {selected ? <Check className="size-4 shrink-0" aria-hidden="true" /> : null}
+
               </span>
             </Button>
             {imported ? <Button
               variant="ghost"
-              size="icon-sm"
+              size="sm"
               aria-label={t("settingsAppearance.uninstallSkin", { name: label(skin) })}
               title={t("settingsAppearance.uninstallSkin", { name: label(skin) })}
               disabled={loading}
               onClick={() => setSkinToUninstall(skin)}
               className="absolute right-2 top-2 z-10 border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]/90 text-[var(--color-error)] shadow-sm hover:bg-[var(--color-elevated-surface)]"
-            >
-              <Trash2 aria-hidden="true" />
-            </Button> : null}
+            >{t("settingsAppearance.uninstallSkin", { name: label(skin) })}</Button> : null}
           </div>;
         })}
       </div>

@@ -4,11 +4,27 @@ export const common = {
     description: "页面加载或运行出错。可以切换到其他页面，或刷新后重试。刷新会丢失尚未保存的内容。",
   },
   actions: {
+    back: "后退",
+    forward: "前进",
+    open: "打开",
+    disableInspection: "关闭注释",
+    enableInspection: "开启注释",
+
+    closeTab: "关闭标签页",
+    help: "帮助",
+    archive: "归档",
+    collapse: "收起",
+    create: "创建",
+    expand: "展开",
+    more: "更多",
+    remove: "移除",
+
     close: "关闭",
     logout: "退出登录",
     refresh: "刷新",
     signIn: "登录",
   },
+  status: { running: "运行中" },
   dialogSelect: {
     cancel: "取消",
     confirm: "确定",

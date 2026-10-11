@@ -8,12 +8,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  Edit3,
-  Save,
-  Trash2,
-  X,
-} from "lucide-react";
 
 import {
   deletePlatformVariable,
@@ -237,22 +231,22 @@ export function PlatformVariableDetailsPage() {
         actions={editing ? (
           <>
             <Button variant="secondary" disabled={submitting} onClick={resetDraft}>
-              <X size={16} aria-hidden="true" />
+
               {t("pages:variables.actions.cancel", "Cancel")}
             </Button>
             <Button disabled={submitting} aria-busy={submitting} onClick={() => void saveVariable()}>
-              <Save size={16} aria-hidden="true" />
+
               {submitting ? t("pages:variables.actions.saving", "Saving...") : t("pages:variables.actions.save", "Save")}
             </Button>
           </>
         ) : (
           <>
             <Button onClick={enterEditing}>
-              <Edit3 size={16} aria-hidden="true" />
+
               {t("pages:variables.actions.edit", "Edit")}
             </Button>
             <Button variant="ghost" disabled={deleting || loading} aria-busy={deleting} onClick={() => void removeVariable()}>
-              <Trash2 size={16} aria-hidden="true" />
+
               {deleting ? t("pages:variables.actions.deleting", "Deleting...") : t("pages:variables.actions.delete", "Delete")}
             </Button>
           </>

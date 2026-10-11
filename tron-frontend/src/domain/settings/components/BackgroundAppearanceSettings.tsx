@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Image as ImageIcon, Trash2, Upload } from "lucide-react";
+import { Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OptionSelect } from "@/components/option-select/OptionSelect";
@@ -70,7 +70,7 @@ export function BackgroundAppearanceSettings() {
           <ItemTitle>{t("settingsAppearance.backgroundImage")}</ItemTitle>
           <div className="flex items-center gap-2">
             <Button disabled={savingImage} variant="outline" onClick={() => imageInput.current?.click()}>
-              <Upload aria-hidden="true" />
+
               {backgroundImageUrl
                 ? t("settingsAppearance.backgroundImageReplace")
                 : t("settingsAppearance.backgroundImageChoose")}
@@ -79,13 +79,11 @@ export function BackgroundAppearanceSettings() {
               <Button
                 aria-label={t("settingsAppearance.backgroundImageRemove")}
                 disabled={savingImage}
-                size="icon-sm"
+                size="sm"
                 title={t("settingsAppearance.backgroundImageRemove")}
                 variant="ghost"
                 onClick={() => void removeImage()}
-              >
-                <Trash2 aria-hidden="true" />
-              </Button>
+              >{t("settingsAppearance.backgroundImageRemove")}</Button>
             ) : null}
             <input
               accept="image/avif,image/gif,image/jpeg,image/png,image/webp"

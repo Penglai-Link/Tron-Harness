@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Plus } from "lucide-react";
+
 import { useNavigate } from "react-router";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { Create } from "./components/Create";
@@ -15,7 +15,7 @@ import { navigationPageRegistry } from "@/shared/constants/navigationPageRegistr
 import { CHAT_PANEL_WIDGET_KEYS } from "@/shared/constants/chatPanelMenu";
 import type { NavigationRuntimeMenu } from "@/shared/types/Navigation";
 import { Button } from "@/components/ui/button";
-import IconButton from "./components/IconButton";
+import ActionButton from "./components/ActionButton";
 import Item from "./components/Item";
 
 const sidebarListPageSize = 5;
@@ -138,18 +138,16 @@ export const ChatSidebarPanel = memo(function ChatSidebarPanel({
               left={<span className="opacity-50">{menu.label}</span>}
               right={
                 <div className="flex items-center gap-2">
-                  <IconButton
+                  <ActionButton
                     className="opacity-0 transition-opacity group-hover/projects:opacity-100"
                     onClick={() => setProjectCreateOpen(true)}
-                    icon={Plus}
+                    aria-label={t("common:actions.create", "Create")}
                   />
-                  <IconButton
+                  <ActionButton
                     className={
-                      projectListExpanded
-                        ? "transition-transform"
-                        : "-rotate-90 transition-transform"
+                      "shrink-0"
                     }
-                    icon={ChevronDown}
+                    aria-label={t(projectListExpanded ? "common:actions.collapse" : "common:actions.expand", projectListExpanded ? "Collapse" : "Expand")}
                   />
                 </div>
               }

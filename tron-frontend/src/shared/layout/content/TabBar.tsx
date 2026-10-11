@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { X } from "lucide-react";
+import { useRef, type ComponentProps } from "react";
+
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
@@ -123,22 +123,17 @@ function TabBarItem({
 }: TabBarItemProps) {
   const { t } = useTranslation("shell");
   const labelRef = useRef<HTMLSpanElement>(null);
-  const [tooltipOpen, setTooltipOpen] = useState(false);
 
   const label = tab.titleTranslationKey ? t(tab.titleTranslationKey) : tab.title;
 
-  const handleTooltipOpenChange = (open: boolean) => {
-    if (!open) {
-      setTooltipOpen(false);
-      return;
-    }
+  const handleTooltipOpenChange: NonNullable<ComponentProps<typeof Tooltip>["onOpenChange"]> = (open, details) => {
     const labelEl = labelRef.current;
-    setTooltipOpen(!!labelEl && labelEl.scrollWidth > labelEl.clientWidth);
+    if (open && (!labelEl || labelEl.scrollWidth <= labelEl.clientWidth)) details.cancel();
   };
 
   return (
     <ContextMenu>
-      <Tooltip open={tooltipOpen} onOpenChange={handleTooltipOpenChange}>
+      <Tooltip onOpenChange={handleTooltipOpenChange}>
         <TooltipTrigger
           delay={300}
           render={
@@ -150,6 +145,7 @@ function TabBarItem({
                   : "hover:bg-background/50 hover:text-foreground",
               )}
               role="tab"
+              aria-label={label}
               aria-selected={isActive}
               onClick={onActivate}
             >
@@ -161,7 +157,7 @@ function TabBarItem({
               </span>
               {tab.closable && (
                 <Button
-                  size="icon-sm"
+                  size="sm"
                   variant="ghost"
                   className="shrink-0"
                   onClick={(event) => {
@@ -169,7 +165,7 @@ function TabBarItem({
                     onClose();
                   }}
                 >
-                  <X size={12} aria-hidden="true" />
+                  {t("common:actions.close", "Close")}
                 </Button>
               )}
             </ContextMenuTrigger>

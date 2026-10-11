@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 import { archiveChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
-import IconButton from "./IconButton";
+import ActionButton from "./ActionButton";
 
 const ActionsMenu = ({
   onEdit,
@@ -77,10 +77,10 @@ const ActionsMenu = ({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <IconButton
+            <ActionButton
               needHover
               onClick={(event) => event.stopPropagation()}
-              icon={MoreHorizontal}
+              aria-label={t("common:actions.more", "More")}
             />
           }
         />

@@ -6,11 +6,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
-import {
-  MoreHorizontal,
-  Plus,
-  RefreshCcw,
-} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +23,6 @@ import {
 } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 
-import { cn } from "@/shared/lib/utils";
 import {
   archiveAutomation,
   executeAutomation,
@@ -428,7 +422,7 @@ export function AutomationsPage() {
               return (
                 <div className="flex justify-end">
                   <Button
-                    size="icon"
+                    size="sm"
                     variant="ghost"
                     aria-label={pt("Open actions for {{name}}", { name: row.name })}
                     aria-expanded={isMenuOpen}
@@ -438,9 +432,7 @@ export function AutomationsPage() {
                       event.stopPropagation();
                       toggleRowMenu(row, event.currentTarget);
                     }}
-                  >
-                    <MoreHorizontal size={16} aria-hidden="true" />
-                  </Button>
+                  >{pt("Open actions for {{name}}", { name: row.name })}</Button>
                 </div>
               );
             },
