@@ -266,7 +266,28 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         ),
     )
     .await
-    .expect("background must not wait for foreground model completion")
+    .unwrap_or_else(|_| {
+        let requests = model.requests.lock().unwrap();
+        let seen = requests
+            .iter()
+            .enumerate()
+            .map(|(index, request)| {
+                let last_user = request
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|message| message.role == fw::Role::User)
+                    .map(|message| message.content.text())
+                    .unwrap_or_default();
+                format!("request {index}: last user={last_user:?}")
+            })
+            .collect::<Vec<_>>();
+        panic!(
+            "background must not wait for foreground model completion; model dispatches={}\n{}",
+            requests.len(),
+            seen.join("\n")
+        );
+    })
     .expect("platform background run succeeds");
     assert_eq!(
         background.final_output,
