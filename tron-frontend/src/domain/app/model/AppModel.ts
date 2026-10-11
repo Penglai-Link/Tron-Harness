@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import type { BadgeProps } from "@/components/ui/badge";
 
 export type AppRuntimeRole = "Frontend" | "Backend" | "Mono";
@@ -83,7 +84,7 @@ export function appRuntimeRoleTone(runtimeRole: AppRuntimeRole): BadgeProps["var
 
 export function formatAppTimestamp(value: string | null, locale = "en-US", emptyLabel = "Not archived") {
   if (!value) return emptyLabel;
-  return new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(locale, { timeZone: getUserTimeZone(),
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));

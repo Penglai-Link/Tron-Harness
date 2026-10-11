@@ -24,6 +24,8 @@ pub struct CreateInternalAgentRequest {
     loop_code: Option<String>,
     avatar_id: Option<String>,
     group_name: Option<String>,
+    #[serde(default)]
+    candidate_model_codes: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -35,6 +37,8 @@ pub struct CreateInternalAgentResponse {
     loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
+    #[serde(default)]
+    candidate_model_codes: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -45,6 +49,8 @@ pub struct UpdateInternalAgentDefinitionRequest {
     loop_code: Option<String>,
     avatar_id: Option<String>,
     group_name: Option<String>,
+    #[serde(default)]
+    candidate_model_codes: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -56,6 +62,8 @@ pub struct UpdateInternalAgentDefinitionResponse {
     loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
+    #[serde(default)]
+    candidate_model_codes: Vec<String>,
 }
 
 pub async fn create_internal_agent(
@@ -75,6 +83,7 @@ pub async fn create_internal_agent(
                 loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
                 group_name: request.group_name,
+                candidate_model_codes: request.candidate_model_codes,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?;
@@ -85,6 +94,7 @@ pub async fn create_internal_agent(
         loop_code: record.loop_code,
         avatar_id: record.avatar_id,
         group_name: record.group_name,
+        candidate_model_codes: record.candidate_model_codes,
     })))
 }
 
@@ -105,6 +115,7 @@ pub async fn update_internal_agent_definition(
                 loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
                 group_name: request.group_name,
+                candidate_model_codes: request.candidate_model_codes,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale.clone()))?;
@@ -116,6 +127,7 @@ pub async fn update_internal_agent_definition(
             loop_code: record.loop_code,
             avatar_id: record.avatar_id,
             group_name: record.group_name,
+            candidate_model_codes: record.candidate_model_codes,
         },
     )))
 }

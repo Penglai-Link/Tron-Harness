@@ -6,6 +6,7 @@ pub struct CapabilityContentInfo {
     pub kind: String,
     pub name: String,
     pub description: String,
+    pub provides: Vec<String>,
 }
 
 fn content(
@@ -17,6 +18,7 @@ fn content(
         kind: kind.into(),
         name: name.into(),
         description: description.into(),
+        provides: Vec::new(),
     }
 }
 
@@ -158,7 +160,6 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
         ],
         _ => &[],
     };
-    items.extend(plugins.iter().map(|plugin| content("Plugin", *plugin, "")));
     let resources: &[(&str, &str)] = match id {
         "framework.a2ui" => &[
             (
@@ -197,7 +198,97 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             .iter()
             .map(|(name, description)| content("Resource", *name, *description)),
     );
+    let plugin_items: Vec<_> = plugins
+        .iter()
+        .map(|plugin| plugin_content(plugin, &items))
+        .collect();
+    items.extend(plugin_items);
     items
+}
+
+fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityContentInfo {
+    let (description, provides): (&str, &[&str]) = match id {
+        "framework.external-agent" => (
+            "Connect external agents to host execution and session bridging",
+            &["HostExternalAgent"],
+        ),
+        "framework.loop" => (
+            "Run external agents with native session ownership and observation events",
+            &["Independent ExternalAgentLoop"],
+        ),
+        "framework.pty.service" => (
+            "Manage scoped interactive terminal sessions",
+            &["PtyService"],
+        ),
+        "framework.local.scoped.tools" => (
+            "Provide filesystem and command tools within the authorized scope",
+            &["ScopedLocalToolsPlugin"],
+        ),
+        "tools.agents" => (
+            "Delegate to child agents and manage independent threads",
+            &["AgentToolsPlugin"],
+        ),
+        "agent.a2ui" => (
+            "Publish interactive interfaces with shared state, guidance and resources",
+            &["A2uiService", "A2UI Guidance", "a2ui-interface"],
+        ),
+        "capability.personai" => (
+            "Provide account-bound PersonAI tools, clients and model services",
+            &[
+                "PersonAiToolProvider",
+                "PersonAiConnection",
+                "PersonAiServices",
+                "PersonAiModels",
+                "PersonAiModelSync",
+                "ModelRuntimeService",
+                "ModelCatalogRefreshService",
+            ],
+        ),
+        "framework.tools.discovery" => (
+            "Discover and load available tools on demand",
+            &["tool_search"],
+        ),
+        "framework.web.tools" => (
+            "Fetch text from public webpages",
+            &["WebToolsPlugin", "web_fetch"],
+        ),
+        "framework.media.tools" => (
+            "Read images and PDF files within the authorized scope",
+            &["MediaToolsPlugin"],
+        ),
+        "tron.harness.tools" => ("Provide Tron business tools", &["Tron HarnessTools"]),
+        "tron.harness.tool-permissions" => (
+            "Apply platform tool permissions and risk approval",
+            &["TronToolPolicy"],
+        ),
+        "framework.context-assembler" => (
+            "Assemble bounded context for agent execution",
+            &["TronContext + bounded context preparation"],
+        ),
+        _ => ("", &[]),
+    };
+    let mut item = content("Plugin", id, description);
+    item.provides = provides.iter().map(|name| (*name).into()).collect();
+    let provides_tools = matches!(
+        id,
+        "framework.local.scoped.tools"
+            | "tools.agents"
+            | "agent.a2ui"
+            | "capability.personai"
+            | "framework.web.tools"
+            | "framework.media.tools"
+            | "tron.harness.tools"
+    );
+    for entry in contents {
+        if (provides_tools && entry.kind == "Tool")
+            || (id == "agent.a2ui" && matches!(entry.kind.as_str(), "Resource" | "Skill"))
+        {
+            if !item.provides.contains(&entry.name) {
+                item.provides.push(entry.name.clone());
+            }
+        }
+    }
+    item
 }
 
 #[cfg(test)]
@@ -300,6 +391,30 @@ mod content_tests {
                 .contents
                 .iter()
                 .any(|item| item.name == "Tron HarnessTools")
+        );
+    }
+
+    #[test]
+    fn builtin_plugins_declare_descriptions_and_provided_capabilities() {
+        let packs = super::super::capability_pack_catalog();
+        for pack in packs {
+            for plugin in pack.contents.iter().filter(|item| item.kind == "Plugin") {
+                assert!(!plugin.description.is_empty(), "{}", plugin.name);
+                assert!(!plugin.provides.is_empty(), "{}", plugin.name);
+            }
+        }
+        let external = builtin_contents("framework.external-agent");
+        let plugin = external
+            .iter()
+            .find(|item| item.name == "framework.loop")
+            .unwrap();
+        assert_eq!(plugin.provides, ["Independent ExternalAgentLoop"]);
+        let json = serde_json::to_value(&external).unwrap();
+        assert!(
+            json.as_array()
+                .unwrap()
+                .iter()
+                .all(|item| item["provides"].is_array())
         );
     }
 

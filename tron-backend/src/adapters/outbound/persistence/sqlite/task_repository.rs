@@ -1,4 +1,3 @@
-
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::{
@@ -364,7 +363,7 @@ fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
 }
 
 fn storage_error(error: rusqlite::Error) -> TaskError {
-    eprintln!("task sqlite error: {error}");
+    tracing::error!("task sqlite error: {error}");
     TaskError::StorageFailure
 }
 

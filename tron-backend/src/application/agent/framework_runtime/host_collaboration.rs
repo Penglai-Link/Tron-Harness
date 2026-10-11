@@ -148,9 +148,17 @@ impl Runtime {
         } else {
             text
         };
+        let router = self
+            .builder
+            .model_router()
+            .ok_or_else(|| failure("Agent Auto model router is unavailable"))?;
+        let (model, route) = router
+            .resolve_initial(&base.workspace_code, &session, &code, None)
+            .map_err(failure)?;
+        let harness = caller.harness.clone().framework_with_model_router(router);
         let mut command: AgentInvocationCommand = serde_json::from_value(serde_json::json!({
             "prompt": preparation_prompt, "workspaceCode": base.workspace_code,
-            "agentCode": code, "model": base.model,
+            "agentCode": code, "model": model,
         }))
         .map_err(failure)?;
         command.run_code = request
@@ -172,11 +180,7 @@ impl Runtime {
             &session,
             Some(&context.run_code),
         );
-        context.auto_model_route = base.auto_model_route.clone().map(|mut route| {
-            route.session_code = session.clone();
-            route.agent_code = code.clone();
-            route
-        });
+        context.auto_model_route = Some(route);
         context.messages.pop();
         context.messages.push(
             super::super::messages::decode(&fw::Message::user(request.input.clone()))
@@ -188,6 +192,9 @@ impl Runtime {
         request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(failure)?);
         request.model = None;
         request.extensions = fw::Extensions::default();
+        // Capture the active caller tool span before SDK-owned tasks are started.
+        let trace_parent = opentelemetry::Context::current();
+        request.extensions.insert(eliteforge_agent_official_plugin_otel::TraceParent(trace_parent));
         match limits {
             ExecutionLimits::AgentDefinition => {
                 request.limits.max_steps = context.limits.max_steps as usize;
@@ -221,7 +228,7 @@ impl Runtime {
         };
         request.limits.max_model_calls_per_step =
             Some((request.limits.max_model_retries + 1).max(3));
-        request.limits.max_overflow_recoveries = caller.harness.framework_overflow_limit();
+        request.limits.max_overflow_recoveries = harness.framework_overflow_limit();
         request.limits.allow_unexposed_tools = true;
         request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
         request.limits.max_context_tokens =
@@ -237,7 +244,7 @@ impl Runtime {
             .extensions
             .insert(fw::ToolResultProcessorService(Arc::new(ToolAudit)));
         request.extensions.insert(HostExecution {
-            harness: caller.harness.clone(),
+            harness: harness.clone(),
             state: Arc::new(Mutex::new(HostRunState::new(context.clone()))),
             summaries: host.summary_store().await?,
             sink: None,
@@ -245,7 +252,7 @@ impl Runtime {
         request.extensions.insert(
             eliteforge_agent_official_plugin_tools_local::CommandProgressSinkService(Arc::new(
                 super::super::tools::CommandProgress {
-                    harness: caller.harness.clone(),
+                    harness: harness.clone(),
                     context: context.clone(),
                 },
             )),
@@ -268,8 +275,7 @@ impl Runtime {
                 ))));
         }
         attach(&host, context, &mut request);
-        caller
-            .harness
+        harness
             .framework_model_scope(context)
             .map_err(failure)?
             .attach(&mut request);

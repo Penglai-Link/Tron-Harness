@@ -17,6 +17,7 @@ vi.mock("@/store/tabStore", () => ({
   useTabStore: { getState: () => ({ resetAllTabs: mocks.resetTabs }) },
 }));
 import { useAuthStore } from "./authStore";
+import { useTimeZoneStore } from "@/shared/lib/userTimeZone";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -28,6 +29,23 @@ beforeEach(() => {
 });
 
 describe("401 recovery", () => {
+  it("loads time zones from the database-backed bootstrap and resets on logout", async () => {
+    mocks.token.mockResolvedValue({ token: "fresh" });
+    mocks.bootstrap.mockResolvedValue({
+      activeProfile: { status: "ACTIVE", personAiUserId: "u", personAiUsername: "User" },
+      avatarUrl: null, account: null, timeZone: "America/New_York",
+    });
+    expect(await useAuthStore.getState().ensureSessionFresh()).toBe(true);
+    expect(useTimeZoneStore.getState().timeZone).toBe("America/New_York");
+    mocks.bootstrap.mockResolvedValue({
+      activeProfile: { status: "ACTIVE", personAiUserId: "other", personAiUsername: "Other" },
+      avatarUrl: null, account: null, timeZone: "Asia/Tokyo",
+    });
+    expect(await useAuthStore.getState().ensureSessionFresh()).toBe(true);
+    expect(useTimeZoneStore.getState().timeZone).toBe("Asia/Tokyo");
+    await useAuthStore.getState().logout();
+    expect(useTimeZoneStore.getState().timeZone).toBe("Asia/Shanghai");
+  });
   it("loads a refreshed token once for concurrent rejected requests", async () => {
     mocks.token.mockResolvedValue({ token: "fresh" });
     const first = useAuthStore.getState().recoverFromUnauthorized();

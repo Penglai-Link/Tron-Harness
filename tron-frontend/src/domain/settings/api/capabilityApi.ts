@@ -16,6 +16,7 @@ export interface CapabilityContentRecord {
   kind: string;
   name: string;
   description: string;
+  provides?: string[];
 }
 
 export interface ExtensionImplementationRecord {

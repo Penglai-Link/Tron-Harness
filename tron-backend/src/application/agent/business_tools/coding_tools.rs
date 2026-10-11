@@ -217,7 +217,7 @@ mod tests {
     fn test_context(local_directory: Option<&str>) -> AgentRunContext {
         AgentRunContext {
             agent_code: None,
-        auto_model_route: None,
+            auto_model_route: None,
             conversation_code: Some("CONV-1".into()),
             run_code: "RUN-1".into(),
             workspace_code: "WS-1".into(),

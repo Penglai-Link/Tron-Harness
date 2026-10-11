@@ -4,8 +4,10 @@ use std::{collections::BTreeMap, sync::Arc};
 #[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceSummary {
+    pub workspace_code: String,
     pub trace_id: String,
     pub session_code: String,
+    pub session_name: Option<String>,
     pub run_code: String,
     pub agent_code: String,
     pub started_at: i64,
@@ -59,8 +61,31 @@ pub struct TraceDetail {
     pub trace: TraceSummary,
     pub spans: Vec<TraceSpan>,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, utoipa::ToSchema)]
+pub enum TraceSortField {
+    #[default]
+    StartedAt,
+    Duration,
+    Spans,
+    Tokens,
+    Errors,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, utoipa::ToSchema)]
+pub enum TraceSortDirection {
+    Asc,
+    #[default]
+    Desc,
+}
+#[derive(Clone, Copy, Debug, serde::Deserialize, utoipa::ToSchema)]
+pub struct TraceSort {
+    pub field: TraceSortField,
+    pub direction: TraceSortDirection,
+}
 #[derive(Clone, Debug)]
 pub struct TraceQuery {
+    pub sorts: Vec<TraceSort>,
+    pub sort_by: TraceSortField,
+    pub sort_direction: TraceSortDirection,
     pub workspace_code: String,
     pub session_code: Option<String>,
     pub trace_id: Option<String>,
@@ -70,6 +95,7 @@ pub struct TraceQuery {
 #[derive(Clone, Copy, Debug)]
 pub enum ObservabilityError {
     InvalidQuery,
+    InvalidLogQuery,
     NotFound,
     Storage,
 }
@@ -80,6 +106,7 @@ pub struct ApplicationErrorDescriptor {
 impl ObservabilityError {
     pub fn descriptor(self) -> ApplicationErrorDescriptor {
         let (code, message_key) = match self {
+            Self::InvalidLogQuery => ("101040004", "tron.observability.invalid_log_query"),
             Self::InvalidQuery => ("101040001", "tron.observability.invalid_query"),
             Self::NotFound => ("101040002", "tron.observability.not_found"),
             Self::Storage => ("101040003", "tron.observability.storage_failure"),
@@ -114,8 +141,7 @@ impl ObservabilityService {
             .session_code
             .map(|id| id.trim().to_owned())
             .filter(|id| !id.is_empty());
-        if query.workspace_code.trim().is_empty()
-            || query.current == 0
+        if query.current == 0
             || !(1..=100).contains(&query.size)
             || query.current > 1_000_000
             || query.session_code.as_ref().is_some_and(|s| s.len() > 256)
@@ -137,8 +163,7 @@ impl ObservabilityService {
             .session_code
             .map(|id| id.trim().to_owned())
             .filter(|id| !id.is_empty());
-        if query.workspace_code.trim().is_empty()
-            || query.session_code.as_ref().is_some_and(|s| s.len() > 256)
+        if query.session_code.as_ref().is_some_and(|s| s.len() > 256)
             || query
                 .trace_id
                 .as_ref()
@@ -149,7 +174,7 @@ impl ObservabilityService {
         self.0.metrics(&query)
     }
     pub fn detail(&self, workspace: &str, trace: &str) -> Result<TraceDetail, ObservabilityError> {
-        if workspace.trim().is_empty() || !valid_trace_id(trace) {
+        if !valid_trace_id(trace) {
             return Err(ObservabilityError::InvalidQuery);
         }
         self.0.detail(workspace, &trace.to_ascii_lowercase())

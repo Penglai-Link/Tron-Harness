@@ -16,18 +16,28 @@ use tron_backend::{
 };
 fn service(database: &str) -> AgentManagementService {
     SqliteMcpRepository::connect(database).unwrap();
-    AgentManagementService::new(
+    let agents = AgentManagementService::new(
         SqliteAgentManagementRepository::connect(database).unwrap(),
         WorkspaceService::new(SqliteWorkspaceRepository::connect(database).unwrap()),
         &AppConfig::default().system_agents,
-    )
+    );
+    if !agents
+        .list_loop_designs()
+        .unwrap()
+        .iter()
+        .any(|design| design.loop_code == "test-react")
+    {
+        agents.save_loop_design(serde_json::from_value(serde_json::json!({"loopCode":"test-react","name":"Test React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(), 0).unwrap();
+    }
+    agents
 }
 fn create(code: &str, group: Option<&str>) -> CreateWorkspaceInternalAgentCommand {
     CreateWorkspaceInternalAgentCommand {
+        candidate_model_codes: Vec::new(),
         agent_code: code.into(),
         name: code.into(),
         role_prompt: "Preserve this role".into(),
-        loop_code: None,
+        loop_code: Some("test-react".into()),
         avatar_id: None,
         group_name: group.map(str::to_owned),
     }
@@ -44,8 +54,10 @@ fn internal_agent_groups_persist_and_follow_definition_inheritance_without_chang
     let agents = service(&config.database_url);
     assert!(agents.list_platform_internal_agents().unwrap()[0].built_in);
     assert_eq!(
-        agents.list_platform_internal_agents().unwrap()[0].group_name,
-        None
+        agents.list_platform_internal_agents().unwrap()[0]
+            .group_name
+            .as_deref(),
+        Some("主智能体")
     );
     assert_eq!(
         agents
@@ -139,7 +151,14 @@ fn internal_agent_groups_persist_and_follow_definition_inheritance_without_chang
     let agents = service(&config.database_url);
     assert_eq!(
         agents.list_internal_agent_groups("").unwrap(),
-        vec!["Empty group", "Engineering", "主智能体"]
+        vec![
+            "Empty group",
+            "Engineering",
+            "主智能体",
+            "开发",
+            "探索",
+            "设计"
+        ]
     );
     let local = agents
         .workspace_internal_agent_policy("TRON_CORE", "local-grouped")
@@ -153,8 +172,7 @@ fn internal_agent_groups_persist_and_follow_definition_inheritance_without_chang
     );
 }
 #[test]
-fn internal_agent_groups_validate_names_and_builtin_definitions_are_platform_editable()
- {
+fn internal_agent_groups_validate_names_and_builtin_definitions_are_platform_editable() {
     let config = common::prepared_config(AppConfig::default());
     let agents = service(&config.database_url);
     for name in ["".to_owned(), " ".into(), "x".repeat(61), "a\nb".into()] {

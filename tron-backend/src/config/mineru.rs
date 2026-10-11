@@ -5,8 +5,9 @@ const DEFAULT_MINERU_PARSE_ENDPOINT: &str = "/file_parse";
 fn configured_default_timeout_seconds() -> u64 {
     static TIMEOUT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *TIMEOUT.get_or_init(|| {
-        let config: serde_yaml::Value = serde_yaml::from_str(include_str!("../../application.yaml"))
-            .expect("packaged application configuration must be valid YAML");
+        let config: serde_yaml::Value =
+            serde_yaml::from_str(include_str!("../../application.yaml"))
+                .expect("packaged application configuration must be valid YAML");
         config["mineru"]["timeoutSeconds"]
             .as_u64()
             .filter(|value| *value > 0)
@@ -70,33 +71,68 @@ impl MineruConfig {
         self.ingestion.validate()?;
         let mut ids = std::collections::BTreeSet::new();
         for node in &self.nodes {
-            if node.id.is_empty() || node.id == "local-markdown"
-                || !node.id.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
-                || !ids.insert(&node.id) {
+            if node.id.is_empty()
+                || node.id == "local-markdown"
+                || !node
+                    .id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+                || !ids.insert(&node.id)
+            {
                 return Err("MinerU 节点 ID 必须唯一，只能使用字母、数字、下划线或连字符".into());
             }
             if node.capacity == 0 || node.weight == 0 || node.resource_group_capacity == 0 {
-                return Err(format!("MinerU 节点 {} 的并发、权重和共享组并发必须大于 0", node.id));
+                return Err(format!(
+                    "MinerU 节点 {} 的并发、权重和共享组并发必须大于 0",
+                    node.id
+                ));
             }
-            let url = reqwest::Url::parse(&node.base_url).map_err(|_| format!("MinerU 节点 {} 的地址无效", node.id))?;
-            if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none()
-                || !url.username().is_empty() || url.password().is_some() || url.query().is_some() || url.fragment().is_some() {
-                return Err(format!("MinerU 节点 {} 必须使用不含账号、查询参数或片段的 HTTP/HTTPS 地址", node.id));
+            let url = reqwest::Url::parse(&node.base_url)
+                .map_err(|_| format!("MinerU 节点 {} 的地址无效", node.id))?;
+            if !matches!(url.scheme(), "http" | "https")
+                || url.host_str().is_none()
+                || !url.username().is_empty()
+                || url.password().is_some()
+                || url.query().is_some()
+                || url.fragment().is_some()
+            {
+                return Err(format!(
+                    "MinerU 节点 {} 必须使用不含账号、查询参数或片段的 HTTP/HTTPS 地址",
+                    node.id
+                ));
             }
-            let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "::1" | "[::1]"));
+            let local = matches!(
+                url.host_str(),
+                Some("localhost" | "127.0.0.1" | "::1" | "[::1]")
+            );
             if node.enabled && !local && !node.allow_remote {
-                return Err(format!("启用远程 MinerU 节点 {} 前，请允许向该节点传输文档", node.id));
+                return Err(format!(
+                    "启用远程 MinerU 节点 {} 前，请允许向该节点传输文档",
+                    node.id
+                ));
             }
         }
         Ok(())
     }
     pub(super) fn apply_overrides(&mut self, overrides: MineruFileConfig) {
-        if let Some(value) = overrides.nodes { self.nodes = value; }
-        if let Some(value) = overrides.ingestion { self.ingestion = value; }
-        if let Some(value) = non_blank(overrides.ocr_mode) { self.ocr_mode = value; }
-        if let Some(value) = non_blank(overrides.parser_profile) { self.parser_profile = value; }
-        if let Some(value) = non_blank(overrides.expected_parser_version) { self.expected_parser_version = value; }
-        if let Some(value) = overrides.visual_context_enabled { self.visual_context_enabled=value; }
+        if let Some(value) = overrides.nodes {
+            self.nodes = value;
+        }
+        if let Some(value) = overrides.ingestion {
+            self.ingestion = value;
+        }
+        if let Some(value) = non_blank(overrides.ocr_mode) {
+            self.ocr_mode = value;
+        }
+        if let Some(value) = non_blank(overrides.parser_profile) {
+            self.parser_profile = value;
+        }
+        if let Some(value) = non_blank(overrides.expected_parser_version) {
+            self.expected_parser_version = value;
+        }
+        if let Some(value) = overrides.visual_context_enabled {
+            self.visual_context_enabled = value;
+        }
         if let Some(value) = overrides.image_description {
             self.image_description = value;
         }
@@ -190,7 +226,18 @@ pub struct MineruNode {
     pub resource_group_capacity: usize,
 }
 impl Default for MineruNode {
-    fn default() -> Self { Self { id: String::new(), base_url: String::new(), enabled: false, allow_remote: false, capacity: 1, weight: 1, resource_group: String::new(), resource_group_capacity: 1 } }
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            base_url: String::new(),
+            enabled: false,
+            allow_remote: false,
+            capacity: 1,
+            weight: 1,
+            resource_group: String::new(),
+            resource_group_capacity: 1,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -206,12 +253,35 @@ pub struct KnowledgeIngestionConfig {
     pub retry_backoff_ms: i64,
 }
 impl Default for KnowledgeIngestionConfig {
-    fn default() -> Self { Self { parse_capacity: 2, embedding_capacity: 2, embedding_resource_group: None, embedding_resource_group_capacity: 2, lease_ms: 30_000, poll_ms: 250, max_attempts: 3, retry_backoff_ms: 2_000 } }
+    fn default() -> Self {
+        Self {
+            parse_capacity: 2,
+            embedding_capacity: 2,
+            embedding_resource_group: None,
+            embedding_resource_group_capacity: 2,
+            lease_ms: 30_000,
+            poll_ms: 250,
+            max_attempts: 3,
+            retry_backoff_ms: 2_000,
+        }
+    }
 }
 impl KnowledgeIngestionConfig {
     pub fn validate(&self) -> Result<(), String> {
-        if !(1..=32).contains(&self.parse_capacity) || !(1..=32).contains(&self.embedding_capacity) || self.lease_ms < 300 || self.poll_ms == 0 || self.max_attempts == 0 || self.retry_backoff_ms < 0 { return Err("知识库并发、租约或重试配置无效".into()); }
-        if self.embedding_resource_group.as_ref().is_some_and(|g| g.trim().is_empty() || !(1..=32).contains(&self.embedding_resource_group_capacity)) { return Err("Embedding共享硬件组配置无效".into()); }
+        if !(1..=32).contains(&self.parse_capacity)
+            || !(1..=32).contains(&self.embedding_capacity)
+            || self.lease_ms < 300
+            || self.poll_ms == 0
+            || self.max_attempts == 0
+            || self.retry_backoff_ms < 0
+        {
+            return Err("知识库并发、租约或重试配置无效".into());
+        }
+        if self.embedding_resource_group.as_ref().is_some_and(|g| {
+            g.trim().is_empty() || !(1..=32).contains(&self.embedding_resource_group_capacity)
+        }) {
+            return Err("Embedding共享硬件组配置无效".into());
+        }
         Ok(())
     }
 }
@@ -221,10 +291,16 @@ mod image_description_tests {
     use super::*;
     #[test]
     fn parse_timeout_comes_from_configuration_and_explicit_overrides_win() {
-        let packaged: serde_yaml::Value = serde_yaml::from_str(include_str!("../../application.yaml")).unwrap();
+        let packaged: serde_yaml::Value =
+            serde_yaml::from_str(include_str!("../../application.yaml")).unwrap();
         let mut config = MineruConfig::default();
-        assert_eq!(config.timeout_seconds, packaged["mineru"]["timeoutSeconds"].as_u64().unwrap());
-        config.apply_overrides(serde_yaml::from_str::<MineruFileConfig>("timeoutSeconds: 7").unwrap());
+        assert_eq!(
+            config.timeout_seconds,
+            packaged["mineru"]["timeoutSeconds"].as_u64().unwrap()
+        );
+        config.apply_overrides(
+            serde_yaml::from_str::<MineruFileConfig>("timeoutSeconds: 7").unwrap(),
+        );
         assert_eq!(config.timeout_seconds, 7);
         config.validate().unwrap();
         config.timeout_seconds = 0;
@@ -232,25 +308,38 @@ mod image_description_tests {
     }
     #[test]
     fn default_is_off_and_partial_yaml_keeps_safe_defaults() {
-        let config: ImageDescriptionConfig = serde_yaml::from_str("modelCode: PERSON_AI:FIXED:High:synthetic-vision").unwrap();
-        assert!(!config.enabled); assert_eq!(config.timeout_seconds,30); assert_eq!(config.max_images_per_document,64);
+        let config: ImageDescriptionConfig =
+            serde_yaml::from_str("modelCode: PERSON_AI:FIXED:High:synthetic-vision").unwrap();
+        assert!(!config.enabled);
+        assert_eq!(config.timeout_seconds, 30);
+        assert_eq!(config.max_images_per_document, 64);
         assert!(!MineruConfig::default().image_description.enabled);
         assert!(!MineruConfig::default().visual_context_enabled);
-        assert_eq!(MineruConfig::default().default_tier.as_str(),"standard");
+        assert_eq!(MineruConfig::default().default_tier.as_str(), "standard");
         assert!(serde_yaml::from_str::<ImageDescriptionConfig>("unknown: true").is_err());
     }
     #[test]
     fn ingestion_pool_partial_configuration_and_capacity_limits() {
         let config: KnowledgeIngestionConfig = serde_yaml::from_str("parseCapacity: 3\nembeddingCapacity: 1\nembeddingResourceGroup: gpu-a\nembeddingResourceGroupCapacity: 2").unwrap();
         config.validate().unwrap();
-        assert_eq!(config.lease_ms,30_000); assert_eq!(config.embedding_resource_group.as_deref(),Some("gpu-a"));
-        let mut invalid=config.clone(); invalid.parse_capacity=0; assert!(invalid.validate().is_err());
-        invalid=config.clone(); invalid.embedding_resource_group_capacity=0; assert!(invalid.validate().is_err());
+        assert_eq!(config.lease_ms, 30_000);
+        assert_eq!(config.embedding_resource_group.as_deref(), Some("gpu-a"));
+        let mut invalid = config.clone();
+        invalid.parse_capacity = 0;
+        assert!(invalid.validate().is_err());
+        invalid = config.clone();
+        invalid.embedding_resource_group_capacity = 0;
+        assert!(invalid.validate().is_err());
         assert!(serde_yaml::from_str::<KnowledgeIngestionConfig>("parseCapcity: 2").is_err());
-        let node: MineruNode=serde_yaml::from_str("id: candidate\nbaseUrl: http://192.0.2.1:8000").unwrap();
-        assert!(!node.enabled); assert!(!node.allow_remote);
+        let node: MineruNode =
+            serde_yaml::from_str("id: candidate\nbaseUrl: http://192.0.2.1:8000").unwrap();
+        assert!(!node.enabled);
+        assert!(!node.allow_remote);
         let config: MineruFileConfig=serde_yaml::from_str("nodes:\n  - id: cpu\n    baseUrl: http://127.0.0.1:8100\n    enabled: true\nocrMode: ocr\nexpectedParserVersion: 4.0.10\ningestion:\n  parseCapacity: 4").unwrap();
-        let mut runtime=MineruConfig::default(); runtime.apply_overrides(config);
-        assert_eq!(runtime.nodes[0].id,"cpu"); assert_eq!(runtime.ingestion.parse_capacity,4); assert_eq!(runtime.ocr_mode,"ocr");
+        let mut runtime = MineruConfig::default();
+        runtime.apply_overrides(config);
+        assert_eq!(runtime.nodes[0].id, "cpu");
+        assert_eq!(runtime.ingestion.parse_capacity, 4);
+        assert_eq!(runtime.ocr_mode, "ocr");
     }
 }

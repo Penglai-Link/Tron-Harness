@@ -268,7 +268,7 @@ export function TronSidebar({
 
             return (
               <SidebarGroup className="p-0" key={sectionKey}>
-                {compact || section.flyout ? null : (
+                {compact || section.flyout || section.standalone ? null : (
                   <SidebarGroupLabel
                     aria-expanded={open}
                     className="h-8 w-full justify-between px-2 text-sm font-semibold text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -279,7 +279,7 @@ export function TronSidebar({
                     <ChevronRight className={cn("transition-transform", open ? "rotate-90" : "")} size={14} aria-hidden="true" />
                   </SidebarGroupLabel>
                 )}
-                {section.flyout || open || compact ? (
+                {section.flyout || section.standalone || open || compact ? (
                   <SidebarGroupContent>
                     <SidebarMenu className={cn(compact ? "" : "mt-1")}>
                       {sectionItems.map((item) => renderNavigationItem(item, `${section.label}/${item.label}`))}

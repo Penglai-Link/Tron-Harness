@@ -411,7 +411,8 @@ function startBackend(resourcesDir) {
       TRON_BACKEND_FRONTEND_DIST_DIR: state.frontendDistDir,
       TRON_BACKEND_GRAPH_STORAGE_PATH: state.graphPath,
       TRON_BACKEND_PORT: String(state.backendPort),
-      TRON_BACKEND_BIND_ADDRESS: state.backendHost
+      TRON_BACKEND_BIND_ADDRESS: state.backendHost,
+      TRON_BACKEND_LOG_STDERR: "false"
     },
     cwd: appDataDir,
     stdio: ["ignore", "pipe", "pipe"]

@@ -3,27 +3,29 @@ use crate::application::knowledge_base::{deletion::DeletionCleanupPlan, ingestio
 use rusqlite::TransactionBehavior;
 
 impl SqliteKnowledgeBaseRepositorySql<'_> {
-    pub fn delete_empty_library(
-        &self,
-        user: &str,
-        id: &str,
-    ) -> Result<(), KnowledgeBaseError> {
+    pub fn delete_empty_library(&self, user: &str, id: &str) -> Result<(), KnowledgeBaseError> {
         let tx = super::super::framework_storage::business_transaction(
             self.connection,
             TransactionBehavior::Immediate,
         )
         .map_err(storage)?;
-        let owned: bool = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2)",
-            params![id, user], |row| row.get(0),
-        ).map_err(storage)?;
+        let owned: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM knowledge_bases WHERE id=?1 AND owner_user_code=?2)",
+                params![id, user],
+                |row| row.get(0),
+            )
+            .map_err(storage)?;
         if !owned {
             return Err(KnowledgeBaseError::NotFound);
         }
-        let nonempty: bool = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM knowledge_base_documents WHERE knowledge_base_id=?1)",
-            [id], |row| row.get(0),
-        ).map_err(storage)?;
+        let nonempty: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM knowledge_base_documents WHERE knowledge_base_id=?1)",
+                [id],
+                |row| row.get(0),
+            )
+            .map_err(storage)?;
         if nonempty {
             return Err(KnowledgeBaseError::NotEmpty);
         }
@@ -36,9 +38,14 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
             "knowledge_base_ingestion_intents",
             "knowledge_base_upload_requests",
         ] {
-            tx.execute(&format!("DELETE FROM {table} WHERE knowledge_base_id=?1"), [id]).map_err(storage)?;
+            tx.execute(
+                &format!("DELETE FROM {table} WHERE knowledge_base_id=?1"),
+                [id],
+            )
+            .map_err(storage)?;
         }
-        tx.execute("DELETE FROM knowledge_bases WHERE id=?1", [id]).map_err(storage)?;
+        tx.execute("DELETE FROM knowledge_bases WHERE id=?1", [id])
+            .map_err(storage)?;
         tx.commit().map_err(storage)
     }
 
@@ -265,7 +272,9 @@ impl SqliteKnowledgeBaseRepository {
     pub fn delete_empty_library(&self, user: &str, id: &str) -> Result<(), KnowledgeBaseError> {
         let (user, id) = (user.to_owned(), id.to_owned());
         self.connection.call(
-            move |connection| SqliteKnowledgeBaseRepositorySql { connection }.delete_empty_library(&user, &id),
+            move |connection| {
+                SqliteKnowledgeBaseRepositorySql { connection }.delete_empty_library(&user, &id)
+            },
             || storage("database worker stopped"),
         )
     }

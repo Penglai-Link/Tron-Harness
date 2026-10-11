@@ -12,8 +12,8 @@ use crate::{
 };
 
 use super::automation_repository_helpers::{
-    next_id_in_transaction, row_to_automation,
-    row_to_execution_record, storage_error, timestamp_to_millis, update_automation_in_transaction,
+    next_id_in_transaction, row_to_automation, row_to_execution_record, storage_error,
+    timestamp_to_millis, update_automation_in_transaction,
 };
 
 struct SqliteAutomationRepositorySql<'a> {

@@ -121,8 +121,11 @@ pub struct ChatClientCapabilities {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all="camelCase",deny_unknown_fields)]
-pub struct ChatA2uiCapabilities {pub version:String,pub catalog_ids:Vec<String>}
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChatA2uiCapabilities {
+    pub version: String,
+    pub catalog_ids: Vec<String>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]

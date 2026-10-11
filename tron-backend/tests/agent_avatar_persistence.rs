@@ -1,7 +1,9 @@
 mod common;
 
 use tron_backend::{
-    adapters::outbound::persistence::{SqliteAgentManagementRepository, SqliteWorkspaceRepository, SqliteMcpRepository},
+    adapters::outbound::persistence::{
+        SqliteAgentManagementRepository, SqliteMcpRepository, SqliteWorkspaceRepository,
+    },
     application::{
         agent::{
             AgentManagementService, CreateWorkspaceInternalAgentCommand,
@@ -16,11 +18,20 @@ use tron_backend::{
 fn service(database_url: &str) -> AgentManagementService {
     // Agent policy deletion touches MCP foreign keys even without assignments.
     SqliteMcpRepository::connect(database_url).unwrap();
-    AgentManagementService::new(
+    let agents = AgentManagementService::new(
         SqliteAgentManagementRepository::connect(database_url).unwrap(),
         WorkspaceService::new(SqliteWorkspaceRepository::connect(database_url).unwrap()),
         &AppConfig::default().system_agents,
-    )
+    );
+    if !agents
+        .list_loop_designs()
+        .unwrap()
+        .iter()
+        .any(|design| design.loop_code == "test-react")
+    {
+        agents.save_loop_design(serde_json::from_value(serde_json::json!({"loopCode":"test-react","name":"Test React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(), 0).unwrap();
+    }
+    agents
 }
 
 #[test]
@@ -47,10 +58,11 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
     ] {
         let created = agents
             .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+                candidate_model_codes: Vec::new(),
                 agent_code: format!("avatar-{avatar}"),
                 name: avatar.into(),
                 role_prompt: String::new(),
-                loop_code: None,
+                loop_code: Some("test-react".into()),
                 avatar_id: Some(avatar.into()),
                 group_name: None,
             })
@@ -90,10 +102,11 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
         .create_internal_agent(
             "TRON_CORE",
             CreateWorkspaceInternalAgentCommand {
+                candidate_model_codes: Vec::new(),
                 agent_code: "local-avatar".into(),
                 name: "Local".into(),
                 role_prompt: String::new(),
-                loop_code: None,
+                loop_code: Some("test-react".into()),
                 avatar_id: Some("panda".into()),
                 group_name: None,
             },

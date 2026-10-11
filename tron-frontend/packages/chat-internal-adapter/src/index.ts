@@ -1,5 +1,6 @@
 import {
   buildApiUrl,
+  tracedFetch,
   createFetchTransport,
   FetchTransportError,
   normalizeChatActiveRunResult,
@@ -67,6 +68,7 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
   const workspaceCode = options.workspaceCode.trim();
   const transport = createFetchTransport({
     baseUrl: options.baseUrl,
+    traceRequests: true,
     credentials: options.credentials ?? "include",
     getHeaders: () => requestHeaders(options, workspaceCode),
   });
@@ -117,7 +119,7 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
         "/api/v1/chats/sessions/{sessionCode}/attachments/{attachmentCode}",
         { attachmentCode, sessionCode: session.sessionCode },
       );
-      const response = await fetch(url, {
+      const response = await tracedFetch(url, {
         credentials: options.credentials ?? "include",
         headers: await requestHeaders(options, workspaceCode),
         method: "GET",
@@ -385,6 +387,7 @@ export function createInternalTerminalAdapter(
 ): TerminalAdapter {
   const transport = createFetchTransport({
     baseUrl: options.baseUrl,
+    traceRequests: true,
     credentials: options.credentials ?? "include",
     getHeaders: () => requestHeaders(options),
   });

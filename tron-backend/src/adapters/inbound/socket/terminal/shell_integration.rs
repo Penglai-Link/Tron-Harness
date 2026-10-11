@@ -79,7 +79,7 @@ impl ShellIntegration {
                 directory: Some(directory),
             },
             Err(error) => {
-                eprintln!(
+                tracing::warn!(
                     "terminal shell integration files could not be written, \
                      falling back to a terminal without command blocks: {error:?}"
                 );

@@ -15,8 +15,7 @@ use crate::{
     },
     domain::prompt::{
         Prompt, PromptRuntimeProvider, PromptVariable, PromptVariableSourceKind,
-        PromptVariableType, analyze_template,
-        render_typed_template,
+        PromptVariableType, analyze_template, render_typed_template,
     },
     shared::{
         id::{IdGenerator, SnowflakeId},
@@ -282,7 +281,8 @@ impl PromptService {
         locale: &str,
         runtime_values: &HashMap<PromptRuntimeProvider, Value>,
     ) -> Result<Option<String>, crate::domain::prompt::PromptError> {
-        let prompt = self.platform_page(PromptPageQuery {
+        let prompt = self
+            .platform_page(PromptPageQuery {
                 current: 1,
                 size: 200,
                 search: None,

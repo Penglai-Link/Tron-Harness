@@ -12,6 +12,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 struct Candidate {
+    code: String,
     selection: ModelSelection,
     config: AgentModelConfig,
     key: String,
@@ -37,8 +38,25 @@ impl ChatAutoModelRouter {
         agent_code: &str,
         reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<(AgentModelConfig, AutoModelRouteContext), String> {
+        self.resolve_initial_with_candidates(
+            workspace_code,
+            session_code,
+            agent_code,
+            reasoning_effort,
+            &[],
+        )
+    }
+
+    pub fn resolve_initial_with_candidates(
+        &self,
+        workspace_code: &str,
+        session_code: &str,
+        agent_code: &str,
+        reasoning_effort: Option<ReasoningEffort>,
+        allowed: &[String],
+    ) -> Result<(AgentModelConfig, AutoModelRouteContext), String> {
         let initial_scope = self.providers.sdk_model_authorization_scope();
-        let candidates = self.candidates(workspace_code, reasoning_effort)?;
+        let candidates = self.candidates(workspace_code, reasoning_effort, allowed)?;
         let authorization_scope = if candidates.iter().any(|candidate| candidate.provider) {
             let scope = initial_scope.map_err(|error| error.to_string())?;
             if self
@@ -80,6 +98,7 @@ impl ChatAutoModelRouter {
         Ok((
             candidate.config.clone(),
             AutoModelRouteContext {
+                candidate_model_codes: allowed.to_vec(),
                 authorization_scope,
                 authorized_candidates: candidates
                     .iter()
@@ -103,8 +122,17 @@ impl ChatAutoModelRouter {
         workspace: &str,
         current: &AgentModelConfig,
     ) -> Result<Vec<AgentModelConfig>, String> {
+        self.authorized_models_with_candidates(workspace, current, &[])
+    }
+
+    pub fn authorized_models_with_candidates(
+        &self,
+        workspace: &str,
+        current: &AgentModelConfig,
+        allowed: &[String],
+    ) -> Result<Vec<AgentModelConfig>, String> {
         let candidates = self
-            .candidates(workspace, current.reasoning_effort)?
+            .candidates(workspace, current.reasoning_effort, allowed)?
             .into_iter()
             .map(|candidate| AutoModelCandidate {
                 selection: candidate.selection,
@@ -141,13 +169,17 @@ impl ChatAutoModelRouter {
         model: &AgentModelConfig,
     ) -> Result<(), String> {
         let candidates = if route.authorized_candidates.is_empty() {
-            self.candidates(workspace_code, model.reasoning_effort)?
-                .into_iter()
-                .map(|candidate| AutoModelCandidate {
-                    selection: candidate.selection,
-                    config: candidate.config,
-                })
-                .collect()
+            self.candidates(
+                workspace_code,
+                model.reasoning_effort,
+                &route.candidate_model_codes,
+            )?
+            .into_iter()
+            .map(|candidate| AutoModelCandidate {
+                selection: candidate.selection,
+                config: candidate.config,
+            })
+            .collect()
         } else {
             route.authorized_candidates.clone()
         };
@@ -174,6 +206,7 @@ impl ChatAutoModelRouter {
         &self,
         workspace_code: &str,
         reasoning_effort: Option<ReasoningEffort>,
+        allowed: &[String],
     ) -> Result<Vec<Candidate>, String> {
         let mut candidates = Vec::new();
         // An unavailable provider is represented by no enabled options.
@@ -187,6 +220,7 @@ impl ChatAutoModelRouter {
                 || option.selection.provider_code != Some(ModelProviderCode::PersonAi)
                 || !option.enabled
                 || option.remote_status != ProviderCatalogModelStatus::Available
+                || (!allowed.is_empty() && !allowed.contains(&option.option_code))
                 || option.context_window_tokens.is_none_or(|value| value == 0)
             {
                 continue;
@@ -200,6 +234,7 @@ impl ChatAutoModelRouter {
                 let prefers_responses =
                     config.protocol == crate::domain::agent::AgentModelProtocol::Responses;
                 candidates.push(Candidate {
+                    code: option.option_code,
                     key: candidate_key(&option.selection),
                     selection: option.selection,
                     config,
@@ -215,6 +250,7 @@ impl ChatAutoModelRouter {
         {
             if option.model_type != ModelType::Text
                 || !option.enabled
+                || (!allowed.is_empty() && !allowed.contains(&option.option_code))
                 || option.context_window_tokens.is_none_or(|value| value == 0)
             {
                 continue;
@@ -233,6 +269,7 @@ impl ChatAutoModelRouter {
             config.reasoning_effort = reasoning_effort;
             let selection = ModelSelection::fixed(option.model_code);
             candidates.push(Candidate {
+                code: option.option_code,
                 key: candidate_key(&selection),
                 selection,
                 config,
@@ -240,6 +277,7 @@ impl ChatAutoModelRouter {
                 prefers_responses: false,
             });
         }
+        candidates.retain(|candidate| allowed.is_empty() || allowed.contains(&candidate.code));
         Ok(candidates)
     }
 }

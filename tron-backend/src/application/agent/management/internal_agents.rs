@@ -78,6 +78,7 @@ impl AgentManagementService {
                 description: definition.description,
                 role_prompt: definition.role_prompt,
                 avatar_id: definition.avatar_id,
+                candidate_model_codes: definition.candidate_model_codes,
                 group_name: definition.group_name,
                 loop_code: definition.loop_code,
                 platform_defined: definition.platform_defined,

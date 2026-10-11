@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { formatModelVerifyStatus, getModelVerifyTone } from "@/domain/model/constants/modelPageOptions";
@@ -5,7 +6,7 @@ import type { ModelRecord } from "@/domain/model/model";
 
 function formatTimestamp(value: string | null, neverLabel: string) {
   if (!value) return neverLabel;
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-US", { timeZone: getUserTimeZone(),
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));

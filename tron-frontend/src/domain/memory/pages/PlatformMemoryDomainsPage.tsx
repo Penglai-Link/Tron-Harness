@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import {
   useEffect,
   useMemo,
@@ -149,7 +150,7 @@ function compareDomainRecords(left: MemoryWorkDomainRecord, right: MemoryWorkDom
 function formatUpdatedAt(value: string) {
   const parsed = new Date(value);
   if (!Number.isNaN(parsed.getTime())) {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("en-US", { timeZone: getUserTimeZone(),
       day: "2-digit",
       month: "short",
       year: "numeric",

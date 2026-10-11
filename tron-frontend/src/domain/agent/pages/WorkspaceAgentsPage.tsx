@@ -112,11 +112,13 @@ import {
   groupInternalAgents,
   internalAgentGroupName,
 } from "../model/internalAgentGroups";
+import { AgentCandidateModelsField } from "../components/AgentCandidateModelsField";
 import { AgentLoopField } from "../components/AgentLoopField";
 
 interface InternalAgentDraft {
   groupName: string;
   avatarId: string;
+  candidateModelCodes: string[];
   loopCode: string;
   name: string;
   rolePrompt: string;
@@ -178,6 +180,7 @@ function draftFromRecord(
 ): InternalAgentDraft {
   return {
     avatarId: record.avatarId || "robot",
+    candidateModelCodes: normalizeToolCodes(record.candidateModelCodes ?? []),
     groupName: record.groupName || "",
     name: record.name,
     rolePrompt: record.rolePrompt,
@@ -219,6 +222,7 @@ function hasDraftChanges(
   return (
     (record.groupName || "") !== draft.groupName ||
     (record.avatarId || "robot") !== draft.avatarId ||
+    !hasSameToolCodes(normalizeToolCodes(record.candidateModelCodes ?? []), normalizeToolCodes(draft.candidateModelCodes)) ||
     record.name !== draft.name ||
     (record.loopCode || "") !== draft.loopCode ||
     record.rolePrompt !== draft.rolePrompt ||
@@ -928,9 +932,11 @@ export function WorkspaceAgentsPage({
           row.name !== draft.name ||
           row.rolePrompt !== draft.rolePrompt ||
           (row.loopCode || "") !== draft.loopCode ||
-          (row.avatarId || "robot") !== draft.avatarId
+          (row.avatarId || "robot") !== draft.avatarId ||
+          !hasSameToolCodes(normalizeToolCodes(row.candidateModelCodes ?? []), normalizeToolCodes(draft.candidateModelCodes))
         ) {
           const definition = {
+            ...(!hasSameToolCodes(normalizeToolCodes(row.candidateModelCodes ?? []), normalizeToolCodes(draft.candidateModelCodes)) ? { candidateModelCodes: draft.candidateModelCodes } : {}),
             ...((row.groupName || "") !== draft.groupName
               ? { groupName: draft.groupName }
               : {}),
@@ -1273,7 +1279,7 @@ export function WorkspaceAgentsPage({
                 ))}
             </SelectInput>
             {allowCreate ? (
-              <>
+              <div className="flex items-center gap-3 sm:ml-auto">
                 <Button
                   type="button"
                   variant="outline"
@@ -1284,15 +1290,13 @@ export function WorkspaceAgentsPage({
                 >
                   {internalPageT("groups.manage", "Manage groups")}
                 </Button>
-                <div className="sm:ml-auto">
                   <CreateInternalAgentDialog
                     key={activeWorkspaceCode}
                     workspaceCode={activeWorkspaceCode}
                     allowWorkspaceAssignment={scope === "platform"}
                     onCreated={refreshCreatedAgent}
                   />
-                </div>
-              </>
+              </div>
             ) : null}
           </div>
           {groupInternalAgents(
@@ -1309,36 +1313,16 @@ export function WorkspaceAgentsPage({
             </p>
           ) : null}
 
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
           {groupInternalAgents(
             internalAgents,
             internalSearch,
             groupFilter,
             (agent) => translateInternalAgentName(t, agent)
           ).map(({ name: groupName, agents }) => (
-            <details
+            <Fragment
               key={`${activeWorkspaceCode}:${groupName}`}
-              open
-              className="group/section border-t border-[var(--color-outline-variant)] pt-3"
             >
-              <summary className="mb-3 flex cursor-pointer list-none items-center gap-2 text-sm font-medium marker:hidden [&::-webkit-details-marker]:hidden">
-                <ChevronDown
-                  aria-hidden="true"
-                  size={16}
-                  className="-rotate-90 transition-transform group-open/section:rotate-0"
-                />
-                <span
-                  className="min-w-0 truncate"
-                  title={groupName || undefined}
-                >
-                  {groupName
-                    ? translateInternalAgentGroupName(t, groupName)
-                    : internalPageT("groups.ungrouped", "Ungrouped")}
-                </span>
-                <span className="text-xs font-normal text-[var(--color-on-surface-variant)]">
-                  {agents.length}
-                </span>
-              </summary>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,128px),1fr))] gap-x-4 gap-y-5">
                 {agents.map((agent) => {
                   const draft =
                     internalDrafts[agent.agentCode] ?? draftFromRecord(agent);
@@ -1387,6 +1371,9 @@ export function WorkspaceAgentsPage({
                       <InternalAgentBrowseItem
                         agent={agent}
                         name={translateInternalAgentName(t, agent)}
+                        groupLabel={groupName
+                          ? translateInternalAgentGroupName(t, groupName)
+                          : internalPageT("groups.ungrouped", "Ungrouped")}
                         disabled={
                           loading ||
                           isBusy(`internal-delete:${agent.agentCode}`)
@@ -1521,6 +1508,8 @@ export function WorkspaceAgentsPage({
                                     }
                                   />
                                 )}
+                                <AgentCandidateModelsField workspaceCode={activeWorkspaceCode} value={draft.candidateModelCodes} disabled={editingDisabled}
+                                  onChange={(candidateModelCodes) => setInternalDraft(agent.agentCode, { candidateModelCodes })} />
                                 <AgentLoopField
                                   value={draft.loopCode}
                                   disabled={editingDisabled}
@@ -1985,9 +1974,9 @@ export function WorkspaceAgentsPage({
                     </Fragment>
                   );
                 })}
-              </div>
-            </details>
+            </Fragment>
           ))}
+          </div>
         </div>
       ) : null}
 

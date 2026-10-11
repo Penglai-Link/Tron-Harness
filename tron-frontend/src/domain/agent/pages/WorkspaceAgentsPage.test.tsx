@@ -31,6 +31,15 @@ vi.mock("@/domain/knowledge-base/api/knowledgeBaseApi", () => ({ setAgentKnowled
 vi.mock("../hooks/agentWorkspaceGrants", () => ({ persistAgentWorkspaceGrants: fixture.workspaceGrants }));
 vi.mock("../components/AgentWorkspaceField", () => ({ AgentWorkspaceField: ({ disabled, onSelectionChange }: { disabled: boolean; onSelectionChange: (codes: string[]) => void }) => <><button type="button" disabled={disabled} onClick={() => onSelectionChange(["TRON_CORE"])}>Choose workspace</button><button type="button" disabled={disabled} onClick={() => onSelectionChange([])}>Clear workspaces</button></> }));
 
+
+vi.mock("@/domain/admin/api", () => ({ fetchWorkspaceOptions: vi.fn(async () => [{ workspaceCode: "TRON_CORE" }]) }));
+vi.mock("@/domain/model/api", () => ({ fetchWorkspaceSelectOptions: vi.fn(async () => [
+  { optionCode: "model-a", modelCode: "model-a", displayName: "Model A", vendor: "fixture", sourceLabel: "Platform", modelType: "TEXT", enabled: true, contextWindowTokens: 128000 },
+  { optionCode: "model-b", modelCode: "model-b", displayName: "Model B", vendor: "fixture", sourceLabel: "Platform", modelType: "TEXT", enabled: true, contextWindowTokens: 64000 },
+  { modelCode: "embedding", displayName: "Embedding", modelType: "EMBEDDING", enabled: true, contextWindowTokens: 64000 },
+  { modelCode: "auto", displayName: "Auto", modelType: "TEXT", modelSelection: {kind: "Auto"}, enabled: true, contextWindowTokens: 64000 },
+]) }));
+
 vi.mock("@/domain/agent/api", () => ({
   fetchWorkspaceInternalAgents: vi.fn(async () => [fixture.record, ...fixture.additionalRecords].map((record) => ({ ...record, selectedToolCodes: [...record.selectedToolCodes] }))),
   fetchToolDomains: vi.fn(async () => []),
@@ -169,6 +178,24 @@ async function openEditor(scope: "workspace" | "platform" = "workspace") {
 function save() { fireEvent.click(screen.getByRole("button", { name: "Save" })); }
 
 describe("internal agent cards and manual editing", () => {
+  it.each(["workspace", "platform"] as const)("saves candidate models, restores them and allows clearing in %s", async (scope) => {
+    fixture.record.candidateModelCodes = ["model-a"];
+    let dialog = await openEditor(scope);
+    expect((await within(dialog).findByRole<HTMLInputElement>("checkbox", {name: "Model A"})).checked).toBe(true);
+    fireEvent.click(within(dialog).getByRole("checkbox", {name: "Model B"}));
+    expect(fixture.patchDefinition).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patchDefinition).toHaveBeenLastCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", {candidateModelCodes:["model-a", "model-b"]});
+    fireEvent.click(screen.getByRole("button", {name:"Edit Main Agent"}));
+    dialog = await screen.findByRole("dialog");
+    expect((await within(dialog).findByRole<HTMLInputElement>("checkbox", {name: "Model B"})).checked).toBe(true);
+    fireEvent.click(within(dialog).getByRole("button", {name:"workspaceAgents.internal.candidateModels.clear"}));
+    save();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patchDefinition).toHaveBeenLastCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", {candidateModelCodes:[]});
+  });
+
   it("saves the refreshed resource draft after a lifecycle event while preserving text edits", async () => {
     fixture.record.toolAssignmentMode = "selected_tools";
     fixture.record.mcpAccessMode = "selected_servers";
@@ -359,9 +386,13 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.owl" }));
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: "Model A" }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Model B" }));
+    expect(within(dialog).queryByRole("checkbox", { name: "Embedding" })).toBeNull();
+    expect(within(dialog).queryByRole("checkbox", { name: "Auto" })).toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "review-flow", avatarId: "owl", groupName: "" }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "review-flow", avatarId: "owl", groupName: "", candidateModelCodes: ["model-a", "model-b"] }));
     expect(await screen.findByRole("button", { name: "Edit Reviewer" })).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(fixture.workspaceGrants).toHaveBeenCalledWith("reviewer", ["TRON_CORE"]);
@@ -423,7 +454,7 @@ describe("internal agent cards and manual editing", () => {
 });
 
 describe("internal agent groups and built-in platform editing", () => {
-  it("shows collapsible groups with counts and filters by group or search", async () => {
+  it("shows group labels on agent tiles and filters by group or search", async () => {
     fixture.record.groupName = "Engineering";
     fixture.additionalRecords = [
       { ...fixture.record, agentCode: "finance", name: "Finance reviewer", groupName: "Finance" },
@@ -431,11 +462,9 @@ describe("internal agent groups and built-in platform editing", () => {
     ];
     render(<WorkspaceAgentsPage category="internal" scope="platform" />);
     await screen.findByRole("button", { name: "Edit Finance reviewer" });
-    const engineering = screen.getByText("Engineering", { selector: "summary span" }).closest("details")!;
-    expect(within(engineering).getByText("1", { selector: "summary span" })).toBeTruthy();
-    expect(engineering.hasAttribute("open")).toBe(true);
-    fireEvent.click(engineering.querySelector("summary")!);
-    expect(engineering.hasAttribute("open")).toBe(false);
+    expect(within(screen.getByRole("button", { name: "Edit Main Agent" })).getByText("Engineering")).toBeTruthy();
+    expect(within(screen.getByRole("button", { name: "Edit Finance reviewer" })).getByText("Finance")).toBeTruthy();
+    expect(within(screen.getByRole("button", { name: "Edit Unsorted" })).getByText("Ungrouped")).toBeTruthy();
     fireEvent.change(screen.getByRole("combobox", { name: "Group" }), { target: { value: "group:Finance" } });
     expect(screen.queryByRole("button", { name: "Edit Main Agent" })).toBeNull();
     expect(screen.getByRole("button", { name: "Edit Finance reviewer" })).toBeTruthy();

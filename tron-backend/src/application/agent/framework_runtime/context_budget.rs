@@ -70,7 +70,9 @@ impl fw::ContextBudgetPolicy for SharedSeedBudget {
                 .ok_or_else(|| {
                     fw::AgentError::InvalidConfiguration("missing knowledge base".into())
                 })?;
-            let knowledge_tokens = source_tokens[knowledge].min(pool / 2).min(self.knowledge_cap);
+            let knowledge_tokens = source_tokens[knowledge]
+                .min(pool / 2)
+                .min(self.knowledge_cap);
             adjusted[knowledge].budget = fw::BlockBudget::tokens(knowledge_tokens);
             adjusted[working].budget =
                 fw::BlockBudget::tokens(pool.saturating_sub(knowledge_tokens));
@@ -116,7 +118,7 @@ mod tests {
             let policy = SharedSeedBudget {
                 max_tokens: cap,
                 working_pool: None,
-                knowledge_cap:1200,
+                knowledge_cap: 1200,
             };
             let allocated = policy
                 .allocate_sources(&blocks, capacity, &[cap - 100, 1_000, 50])
@@ -152,7 +154,7 @@ mod tests {
         let policy = SharedSeedBudget {
             max_tokens: 1000,
             working_pool: Some(1000),
-            knowledge_cap:1200,
+            knowledge_cap: 1200,
         };
         for retrieved in [0, 300, 900] {
             let result = policy

@@ -1,4 +1,5 @@
 import {
+  Activity, LayoutDashboard, ChartNoAxesCombined, ScrollText,
   Archive,
   BookOpenText,
   Database,
@@ -121,6 +122,15 @@ export const settingsNavigation = [
       { label: "KnowledgeGraph", href: "/settings/knowledge-graph", icon: Network, translationKey: "shell:nav.items.knowledgeGraph" },
       { label: "KnowledgeBase", href: "/settings/knowledge-base", icon: BookOpenText, translationKey: "shell:nav.items.knowledgeBase" },
       { label: "RAG", href: "/settings/rag", icon: Database, translationKey: "shell:nav.items.rag" },
+    ],
+  },
+  {
+    groupKey: "observability", label: "Observability", translationKey: "observability:title",
+    items: [
+      { label: "Dashboard", href: "/settings/observability/dashboard", icon: LayoutDashboard, translationKey: "observability:dashboard" },
+      { label: "Traces", href: "/settings/observability/traces", icon: Activity, translationKey: "observability:traces" },
+      { label: "Metrics", href: "/settings/observability/metrics", icon: ChartNoAxesCombined, translationKey: "observability:metrics" },
+      { label: "Logs", href: "/settings/observability/logs", icon: ScrollText, translationKey: "observability:logs" },
     ],
   },
   {

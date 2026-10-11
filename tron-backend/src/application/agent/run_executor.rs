@@ -206,7 +206,7 @@ impl AgentRunExecutor {
         if native {
             let mut caller = CallerCancellation(Some(caller_cancel));
             let parent = eliteforge_agent_framework::current_continuation_parent();
-            let result = tokio::spawn(async move {
+            let result = crate::app::telemetry::spawn_traced(async move {
                 if let Some(parent) = parent {
                     eliteforge_agent_framework::with_continuation_parent(&parent, execution).await
                 } else {
@@ -428,7 +428,7 @@ mod tests {
     fn context(max_retries: u32) -> AgentRunContext {
         AgentRunContext {
             agent_code: None,
-        auto_model_route: None,
+            auto_model_route: None,
             conversation_code: Some("CONV-1".into()),
             run_code: "RUN-1".into(),
             workspace_code: "TRON_CORE".into(),

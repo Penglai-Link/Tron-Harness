@@ -95,14 +95,12 @@ pub fn builtin_prompt_variables(catalog_key: &str) -> Option<Vec<PromptVariable>
 
 pub fn registered_runtime_prompt_variables() -> impl Iterator<Item = &'static BuiltinPromptParameter>
 {
-    builtin_prompts()
-        .iter()
-        .flat_map(|definition| {
-            definition
-                .parameters
-                .iter()
-                .chain(definition.runtime_variables.iter())
-        })
+    builtin_prompts().iter().flat_map(|definition| {
+        definition
+            .parameters
+            .iter()
+            .chain(definition.runtime_variables.iter())
+    })
 }
 
 pub fn registered_runtime_prompt_variable(

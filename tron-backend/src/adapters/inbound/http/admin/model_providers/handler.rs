@@ -181,7 +181,7 @@ pub async fn poll_authorization_session(
                     ModelProviderError::AuthenticationRequired
                         | ModelProviderError::ConnectionNotReady
                 ) {
-                    eprintln!("[person-ai] login heartbeat failed: {error}");
+                    tracing::error!("[person-ai] login heartbeat failed: {error}");
                 }
             }
             Json(ApiResponse::success(AuthorizationPollResponse {

@@ -74,7 +74,7 @@ impl SqliteAgentEventReplayStore {
                         Ok(())
                     }));
                     if let Err(error) = result {
-                        eprintln!("Framework replay diagnostics failed: {error}");
+                        tracing::error!("Framework replay diagnostics failed: {error}");
                     }
                 }
             })

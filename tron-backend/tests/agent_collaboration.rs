@@ -1,6 +1,8 @@
 mod common;
 #[path = "support/knowledge_base_fixture.rs"]
 mod fixture;
+#[path = "support/candidate_model_fixture.rs"]
+mod models;
 use eliteforge_agent_core as fw;
 use fixture::*;
 use serde_json::{Value, json};
@@ -243,11 +245,14 @@ fn context(prompt: &str) -> AgentRunContext {
     })).unwrap()
 }
 fn reviewer(f: &Fixture) {
+    models::seed_loop(&f.state);
+    let candidate = models::add_text_model(&f.state, "Reviewer model");
     f.state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            candidate_model_codes: vec![candidate],
             avatar_id: Some("fox".into()),
-            loop_code: None,
+            loop_code: Some("test-react".into()),
             agent_code: "reviewer".into(),
             name: "Reviewer".into(),
             role_prompt: "REVIEWER_ROLE: inspect changes and report concrete findings.".into(),
@@ -404,7 +409,13 @@ async fn collaboration_thread_keeps_target_across_messages() {
     .with_framework_host(Some(host.clone()))
     .build()
     .unwrap();
-    let result = agent.run(context("root:thread")).await.unwrap();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        agent.run(context("root:thread")),
+    )
+    .await
+    .expect("thread conversation should finish within 60 seconds")
+    .unwrap();
     assert!(
         result.final_output.contains("reviewed by target"),
         "{}",
@@ -527,7 +538,7 @@ async fn collaboration_child_stops_with_parent_cancellation() {
 }
 
 #[tokio::test]
-async fn collaboration_person_ai_child_uses_its_own_provider_session() {
+async fn collaboration_child_does_not_inherit_parent_fixed_provider_model() {
     let f = Fixture::new();
     reviewer(&f);
     let script = Arc::new(Script::default());
@@ -561,20 +572,83 @@ async fn collaboration_person_ai_child_uses_its_own_provider_session() {
             .unwrap()
             .contains("parent-session")
     );
-    assert!(
-        configs[1]
-            .api_path
-            .as_ref()
-            .unwrap()
-            .contains("tool-child-")
-    );
+    let selected = f
+        .state
+        .agent_management
+        .workspace_internal_agent_policy(WORKSPACE, "reviewer")
+        .unwrap()
+        .candidate_model_codes;
+    assert_eq!(configs[1].model_code, selected[0]);
     assert!(
         !configs[1]
             .api_path
-            .as_ref()
-            .unwrap()
+            .as_deref()
+            .unwrap_or_default()
             .contains("parent-session")
     );
     drop(configs);
     assert!(host.close().await.is_success());
+}
+
+#[tokio::test]
+async fn subagents_and_threads_use_target_auto_pool_instead_of_parent_auto_pool() {
+    for prompt in ["root:spawn", "root:thread"] {
+        let f = Fixture::new();
+        reviewer(&f);
+        let parent_model = models::add_text_model(&f.state, "Parent model");
+        f.state
+            .agent_management
+            .update_platform_internal_agent_definition(
+                "main-agent",
+                tron_backend::application::agent::UpdateWorkspaceInternalAgentDefinitionCommand {
+                    candidate_model_codes: Some(vec![parent_model.clone()]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let router = tron_backend::application::model_router::AgentModelRouter::new(
+            f.state.models.clone(),
+            f.state.model_providers.clone(),
+        )
+        .with_agent_management(f.state.agent_management.clone());
+        let (model, route) = router
+            .resolve_initial(WORKSPACE, "parent-session", "main-agent", None)
+            .unwrap();
+        let script = Arc::new(Script::default());
+        let host = f.state.agent_framework.clone();
+        let agent = ReactAgentBuilder::new(
+            script.clone(),
+            f.state.agent_tool_registry.clone(),
+            EventBusHandle::disabled(),
+        )
+        .with_framework_host(Some(host.clone()))
+        .with_auto_model_router(Some(router))
+        .build()
+        .unwrap();
+        let mut root = context(prompt);
+        root.model = model;
+        root.auto_model_route = Some(route);
+        let result = agent.run(root).await.unwrap();
+        assert!(
+            result.final_output.contains("reviewed by target"),
+            "{}",
+            result.final_output
+        );
+        let child_model = f
+            .state
+            .agent_management
+            .workspace_internal_agent_policy(WORKSPACE, "reviewer")
+            .unwrap()
+            .candidate_model_codes[0]
+            .clone();
+        let configs = script.configs.lock().unwrap();
+        assert!(
+            configs
+                .iter()
+                .any(|config| config.model_code == child_model)
+        );
+        assert!(configs.iter().all(|config| config.model_code == parent_model || config.model_code == child_model));
+        drop(configs);
+        assert!(host.close().await.is_success());
+    }
 }

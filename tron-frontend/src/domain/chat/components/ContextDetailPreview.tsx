@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { useTranslation } from "react-i18next";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -153,7 +154,7 @@ function FamilyPreview({ value }: { value: unknown }) {
       <h3 className="text-xs font-semibold" title={sessionCode}>{typeof summary.title === "string" ? summary.title : t(`${keyPrefix}familySession`, { session: sessionCode.slice(0, 8) })}</h3>
       <div className="flex flex-wrap gap-x-3 text-xs text-[var(--color-on-surface-variant)]">
         {typeof summary.coveredMessages === "number" ? <span>{t(`${keyPrefix}familyCoveredMessages`, { count: summary.coveredMessages })}</span> : null}
-        {typeof summary.createdAt === "number" ? <time>{new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }).format(summary.createdAt)}</time> : null}
+        {typeof summary.createdAt === "number" ? <time>{new Intl.DateTimeFormat(i18n.language, { timeZone: getUserTimeZone(), dateStyle: "medium", timeStyle: "short" }).format(summary.createdAt)}</time> : null}
       </div>
       <StructuredContent value={summary.summary} />
     </section>;

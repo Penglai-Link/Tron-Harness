@@ -1,3 +1,4 @@
+import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import { usePlatformDataHref, usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import {
   useEffect,
@@ -91,6 +92,7 @@ function targetFromMemory(memory: MemoryRecord): MemorySearchTarget {
 }
 
 export function MemoryDetailsPage() {
+  const { formatDateTime } = useLocaleFormatters();
   const { t } = useTranslation(["pages"]);
   const [searchParams] = useSearchParams();
   const navigate = usePlatformDataNavigate();
@@ -271,7 +273,7 @@ export function MemoryDetailsPage() {
                   <ReadValue>{memory.score.toFixed(2)}</ReadValue>
                 </Field>
                 <Field label="Updated">
-                  <ReadValue>{memory.updatedAt}</ReadValue>
+                  <ReadValue>{formatDateTime(memory.updatedAt, { dateStyle: "medium", timeStyle: "short" })}</ReadValue>
                 </Field>
               </div>
             </SurfaceCard>
@@ -327,7 +329,7 @@ export function MemoryDetailsPage() {
                   <ReadValue>{memory.score.toFixed(2)}</ReadValue>
                 </Field>
                 <Field label="Updated">
-                  <ReadValue>{memory.updatedAt}</ReadValue>
+                  <ReadValue>{formatDateTime(memory.updatedAt, { dateStyle: "medium", timeStyle: "short" })}</ReadValue>
                 </Field>
                 <div className="md:col-span-2">
                   <Field label="Tags">

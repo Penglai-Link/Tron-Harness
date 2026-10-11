@@ -108,9 +108,14 @@ async fn runtime_navigation_requires_profile_and_is_localized_and_separate_from_
     assert_eq!(tree_payload["data"]["locale"], "zh-CN");
     assert!(!tree_payload["data"].to_string().contains("\"CHATS\""));
     let menu_definitions = request_json(
-        &router, Method::POST, "/api/v1/admin/navigation/menus/query",
-        Some(json!({ "current": 1, "size": 200, "keyword": "" })), Some(&token), None,
-    ).await;
+        &router,
+        Method::POST,
+        "/api/v1/admin/navigation/menus/query",
+        Some(json!({ "current": 1, "size": 200, "keyword": "" })),
+        Some(&token),
+        None,
+    )
+    .await;
     assert_eq!(menu_definitions.status(), StatusCode::OK);
     let definitions = response_json(menu_definitions).await;
     assert!(!definitions["data"].to_string().contains("\"CHATS\""));
@@ -307,7 +312,7 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
     )
     .await;
     let tree_payload = response_json(advanced_tree_after_failed_copy).await;
-    assert_eq!(tree_payload["data"].as_array().map(Vec::len), Some(4));
+    assert_eq!(tree_payload["data"].as_array().map(Vec::len), Some(3));
 }
 
 #[tokio::test]
@@ -438,7 +443,6 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         "CORE",
         "MCP_SERVERS",
         "MODELS",
-        "SKILLS",
         "AGENT_OPERATIONS",
         "FILE_MANAGEMENT",
         "DATA_SOURCE_MANAGEMENT",
@@ -447,7 +451,6 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         "RESOURCE_MANAGEMENT",
         "VARIABLES",
         "DATA",
-        "OBSERVABILITY",
     ] {
         let response = request_json(
             &router,
@@ -488,7 +491,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         restore_payload["data"]["restoredDomainCodes"],
         json!(["ADVANCED", "CHAT_PANEL"])
     );
-    assert_eq!(restore_payload["data"]["restoredItemCount"], 16);
+    assert_eq!(restore_payload["data"]["restoredItemCount"], 14);
 
     let restored_tree = request_json(
         &router,
@@ -504,10 +507,24 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     assert_eq!(restored_payload["data"][0]["menuCode"], "CORE");
     assert_eq!(restored_payload["data"][0]["childDisplay"], "Flyout");
     assert_eq!(restored_payload["data"][1]["menuCode"], "AGENT_OPERATIONS");
-    assert_eq!(restored_payload["data"][1]["children"][0]["menuCode"], "MCP_SERVERS");
+    assert_eq!(
+        restored_payload["data"][1]["children"][0]["menuCode"],
+        "MCP_SERVERS"
+    );
+    assert!(!restored_payload["data"].as_array().unwrap().iter().any(|menu| menu["menuCode"] == "OBSERVABILITY"));
     let tree_json = restored_payload["data"].to_string();
-    for removed in ["INTERNAL_AGENTS", "SYSTEM_AGENTS", "KNOWLEDGE_BASE", "KNOWLEDGE_GRAPH", "MEMORY", "RAG"] {
-        assert!(!tree_json.contains(removed), "removed menu {removed} was restored");
+    for removed in [
+        "INTERNAL_AGENTS",
+        "SYSTEM_AGENTS",
+        "KNOWLEDGE_BASE",
+        "KNOWLEDGE_GRAPH",
+        "MEMORY",
+        "RAG",
+    ] {
+        assert!(
+            !tree_json.contains(removed),
+            "removed menu {removed} was restored"
+        );
     }
 
     let second_restore = request_json(

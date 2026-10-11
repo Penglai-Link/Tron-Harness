@@ -193,7 +193,7 @@ impl ModelProviderService {
          },||ModelProviderError::Storage)
         })();
         if let Err(error) = result {
-            eprintln!("[person-ai] scoped credential failure persistence failed: {error}");
+            tracing::error!("[person-ai] scoped credential failure persistence failed: {error}");
         }
     }
 }

@@ -28,8 +28,16 @@ impl LlmRuntimeService {
         if config.model_code != model {
             return Err(LlmRuntimeError::model_resolution("图片描述模型发生变化"));
         }
-        if config.model_type != crate::domain::model::ModelType::Text || !matches!(config.protocol, crate::domain::model::ModelProtocol::OpenAiCompatible | crate::domain::model::ModelProtocol::Responses) {
-            return Err(LlmRuntimeError::model_resolution("图片描述模型协议不受支持"));
+        if config.model_type != crate::domain::model::ModelType::Text
+            || !matches!(
+                config.protocol,
+                crate::domain::model::ModelProtocol::OpenAiCompatible
+                    | crate::domain::model::ModelProtocol::Responses
+            )
+        {
+            return Err(LlmRuntimeError::model_resolution(
+                "图片描述模型协议不受支持",
+            ));
         }
         config.temperature = Some(0.0);
         config.max_tokens = Some(2048);
@@ -42,7 +50,11 @@ impl LlmRuntimeService {
             .map_err(|_| LlmRuntimeError::model_resolution("图片描述模型授权不可用"))?
             .filter(|s| !s.is_empty())
             .ok_or_else(|| LlmRuntimeError::model_resolution("图片描述需要账户绑定的模型授权"))?;
-        let cache_identity = self.model_resolver.vision_cache_identity().map_err(|_| LlmRuntimeError::model_resolution("图片描述账户不可用"))?.unwrap_or_else(|| scope.clone());
+        let cache_identity = self
+            .model_resolver
+            .vision_cache_identity()
+            .map_err(|_| LlmRuntimeError::model_resolution("图片描述账户不可用"))?
+            .unwrap_or_else(|| scope.clone());
         let identity = serde_json::to_vec(&(
             &config.model_code,
             &config.model_name,

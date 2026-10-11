@@ -443,8 +443,16 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
         Ok::<_, ModelProviderError>(())
     }, || ModelProviderError::Storage).unwrap();
     let ambiguous_default_options = service.list_text_select_options("").unwrap();
-    assert!(ambiguous_default_options.iter().any(|option| option.enabled));
-    assert!(!ambiguous_default_options.iter().any(|option| option.is_default));
+    assert!(
+        ambiguous_default_options
+            .iter()
+            .any(|option| option.enabled)
+    );
+    assert!(
+        !ambiguous_default_options
+            .iter()
+            .any(|option| option.is_default)
+    );
     service.connection.call(|connection| {
         connection.execute("UPDATE default_model_selections SET model_code='alibaba_coding_plan/deepseek-v4.1-flash' WHERE scope_key='platform'", []).unwrap();
         Ok::<_, ModelProviderError>(())
@@ -507,7 +515,8 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
         service.resolve_chat_selection(
             "",
             Some(&ModelSelection::person_ai_fixed(
-                "deepseek-v4.1-flash", ProviderModelQuality::High,
+                "deepseek-v4.1-flash",
+                ProviderModelQuality::High,
             )),
             None,
             None,
@@ -530,35 +539,81 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
         let state = state.lock().unwrap();
         assert!(state.steps.is_empty());
         assert!(state.errors.is_empty(), "{:?}", state.errors);
-        assert_eq!(state.model_queries, ["quality_type=high", "quality_type=middle", "quality_type=low"]);
+        assert_eq!(
+            state.model_queries,
+            [
+                "quality_type=high",
+                "quality_type=middle",
+                "quality_type=low"
+            ]
+        );
     }
     // Retiring one vendor must not retire a same-named model on another vendor.
     state.lock().unwrap().steps = VecDeque::from([
-        step("GET", "/chat/models", json!([
-            {"model_code":"deepseek-v4.1-flash","provider_code":"alibaba_coding_plan","provider_name":"百炼tokenplan 个人","protocol_types":["chat_completions","responses"]}
-        ])),
+        step(
+            "GET",
+            "/chat/models",
+            json!([
+                {"model_code":"deepseek-v4.1-flash","provider_code":"alibaba_coding_plan","provider_name":"百炼tokenplan 个人","protocol_types":["chat_completions","responses"]}
+            ]),
+        ),
         step("GET", "/chat/models", json!([])),
         step("GET", "/chat/models", json!([])),
         step("GET", "/multimedia/models", json!([])),
     ]);
     let run = service.sync_now(ModelProviderCode::PersonAi).await.unwrap();
     assert_eq!(run.model_count, Some(1));
-    let last_good = service.list_catalog_models(ModelProviderCode::PersonAi).unwrap();
+    let last_good = service
+        .list_catalog_models(ModelProviderCode::PersonAi)
+        .unwrap();
     assert_eq!(last_good.len(), 11);
-    assert_eq!(last_good.iter().filter(|model| model.status == ProviderCatalogModelStatus::Available).count(), 1);
-    assert!(service.resolve_chat_selection("", Some(&ModelSelection::person_ai_fixed(
-        "alibaba_coding_plan/deepseek-v4.1-flash", ProviderModelQuality::High,
-    )), None, None).unwrap().is_some());
-    assert!(matches!(service.resolve_chat_selection("", Some(&ModelSelection::person_ai_fixed(
-        "qianfan_plan/deepseek-v4.1-flash", ProviderModelQuality::High,
-    )), None, None), Err(ModelProviderError::CatalogModelUnavailable(_))));
+    assert_eq!(
+        last_good
+            .iter()
+            .filter(|model| model.status == ProviderCatalogModelStatus::Available)
+            .count(),
+        1
+    );
+    assert!(
+        service
+            .resolve_chat_selection(
+                "",
+                Some(&ModelSelection::person_ai_fixed(
+                    "alibaba_coding_plan/deepseek-v4.1-flash",
+                    ProviderModelQuality::High,
+                )),
+                None,
+                None
+            )
+            .unwrap()
+            .is_some()
+    );
+    assert!(matches!(
+        service.resolve_chat_selection(
+            "",
+            Some(&ModelSelection::person_ai_fixed(
+                "qianfan_plan/deepseek-v4.1-flash",
+                ProviderModelQuality::High,
+            )),
+            None,
+            None
+        ),
+        Err(ModelProviderError::CatalogModelUnavailable(_))
+    ));
     // A later remote failure must not overwrite the last successful snapshot.
     state.lock().unwrap().steps = VecDeque::from([Step {
-        method: "GET", path: "/chat/models", status: StatusCode::INTERNAL_SERVER_ERROR,
+        method: "GET",
+        path: "/chat/models",
+        status: StatusCode::INTERNAL_SERVER_ERROR,
         body: json!({"code":500,"message":"fixture failure"}),
     }]);
     assert!(service.sync_now(ModelProviderCode::PersonAi).await.is_err());
-    assert_eq!(service.list_catalog_models(ModelProviderCode::PersonAi).unwrap(), last_good);
+    assert_eq!(
+        service
+            .list_catalog_models(ModelProviderCode::PersonAi)
+            .unwrap(),
+        last_good
+    );
     {
         let state = state.lock().unwrap();
         assert!(state.steps.is_empty());

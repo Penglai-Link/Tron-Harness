@@ -20,13 +20,9 @@ async fn observability_api_validates_scope_pagination_and_localized_errors() {
     .await;
     assert_eq!(tree.status(), StatusCode::OK);
     let tree = response_json(tree).await;
-    assert!(
-        tree["data"]["menus"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|menu| menu["pageCode"] == "observability.index")
-    );
+    assert!(!tree["data"]["menus"].as_array().unwrap().iter().any(|menu| menu["menuCode"] == "OBSERVABILITY"));
+    let all = request_with_headers(&app, Method::POST, "/api/v1/observability/traces/query", Some(json!({"workspaceCode":null,"current":1,"size":15})), None, None).await;
+    assert_eq!(all.status(), StatusCode::OK);
     let response=request_with_headers(&app,Method::POST,"/api/v1/observability/traces/query",Some(json!({"workspaceCode":"TRON_CORE","sessionCode":null,"traceId":null,"current":1,"size":15})),None,None).await;
     assert_eq!(response.status(), StatusCode::OK);
     let page = response_json(response).await;
@@ -152,7 +148,7 @@ async fn observability_api_validates_scope_pagination_and_localized_errors() {
 }
 
 #[test]
-fn observability_menu_survives_repeated_startup_without_duplicate_assignments() {
+fn observability_is_not_reseeded_into_workspace_navigation() {
     use tron_backend::adapters::outbound::persistence::sqlite::SqliteNavigationRepository;
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("navigation.sqlite3");
@@ -160,8 +156,10 @@ fn observability_menu_survives_repeated_startup_without_duplicate_assignments() 
         drop(SqliteNavigationRepository::connect(path.to_str().unwrap()).unwrap());
     }
     let db = rusqlite::Connection::open(path).unwrap();
-    let count:i64=db.query_row("SELECT COUNT(*) FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id=i.menu_id WHERE m.menu_code='OBSERVABILITY' AND i.parent_item_id IS NULL",[],|r|r.get(0)).unwrap();
-    assert_eq!(count, 1);
+    let count:i64=db.query_row("SELECT COUNT(*) FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id=i.menu_id WHERE m.menu_code IN ('TRACES', 'METRICS', 'OBSERVABILITY_DASHBOARD', 'LOGS') AND i.parent_item_id IS NOT NULL",[],|r|r.get(0)).unwrap();
+    assert_eq!(count, 0);
+    let menus: i64 = db.query_row("SELECT COUNT(*) FROM navigation_menus WHERE menu_code IN ('OBSERVABILITY', 'TRACES', 'METRICS', 'OBSERVABILITY_DASHBOARD', 'LOGS')", [], |row| row.get(0)).unwrap();
+    assert_eq!(menus, 0);
 }
 
 #[tokio::test]
@@ -240,4 +238,219 @@ async fn observability_collector_accepts_gzip_and_preserves_i64_points() {
         points["data"]["records"][0]["data"]["asInt"],
         i64::MAX.to_string()
     );
+}
+
+#[tokio::test]
+async fn trace_session_names_are_current_and_workspace_scoped() {
+    let config = common::prepared_config(tron_backend::config::AppConfig::default());
+    let telemetry_path =
+        std::path::Path::new(&config.database_url).with_extension("telemetry.sqlite3");
+    let app = common::app_with_config(config);
+    let token = common::authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({"workspaceCode":"TRON_CORE", "title":"Current session name"})),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = response_json(created).await;
+    let session_code = created["data"]["sessionCode"].as_str().unwrap();
+    let runtime = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/observability/runtime",
+        None,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(runtime.status(), StatusCode::OK);
+    let db = rusqlite::Connection::open(telemetry_path).unwrap();
+    for (id, workspace, session) in [
+        (
+            "11111111111111111111111111111111",
+            "TRON_CORE",
+            session_code,
+        ),
+        (
+            "22222222222222222222222222222222",
+            "COMPLIANCE",
+            session_code,
+        ),
+        (
+            "33333333333333333333333333333333",
+            "TRON_CORE",
+            "missing-session",
+        ),
+    ] {
+        db.execute("INSERT INTO ef_telemetry_traces(trace_id,started_at,ended_at,status_code,attributes,abandoned) VALUES (?1,1,2,0,?2,0)",
+            rusqlite::params![id, json!({"tron.workspace.code":workspace,"tron.session.code":session}).to_string()]).unwrap();
+    }
+    for (id, workspace, expected) in [
+        (
+            "11111111111111111111111111111111",
+            "TRON_CORE",
+            json!("Current session name"),
+        ),
+        (
+            "22222222222222222222222222222222",
+            "COMPLIANCE",
+            json!(null),
+        ),
+        ("33333333333333333333333333333333", "TRON_CORE", json!(null)),
+    ] {
+        let page = request_with_headers(
+            &app,
+            Method::POST,
+            "/api/v1/observability/traces/query",
+            Some(json!({"workspaceCode":workspace,"traceId":id,"current":1,"size":15})),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(page.status(), StatusCode::OK);
+        assert_eq!(
+            response_json(page).await["data"]["records"][0]["sessionName"],
+            expected
+        );
+        let all_detail = request_with_headers(&app, Method::GET, &format!("/api/v1/observability/traces/{id}"), None, None, None).await;
+        assert_eq!(all_detail.status(), StatusCode::OK);
+        let all_detail = response_json(all_detail).await;
+        assert_eq!(all_detail["data"]["trace"]["sessionName"], expected);
+        assert_eq!(all_detail["data"]["trace"]["workspaceCode"], workspace);
+        let detail = request_with_headers(
+            &app,
+            Method::GET,
+            &format!("/api/v1/observability/traces/{id}?workspaceCode={workspace}"),
+            None,
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(detail.status(), StatusCode::OK);
+        assert_eq!(
+            response_json(detail).await["data"]["trace"]["sessionName"],
+            expected
+        );
+    }
+}
+
+#[tokio::test]
+async fn dashboard_counts_workspace_requests_and_recent_traffic_without_other_workspaces() {
+    let config = common::prepared_config(tron_backend::config::AppConfig::default());
+    let telemetry_path =
+        std::path::Path::new(&config.database_url).with_extension("telemetry.sqlite3");
+    let app = common::app_with_config(config);
+    let runtime = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/observability/runtime",
+        None,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(runtime.status(), StatusCode::OK);
+    let db = rusqlite::Connection::open(telemetry_path).unwrap();
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    for (id, workspace, start, end, status) in [
+        (
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "TRON_CORE",
+            at - 3600000,
+            Some(at - 3599000),
+            0,
+        ),
+        (
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "TRON_CORE",
+            at - 3000,
+            Some(at - 1000),
+            2,
+        ),
+        (
+            "cccccccccccccccccccccccccccccccc",
+            "TRON_CORE",
+            at - 1000,
+            None,
+            0,
+        ),
+        (
+            "dddddddddddddddddddddddddddddddd",
+            "COMPLIANCE",
+            at - 3000,
+            Some(at - 1000),
+            2,
+        ),
+    ] {
+        db.execute("INSERT INTO ef_telemetry_traces(trace_id,started_at,ended_at,status_code,attributes,abandoned) VALUES (?1,?2,?3,?4,?5,0)",rusqlite::params![id,start,end,status,json!({"tron.workspace.code":workspace}).to_string()]).unwrap();
+    }
+    let response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/observability/dashboard?workspaceCode=TRON_CORE",
+        None,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    let data = &body["data"];
+    assert_eq!(data["traceCount"], 3);
+    assert_eq!(data["failedTraceCount"], 1);
+    assert_eq!(data["runningTraceCount"], 1);
+    assert_eq!(data["averageDurationMs"], 1500.0);
+    assert_eq!(data["p95DurationMs"], 2000.0);
+    let buckets = data["recentRequests"].as_array().unwrap();
+    assert_eq!(buckets.len(), 15);
+    assert_eq!(
+        buckets
+            .iter()
+            .map(|b| b["requests"].as_u64().unwrap())
+            .sum::<u64>(),
+        2
+    );
+    assert_eq!(
+        buckets
+            .iter()
+            .map(|b| b["errors"].as_u64().unwrap())
+            .sum::<u64>(),
+        1
+    );
+    assert!(
+        data["processes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["pid"] == std::process::id() && p["parentPid"].is_null())
+    );
+    let all = request_with_headers(&app, Method::GET, "/api/v1/observability/dashboard", None, None, None).await;
+    assert_eq!(all.status(), StatusCode::OK);
+    let all = response_json(all).await;
+    assert_eq!(all["data"]["traceCount"], 4);
+    assert_eq!(all["data"]["failedTraceCount"], 2);
+    let page = request_with_headers(&app, Method::POST, "/api/v1/observability/traces/query", Some(json!({"current":1,"size":15})), None, None).await;
+    assert_eq!(page.status(), StatusCode::OK);
+    let page = response_json(page).await;
+    assert_eq!(page["data"]["total"], 4);
+    assert!(page["data"]["records"].as_array().unwrap().iter().any(|record| record["workspaceCode"] == "COMPLIANCE"));
+    let missing = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/observability/dashboard?workspaceCode=missing",
+        None,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
 }

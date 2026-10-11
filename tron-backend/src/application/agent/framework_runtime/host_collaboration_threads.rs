@@ -90,7 +90,7 @@ impl Runtime {
             .await;
         let origin = parent.clone();
         let returned = summary.clone();
-        tokio::spawn(async move {
+        crate::app::telemetry::spawn_traced(async move {
             let result = thread
                 .agent
                 .wait(handle)

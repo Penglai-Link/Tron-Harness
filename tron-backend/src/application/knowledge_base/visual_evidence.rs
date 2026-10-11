@@ -39,7 +39,8 @@ impl KnowledgeBaseService {
             !allowed.iter().any(|kb| {
                 kb.id == hit.knowledge_base_id
                     && kb.documents.iter().any(|d| {
-                        !super::fidelity::blocked(d) && d.id == hit.document_id
+                        !super::fidelity::blocked(d)
+                            && d.id == hit.document_id
                             && d.resource_code == hit.resource_code
                             && d.resource_revision == hit.resource_revision
                             && d.active_source_code.as_ref() == Some(&hit.source_code)
@@ -79,10 +80,16 @@ impl KnowledgeBaseService {
         let mut seen = BTreeSet::new();
         let mut total = 0usize;
         for hit in hits {
-            let library = allowed.iter().find(|k| k.id == hit.knowledge_base_id).ok_or(KnowledgeBaseError::Forbidden)?;
+            let library = allowed
+                .iter()
+                .find(|k| k.id == hit.knowledge_base_id)
+                .ok_or(KnowledgeBaseError::Forbidden)?;
             // The target-space grant was verified above; this scoped reader cannot expose unrelated resources.
             let resources = &self.resources;
-            let doc = library.documents.iter().find(|d| d.id == hit.document_id)
+            let doc = library
+                .documents
+                .iter()
+                .find(|d| d.id == hit.document_id)
                 .ok_or(KnowledgeBaseError::Forbidden)?;
             let registered = doc
                 .parsing_artifact

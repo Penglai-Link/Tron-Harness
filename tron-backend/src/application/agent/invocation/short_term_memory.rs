@@ -24,10 +24,9 @@ pub(super) fn activate_short_term_memory(
 ) -> Result<(), AgentInvocationError> {
     // Carry structured answer identity in the user input for both persistent
     // and ephemeral runs. It is not promoted into trusted instructions.
-    if let Some(metadata) = input_metadata
-        .as_ref()
-        .filter(|metadata| metadata.get("resume").is_some() || metadata.get("a2uiClientCapabilities").is_some())
-    {
+    if let Some(metadata) = input_metadata.as_ref().filter(|metadata| {
+        metadata.get("resume").is_some() || metadata.get("a2uiClientCapabilities").is_some()
+    }) {
         let part = crate::domain::agent::AgentMessagePart::Context {
             kind: "tron_interaction_response".into(),
             text: String::new(),

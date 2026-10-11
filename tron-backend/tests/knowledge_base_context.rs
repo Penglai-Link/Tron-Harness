@@ -69,10 +69,7 @@ async fn native_framework_loop_reads_current_agent_grants_and_revocation_without
     {
         let f = Fixture::new();
         f.client.dimensions.store(1024, Ordering::SeqCst);
-        let kb = f
-            .service
-            .create(USER, "orchid", "source")
-            .unwrap();
+        let kb = f.service.create(USER, "orchid", "source").unwrap();
         let d = f
             .service
             .upload(
@@ -83,11 +80,7 @@ async fn native_framework_loop_reads_current_agent_grants_and_revocation_without
             )
             .unwrap();
         assert_eq!(
-            f.service
-                .index(USER, &kb.id, &d.id)
-                .await
-                .unwrap()
-                .status,
+            f.service.index(USER, &kb.id, &d.id).await.unwrap().status,
             "READY"
         );
         let host = FrameworkHost::temporary(Some(f.state.resources.clone())).unwrap();
@@ -110,9 +103,7 @@ async fn native_framework_loop_reads_current_agent_grants_and_revocation_without
             .unwrap();
         harness.run(context(&f, "with-grants", true)).await.unwrap();
         assert_eq!(f.client.calls.load(Ordering::SeqCst), before + 1);
-        f.service
-            .set_grants(USER, &kb.id, vec![])
-            .unwrap();
+        f.service.set_grants(USER, &kb.id, vec![]).unwrap();
         harness.run(context(&f, "revoked", true)).await.unwrap();
         f.service
             .set_grants(USER, &kb.id, vec![f.agent.clone()])

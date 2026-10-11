@@ -1,4 +1,3 @@
-
 use chrono::{DateTime, TimeZone, Utc};
 use rusqlite::{Row, params};
 
@@ -13,7 +12,7 @@ use crate::{
 };
 
 pub(super) fn storage_error(error: rusqlite::Error) -> AutomationError {
-    eprintln!("automation sqlite error: {error}");
+    tracing::error!("automation sqlite error: {error}");
     AutomationError::StorageFailure
 }
 

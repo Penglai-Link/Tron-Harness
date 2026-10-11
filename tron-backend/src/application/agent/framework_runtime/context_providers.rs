@@ -401,7 +401,8 @@ fn reducer(
                 model
                     .context_window_tokens
                     .unwrap_or(128_000)
-                    .saturating_sub(model.max_tokens.unwrap_or(limits.max_model_output_tokens)) as usize,
+                    .saturating_sub(model.max_tokens.unwrap_or(limits.max_model_output_tokens))
+                    as usize,
             );
             auxiliary_limits.max_model_output_tokens = limits
                 .max_model_output_tokens

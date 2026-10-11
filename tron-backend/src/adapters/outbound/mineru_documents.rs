@@ -38,10 +38,7 @@ impl MineruKnowledgeDocumentParser {
             .timeout(Duration::from_secs(config.timeout_seconds))
             .build()
             .expect("MinerU HTTP client");
-        Self {
-            config,
-            client,
-        }
+        Self { config, client }
     }
     fn url(&self, path: &str) -> Result<Url, KnowledgeBaseError> {
         if !self.config.enabled {
@@ -64,16 +61,28 @@ impl MineruKnowledgeDocumentParser {
         .map_err(invalid)
     }
     async fn bytes(&self, request: reqwest::RequestBuilder) -> Result<Vec<u8>, KnowledgeBaseError> {
-        let response = request.send().await.map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
         self.response_bytes(response).await
     }
-    async fn response_bytes(&self, mut response: reqwest::Response) -> Result<Vec<u8>, KnowledgeBaseError> {
+    async fn response_bytes(
+        &self,
+        mut response: reqwest::Response,
+    ) -> Result<Vec<u8>, KnowledgeBaseError> {
         if !response.status().is_success() {
             let message = format!(
                 "MinerU返回HTTP {}，资料解析未完成",
                 response.status().as_u16()
             );
-            return Err(if response.status().is_server_error() || response.status().as_u16() == 429 { KnowledgeBaseError::Storage(message) } else { invalid(message) });
+            return Err(
+                if response.status().is_server_error() || response.status().as_u16() == 429 {
+                    KnowledgeBaseError::Storage(message)
+                } else {
+                    invalid(message)
+                },
+            );
         }
         if response
             .content_length()
@@ -82,7 +91,11 @@ impl MineruKnowledgeDocumentParser {
             return Err(invalid("MinerU响应超过100 MiB上限"));
         }
         let mut result = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|e| KnowledgeBaseError::Storage(e.to_string()))? {
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?
+        {
             if result.len().saturating_add(chunk.len()) > MAX_EXPANDED_BYTES {
                 return Err(invalid("MinerU响应超过100 MiB上限"));
             }
@@ -103,12 +116,24 @@ impl MineruKnowledgeDocumentParser {
         .map_err(invalid)
     }
     async fn submit_job(&self, value: Value) -> Result<Value, KnowledgeBaseError> {
-        let response = self.client.post(self.url("/v1/parse/jobs")?).json(&value).send().await.map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
-        if !response.status().is_success() { return self.response_bytes(response).await.map(|_| Value::Null); }
+        let response = self
+            .client
+            .post(self.url("/v1/parse/jobs")?)
+            .json(&value)
+            .send()
+            .await
+            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+        if !response.status().is_success() {
+            return self.response_bytes(response).await.map(|_| Value::Null);
+        }
         // Missing/truncated JSON or an invalid ID may still mean a created job.
         // Keep reconciling instead of sending a second POST.
-        let bytes = self.response_bytes(response).await.map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
-        let job: Value = serde_json::from_slice(&bytes).map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+        let bytes = self
+            .response_bytes(response)
+            .await
+            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+        let job: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
         Self::id(&job, "job_id").map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
         Ok(job)
     }
@@ -129,7 +154,10 @@ impl MineruKnowledgeDocumentParser {
 }
 #[async_trait]
 impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
-    fn with_ocr_mode(&self, mode: OcrMode) -> Result<std::sync::Arc<dyn KnowledgeDocumentParser>, KnowledgeBaseError> {
+    fn with_ocr_mode(
+        &self,
+        mode: OcrMode,
+    ) -> Result<std::sync::Arc<dyn KnowledgeDocumentParser>, KnowledgeBaseError> {
         let mut parser = self.clone();
         parser.config.ocr_mode = mode.as_str().into();
         Ok(std::sync::Arc::new(parser))
@@ -167,42 +195,88 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
         >,
     ) -> Result<StructuredParse, KnowledgeBaseError> {
         let task = checkpoint.task()?;
-        let parser = self.on_endpoint(task.endpoint_id.as_deref().ok_or_else(|| invalid("解析节点未认领"))?)?;
-        parser.parse_internal(filename, bytes, tier, Some(checkpoint)).await
+        let parser = self.on_endpoint(
+            task.endpoint_id
+                .as_deref()
+                .ok_or_else(|| invalid("解析节点未认领"))?,
+        )?;
+        parser
+            .parse_internal(filename, bytes, tier, Some(checkpoint))
+            .await
     }
     async fn cancel_job(&self, endpoint: &str, job: &str) -> Result<(), KnowledgeBaseError> {
         let parser = self.on_endpoint(endpoint)?;
         Self::id(&json!({"id":job}), "id")?;
-        let response = parser.client.delete(parser.url(&format!("/v1/parse/jobs/{job}"))?).send().await.map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
-        if response.status().is_success() || matches!(response.status().as_u16(), 404 | 409) { Ok(()) } else { Err(KnowledgeBaseError::Storage(format!("MinerU取消失败HTTP {}", response.status()))) }
+        let response = parser
+            .client
+            .delete(parser.url(&format!("/v1/parse/jobs/{job}"))?)
+            .send()
+            .await
+            .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+        if response.status().is_success() || matches!(response.status().as_u16(), 404 | 409) {
+            Ok(())
+        } else {
+            Err(KnowledgeBaseError::Storage(format!(
+                "MinerU取消失败HTTP {}",
+                response.status()
+            )))
+        }
     }
-    async fn cancel_task(&self, task: &crate::application::knowledge_base::ingestion::IngestionTask) -> Result<Option<String>, KnowledgeBaseError> {
+    async fn cancel_task(
+        &self,
+        task: &crate::application::knowledge_base::ingestion::IngestionTask,
+    ) -> Result<Option<String>, KnowledgeBaseError> {
         // Use the authorized snapshot even if the node is disabled later.
         // Cancellation never uploads a new source or moves to another node.
         let mut snapshot = self.clone();
         if let Some(mode) = task.configuration["parser"]["ocrMode"].as_str() {
-            snapshot.config.ocr_mode = OcrMode::from_wire(mode).ok_or_else(|| invalid("解析任务OCR模式无效"))?.as_str().into();
+            snapshot.config.ocr_mode = OcrMode::from_wire(mode)
+                .ok_or_else(|| invalid("解析任务OCR模式无效"))?
+                .as_str()
+                .into();
         }
-        if let Some(base) = task.configuration["parser"]["baseUrl"].as_str() { snapshot.config.base_url = base.into(); }
-        if let Some(nodes) = task.configuration["parser"].get("nodes") { snapshot.config.nodes = serde_json::from_value(nodes.clone()).map_err(invalid)?; }
-        let endpoint = task.endpoint_id.as_deref().ok_or_else(|| invalid("原解析节点身份缺失"))?;
+        if let Some(base) = task.configuration["parser"]["baseUrl"].as_str() {
+            snapshot.config.base_url = base.into();
+        }
+        if let Some(nodes) = task.configuration["parser"].get("nodes") {
+            snapshot.config.nodes = serde_json::from_value(nodes.clone()).map_err(invalid)?;
+        }
+        let endpoint = task
+            .endpoint_id
+            .as_deref()
+            .ok_or_else(|| invalid("原解析节点身份缺失"))?;
         let parser = snapshot.on_endpoint(endpoint)?;
-        let job = if let Some(job) = &task.remote_job_id { job.clone() } else if task.reconciling {
-            let file = task.remote_file_id.as_deref().ok_or_else(|| invalid("原解析文件身份缺失"))?;
-            let tier = serde_json::from_value(task.configuration["parsingTier"].clone()).map_err(invalid)?;
+        let job = if let Some(job) = &task.remote_job_id {
+            job.clone()
+        } else if task.reconciling {
+            let file = task
+                .remote_file_id
+                .as_deref()
+                .ok_or_else(|| invalid("原解析文件身份缺失"))?;
+            let tier = serde_json::from_value(task.configuration["parsingTier"].clone())
+                .map_err(invalid)?;
             Self::id(&parser.reconcile_job(file, tier).await?, "job_id")?.to_owned()
-        } else { return Ok(None); };
+        } else {
+            return Ok(None);
+        };
         parser.cancel_job("default", &job).await?;
         Ok(Some(job))
     }
     fn supports_local_visual_reparse(&self) -> bool {
-        Url::parse(&self.config.base_url).is_ok_and(|url| matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]" | "::1")))
+        Url::parse(&self.config.base_url).is_ok_and(|url| {
+            matches!(
+                url.host_str(),
+                Some("127.0.0.1" | "localhost" | "[::1]" | "::1")
+            )
+        })
     }
     fn default_tier(&self) -> ParsingTier {
         self.config.default_tier
     }
     async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
-        if !self.config.nodes.is_empty() { return self.pool_capabilities().await; }
+        if !self.config.nodes.is_empty() {
+            return self.pool_capabilities().await;
+        }
         let health = self.get("/v1/health").await?;
         if health["status"] != "ok" {
             return Err(invalid("MinerU服务未就绪"));
@@ -210,7 +284,9 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
         let version = health["version"]
             .as_str()
             .ok_or_else(|| invalid("MinerU未报告版本"))?;
-        if version != self.config.expected_parser_version { return Err(invalid("MinerU版本与固定解析配置不匹配")); }
+        if version != self.config.expected_parser_version {
+            return Err(invalid("MinerU版本与固定解析配置不匹配"));
+        }
         if !version.starts_with("4.") {
             return Err(invalid("知识库需要MinerU 4 V1服务"));
         }
@@ -226,7 +302,8 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
         }
         Ok(ParsingCapabilities {
             default_tier: self.config.default_tier,
-            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode).ok_or_else(|| invalid("MinerU OCR模式无效"))?,
+            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode)
+                .ok_or_else(|| invalid("MinerU OCR模式无效"))?,
             available_tiers: available,
             parser_version: version.into(),
             office_tier: ParsingTier::Flash,
@@ -240,15 +317,30 @@ impl KnowledgeDocumentParser for MineruKnowledgeDocumentParser {
     ) -> Result<StructuredParse, KnowledgeBaseError> {
         if !self.config.nodes.is_empty() {
             let capacities = self.routing_capacities().await?;
-            let first = capacities.first().ok_or_else(|| invalid("没有可用解析节点"))?;
-            return self.on_endpoint(&first.endpoint_id)?.parse_internal(filename, bytes, tier, None).await;
+            let first = capacities
+                .first()
+                .ok_or_else(|| invalid("没有可用解析节点"))?;
+            return self
+                .on_endpoint(&first.endpoint_id)?
+                .parse_internal(filename, bytes, tier, None)
+                .await;
         }
         self.parse_internal(filename, bytes, tier, None).await
     }
 }
 impl MineruKnowledgeDocumentParser {
-    async fn parse_internal(&self, filename: &str, bytes: &[u8], tier: Option<ParsingTier>, checkpoint: Option<std::sync::Arc<dyn crate::application::knowledge_base::parsing::ParseCheckpoint>>) -> Result<StructuredParse, KnowledgeBaseError> {
-        if !matches!(self.config.ocr_mode.as_str(), "auto" | "txt" | "ocr") { return Err(invalid("MinerU OCR模式无效")); }
+    async fn parse_internal(
+        &self,
+        filename: &str,
+        bytes: &[u8],
+        tier: Option<ParsingTier>,
+        checkpoint: Option<
+            std::sync::Arc<dyn crate::application::knowledge_base::parsing::ParseCheckpoint>,
+        >,
+    ) -> Result<StructuredParse, KnowledgeBaseError> {
+        if !matches!(self.config.ocr_mode.as_str(), "auto" | "txt" | "ocr") {
+            return Err(invalid("MinerU OCR模式无效"));
+        }
         if bytes.len() > self.config.max_bytes.min(20 * 1024 * 1024) {
             return Err(invalid("资料超过解析大小上限"));
         }
@@ -271,7 +363,8 @@ impl MineruKnowledgeDocumentParser {
         } else {
             tier.unwrap_or(self.config.default_tier)
         };
-        let mut probe = self.clone(); probe.config.default_tier = selected;
+        let mut probe = self.clone();
+        probe.config.default_tier = selected;
         let capabilities = probe.capabilities().await?;
         if !capabilities.available_tiers.contains(&selected) {
             return Err(invalid("MinerU当前不支持选定解析质量，不会自动降级"));
@@ -279,47 +372,91 @@ impl MineruKnowledgeDocumentParser {
         let saved = checkpoint.as_ref().map(|c| c.task()).transpose()?;
         let reusable = if let Some(task) = &saved {
             if let Some(id) = &task.remote_job_id {
-                let response = self.client.get(self.url(&format!("/v1/parse/jobs/{id}"))?).send().await.map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
+                let response = self
+                    .client
+                    .get(self.url(&format!("/v1/parse/jobs/{id}"))?)
+                    .send()
+                    .await
+                    .map_err(|e| KnowledgeBaseError::Storage(e.to_string()))?;
                 if response.status().as_u16() == 404 {
                     checkpoint.as_ref().unwrap().save(None, None, false)?;
                     None
                 } else {
-                    let job: Value = serde_json::from_slice(&self.response_bytes(response).await?).map_err(invalid)?;
-                    if matches!(job["status"].as_str(), Some("failed" | "partial" | "canceled")) {
-                        checkpoint.as_ref().unwrap().save(task.remote_file_id.clone(), None, false)?;
+                    let job: Value = serde_json::from_slice(&self.response_bytes(response).await?)
+                        .map_err(invalid)?;
+                    if matches!(
+                        job["status"].as_str(),
+                        Some("failed" | "partial" | "canceled")
+                    ) {
+                        checkpoint.as_ref().unwrap().save(
+                            task.remote_file_id.clone(),
+                            None,
+                            false,
+                        )?;
                         None
-                    } else { Some(job) }
+                    } else {
+                        Some(job)
+                    }
                 }
             } else if task.reconciling {
-                Some(self.reconcile_job(task.remote_file_id.as_deref().ok_or_else(|| invalid("MinerU对账文件身份缺失"))?, selected).await?)
-            } else { None }
+                Some(
+                    self.reconcile_job(
+                        task.remote_file_id
+                            .as_deref()
+                            .ok_or_else(|| invalid("MinerU对账文件身份缺失"))?,
+                        selected,
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            }
         // Only the durable Tron task can prove which OCR mode created a job.
         // MinerU's job response does not include the requested OCR mode.
-        } else { None };
+        } else {
+            None
+        };
         let resumed = reusable.is_some();
         let mut job = if let Some(job) = reusable {
             if let Some(checkpoint) = &checkpoint {
                 let task = checkpoint.task()?;
-                checkpoint.save(task.remote_file_id, Some(Self::id(&job, "job_id")?.into()), false)?;
+                checkpoint.save(
+                    task.remote_file_id,
+                    Some(Self::id(&job, "job_id")?.into()),
+                    false,
+                )?;
             }
             job
         } else {
             let current = checkpoint.as_ref().map(|c| c.task()).transpose()?;
-            let file_id = if let Some(file) = current.as_ref().and_then(|t| t.remote_file_id.clone()) { file } else {
-                let file = self.upload_source(filename, bytes, &extension).await?;
-                if let Some(checkpoint) = &checkpoint { checkpoint.save(Some(file.clone()), None, false)?; }
-                file
-            };
-            if let Some(checkpoint) = &checkpoint { checkpoint.save(Some(file_id.clone()), None, true)?; }
+            let file_id =
+                if let Some(file) = current.as_ref().and_then(|t| t.remote_file_id.clone()) {
+                    file
+                } else {
+                    let file = self.upload_source(filename, bytes, &extension).await?;
+                    if let Some(checkpoint) = &checkpoint {
+                        checkpoint.save(Some(file.clone()), None, false)?;
+                    }
+                    file
+                };
+            if let Some(checkpoint) = &checkpoint {
+                checkpoint.save(Some(file_id.clone()), None, true)?;
+            }
             let created = self.submit_job(json!({"files":[{"source":{"type":"file_id","file_id":file_id}}],"tier":selected,"ocr_mode":self.config.ocr_mode,"output_formats":["zip","structured_content"]})).await;
             if matches!(&created, Err(KnowledgeBaseError::Invalid(_))) {
-                if let Some(checkpoint) = &checkpoint { checkpoint.save(Some(file_id.clone()), None, false)?; }
+                if let Some(checkpoint) = &checkpoint {
+                    checkpoint.save(Some(file_id.clone()), None, false)?;
+                }
             }
             let job = created?;
             if let Some(checkpoint) = &checkpoint {
                 let id = Self::id(&job, "job_id")?.to_owned();
                 if let Err(error) = checkpoint.save(Some(file_id), Some(id.clone()), false) {
-                    let _ = self.client.delete(self.url(&format!("/v1/parse/jobs/{id}"))?).send().await;
+                    let _ = self
+                        .client
+                        .delete(self.url(&format!("/v1/parse/jobs/{id}"))?)
+                        .send()
+                        .await;
                     return Err(error);
                 }
             }
@@ -332,7 +469,9 @@ impl MineruKnowledgeDocumentParser {
                 Some("completed") => break,
                 Some("queued" | "running") => {
                     if Instant::now() >= deadline {
-                        return Err(KnowledgeBaseError::Storage(format!("MinerU解析超时，可重试（任务{job_id}）")));
+                        return Err(KnowledgeBaseError::Storage(format!(
+                            "MinerU解析超时，可重试（任务{job_id}）"
+                        )));
                     }
                     sleep(Duration::from_millis(750)).await;
                     job = self.get(&format!("/v1/parse/jobs/{job_id}")).await?;
@@ -349,7 +488,11 @@ impl MineruKnowledgeDocumentParser {
         if files.len() != 1 {
             return Err(invalid("MinerU返回了不匹配的资料输出"));
         }
-        if (resumed || checkpoint.is_some()) && files[0]["parse"]["parser_version"] != capabilities.parser_version { return Err(invalid("MinerU复用任务的解析版本发生变化，拒绝发布")); }
+        if (resumed || checkpoint.is_some())
+            && files[0]["parse"]["parser_version"] != capabilities.parser_version
+        {
+            return Err(invalid("MinerU复用任务的解析版本发生变化，拒绝发布"));
+        }
         let output = &files[0]["output_files"];
         let zip_id = Self::id(&output["zip"], "file_id")?;
         let archive = self
@@ -376,8 +519,13 @@ fn parse_failure(job: &Value, job_id: &str) -> String {
         .or_else(|| error_message(&job["error"]));
     // Keep remote diagnostics bounded and render them as plain text in the UI.
     let reason = reason.map(|message| {
-        message.split_whitespace().collect::<Vec<_>>()
-            .join(" ").chars().take(1000).collect::<String>()
+        message
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(1000)
+            .collect::<String>()
     });
     format!(
         "MINERU_PARSE_FAILED:{}",

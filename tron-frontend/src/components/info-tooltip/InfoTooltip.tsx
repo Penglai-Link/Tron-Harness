@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CircleHelp } from "lucide-react";
 
 import type { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
@@ -9,12 +10,14 @@ interface InfoTooltipProps {
   align?: TooltipPrimitive.Positioner.Props["align"];
   ariaLabel: string;
   children: ReactNode;
+  variant?: "text" | "icon";
 }
 
 export function InfoTooltip({
   align,
   ariaLabel,
   children,
+  variant = "text",
 }: InfoTooltipProps) {
   const { t } = useTranslation("common");
 
@@ -26,7 +29,7 @@ export function InfoTooltip({
         aria-label={ariaLabel}
         className="inline-flex min-h-7 min-w-7 shrink-0 items-center justify-center rounded-sm px-1"
       >
-        {t("actions.help")}
+        {variant === "icon" ? <CircleHelp aria-hidden="true" className="size-4" /> : t("actions.help")}
       </TooltipTrigger>
       <TooltipContent align={align}>
         {children}

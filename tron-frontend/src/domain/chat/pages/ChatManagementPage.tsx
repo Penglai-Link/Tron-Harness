@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { ShinyText } from "@/shared/motion";
 import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
 import { historyMessages } from "@eliteforge/agent-ui-chat-core";
@@ -8,7 +9,7 @@ import { openAgentTerminalFromLiveResult } from "../terminal/store";
 import { SessionApplicationsPanel } from "@/domain/chat/components/SessionApplicationsPanel";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { AlarmClock, Bot, CheckCircle2, CircleAlert, CircleDot, ListTodo, LoaderCircle, MessageCircleQuestionMark, MessageSquareText, Pause, Paperclip, UserRound, type LucideIcon } from "lucide-react";
+import { AlarmClock, Bot, CheckCircle2, CircleAlert, CircleDot, ListTodo, LoaderCircle, MessageCircleQuestionMark, MessageSquareText, Pause, Paperclip, Plus, UserRound, type LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -150,7 +151,7 @@ import { throttle } from "lodash-es";
 function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-US", { timeZone: getUserTimeZone(),
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
@@ -5612,12 +5613,14 @@ export function ChatManagementPage() {
         <Button
           aria-label={t("chat.management.composer.uploadAttachment")}
           disabled={(!activeSession && !isDraft) || creatingSession || attachmentUploadPending}
-          size="sm"
+          size="icon-sm"
           title={attachmentUploadPending ? t("chat.management.composer.uploading") : t("chat.management.composer.uploadAttachment")}
           type="button"
           variant="ghost"
           onClick={() => attachmentFileInputRef.current?.click()}
-        >{t("chat.management.composer.uploadAttachment")}</Button>
+        >
+          <Plus aria-hidden="true" className="!block size-4" />
+        </Button>
         <div className="min-w-0 max-w-[9.5rem] shrink">
           <ChatAgentSelector
             locked={agentSelectionLocked}

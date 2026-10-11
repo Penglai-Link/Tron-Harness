@@ -99,6 +99,7 @@ interface WorkspaceInternalAgentRecordApi {
   rolePrompt: string;
   loopCode?: string | null;
   avatarId?: string;
+  candidateModelCodes?: string[];
   groupName?: string | null;
   builtIn?: boolean;
   platformDefined: boolean;
@@ -263,6 +264,7 @@ function normalizeWorkspaceInternalAgentRecord(
     rolePrompt: record.rolePrompt ?? "",
     loopCode: record.loopCode || null,
     avatarId: record.avatarId || "robot",
+    candidateModelCodes: record.candidateModelCodes ?? [],
     groupName: record.groupName || null,
     builtIn: record.builtIn ?? false,
     platformDefined:

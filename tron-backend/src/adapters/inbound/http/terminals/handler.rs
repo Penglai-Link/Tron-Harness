@@ -45,14 +45,14 @@ pub async fn generate_command(
         return terminal_error_response(error);
     }
     let runtime_values = terminal_command_runtime_values(&request.prompt);
-    let prompt = match state.prompts.runtime_prompt_text(
-        "terminal.command-exact",
-        "en-US",
-        &runtime_values,
-    ) {
-        Ok(Some(prompt)) => prompt,
-        Ok(None) | Err(_) => return prompt_render_error_response(),
-    };
+    let prompt =
+        match state
+            .prompts
+            .runtime_prompt_text("terminal.command-exact", "en-US", &runtime_values)
+        {
+            Ok(Some(prompt)) => prompt,
+            Ok(None) | Err(_) => return prompt_render_error_response(),
+        };
     let config = match state
         .llm_router
         .route_text(&request.workspace_code, request.model_code.as_deref())

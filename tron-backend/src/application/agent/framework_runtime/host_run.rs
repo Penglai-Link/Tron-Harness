@@ -20,7 +20,7 @@ impl FrameworkHost {
         };
         let host = self.clone();
         let parent = eliteforge_agent_framework::current_continuation_parent();
-        let result = tokio::spawn(async move {
+        let result = crate::app::telemetry::spawn_traced(async move {
             let execution = host.run_inner(harness, context, sink, steering, registration);
             if let Some(parent) = parent {
                 eliteforge_agent_framework::with_continuation_parent(&parent, execution).await
@@ -84,8 +84,10 @@ impl Drop for ProductLifecycle {
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 self.harness.framework_finished(&self.context, &error)
             })) {
-                Ok(Err(error)) => eprintln!("product native completion audit failed: {error}"),
-                Err(_) => eprintln!("product native completion audit panicked"),
+                Ok(Err(error)) => {
+                    tracing::error!("product native completion audit failed: {error}")
+                }
+                Err(_) => tracing::error!("product native completion audit panicked"),
                 _ => {}
             }
         }

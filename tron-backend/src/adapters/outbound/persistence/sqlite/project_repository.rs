@@ -1,4 +1,3 @@
-
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{

@@ -1,3 +1,4 @@
+import { tracedFetch } from "@tron/chat-core";
 import {
   useEffect,
   useCallback,
@@ -171,7 +172,7 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
     setLoading(true);
     setError(null);
 
-    fetch(request.url, {
+    tracedFetch(request.url, {
       credentials: "include",
       headers,
       method: request.method,

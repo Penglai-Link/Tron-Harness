@@ -56,7 +56,8 @@ impl AgentManagementService {
             for mut config in self.platform_internal_agent_configs()? {
                 if config.group_name.as_deref() == Some(name.as_str()) {
                     config.group_name = None;
-                    self.repository().upsert_platform_internal_agent_config(&config)?;
+                    self.repository()
+                        .upsert_platform_internal_agent_config(&config)?;
                 }
             }
         } else {
@@ -84,6 +85,7 @@ impl AgentManagementService {
                         role_prompt: None,
                         loop_code: None,
                         avatar_id: None,
+                        candidate_model_codes: None,
                         group_name: None,
                         created_at: now.clone(),
                         updated_at: now.clone(),
@@ -95,7 +97,8 @@ impl AgentManagementService {
             }
         }
 
-        self.repository().delete_internal_agent_group(scope, &name)?;
+        self.repository()
+            .delete_internal_agent_group(scope, &name)?;
         Ok(())
     }
 

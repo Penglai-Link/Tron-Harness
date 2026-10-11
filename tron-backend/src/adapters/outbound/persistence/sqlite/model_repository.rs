@@ -1,4 +1,3 @@
-
 use rusqlite::{Connection, params};
 
 use crate::{
@@ -41,7 +40,6 @@ impl<'a> SqliteModelRepositorySql<'a> {
             .map_err(storage_error)?;
         Ok(Self { connection })
     }
-
 }
 
 impl SqliteModelRepository {

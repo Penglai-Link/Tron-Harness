@@ -15,14 +15,8 @@ async fn global_agent_selection_preserves_other_agents_and_users_and_rolls_back(
     let f = Fixture::new();
     let a = f.service.create(USER, "A", "").unwrap();
     let b = f.service.create(USER, "B", "").unwrap();
-    let foreign = f
-        .service
-        .create("OTHER-USER", "Foreign", "")
-        .unwrap();
-    let elsewhere = f
-        .service
-        .create(USER, "Elsewhere", "")
-        .unwrap();
+    let foreign = f.service.create("OTHER-USER", "Foreign", "").unwrap();
+    let elsewhere = f.service.create(USER, "Elsewhere", "").unwrap();
     let conn = rusqlite::Connection::open(&f.state.config.database_url).unwrap();
     for id in [&a.id, &b.id, &foreign.id, &elsewhere.id] {
         conn.execute(
@@ -40,10 +34,7 @@ async fn global_agent_selection_preserves_other_agents_and_users_and_rolls_back(
         .set_agent_knowledge_libraries(USER, &f.agent, &[b.id.clone(), b.id.clone()])
         .unwrap();
     assert_eq!(
-        f.service
-            .detail(USER, &a.id)
-            .unwrap()
-            .agent_codes,
+        f.service.detail(USER, &a.id).unwrap().agent_codes,
         vec!["another-agent"]
     );
     assert!(
@@ -61,18 +52,11 @@ async fn global_agent_selection_preserves_other_agents_and_users_and_rolls_back(
             .contains(&f.agent)
     );
     assert_eq!(
-        f.service
-            .detail(USER, &elsewhere.id)
-            .unwrap()
-            .agent_codes,
+        f.service.detail(USER, &elsewhere.id).unwrap().agent_codes,
         vec!["another-agent"]
     );
     f.service
-        .set_agent_knowledge_libraries(
-            USER,
-            &f.agent,
-            &[b.id.clone(), elsewhere.id.clone()],
-        )
+        .set_agent_knowledge_libraries(USER, &f.agent, &[b.id.clone(), elsewhere.id.clone()])
         .unwrap();
     assert!(
         f.service
@@ -119,10 +103,7 @@ async fn global_agent_selection_preserves_other_agents_and_users_and_rolls_back(
         .set_agent_knowledge_libraries(USER, &f.agent, &[])
         .unwrap();
     assert_eq!(
-        f.service
-            .detail(USER, &b.id)
-            .unwrap()
-            .agent_codes,
+        f.service.detail(USER, &b.id).unwrap().agent_codes,
         vec!["another-agent"]
     );
 }
@@ -130,10 +111,7 @@ async fn global_agent_selection_preserves_other_agents_and_users_and_rolls_back(
 #[tokio::test]
 async fn agent_grants_api_roundtrips_with_library_grants_and_localized_errors() {
     let f = Fixture::new();
-    let library = f
-        .service
-        .create(USER, "Library", "Documents")
-        .unwrap();
+    let library = f.service.create(USER, "Library", "Documents").unwrap();
     let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
     let path = format!("/api/v1/knowledge-bases/agent-grants/{}", f.agent);
     let query = path.clone();
@@ -186,9 +164,7 @@ async fn agent_grants_api_roundtrips_with_library_grants_and_localized_errors() 
             .header("authorization", "Bearer profile-test-token")
             .header("accept-language", locale)
             .header("content-type", "application/json")
-            .body(Body::from(
-                json!({"libraryIds":["missing"]}).to_string(),
-            ))
+            .body(Body::from(json!({"libraryIds":["missing"]}).to_string()))
             .unwrap();
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -207,6 +183,7 @@ async fn platform_agent_knowledge_configuration_precedes_space_authorization() {
         .state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            candidate_model_codes: Vec::new(),
             avatar_id: None,
             loop_code: None,
             agent_code: "platform-reader".into(),
@@ -216,7 +193,10 @@ async fn platform_agent_knowledge_configuration_precedes_space_authorization() {
         })
         .unwrap();
     let library = f.service.create(USER, "Global library", "").unwrap();
-    let foreign = f.service.create("OTHER-USER", "Private library", "").unwrap();
+    let foreign = f
+        .service
+        .create("OTHER-USER", "Private library", "")
+        .unwrap();
     let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
     let path = format!("/api/v1/knowledge-bases/agent-grants/{}", agent.agent_code);
     let query = path.clone();
@@ -226,17 +206,44 @@ async fn platform_agent_knowledge_configuration_precedes_space_authorization() {
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
     assert_eq!(body["data"][0]["id"], library.id);
     assert_eq!(body["data"][0]["granted"], false);
-    let response = common::authenticated_request(&app, Method::PUT, &path,
-        Some(json!({"libraryIds":[library.id]}))).await;
+    let response = common::authenticated_request(
+        &app,
+        Method::PUT,
+        &path,
+        Some(json!({"libraryIds":[library.id]})),
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(f.state.agent_management.agent_workspace_grants(&agent.agent_code).unwrap().is_empty());
+    assert!(
+        f.state
+            .agent_management
+            .agent_workspace_grants(&agent.agent_code)
+            .unwrap()
+            .is_empty()
+    );
     let response = common::authenticated_request(&app, Method::GET, &query, None).await;
-    assert_eq!(common::response_json(response).await["data"][0]["granted"], true);
-    let response = common::authenticated_request(&app, Method::PUT, &path,
-        Some(json!({"libraryIds":[foreign.id]}))).await;
+    assert_eq!(
+        common::response_json(response).await["data"][0]["granted"],
+        true
+    );
+    let response = common::authenticated_request(
+        &app,
+        Method::PUT,
+        &path,
+        Some(json!({"libraryIds":[foreign.id]})),
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    assert_eq!(f.service.library_agent_grants(USER, &library.id).unwrap(), vec![agent.agent_code]);
-    let response = common::authenticated_request(&app, Method::GET,
-        "/api/v1/knowledge-bases/agent-grants/unknown-agent", None).await;
+    assert_eq!(
+        f.service.library_agent_grants(USER, &library.id).unwrap(),
+        vec![agent.agent_code]
+    );
+    let response = common::authenticated_request(
+        &app,
+        Method::GET,
+        "/api/v1/knowledge-bases/agent-grants/unknown-agent",
+        None,
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

@@ -143,7 +143,7 @@ impl ResourceService {
     pub fn cleanup_chat_session_attachment_files(&self, records: &[ChatSessionAttachmentRecord]) {
         for record in records {
             if let Err(error) = self.storage.delete(&record.storage_locator) {
-                eprintln!(
+                tracing::error!(
                     "attachment {} file cleanup failed after session deletion: {error:?}",
                     record.attachment_code
                 );

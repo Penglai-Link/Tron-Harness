@@ -1,6 +1,11 @@
-use sha2::{Digest, Sha256};
 use super::*;
-use crate::{application::knowledge_base::ingestion::{ParseEndpointCapacity, IngestionWaitReason, WaitReasonCode}, config::MineruNode};
+use crate::{
+    application::knowledge_base::ingestion::{
+        IngestionWaitReason, ParseEndpointCapacity, WaitReasonCode,
+    },
+    config::MineruNode,
+};
+use sha2::{Digest, Sha256};
 
 impl MineruKnowledgeDocumentParser {
     pub(super) async fn upload_source(
@@ -116,15 +121,26 @@ impl MineruKnowledgeDocumentParser {
         &self,
         node: &MineruNode,
     ) -> Result<ParsingCapabilities, IngestionWaitReason> {
-        let parser = self.on_endpoint(&node.id).map_err(|_| IngestionWaitReason::new(WaitReasonCode::InvalidNodeConfig))?;
-        let health = parser.get("/v1/health").await.map_err(|_| IngestionWaitReason::new(WaitReasonCode::NodeUnreachable))?;
+        let parser = self
+            .on_endpoint(&node.id)
+            .map_err(|_| IngestionWaitReason::new(WaitReasonCode::InvalidNodeConfig))?;
+        let health = parser
+            .get("/v1/health")
+            .await
+            .map_err(|_| IngestionWaitReason::new(WaitReasonCode::NodeUnreachable))?;
         if health["status"] != "ok" {
             return Err(IngestionWaitReason::new(WaitReasonCode::Unhealthy));
         }
         if health["version"] != self.config.expected_parser_version {
-            return Err(IngestionWaitReason::with_params(WaitReasonCode::VersionMismatch, json!({"expected":self.config.expected_parser_version,"actual":health["version"].as_str()})));
+            return Err(IngestionWaitReason::with_params(
+                WaitReasonCode::VersionMismatch,
+                json!({"expected":self.config.expected_parser_version,"actual":health["version"].as_str()}),
+            ));
         }
-        let tiers = parser.get("/v1/tiers").await.map_err(|_| IngestionWaitReason::new(WaitReasonCode::NodeUnreachable))?;
+        let tiers = parser
+            .get("/v1/tiers")
+            .await
+            .map_err(|_| IngestionWaitReason::new(WaitReasonCode::NodeUnreachable))?;
         let available = tiers["data"]
             .as_array()
             .ok_or_else(|| IngestionWaitReason::new(WaitReasonCode::NoTiers))?
@@ -133,7 +149,8 @@ impl MineruKnowledgeDocumentParser {
             .collect();
         Ok(ParsingCapabilities {
             default_tier: self.config.default_tier,
-            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode).ok_or_else(|| IngestionWaitReason::new(WaitReasonCode::NoTiers))?,
+            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode)
+                .ok_or_else(|| IngestionWaitReason::new(WaitReasonCode::NoTiers))?,
             available_tiers: available,
             parser_version: self.config.expected_parser_version.clone(),
             office_tier: ParsingTier::Flash,
@@ -145,39 +162,64 @@ impl MineruKnowledgeDocumentParser {
         self.nodes()?;
         Ok(self.routing_status_with_reasons().await.endpoints)
     }
-    pub(super) async fn routing_status_with_reasons(&self) -> crate::application::knowledge_base::parsing::ParserRoutingStatus {
+    pub(super) async fn routing_status_with_reasons(
+        &self,
+    ) -> crate::application::knowledge_base::parsing::ParserRoutingStatus {
         use crate::application::knowledge_base::parsing::ParserRoutingStatus;
         let mut status = ParserRoutingStatus::default();
         if !self.config.enabled {
-            status.unavailable.push((None, IngestionWaitReason::new(WaitReasonCode::MineruDisabled)));
+            status.unavailable.push((
+                None,
+                IngestionWaitReason::new(WaitReasonCode::MineruDisabled),
+            ));
             return status;
         }
         let nodes = match self.nodes() {
             Ok(nodes) => nodes,
-            Err(_) => { status.unavailable.push((None, IngestionWaitReason::new(WaitReasonCode::InvalidNodeConfig))); return status; }
+            Err(_) => {
+                status.unavailable.push((
+                    None,
+                    IngestionWaitReason::new(WaitReasonCode::InvalidNodeConfig),
+                ));
+                return status;
+            }
         };
-        if nodes.is_empty() { status.unavailable.push((None, IngestionWaitReason::new(WaitReasonCode::NoEnabledNodes))); }
+        if nodes.is_empty() {
+            status.unavailable.push((
+                None,
+                IngestionWaitReason::new(WaitReasonCode::NoEnabledNodes),
+            ));
+        }
         for node in nodes {
-            match tokio::time::timeout(Duration::from_secs(2), self.node_capabilities(&node)).await {
-                Ok(Ok(capabilities)) if !capabilities.available_tiers.is_empty() => status.endpoints.push(ParseEndpointCapacity {
-                    supported_tiers: capabilities
-                        .available_tiers
-                        .iter()
-                        .map(|t| t.as_str().into())
-                        .collect(),
-                    endpoint_id: node.id.clone(),
-                    capacity: node.capacity,
-                    resource_group: if node.resource_group.is_empty() {
-                        node.id.clone()
-                    } else {
-                        node.resource_group.clone()
-                    },
-                    resource_group_capacity: node.resource_group_capacity,
-                    weight: node.weight,
-                }),
-                Ok(Ok(_)) => status.unavailable.push((Some(node.id), IngestionWaitReason::new(WaitReasonCode::NoTiers))),
+            match tokio::time::timeout(Duration::from_secs(2), self.node_capabilities(&node)).await
+            {
+                Ok(Ok(capabilities)) if !capabilities.available_tiers.is_empty() => {
+                    status.endpoints.push(ParseEndpointCapacity {
+                        supported_tiers: capabilities
+                            .available_tiers
+                            .iter()
+                            .map(|t| t.as_str().into())
+                            .collect(),
+                        endpoint_id: node.id.clone(),
+                        capacity: node.capacity,
+                        resource_group: if node.resource_group.is_empty() {
+                            node.id.clone()
+                        } else {
+                            node.resource_group.clone()
+                        },
+                        resource_group_capacity: node.resource_group_capacity,
+                        weight: node.weight,
+                    })
+                }
+                Ok(Ok(_)) => status.unavailable.push((
+                    Some(node.id),
+                    IngestionWaitReason::new(WaitReasonCode::NoTiers),
+                )),
                 Ok(Err(reason)) => status.unavailable.push((Some(node.id), reason)),
-                Err(_) => status.unavailable.push((Some(node.id), IngestionWaitReason::new(WaitReasonCode::HealthTimeout))),
+                Err(_) => status.unavailable.push((
+                    Some(node.id),
+                    IngestionWaitReason::new(WaitReasonCode::HealthTimeout),
+                )),
             }
         }
         status
@@ -194,7 +236,8 @@ impl MineruKnowledgeDocumentParser {
         }
         Ok(ParsingCapabilities {
             default_tier: self.config.default_tier,
-            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode).ok_or_else(|| invalid("MinerU OCR模式无效"))?,
+            default_ocr_mode: OcrMode::from_wire(&self.config.ocr_mode)
+                .ok_or_else(|| invalid("MinerU OCR模式无效"))?,
             available_tiers: tiers
                 .into_iter()
                 .filter_map(|t| serde_json::from_value(json!(t)).ok())

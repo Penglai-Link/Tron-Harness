@@ -1,5 +1,8 @@
 import {
+  ScrollText,
   Activity,
+  LayoutDashboard,
+  ChartNoAxesCombined,
   AlarmClock,
   Archive,
   Database,
@@ -33,12 +36,6 @@ export const tronNavigation: TronNavSection[] = [
         href: "/tasks",
         icon: ListTodo,
         translationKey: "shell:nav.items.tasks",
-      },
-      {
-        label: "Observability",
-        href: "/observability",
-        icon: Activity,
-        translationKey: "observability:title",
       },
       {
         label: "Automations",
@@ -110,4 +107,5 @@ export const tronNavigation: TronNavSection[] = [
       },
     ],
   },
+
 ];

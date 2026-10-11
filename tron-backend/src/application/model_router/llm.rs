@@ -152,7 +152,9 @@ fn temporary_text_quality_rank(quality: Option<ProviderModelQuality>) -> Option<
     }
 }
 
-pub(crate) fn runtime_from_agent(config: crate::domain::agent::AgentModelConfig) -> RuntimeModelConfig {
+pub(crate) fn runtime_from_agent(
+    config: crate::domain::agent::AgentModelConfig,
+) -> RuntimeModelConfig {
     RuntimeModelConfig {
         model_code: config.model_code,
         protocol: match config.protocol {

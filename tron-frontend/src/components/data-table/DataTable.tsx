@@ -16,6 +16,7 @@ export interface DataTableColumn<T> {
   cellClassName?: string;
   colClassName?: string;
   header: ReactNode;
+  ariaSort?: "ascending" | "descending" | "none";
   headerClassName?: string;
   id: string;
   render: (row: T) => ReactNode;
@@ -108,6 +109,7 @@ export function DataTable<T>({
           <TableRow>
             {columns.map((column) => (
               <TableHead
+                aria-sort={column.ariaSort}
                 className={cn(
                   "px-[var(--tron-table-cell-padding-x,1.25rem)] py-[var(--tron-table-cell-padding-y,0.75rem)]",
                   column.align === "right" ? "text-right" : "text-left",
@@ -135,10 +137,13 @@ export function DataTable<T>({
                       rowClassName?.(row),
                     )}
                     tabIndex={onRowClick ? 0 : undefined}
-                    onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+                    onClick={onRowClick ? (event) => {
+                      if (!(event.target as HTMLElement).closest("button,a,input,select,textarea,[role=button]")) onRowClick(row, index);
+                    } : undefined}
                     onKeyDown={
                       onRowClick
                         ? (event) => {
+                            if (event.target !== event.currentTarget) return;
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
                               onRowClick(row, index);
@@ -182,9 +187,11 @@ export function DataTable<T>({
           )}
         </TableBody>
       </Table>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] px-5 py-3 text-[13px] text-[var(--color-on-surface-variant)]">
-        {pagination}
-      </div>
+      {pagination != null && pagination !== false ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] px-5 py-3 text-[13px] text-[var(--color-on-surface-variant)]">
+          {pagination}
+        </div>
+      ) : null}
     </section>
   );
 }

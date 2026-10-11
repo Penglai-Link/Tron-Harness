@@ -280,7 +280,8 @@ pub(crate) fn prepare_send_model(
             let router = crate::application::model_router::AgentModelRouter::new(
                 state.models.clone(),
                 state.model_providers.clone(),
-            );
+            )
+            .with_agent_management(state.agent_management.clone());
             let (model, auto_route) = router
                 .resolve_initial(
                     &session.workspace_code,

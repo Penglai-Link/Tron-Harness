@@ -37,13 +37,14 @@ pub struct RuntimeMetrics {
     pub sampled_at: Option<i64>,
     pub metric_point_count: usize,
 }
-pub trait ObservabilityRepository: TraceRepository {
+pub trait ObservabilityRepository: TraceRepository + super::DashboardRepository {
     fn metric_points(
         &self,
         name: Option<String>,
         current: usize,
         size: usize,
     ) -> Result<MetricPage, ObservabilityError>;
+    fn scoped_metric_points(&self, workspace: Option<String>, name: Option<String>, current: usize, size: usize) -> Result<MetricPage, ObservabilityError>;
     fn runtime_metrics(&self) -> Result<RuntimeMetrics, ObservabilityError>;
 }
 

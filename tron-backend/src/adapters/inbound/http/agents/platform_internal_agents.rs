@@ -31,6 +31,8 @@ pub struct CreatePlatformInternalAgentRequest {
     loop_code: Option<String>,
     avatar_id: Option<String>,
     group_name: Option<String>,
+    #[serde(default)]
+    candidate_model_codes: Vec<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -40,6 +42,8 @@ pub struct UpdatePlatformInternalAgentDefinitionRequest {
     loop_code: Option<String>,
     avatar_id: Option<String>,
     group_name: Option<String>,
+    #[serde(default)]
+    candidate_model_codes: Option<Vec<String>>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -63,6 +67,8 @@ pub struct PlatformInternalAgentView {
     loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
+    #[serde(default)]
+    candidate_model_codes: Vec<String>,
     platform_defined: bool,
     built_in: bool,
     source: InternalAgentPolicySource,
@@ -89,6 +95,7 @@ impl From<InternalAgentToolPolicy> for PlatformInternalAgentView {
             loop_code: record.loop_code,
             avatar_id: record.avatar_id,
             group_name: record.group_name,
+            candidate_model_codes: record.candidate_model_codes,
             platform_defined: record.platform_defined,
             built_in: record.built_in,
             source: record.source,
@@ -172,6 +179,7 @@ pub async fn create_platform_internal_agent(
             loop_code: request.loop_code,
             avatar_id: request.avatar_id,
             group_name: request.group_name,
+            candidate_model_codes: request.candidate_model_codes,
         })
         .map_err(|error| InternalAgentApiError(error, auth.locale))?;
     Ok(Json(ApiResponse::success(record.into())))
@@ -206,6 +214,7 @@ pub async fn update_platform_internal_agent_definition(
                 loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
                 group_name: request.group_name,
+                candidate_model_codes: request.candidate_model_codes,
             },
         )
         .map_err(|error| InternalAgentApiError(error, auth.locale))?;

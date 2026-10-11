@@ -102,7 +102,7 @@ struct Host {
     _temporary: Option<tempfile::TempDir>,
 }
 impl FrameworkHost {
-    async fn telemetry(
+    pub(crate) async fn telemetry(
         &self,
     ) -> Result<
         &crate::app::telemetry::LocalTelemetry,

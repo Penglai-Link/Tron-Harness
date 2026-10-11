@@ -16,6 +16,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { useTabStore, type TabItem } from "@/store/tabStore";
 import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 interface TabBarProps {
   className?: string;
@@ -157,15 +158,17 @@ function TabBarItem({
               </span>
               {tab.closable && (
                 <Button
-                  size="sm"
+                  size="icon-xs"
                   variant="ghost"
                   className="shrink-0"
+                  aria-label={t("common:actions.close", "Close")}
+                  title={t("common:actions.close", "Close")}
                   onClick={(event) => {
                     event.stopPropagation();
                     onClose();
                   }}
                 >
-                  {t("common:actions.close", "Close")}
+                  <X aria-hidden="true" className="size-3.5" />
                 </Button>
               )}
             </ContextMenuTrigger>

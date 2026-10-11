@@ -108,6 +108,10 @@ function CachedRouteLocationProvider({
 export default function AppRoutePage() {
   const { pathname, search, key: locationKey } = useLocation();
   const { t } = useTranslation();
+  const observabilityWorkspace = pathname.startsWith("/settings/observability/") ? new URLSearchParams(search).get("workspaceCode") : null;
+  const scopedSettingsNavigation = useMemo(() => settingsNavigation.map((group) => group.groupKey === "observability" && observabilityWorkspace
+    ? { ...group, items: group.items.map((item) => ({ ...item, href: `${item.href}?${new URLSearchParams({ workspaceCode: observabilityWorkspace })}` })) }
+    : group), [observabilityWorkspace]);
   const chatSessionCode =
     pathname === "/chats"
       ? new URLSearchParams(search).get("sessionCode")?.trim() ?? ""
@@ -274,6 +278,10 @@ export default function AppRoutePage() {
     return <Navigate replace to="/workspace" />;
   }
 
+  if (/^\/observability(?:\/|$)/.test(pathname)) {
+    return <Navigate replace to={`${pathname === "/observability" ? "/settings/observability/dashboard" : `/settings${pathname}`}${search}`} />;
+  }
+
   if (resolved?.route.layout === "settings") {
     const { route } = resolved;
     // Settings 页面不使用 keep-alive，直接渲染
@@ -281,12 +289,12 @@ export default function AppRoutePage() {
       <SettingsShell
         activeItem={route.settingsNav ?? route.title}
         contentClassName={route.shellConfig?.contentClassName}
-        items={settingsNavigation}
+        items={scopedSettingsNavigation}
       >
         <MotionReveal preset="fade" replayKey={pathname} className="h-full">
         <Routes>
-          <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute>{ /^(memory|knowledgeGraph)\./.test(route.pageId)
-            ? <PlatformWorkspaceScope renderWithoutWorkspace={route.pageId === "memory.index" || route.pageId === "knowledgeGraph.index"}><resolved.Component key={routeRenderKey} /></PlatformWorkspaceScope>
+          <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute>{ /^(memory|knowledgeGraph|observability)\./.test(route.pageId)
+            ? <PlatformWorkspaceScope inlineFilter={["observability.dashboard", "observability.logs", "observability.metrics", "observability.traces"].includes(route.pageId)} showScopeHelp={!["observability.dashboard", "observability.logs", "observability.traces", "observability.metrics"].includes(route.pageId)} allowAll={route.pageId.startsWith("observability.")} renderWithoutWorkspace={route.pageId === "memory.index" || route.pageId === "knowledgeGraph.index"}><resolved.Component key={routeRenderKey} /></PlatformWorkspaceScope>
             : <resolved.Component key={routeRenderKey} /> }</SuspendedRoute>} />
         </Routes>
         </MotionReveal>

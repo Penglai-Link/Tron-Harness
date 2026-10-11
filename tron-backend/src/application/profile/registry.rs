@@ -46,6 +46,7 @@ pub struct PersonAiAccountSummary {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BootstrapProfileStatus {
+    pub time_zone: String,
     pub has_profiles: bool,
     pub active_profile_id: Option<String>,
     pub active_profile: Option<ProfileRecord>,
@@ -175,6 +176,10 @@ impl ProfileRegistryService {
             })?
         };
         Ok(BootstrapProfileStatus {
+            time_zone: match &active_profile {
+                Some(profile) => self.time_zone(&profile.person_ai_user_id)?,
+                None => "Asia/Shanghai".into(),
+            },
             has_profiles,
             active_profile_id: active_profile
                 .as_ref()
@@ -183,6 +188,37 @@ impl ProfileRegistryService {
             avatar_url,
             account: None,
         })
+    }
+
+    pub fn time_zone(&self, user_id: &str) -> Result<String, ProfileRegistryError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ProfileRegistryError::LockPoisoned)?;
+        Ok(connection
+            .query_row(
+                "SELECT time_zone FROM profile_preferences WHERE person_ai_user_id=?1",
+                [user_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .unwrap_or_else(|| "Asia/Shanghai".into()))
+    }
+
+    pub fn set_time_zone(&self, user_id: &str, zone: &str) -> Result<String, ProfileRegistryError> {
+        let zone = zone.trim();
+        zone.parse::<chrono_tz::Tz>()
+            .map_err(|_| ProfileRegistryError::InvalidInput("timeZone"))?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ProfileRegistryError::LockPoisoned)?;
+        connection.execute(
+            "INSERT INTO profile_preferences(person_ai_user_id,time_zone,updated_at) VALUES(?1,?2,?3)
+             ON CONFLICT(person_ai_user_id) DO UPDATE SET time_zone=excluded.time_zone,updated_at=excluded.updated_at",
+            params![user_id, zone, crate::shared::time::current_timestamp()],
+        )?;
+        Ok(zone.into())
     }
 
     pub fn register_or_update(
@@ -675,6 +711,52 @@ mod tests {
                 content_type: "image/png".to_owned(),
                 image_bytes: image_bytes.to_vec(),
             }
+        );
+    }
+}
+
+#[cfg(test)]
+mod time_zone_tests {
+    use super::*;
+    #[test]
+    fn database_preferences_survive_reopening_and_are_isolated_by_user() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("profiles.sqlite3");
+        let service = ProfileRegistryService::new(path.to_str().unwrap()).unwrap();
+        service.register_or_update("alice", "Alice").unwrap();
+        service.register_or_update("bob", "Bob").unwrap();
+        assert_eq!(service.time_zone("alice").unwrap(), "Asia/Shanghai");
+        service.set_time_zone("alice", "America/New_York").unwrap();
+        assert!(service.set_time_zone("alice", "Invalid/Zone").is_err());
+        assert_eq!(service.time_zone("bob").unwrap(), "Asia/Shanghai");
+        let connection = service.connection.lock().unwrap();
+        let updated: String = connection
+            .query_row(
+                "SELECT updated_at FROM profile_preferences WHERE person_ai_user_id='alice'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(updated.ends_with('Z'));
+        drop(connection);
+        drop(service);
+        let reopened = ProfileRegistryService::new(path.to_str().unwrap()).unwrap();
+        assert_eq!(reopened.time_zone("alice").unwrap(), "America/New_York");
+        assert_eq!(reopened.time_zone("bob").unwrap(), "Asia/Shanghai");
+        reopened
+            .activate(
+                &reopened
+                    .list()
+                    .unwrap()
+                    .into_iter()
+                    .find(|p| p.person_ai_user_id == "alice")
+                    .unwrap()
+                    .profile_id,
+            )
+            .unwrap();
+        assert_eq!(
+            reopened.bootstrap_status().unwrap().time_zone,
+            "America/New_York"
         );
     }
 }

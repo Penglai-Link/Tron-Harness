@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import {
   useEffect,
   useMemo,
@@ -62,7 +63,7 @@ import {
 
 function formatTimestamp(value?: string | null) {
   if (!value) return "Not available";
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-US", { timeZone: getUserTimeZone(),
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));

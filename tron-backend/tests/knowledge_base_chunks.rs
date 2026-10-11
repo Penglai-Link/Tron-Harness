@@ -35,11 +35,7 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
             }),
         )
         .unwrap();
-    let ready = f
-        .service
-        .index(USER, &kb.id, &doc.id)
-        .await
-        .unwrap();
+    let ready = f.service.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(ready.status, "READY", "{:?}", ready.error);
     assert!(ready.chunk_count > 20);
     let mut units = vec![];
@@ -111,11 +107,7 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
         .unwrap();
     assert_eq!(retained.total, ready.chunk_count);
     assert_eq!(retained.items[0].text, units[0].text);
-    let rebuilt = f
-        .service
-        .index(USER, &kb.id, &doc.id)
-        .await
-        .unwrap();
+    let rebuilt = f.service.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(rebuilt.status, "READY", "{:?}", rebuilt.error);
     assert!(rebuilt.chunk_count < ready.chunk_count);
     let current = f

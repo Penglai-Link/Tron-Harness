@@ -352,7 +352,7 @@ impl ModelProviderService {
     pub(super) fn mark_auth_required_after_rejected_credentials(&self, error: &ModelProviderError) {
         if matches!(error, ModelProviderError::DeviceUnbound) {
             if let Err(storage_error) = self.clear_credentials_after_device_unbound() {
-                eprintln!("[person-ai] failed to clear unbound credentials: {storage_error}");
+                tracing::error!("[person-ai] failed to clear unbound credentials: {storage_error}");
             }
             return;
         }

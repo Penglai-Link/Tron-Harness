@@ -51,7 +51,7 @@ pub(super) fn schedule_session_summary(
     if outcome.status != "COMPLETED" {
         return;
     }
-    tokio::spawn(async move {
+    crate::app::telemetry::spawn_traced(async move {
         if let Err(error) = short_term_memory
             .summarize(
                 &context.session_code,
@@ -62,7 +62,7 @@ pub(super) fn schedule_session_summary(
             )
             .await
         {
-            eprintln!(
+            tracing::error!(
                 "session summary failed for {}: {error:?}",
                 context.session_code
             );

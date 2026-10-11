@@ -1,3 +1,4 @@
+import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import {
   useCallback,
   useEffect,
@@ -109,6 +110,7 @@ function ReadValue({ children, noneLabel = "None" }: { children: ReactNode; none
 }
 
 export function TaskDetailsPage() {
+  const { formatDateTime } = useLocaleFormatters();
   const { t } = useTranslation(["pages"]);
   const pageT = useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`tasks.${key}`, { defaultValue, ...options })
@@ -348,9 +350,9 @@ export function TaskDetailsPage() {
                 <span className="font-medium">{pageT("detail.none", "None")}</span>
               )}
             </div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.created", "Created")}</span><span className="font-medium">{task.createdAt}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.updated", "Updated")}</span><span className="font-medium">{task.updatedAt}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.archivedAt", "Archived At")}</span><span className="font-medium">{task.archivedAt ?? pageT("detail.notArchived", "Not archived")}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.created", "Created")}</span><span className="font-medium">{formatDateTime(task.createdAt, { dateStyle: "medium", timeStyle: "short" })}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.updated", "Updated")}</span><span className="font-medium">{formatDateTime(task.updatedAt, { dateStyle: "medium", timeStyle: "short" })}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.archivedAt", "Archived At")}</span><span className="font-medium">{task.archivedAt ? formatDateTime(task.archivedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notArchived", "Not archived")}</span></div>
           </div>
         </div>
 

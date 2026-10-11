@@ -117,8 +117,12 @@ async fn local_mac(format: &str, bytes: &[u8]) -> Result<Vec<u8>, KnowledgeBaseE
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .kill_on_drop(true);
-    let diagnostics=std::env::var("TRON_OFFICE_RENDER_TEST_DIAGNOSTICS").as_deref()==Ok("1");
-    if diagnostics { command.stderr(Stdio::from(std::fs::File::create(job.join("stderr.log")).map_err(invalid)?)); }
+    let diagnostics = std::env::var("TRON_OFFICE_RENDER_TEST_DIAGNOSTICS").as_deref() == Ok("1");
+    if diagnostics {
+        command.stderr(Stdio::from(
+            std::fs::File::create(job.join("stderr.log")).map_err(invalid)?,
+        ));
+    }
     let mut child = command.spawn().map_err(invalid)?;
     let status = tokio::time::timeout(Duration::from_secs(45), child.wait())
         .await
@@ -127,8 +131,11 @@ async fn local_mac(format: &str, bytes: &[u8]) -> Result<Vec<u8>, KnowledgeBaseE
     if !status.success() {
         if diagnostics {
             use std::io::Read;
-            let mut text=String::new(); if let Ok(file)=std::fs::File::open(job.join("stderr.log")) { let _=file.take(4096).read_to_string(&mut text); }
-            eprintln!("Synthetic Office sandbox diagnostics: {text}");
+            let mut text = String::new();
+            if let Ok(file) = std::fs::File::open(job.join("stderr.log")) {
+                let _ = file.take(4096).read_to_string(&mut text);
+            }
+            tracing::warn!("Synthetic Office sandbox diagnostics: {text}");
         }
         return Err(invalid(format!("沙箱转换退出状态{status}")));
     }

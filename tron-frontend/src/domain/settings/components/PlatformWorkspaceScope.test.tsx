@@ -25,9 +25,9 @@ function Probe() {
     <button onClick={() => navigate("/rag?section=retrieval")}>RAG workbench</button>
   </>;
 }
-function mount(path: string, renderWithoutWorkspace = false) {
+function mount(path: string, renderWithoutWorkspace = false, allowAll = false) {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    <MemoryRouter initialEntries={[path]}><PlatformWorkspaceScope renderWithoutWorkspace={renderWithoutWorkspace}><Probe /></PlatformWorkspaceScope></MemoryRouter>
+    <MemoryRouter initialEntries={[path]}><PlatformWorkspaceScope allowAll={allowAll} renderWithoutWorkspace={renderWithoutWorkspace}><Probe /></PlatformWorkspaceScope></MemoryRouter>
   </QueryClientProvider>);
 }
 afterEach(cleanup);
@@ -57,4 +57,16 @@ it("renders the empty page with an empty scope rather than another space", async
   expect(screen.queryByText("scope:alpha")).toBeNull();
   expect(screen.getByText("Memory home")).toBeTruthy();
   expect(screen.queryByText("platformData.selectWorkspace", { selector: "p" })).toBeNull();
+});
+
+it("defaults observability to all workspaces independently of the available workspace list", async () => {
+  mount("/settings/observability/dashboard", false, true);
+  await screen.findByText("scope:");
+  expect(screen.queryByText("scope:alpha")).toBeNull();
+  expect(screen.getByText("observability:allWorkspaces")).toBeTruthy();
+});
+it("applies an explicit observability workspace without falling back to the first workspace", async () => {
+  mount("/settings/observability/traces?workspaceCode=beta", false, true);
+  await screen.findByText("scope:beta");
+  expect(screen.queryByText("scope:alpha")).toBeNull();
 });

@@ -249,7 +249,9 @@ pub(super) fn read_chat_catalog_models(
                 model_name: row.get(2)?,
                 protocols: serde_json::from_str(&row.get::<_, String>(6)?)
                     .unwrap_or_else(|_| vec![AgentModelProtocol::ChatCompletions]),
-                upstream_vendor_code: row.get::<_, Option<String>>(3)?.filter(|code| !code.is_empty()),
+                upstream_vendor_code: row
+                    .get::<_, Option<String>>(3)?
+                    .filter(|code| !code.is_empty()),
                 upstream_vendor_name: row.get(4)?,
                 context_window_tokens: row
                     .get::<_, Option<i64>>(5)?

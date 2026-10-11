@@ -110,11 +110,26 @@ pub(crate) struct AgentRunContextBuilder {
     short_term_memory: Option<ShortTermMemoryService>,
     prompt_service: Option<PromptService>,
     auto_model_route: Option<AutoModelRouteContext>,
+    model_router: Option<crate::application::model_router::AgentModelRouter>,
     directory_inspector:
         Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
 }
 
 impl AgentRunContextBuilder {
+    pub(crate) fn with_model_router(
+        mut self,
+        router: crate::application::model_router::AgentModelRouter,
+    ) -> Self {
+        self.model_router = Some(router);
+        self
+    }
+
+    pub(crate) fn model_router(
+        &self,
+    ) -> Option<crate::application::model_router::AgentModelRouter> {
+        self.model_router.clone()
+    }
+
     pub(crate) fn agent_management(&self) -> &AgentManagementService {
         &self.management
     }
@@ -147,6 +162,7 @@ impl AgentRunContextBuilder {
             short_term_memory,
             prompt_service,
             auto_model_route,
+            model_router: None,
             directory_inspector,
         }
     }

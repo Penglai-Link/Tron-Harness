@@ -47,11 +47,16 @@ pub trait ResourcePrivacyPolicy: Send + Sync {
         !self.is_protected(workspace, resource) && self.can_read(user, workspace, resource)
     }
     fn can_read_agent_in_workspace(
-        &self, user: &str, storage_scope: &str, resource: &str,
-        agent: Option<&str>, run_workspace: Option<&str>,
+        &self,
+        user: &str,
+        storage_scope: &str,
+        resource: &str,
+        agent: Option<&str>,
+        run_workspace: Option<&str>,
     ) -> bool {
         if self.is_protected(storage_scope, resource)
-            && run_workspace.is_some_and(|workspace| workspace != storage_scope) {
+            && run_workspace.is_some_and(|workspace| workspace != storage_scope)
+        {
             return false;
         }
         self.can_read_agent(user, storage_scope, resource, agent)
@@ -173,7 +178,11 @@ impl ResourceService {
             .as_ref()
             .is_none_or(|p| match &self.agent_scope {
                 Some(agent) => p.can_read_agent_in_workspace(
-                    user, workspace, resource, agent.as_deref(), self.agent_workspace.as_deref(),
+                    user,
+                    workspace,
+                    resource,
+                    agent.as_deref(),
+                    self.agent_workspace.as_deref(),
                 ),
                 None => p.can_read(user, workspace, resource),
             })

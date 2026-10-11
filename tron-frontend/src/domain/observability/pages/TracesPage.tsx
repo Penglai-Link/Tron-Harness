@@ -1,6 +1,6 @@
 import { useWorkspaceSpaces } from "@/shared";
 import { TraceExplorer } from "../components/TraceExplorer";
-export function ObservabilityPage() {
+export function TracesPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const workspaceCode =
     (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";

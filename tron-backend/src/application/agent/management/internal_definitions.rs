@@ -21,6 +21,7 @@ pub(super) struct InternalAgentDefinition {
     pub(super) role_prompt: String,
     pub(super) loop_code: Option<String>,
     pub(super) avatar_id: String,
+    pub(super) candidate_model_codes: Vec<String>,
     pub(super) group_name: Option<String>,
     pub(super) tool_assignment_mode: ToolAssignmentMode,
     pub(super) mcp_access_mode: McpAccessMode,
@@ -43,6 +44,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             .to_string(),
         role_prompt: default_main_agent_role_prompt(),
         avatar_id: "robot".into(),
+        candidate_model_codes: Vec::new(),
         group_name: Some("主智能体".into()),
         loop_code: None,
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
@@ -57,13 +59,14 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         platform_defined: true,
         built_in: true,
     }];
-    for (agent_code, name, description, catalog_key, group_name) in [
+    for (agent_code, name, description, catalog_key, group_name, avatar_id) in [
         (
             "explore",
             "探索智能体",
             "只读探索任务使用的内置智能体。",
             "agent.role.explorer",
             "探索",
+            "fox",
         ),
         (
             "full-stack",
@@ -71,6 +74,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             "用于全栈开发任务的内置智能体。",
             "agent.role.full-stack-developer",
             "开发",
+            "panda",
         ),
         (
             "product",
@@ -78,6 +82,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             "用于产品分析与设计任务的内置智能体。",
             "agent.role.product-manager",
             "设计",
+            "astronaut",
         ),
     ] {
         definitions.push(InternalAgentDefinition {
@@ -85,7 +90,8 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             name: name.to_owned(),
             description: description.to_owned(),
             role_prompt: builtin_role_prompt(catalog_key),
-            avatar_id: "robot".into(),
+            avatar_id: avatar_id.into(),
+            candidate_model_codes: Vec::new(),
             group_name: Some(group_name.to_owned()),
             loop_code: None,
             tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
@@ -148,6 +154,7 @@ impl AgentManagementService {
                 role_prompt: config.role_prompt,
                 loop_code: config.loop_code,
                 avatar_id: config.avatar_id,
+                candidate_model_codes: config.candidate_model_codes,
                 group_name: config.group_name,
                 tool_assignment_mode: config.tool_assignment_mode,
                 mcp_access_mode: config.mcp_access_mode,
@@ -184,6 +191,9 @@ impl AgentManagementService {
                 if let Some(group_name) = record.group_name {
                     definition.group_name = (!group_name.is_empty()).then_some(group_name);
                 }
+                if let Some(codes) = record.candidate_model_codes {
+                    definition.candidate_model_codes = codes;
+                }
                 if let Some(avatar_id) = record.avatar_id {
                     definition.avatar_id = avatar_id;
                 }
@@ -204,6 +214,7 @@ impl AgentManagementService {
                 definition.role_prompt = record.role_prompt.unwrap_or_default();
                 definition.loop_code = record.loop_code;
                 definition.avatar_id = record.avatar_id.unwrap_or_else(|| "robot".into());
+                definition.candidate_model_codes = record.candidate_model_codes.unwrap_or_default();
                 definition.group_name = record.group_name.filter(|name| !name.is_empty());
                 definition.platform_defined = false;
                 definition.built_in = false;
@@ -231,6 +242,9 @@ impl AgentManagementService {
             role_prompt: Some(command.role_prompt),
             loop_code: Some(loop_code),
             avatar_id: Some(validate_avatar_id(command.avatar_id.as_deref())?),
+            candidate_model_codes: Some(normalize_candidate_model_codes(
+                command.candidate_model_codes,
+            )?),
             group_name,
             created_at: now.clone(),
             updated_at: now,
@@ -287,6 +301,15 @@ impl AgentManagementService {
                     .or_else(|| saved.as_ref().and_then(|record| record.avatar_id.clone())),
                 group_name: group_name
                     .or_else(|| saved.as_ref().and_then(|record| record.group_name.clone())),
+                candidate_model_codes: command
+                    .candidate_model_codes
+                    .map(normalize_candidate_model_codes)
+                    .transpose()?
+                    .or_else(|| {
+                        saved
+                            .as_ref()
+                            .and_then(|record| record.candidate_model_codes.clone())
+                    }),
                 created_at,
                 updated_at: now,
             })?;
@@ -352,4 +375,23 @@ pub(super) fn ensure_editable_definition(code: &str) -> Result<(), AgentManageme
     } else {
         Ok(())
     }
+}
+
+pub(super) fn normalize_candidate_model_codes(
+    codes: Vec<String>,
+) -> Result<Vec<String>, AgentManagementError> {
+    if codes.len() > 256
+        || codes
+            .iter()
+            .any(|code| code.trim().is_empty() || code.len() > 512)
+    {
+        return Err(AgentManagementError::InternalAgentDefinitionInvalid);
+    }
+    let mut codes = codes
+        .into_iter()
+        .map(|code| code.trim().to_owned())
+        .collect::<Vec<_>>();
+    codes.sort();
+    codes.dedup();
+    Ok(codes)
 }

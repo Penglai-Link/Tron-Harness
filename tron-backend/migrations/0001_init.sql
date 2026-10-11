@@ -869,6 +869,7 @@ CREATE TABLE workspace_internal_agent_definitions (
     role_prompt TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL, loop_code TEXT, avatar_id TEXT, group_name TEXT,
+    candidate_model_codes_json TEXT NOT NULL DEFAULT 'null',
     PRIMARY KEY (workspace_code, agent_code)
 );
 
@@ -1273,7 +1274,6 @@ INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, 
     (734510000000000020, 'SERVER_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.servers', NULL, 'Server', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000021, 'SERVER_ACCOUNT_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.serverAccounts', NULL, 'UserRound', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000030, 'OBSERVABILITY', 'BuiltIn', 'Internal', 'observability.index', NULL, 'Activity', 1, '2026-10-10T00:00:00Z', '2026-10-10T00:00:00Z'),
     (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000002, 'CHAT_NEW_SESSION', 'BuiltIn', 'Widget', 'chat.newSession', NULL, 'SquarePen', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
     (734550000000000003, 'CHAT_PROJECTS', 'BuiltIn', 'Widget', 'chat.projects', NULL, 'FolderKanban', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
@@ -1309,8 +1309,6 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734530000000000042, 734510000000000021, 'en-US', 'Server Account Management'),
     (734530000000000043, 734510000000000022, 'zh-CN', '变量'),
     (734530000000000044, 734510000000000022, 'en-US', 'Variables'),
-    (734530000000000060, 734510000000000030, 'zh-CN', '可观测'),
-    (734530000000000061, 734510000000000030, 'en-US', 'Observability'),
     (734550100000000001, 734550000000000001, 'zh-CN', '会话'),
     (734550100000000002, 734550000000000001, 'en-US', 'Chats'),
     (734550100000000003, 734550000000000002, 'zh-CN', '新会话'),
@@ -1346,7 +1344,6 @@ INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, po
     (734520000000000020, 734500000000000001, 734510000000000020, 734520000000000017, 2, 'Inline'),
     (734520000000000021, 734500000000000001, 734510000000000021, 734520000000000017, 3, 'Inline'),
     (734520000000000022, 734500000000000001, 734510000000000022, 734520000000000012, 5, 'Inline'),
-    (734550000000000030, 734500000000000001, 734510000000000030, NULL, 3, 'Inline'),
     (734550200000000001, 734500000000000002, 734550000000000001, NULL, 0, 'Inline'),
     (734550200000000002, 734500000000000002, 734550000000000002, 734550200000000001, 0, 'Inline'),
     (734550200000000003, 734500000000000002, 734550000000000003, 734550200000000001, 1, 'Inline'),
@@ -1388,6 +1385,13 @@ CREATE TABLE profiles (
     status TEXT NOT NULL DEFAULT 'PENDING',
     created_at TEXT NOT NULL,
     last_activated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS profile_preferences (
+    person_ai_user_id TEXT PRIMARY KEY NOT NULL,
+    time_zone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (person_ai_user_id) REFERENCES profiles(person_ai_user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS tron_schema_initialized (scope TEXT PRIMARY KEY);

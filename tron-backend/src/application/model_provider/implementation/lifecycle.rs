@@ -145,7 +145,7 @@ impl ModelProviderService {
                         | ModelProviderError::ConnectionNotReady
                 )
             {
-                eprintln!("[person-ai] device heartbeat failed: {error}");
+                tracing::error!("[person-ai] device heartbeat failed: {error}");
             }
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5 * 60));
             interval.tick().await;
@@ -158,7 +158,7 @@ impl ModelProviderService {
                             | ModelProviderError::ConnectionNotReady
                     )
                 {
-                    eprintln!("[person-ai] device heartbeat failed: {error}");
+                    tracing::error!("[person-ai] device heartbeat failed: {error}");
                 }
             }
         });
@@ -338,7 +338,7 @@ impl ModelProviderService {
                     .execute_for_raw_json(request, Some(&context), "获取账户信息")
                     .await
                     .map_err(|error| {
-                        eprintln!(
+                        tracing::error!(
                             "[person-ai] account profile request failed: {}",
                             account_info_error_kind(&error)
                         );

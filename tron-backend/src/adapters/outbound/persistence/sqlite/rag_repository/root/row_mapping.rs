@@ -200,6 +200,6 @@ fn ensure_database_parent(database_url: &str) -> Result<(), RagError> {
 }
 
 fn storage_error(error: rusqlite::Error) -> RagError {
-    eprintln!("RAG SQLite storage error: {error:?}");
+    tracing::error!("RAG SQLite storage error: {error:?}");
     RagError::StorageFailure
 }

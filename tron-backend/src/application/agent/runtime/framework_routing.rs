@@ -30,9 +30,10 @@ impl ReactAgent {
                 Some(route) if initial && !route.authorized_candidates.is_empty() => router
                     .snapshot_models(route, &context.model)
                     .map_err(AgentError::InvalidConfiguration)?,
-                _ => router
-                    .authorized_models(&context.workspace_code, &context.model)
+                Some(route) => router
+                    .authorized_models_for_route(&context.workspace_code, route, &context.model)
                     .map_err(AgentError::InvalidConfiguration)?,
+                None => unreachable!("Auto route checked above"),
             };
             if let Some(route) = &context.auto_model_route {
                 for model in &mut models {
@@ -78,6 +79,14 @@ impl ReactAgent {
         config: &AgentModelConfig,
     ) -> Result<Option<String>, String> {
         self.model_client.authorization_scope(config)
+    }
+    pub(crate) fn framework_with_model_router(
+        &self,
+        router: crate::application::model_router::AgentModelRouter,
+    ) -> Self {
+        let mut harness = self.clone();
+        harness.auto_model_router = Some(router);
+        harness
     }
     pub(crate) fn framework_with_model_client(&self, client: Arc<dyn ModelClient>) -> Self {
         let mut harness = self.clone();

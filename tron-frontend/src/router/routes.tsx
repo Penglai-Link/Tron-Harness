@@ -32,12 +32,23 @@ export interface AppRoute {
 }
 
 const registeredRoutes: AppRoute[] = [
+  {pageId:"observability.logs", layout: "settings",route:"/settings/observability/logs",activeNav:"Logs",title:"Logs",titleTranslationKey:"observability:logs",archetype:"data-table"},
+  {pageId:"observability.dashboard", layout: "settings",route:"/settings/observability/dashboard",activeNav:"Dashboard",title:"Dashboard",titleTranslationKey:"observability:dashboard",archetype:"dashboard"},
+  { pageId: "observability.traceDetail", layout: "settings", settingsNav: "Traces", route: "/settings/observability/traces/:traceId", activeNav: "Traces", title: "Trace detail", titleTranslationKey: "observability:detail", archetype: "detail" },
   {
-    pageId: "observability.index",
-    route: "/observability",
-    activeNav: "Observability",
-    title: "Observability",
-    titleTranslationKey: "observability:title",
+    pageId: "observability.traces", layout: "settings",
+    route: "/settings/observability/traces",
+    activeNav: "Traces",
+    title: "Traces",
+    titleTranslationKey: "observability:traces",
+    archetype: "data-table",
+  },
+  {
+    pageId: "observability.metrics", layout: "settings",
+    route: "/settings/observability/metrics",
+    activeNav: "Metrics",
+    title: "Metrics",
+    titleTranslationKey: "observability:metrics",
     archetype: "data-table",
   },
   {
@@ -796,6 +807,15 @@ const registeredRoutes: AppRoute[] = [
     route: "/settings/skills/sync",
     activeNav: "Settings",
     title: "Sync Skills",
+    archetype: "settings",
+    layout: "settings",
+    settingsNav: "Skill Center",
+  },
+  {
+    pageId: "settings.skillDetail",
+    route: "/settings/skills/:skillName",
+    activeNav: "Settings",
+    title: "Skill Detail",
     archetype: "settings",
     layout: "settings",
     settingsNav: "Skill Center",

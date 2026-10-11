@@ -1,6 +1,8 @@
 export interface TraceSummary {
+  workspaceCode: string;
   traceId: string;
   sessionCode: string;
+  sessionName: string | null;
   runCode: string;
   agentCode: string;
   startedAt: number;
@@ -39,7 +41,11 @@ export interface TraceDetail {
   trace: TraceSummary;
   spans: TraceSpan[];
 }
+export type TraceSortField = "StartedAt" | "Duration" | "Spans" | "Tokens" | "Errors";
 export interface TraceQuery {
+  sorts?: { field: TraceSortField; direction: "Asc" | "Desc" }[];
+  sortBy?: TraceSortField;
+  sortDirection?: "Asc" | "Desc";
   workspaceCode: string;
   sessionCode: string;
   traceId: string;
@@ -87,4 +93,28 @@ export interface CollectorConnection {
   traceRetentionDays: number;
   metricRetentionDays: number;
   maxTraceRecords: number;
+}
+
+export interface ServiceProcess {
+  pid: number;
+  parentPid: number | null;
+  name: string;
+  memoryBytes: number;
+  startedAt: number;
+}
+export interface ObservabilityDashboard {
+  sampledAt: number;
+  traceCount: number;
+  failedTraceCount: number;
+  runningTraceCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  averageDurationMs: number;
+  p95DurationMs: number;
+  recentRequests: { startedAt: number; requests: number; errors: number }[];
+  cpuPercent: number | null;
+  memoryBytes: number | null;
+  resourceSampledAt: number | null;
+  metricPointCount: number;
+  processes: ServiceProcess[];
 }

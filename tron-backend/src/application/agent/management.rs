@@ -59,10 +59,12 @@ pub struct CreateWorkspaceInternalAgentCommand {
     pub avatar_id: Option<String>,
     /// Missing keeps the current group on update; an empty string clears it.
     pub group_name: Option<String>,
+    pub candidate_model_codes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct UpdateWorkspaceInternalAgentDefinitionCommand {
+    pub candidate_model_codes: Option<Vec<String>>,
     pub name: Option<String>,
     pub role_prompt: Option<String>,
     pub loop_code: Option<String>,

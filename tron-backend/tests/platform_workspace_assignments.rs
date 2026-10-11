@@ -12,21 +12,14 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
     let kb = f.service.create(USER, "Shared", "").unwrap();
     let doc = f
         .service
-        .upload(
-            USER,
-            &kb.id,
-            "note.md",
-            b"orchid shared platform evidence",
-        )
+        .upload(USER, &kb.id, "note.md", b"orchid shared platform evidence")
         .unwrap();
-    f.service
-        .index(USER, &kb.id, &doc.id)
-        .await
-        .unwrap();
+    f.service.index(USER, &kb.id, &doc.id).await.unwrap();
     let agent = f
         .state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            candidate_model_codes: Vec::new(),
             avatar_id: None,
             loop_code: None,
             agent_code: "knowledge-expert".into(),
@@ -37,15 +30,32 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
         .unwrap()
         .agent_code;
     let read_resource = |workspace: &str| {
-        f.state.resources.for_agent_in_workspace(Some(&agent), workspace).download_binary_to_file(
-            USER, tron_backend::application::resource::ResourceBinaryDownloadCommand {
-                workspace_code: "PLATFORM".into(), resource_code: doc.resource_code.clone(),
-            },
-        )
+        f.state
+            .resources
+            .for_agent_in_workspace(Some(&agent), workspace)
+            .download_binary_to_file(
+                USER,
+                tron_backend::application::resource::ResourceBinaryDownloadCommand {
+                    workspace_code: "PLATFORM".into(),
+                    resource_code: doc.resource_code.clone(),
+                },
+            )
     };
     // Knowledge configuration is available before the new Agent has any spaces.
-    assert!(f.state.agent_management.agent_workspace_grants(&agent).unwrap().is_empty());
-    assert_eq!(f.service.list_agent_knowledge_libraries(USER, &agent).unwrap().len(), 1);
+    assert!(
+        f.state
+            .agent_management
+            .agent_workspace_grants(&agent)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        f.service
+            .list_agent_knowledge_libraries(USER, &agent)
+            .unwrap()
+            .len(),
+        1
+    );
     f.service
         .set_agent_knowledge_libraries(USER, &agent, &[kb.id.clone(), kb.id.clone()])
         .unwrap();
@@ -84,12 +94,7 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
                 .contains("orchid shared platform evidence")
         );
     }
-    let indexed = f
-        .service
-        .detail(USER, &kb.id)
-        .unwrap()
-        .documents[0]
-        .clone();
+    let indexed = f.service.detail(USER, &kb.id).unwrap().documents[0].clone();
     f.state
         .agent_management
         .assign_agent_workspaces(&agent, vec!["COMPLIANCE".into()])
@@ -122,12 +127,7 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
             .hits
             .is_empty()
     );
-    let after = f
-        .service
-        .detail(USER, &kb.id)
-        .unwrap()
-        .documents[0]
-        .clone();
+    let after = f.service.detail(USER, &kb.id).unwrap().documents[0].clone();
     assert_eq!(indexed.active_source_code, after.active_source_code);
     assert_eq!(indexed.index_revision, after.index_revision);
 }
@@ -163,7 +163,13 @@ fn global_library_grants_are_owner_scoped_validated_atomic_and_persist_on_reconn
     assert!(!column_exists);
     let stale_tables: u32 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name IN ('knowledge_base_scoped_agent_grants','knowledge_base_workspace_grants','knowledge_base_migration_markers')", [], |row| row.get(0)).unwrap();
     assert_eq!(stale_tables, 0);
-    let payload: String = conn.query_row("SELECT payload_json FROM knowledge_bases WHERE id=?1", [&kb.id], |row| row.get(0)).unwrap();
+    let payload: String = conn
+        .query_row(
+            "SELECT payload_json FROM knowledge_bases WHERE id=?1",
+            [&kb.id],
+            |row| row.get(0),
+        )
+        .unwrap();
     assert!(!payload.contains("workspaceCode"));
 
     f.service.assign_library_agents(USER, &kb.id, &[]).unwrap();
@@ -177,6 +183,7 @@ async fn platform_agent_assignment_controls_catalog_and_runtime() {
     let service = &f.state.agent_management;
     let agent = service
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            candidate_model_codes: Vec::new(),
             avatar_id: None,
             loop_code: None,
             agent_code: "shared-expert".into(),
@@ -245,14 +252,8 @@ async fn platform_knowledge_agent_http_contracts_count_and_roundtrip() {
     use axum::http::{Method, StatusCode};
     use serde_json::json;
     let f = Fixture::new();
-    let library = f
-        .service
-        .create(USER, "Shared", "Documents")
-        .unwrap();
-    let other = f
-        .service
-        .create("OTHER-USER", "Private", "")
-        .unwrap();
+    let library = f.service.create(USER, "Shared", "Documents").unwrap();
+    let other = f.service.create("OTHER-USER", "Private", "").unwrap();
     let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
     let path = format!("/api/v1/knowledge-bases/{}/agent-grants", library.id);
     let response = common::authenticated_request(

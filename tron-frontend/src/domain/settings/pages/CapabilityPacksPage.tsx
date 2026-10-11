@@ -1,3 +1,4 @@
+import { capabilityDescription } from "../model/capabilityDescription";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Package } from "lucide-react";
 import { Link } from "react-router";
@@ -231,7 +232,7 @@ export function CapabilityPacksPage() {
               </Badge>
             </div>
             <p className="min-h-10 text-sm text-[var(--color-on-surface-variant)]">
-              {record.description}
+              {capabilityDescription(t, "Pack", record.id, record.description)}
             </p>
             <dl className="grid grid-cols-3 gap-3 border-t border-[var(--color-outline-variant)] pt-3 text-xs">
               <div>

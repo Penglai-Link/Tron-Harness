@@ -706,9 +706,7 @@ impl ShortTermMemoryService {
             }
             let Some(view) = last else { return Ok(None) };
             if block == "toolSchema" {
-                return Ok(Some(
-                    json!({"blockCode":block,"tools":view["tools"]}),
-                ));
+                return Ok(Some(json!({"blockCode":block,"tools":view["tools"]})));
             }
             let ids: &[&str] = match block {
                 "systemPrompt" => &["seed_prompt_prefix", fw::INSTRUCTIONS_BLOCK],
@@ -799,7 +797,7 @@ impl ShortTermMemoryService {
             ..Default::default()
         };
         let agent = framework.agent(selection).build().await.map_err(|e| {
-            eprintln!("summary agent binding failed: {e}");
+            tracing::error!("summary agent binding failed: {e}");
             ShortTermMemoryError::StorageFailure
         })?;
         let mut request = fw::RunRequest::new(session, "");
@@ -813,16 +811,16 @@ impl ShortTermMemoryService {
             client,
         )
         .map_err(|e| {
-            eprintln!("summary model binding failed: {e}");
+            tracing::error!("summary model binding failed: {e}");
             ShortTermMemoryError::StorageFailure
         })?;
         let result = agent.run(request).await;
         let cleanup = agent.close().await;
         if !cleanup.errors.is_empty() {
-            eprintln!("summary Agent cleanup failed: {:?}", cleanup.errors);
+            tracing::error!("summary Agent cleanup failed: {:?}", cleanup.errors);
         }
         let result = result.map_err(|e| {
-            eprintln!("native summary failed: {e}");
+            tracing::error!("native summary failed: {e}");
             match e.primary() {
                 fw::AgentError::SessionBusy(_) => ShortTermMemoryError::RunConflict,
                 fw::AgentError::State(fw::StateError::Conflict) => {

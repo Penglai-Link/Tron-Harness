@@ -117,7 +117,11 @@ fn package(bytes: &[u8], depth: usize) -> Result<BTreeMap<String, String>, Knowl
             if matches!(tag, "f" | "instrText" | "fldSimple") {
                 let code = node
                     .text()
-                    .or_else(|| node.attributes().find(|a|a.name()=="instr").map(|a|a.value()))
+                    .or_else(|| {
+                        node.attributes()
+                            .find(|a| a.name() == "instr")
+                            .map(|a| a.value())
+                    })
                     .unwrap_or("")
                     .to_ascii_uppercase()
                     .replace(char::is_whitespace, "");
@@ -161,7 +165,9 @@ fn resolve(base: &str, target: &str) -> Result<String, KnowledgeBaseError> {
         .unwrap_or_default();
     // OPC permits package-root absolute relationship targets; these are ZIP
     // part names, never paths opened on the host filesystem.
-    if target.starts_with('/') { segments.clear(); }
+    if target.starts_with('/') {
+        segments.clear();
+    }
     for segment in target.split('/') {
         match segment {
             ".." => {

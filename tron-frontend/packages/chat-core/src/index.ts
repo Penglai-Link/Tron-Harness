@@ -11,3 +11,4 @@ export * from "./terminal";
 export * from "./transport";
 export * from "./types";
 export * from "./window-state";
+export * from "./tracing";

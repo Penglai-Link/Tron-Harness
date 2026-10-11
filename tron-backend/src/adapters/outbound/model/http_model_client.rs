@@ -429,23 +429,46 @@ mod controlled_native_tests {
     fn host_records_are_typed_protocol_messages_not_assistant_prose() {
         let input = json!({"fileRef":{"kind":"session_attachment","attachmentCode":"ATTACH-1"}});
         let mut assistant = fw::Message::assistant(fw::Content(vec![
-            fw::ContentBlock::Json { value:json!({"tronMessagePart":{"type":"reasoningSummary","text":"summary"}}) },
-            fw::ContentBlock::Json { value:json!({"tronMessagePart":{"type":"toolCall","call_id":"CALL-1","tool_name":"word_read","input":input}}) },
+            fw::ContentBlock::Json {
+                value: json!({"tronMessagePart":{"type":"reasoningSummary","text":"summary"}}),
+            },
+            fw::ContentBlock::Json {
+                value: json!({"tronMessagePart":{"type":"toolCall","call_id":"CALL-1","tool_name":"word_read","input":input}}),
+            },
         ]));
-        assistant.tool_calls.push(fw::ToolCall::new("CALL-1", "word_read", input.clone()));
+        assistant
+            .tool_calls
+            .push(fw::ToolCall::new("CALL-1", "word_read", input.clone()));
         let mut result = fw::Message::new(fw::Role::Tool, "document evidence");
         result.tool_call_id = Some("CALL-1".into());
         let mut admitted = fw::ChatRequest {
             messages: vec![fw::Message::user("read"), assistant, result],
-            tools: Vec::new(), options: Default::default(), extensions: Default::default(),
+            tools: Vec::new(),
+            options: Default::default(),
+            extensions: Default::default(),
         };
         let request = native_request(&admitted).unwrap();
-        assert!(!request.messages[1].plain_text_content().contains("tronMessagePart"));
+        assert!(
+            !request.messages[1]
+                .plain_text_content()
+                .contains("tronMessagePart")
+        );
         assert_eq!(request.messages[1].plain_text_content(), "summary");
-        let sdk::AgentMessagePart::ToolCall { call_id, input: actual, .. } = &request.messages[1].parts[1] else { panic!("tool call missing") };
+        let sdk::AgentMessagePart::ToolCall {
+            call_id,
+            input: actual,
+            ..
+        } = &request.messages[1].parts[1]
+        else {
+            panic!("tool call missing")
+        };
         assert_eq!(call_id.as_deref(), Some("CALL-1"));
         assert_eq!(*actual, input);
-        assert!(request.messages[2].text_content().contains("document evidence"));
+        assert!(
+            request.messages[2]
+                .text_content()
+                .contains("document evidence")
+        );
         admitted.messages[1].tool_calls[0].arguments = json!({"forged":true});
         assert!(native_request(&admitted).is_err());
     }
@@ -454,10 +477,21 @@ mod controlled_native_tests {
     fn explicit_output_limit_wins_over_configured_default() {
         let mut config: AgentModelConfig = serde_json::from_value(json!({"modelCode":"fixture","protocol":"RESPONSES","baseUrl":"http://unused.invalid","apiKey":"","modelName":"fixture"})).unwrap();
         let invocation = crate::config::ModelInvocationConfig::default();
-        assert_eq!(limits(&config, &invocation.text, invocation.default_output_tokens).max_model_output_tokens, 16_384);
-        assert_eq!(limits(&config, &invocation.text, 8192).max_model_output_tokens, 8192);
+        assert_eq!(
+            limits(&config, &invocation.text, invocation.default_output_tokens)
+                .max_model_output_tokens,
+            16_384
+        );
+        assert_eq!(
+            limits(&config, &invocation.text, 8192).max_model_output_tokens,
+            8192
+        );
         config.max_tokens = Some(512);
-        assert_eq!(limits(&config, &invocation.text, invocation.default_output_tokens).max_model_output_tokens, 512);
+        assert_eq!(
+            limits(&config, &invocation.text, invocation.default_output_tokens)
+                .max_model_output_tokens,
+            512
+        );
     }
     #[tokio::test]
     async fn native_image_and_attachment_generate_uses_controlled_sdk_transport() {

@@ -37,7 +37,7 @@ pub(crate) fn chat_error(
         StateError::NotFound => ChatError::SessionNotFound,
         StateError::Busy => ChatError::SessionRunActive,
         other => {
-            eprintln!("Framework session storage failed: {other}");
+            tracing::error!("Framework session storage failed: {other}");
             ChatError::StorageFailure
         }
     }
@@ -195,7 +195,7 @@ impl Drop for BusinessTransaction<'_> {
     fn drop(&mut self) {
         if !self.finished {
             if let Err(error) = self.rollback_inner() {
-                eprintln!("business transaction rollback failed: {error}");
+                tracing::error!("business transaction rollback failed: {error}");
             }
         }
     }

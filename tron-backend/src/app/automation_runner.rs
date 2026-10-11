@@ -17,6 +17,7 @@ const AUTOMATION_AGENT_CODE: &str = "main-agent";
 const AUTOMATION_LOCALE: &str = "en-US";
 
 pub(super) struct MainAgentAutomationRunner {
+    framework: crate::application::agent::FrameworkHost,
     automations: AutomationService,
     chats: ChatService,
     agent_management: AgentManagementService,
@@ -26,6 +27,7 @@ pub(super) struct MainAgentAutomationRunner {
 
 impl MainAgentAutomationRunner {
     pub(super) fn new(
+        framework: crate::application::agent::FrameworkHost,
         automations: AutomationService,
         chats: ChatService,
         agent_management: AgentManagementService,
@@ -33,6 +35,7 @@ impl MainAgentAutomationRunner {
         agent: AgentInvocationService,
     ) -> Self {
         Self {
+            framework,
             automations,
             chats,
             agent_management,
@@ -49,7 +52,33 @@ impl AutomationExecutionRunner for MainAgentAutomationRunner {
         let agent_management = self.agent_management.clone();
         let models = self.models.clone();
         let agent = self.agent.clone();
-        tokio::spawn(async move {
+        let framework = self.framework.clone();
+        crate::app::telemetry::spawn_traced(async move {
+            use opentelemetry::{Context, KeyValue, trace::{FutureExt, TraceContextExt, Status}};
+            use tracing::Instrument;
+            // Each scheduled occurrence owns a fresh root; manual runs retain their HTTP parent.
+            let parent = if execution.trigger_source == crate::domain::automation::AutomationTriggerSource::Scheduler {
+                Context::new()
+            } else { Context::current() };
+            let telemetry = match framework.telemetry().await {
+                Ok(telemetry) => telemetry,
+                Err(error) => {
+                    tracing::error!(?error, "Automation tracing unavailable");
+                    let _ = automations.complete_execution(&automation.automation_code, &execution.execution_code,
+                        AutomationExecutionStatus::Failed, Some("Telemetry unavailable".into()), None);
+                    return;
+                }
+            };
+            let guard = telemetry.begin_operation("tron.automation.execute", &parent, vec![
+                KeyValue::new("tron.workspace.code", automation.workspace_code.clone()),
+                KeyValue::new("tron.automation.code", automation.automation_code.clone()),
+                KeyValue::new("tron.automation.execution.code", execution.execution_code.clone()),
+            ]);
+            let context = guard.0.clone();
+            let ids = context.span().span_context().clone();
+            let log_span = tracing::info_span!("automation.execute", trace_id=%ids.trace_id(), span_id=%ids.span_id());
+            tracing::info!(trace_id=%ids.trace_id(), span_id=%ids.span_id(), automation_code=%automation.automation_code,
+                execution_code=%execution.execution_code, "Automation execution started");
             let result = run_automation_with_main_agent(
                 automation.clone(),
                 execution.clone(),
@@ -58,7 +87,8 @@ impl AutomationExecutionRunner for MainAgentAutomationRunner {
                 models,
                 agent,
             )
-            .await;
+            .instrument(log_span).with_context(context.clone()).await;
+            if result.is_err() { context.span().set_status(Status::error("Automation execution failed")); }
             let (status, summary, session_code) = match result {
                 Ok(result) => (
                     AutomationExecutionStatus::Success,
@@ -74,6 +104,13 @@ impl AutomationExecutionRunner for MainAgentAutomationRunner {
                 Some(summary),
                 session_code,
             );
+            if status == AutomationExecutionStatus::Failed {
+                tracing::error!(trace_id=%ids.trace_id(), span_id=%ids.span_id(), "Automation execution failed");
+            } else {
+                tracing::info!(trace_id=%ids.trace_id(), span_id=%ids.span_id(), "Automation execution finished");
+            }
+            guard.complete(if status == AutomationExecutionStatus::Failed { "error" } else { "completed" });
+            drop(guard);
         });
     }
 }
@@ -200,7 +237,8 @@ async fn run_automation_with_main_agent(
         .send_message(
             &session.session_code,
             SendChatMessageCommand {
-            a2ui_action_id: None, a2ui_metadata: None,
+                a2ui_action_id: None,
+                a2ui_metadata: None,
                 run_code: None,
                 content: Some(automation.prompt_text.clone()),
                 workspace_code: Some(automation.workspace_code.clone()),

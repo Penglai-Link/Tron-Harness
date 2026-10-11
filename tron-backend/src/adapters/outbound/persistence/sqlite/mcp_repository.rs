@@ -33,7 +33,6 @@ impl<'a> SqliteMcpRepositorySql<'a> {
             .map_err(storage_error)?;
         Ok(Self { connection })
     }
-
 }
 
 impl McpRepository for SqliteMcpRepositorySql<'_> {

@@ -17,26 +17,28 @@ import { useToast } from "@/components/ui/toast";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import type { TraceDetail, TraceSpan } from "../model/Trace";
 import { TraceStatus } from "./TraceStatus";
+import { formatTraceDuration, formatTraceTokens } from "./traceFormat";
+import { SpanVisualization } from "./SpanVisualization";
 import { traceTree } from "./traceTree";
 
 export function TraceInspector({ detail }: { detail: TraceDetail }) {
   const { t } = useTranslation("observability");
-  const { formatNumber, formatDateTime } = useLocaleFormatters();
+  const { currentLocale, formatNumber, formatDateTime } = useLocaleFormatters();
   const toast = useToast();
   const [selected, setSelected] = useState("");
+  const [view, setView] = useState("waterfall");
   const span =
     detail.spans.find((s) => s.spanId === selected) ??
     detail.spans.find((s) => s.name === "agent.run") ??
     detail.spans[0];
   const trace = detail.trace;
-  const duration = (value: number) =>
-    `${formatNumber(value, { maximumFractionDigits: 2 })} ms`;
+  const duration = (value: number) => formatTraceDuration(value, currentLocale);
   const metrics = [
     ["duration", duration(trace.durationMs)],
     ["modelCalls", formatNumber(trace.modelCount)],
     ["toolCalls", formatNumber(trace.toolCount)],
-    ["inputTokens", formatNumber(trace.inputTokens)],
-    ["outputTokens", formatNumber(trace.outputTokens)],
+    ["inputTokens", formatTraceTokens(trace.inputTokens, currentLocale)],
+    ["outputTokens", formatTraceTokens(trace.outputTokens, currentLocale)],
     ["errors", formatNumber(trace.errorCount)],
   ];
   const copy = async () => {
@@ -49,7 +51,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
   };
   return (
     <section
-      className="mt-6 min-w-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
+      className="min-w-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
       aria-label={t("detail")}
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
@@ -69,7 +71,11 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
             variant="secondary"
             nativeButton={false}
             render={
-              <Link to={`/chats/${encodeURIComponent(trace.sessionCode)}`} />
+              <Link
+                to={`/chats?sessionCode=${encodeURIComponent(
+                  trace.sessionCode
+                )}`}
+              />
             }
           >
 
@@ -90,93 +96,83 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
       </dl>
       <div className="grid min-w-0 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
         <div className="min-w-0 p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <h3 className="text-sm font-semibold">{t("waterfall")}</h3>
-            <InfoTooltip ariaLabel={t("waterfallHelpLabel")}>
-              {t("waterfallHelp")}
-            </InfoTooltip>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("operation")}</TableHead>
-                <TableHead className="min-w-40">{t("duration")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {traceTree(detail.spans).map(({ span: s, depth }) => {
-                const start = Math.max(
-                  0,
-                  ((s.startedAt - trace.startedAt) /
-                    Math.max(trace.durationMs, 1)) *
-                    100
-                );
-                const width = Math.min(
-                  100 - start,
-                  Math.max(
-                    0.8,
-                    (s.durationMs / Math.max(trace.durationMs, 1)) * 100
-                  )
-                );
-                return (
-                  <TableRow
-                    key={s.spanId}
-                    data-state={
-                      s.spanId === span?.spanId ? "selected" : undefined
-                    }
-                  >
-                    <TableCell>
-                      <Button
-                        className="max-w-full justify-start"
-                        variant="ghost"
-                        style={{
-                          paddingLeft: `${Math.min(depth, 6) * 12 + 4}px`,
-                        }}
-                        onClick={() => setSelected(s.spanId)}
-                        aria-pressed={s.spanId === span?.spanId}
-                      >
-                        <span
-                          className={`size-1.5 shrink-0 rounded-full ${
-                            s.status === "Error"
-                              ? "bg-[var(--color-error)]"
-                              : "bg-[var(--color-accent)]"
-                          }`}
-                        />
-                        <span className="max-w-64 truncate">
-                          {s.attributes["gen_ai.tool.name"] ??
-                            s.attributes["gen_ai.request.model"] ??
-                            s.name}
-                        </span>
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="relative h-2 overflow-hidden rounded bg-[var(--color-surface-container)]">
-                        <div
-                          className={`absolute h-full min-w-px rounded ${
-                            s.status === "Error"
-                              ? "bg-[var(--color-error)]"
-                              : "bg-[var(--color-accent)]"
-                          }`}
-                          style={{
-                            left: `${Math.min(start, 99)}%`,
-                            width: `${width}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="mt-1 text-right text-xs tabular-nums">
-                        {duration(s.durationMs)}
-                      </div>
-                    </TableCell>
+          <Tabs value={view} onValueChange={(value) => setView(String(value))}>
+            <TabsList aria-label={t("detailView")}>
+              <TabsTrigger value="table">{t("tableView")}</TabsTrigger>
+              <TabsTrigger value="waterfall">{t("waterfall")}</TabsTrigger>
+              <TabsTrigger value="topology">{t("topology")}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="table">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("operation")}</TableHead>
+                    <TableHead>Span ID</TableHead>
+                    <TableHead>{t("state")}</TableHead>
+                    <TableHead>{t("elapsedTime")}</TableHead>
+                    <TableHead>{t("duration")}</TableHead>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {traceTree(detail.spans).map(({ span: item, depth }) => (
+                    <TableRow
+                      key={item.spanId}
+                      data-state={
+                        item.spanId === span?.spanId ? "selected" : undefined
+                      }
+                    >
+                      <TableCell>
+                        <Button
+                          variant="link"
+                          className="h-auto max-w-64 justify-start p-0"
+                          style={{ paddingLeft: Math.min(depth, 8) * 12 }}
+                          onClick={() => setSelected(item.spanId)}
+                        >
+                          <span className="truncate">
+                            {item.attributes["gen_ai.tool.name"] ??
+                              item.attributes["gen_ai.request.model"] ??
+                              item.name}
+                          </span>
+                        </Button>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {item.spanId}
+                      </TableCell>
+                      <TableCell>
+                        <TraceStatus status={item.status} />
+                      </TableCell>
+                      <TableCell>
+                        {duration(item.startedAt - trace.startedAt)}
+                      </TableCell>
+                      <TableCell>{duration(item.durationMs)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TabsContent>
+            <TabsContent value="waterfall">
+              {detail.spans.length > 0 && (
+                <SpanVisualization
+                  detail={detail}
+                  mode="waterfall"
+                  selected={span?.spanId ?? ""}
+                  onSelect={setSelected}
+                />
+              )}
+            </TabsContent>
+            <TabsContent value="topology">
+              {detail.spans.length > 0 && (
+                <SpanVisualization
+                  detail={detail}
+                  mode="topology"
+                  selected={span?.spanId ?? ""}
+                  onSelect={setSelected}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
           {!detail.spans.length && (
-            <p
-              role="status"
-              className="py-10 text-center text-sm text-[var(--color-on-surface-variant)]"
-            >
+            <p role="status" className="py-10 text-center text-sm">
               {t("noSpans")}
             </p>
           )}

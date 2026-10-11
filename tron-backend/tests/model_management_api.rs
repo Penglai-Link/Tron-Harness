@@ -1145,8 +1145,6 @@ async fn workspace_can_disable_platform_models_without_mutating_platform_source(
     );
 }
 
-
-
 #[tokio::test]
 async fn workspace_platform_verify_uses_visible_platform_model_code() {
     let database_url = temp_database_url("model-platform-reference-verify");

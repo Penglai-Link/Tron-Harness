@@ -184,12 +184,21 @@ async fn blank_command_activity_does_not_mark_presentation_incomplete() {
     let bus = EventBusRuntimeBuilder::new(
         EventBusConfig::default(),
         Arc::new(FixedSnowflakeIdProvider::new(804_300_000_000_001_000)),
-    ).without_workers_for_testing().build();
+    )
+    .without_workers_for_testing()
+    .build();
     let host = FrameworkHost::temporary(None).unwrap();
     let agent = ReactAgentBuilder::new(
-        Arc::new(NativeClient { step: AtomicUsize::new(0), actual: Default::default() }),
-        Arc::new(ToolRegistry::default()), bus.clone(),
-    ).with_framework_host(Some(host.clone())).build().unwrap();
+        Arc::new(NativeClient {
+            step: AtomicUsize::new(0),
+            actual: Default::default(),
+        }),
+        Arc::new(ToolRegistry::default()),
+        bus.clone(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
     let context: AgentRunContext = serde_json::from_value(json!({
         "runCode":"command-progress", "workspaceCode":"test", "locale":"en-US", "agentKind":"REACT",
         "model":{"modelCode":"test","protocol":"CHAT_COMPLETIONS","baseUrl":"http://unused.invalid","apiKey":"","modelName":"test"},

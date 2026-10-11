@@ -18,6 +18,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse_HealthData'
+  /api/v1/observability/browser-spans:
+    post:
+      tags:
+      - Observability
+      operationId: record_browser_span
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrowserSpanRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse_EmptyData'
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse_EmptyData'
   /api/v1/observability/collector/export-config:
     post:
       tags:
@@ -30,6 +54,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse_CollectorConnection'
+  /api/v1/observability/dashboard:
+    get:
+      tags:
+      - Observability
+      operationId: get_dashboard
+      parameters:
+      - name: workspaceCode
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse_ObservabilityDashboard'
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse_EmptyData'
+  /api/v1/observability/logs/query:
+    post:
+      tags:
+      - Observability
+      operationId: query_logs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryLogsRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse_ApplicationLogPage'
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse_EmptyData'
   /api/v1/observability/metric-points/query:
     post:
       tags:
@@ -62,7 +134,7 @@ paths:
       parameters:
       - name: workspaceCode
         in: query
-        required: true
+        required: false
         schema:
           type: string
       - name: sessionCode
@@ -137,7 +209,7 @@ paths:
           type: string
       - name: workspaceCode
         in: query
-        required: true
+        required: false
         schema:
           type: string
       responses:
@@ -153,6 +225,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse_EmptyData'
+  /api/v1/profiles/active/preferences:
+    patch:
+      tags:
+      - Profiles
+      operationId: update_preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePreferencesRequest'
+        required: true
+      responses:
+        '200':
+          description: User time zone saved
+        '400':
+          description: Invalid IANA time zone
   /api/v1/readiness:
     get:
       tags:
@@ -173,6 +261,44 @@ paths:
                 $ref: '#/components/schemas/ApiResponse_ReadinessData'
 components:
   schemas:
+    ApiResponse_ApplicationLogPage:
+      type: object
+      required:
+      - code
+      - message
+      - data
+      properties:
+        code:
+          type: string
+        data:
+          type: object
+          required:
+          - date
+          - timeZone
+          - current
+          - size
+          - total
+          - records
+          properties:
+            current:
+              type: integer
+              minimum: 0
+            date:
+              type: string
+            records:
+              type: array
+              items:
+                $ref: '#/components/schemas/ApplicationLog'
+            size:
+              type: integer
+              minimum: 0
+            timeZone:
+              type: string
+            total:
+              type: integer
+              minimum: 0
+        message:
+          type: string
     ApiResponse_CollectorConnection:
       type: object
       required:
@@ -271,6 +397,85 @@ components:
               type: integer
               minimum: 0
             total:
+              type: integer
+              minimum: 0
+        message:
+          type: string
+    ApiResponse_ObservabilityDashboard:
+      type: object
+      required:
+      - code
+      - message
+      - data
+      properties:
+        code:
+          type: string
+        data:
+          type: object
+          required:
+          - sampledAt
+          - traceCount
+          - failedTraceCount
+          - runningTraceCount
+          - inputTokens
+          - outputTokens
+          - averageDurationMs
+          - p95DurationMs
+          - recentRequests
+          - metricPointCount
+          - processes
+          properties:
+            averageDurationMs:
+              type: number
+              format: double
+            cpuPercent:
+              type:
+              - number
+              - 'null'
+              format: double
+            failedTraceCount:
+              type: integer
+              minimum: 0
+            inputTokens:
+              type: integer
+              format: int64
+              minimum: 0
+            memoryBytes:
+              type:
+              - integer
+              - 'null'
+              format: int64
+              minimum: 0
+            metricPointCount:
+              type: integer
+              minimum: 0
+            outputTokens:
+              type: integer
+              format: int64
+              minimum: 0
+            p95DurationMs:
+              type: number
+              format: double
+            processes:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceProcess'
+            recentRequests:
+              type: array
+              items:
+                $ref: '#/components/schemas/RequestBucket'
+            resourceSampledAt:
+              type:
+              - integer
+              - 'null'
+              format: int64
+            runningTraceCount:
+              type: integer
+              minimum: 0
+            sampledAt:
+              type: integer
+              format: int64
+            traceCount:
               type: integer
               minimum: 0
         message:
@@ -433,6 +638,103 @@ components:
               minimum: 0
         message:
           type: string
+    ApplicationLog:
+      type: object
+      required:
+      - logId
+      - timestamp
+      - level
+      - target
+      - message
+      - attributes
+      properties:
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
+        level:
+          type: string
+        logId:
+          type: string
+        message:
+          type: string
+        spanId:
+          type:
+          - string
+          - 'null'
+        target:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+        traceId:
+          type:
+          - string
+          - 'null'
+    ApplicationLogPage:
+      type: object
+      required:
+      - date
+      - timeZone
+      - current
+      - size
+      - total
+      - records
+      properties:
+        current:
+          type: integer
+          minimum: 0
+        date:
+          type: string
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplicationLog'
+        size:
+          type: integer
+          minimum: 0
+        timeZone:
+          type: string
+        total:
+          type: integer
+          minimum: 0
+    BrowserSpanRequest:
+      type: object
+      description: Record completed application API requests without credentials, query strings or polling noise.
+      required:
+      - traceId
+      - spanId
+      - startedAt
+      - endedAt
+      - method
+      - path
+      - status
+      properties:
+        endedAt:
+          type: integer
+          format: int64
+        method:
+          type: string
+        parentSpanId:
+          type:
+          - string
+          - 'null'
+        path:
+          type: string
+        spanId:
+          type: string
+        startedAt:
+          type: integer
+          format: int64
+        status:
+          type: integer
+          format: int32
+          minimum: 0
+        traceId:
+          type: string
+      additionalProperties: false
     CollectorConnection:
       type: object
       required:
@@ -533,6 +835,123 @@ components:
           format: int64
         unit:
           type: string
+    ObservabilityDashboard:
+      type: object
+      required:
+      - sampledAt
+      - traceCount
+      - failedTraceCount
+      - runningTraceCount
+      - inputTokens
+      - outputTokens
+      - averageDurationMs
+      - p95DurationMs
+      - recentRequests
+      - metricPointCount
+      - processes
+      properties:
+        averageDurationMs:
+          type: number
+          format: double
+        cpuPercent:
+          type:
+          - number
+          - 'null'
+          format: double
+        failedTraceCount:
+          type: integer
+          minimum: 0
+        inputTokens:
+          type: integer
+          format: int64
+          minimum: 0
+        memoryBytes:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        metricPointCount:
+          type: integer
+          minimum: 0
+        outputTokens:
+          type: integer
+          format: int64
+          minimum: 0
+        p95DurationMs:
+          type: number
+          format: double
+        processes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceProcess'
+        recentRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestBucket'
+        resourceSampledAt:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        runningTraceCount:
+          type: integer
+          minimum: 0
+        sampledAt:
+          type: integer
+          format: int64
+        traceCount:
+          type: integer
+          minimum: 0
+    QueryLogsRequest:
+      type: object
+      required:
+      - current
+      - size
+      properties:
+        afterLogId:
+          type:
+          - string
+          - 'null'
+        beforeLogId:
+          type:
+          - string
+          - 'null'
+        current:
+          type: integer
+          minimum: 0
+        date:
+          type:
+          - string
+          - 'null'
+        keyword:
+          type:
+          - string
+          - 'null'
+        level:
+          type:
+          - string
+          - 'null'
+        size:
+          type: integer
+          minimum: 0
+        spanId:
+          type:
+          - string
+          - 'null'
+        timeZone:
+          type:
+          - string
+          - 'null'
+        traceId:
+          type:
+          - string
+          - 'null'
+        workspaceCode:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
     QueryMetricPointsRequest:
       type: object
       required:
@@ -549,11 +968,14 @@ components:
         size:
           type: integer
           minimum: 0
+        workspaceCode:
+          type:
+          - string
+          - 'null'
       additionalProperties: false
     QueryTracesRequest:
       type: object
       required:
-      - workspaceCode
       - current
       - size
       properties:
@@ -567,12 +989,22 @@ components:
         size:
           type: integer
           minimum: 0
+        sortBy:
+          $ref: '#/components/schemas/TraceSortField'
+        sortDirection:
+          $ref: '#/components/schemas/TraceSortDirection'
+        sorts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraceSort'
         traceId:
           type:
           - string
           - 'null'
         workspaceCode:
-          type: string
+          type:
+          - string
+          - 'null'
       additionalProperties: false
     ReadinessComponents:
       type: object
@@ -603,6 +1035,22 @@ components:
           type: string
         version:
           type: string
+    RequestBucket:
+      type: object
+      required:
+      - startedAt
+      - requests
+      - errors
+      properties:
+        errors:
+          type: integer
+          minimum: 0
+        requests:
+          type: integer
+          minimum: 0
+        startedAt:
+          type: integer
+          format: int64
     RuntimeMetrics:
       type: object
       required:
@@ -626,6 +1074,33 @@ components:
           type:
           - integer
           - 'null'
+          format: int64
+    ServiceProcess:
+      type: object
+      required:
+      - pid
+      - name
+      - memoryBytes
+      - startedAt
+      properties:
+        memoryBytes:
+          type: integer
+          format: int64
+          minimum: 0
+        name:
+          type: string
+        parentPid:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        pid:
+          type: integer
+          format: int32
+          minimum: 0
+        startedAt:
+          type: integer
           format: int64
     SpanEvent:
       type: object
@@ -718,6 +1193,29 @@ components:
         total:
           type: integer
           minimum: 0
+    TraceSort:
+      type: object
+      required:
+      - field
+      - direction
+      properties:
+        direction:
+          $ref: '#/components/schemas/TraceSortDirection'
+        field:
+          $ref: '#/components/schemas/TraceSortField'
+    TraceSortDirection:
+      type: string
+      enum:
+      - Asc
+      - Desc
+    TraceSortField:
+      type: string
+      enum:
+      - StartedAt
+      - Duration
+      - Spans
+      - Tokens
+      - Errors
     TraceSpan:
       type: object
       required:
@@ -763,6 +1261,7 @@ components:
     TraceSummary:
       type: object
       required:
+      - workspaceCode
       - traceId
       - sessionCode
       - runCode
@@ -805,6 +1304,10 @@ components:
           type: string
         sessionCode:
           type: string
+        sessionName:
+          type:
+          - string
+          - 'null'
         spanCount:
           type: integer
           minimum: 0
@@ -817,6 +1320,15 @@ components:
           type: integer
           minimum: 0
         traceId:
+          type: string
+        workspaceCode:
+          type: string
+    UpdatePreferencesRequest:
+      type: object
+      required:
+      - timeZone
+      properties:
+        timeZone:
           type: string
 tags:
 - name: System

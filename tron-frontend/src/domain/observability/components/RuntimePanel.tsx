@@ -1,86 +1,15 @@
+import { PlatformWorkspaceFilter } from "@/domain/settings/components/PlatformWorkspaceScope";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { TextInput } from "@/components/forms";
 import { DataTable } from "@/components/data-table";
 import { TablePagination } from "@/components/table-pagination";
 import { InfoTooltip } from "@/components/info-tooltip/InfoTooltip";
 import { useLocaleFormatters } from "@/shared";
-import { useRuntimeMetrics, useMetricPoints } from "../hooks/useObservability";
+import { useMetricPoints } from "../hooks/useObservability";
 import type { MetricPoint } from "../model/Trace";
 export function RuntimePanel() {
-  const { t } = useTranslation("observability");
-  const { formatNumber, formatDateTime } = useLocaleFormatters();
-  const runtime = useRuntimeMetrics();
-  const [show, setShow] = useState(false);
-  return (
-    <section
-      className="mb-6 border-b border-[var(--color-outline-variant)] pb-6"
-      aria-label={t("runtime")}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-5">
-        <dl className="flex flex-wrap gap-x-10 gap-y-5">
-          <div>
-            <dt className="text-xs text-[var(--color-on-surface-variant)]">
-              {t("processCpu")}
-            </dt>
-            <dd className="mt-2 text-2xl font-semibold tabular-nums">
-              {runtime.data?.cpuPercent != null
-                ? `${formatNumber(runtime.data.cpuPercent, {
-                    maximumFractionDigits: 1,
-                  })}%`
-                : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-[var(--color-on-surface-variant)]">
-              {t("processMemory")}
-            </dt>
-            <dd className="mt-2 text-2xl font-semibold tabular-nums">
-              {runtime.data?.memoryBytes != null
-                ? `${formatNumber(runtime.data.memoryBytes / 1048576, {
-                    maximumFractionDigits: 1,
-                  })} MiB`
-                : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-[var(--color-on-surface-variant)]">
-              {t("metricPoints")}
-            </dt>
-            <dd className="mt-2 text-2xl font-semibold tabular-nums">
-              {runtime.data ? formatNumber(runtime.data.metricPointCount) : "—"}
-            </dd>
-          </div>
-        </dl>
-        <div className="flex items-center gap-3">
-          <InfoTooltip ariaLabel={t("runtimeHelpLabel")}>
-            {t("runtimeHelp")}
-          </InfoTooltip>
-          <Button
-            variant="secondary"
-            onClick={() => setShow(!show)}
-            aria-expanded={show}
-          >
-            {t(show ? "hideMetrics" : "showMetrics")}
-          </Button>
-          {runtime.isError && (
-            <Button variant="secondary" onClick={() => void runtime.refetch()}>
-              {t("retry")}
-            </Button>
-          )}
-        </div>
-      </div>
-      {runtime.data?.sampledAt && (
-        <time className="mt-3 block text-xs text-[var(--color-on-surface-variant)]">
-          {formatDateTime(runtime.data.sampledAt, { timeStyle: "medium" })}
-        </time>
-      )}
-      {show && <MetricPointsTable />}
-    </section>
-  );
-}
-function MetricPointsTable() {
   const { t } = useTranslation("observability");
   const { formatNumber, formatDateTime } = useLocaleFormatters();
   const [input, setInput] = useState("");
@@ -90,24 +19,43 @@ function MetricPointsTable() {
   const [selected, setSelected] = useState<MetricPoint | null>(null);
   const query = useMetricPoints(name, page, size);
   const total = query.data?.total ?? 0;
+  const description = (point: MetricPoint) =>
+    point.name === "process.cpu.utilization"
+      ? t("cpuDescription")
+      : point.name === "process.memory.usage"
+      ? t("memoryDescription")
+      : point.description || t("noMetricDescription");
+  const unit = (point: MetricPoint) =>
+    point.unit === "1"
+      ? t(
+          point.name === "process.cpu.utilization"
+            ? "cpuRatioUnit"
+            : "dimensionlessUnit"
+        )
+      : point.unit === "By"
+      ? t("bytesUnit")
+      : point.unit || t("unspecifiedUnit");
   return (
-    <div className="mt-5 min-w-0">
+    <div className="h-full min-h-0 min-w-0">
       <DataTable<MetricPoint>
+        className="flex max-h-full flex-col [&>div]:shrink-0 [&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:shrink [&>[data-slot=table-container]]:overflow-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-[var(--color-elevated-surface)]"
         title={t("metricPoints")}
         rows={query.data?.records ?? []}
         rowKey={(p) => p.pointId}
         toolbar={
           <form
-            className="flex flex-wrap gap-3"
+            className="flex flex-wrap items-center gap-3"
             onSubmit={(e) => {
               e.preventDefault();
+              if (page === 1 && name === input.trim()) void query.refetch();
               setName(input.trim());
               setPage(1);
               setSelected(null);
             }}
           >
-            <Input
-              className="w-72 max-w-full"
+            <PlatformWorkspaceFilter />
+            <TextInput
+              className="h-[var(--tron-input-height,2.25rem)] w-48 max-w-full sm:h-[var(--tron-input-height,2.25rem)]"
               aria-label={t("metricName")}
               placeholder={t("metricName")}
               value={input}
@@ -118,11 +66,7 @@ function MetricPointsTable() {
         }
         emptyState={
           <span role="status">
-            {query.isPending
-              ? t("loading")
-              : query.isError
-              ? t("loadFailed")
-              : t("empty")}
+            {query.isPending || query.isError ? null : t("empty")}
           </span>
         }
         pagination={
@@ -155,7 +99,35 @@ function MetricPointsTable() {
               </Button>
             ),
           },
-          { id: "kind", header: t("metricKind"), render: (p) => p.kind },
+          {
+            id: "description",
+            header: t("metricDescription"),
+            cellClassName:
+              "whitespace-normal min-w-56 max-w-80 text-xs text-[var(--color-on-surface-variant)]",
+            render: description,
+          },
+          {
+            id: "kind",
+            header: (
+              <span className="inline-flex items-center gap-1.5">
+                {t("metricKind")}
+                <InfoTooltip ariaLabel={t("metricKindHelpLabel")}>
+                  <div className="max-w-80 space-y-2 whitespace-normal">
+                    {[
+                      "gaugeHelp",
+                      "sumHelp",
+                      "histogramHelp",
+                      "exponentialHistogramHelp",
+                      "summaryHelp",
+                    ].map((key) => (
+                      <p key={key}>{t(key)}</p>
+                    ))}
+                  </div>
+                </InfoTooltip>
+              </span>
+            ),
+            render: (p) => p.kind,
+          },
           {
             id: "value",
             header: t("metricValue"),
@@ -168,7 +140,28 @@ function MetricPointsTable() {
                 ? `${t("metricCount")}: ${String(p.data.count)}`
                 : "—",
           },
-          { id: "unit", header: t("metricUnit"), render: (p) => p.unit || "—" },
+          {
+            id: "unit",
+            header: (
+              <span className="inline-flex items-center gap-1.5">
+                {t("metricUnit")}
+                <InfoTooltip ariaLabel={t("metricUnitHelpLabel")}>
+                  <div className="max-w-80 space-y-2 whitespace-normal">
+                    {[
+                      "dimensionlessHelp",
+                      "cpuRatioHelp",
+                      "bytesHelp",
+                      "timeUnitsHelp",
+                      "otherUnitsHelp",
+                    ].map((key) => (
+                      <p key={key}>{t(key)}</p>
+                    ))}
+                  </div>
+                </InfoTooltip>
+              </span>
+            ),
+            render: unit,
+          },
           {
             id: "time",
             header: t("sampledAt"),
@@ -187,9 +180,9 @@ function MetricPointsTable() {
         <div className="mt-4 min-w-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--color-outline-variant)] p-4">
           <div className="mb-3 flex items-center gap-3">
             <h3 className="break-all font-mono text-sm">{selected.name}</h3>
-            {selected.description && (
+            {description(selected) && (
               <InfoTooltip ariaLabel={t("help")}>
-                {selected.description}
+                {description(selected)}
               </InfoTooltip>
             )}
             <InfoTooltip ariaLabel={t("help")}>

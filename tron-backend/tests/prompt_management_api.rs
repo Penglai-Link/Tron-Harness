@@ -39,8 +39,16 @@ async fn platform_prompt_lifecycle_uses_global_records_and_prompt_local_envelope
         .as_str()
         .expect("platform create should return promptCode")
         .to_string();
-    for field in ["scopeKind", "workspaceCode", "sourceKind", "allowInheritance"] {
-        assert!(!created["data"].as_object().unwrap().contains_key(field), "{field}");
+    for field in [
+        "scopeKind",
+        "workspaceCode",
+        "sourceKind",
+        "allowInheritance",
+    ] {
+        assert!(
+            !created["data"].as_object().unwrap().contains_key(field),
+            "{field}"
+        );
     }
     assert_envelope_only(&created);
 
@@ -95,12 +103,24 @@ async fn platform_prompt_lifecycle_uses_global_records_and_prompt_local_envelope
         json!({ "promptCode": duplicated["data"]["promptCode"] }),
     )
     .await;
-    assert_eq!(deleted["data"], json!({ "promptCode": duplicated["data"]["promptCode"] }));
+    assert_eq!(
+        deleted["data"],
+        json!({ "promptCode": duplicated["data"]["promptCode"] })
+    );
 
     let connection = Connection::open(database_url).expect("prompt database should open");
     let columns = table_columns(&connection, "prompts");
-    for removed_column in ["scope_kind", "workspace_code", "source_kind", "source_prompt_code", "allow_inheritance"] {
-        assert!(!columns.contains(removed_column), "database still has {removed_column}");
+    for removed_column in [
+        "scope_kind",
+        "workspace_code",
+        "source_kind",
+        "source_prompt_code",
+        "allow_inheritance",
+    ] {
+        assert!(
+            !columns.contains(removed_column),
+            "database still has {removed_column}"
+        );
     }
 }
 
@@ -197,7 +217,10 @@ async fn prompt_variables_require_matching_descriptions_and_supported_types() {
         )
         .await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{name}");
-        assert_eq!(response_json(response).await["code"], json!("PROMPT_INPUT_INVALID"));
+        assert_eq!(
+            response_json(response).await["code"],
+            json!("PROMPT_INPUT_INVALID")
+        );
     }
 }
 
@@ -226,7 +249,10 @@ async fn runtime_prompt_variables_must_match_the_global_runtime_catalog() {
     .await;
     assert_eq!(valid.status(), StatusCode::OK);
     let valid = response_json(valid).await;
-    assert_eq!(valid["data"]["variables"][0]["sourceKind"], json!("RUNTIME"));
+    assert_eq!(
+        valid["data"]["variables"][0]["sourceKind"],
+        json!("RUNTIME")
+    );
 
     let invalid = authenticated_request(
         &router,
@@ -249,7 +275,10 @@ async fn runtime_prompt_variables_must_match_the_global_runtime_catalog() {
     )
     .await;
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(response_json(invalid).await["code"], json!("PROMPT_INPUT_INVALID"));
+    assert_eq!(
+        response_json(invalid).await["code"],
+        json!("PROMPT_INPUT_INVALID")
+    );
 }
 
 #[tokio::test]
@@ -290,8 +319,22 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
     assert_envelope_only(&response_json(forbidden_request).await);
 
     let connection = Connection::open(database_url).expect("prompt database should open");
-    assert!(connection.execute("UPDATE prompts SET category = 'SYSTEM' WHERE prompt_code = ?1", [&prompt_code]).is_err());
-    assert!(connection.execute("UPDATE prompts SET prompt_code = 'PROMPT-999' WHERE prompt_code = ?1", [&prompt_code]).is_err());
+    assert!(
+        connection
+            .execute(
+                "UPDATE prompts SET category = 'SYSTEM' WHERE prompt_code = ?1",
+                [&prompt_code]
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "UPDATE prompts SET prompt_code = 'PROMPT-999' WHERE prompt_code = ?1",
+                [&prompt_code]
+            )
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -375,7 +418,11 @@ fn managed_variable(name: &str, variable_type: &str, description: &str) -> Value
 
 async fn post_json(router: &axum::Router, path: &str, body: Value) -> Value {
     let response = authenticated_request(router, Method::POST, path, Some(body)).await;
-    assert_eq!(response.status(), StatusCode::OK, "POST {path} should succeed");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "POST {path} should succeed"
+    );
     let payload = response_json(response).await;
     assert_eq!(payload["code"], json!("0"));
     assert_eq!(payload["message"], json!("success"));

@@ -1,4 +1,6 @@
 //! Tron projection of Framework telemetry records. No transport or physical storage.
+mod dashboard;
+pub mod logs;
 use crate::adapters::outbound::persistence::sqlite::framework_storage::blocking;
 use crate::application::observability::*;
 use eliteforge_agent_core::{TelemetrySpan, TelemetryStore, TelemetryTrace, TelemetryTraceFilter};
@@ -11,7 +13,8 @@ fn failure(_: impl std::fmt::Display) -> ObservabilityError {
     ObservabilityError::Storage
 }
 fn filter(q: &TraceQuery) -> TelemetryTraceFilter {
-    let mut attributes = BTreeMap::from([("tron.workspace.code".into(), q.workspace_code.clone())]);
+    let mut attributes = BTreeMap::new();
+    if !q.workspace_code.is_empty() { attributes.insert("tron.workspace.code".into(), q.workspace_code.clone()); }
     if let Some(session) = &q.session_code {
         attributes.insert("tron.session.code".into(), session.clone());
     }
@@ -33,7 +36,7 @@ fn status(attrs: &BTreeMap<String, String>, code: i32) -> String {
     .into()
 }
 fn trace_status(t: &TelemetryTrace) -> String {
-    if t.ended_at.is_none() {
+    if t.ended_at.is_none() || t.attributes.get("tron.operation.active").is_some_and(|v| v == "true") {
         "Running".into()
     } else if t.abandoned {
         "Unknown".into()
@@ -76,8 +79,10 @@ fn span(s: TelemetrySpan) -> TraceSpan {
 fn summary(t: TelemetryTrace, spans: &[TraceSpan]) -> TraceSummary {
     let attr = |key: &str| t.attributes.get(key).cloned().unwrap_or_default();
     let mut record = TraceSummary {
+        workspace_code: attr("tron.workspace.code"),
         trace_id: t.trace_id.clone(),
         session_code: attr("tron.session.code"),
+        session_name: None,
         run_code: attr("tron.run.code"),
         agent_code: attr("tron.agent.code"),
         started_at: t.started_at,
@@ -121,30 +126,51 @@ pub(crate) fn now() -> i64 {
         .as_millis()
         .min(i64::MAX as u128) as i64
 }
+fn sort_trace_summaries(records: &mut [TraceSummary], sorts: &[crate::application::observability::TraceSort]) {
+    records.sort_by(|a, b| {
+        for sort in sorts {
+            let order = match sort.field {
+                TraceSortField::StartedAt => a.started_at.cmp(&b.started_at),
+                TraceSortField::Duration => a.duration_ms.total_cmp(&b.duration_ms),
+                TraceSortField::Spans => a.span_count.cmp(&b.span_count),
+                TraceSortField::Tokens => a.input_tokens.saturating_add(a.output_tokens).cmp(&b.input_tokens.saturating_add(b.output_tokens)),
+                TraceSortField::Errors => a.error_count.cmp(&b.error_count),
+            };
+            if !order.is_eq() {
+                return if matches!(sort.direction, TraceSortDirection::Desc) { order.reverse() } else { order };
+            }
+        }
+        b.started_at.cmp(&a.started_at).then_with(|| a.trace_id.cmp(&b.trace_id))
+    });
+}
 impl TraceRepository for TelemetryProjection {
     fn query(&self, q: &TraceQuery) -> Result<TracePage, ObservabilityError> {
         blocking(async {
-            let page = self
-                .store
-                .query_traces(filter(q), (q.current - 1) * q.size, q.size)
-                .await
-                .map_err(failure)?;
+            let sorts = if q.sorts.is_empty() { vec![crate::application::observability::TraceSort { field: q.sort_by, direction: q.sort_direction }] } else { q.sorts.clone() };
+            let default_order = sorts.len() == 1 && sorts[0].field == TraceSortField::StartedAt && sorts[0].direction == TraceSortDirection::Desc;
+            let mut offset = if default_order { (q.current - 1) * q.size } else { 0 };
             let mut records = Vec::new();
-            for t in page.records {
-                let spans = self
-                    .store
-                    .spans(t.trace_id.clone())
-                    .await
-                    .map_err(failure)?
-                    .into_iter()
-                    .map(span)
-                    .collect::<Vec<_>>();
-                records.push(summary(t, &spans));
+            let total = loop {
+                let page = self.store.query_traces(filter(q), offset, if default_order { q.size } else { 5000 })
+                    .await.map_err(failure)?;
+                let total = page.total;
+                let count = page.records.len();
+                for t in page.records {
+                    let spans = self.store.spans(t.trace_id.clone()).await.map_err(failure)?
+                        .into_iter().map(span).collect::<Vec<_>>();
+                    records.push(summary(t, &spans));
+                }
+                offset += count;
+                if default_order || offset >= total || count == 0 { break total; }
+            };
+            if !default_order {
+                sort_trace_summaries(&mut records, &sorts);
+                records = records.into_iter().skip((q.current - 1) * q.size).take(q.size).collect();
             }
             Ok(TracePage {
                 current: q.current,
                 size: q.size,
-                total: page.total,
+                total,
                 records,
             })
         })
@@ -153,7 +179,7 @@ impl TraceRepository for TelemetryProjection {
         blocking(async {
             let filter = TelemetryTraceFilter {
                 trace_id: Some(id.into()),
-                attributes: BTreeMap::from([("tron.workspace.code".into(), workspace.into())]),
+                attributes: if workspace.is_empty() { BTreeMap::new() } else { BTreeMap::from([("tron.workspace.code".into(), workspace.into())]) },
             };
             let mut page = self
                 .store
@@ -265,6 +291,26 @@ impl ObservabilityRepository for TelemetryProjection {
             })
         })
     }
+    fn scoped_metric_points(&self, workspace: Option<String>, name: Option<String>, current: usize, size: usize) -> Result<MetricPage, ObservabilityError> {
+        let Some(workspace) = workspace.filter(|code| !code.is_empty()) else { return self.metric_points(name, current, size); };
+        if current == 0 || current > 1_000_000 || !(1..=100).contains(&size) { return Err(ObservabilityError::InvalidQuery); }
+        let start = (current - 1) * size;
+        let mut total = 0;
+        let mut records = Vec::new();
+        let mut page_number = 1;
+        loop {
+            let page = self.metric_points(name.clone(), page_number, 100)?;
+            let count = page.records.len();
+            for point in page.records {
+                let belongs = point.resource.get("tron.workspace.code") == Some(&workspace)
+                    || point.data.get("attributes").and_then(|v| v.as_array()).is_some_and(|attrs| attrs.iter().any(|attr| attr.get("key").and_then(|v| v.as_str()) == Some("tron.workspace.code") && attr.pointer("/value/stringValue").and_then(|v| v.as_str()) == Some(workspace.as_str())));
+                if belongs { if total >= start && records.len() < size { records.push(point); } total += 1; }
+            }
+            if page_number * 100 >= page.total || count == 0 { break; }
+            page_number += 1;
+        }
+        Ok(MetricPage { current, size, total, records })
+    }
     fn runtime_metrics(&self) -> Result<RuntimeMetrics, ObservabilityError> {
         blocking(async {
             let resource = BTreeMap::from([
@@ -303,5 +349,43 @@ impl ObservabilityRepository for TelemetryProjection {
                     .total,
             })
         })
+    }
+}
+
+#[cfg(test)]
+mod sorting_tests {
+    use super::*;
+    fn row(id: &str, start: i64, duration: f64, spans: usize, tokens: u64, errors: usize) -> TraceSummary {
+        TraceSummary { workspace_code: "w".into(), trace_id: id.into(), session_code: "s".into(), session_name: None,
+            run_code: "r".into(), agent_code: "a".into(), started_at: start, ended_at: Some(start + duration as i64),
+            duration_ms: duration, status: "Completed".into(), span_count: spans, error_count: errors,
+            model_count: 0, tool_count: 0, input_tokens: tokens, output_tokens: 1 }
+    }
+    #[test]
+    fn trace_sorting_uses_numeric_values_and_deterministic_ties() {
+        let rows = vec![row("a", 10, 1200., 2, 1000, 1), row("b", 20, 50., 10, 20, 3), row("c", 30, 300., 1, 200, 2)];
+        for (field, expected) in [
+            (TraceSortField::StartedAt, ["a", "b", "c"]),
+            (TraceSortField::Duration, ["b", "c", "a"]),
+            (TraceSortField::Spans, ["c", "a", "b"]),
+            (TraceSortField::Tokens, ["b", "c", "a"]),
+            (TraceSortField::Errors, ["a", "c", "b"]),
+        ] {
+            let mut sorted = rows.clone();
+            sort_trace_summaries(&mut sorted, &[crate::application::observability::TraceSort { field: field, direction: TraceSortDirection::Asc }]);
+            assert_eq!(sorted.iter().map(|r| r.trace_id.as_str()).collect::<Vec<_>>(), expected);
+            sort_trace_summaries(&mut sorted, &[crate::application::observability::TraceSort { field: field, direction: TraceSortDirection::Desc }]);
+            assert_eq!(sorted.iter().map(|r| r.trace_id.as_str()).collect::<Vec<_>>(), expected.into_iter().rev().collect::<Vec<_>>());
+        }
+        let mut tied = vec![row("b", 1, 1., 1, 1, 1), row("a", 1, 1., 1, 1, 1)];
+        sort_trace_summaries(&mut tied, &[crate::application::observability::TraceSort { field: TraceSortField::Tokens, direction: TraceSortDirection::Desc }]);
+        assert_eq!(tied[0].trace_id, "a");
+        let mut combined = vec![row("a", 30, 100., 2, 1, 1), row("b", 10, 100., 5, 1, 1), row("c", 20, 50., 9, 1, 1)];
+        sort_trace_summaries(&mut combined, &[
+            crate::application::observability::TraceSort { field: TraceSortField::Duration, direction: TraceSortDirection::Desc },
+            crate::application::observability::TraceSort { field: TraceSortField::Spans, direction: TraceSortDirection::Desc },
+        ]);
+        assert_eq!(combined.iter().map(|r| r.trace_id.as_str()).collect::<Vec<_>>(), ["b", "a", "c"]);
+
     }
 }

@@ -13,6 +13,7 @@ import { AgentRolePromptField } from "./AgentRolePromptField";
 import { AgentAvatarPicker } from "./AgentAvatarPicker";
 import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
 import { InternalAgentGroupField } from "./InternalAgentGroupField";
+import { AgentCandidateModelsField } from "./AgentCandidateModelsField";
 import { AgentLoopField } from "./AgentLoopField";
 import { AgentWorkspaceField } from "./AgentWorkspaceField";
 import { persistAgentWorkspaceGrants } from "../hooks/agentWorkspaceGrants";
@@ -27,6 +28,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   const [rolePrompt, setRolePrompt] = useState("");
   const [groupName, setGroupName] = useState("");
   const { groups, create: createGroup } = useInternalAgentGroups(workspaceCode);
+  const [candidateModelCodes, setCandidateModelCodes] = useState<string[]>([]);
   const [avatarId, setAvatarId] = useState("robot");
   const [saving, setSaving] = useState(false);
   const [workspaceCodes, setWorkspaceCodes] = useState<string[]>([]);
@@ -41,7 +43,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
     setSaving(true);
     try {
       if (!loopCode) throw new Error(text("loopRequired", "Select an agent loop"));
-      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId, groupName };
+      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId, groupName, candidateModelCodes };
       // Keep the created identity if assignment fails so retry cannot create twice.
       if (!createdAgentCode) {
         if (groupName && !groups.includes(groupName)) await createGroup(groupName);
@@ -60,7 +62,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
       setName("");
       setRolePrompt("");
       setLoopCode("");
-      setAvatarId("robot");
+      setAvatarId("robot"); setCandidateModelCodes([]);
       setGroupName("");
       setWorkspaceCodes([]);
       setCreatedAgentCode(null);
@@ -73,7 +75,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   }
 
   return <>
-    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setRolePrompt(""); setAvatarId("robot"); setLoopCode(""); setWorkspaceCodes([]); setGroupName(""); setOpen(true); }}>{text("create", "New")}</Button>
+    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setRolePrompt(""); setAvatarId("robot"); setCandidateModelCodes([]); setLoopCode(""); setWorkspaceCodes([]); setGroupName(""); setOpen(true); }}>{text("create", "New")}</Button>
     <Dialog disablePointerDismissal open={open} onOpenChange={(next, details) => { if (details.reason === "outside-press" || saving) { details.cancel(); return; } setOpen(next); }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl" closeLabel={text("close", "Close")} showCloseButton={!saving}>
         <DialogHeader>
@@ -93,6 +95,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
           {createdAgentCode ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:platformData.createdAssignmentPending")}</p> : null}
           <InternalAgentGroupField workspaceCode={workspaceCode} value={groupName} disabled={definitionDisabled} onChange={setGroupName} />
           <AgentLoopField value={loopCode} disabled={definitionDisabled} onChange={setLoopCode} />
+          <AgentCandidateModelsField workspaceCode={workspaceCode} value={candidateModelCodes} onChange={setCandidateModelCodes} disabled={definitionDisabled} />
           <AgentRolePromptField rows={8} disabled={definitionDisabled} value={rolePrompt} onChange={setRolePrompt} />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>{text("cancel", "Cancel")}</Button>

@@ -18,7 +18,10 @@ impl ModelProviderService {
                     && let Some(code) = selection.model_code.as_deref()
                 {
                     let model = match read_catalog_model(
-                        &connection, ModelProviderCode::PersonAi, code, selection.quality_type,
+                        &connection,
+                        ModelProviderCode::PersonAi,
+                        code,
+                        selection.quality_type,
                     ) {
                         Ok(model) => model,
                         // A stale ambiguous default must not hide the explicit vendor

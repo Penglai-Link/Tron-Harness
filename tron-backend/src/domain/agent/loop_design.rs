@@ -62,5 +62,4 @@ pub struct LoopDesign {
     pub max_parallel_nodes: u32,
     pub updated_at: i64,
 }
-impl LoopDesign {
-}
+impl LoopDesign {}

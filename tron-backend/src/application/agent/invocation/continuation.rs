@@ -51,6 +51,7 @@ impl AgentInvocationService {
         )
         .map_err(map_continuation_error)?;
         group.attach(&mut request.extensions);
+        request.extensions.insert(eliteforge_agent_official_plugin_otel::TraceParent(opentelemetry::Context::current()));
         let presentation = host
             .presentation_service()
             .map_err(AgentInvocationError::RuntimeFailed)?;
@@ -69,7 +70,7 @@ impl AgentInvocationService {
         };
         // This owner retains the group through SDK child/resource cleanup even
         // if the HTTP caller disappears. Drop only sends native cancellation.
-        let outcome = tokio::spawn(async move {
+        let outcome = crate::app::telemetry::spawn_traced(async move {
             let _group = group;
             let (outcome, ()) = tokio::join!(
                 agent.wait(handle),

@@ -101,6 +101,8 @@ pub struct AgentPromptPrefixSource {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoModelRouteContext {
+    #[serde(default)]
+    pub candidate_model_codes: Vec<String>,
     /// In-memory initial authorization snapshot; never persist credentials.
     /// Resumed runs without a snapshot must re-read authorization.
     #[serde(skip)]
@@ -224,7 +226,7 @@ mod tests {
     fn domain_discovery_hidden_tools_remain_policy_authorized_without_effective_snapshot() {
         let context = AgentRunContext {
             agent_code: None,
-        conversation_code: None,
+            conversation_code: None,
             run_code: "run".into(),
             workspace_code: "workspace".into(),
             user_code: None,
@@ -291,6 +293,7 @@ mod auto_route_tests {
         }))
         .unwrap();
         let route = AutoModelRouteContext {
+            candidate_model_codes: Vec::new(),
             authorization_scope: Some("account-scope".into()),
             authorized_candidates: vec![AutoModelCandidate {
                 selection: crate::domain::model_provider::ModelSelection::fixed("local-model"),

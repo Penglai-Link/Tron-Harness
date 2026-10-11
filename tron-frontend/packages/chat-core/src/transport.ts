@@ -1,3 +1,4 @@
+import { tracedFetch } from "./tracing";
 export type EndpointParams = Record<string, string | number | boolean | null | undefined>;
 type MaybePromise<T> = T | Promise<T>;
 export type BodyInitLike = BodyInit | ArrayBuffer | ArrayBufferView | object | unknown[];
@@ -16,6 +17,7 @@ export interface FetchTransportOptions {
   credentials?: RequestCredentials;
   getHeaders?: (context: FetchTransportRequestContext) => MaybePromise<HeadersInit | undefined>;
   unwrapEnvelope?: boolean;
+  traceRequests?: boolean;
 }
 
 export interface ApiEnvelope<T> {
@@ -151,7 +153,7 @@ export function createFetchTransport(options: FetchTransportOptions = {}) {
     if (body && typeof body === "string" && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    const response = await fetch(url, {
+    const response = await (options.traceRequests ? tracedFetch : fetch)(url, {
       body,
       credentials: options.credentials ?? "include",
       headers,
@@ -193,7 +195,7 @@ export function createFetchTransport(options: FetchTransportOptions = {}) {
       url,
     }) ?? {});
     headers.set("Content-Type", "application/json");
-    const response = await fetch(url, {
+    const response = await (options.traceRequests ? tracedFetch : fetch)(url, {
       body: body === undefined ? undefined : body,
       credentials: options.credentials ?? "include",
       headers,

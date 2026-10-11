@@ -38,7 +38,9 @@ pub async fn variables_transport(
         Ok(availability)
             if !availability.gateway_enabled || !availability.variables_endpoint_enabled =>
         {
-            eprintln!("MCP variables transport request rejected because the endpoint is disabled");
+            tracing::warn!(
+                "MCP variables transport request rejected because the endpoint is disabled"
+            );
             mcp_jsonrpc_error(
                 StatusCode::SERVICE_UNAVAILABLE,
                 payload.get("id").cloned(),

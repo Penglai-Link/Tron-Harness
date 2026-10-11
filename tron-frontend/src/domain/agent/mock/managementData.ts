@@ -219,6 +219,7 @@ const toolSeed: ToolSeed[] = [
 
 type WorkspaceInternalAgentSeed = {
   avatarId?: string;
+  candidateModelCodes?: string[];
   groupName?: string | null;
   loopCode: string;
   rolePrompt: string;
@@ -255,17 +256,17 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     toolExposureMode: "domain_discovery",
   },
   ...[
-    { agentCode: "explore", name: "探索智能体", promptCode: "ROLE_EXPLORER", groupName: "探索" },
-    { agentCode: "full-stack", name: "全栈工程师", promptCode: "ROLE_FULL_STACK_DEVELOPER", groupName: "开发" },
-    { agentCode: "product", name: "杨布斯", promptCode: "ROLE_PRODUCT_MANAGER", groupName: "设计" },
-  ].map(({ agentCode, name, promptCode, groupName }) => ({
+    { agentCode: "explore", name: "探索智能体", promptCode: "ROLE_EXPLORER", groupName: "探索", avatarId: "fox" },
+    { agentCode: "full-stack", name: "全栈工程师", promptCode: "ROLE_FULL_STACK_DEVELOPER", groupName: "开发", avatarId: "panda" },
+    { agentCode: "product", name: "杨布斯", promptCode: "ROLE_PRODUCT_MANAGER", groupName: "设计", avatarId: "astronaut" },
+  ].map(({ agentCode, name, promptCode, groupName, avatarId }) => ({
     agentCode,
     name,
     groupName,
     description: "Platform built-in internal agent.",
     rolePrompt: agentRolePromptSeeds.find((seed) => seed.promptCode === promptCode)?.translations["zh-CN"].promptBody ?? "",
     loopCode: "",
-    avatarId: "robot",
+    avatarId,
     expandedDomainPersistenceMode: "sticky_expanded" as const,
     maxSteps: 100,
     maxToolCalls: 100,
@@ -439,6 +440,7 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     rolePrompt: effective.rolePrompt,
     loopCode: effective.loopCode,
     avatarId: effective.avatarId ?? "robot",
+    candidateModelCodes: effective.candidateModelCodes ?? [],
     groupName: effective.groupName || null,
     builtIn: workspaceInternalAgentSeed.some((agent) => agent.agentCode === agentCode),
     platformDefined,
@@ -523,7 +525,7 @@ export function deleteWorkspaceInternalAgentMock(workspaceCode: string, agentCod
   };
 }
 
-export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string; avatarId?: string; groupName?: string | null }) {
+export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string; candidateModelCodes?: string[]; avatarId?: string; groupName?: string | null }) {
   if (buildWorkspaceInternalAgentRecord(workspaceCode, agentCode).builtIn) throw new Error("Built-in agent definitions are read-only");
   const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
   const patch = { ...payload, ...(groupName !== undefined ? { groupName } : {}) };

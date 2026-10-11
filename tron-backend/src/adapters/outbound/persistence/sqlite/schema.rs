@@ -62,6 +62,10 @@ mod tests {
             ("models", "default_reasoning_effort"),
             ("workspace_internal_agent_definitions", "group_name"),
             ("workspace_internal_agent_definitions", "avatar_id"),
+            (
+                "workspace_internal_agent_definitions",
+                "candidate_model_codes_json",
+            ),
             ("resource_server_accounts", "server_workspace_code"),
             ("provider_catalog_models", "quality_type"),
             ("navigation_menu_tree_items", "child_display"),

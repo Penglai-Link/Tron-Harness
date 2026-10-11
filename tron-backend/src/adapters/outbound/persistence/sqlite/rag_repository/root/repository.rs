@@ -36,7 +36,7 @@ impl<'a> SqliteRagRepositorySql<'a> {
         default_sqlite_extension_context()
             .prepare_connection(&connection)
             .map_err(|error| {
-                eprintln!("RAG SQLite extension error: {error}");
+                tracing::error!("RAG SQLite extension error: {error}");
                 RagError::StorageFailure
             })?;
         let repository = Self { connection };

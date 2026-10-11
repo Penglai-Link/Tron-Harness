@@ -74,6 +74,8 @@ pub struct WorkspaceInternalAgentDefinition {
     pub avatar_id: Option<String>,
     #[serde(default)]
     pub group_name: Option<String>,
+    #[serde(default)]
+    pub candidate_model_codes: Option<Vec<String>>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -90,6 +92,8 @@ pub struct PlatformInternalAgentConfig {
     pub avatar_id: String,
     #[serde(default)]
     pub group_name: Option<String>,
+    #[serde(default)]
+    pub candidate_model_codes: Vec<String>,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
     pub tool_exposure_mode: ToolExposureMode,
@@ -135,6 +139,8 @@ pub struct InternalAgentToolPolicy {
     pub avatar_id: String,
     #[serde(default)]
     pub group_name: Option<String>,
+    #[serde(default)]
+    pub candidate_model_codes: Vec<String>,
     pub platform_defined: bool,
     #[serde(default)]
     pub built_in: bool,

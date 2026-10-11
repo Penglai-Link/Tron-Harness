@@ -170,7 +170,7 @@ pub async fn submit(
             state.skills.clone(),
             state.rag.clone(),
         );
-        tokio::spawn(async move {
+        crate::app::telemetry::spawn_traced(async move {
             let _ = indexer.index_all().await;
         });
     } else if input.corpus_id == "memory-card" {
@@ -193,7 +193,7 @@ pub async fn submit(
                 Err(error) => return rag_error_response(error),
             };
             let rag = state.rag.clone();
-            tokio::spawn(async move {
+            crate::app::telemetry::spawn_traced(async move {
                 let _ = rag.execute_record_task(queued).await;
             });
         }
@@ -336,7 +336,7 @@ async fn control(
         };
         let task_id = task.id.clone();
         let rag = state.rag.clone();
-        tokio::spawn(async move {
+        crate::app::telemetry::spawn_traced(async move {
             let _ = rag.execute_record_task(task).await;
         });
         (

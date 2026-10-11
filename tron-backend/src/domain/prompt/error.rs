@@ -66,9 +66,7 @@ impl Display for PromptError {
         match self {
             Self::NotFound => formatter.write_str("prompt not found"),
             Self::InvalidInput(message) => formatter.write_str(message),
-            Self::DuplicateDisplayName => {
-                formatter.write_str("displayName already exists")
-            }
+            Self::DuplicateDisplayName => formatter.write_str("displayName already exists"),
             Self::BuiltinMutationDenied => {
                 formatter.write_str("built-in prompts cannot be deleted")
             }

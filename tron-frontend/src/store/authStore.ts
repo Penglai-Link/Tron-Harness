@@ -6,6 +6,7 @@ import type {
 } from "@/domain/auth/model";
 import { fetchActiveProfileToken, fetchBootstrapProfileStatus } from "@/domain/profile/api";
 import { useTabStore } from "@/store/tabStore";
+import { DEFAULT_TIME_ZONE, useTimeZoneStore } from "@/shared/lib/userTimeZone";
 import { isUnauthorizedApiError, setApiAccessToken, setApiUnauthorizedHandler } from "@/shared/api/httpClient";
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
@@ -52,6 +53,7 @@ function sessionFromProfile(profile: {
 function transitionToUnauthenticated(set: (state: Partial<AuthState>) => void) {
   sessionLoadGeneration += 1;
   setApiAccessToken(null);
+  useTimeZoneStore.getState().setTimeZone(DEFAULT_TIME_ZONE);
   useTabStore.getState().resetAllTabs();
   set({ session: null, status: "unauthenticated" });
 }
@@ -75,6 +77,7 @@ async function loadActiveProfile(
       return useAuthStore.getState().status === "authenticated";
     }
     setApiAccessToken(token.token);
+    useTimeZoneStore.getState().setTimeZone(bootstrap.timeZone ?? DEFAULT_TIME_ZONE);
     set({
       session: sessionFromProfile(activeProfile, bootstrap.avatarUrl, bootstrap.account),
       status: "authenticated",

@@ -53,7 +53,7 @@ impl AuthHolder {
         Fut::Output: Send + 'static,
     {
         let context = Self::get();
-        tokio::spawn(async move {
+        crate::app::telemetry::spawn_traced(async move {
             match context {
                 Some(context) => Self::scope_shared(context, future).await,
                 None => future.await,

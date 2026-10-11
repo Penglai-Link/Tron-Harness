@@ -24,6 +24,9 @@ async fn main() {
         skills_registry_root: root.join("skills").display().to_string(),
         ..base
     };
+    tron_backend::adapters::outbound::observability::logs::init_application_logging(&config)
+        .unwrap();
+    tracing::info!("Browser acceptance backend starting");
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
         .await
         .unwrap();

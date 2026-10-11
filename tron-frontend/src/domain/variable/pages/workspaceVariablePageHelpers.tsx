@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -61,7 +62,7 @@ export function formatWorkspaceVariableTimestamp(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown";
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-US", { timeZone: getUserTimeZone(),
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);

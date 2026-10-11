@@ -15,7 +15,7 @@ use axum::{
         IntoResponse, Response, Sse,
         sse::{Event, KeepAlive},
     },
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
 };
 use serde::Deserialize;
 use std::{convert::Infallible, time::Duration};
@@ -33,6 +33,10 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/bootstrap/status", get(bootstrap_status))
         .route("/api/v1/profiles/events", get(server_auth_events))
         .route("/api/v1/profiles/active/token", get(active_profile_token))
+        .route(
+            "/api/v1/profiles/active/preferences",
+            patch(update_preferences),
+        )
         .route("/api/v1/profiles", get(list_profiles))
         .route("/api/v1/profiles/{profile_id}/avatar", get(profile_avatar))
         .route(
@@ -41,6 +45,51 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/v1/profiles/{profile_id}", delete(remove_profile))
         .route("/api/v1/profiles/pending", post(create_pending_profile))
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePreferencesRequest {
+    time_zone: String,
+}
+
+#[utoipa::path(patch, path = "/api/v1/profiles/active/preferences", request_body = UpdatePreferencesRequest,
+    responses((status = 200, description = "User time zone saved"), (status = 400, description = "Invalid IANA time zone")), tag = "Profiles")]
+pub async fn update_preferences(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(request): Json<UpdatePreferencesRequest>,
+) -> Response {
+    let context = match state.profiles.current_context() {
+        Ok(context) => context,
+        Err(error) => return profile_error_response(error),
+    };
+    if request.time_zone.trim().parse::<chrono_tz::Tz>().is_err() {
+        let locale = crate::shared::locale::resolve_request_locale(
+            headers
+                .get(header::ACCEPT_LANGUAGE)
+                .and_then(|v| v.to_str().ok()),
+        );
+        return generic_profile_error(
+            StatusCode::BAD_REQUEST,
+            "PERSONAI_PROFILE_INVALID_TIME_ZONE",
+            if locale.starts_with("zh") {
+                "请选择有效的 IANA 时区"
+            } else {
+                "Select a valid IANA time zone"
+            },
+        );
+    }
+    match state
+        .profiles
+        .set_time_zone(&context.person_ai_user_id, &request.time_zone)
+    {
+        Ok(time_zone) => Json(ApiResponse::success(
+            serde_json::json!({"timeZone": time_zone}),
+        ))
+        .into_response(),
+        Err(error) => profile_error_response(error),
+    }
 }
 
 async fn server_auth_events(State(state): State<AppState>) -> Response {

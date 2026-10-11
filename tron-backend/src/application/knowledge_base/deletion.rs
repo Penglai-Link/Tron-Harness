@@ -101,24 +101,30 @@ impl KnowledgeBaseService {
                 Ok((_, record)) => record,
                 Err(crate::domain::resource::ResourceError::NotFound) => continue,
                 Err(error) => {
-                    eprintln!("knowledge document {doc}: checkpoint discovery skipped: {error}");
+                    tracing::error!(
+                        "knowledge document {doc}: checkpoint discovery skipped: {error}"
+                    );
                     continue;
                 }
             };
             if record.description == "知识库解析附件" && record.file_name.ends_with(".json")
             {
                 if record.byte_size > 100 * 1024 * 1024 {
-                    eprintln!("knowledge document {doc}: oversized cleanup checkpoint skipped");
+                    tracing::warn!(
+                        "knowledge document {doc}: oversized cleanup checkpoint skipped"
+                    );
                     continue;
                 }
                 let mut bytes = Vec::new();
                 if let Err(error) = self.resources.download_binary_storage(&record, &mut bytes) {
-                    eprintln!("knowledge document {doc}: checkpoint discovery skipped: {error}");
+                    tracing::error!(
+                        "knowledge document {doc}: checkpoint discovery skipped: {error}"
+                    );
                     continue;
                 }
                 match serde_json::from_slice(&bytes) {
                     Ok(value) => collect_codes(&value, &mut candidates),
-                    Err(error) => eprintln!(
+                    Err(error) => tracing::error!(
                         "knowledge document {doc}: invalid cleanup checkpoint skipped: {error}"
                     ),
                 }
@@ -146,7 +152,7 @@ impl KnowledgeBaseService {
                 service.clean_document_deletion(job).await;
             });
         } else {
-            eprintln!(
+            tracing::warn!(
                 "knowledge document {doc}: cleanup runtime unavailable; database deletion succeeded"
             );
         }
@@ -162,7 +168,7 @@ impl KnowledgeBaseService {
         // Task snapshots survive only in this best-effort call, not in database history.
         for task in &job.cancellations {
             let Some(parser) = self.parser.as_ref() else {
-                eprintln!(
+                tracing::warn!(
                     "knowledge document {}: parser unavailable for cancellation",
                     job.document_id
                 );
@@ -172,11 +178,11 @@ impl KnowledgeBaseService {
                 .await
             {
                 Ok(Ok(_)) => {}
-                Ok(Err(error)) => eprintln!(
+                Ok(Err(error)) => tracing::error!(
                     "knowledge document {}: remote cancellation failed: {error}",
                     job.document_id
                 ),
-                Err(_) => eprintln!(
+                Err(_) => tracing::warn!(
                     "knowledge document {}: remote cancellation timed out",
                     job.document_id
                 ),
@@ -186,7 +192,7 @@ impl KnowledgeBaseService {
         // Every object is attempted independently; failures do not affect deletion.
         for locator in &job.objects {
             if let Err(error) = self.resources.remove_managed_binary_object(locator) {
-                eprintln!(
+                tracing::error!(
                     "knowledge document {}: derived object cleanup failed: {error}",
                     job.document_id
                 );

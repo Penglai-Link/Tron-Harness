@@ -1,3 +1,4 @@
+import { tracedFetch } from "@tron/chat-core";
 import { getChatAguiEvents, getChatMessages, createMockChatSendResult } from "@/domain/chat/mock/data";
 import { chatApiEndpoints } from "@/domain/chat/api";
 import type {
@@ -417,7 +418,7 @@ async function streamChatSse(
   const accessToken = getApiAccessToken();
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
-  const response = await fetch(buildApiUrl(path, { sessionCode, ...extraPathParams }), {
+  const response = await tracedFetch(buildApiUrl(path, { sessionCode, ...extraPathParams }), {
     body: JSON.stringify(body),
     credentials: "include",
     headers,

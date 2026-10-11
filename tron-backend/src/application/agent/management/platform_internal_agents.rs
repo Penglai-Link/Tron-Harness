@@ -51,6 +51,8 @@ impl AgentManagementService {
         config.name = command.name.trim().to_owned();
         config.role_prompt = command.role_prompt;
         config.avatar_id = internal_definitions::validate_avatar_id(command.avatar_id.as_deref())?;
+        config.candidate_model_codes =
+            internal_definitions::normalize_candidate_model_codes(command.candidate_model_codes)?;
         config.loop_code = Some(self.validate_loop_selection(command.loop_code.as_deref())?);
         self.repository()
             .insert_platform_internal_agent_config(&config)?;
@@ -117,6 +119,10 @@ impl AgentManagementService {
         self.change_platform_internal_agent(code, |config| {
             if let Some(name) = group_name {
                 config.group_name = (!name.is_empty()).then_some(name);
+            }
+            if let Some(codes) = command.candidate_model_codes {
+                config.candidate_model_codes =
+                    internal_definitions::normalize_candidate_model_codes(codes)?;
             }
             if let Some(id) = command.avatar_id {
                 config.avatar_id = id;
@@ -249,6 +255,7 @@ fn platform_view(
         role_prompt: config.role_prompt,
         loop_code: config.loop_code,
         avatar_id: config.avatar_id,
+        candidate_model_codes: config.candidate_model_codes,
         group_name: config.group_name,
         platform_defined: true,
         built_in: internal_definitions::is_builtin_agent(&config.agent_code),
@@ -276,6 +283,7 @@ fn default_config(
         role_prompt: definition.role_prompt,
         loop_code: definition.loop_code,
         avatar_id: definition.avatar_id,
+        candidate_model_codes: definition.candidate_model_codes,
         group_name: definition.group_name,
         tool_assignment_mode: definition.tool_assignment_mode,
         mcp_access_mode: definition.mcp_access_mode,

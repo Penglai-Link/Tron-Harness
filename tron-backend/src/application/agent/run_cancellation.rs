@@ -21,5 +21,5 @@ pub(super) async fn cancel_runtime_after_stop(runtime: &Arc<dyn AgentRuntime>, r
                 runtime.key().code(),
             ),
         };
-    eprintln!("{diagnostic}");
+    tracing::warn!("{diagnostic}");
 }

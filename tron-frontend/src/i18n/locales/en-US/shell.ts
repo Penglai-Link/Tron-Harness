@@ -113,6 +113,9 @@ export const shell = {
     search: "Search Tron...",
   },
   userMenu: {
+    timeZone: "Time zone",
+    timeZoneSaveFailed: "Could not save the time zone. Please retry.",
+    searchTimeZone: "Search time zones",
     checkin: "Check in",
     checkedIn: "Checked in",
     checkingIn: "Checking in",

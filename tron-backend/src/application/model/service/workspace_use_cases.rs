@@ -152,10 +152,18 @@ impl ModelService {
             let models = self.all_models()?;
             let views = self.list_platform_models()?;
             let requested = model_code.map(str::trim).filter(|code| !code.is_empty());
-            let view = views.iter().find(|view| view.enabled && view.model_type == model_type
-                && requested.map_or(view.is_default, |code| view.model_code == code));
-            let Some(view) = view else { return Ok(None); };
-            let model = models.iter().find(|model| model.model_code == view.model_code).ok_or(ModelError::NotFound)?;
+            let view = views.iter().find(|view| {
+                view.enabled
+                    && view.model_type == model_type
+                    && requested.map_or(view.is_default, |code| view.model_code == code)
+            });
+            let Some(view) = view else {
+                return Ok(None);
+            };
+            let model = models
+                .iter()
+                .find(|model| model.model_code == view.model_code)
+                .ok_or(ModelError::NotFound)?;
             let api_key = self.reveal_api_key_ref(&model.api_key_ref)?;
             return Ok(runtime_model_config_from_view(view, &api_key));
         }

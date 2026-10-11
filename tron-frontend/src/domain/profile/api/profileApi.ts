@@ -20,6 +20,7 @@ export interface PersonAiAccountSummary {
 }
 
 export interface BootstrapProfileStatus {
+  timeZone?: string;
   hasProfiles: boolean;
   activeProfileId: string | null;
   activeProfile: PersonAiProfile | null;
@@ -67,6 +68,12 @@ export function fetchBootstrapProfileStatus(signal?: AbortSignal, refreshAccount
 export function fetchActiveProfileToken() {
   return requestApi<{ token: string }>("GET /api/v1/profiles/active/token", {
     retryOnUnauthorized: false,
+  });
+}
+
+export function updateProfileTimeZone(timeZone: string) {
+  return requestApi<{ timeZone: string }>("PATCH /api/v1/profiles/active/preferences", {
+    body: { timeZone },
   });
 }
 

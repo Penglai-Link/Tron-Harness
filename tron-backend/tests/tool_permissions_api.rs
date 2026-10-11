@@ -180,11 +180,11 @@ async fn discovered_native_mcp_tools_are_listed_in_domains_catalog_and_permissio
 
 #[test]
 fn tool_permissions_persist_and_failed_full_replace_rolls_back() {
-    use tron_harness_capability::{ToolPermission, ToolPermissionSetting, ToolRisk};
     use tron_backend::{
         adapters::outbound::persistence::sqlite::SqliteAgentManagementRepository,
         application::agent::AgentManagementRepository,
     };
+    use tron_harness_capability::{ToolPermission, ToolPermissionSetting, ToolRisk};
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("permissions.sqlite");
     let mut repository = SqliteAgentManagementRepository::connect(path.to_str().unwrap()).unwrap();

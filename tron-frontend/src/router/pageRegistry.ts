@@ -3,10 +3,16 @@ import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 type RoutePageComponent = LazyExoticComponent<ComponentType>;
 
 export const routePages: Record<string, RoutePageComponent> = {
-  "observability.index": lazy(() =>
-    import("@/domain/observability/pages/ObservabilityPage").then((module) => ({
-      default: module.ObservabilityPage,
+  "observability.logs": lazy(() => import("@/domain/observability/pages/LogsPage").then(module => ({default:module.LogsPage}))),
+  "observability.dashboard": lazy(() => import("@/domain/observability/pages/DashboardPage").then(module => ({default:module.DashboardPage}))),
+  "observability.traceDetail": lazy(() => import("@/domain/observability/pages/TraceDetailPage").then((module) => ({ default: module.TraceDetailPage }))),
+  "observability.traces": lazy(() =>
+    import("@/domain/observability/pages/TracesPage").then((module) => ({
+      default: module.TracesPage,
     }))
+  ),
+  "observability.metrics": lazy(() =>
+    import("@/domain/observability/pages/MetricsPage").then((module) => ({ default: module.MetricsPage }))
   ),
   "admin.archivedChats": lazy(() =>
     import("@/domain/admin/pages/ArchivedChatsPage").then((module) => ({
@@ -392,6 +398,11 @@ export const routePages: Record<string, RoutePageComponent> = {
   "settings.skills": lazy(() =>
     import("@/domain/skill/pages/InstalledSkillsPage").then((module) => ({
       default: module.InstalledSkillsPage,
+    }))
+  ),
+  "settings.skillDetail": lazy(() =>
+    import("@/domain/skill/pages/SkillDetailPage").then((module) => ({
+      default: module.SkillDetailPage,
     }))
   ),
   "settings.skillsSync": lazy(() =>

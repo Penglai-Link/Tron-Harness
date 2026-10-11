@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChatA2uiSession } from "@eliteforge/agent-ui-chat-core";
@@ -31,7 +32,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 function displayTimestamp(value: number) {
-  return new Date(value).toLocaleString(document.documentElement.lang || undefined);
+  return new Date(value).toLocaleString(document.documentElement.lang || undefined, { timeZone: getUserTimeZone() });
 }
 
 export function ArchivedChatsPage() {

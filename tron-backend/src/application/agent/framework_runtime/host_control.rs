@@ -195,7 +195,7 @@ impl FrameworkHost {
             .unwrap_or_else(|e| e.into_inner())
             .clone();
         // The detached owner retains wait/drain even when its caller is dropped.
-        tokio::spawn(async move {
+        crate::app::telemetry::spawn_traced(async move {
             let _registration = registration;
             let (result, ()) = tokio::join!(
                 agent.wait(handle),
@@ -222,7 +222,7 @@ impl FrameworkHost {
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        tokio::spawn(async move {
+        crate::app::telemetry::spawn_traced(async move {
             let _registration = registration;
             let (result, ()) = tokio::join!(
                 handle.wait(),

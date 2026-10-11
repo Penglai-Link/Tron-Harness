@@ -15,11 +15,7 @@ async fn library_deletion_requires_empty_library_and_removes_grants_and_index_at
     let kb = f.service.create(USER, "Library", "").unwrap();
     let other = f.service.create(USER, "Keep", "").unwrap();
     f.service
-        .set_grants(
-            USER,
-            &kb.id,
-            vec![f.agent.clone(), f.agent.clone()],
-        )
+        .set_grants(USER, &kb.id, vec![f.agent.clone(), f.agent.clone()])
         .unwrap();
     assert_eq!(
         f.service
@@ -32,11 +28,7 @@ async fn library_deletion_requires_empty_library_and_removes_grants_and_index_at
             .len(),
         1
     );
-    assert!(
-        f.service
-            .remove_library("OTHER-USER", &kb.id)
-            .is_err()
-    );
+    assert!(f.service.remove_library("OTHER-USER", &kb.id).is_err());
     let doc = f
         .service
         .upload(USER, &kb.id, "note.md", b"# Library\norchid")
@@ -45,19 +37,13 @@ async fn library_deletion_requires_empty_library_and_removes_grants_and_index_at
         f.service.remove_library(USER, &kb.id),
         Err(KnowledgeBaseError::NotEmpty)
     ));
-    let indexed = f
-        .service
-        .index(USER, &kb.id, &doc.id)
-        .await
-        .unwrap();
+    let indexed = f.service.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(indexed.status, "READY");
     assert!(matches!(
         f.service.remove_library(USER, &kb.id),
         Err(KnowledgeBaseError::NotEmpty)
     ));
-    f.service
-        .remove_document(USER, &kb.id, &doc.id)
-        .unwrap();
+    f.service.remove_document(USER, &kb.id, &doc.id).unwrap();
     f.service.remove_library(USER, &kb.id).unwrap();
     assert!(matches!(
         f.service.detail(USER, &kb.id),
@@ -109,10 +95,7 @@ async fn library_deletion_requires_empty_library_and_removes_grants_and_index_at
 #[tokio::test]
 async fn failed_library_deletion_rolls_back_corpus_tables_and_grants() {
     let f = Fixture::new();
-    let kb = f
-        .service
-        .create(USER, "Keep on failure", "")
-        .unwrap();
+    let kb = f.service.create(USER, "Keep on failure", "").unwrap();
     f.service
         .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
@@ -120,10 +103,7 @@ async fn failed_library_deletion_rolls_back_corpus_tables_and_grants() {
     conn.execute_batch("CREATE TRIGGER fail_kb_delete BEFORE DELETE ON knowledge_bases BEGIN SELECT RAISE(ABORT, 'test deletion failure'); END;").unwrap();
     assert!(f.service.remove_library(USER, &kb.id).is_err());
     assert_eq!(
-        f.service
-            .detail(USER, &kb.id)
-            .unwrap()
-            .agent_codes,
+        f.service.detail(USER, &kb.id).unwrap().agent_codes,
         vec![f.agent.clone()]
     );
     assert_eq!(
@@ -160,21 +140,13 @@ async fn catalog_count_and_deletion_http_contract_are_localized_and_owner_scoped
     let mut state = f.state.clone();
     state.knowledge_bases = f.service.clone();
     let app = tron_backend::app::build_router_with_state(state).unwrap();
-    let list = common::authenticated_request(
-        &app,
-        Method::GET,
-        "/api/v1/knowledge-bases",
-        None,
-    )
-    .await;
+    let list =
+        common::authenticated_request(&app, Method::GET, "/api/v1/knowledge-bases", None).await;
     let data = common::response_json(list).await;
     assert_eq!(data["data"][0]["authorizedAgentCount"], 1);
     assert_eq!(data["data"][0]["documentCount"], 1);
     assert!(data["data"][0].get("documents").is_none());
-    let uri = format!(
-        "/api/v1/knowledge-bases/{}",
-        kb.id
-    );
+    let uri = format!("/api/v1/knowledge-bases/{}", kb.id);
     for (locale, message) in [
         ("en-US", "Delete all resources in the knowledge base first"),
         ("zh-CN", "请先删除知识库内的所有资源"),
@@ -201,9 +173,7 @@ async fn catalog_count_and_deletion_http_contract_are_localized_and_owner_scoped
     )
     .await;
     assert!(!denied.status().is_success());
-    f.service
-        .remove_document(USER, &kb.id, &doc.id)
-        .unwrap();
+    f.service.remove_document(USER, &kb.id, &doc.id).unwrap();
     let response = common::authenticated_request(&app, Method::DELETE, &uri, None).await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(

@@ -20,6 +20,11 @@ eliteforge-agent-memory = { path = "../.agent-deps/agent-framework/crates/plugin
 eliteforge-agent-official-plugin-model-http = { path = "../.agent-deps/agent-framework/crates/plugin/model/eliteforge-agent-official-plugin-model-http" }
 eliteforge-agent-official-plugin-tools-human = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-human" }
 eliteforge-agent-capability-external = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-external" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+tracing-appender = "0.2.5"
+chrono-tz = "0.10"
+sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
 async-trait = "0.1"
 tokio-util = "0.7"
 eliteforge-agent-official-plugin-tools-mcp = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-mcp" }

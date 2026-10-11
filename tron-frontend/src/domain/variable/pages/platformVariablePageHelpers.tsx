@@ -1,3 +1,4 @@
+import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import type { MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -47,7 +48,7 @@ export function normalizePlatformVariableDescription(value: string) {
 }
 
 export function formatPlatformVariableTimestamp(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-US", { timeZone: getUserTimeZone(),
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));

@@ -23,7 +23,15 @@ describe("getNavigationIcon", () => {
 });
 
 describe("mapNavigationTree", () => {
-  it("resolves the standalone observability menu to its page", () => {
+  it("excludes observability from persisted workspace parent menus", () => {
+    const [section] = mapNavigationTree({ domainCode:"ADVANCED",locale:"zh-CN",maxDepth:3,
+      menus:[{menuCode:"OBSERVABILITY",label:"可观测",menuType:"Group",pageCode:null,url:null,icon:"Activity",childDisplay:"Flyout",children:
+        ["dashboard","traces","metrics"].map(page=>({menuCode:page,label:page,menuType:"Internal" as const,pageCode:`observability.${page}`,url:null,icon:"Activity",childDisplay:"Inline" as const,children:[]}))
+      }] });
+    expect(section).toBeUndefined();
+  });
+
+  it("excludes standalone observability pages from workspace navigation", () => {
     const [section] = mapNavigationTree({
       domainCode: "ADVANCED",
       locale: "zh-CN",
@@ -31,17 +39,16 @@ describe("mapNavigationTree", () => {
       menus: [{
         children: [],
         icon: "Activity",
-        label: "可观测",
-        menuCode: "OBSERVABILITY",
+        label: "链路",
+        menuCode: "TRACES",
         menuType: "Internal",
-        pageCode: "observability.index",
+        pageCode: "observability.traces",
         url: null,
         childDisplay: "Inline",
       }],
     });
 
-    expect(section.items[0].href).toBe("/observability");
-    expect(section.items[0].external).toBe(false);
+    expect(section).toBeUndefined();
   });
 
   it("maps backend groups, internal pages, and external links to the shell model", () => {

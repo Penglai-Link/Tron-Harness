@@ -1,4 +1,3 @@
-
 use rusqlite::{Connection, params};
 
 use crate::{
@@ -22,7 +21,6 @@ impl<'a> SqliteMemoryWorkDomainRepositorySql<'a> {
             .map_err(storage_error)?;
         Ok(Self { connection })
     }
-
 }
 
 impl MemoryWorkDomainRepository for SqliteMemoryWorkDomainRepositorySql<'_> {

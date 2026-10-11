@@ -113,6 +113,9 @@ export const shell = {
     search: "搜索 Tron...",
   },
   userMenu: {
+    timeZone: "时区",
+    timeZoneSaveFailed: "时区保存失败，请重试",
+    searchTimeZone: "搜索时区",
     checkin: "签到",
     checkedIn: "已签到",
     checkingIn: "签到中",

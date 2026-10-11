@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table";
 import { SearchField } from "@/components/search-field";
-import { MarkdownContent } from "@/components/markdown-content";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +20,6 @@ import { PageHeader, SurfaceCard } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import {
   fetchRegistrySkills,
-  fetchRegistrySkill,
   fetchSkillAgents,
   setSkillAgents,
   uninstallRegistrySkill,
@@ -32,7 +30,6 @@ import {
 } from "@/domain/skill/api";
 import type {
   RegistrySkillRecord,
-  RegistrySkillDetail,
 } from "@/domain/skill/model";
 import { fetchWorkspaceInternalAgents } from "@/domain/agent/api/agentManagementApi";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
@@ -44,14 +41,11 @@ export function InstalledSkillsPage() {
   const toast = useToast();
   const [skills, setSkills] = useState<RegistrySkillRecord[]>([]);
   const [search, setSearch] = useState("");
-  const [detail, setDetail] = useState<RegistrySkillDetail | null>(null);
-  const [selected, setSelected] = useState("");
   const [grant, setGrant] = useState<RegistrySkillRecord | null>(null);
   const [uninstall, setUninstall] = useState<RegistrySkillRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [fullscreen, setFullscreen] = useState(false);
   const pagination = useTablePagination(
     skills.filter((s) =>
       `${s.skillName} ${s.description ?? ""} ${s.sourceRef}`
@@ -81,24 +75,6 @@ export function InstalledSkillsPage() {
     return () =>
       window.removeEventListener(CAPABILITY_RESOURCES_CHANGED, changed);
   }, []);
-  useEffect(() => {
-    let active = true;
-    if (!selected) {
-      setDetail(null);
-      return;
-    }
-    setDetail(null);
-    void fetchRegistrySkill(selected)
-      .then((d) => {
-        if (active) setDetail(d);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [selected, skills]);
   async function sync(update: boolean) {
     setBusy(true);
     try {
@@ -119,7 +95,6 @@ export function InstalledSkillsPage() {
     setBusy(true);
     try {
       await uninstallRegistrySkill(uninstall.skillName);
-      if (selected === uninstall.skillName) setSelected("");
       setUninstall(null);
       notifyCapabilityResourcesChanged();
     } catch (e) {
@@ -156,7 +131,7 @@ export function InstalledSkillsPage() {
           </Button>
         </p>
       ) : null}
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div>
         <SurfaceCard className="p-0">
           <div className="flex gap-3 p-4">
             <SearchField
@@ -184,8 +159,7 @@ export function InstalledSkillsPage() {
             }
             rows={pagination.visibleItems}
             rowKey={(s) => s.skillName}
-            onRowClick={(s) => setSelected(s.skillName)}
-            isRowSelected={(s) => s.skillName === selected}
+            onRowClick={(s) => navigate(`/settings/skills/${encodeURIComponent(s.skillName)}`)}
             emptyState={<p>{loading ? text("loading") : text("empty")}</p>}
             columns={[
               {
@@ -193,7 +167,7 @@ export function InstalledSkillsPage() {
                 header: t("installedSkills.columns.skill"),
                 render: (s) => (
                   <div>
-                    <span className="block font-medium">{s.skillName}</span>
+                    <Link className="block font-medium hover:underline" to={`/settings/skills/${encodeURIComponent(s.skillName)}`} onClick={(event) => event.stopPropagation()}>{s.skillName}</Link>
                     <span className="text-xs text-[var(--color-on-surface-variant)]">
                       {s.sourceRef}
                     </span>
@@ -261,38 +235,6 @@ export function InstalledSkillsPage() {
             ]}
           />
         </SurfaceCard>
-        <SurfaceCard className="min-w-0 space-y-4">
-          <h2 className="text-xl font-semibold">
-            {selected || t("installedSkills.detail.select")}
-          </h2>
-          {detail ? (
-            <>
-              <p className="break-all text-sm text-[var(--color-on-surface-variant)]">
-                {detail.sourceRef}
-              </p>
-              <p className="text-sm">
-                {text("assignedAgents")}: {detail.assignedAgentCount}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {detail.files.map((f) => (
-                  <Badge key={f.path} variant="outline">
-                    {f.path}
-                  </Badge>
-                ))}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFullscreen(true)}
-              >
-                {t("installedSkills.detail.fullscreen")}
-              </Button>
-              <div className="max-h-[60dvh] overflow-y-auto">
-                <MarkdownContent content={detail.skillMarkdown} />
-              </div>
-            </>
-          ) : null}
-        </SurfaceCard>
       </div>
       {grant ? (
         <SkillAgentGrants
@@ -331,16 +273,6 @@ export function InstalledSkillsPage() {
                 {t("installedSkills.actions.uninstall")}
               </Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      ) : null}
-      {fullscreen && detail ? (
-        <Dialog open onOpenChange={setFullscreen}>
-          <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-5xl">
-            <DialogHeader>
-              <DialogTitle>{detail.skillName} · SKILL.md</DialogTitle>
-            </DialogHeader>
-            <MarkdownContent content={detail.skillMarkdown} />
           </DialogContent>
         </Dialog>
       ) : null}

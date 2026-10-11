@@ -203,12 +203,12 @@ impl KnowledgeBaseService {
             loop {
                 if maintenance.workers.stop.is_cancelled() { break; }
                 if let Err(error) = maintenance.recover_ingestion_intents() {
-                    eprintln!("knowledge ingestion intake recovery failed: {error}");
+                    tracing::error!("knowledge ingestion intake recovery failed: {error}");
                 }
                 tokio::select! {
                     _ = maintenance.workers.stop.cancelled() => break,
                     result = maintenance.refresh_parser_waits() => {
-                        if let Err(error) = result { eprintln!("knowledge parser availability update failed: {error}"); }
+                        if let Err(error) = result { tracing::error!("knowledge parser availability update failed: {error}"); }
                     }
                 }
                 tokio::select! {
@@ -379,7 +379,8 @@ impl KnowledgeBaseService {
                 .embedding_space_fingerprint(workspace, Some(m), settings.embedding_dimension)
                 .ok()
         });
-        let parser = self.document_parser(&doc)?
+        let parser = self
+            .document_parser(&doc)?
             .as_ref()
             .map(|parser| parser.snapshot().unwrap_or_else(|| parser.clone()));
         let parser_identity = parser
@@ -444,7 +445,11 @@ impl KnowledgeBaseService {
         if !self.queue.pending(stage, now_ms()).map_err(queue_error)? {
             return Ok(None);
         }
-        let endpoints = if stage == IngestionStage::Parsing { self.refresh_parser_waits().await? } else { vec![] };
+        let endpoints = if stage == IngestionStage::Parsing {
+            self.refresh_parser_waits().await?
+        } else {
+            vec![]
+        };
         let config = self.active_ingestion_config();
         self.queue
             .claim(IngestionClaim {
@@ -461,12 +466,7 @@ impl KnowledgeBaseService {
                 embedding_resource_group: config
                     .embedding_resource_group
                     .as_ref()
-                    .map(|g| {
-                        (
-                            g.clone(),
-                            config.embedding_resource_group_capacity,
-                        )
-                    }),
+                    .map(|g| (g.clone(), config.embedding_resource_group_capacity)),
                 parse_endpoints: endpoints,
             })
             .map_err(queue_error)

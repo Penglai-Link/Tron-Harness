@@ -83,11 +83,7 @@ pub(super) async fn replace(
     Path(agent): Path<String>,
     Json(body): Json<ReplaceRequest>,
 ) -> Result<Json<ApiResponse<EmptyData>>, AgentGrantsApiError> {
-    kb.set_agent_knowledge_libraries(
-        &auth.user().user_code,
-        &agent,
-        &body.library_ids,
-    )
-    .map_err(|error| AgentGrantsApiError(error, auth.locale.clone()))?;
+    kb.set_agent_knowledge_libraries(&auth.user().user_code, &agent, &body.library_ids)
+        .map_err(|error| AgentGrantsApiError(error, auth.locale.clone()))?;
     Ok(Json(ApiResponse::protocol_success(EmptyData {})))
 }

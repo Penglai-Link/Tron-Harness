@@ -1,3 +1,4 @@
+import { tracedFetch } from "@tron/chat-core";
 import { applyCurrentLocaleHeader } from "@/i18n";
 
 export type EndpointParams = Record<string, string | number | boolean | null | undefined>;
@@ -162,7 +163,7 @@ export function unwrapApiEnvelope<T>(payload: unknown): T {
 export async function requestApi<T>(endpoint: string, options: ApiRequestOptions = {}): Promise<T> {
   const { method, path } = parseEndpoint(endpoint);
   const headers = resolveHeaders(options.body, options.headers);
-  const response = await fetch(buildApiUrl(path, options.pathParams, options.queryParams), {
+  const response = await tracedFetch(buildApiUrl(path, options.pathParams, options.queryParams), {
     body: resolveRequestBody(options.body),
     cache: options.cache,
     credentials: options.credentials ?? "include",
@@ -220,7 +221,7 @@ export async function requestApiBlob(
 ): Promise<ApiBlobResponse> {
   const { method, path } = parseEndpoint(endpoint);
   const headers = resolveHeaders(options.body, options.headers);
-  const response = await fetch(buildApiUrl(path, options.pathParams, options.queryParams), {
+  const response = await tracedFetch(buildApiUrl(path, options.pathParams, options.queryParams), {
     body: resolveRequestBody(options.body),
     credentials: options.credentials ?? "include",
     headers,

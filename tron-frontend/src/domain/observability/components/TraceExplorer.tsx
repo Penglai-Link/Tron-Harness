@@ -1,66 +1,64 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { PlatformWorkspaceFilter } from "@/domain/settings/components/PlatformWorkspaceScope";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { TextInput } from "@/components/forms";
 import { DataTable } from "@/components/data-table";
 import { TablePagination } from "@/components/table-pagination";
-import { InfoTooltip } from "@/components/info-tooltip/InfoTooltip";
 import { useToast } from "@/components/ui/toast";
-import { PageHeader, useLocaleFormatters } from "@/shared";
-import {
-  useTraceList,
-  useTraceDetail,
-  useTraceMetrics,
-} from "../hooks/useObservability";
+import { useLocaleFormatters } from "@/shared";
+import { useTraceList } from "../hooks/useObservability";
 import { TraceStatus } from "./TraceStatus";
-import { TraceInspector } from "./TraceInspector";
-import { RuntimePanel } from "./RuntimePanel";
-import { getCollectorExportConfig } from "../api/observabilityApi";
-import type { TraceSummary } from "../model/Trace";
+import { TraceIdentifier } from "./TraceIdentifier";
+import { formatTraceDuration, formatTraceTokens } from "./traceFormat";
+import type { TraceSortField, TraceSummary } from "../model/Trace";
 
 export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
   const { t } = useTranslation("observability");
-  const { formatDateTime, formatNumber } = useLocaleFormatters();
+  const { currentLocale, formatDateTime, formatNumber } = useLocaleFormatters();
   const [params, setParams] = useSearchParams();
   const sessionCode = params.get("sessionCode") ?? "";
   const traceId = params.get("traceId") ?? "";
-  const selectedId = params.get("selected") ?? "";
+  const navigate = useNavigate();
   const [sessionInput, setSessionInput] = useState(sessionCode);
   const [traceInput, setTraceInput] = useState(traceId);
   const [current, setCurrent] = useState(1);
   const [size, setSize] = useState(15);
   const toast = useToast();
+  const notifiedError = useRef<string | null>(null);
+  const [sorts, setSorts] = useState<{ field: TraceSortField; direction: "Asc" | "Desc" }[]>([{ field: "StartedAt", direction: "Desc" }]);
   const list = useTraceList({
+    sorts,
     workspaceCode,
     sessionCode,
     traceId,
     current,
     size,
   });
-  const detail = useTraceDetail(workspaceCode, selectedId);
-  const metrics = useTraceMetrics(workspaceCode, sessionCode, traceId);
   useEffect(() => {
     setSessionInput(sessionCode);
     setTraceInput(traceId);
     setCurrent(1);
   }, [sessionCode, traceId]);
   useEffect(() => {
-    if (list.error) toast.error(list.error.message);
-  }, [list.error, toast]);
-  useEffect(() => {
-    if (detail.error) toast.error(detail.error.message);
-  }, [detail.error, toast]);
+    if (list.isSuccess) notifiedError.current = null;
+    if (list.error && notifiedError.current !== list.error.message) {
+      notifiedError.current = list.error.message;
+      toast.error(list.error.message);
+    }
+  }, [list.error, list.isSuccess, toast]);
   const page = list.data;
   const total = page?.total ?? 0;
-  const select = (id: string) => {
-    const next = new URLSearchParams(params);
-    next.set("selected", id);
-    setParams(next, { replace: true });
-  };
+  const select = (id: string) =>
+    navigate(
+      `/settings/observability/traces/${encodeURIComponent(id)}${
+        params.size ? `?${params}` : ""
+      }`
+    );
   const filterSession = (code: string) => {
-    const next = new URLSearchParams();
+    const next = new URLSearchParams(params);
     next.set("sessionCode", code);
     setParams(next);
   };
@@ -71,215 +69,143 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
       toast.error(t("invalidTraceId"));
       return;
     }
-    const next = new URLSearchParams();
+    const next = new URLSearchParams(params);
+    next.delete("sessionCode"); next.delete("traceId");
     if (sessionInput.trim()) next.set("sessionCode", sessionInput.trim());
     if (id) next.set("traceId", id);
+    if (current === 1 && sessionCode === sessionInput.trim() && traceId === id) void list.refetch();
     setParams(next);
     setCurrent(1);
   };
-  const copyCollectorConfig = async () => {
-    try {
-      const config = await getCollectorExportConfig();
-      await navigator.clipboard.writeText(
-        JSON.stringify(
-          {
-            OTEL_EXPORTER_OTLP_ENDPOINT: config.endpoint,
-            OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
-            OTEL_EXPORTER_OTLP_HEADERS: `authorization=${encodeURIComponent(
-              config.authorization
-            )}`,
-          },
-          null,
-          2
+  const sortAria = (field: TraceSortField) => {
+    const sort = sorts.find((item) => item.field === field);
+    return sort ? (sort.direction === "Asc" ? "ascending" as const : "descending" as const) : "none" as const;
+  };
+  const sortableHeader = (label: string, field: TraceSortField) => {
+    const index = sorts.findIndex((item) => item.field === field);
+    const sort = sorts[index];
+    return <Button variant="ghost" size="sm" className="h-auto px-0 font-medium" onClick={() => {
+      setSorts((previous) => {
+        const existing = previous.find((item) => item.field === field);
+        if (!existing) return [...previous, { field, direction: "Desc" }];
+        return existing.direction === "Desc"
+          ? previous.map((item) => item.field === field ? { ...item, direction: "Asc" } : item)
+          : previous.filter((item) => item.field !== field);
+      });
+      setCurrent(1);
+    }}>
+      {label}{sort ? ` ${sort.direction === "Asc" ? "↑" : "↓"}` : ""}
+    </Button>;
+  };
+  const toolbar = (
+    <form
+      className="flex min-w-0 flex-wrap items-center gap-3"
+      onSubmit={search}
+    >
+      <PlatformWorkspaceFilter />
+      <TextInput
+        aria-label="Trace ID"
+        placeholder="Trace ID"
+        className="h-[var(--tron-input-height,2.25rem)] w-48 max-w-full font-mono sm:h-[var(--tron-input-height,2.25rem)]"
+        value={traceInput}
+        onChange={(e) => setTraceInput(e.target.value)}
+        maxLength={128}
+      />
+      <TextInput
+        aria-label={t("sessionCode")}
+        placeholder={t("sessionCode")}
+        className="h-[var(--tron-input-height,2.25rem)] w-48 max-w-full sm:h-[var(--tron-input-height,2.25rem)]"
+        value={sessionInput}
+        onChange={(e) => setSessionInput(e.target.value)}
+        maxLength={256}
+      />
+      <Button type="submit" >
+        {t("search")}
+      </Button>
+      {(sessionCode || traceId) && (
+        <Button
+          variant="ghost"
+          type="button"
+          onClick={() => {
+            const next = new URLSearchParams(params); next.delete("sessionCode"); next.delete("traceId"); setParams(next);
+            setSessionInput("");
+            setTraceInput("");
+          }}
+        >
+          {t("reset")}
+        </Button>
+      )}
+    </form>
+  );
+  const emptyState = (
+    <span
+      role="status"
+      className="block w-fit max-w-[calc(100vw-6rem)] text-left"
+    >
+      {list.isPending || list.isError ? null : t("noTraces")}
+    </span>
+  );
+  const pagination = (
+    <TablePagination
+      totalItems={total}
+      startItem={total ? (current - 1) * size + 1 : 0}
+      endItem={total ? (current - 1) * size + (page?.records.length ?? 0) : 0}
+      page={current}
+      pageCount={Math.max(1, Math.ceil(total / size))}
+      pageSize={size}
+      onPageChange={(value) =>
+        setCurrent(
+          Math.max(1, Math.min(value, Math.max(1, Math.ceil(total / size))))
         )
-      );
-      toast.success(t("copied"));
-    } catch {
-      toast.error(t("copyFailed"));
-    }
-  };
-  const refresh = () => {
-    void metrics.refetch();
-    void list.refetch();
-    if (selectedId) void detail.refetch();
-  };
+      }
+      onPageSizeChange={(value) => {
+        setSize(value);
+        setCurrent(1);
+      }}
+      itemLabel={t("traces")}
+    />
+  );
   return (
     <>
-      <PageHeader
-        title={t("title")}
-        actions={
-          <>
-            <InfoTooltip ariaLabel={t("help")}>{t("pageHelp")}</InfoTooltip>
-            <Button
-              variant="secondary"
-              onClick={() => void copyCollectorConfig()}
-            >
-              {t("copyCollectorConfig")}
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={refresh}
-              disabled={!workspaceCode || list.isFetching}
-            >
-
-              {t("refresh")}
-            </Button>
-          </>
-        }
-      />
-      <RuntimePanel />
-      <section
-        className="mb-6 flex flex-wrap items-center gap-x-10 gap-y-5 border-b border-[var(--color-outline-variant)] pb-6"
-        aria-label={t("overview")}
-      >
-        <dl className="flex flex-1 flex-wrap gap-x-10 gap-y-5">
-          {[
-            ["traceCount", metrics.data?.traceCount],
-            ["failedTraces", metrics.data?.failedTraceCount],
-            [
-              "totalTokens",
-              metrics.data
-                ? metrics.data.inputTokens + metrics.data.outputTokens
-                : undefined,
-            ],
-            ["averageDuration", metrics.data?.averageDurationMs],
-            ["p95Duration", metrics.data?.p95DurationMs],
-          ].map(([key, value]) => (
-            <div key={key}>
-              <dt className="text-xs text-[var(--color-on-surface-variant)]">
-                {t(String(key))}
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold tabular-nums">
-                {typeof value === "number"
-                  ? `${formatNumber(value, { maximumFractionDigits: 1 })}${
-                      String(key).endsWith("Duration") ? " ms" : ""
-                    }`
-                  : "—"}
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <InfoTooltip ariaLabel={t("overviewHelpLabel")}>
-          {t("overviewHelp")}
-        </InfoTooltip>
-        {metrics.isError && (
-          <Button variant="secondary" onClick={() => void metrics.refetch()}>
-            {t("retry")}
-          </Button>
-        )}
-      </section>
       <DataTable<TraceSummary>
         title={t("traces")}
+        toolbar={toolbar}
         rows={page?.records ?? []}
         rowKey={(row) => row.traceId}
-        isRowSelected={(row) => row.traceId === selectedId}
-        toolbar={
-          <form
-            className="flex min-w-0 flex-wrap items-center gap-3"
-            onSubmit={search}
-          >
-            <Input
-              aria-label={t("sessionCode")}
-              placeholder={t("sessionCode")}
-              className="w-48"
-              value={sessionInput}
-              onChange={(e) => setSessionInput(e.target.value)}
-              maxLength={256}
-            />
-            <Input
-              aria-label="Trace ID"
-              placeholder="Trace ID"
-              className="w-72 max-w-full font-mono"
-              value={traceInput}
-              onChange={(e) => setTraceInput(e.target.value)}
-              maxLength={128}
-            />
-            <Button type="submit" disabled={!workspaceCode}>
-
-              {t("search")}
-            </Button>
-            {(sessionCode || traceId) && (
-              <Button
-                variant="ghost"
-                type="button"
-                onClick={() => {
-                  setParams({});
-                  setSessionInput("");
-                  setTraceInput("");
-                }}
-              >
-                {t("reset")}
-              </Button>
-            )}
-          </form>
-        }
-        emptyState={
-          <span
-            role="status"
-            className="block w-fit max-w-[calc(100vw-6rem)] text-left"
-          >
-            {!workspaceCode
-              ? t("chooseWorkspace")
-              : list.isPending
-              ? t("loading")
-              : list.isError
-              ? t("loadFailed")
-              : t("noTraces")}
-          </span>
-        }
-        pagination={
-          <TablePagination
-            totalItems={total}
-            startItem={total ? (current - 1) * size + 1 : 0}
-            endItem={
-              total ? (current - 1) * size + (page?.records.length ?? 0) : 0
-            }
-            page={current}
-            pageCount={Math.max(1, Math.ceil(total / size))}
-            pageSize={size}
-            onPageChange={(value) =>
-              setCurrent(
-                Math.max(
-                  1,
-                  Math.min(value, Math.max(1, Math.ceil(total / size)))
-                )
-              )
-            }
-            onPageSizeChange={(value) => {
-              setSize(value);
-              setCurrent(1);
-            }}
-            itemLabel={t("traces")}
-          />
-        }
+        emptyState={emptyState}
+        pagination={pagination}
         columns={[
+          { id: "workspace", header: t("workspace"), width: "160px", render: (row) => <span className="block max-w-36 truncate" title={row.workspaceCode}>{row.workspaceCode || "—"}</span> },
           {
             id: "trace",
             header: "Trace ID",
+            width: "208px",
             render: (row) => (
-              <Button
-                className="h-auto p-0 font-mono text-xs"
-                variant="link"
+              <TraceIdentifier
+                value={row.traceId}
+                label="Trace ID"
                 onClick={() => select(row.traceId)}
-              >
-                {row.traceId}
-              </Button>
+              />
             ),
           },
           {
             id: "session",
             header: t("sessionCode"),
+            width: "208px",
             render: (row) => (
-              <Button
-                className="h-auto max-w-48 truncate p-0 text-xs"
-                variant="link"
+              <TraceIdentifier
+                value={row.sessionCode}
+                description={row.sessionName || t("sessionUnavailable")}
+                label={t("sessionId")}
                 onClick={() => filterSession(row.sessionCode)}
-              >
-                {row.sessionCode}
-              </Button>
+              />
             ),
           },
-          { id: "agent", header: t("agent"), render: (row) => row.agentCode },
+          {
+            id: "agent",
+            header: t("agent"),
+            render: (row) => row.agentCode,
+          },
           {
             id: "status",
             header: t("state"),
@@ -287,7 +213,8 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
           },
           {
             id: "start",
-            header: t("startedAt"),
+            ariaSort: sortAria("StartedAt"),
+            header: sortableHeader(t("startedAt"), "StartedAt"),
             render: (row) => (
               <span className="whitespace-nowrap tabular-nums">
                 {formatDateTime(row.startedAt, {
@@ -299,29 +226,37 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
           },
           {
             id: "duration",
-            header: t("duration"),
+            ariaSort: sortAria("Duration"),
+            header: sortableHeader(t("duration"), "Duration"),
             align: "right",
             render: (row) => (
               <span className="tabular-nums">
-                {formatNumber(row.durationMs, { maximumFractionDigits: 2 })} ms
+                {formatTraceDuration(row.durationMs, currentLocale)}
               </span>
             ),
           },
           {
             id: "spans",
-            header: "Spans",
+            ariaSort: sortAria("Spans"),
+            header: sortableHeader("Spans", "Spans"),
             align: "right",
             render: (row) => formatNumber(row.spanCount),
           },
           {
             id: "tokens",
-            header: "Tokens",
+            ariaSort: sortAria("Tokens"),
+            header: sortableHeader("Tokens", "Tokens"),
             align: "right",
-            render: (row) => formatNumber(row.inputTokens + row.outputTokens),
+            render: (row) =>
+              formatTraceTokens(
+                row.inputTokens + row.outputTokens,
+                currentLocale
+              ),
           },
           {
             id: "errors",
-            header: t("errors"),
+            ariaSort: sortAria("Errors"),
+            header: sortableHeader(t("errors"), "Errors"),
             align: "right",
             render: (row) => (
               <span
@@ -335,25 +270,6 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
           },
         ]}
       />
-      {detail.isPending && selectedId && (
-        <div role="status" className="py-8 text-center text-sm">
-          {t("loading")}
-        </div>
-      )}
-      {detail.isError && selectedId && (
-        <div
-          className="flex items-center justify-center gap-3 py-8 text-sm"
-          role="alert"
-        >
-          {t("loadFailed")}
-          <Button variant="secondary" onClick={() => void detail.refetch()}>
-            {t("retry")}
-          </Button>
-        </div>
-      )}
-      {detail.data && (
-        <TraceInspector key={detail.data.trace.traceId} detail={detail.data} />
-      )}
     </>
   );
 }

@@ -262,7 +262,7 @@ impl AppState {
             &config.system_agents,
         );
         if let Err(error) = agent_management.bootstrap_registry() {
-            eprintln!("agent management bootstrap scan failed: {error:?}");
+            tracing::error!("agent management bootstrap scan failed: {error:?}");
         }
         let automations =
             build_automation_service(&config.database_url, workspaces.clone(), event_bus.clone());
@@ -378,7 +378,7 @@ impl AppState {
                 crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone());
             runtime.spawn(async move {
                 if let Err(error) = indexer.index_all().await {
-                    eprintln!("platform skill index synchronization failed: {error}");
+                    tracing::error!("platform skill index synchronization failed: {error}");
                 }
             });
         }
@@ -418,7 +418,7 @@ impl AppState {
                 Some(Arc::new(
                     crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
                 )),
-            ),
+            ).with_model_router(crate::application::model_router::AgentModelRouter::new(models.clone(), model_providers.clone()).with_agent_management(agent_management.clone())),
         );
         agent_framework
             .bind_collaboration(&agent_collaboration_builder)
@@ -484,6 +484,7 @@ impl AppState {
         .with_llm_router(llm_router.clone())
         .with_event_bus(event_bus.clone());
         automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
+            agent_framework.clone(),
             automations.clone(),
             chats.clone(),
             agent_management.clone(),
@@ -614,8 +615,12 @@ pub fn build_router_with_state(state: AppState) -> Result<Router, AppBootstrapEr
         )
         .merge(protected_routes)
         .merge(frontend_routes())
-        .with_state(state)
-        .layer(socket_layer))
+        .with_state(state.clone())
+        .layer(socket_layer)
+        .layer(axum::middleware::from_fn_with_state(
+            state,
+            crate::adapters::inbound::http::observability::log_application_request,
+        )))
 }
 
 include!("app/builders.rs");

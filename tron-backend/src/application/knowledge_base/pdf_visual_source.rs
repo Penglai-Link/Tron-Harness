@@ -108,8 +108,7 @@ impl KnowledgeBaseService {
         kb: &str,
         doc: &str,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.prepare_visual_reparse(user, kb, doc)
-            .await?;
+        self.prepare_visual_reparse(user, kb, doc).await?;
         self.preview(user, kb, doc).await?;
         self.owned(user, kb)?;
         self.repository.document(kb, doc)

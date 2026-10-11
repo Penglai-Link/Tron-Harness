@@ -1,0 +1,39 @@
+.log-follow-control {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 999px;
+  padding-inline: 16px;
+  border: 1px solid var(--color-outline-variant);
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  transition: background 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+.log-follow-control[data-active="true"] {
+  background: #171717;
+  color: #fff;
+  border-color: #171717;
+  box-shadow: 0 1px 2px #00000014, inset 0 1px 0 #ffffff20;
+}
+.log-follow-control[data-active="true"]:hover { background: #262626; color: #fff; }
+.log-follow-label { position: relative; z-index: 2; }
+.log-follow-control[data-live="true"][data-motion="full"]::before {
+  content: "";
+  position: absolute;
+  inset: -70px;
+  background: conic-gradient(from 0deg, transparent 0deg 270deg, #ffffff90 320deg, transparent 360deg);
+  animation: log-follow-orbit 3.5s linear infinite;
+  z-index: 0;
+}
+.log-follow-control[data-live="true"][data-motion="full"]::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: #171717;
+  z-index: 1;
+}
+@keyframes log-follow-orbit { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .log-follow-control::before { animation: none !important; }
+}

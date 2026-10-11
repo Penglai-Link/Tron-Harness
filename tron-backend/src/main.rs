@@ -9,6 +9,8 @@ use tron_backend::{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let config = AppConfig::from_application_yaml()?;
+    tron_backend::adapters::outbound::observability::logs::init_application_logging(&config)
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
     let socket_addr = config.socket_addr()?;
     let listener = TcpListener::bind(socket_addr).await?;
     let state = AppState::new(config)?;
@@ -20,7 +22,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let ingestion = state.knowledge_bases.clone();
     let router = build_router_with_state(state)?;
 
-    println!("tron-backend listening on http://{socket_addr}");
+    tracing::info!("tron-backend listening on http://{socket_addr}");
     tokio::select! {
         result = axum::serve(listener, router).into_future() => {
             result?;
@@ -31,10 +33,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // or Tokio's blocking-pool teardown. The OS releases file locks on exit.
             std::thread::spawn(|| {
                 std::thread::sleep(Duration::from_secs(2));
-                eprintln!("shutdown cleanup deadline reached; exiting process");
+                tracing::warn!("shutdown cleanup deadline reached; exiting process");
                 std::process::exit(0);
             });
-            eprintln!("shutdown requested: stopping ingestion, HTTP and Agent work");
+            tracing::warn!("shutdown requested: stopping ingestion, HTTP and Agent work");
             ingestion.stop_ingestion_workers();
             framework.cancel_all_runs();
             let pty = framework.pty();
@@ -42,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 framework.close(),
                 tokio::task::spawn_blocking(move || pty.close()),
             );
-            eprintln!("shutdown cleanup finished: {report:?}; terminal={terminal:?}");
+            tracing::warn!("shutdown cleanup finished: {report:?}; terminal={terminal:?}");
             std::process::exit(0);
         }
     }

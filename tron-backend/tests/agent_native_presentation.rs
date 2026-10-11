@@ -142,7 +142,10 @@ fn historical_delivery_failure_does_not_block_a_later_run_or_restart_replay() {
         Arc::new(AguiEventSink::new(&EventBusConfig::default())),
         Arc::new(replay_store(&path)),
     );
-    assert_eq!(service.protocol_events("SESSION").unwrap()[1].data["runId"], "RETRY-RUN");
+    assert_eq!(
+        service.protocol_events("SESSION").unwrap()[1].data["runId"],
+        "RETRY-RUN"
+    );
     let _ = std::fs::remove_file(path);
 }
 

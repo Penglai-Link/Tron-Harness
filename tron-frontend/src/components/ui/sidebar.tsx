@@ -1,3 +1,4 @@
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 "use client"
 
 import * as React from "react"
@@ -265,8 +266,9 @@ function SidebarTrigger({
     <Button
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
+      title={props["aria-label"] ?? "Toggle Sidebar"}
       variant="ghost"
-      size="sm"
+      size="icon-sm"
       className={cn("hover:bg-sidebar-accent", className)}
       onClick={(event) => {
         onClick?.(event)
@@ -274,8 +276,8 @@ function SidebarTrigger({
       }}
       {...props}
     >
-
-      <span>{props["aria-label"] ?? "Toggle Sidebar"}</span>
+      {isOpen ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
+      <span className="sr-only">{props["aria-label"] ?? "Toggle Sidebar"}</span>
     </Button>
   )
 }

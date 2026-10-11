@@ -13,7 +13,9 @@ impl KnowledgeBaseService {
                 Err(KnowledgeBaseError::NotFound) => continue,
                 Err(error) => return Err(error),
             };
-            if current.resource_code != resource_code { continue; }
+            if current.resource_code != resource_code {
+                continue;
+            }
             if current.revision != revision
                 || !self
                     .queue
@@ -30,7 +32,9 @@ impl KnowledgeBaseService {
                     KnowledgeBaseError::Storage(_) => WaitReasonCode::IntakeStorage,
                     KnowledgeBaseError::Invalid(_) => WaitReasonCode::IntakeInvalid,
                     KnowledgeBaseError::Forbidden => WaitReasonCode::IntakeForbidden,
-                    KnowledgeBaseError::Conflict | KnowledgeBaseError::NotEmpty => WaitReasonCode::IntakeConflict,
+                    KnowledgeBaseError::Conflict | KnowledgeBaseError::NotEmpty => {
+                        WaitReasonCode::IntakeConflict
+                    }
                     KnowledgeBaseError::NotFound => WaitReasonCode::IntakeMissing,
                 });
                 self.repository.fail_ingestion_intent(

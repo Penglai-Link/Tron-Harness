@@ -30,7 +30,7 @@ impl FrameworkHost {
         };
         let host = self.clone();
         let parent = eliteforge_agent_framework::current_continuation_parent();
-        let result = tokio::spawn(async move {
+        let result = crate::app::telemetry::spawn_traced(async move {
             let execution = host.run_external_inner(transport, context, sink, resume, registration);
             if let Some(parent) = parent {
                 eliteforge_agent_framework::with_continuation_parent(&parent, execution).await

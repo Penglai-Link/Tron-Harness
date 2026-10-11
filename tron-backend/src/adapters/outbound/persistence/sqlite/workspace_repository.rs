@@ -25,7 +25,6 @@ impl SqliteWorkspaceRepository {
             super::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
         Ok(Self { connection })
     }
-
 }
 
 impl WorkspaceRepository for SqliteWorkspaceRepository {

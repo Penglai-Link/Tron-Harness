@@ -99,18 +99,16 @@ export function PlatformToolsPage() {
             const domainTools = toolsByDomain.get(domain.domainCode) ?? [];
             return domainTools.length ? (
               <div className="overflow-x-auto rounded-md border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]">
-                <table className="w-full min-w-[900px] table-fixed whitespace-normal text-left text-sm [&_td]:break-words">
+                <table className="w-full min-w-[760px] table-fixed whitespace-normal text-left text-sm [&_td]:break-words">
                   <colgroup>
-                    <col className="w-[105px]" />
-                    <col className="w-[175px]" />
+                    <col className="w-[190px]" />
                     <col />
                     <col className="w-[64px]" />
                     <col className="w-[290px]" />
                   </colgroup>
                   <thead className="border-b border-[var(--color-card-border)] text-xs font-medium text-[var(--color-on-surface-variant)]">
                     <tr>
-                      <th className="px-4 py-2.5">{pageT("domains.tools.columns.name", "工具名称")}</th>
-                      <th className="px-4 py-2.5">{pageT("domains.tools.columns.englishName", "工具名称英文")}</th>
+                      <th className="px-4 py-2.5">{pageT("domains.tools.columns.name", "工具")}</th>
                       <th className="px-4 py-2.5">{pageT("domains.tools.columns.description", "描述")}</th>
                       <th className="px-4 py-2.5">{pageT("domains.tools.columns.type", "类型")}</th>
                       <th className="px-4 py-2.5">{pageT("permissions.title", "Execution permission")}</th>
@@ -119,8 +117,10 @@ export function PlatformToolsPage() {
                   <tbody>
                     {domainTools.map((tool) => (
                       <tr className="border-b border-[var(--color-card-border)] last:border-b-0" key={tool.toolCode}>
-                        <td className="px-4 py-2.5 font-medium text-[var(--color-on-surface)]">{tool.name}</td>
-                        <td className="px-4 py-2.5 font-mono text-xs text-[var(--color-on-surface-variant)]">{tool.toolName}</td>
+                        <td className="px-4 py-2.5">
+                          <p className="font-medium text-[var(--color-on-surface)]">{tool.name}</p>
+                          <p className="mt-1 font-mono text-xs text-[var(--color-on-surface-variant)]">{tool.toolName}</p>
+                        </td>
                         <td className="px-4 py-2.5 text-[13px] text-[var(--color-on-surface-variant)]">{tool.description}</td>
                         <td className="px-4 py-2.5">{t(`common:toolOperationKind.${tool.operationKind}`, { defaultValue: tool.operationKind })}</td>
                         <td className="px-4 py-2.5"><ToolPermissionControl name={tool.name} disabled={loading || saving || !loaded}
@@ -155,7 +155,8 @@ export function PlatformToolsPage() {
             {
               id: "description",
               header: pageT("domains.columns.description", "Description"),
-              width: "34%",
+              width: "56%",
+              cellClassName: "whitespace-normal",
               render: (row) => (
                 <p className="text-[13px] text-[var(--color-on-surface-variant)]">
                   {row.description}
@@ -180,17 +181,6 @@ export function PlatformToolsPage() {
                     : pageT("domains.mutationNo", "Read-only")}
                 </span>
               ),
-            },
-            {
-              id: "samples",
-              header: pageT("domains.columns.samples", "Sample Tools"),
-              width: "22%",
-              render: (row) => {
-                const sampleTools = row.sampleTools.length > 0
-                  ? row.sampleTools.join(", ")
-                  : pageT("domains.sampleFallback", "N/A");
-                return <p className="truncate text-[12px] text-[var(--color-on-surface-variant)]">{sampleTools}</p>;
-              },
             },
           ]}
         />

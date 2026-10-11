@@ -1,0 +1,103 @@
+// @vitest-environment jsdom
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
+import { observability } from "@/i18n/locales/zh-CN/observability";
+import { DashboardPage } from "./DashboardPage";
+const state = vi.hoisted(() => ({
+  data: {
+    sampledAt: 60000,
+    traceCount: 3,
+    failedTraceCount: 1,
+    runningTraceCount: 1,
+    inputTokens: 1000,
+    outputTokens: 500,
+    averageDurationMs: 1250,
+    p95DurationMs: 2000,
+    recentRequests: [{ startedAt: 0, requests: 3, errors: 1 }],
+    cpuPercent: 3.6,
+    memoryBytes: 104857600,
+    resourceSampledAt: 60000,
+    metricPointCount: 8,
+    processes: [
+      {
+        pid: 10,
+        parentPid: null,
+        name: "tron-backend",
+        memoryBytes: 104857600,
+        startedAt: 1,
+      },
+      {
+        pid: 20,
+        parentPid: 10,
+        name: "plugin-backend",
+        memoryBytes: 10485760,
+        startedAt: 1,
+      },
+    ],
+  },
+  isError: false,
+}));
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) =>
+      (
+        (observability[key as keyof typeof observability] as string) ?? key
+      ).replace(/{{(.*?)}}/g, (_, k) => String(values?.[k] ?? "")),
+  }),
+}));
+vi.mock("@/shared", () => ({
+  PageHeader: ({ actions }: { actions: ReactNode }) => (
+    <header>{actions}</header>
+  ),
+  SurfaceCard: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  useWorkspaceSpaces: () => ({ selectedPrimarySpace: { workspaceCode: "WS" } }),
+  useLocaleFormatters: () => ({
+    currentLocale: "en-US",
+    formatNumber: (n: number, options?: Intl.NumberFormatOptions) =>
+      new Intl.NumberFormat("en-US", options).format(n),
+    formatDateTime: String,
+  }),
+}));
+vi.mock("../hooks/useObservability", () => ({
+  useObservabilityDashboard: () => ({
+    ...state,
+    isPending: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("../components/CollectorConfigButton", () => ({
+  CollectorConfigButton: () => null,
+}));
+afterEach(cleanup);
+it("shows scoped request error rate, readable latency, resources and actual child process relationships", () => {
+  render(
+    <MemoryRouter>
+      <DashboardPage />
+    </MemoryRouter>
+  );
+  expect(screen.getByText("33.3%")).toBeTruthy();
+  expect(screen.getByText("1.25 s")).toBeTruthy();
+  expect(screen.getAllByText((_, element) => element?.textContent === "100 MiB" && !Array.from(element.children).some((child) => child.textContent === "100 MiB"))).toHaveLength(2);
+  expect(screen.getByText("plugin-backend")).toBeTruthy();
+  expect(
+    screen.getByRole("link", { name: "查看链路" }).getAttribute("href")
+  ).toBe("/settings/observability/traces");
+  expect(
+    screen.getByRole("link", { name: "查看指标" }).getAttribute("href")
+  ).toBe("/settings/observability/metrics");
+});
+it("does not invent a zero-percent error rate when no requests were collected", () => {
+  const previous = state.data;
+  state.data = { ...previous, traceCount: 0, failedTraceCount: 0 };
+  render(
+    <MemoryRouter>
+      <DashboardPage />
+    </MemoryRouter>
+  );
+  expect(screen.queryByText("0%")).toBeNull();
+  expect(screen.getByText("—")).toBeTruthy();
+  state.data = previous;
+});

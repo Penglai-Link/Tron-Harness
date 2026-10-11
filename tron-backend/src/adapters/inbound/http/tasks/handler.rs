@@ -224,7 +224,8 @@ pub async fn execute_task(
 
     let run_code = generate_agent_run_code();
     let request = SendChatMessageCommand {
-            a2ui_action_id: None, a2ui_metadata: None,
+        a2ui_action_id: None,
+        a2ui_metadata: None,
         run_code: Some(run_code.clone()),
         content: Some(prompt),
         workspace_code: Some(task.workspace_code.clone()),
@@ -282,7 +283,7 @@ pub async fn execute_task(
     let task_code_for_log = task.task_code.clone();
     let task_code_for_result = task.task_code.clone();
     let tasks = state.tasks.clone();
-    tokio::spawn(async move {
+    crate::app::telemetry::spawn_traced(async move {
         match chats
             .send_message(
                 &background_session_code,
@@ -299,13 +300,13 @@ pub async fn execute_task(
                 if let Err(error) =
                     tasks.record_execution_result(&task_code_for_result, result.run.final_output)
                 {
-                    eprintln!(
+                    tracing::error!(
                         "task execution {task_code_for_log} result persistence failed: {error:?}"
                     );
                 }
             }
             Err(error) => {
-                eprintln!("task execution {task_code_for_log} failed: {error:?}");
+                tracing::error!("task execution {task_code_for_log} failed: {error:?}");
             }
         }
     });

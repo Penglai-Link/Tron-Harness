@@ -16,5 +16,6 @@ export interface TronNavSection {
   items: TronNavItem[];
   translationKey: string;
   flyout?: boolean;
+  standalone?: boolean;
   icon?: LucideIcon;
 }

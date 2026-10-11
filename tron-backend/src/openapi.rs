@@ -20,10 +20,14 @@ use crate::{
         description = "Tron backend HTTP API. Coverage is added progressively by bounded context."
     ),
     paths(health, readiness,
+        crate::adapters::inbound::http::profiles::update_preferences,
+        crate::adapters::inbound::http::observability::query_logs,
+        crate::adapters::inbound::http::observability::record_browser_span,
         crate::adapters::inbound::http::observability::query_traces,
         crate::adapters::inbound::http::observability::get_trace,
         crate::adapters::inbound::http::observability::get_metrics,
         crate::adapters::inbound::http::observability::get_runtime,
+        crate::adapters::inbound::http::observability::get_dashboard,
         crate::adapters::inbound::http::observability::query_metric_points,
         crate::adapters::inbound::http::observability::get_export_config),
     components(schemas(

@@ -31,8 +31,7 @@ impl ChatService {
         llm_runtime: LlmRuntimeService,
         fallback_model: crate::domain::agent::AgentModelConfig,
     ) {
-        let Some(prompt) =
-            manual_session_title_prompt(self.prompt_service.as_ref(), user_message)
+        let Some(prompt) = manual_session_title_prompt(self.prompt_service.as_ref(), user_message)
         else {
             self.publish_title_generation_failure(
                 session_code,
@@ -90,7 +89,7 @@ impl ChatService {
         message: impl Into<String>,
     ) {
         let message = message.into();
-        eprintln!("session title generation failed for {session_code}: {code}");
+        tracing::error!("session title generation failed for {session_code}: {code}");
         let _ = self.event_bus.publish(
             crate::shared::event_bus::BusEventDraft::agui(
                 "agent.session_title_generation_failed",
@@ -190,11 +189,7 @@ fn manual_session_title_prompt(
         Value::String(user_message.to_string()),
     )]);
     prompt_service?
-        .runtime_prompt_text(
-            "chat.session-title",
-            "en-US",
-            &runtime_values,
-        )
+        .runtime_prompt_text("chat.session-title", "en-US", &runtime_values)
         .ok()?
 }
 
