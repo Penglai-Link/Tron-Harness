@@ -28,3 +28,5 @@ pub mod skins;
 pub mod person_ai;
 
 pub mod knowledge_bases;
+
+pub mod dudes;

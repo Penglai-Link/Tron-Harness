@@ -11,7 +11,13 @@ impl TaskService {
             BusEventDraft::audit(event_name, "task_service")
                 .subject("task", detail.task_code.clone())
                 .summary(summary)
-                .attr("workspaceCode", detail.workspace_code.clone())
+                .attr(
+                    "workspaceCode",
+                    detail.workspace_code.clone().unwrap_or_default(),
+                )
+                .attr("ownerDudeCode", detail.owner_dude_code.clone().unwrap_or_default())
+                .attr("scheduleVersion", detail.schedule_version.to_string())
+                .attr("workSessionCode", detail.work_session_code.clone().unwrap_or_default())
                 .attr("status", format!("{:?}", detail.status))
                 .attr("progress", detail.progress.to_string())
                 .attr(

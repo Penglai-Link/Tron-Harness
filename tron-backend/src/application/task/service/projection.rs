@@ -68,7 +68,7 @@ pub(super) fn matches_search(task: &Task, search: Option<&str>) -> bool {
     let search = search.to_lowercase();
     [
         task.task_code.as_str(),
-        task.workspace_code.as_str(),
+        task.workspace_code.as_deref().unwrap_or_default(),
         task.title.as_str(),
         task.description.as_deref().unwrap_or_default(),
         task.execution_result.as_deref().unwrap_or_default(),

@@ -57,29 +57,60 @@ impl TaskService {
     }
 
     pub fn create_task(&self, command: CreateTaskCommand) -> Result<TaskDetail, TaskError> {
-        let workspace_code =
-            normalized_required(command.workspace_code).ok_or(TaskError::WorkspaceRequired)?;
-        self.ensure_active_workspace(&workspace_code)?;
+        let workspace_code = optional_trimmed(command.workspace_code);
+        let owner_dude_code = optional_trimmed(command.owner_dude_code);
+        if let Some(workspace) = workspace_code.as_deref() {
+            self.ensure_active_workspace(workspace)?;
+        } else if command.task_type != TaskType::General {
+            return Err(TaskError::WorkspaceRequired);
+        }
+        if command.due_at.is_some_and(|value| value < 0) {
+            return Err(TaskError::InvalidRequest);
+        }
         let title = normalized_required(command.title).ok_or(TaskError::InvalidRequest)?;
         let parent_task_code = optional_trimmed(command.parent_task_code);
         if let Some(parent_code) = parent_task_code.as_deref() {
-            self.ensure_valid_parent(parent_code, &workspace_code)?;
+            self.ensure_valid_parent(
+                parent_code,
+                workspace_code.as_deref(),
+                owner_dude_code.as_deref(),
+            )?;
         }
-        let flow = self.task_flow_for_workspace(&workspace_code)?;
-        let assignees = self.validated_assignees(&workspace_code, command.assignee_user_codes)?;
+        let flow = match workspace_code.as_deref() {
+            Some(workspace) => self.task_flow_for_workspace(workspace)?,
+            None => self.get_task_flow(crate::domain::task::DEFAULT_TASK_FLOW_CODE)?,
+        };
+        let assignees = self.validated_assignees(
+            workspace_code.as_deref().unwrap_or_default(),
+            command.assignee_user_codes,
+        )?;
         let agent_links = normalized_code_links(command.agent_codes);
         let app_links =
-            self.validated_app_links(&workspace_code, normalized_code_links(command.app_codes))?;
-        let id = self
+            self.validate_scope_app_links(workspace_code.as_deref(), command.app_codes)?;
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let planned_start_at = owner_dude_code
+            .as_ref()
+            .map(|_| default_planned_start(now_ms, command.due_at));
+        // Parallel Dude sessions share this service; allocate and persist under one lock.
+        let mut repository = self
             .repository
             .lock()
-            .expect("task repository mutex poisoned")
-            .next_id()?;
+            .expect("task repository mutex poisoned");
+        let id = repository.next_id()?;
         let task_code = format!("TSK-{id}");
+        let agent_code = optional_trimmed(command.agent_code)
+            .or_else(|| owner_dude_code.clone())
+            .unwrap_or_else(|| "main-agent".to_string());
         let task = Task {
             id: SnowflakeId::new(id),
             task_code: task_code.clone(),
             workspace_code,
+            owner_dude_code,
+            due_at: command.due_at,
+            planned_start_at,
+            next_followup_at: planned_start_at,
+            work_session_code: None,
+            schedule_version: 0,
             parent_task_code,
             title,
             description: optional_trimmed(command.description),
@@ -91,24 +122,18 @@ impl TaskService {
             task_type: command.task_type,
             source_type: command.source_type,
             source_url: optional_source_url(command.source_url),
-            agent_code: optional_trimmed(command.agent_code)
-                .unwrap_or_else(|| "main-agent".to_string()),
+            agent_code,
             model_code: optional_trimmed(command.model_code),
             progress: 0,
             created_at: current_timestamp(),
             updated_at: current_timestamp(),
             archived_at: None,
         };
-        {
-            let mut repository = self
-                .repository
-                .lock()
-                .expect("task repository mutex poisoned");
-            repository.create_task(&task)?;
-            repository.replace_user_assignments(&task_code, &assignees)?;
-            repository.replace_agent_links(&task_code, &agent_links)?;
-            repository.replace_app_links(&task_code, &app_links)?;
-        }
+        repository.create_task(&task)?;
+        repository.replace_user_assignments(&task_code, &assignees)?;
+        repository.replace_agent_links(&task_code, &agent_links)?;
+        repository.replace_app_links(&task_code, &app_links)?;
+        drop(repository);
         let detail = self.get_task(&task_code)?;
         self.publish_task_detail_event("task.created", "Created task", &detail);
         Ok(detail)
@@ -176,17 +201,36 @@ impl TaskService {
         if let Some(model_code) = command.model_code {
             task.model_code = model_code.and_then(|value| optional_trimmed(Some(value)));
         }
+        if let Some(due_at) = command.due_at {
+            if due_at.is_some_and(|value| value < 0) {
+                return Err(TaskError::InvalidRequest);
+            }
+            task.due_at = due_at;
+            if task.owner_dude_code.is_some() {
+                let next = default_planned_start(chrono::Utc::now().timestamp_millis(), due_at);
+                task.planned_start_at = Some(next);
+                task.next_followup_at = Some(next);
+            }
+        }
+        if task.workspace_code.is_none() && task.task_type != TaskType::General {
+            return Err(TaskError::WorkspaceRequired);
+        }
+        if task.status == crate::domain::task::CLOSED_STATUS_CODE {
+            task.next_followup_at = None;
+        } else if task.owner_dude_code.is_some() && task.next_followup_at.is_none() {
+            task.next_followup_at = Some(chrono::Utc::now().timestamp_millis());
+        }
         task.updated_at = current_timestamp();
         let assignees = command
             .assignee_user_codes
-            .map(|codes| self.validated_assignees(&task.workspace_code, codes))
+            .map(|codes| {
+                self.validated_assignees(task.workspace_code.as_deref().unwrap_or_default(), codes)
+            })
             .transpose()?;
         let agent_links = command.agent_codes.map(normalized_code_links);
         let app_links = command
             .app_codes
-            .map(|codes| {
-                self.validated_app_links(&task.workspace_code, normalized_code_links(codes))
-            })
+            .map(|codes| self.validate_scope_app_links(task.workspace_code.as_deref(), codes))
             .transpose()?;
         {
             let mut repository = self
@@ -229,6 +273,11 @@ impl TaskService {
         } else {
             command.progress.unwrap_or(task.progress).min(100)
         };
+        if task.status == crate::domain::task::CLOSED_STATUS_CODE {
+            task.next_followup_at = None;
+        } else if task.owner_dude_code.is_some() && task.next_followup_at.is_none() {
+            task.next_followup_at = Some(chrono::Utc::now().timestamp_millis());
+        }
         task.updated_at = current_timestamp();
         self.repository
             .lock()
@@ -251,6 +300,11 @@ impl TaskService {
         task.execution_result = optional_trimmed(Some(execution_result));
         task.status = crate::domain::task::CLOSED_STATUS_CODE.to_string();
         task.progress = 100;
+        if task.status == crate::domain::task::CLOSED_STATUS_CODE {
+            task.next_followup_at = None;
+        } else if task.owner_dude_code.is_some() && task.next_followup_at.is_none() {
+            task.next_followup_at = Some(chrono::Utc::now().timestamp_millis());
+        }
         task.updated_at = current_timestamp();
         self.repository
             .lock()
@@ -278,6 +332,7 @@ impl TaskService {
             task.previous_status = Some(task.status);
             task.status = crate::domain::task::CLOSED_STATUS_CODE.to_string();
             task.archived_at = Some(current_timestamp());
+            task.next_followup_at = None;
             task.updated_at = current_timestamp();
             self.repository
                 .lock()
@@ -299,6 +354,9 @@ impl TaskService {
                 .unwrap_or_else(|| crate::domain::task::NOT_STARTED_STATUS_CODE.to_string());
             task.previous_status = None;
             task.archived_at = None;
+            if task.owner_dude_code.is_some() {
+                task.next_followup_at = Some(chrono::Utc::now().timestamp_millis());
+            }
             task.updated_at = current_timestamp();
             self.repository
                 .lock()
@@ -365,7 +423,13 @@ mod tests {
     fn list_item(priority: TaskPriority, task_code: &str) -> TaskListItem {
         TaskListItem {
             task_code: task_code.into(),
-            workspace_code: "TRON_CORE".into(),
+            workspace_code: Some("TRON_CORE".into()),
+            owner_dude_code: None,
+            due_at: None,
+            planned_start_at: None,
+            next_followup_at: None,
+            work_session_code: None,
+            schedule_version: 0,
             parent_task_code: None,
             title: task_code.into(),
             flow_code: crate::domain::task::DEFAULT_TASK_FLOW_CODE.into(),

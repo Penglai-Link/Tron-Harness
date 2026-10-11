@@ -109,7 +109,7 @@ impl TaskService {
         if self
             .all_tasks()?
             .iter()
-            .filter(|task| task.workspace_code == workspace_code)
+            .filter(|task| task.workspace_code.as_deref() == Some(workspace_code.as_str()))
             .any(|task| task.status != crate::domain::task::CLOSED_STATUS_CODE)
         {
             return Err(TaskError::WorkspaceFlowHasOpenTasks);
@@ -308,7 +308,9 @@ mod tests {
             })
             .expect("custom flow is created");
         let create_task = || CreateTaskCommand {
-            workspace_code: workspace.workspace_code.clone(),
+            workspace_code: Some(workspace.workspace_code.clone()),
+            owner_dude_code: None,
+            due_at: None,
             parent_task_code: None,
             title: "Release candidate".into(),
             description: None,

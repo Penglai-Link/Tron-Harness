@@ -2,6 +2,15 @@ use super::internal_agents::normalize_string_codes;
 use super::*;
 
 impl AgentManagementService {
+    /// Initialize an independent Dude with a full copy of generic Agent policy.
+    pub fn initialize_dude_definition(&self, code:&str, name:&str, role_prompt:Option<String>) -> Result<(),AgentManagementError> {
+        let configs=self.platform_internal_agent_configs()?;
+        if configs.iter().any(|c|c.agent_code==code){return Ok(())}
+        let mut config=configs.into_iter().find(|c|c.agent_code=="main-agent").ok_or(AgentManagementError::InternalAgentNotFound)?;
+        config.agent_code=code.into();config.name=name.into();if let Some(prompt)=role_prompt{config.role_prompt=prompt}
+        self.repository().insert_platform_internal_agent_config(&config)
+    }
+
     pub(super) fn platform_internal_agent_configs(
         &self,
     ) -> Result<Vec<PlatformInternalAgentConfig>, AgentManagementError> {
@@ -30,6 +39,10 @@ impl AgentManagementService {
     pub fn list_platform_internal_agents(
         &self,
     ) -> Result<Vec<InternalAgentToolPolicy>, AgentManagementError> {
+        let dudes=self.repository().list_dude_codes()?;
+        Ok(self.all_platform_internal_agents()?.into_iter().filter(|p|!dudes.contains(&p.agent_code)).collect())
+    }
+    pub fn all_platform_internal_agents(&self)->Result<Vec<InternalAgentToolPolicy>,AgentManagementError>{
         let tool_codes = self.tool_codes();
         Ok(self
             .platform_internal_agent_configs()?

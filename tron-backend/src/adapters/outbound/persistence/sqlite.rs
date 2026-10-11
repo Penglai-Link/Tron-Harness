@@ -46,5 +46,7 @@ pub use knowledge_ingestion_queue::SqliteKnowledgeIngestionQueue;
 
 pub mod capability_repository;
 
+mod dude_repository;
+pub use dude_repository::SqliteDudeRepository;
 mod dude_memory_repository;
 pub use dude_memory_repository::SqliteDudeMemoryRepository;
