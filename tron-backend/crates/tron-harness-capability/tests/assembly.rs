@@ -158,9 +158,30 @@ impl AgentLoop for ProbeLoop {
     }
 }
 
+#[test]
+fn workspace_free_invocation_requires_trusted_platform_scope_and_keeps_session_binding() {
+    let mut request = RunRequest::new("platform-session", "inspect platform");
+    let mut scope = TronRunScope {
+        user_code: "USR-1".into(),
+        workspace_code: String::new(),
+        platform_scope: false,
+        session_code: "platform-session".into(),
+        run_code: "RUN-platform".into(),
+        app_code: None,
+        task_code: None,
+        agent_code: Some("main-dude".into()),
+    };
+    assert!(scope.clone().attach(&mut request).is_err());
+    scope.platform_scope = true;
+    scope.clone().attach(&mut request).unwrap();
+    scope.session_code = "another-session".into();
+    assert!(scope.attach(&mut request).is_err());
+}
+
 fn request(session: &str, workspace: &str) -> RunRequest {
     let mut request = RunRequest::new(session, "inspect project");
     TronRunScope {
+        platform_scope: false,
         user_code: "USR-1".into(),
         workspace_code: workspace.into(),
         session_code: session.into(),

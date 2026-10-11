@@ -52,6 +52,8 @@ pub const TOOL_IMPLEMENTATION_DESCRIPTION: &str = "Adds Tron-specific business t
 pub struct TronRunScope {
     pub user_code: String,
     pub workspace_code: String,
+    /// Set only by the host for a platform-owned invocation, never model input.
+    pub platform_scope: bool,
     pub session_code: String,
     pub run_code: String,
     pub app_code: Option<String>,
@@ -67,14 +69,10 @@ impl TronRunScope {
     }
 
     fn validate(&self, session: &str) -> Result<(), AgentError> {
-        if [
-            &self.user_code,
-            &self.workspace_code,
-            &self.session_code,
-            &self.run_code,
-        ]
-        .iter()
-        .any(|value| value.trim().is_empty())
+        if [&self.user_code, &self.session_code, &self.run_code]
+            .iter()
+            .any(|value| value.trim().is_empty())
+            || (self.workspace_code.trim().is_empty() && !self.platform_scope)
         {
             return Err(AgentError::InvalidConfiguration(
                 "Tron user, workspace, session and run identifiers are required".into(),

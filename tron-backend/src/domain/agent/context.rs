@@ -193,6 +193,14 @@ pub struct AgentRunContext {
 }
 
 impl AgentRunContext {
+    pub(crate) fn is_platform_dude(&self) -> bool {
+        self.workspace_code.trim().is_empty()
+            && self
+                .collaboration_owner
+                .as_ref()
+                .is_some_and(|owner| owner.kind == "DUDE" && !owner.code.trim().is_empty())
+    }
+
     pub(crate) fn uses_platform_agent_definition(&self) -> bool {
         self.workspace_code.is_empty()
             || self.collaboration_owner.as_ref().is_some_and(|owner| {

@@ -67,6 +67,7 @@ impl ChatModel for Model {
 }
 fn scope(request: &mut RunRequest) {
     TronRunScope {
+        platform_scope: false,
         user_code: "U".into(),
         workspace_code: "W".into(),
         session_code: request.session_id.clone(),
