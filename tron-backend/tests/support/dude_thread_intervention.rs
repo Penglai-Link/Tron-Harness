@@ -160,14 +160,6 @@ fn intervention_service(f: &Fixture, model: Arc<HumanScript>) -> AgentInvocation
 async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_native_ownership() {
     let f = Fixture::new();
     reviewer(&f);
-    f.state
-        .agent_management
-        .replace_internal_agent_tool_assignments(
-            WORKSPACE,
-            "reviewer",
-            vec!["chat_ask_user".into()],
-        )
-        .unwrap();
     let script = Arc::new(HumanScript::default());
     let sink = Arc::new(Feedback::default());
     let host = f.state.agent_framework.clone();
