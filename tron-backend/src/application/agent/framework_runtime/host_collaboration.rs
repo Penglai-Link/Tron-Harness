@@ -204,7 +204,8 @@ impl Runtime {
         let harness = harness.framework_with_model_router(router);
         let mut command: AgentInvocationCommand = serde_json::from_value(serde_json::json!({
             "prompt": preparation_prompt, "workspaceCode": base.workspace_code, "conversationCode": session,
-            "agentCode": code, "model": model, "supportsUserInputRequests": true,
+            "agentCode": code, "model": model,
+            "supportsUserInputRequests": caller_context.collaboration_owner.as_ref().is_some_and(|owner| owner.kind == "DUDE"),
         }))
         .map_err(failure)?;
         command.run_code = request
