@@ -1,22 +1,4 @@
-export interface SkillSchemaPreview {
-  name: string;
-  fields: { name: string; type: string; required: boolean }[];
-}
-
 export type SkillSearchMode = "find" | "repo";
-
-export interface CapabilityRecord {
-  id: string;
-  mode: "skills" | "mcp";
-  name: string;
-  description: string;
-  provider: string;
-  status: string;
-  enabled: boolean;
-  latency: string;
-  schema: string;
-  activity: string[];
-}
 
 export type SkillSourceType =
   | "Marketplace"
@@ -24,7 +6,8 @@ export type SkillSourceType =
   | "Git"
   | "Url"
   | "Local"
-  | "Manual";
+  | "Manual"
+  | "BuiltIn";
 
 export type SkillUpdateStatus =
   | "Unknown"
@@ -33,15 +16,7 @@ export type SkillUpdateStatus =
   | "Manual"
   | "Error";
 
-export type SkillManagedBy = "Cli" | "Manual";
-
-export type SkillWorkspaceSourceKind =
-  | "Registry"
-  | "Local"
-  | "Inherited"
-  | "Override";
-
-export type SkillRegistryState = "Present" | "Deleted";
+export type SkillManagedBy = "Cli" | "Manual" | "BuiltIn";
 
 export type SkillRagIndexStatus =
   | "PENDING"
@@ -58,8 +33,8 @@ export interface SkillRagIndexSummary {
   graphStatus: SkillRagIndexStatus;
   contentHash?: string | null;
   structureHash?: string | null;
-  lastIndexedAt?: string | null;
-  updatedAt?: string | null;
+  lastIndexedAt?: number | null;
+  updatedAt?: number | null;
   lastError?: string | null;
   warnings: string[];
 }
@@ -81,19 +56,14 @@ export interface RegistrySkillRecord {
   declaredVersion?: string | null;
   updateStatus: SkillUpdateStatus;
   managedBy: SkillManagedBy;
-  lastCheckedAt?: string | null;
-  lastUpdatedAt?: string | null;
+  lastCheckedAt?: number | null;
+  lastUpdatedAt?: number | null;
   lastError?: string | null;
-  enabled: boolean;
-  sourceKind: SkillWorkspaceSourceKind;
-  sourceWorkspaceCode?: string | null;
-  sourceWorkspaceName?: string | null;
-  sourceLabel?: string | null;
-  shadowedWorkspaceCode?: string | null;
-  shadowedWorkspaceName?: string | null;
-  shadowedLabel?: string | null;
-  shadowedEnabled?: boolean | null;
-  enabledWorkspaceCount: number;
+  providerPackId?: string | null;
+  available: boolean;
+  assigned: boolean;
+  assignedAgentCount: number;
+  disabledReason?: string | null;
 }
 
 export interface RegistrySkillFile {
@@ -109,71 +79,16 @@ export interface RegistrySkillDetail {
   declaredVersion?: string | null;
   updateStatus: SkillUpdateStatus;
   managedBy: SkillManagedBy;
-  lastCheckedAt?: string | null;
-  lastUpdatedAt?: string | null;
+  lastCheckedAt?: number | null;
+  lastUpdatedAt?: number | null;
   lastError?: string | null;
   skillMarkdown: string;
   files: RegistrySkillFile[];
-  enabled: boolean;
-  sourceKind: SkillWorkspaceSourceKind;
-  sourceWorkspaceCode?: string | null;
-  sourceWorkspaceName?: string | null;
-  sourceLabel?: string | null;
-  shadowedWorkspaceCode?: string | null;
-  shadowedWorkspaceName?: string | null;
-  shadowedLabel?: string | null;
-  shadowedEnabled?: boolean | null;
-  enabledWorkspaceCount: number;
-}
-
-export interface WorkspaceSkillRecord {
-  skillName: string;
-  sourceRef?: string | null;
-  sourceType?: SkillSourceType | null;
-  registryPath?: string | null;
-  declaredVersion?: string | null;
-  updateStatus?: SkillUpdateStatus | null;
-  managedBy?: SkillManagedBy | null;
-  lastCheckedAt?: string | null;
-  lastUpdatedAt?: string | null;
-  lastError?: string | null;
-  enabled: boolean;
-  sourceKind: SkillWorkspaceSourceKind;
-  sourceWorkspaceCode?: string | null;
-  sourceWorkspaceName?: string | null;
-  sourceLabel?: string | null;
-  shadowedWorkspaceCode?: string | null;
-  shadowedWorkspaceName?: string | null;
-  shadowedLabel?: string | null;
-  shadowedEnabled?: boolean | null;
-  registryState: SkillRegistryState;
-  ragIndex?: SkillRagIndexSummary | null;
-}
-
-export interface WorkspaceSkillDetail {
-  skillName: string;
-  sourceRef?: string | null;
-  sourceType?: SkillSourceType | null;
-  registryPath?: string | null;
-  declaredVersion?: string | null;
-  updateStatus?: SkillUpdateStatus | null;
-  managedBy?: SkillManagedBy | null;
-  lastCheckedAt?: string | null;
-  lastUpdatedAt?: string | null;
-  lastError?: string | null;
-  skillMarkdown?: string | null;
-  files: RegistrySkillFile[];
-  enabled: boolean;
-  sourceKind: SkillWorkspaceSourceKind;
-  sourceWorkspaceCode?: string | null;
-  sourceWorkspaceName?: string | null;
-  sourceLabel?: string | null;
-  shadowedWorkspaceCode?: string | null;
-  shadowedWorkspaceName?: string | null;
-  shadowedLabel?: string | null;
-  shadowedEnabled?: boolean | null;
-  registryState: SkillRegistryState;
-  ragIndex?: SkillRagIndexSummary | null;
+  providerPackId?: string | null;
+  available: boolean;
+  assigned: boolean;
+  assignedAgentCount: number;
+  disabledReason?: string | null;
 }
 
 export interface SkillSearchCandidate {
@@ -189,28 +104,17 @@ export interface InstallRegistrySkillPayload {
   packageRef?: string;
   sourceRef?: string;
   skillName?: string;
-  enableForWorkspaceCode?: string;
 }
 
 export interface RegistrySkillMutationResult {
   skillName: string;
-  workspaceCode?: string | null;
-  enabled: boolean;
   ragIndex?: SkillRagIndexSummary | null;
 }
 
 export interface RegistrySkillUninstallResult {
   skillName: string;
-  removedBindingsCount: number;
-  keptBindingsCount: number;
+  removedAssignmentsCount: number;
   ragIndex?: SkillRagIndexBatchSummary | null;
-}
-
-export interface SkillBindingMutationResult {
-  workspaceCode: string;
-  skillName: string;
-  enabled: boolean;
-  ragIndex?: SkillRagIndexSummary | null;
 }
 
 export interface RegistrySkillSyncResult {

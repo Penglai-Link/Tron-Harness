@@ -57,7 +57,7 @@ impl FrameworkHost {
             validate_record_response(&record, value)?;
         }
         if let Some(run) = logical_run {
-            ensure_waiting(agent, session, run).await?;
+            ensure_waiting(&agent, session, run).await?;
         }
         Ok(())
     }
@@ -135,7 +135,7 @@ pub(super) async fn apply_answers(
         records.push((id, value));
     }
     if let Some(run) = logical_run {
-        ensure_waiting(agent, session, run).await?;
+        ensure_waiting(&agent, session, run).await?;
     }
     // Validate the whole batch before saving any answer. Native stores enforce answer CAS.
     for (id, value) in records {

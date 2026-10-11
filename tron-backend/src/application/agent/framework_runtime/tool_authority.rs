@@ -34,13 +34,24 @@ pub(crate) fn map_authorized_descriptor(
     descriptor: &fw::ToolDescriptor,
     extensions: &fw::Extensions,
 ) -> Result<EffectiveTool, fw::AgentError> {
-    if framework_a2ui_binding(extensions, descriptor) {
+    if framework_a2ui_binding(extensions, descriptor) || native_skill_descriptor(descriptor) {
         return Ok(EffectiveTool {
             tool_name: descriptor.call_name.clone(),
-            domain_code: Some("a2ui".into()),
+            domain_code: Some(
+                if native_skill_descriptor(descriptor) {
+                    "skill"
+                } else {
+                    "a2ui"
+                }
+                .into(),
+            ),
             description: descriptor.description.clone(),
             input_schema: descriptor.input_schema.clone(),
-            skill_name: Some(eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into()),
+            skill_name: if native_skill_descriptor(descriptor) {
+                None
+            } else {
+                Some(eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into())
+            },
             required_variable_keys: vec![],
         });
     }
@@ -93,15 +104,18 @@ fn native_skill_descriptor(descriptor: &fw::ToolDescriptor) -> bool {
 pub(crate) struct ToolCatalogPolicy {
     tools_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     management: Option<crate::application::agent::AgentManagementService>,
+    skills: Option<crate::application::skill::SkillRegistryService>,
 }
 impl ToolCatalogPolicy {
     pub(crate) fn shared(
         tools_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
         management: Option<crate::application::agent::AgentManagementService>,
+        skills: Option<crate::application::skill::SkillRegistryService>,
     ) -> Self {
         Self {
             tools_enabled,
             management,
+            skills,
         }
     }
 }
@@ -122,12 +136,15 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         let state = host.state.lock().await;
         let name = &binding.descriptor.call_name;
         if (!state.product_tool_authority.contains(name)
-            && !framework_a2ui_binding(&run.extensions, &binding.descriptor))
+            && !framework_a2ui_binding(&run.extensions, &binding.descriptor)
+            && !(self.skills.is_some() && native_skill_descriptor(&binding.descriptor)))
             || overridden_native_skill(&host, &state, &binding.descriptor)
         {
             return Ok(fw::ToolBindingAdmission::Exclude);
         }
-        if framework_a2ui_binding(&run.extensions, &binding.descriptor) {
+        if (self.skills.is_some() && native_skill_descriptor(&binding.descriptor))
+            || framework_a2ui_binding(&run.extensions, &binding.descriptor)
+        {
             return Ok(fw::ToolBindingAdmission::Allow);
         }
         Ok(
@@ -239,6 +256,32 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 ));
             }
         }
+        if self.skills.is_some() && native_skill_descriptor(invocation.descriptor) {
+            if let Some(skills) = self
+                .skills
+                .as_ref()
+                .filter(|_| invocation.descriptor.call_name != "skill_diagnostics")
+            {
+                let name = invocation
+                    .call
+                    .arguments
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                let agent = state.context.agent_code.as_deref().unwrap_or("main-agent");
+                if !skills
+                    .effective_agent_skills(agent)
+                    .map_err(|e| fw::AgentError::Run(e.to_string()))?
+                    .iter()
+                    .any(|s| s.skill_name == name && s.assigned && s.available)
+                {
+                    return Ok(fw::ToolPolicyDecision::Deny(
+                        "skill is not assigned or is unavailable".into(),
+                    ));
+                }
+            }
+            return Ok(fw::ToolPolicyDecision::Allow);
+        }
         if (!state
             .product_tool_authority
             .contains(&invocation.descriptor.call_name)
@@ -270,7 +313,9 @@ impl tron_harness_capability::ToolPermissionSource for PlatformPermissionSource 
         descriptor: &fw::ToolDescriptor,
     ) -> Result<tron_harness_capability::ToolPermissionSetting, String> {
         match &self.0 {
-            Some(source) => tron_harness_capability::ToolPermissionSource::setting(source, descriptor),
+            Some(source) => {
+                tron_harness_capability::ToolPermissionSource::setting(source, descriptor)
+            }
             None => Ok(tron_harness_capability::ToolPermissionSetting::default_for(
                 &descriptor.id,
             )),

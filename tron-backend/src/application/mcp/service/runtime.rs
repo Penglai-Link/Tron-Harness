@@ -121,6 +121,25 @@ impl McpService {
                 });
                 binding.descriptor.id = format!("tron.{tool_name}");
                 binding.descriptor.call_name = tool_name;
+                if let (Some(resources), Some(owner)) = (
+                    self.capabilities.get(),
+                    self.capability_resource(&server.server_code),
+                ) {
+                    resources
+                        .register(&[crate::application::capability::CapabilityResource {
+                            pack_id: owner.pack_id,
+                            kind: "tool".into(),
+                            code: binding.descriptor.id.clone(),
+                            available: owner.available,
+                        }])
+                        .map_err(McpError::RuntimeDiscoveryFailed)?;
+                }
+
+                binding.executor = std::sync::Arc::new(CurrentMcpTool {
+                    inner: binding.executor,
+                    service: self.clone(),
+                    server: server.server_code.clone(),
+                });
                 public_bindings.push(binding);
             }
             let close = client.clone();
@@ -248,7 +267,9 @@ impl McpService {
                     .get(&server.server_code)
                     .map(|policy| !policy.enabled)
                     .unwrap_or(false);
-                server.enabled && !workspace_override_disabled
+                server.enabled
+                    && !workspace_override_disabled
+                    && self.capability_available(&server.server_code)
             })
             .collect::<Vec<_>>();
 
@@ -382,4 +403,30 @@ fn normalize_string_codes(values: Vec<String>) -> Vec<String> {
     normalized.sort_unstable();
     normalized.dedup();
     normalized
+}
+
+struct CurrentMcpTool {
+    inner: std::sync::Arc<dyn fw::Tool>,
+    service: McpService,
+    server: String,
+}
+#[async_trait::async_trait]
+impl fw::Tool for CurrentMcpTool {
+    async fn call(
+        &self,
+        args: Value,
+        run: &fw::RunContext,
+    ) -> Result<fw::ToolOutput, fw::ToolError> {
+        if !self.service.capability_available(&self.server)
+            || !self
+                .service
+                .get_platform_server(&self.server)
+                .is_ok_and(|s| s.enabled)
+        {
+            return Err(fw::ToolError::Failed(
+                "MCP server is no longer available".into(),
+            ));
+        }
+        self.inner.call(args, run).await
+    }
 }

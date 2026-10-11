@@ -5,12 +5,7 @@ use axum::{
 
 use crate::app::AppState;
 
-use super::handler::{
-    bind_workspace_skill, check_registry_skill_updates, get_registry_skill, get_workspace_skill,
-    install_registry_skill, list_registry_skills, list_workspace_skills, refresh_workspace_skills,
-    rescan_registry_skills, retry_workspace_skill_rag_index, search_skills, unbind_workspace_skill,
-    uninstall_registry_skill, update_registry_skills,
-};
+use super::handler::*;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -37,27 +32,11 @@ pub fn routes() -> Router<AppState> {
             get(get_registry_skill).delete(uninstall_registry_skill),
         )
         .route(
-            "/api/v1/skills/workspaces/{workspace_code}/skills",
-            get(list_workspace_skills),
+            "/api/v1/skills/registry/{skill_name}/agent-grants",
+            get(get_skill_agents).put(put_skill_agents),
         )
         .route(
-            "/api/v1/skills/workspaces/{workspace_code}/skills/{skill_name}",
-            get(get_workspace_skill),
-        )
-        .route(
-            "/api/v1/skills/workspaces/{workspace_code}/skills/{skill_name}/rag-index/retry",
-            post(retry_workspace_skill_rag_index),
-        )
-        .route(
-            "/api/v1/skills/workspaces/{workspace_code}/refresh",
-            post(refresh_workspace_skills),
-        )
-        .route(
-            "/api/v1/skills/workspaces/{workspace_code}/bindings",
-            post(bind_workspace_skill),
-        )
-        .route(
-            "/api/v1/skills/workspaces/{workspace_code}/bindings/{skill_name}",
-            axum::routing::delete(unbind_workspace_skill),
+            "/api/v1/agents/registry/internal/{agent_code}/skills",
+            get(get_agent_skills).put(put_agent_skills),
         )
 }

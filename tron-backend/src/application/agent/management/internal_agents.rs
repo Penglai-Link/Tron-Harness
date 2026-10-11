@@ -253,12 +253,12 @@ impl AgentManagementService {
         agent_code: &str,
         mut tool_codes: Vec<String>,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        let _capability_guard = self.capabilities.get().map(|c| c.assignment_guard());
         self.active_workspace_detail(workspace_code)?;
         let definition = self
             .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
         let agent_code = definition.agent_code.as_str();
-        let now = current_timestamp();
         let mut normalized = Vec::new();
         for tool_code in tool_codes.drain(..) {
             let trimmed = tool_code.trim().to_string();
@@ -274,21 +274,10 @@ impl AgentManagementService {
                 normalized.push(trimmed);
             }
         }
+        let policy =
+            self.assignment_override_record(workspace_code, agent_code, "selectedToolCodes")?;
         self.repository()
-            .delete_workspace_internal_agent_tool_assignments(workspace_code, agent_code)?;
-        for tool_code in normalized {
-            self.repository()
-                .upsert_workspace_internal_agent_tool_assignment(
-                    &WorkspaceInternalAgentToolAssignment {
-                        workspace_code: workspace_code.to_string(),
-                        agent_code: agent_code.to_string(),
-                        tool_code,
-                        created_at: now.clone(),
-                        updated_at: now.clone(),
-                    },
-                )?;
-        }
-        self.mark_assignment_override(workspace_code, agent_code, "selectedToolCodes")?;
+            .replace_workspace_resource_assignments(&policy, false, &normalized)?;
         self.workspace_internal_agent_policy(workspace_code, agent_code)
     }
 
@@ -322,28 +311,24 @@ impl AgentManagementService {
         agent_code: &str,
         mut server_codes: Vec<String>,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        let _capability_guard = self.capabilities.get().map(|c| c.assignment_guard());
         self.active_workspace_detail(workspace_code)?;
         let definition = self
             .resolve_internal_agent_default(workspace_code, agent_code)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
         let agent_code = definition.agent_code.as_str();
-        let now = current_timestamp();
         let normalized = normalize_string_codes(server_codes.drain(..).collect());
-        self.repository()
-            .delete_workspace_internal_agent_mcp_server_assignments(workspace_code, agent_code)?;
-        for server_code in normalized {
-            self.repository()
-                .upsert_workspace_internal_agent_mcp_server_assignment(
-                    &WorkspaceInternalAgentMcpServerAssignment {
-                        workspace_code: workspace_code.to_string(),
-                        agent_code: agent_code.to_string(),
-                        server_code,
-                        created_at: now.clone(),
-                        updated_at: now.clone(),
-                    },
-                )?;
+        for code in &normalized {
+            if !self.mcp_assignable(code) {
+                return Err(AgentManagementError::InternalMcpServerAssignmentStale(
+                    code.clone(),
+                ));
+            }
         }
-        self.mark_assignment_override(workspace_code, agent_code, "selectedServerCodes")?;
+        let policy =
+            self.assignment_override_record(workspace_code, agent_code, "selectedServerCodes")?;
+        self.repository()
+            .replace_workspace_resource_assignments(&policy, true, &normalized)?;
         self.workspace_internal_agent_policy(workspace_code, agent_code)
     }
 
@@ -358,6 +343,9 @@ impl AgentManagementService {
         Ok(tool_codes
             .into_iter()
             .filter_map(|tool_code| self.tool(&tool_code, locale))
+            .filter(|tool| {
+                tool.availability_state == crate::domain::agent::ToolAvailabilityState::Available
+            })
             .collect())
     }
 
@@ -440,12 +428,12 @@ impl AgentManagementService {
             .unwrap_or_default())
     }
 
-    fn mark_assignment_override(
+    fn assignment_override_record(
         &self,
         workspace: &str,
         agent: &str,
         field: &str,
-    ) -> Result<(), AgentManagementError> {
+    ) -> Result<WorkspaceInternalAgentPolicy, AgentManagementError> {
         let definition = self
             .resolve_internal_agent_default(workspace, agent)?
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
@@ -462,8 +450,7 @@ impl AgentManagementService {
         {
             record.overridden_fields.push(field.into());
         }
-        self.repository()
-            .upsert_workspace_internal_agent_policy(&record)
+        Ok(record)
     }
 }
 

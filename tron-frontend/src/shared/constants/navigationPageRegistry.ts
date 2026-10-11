@@ -15,7 +15,6 @@ export const navigationPageRegistry: Record<string, string> = {
   "resourceManagement.files": "/resource-management/files",
   "resourceManagement.serverAccounts": "/resource-management/server-accounts",
   "resourceManagement.servers": "/resource-management/servers",
-  "skills.index": "/skills",
   "tasks.index": "/tasks",
   "variables.index": "/variables",
 };

@@ -18,7 +18,6 @@ use crate::{
             EffectiveSkill, EffectiveVariable, ToolExposureMode, ToolRegistry,
         },
         prompt::PromptRuntimeProvider,
-        skill::WorkspaceSkillListQuery,
         workspace::WorkspaceStatus,
     },
     shared::{event_bus::EventBusHandle, locale::SupportedLocale},
@@ -49,11 +48,7 @@ fn managed_system_prompt(
     runtime_values: &HashMap<PromptRuntimeProvider, serde_json::Value>,
 ) -> Result<String, AgentInvocationError> {
     if let Some(prompt_service) = prompt_service {
-        match prompt_service.runtime_prompt_text(
-            catalog_key,
-            locale,
-            runtime_values,
-        ) {
+        match prompt_service.runtime_prompt_text(catalog_key, locale, runtime_values) {
             Ok(Some(prompt)) => return Ok(prompt),
             Ok(None) => {}
             Err(error) => {
@@ -257,22 +252,22 @@ impl AgentRunContextBuilder {
             .iter()
             .map(|variable| (variable.key.clone(), variable.value.clone()))
             .collect::<HashMap<_, _>>();
-        let skills = self
-            .skills
-            .list_workspace_skills(
-                &workspace.workspace_code,
-                WorkspaceSkillListQuery { search: None },
-            )
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|skill| skill.enabled)
-            .map(|skill| EffectiveSkill {
-                skill_name: skill.skill_name,
-                description: skill.source_label.unwrap_or_default(),
-                instruction: None,
-                tool_names: Vec::new(),
-            })
-            .collect::<Vec<_>>();
+        let skills = if matches!(resolved_agent.runtime_type, AgentRuntimeType::React) {
+            self.skills
+                .effective_agent_skills(&resolved_agent.agent_code)
+                .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?
+                .into_iter()
+                .filter(|skill| skill.assigned && skill.available)
+                .map(|skill| EffectiveSkill {
+                    skill_name: skill.skill_name,
+                    description: skill.description.unwrap_or_default(),
+                    instruction: None,
+                    tool_names: Vec::new(),
+                })
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
 
         self.materialize_mcp_tools(
             &mut tool_access,

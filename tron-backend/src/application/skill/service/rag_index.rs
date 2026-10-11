@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::Path,
-};
+use std::{collections::BTreeMap, path::Path};
 
 use crate::{
     application::rag::{
@@ -9,12 +6,9 @@ use crate::{
         RagIngestRepository, RagIngestScope, RagSearchRepository, RagSearchRuntime, RagService,
         RagSourceLifecycleRepository,
     },
-    domain::{
-        skill::{
-            RegistrySkill, SkillError, SkillRagIndexBatchSummary, SkillRagIndexRecord,
-            SkillRagIndexStatus,
-        },
-        workspace::{WorkspaceListQuery, WorkspaceStatus},
+    domain::skill::{
+        RegistrySkill, SkillError, SkillRagIndexBatchSummary, SkillRagIndexRecord,
+        SkillRagIndexStatus,
     },
     shared::time::current_timestamp,
 };
@@ -51,130 +45,61 @@ where
         Self { skills, rag }
     }
 
-    pub async fn index_workspace(
-        &self,
-        workspace_code: &str,
-    ) -> Result<SkillRagIndexBatchSummary, SkillError> {
-        let workspace_code =
-            normalized_required(workspace_code).ok_or(SkillError::WorkspaceRequired)?;
-        let workspace = self.skills.active_workspace_detail(&workspace_code)?;
-        let resolved = self.skills.resolve_workspace_bindings(&workspace)?;
-        let registry_skills = self.registry_skill_map()?;
-        let existing_states = self.list_index_states(Some(&workspace_code))?;
-        let mut handled = BTreeSet::new();
+    pub async fn index_all(&self) -> Result<SkillRagIndexBatchSummary, SkillError> {
+        let _guard = self.skills.index_lock.lock().await;
+        let skills = self.registry_skill_map()?;
+        let states = self.list_index_states()?;
         let mut batch = SkillRagIndexBatchSummary::default();
-
-        for (skill_name, binding) in resolved {
-            handled.insert(skill_name.clone());
-            if !binding.binding.enabled {
-                let summary = self.disable_skill(&workspace_code, &skill_name).await?;
-                merge_summary(&mut batch, &summary);
-                continue;
-            }
-            let Some(skill) = registry_skills.get(skill_name.as_str()) else {
-                self.deactivate_sources(&workspace_code, &skill_name).await;
-                let state = self.failed_state(
-                    &workspace_code,
-                    &skill_name,
-                    true,
-                    None,
-                    None,
-                    "Skill is no longer present in the local registry",
-                );
-                self.upsert_state(&state)?;
-                let summary = state.summary();
-                merge_summary(&mut batch, &summary);
-                continue;
+        for skill in skills.values() {
+            let summary = if skill.available {
+                self.index_skill("PLATFORM", skill).await?
+            } else {
+                self.disable_skill_inner(&skill.skill_name).await?
             };
-            let summary = self.index_skill(&workspace_code, skill).await?;
             merge_summary(&mut batch, &summary);
         }
-
-        for state in existing_states {
-            if handled.contains(&state.skill_name) {
-                continue;
-            }
-            let summary = self
-                .disable_skill(&workspace_code, &state.skill_name)
-                .await?;
-            merge_summary(&mut batch, &summary);
-        }
-
-        Ok(batch)
-    }
-
-    pub async fn index_workspace_skill(
-        &self,
-        workspace_code: &str,
-        skill_name: &str,
-    ) -> Result<crate::domain::skill::SkillRagIndexSummary, SkillError> {
-        let workspace_code =
-            normalized_required(workspace_code).ok_or(SkillError::WorkspaceRequired)?;
-        let skill_name = normalized_required(skill_name).ok_or(SkillError::SkillNameRequired)?;
-        let workspace = self.skills.active_workspace_detail(&workspace_code)?;
-        let resolved = self.skills.resolve_workspace_bindings(&workspace)?;
-        let Some(binding) = resolved.get(skill_name.as_str()) else {
-            return self.disable_skill(&workspace_code, &skill_name).await;
-        };
-
-        if !binding.binding.enabled {
-            return self.disable_skill(&workspace_code, &skill_name).await;
-        }
-
-        let registry_skills = self.registry_skill_map()?;
-        let Some(skill) = registry_skills.get(skill_name.as_str()) else {
-            self.deactivate_sources(&workspace_code, &skill_name).await;
-            let state = self.failed_state(
-                &workspace_code,
-                &skill_name,
-                true,
-                None,
-                None,
-                "Skill is no longer present in the local registry",
-            );
-            self.upsert_state(&state)?;
-            return Ok(state.summary());
-        };
-
-        self.index_skill(&workspace_code, skill).await
-    }
-
-    pub async fn index_all_active_workspaces(
-        &self,
-    ) -> Result<SkillRagIndexBatchSummary, SkillError> {
-        let workspaces = self
-            .skills
-            .workspaces
-            .list_workspace_options(WorkspaceListQuery {
-                include_archived: Some(false),
-                search: None,
-                status: Some(WorkspaceStatus::Active),
-                root_only: None,
-            })
-            .map_err(super::map_workspace_error)?;
-        let mut batch = SkillRagIndexBatchSummary::default();
-        for workspace in workspaces {
-            match self.index_workspace(&workspace.workspace_code).await {
-                Ok(summary) => merge_batch(&mut batch, summary),
-                Err(error) => {
-                    batch.failed_count += 1;
-                    batch.warnings.push(format!(
-                        "{} indexing failed: {error}",
-                        workspace.workspace_code
-                    ));
+        for state in states {
+            if !skills.contains_key(&state.skill_name) {
+                let summary = self.disable_skill_inner(&state.skill_name).await?;
+                merge_summary(&mut batch, &summary);
+                if summary.vector_status != SkillRagIndexStatus::Failed
+                    && summary.graph_status != SkillRagIndexStatus::Failed
+                {
+                    self.skills
+                        .repository
+                        .lock()
+                        .unwrap()
+                        .delete_rag_index_state(&state.skill_name)?;
                 }
             }
         }
         Ok(batch)
     }
+    pub async fn index_registry_skill(
+        &self,
+        name: &str,
+    ) -> Result<crate::domain::skill::SkillRagIndexSummary, SkillError> {
+        let _guard = self.skills.index_lock.lock().await;
+        let skills = self.registry_skill_map()?;
+        let skill = skills.get(name).ok_or(SkillError::NotFound)?;
+        if !skill.available {
+            return self.disable_skill_inner(name).await;
+        }
+        self.index_skill("PLATFORM", skill).await
+    }
 
     pub async fn disable_skill(
         &self,
-        workspace_code: &str,
+        name: &str,
+    ) -> Result<crate::domain::skill::SkillRagIndexSummary, SkillError> {
+        let _guard = self.skills.index_lock.lock().await;
+        self.disable_skill_inner(name).await
+    }
+    async fn disable_skill_inner(
+        &self,
         skill_name: &str,
     ) -> Result<crate::domain::skill::SkillRagIndexSummary, SkillError> {
-        let workspace_code =
-            normalized_required(workspace_code).ok_or(SkillError::WorkspaceRequired)?;
+        let workspace_code = "PLATFORM";
         let skill_name = normalized_required(skill_name).ok_or(SkillError::SkillNameRequired)?;
         let errors = self
             .deactivate_sources(&workspace_code, &skill_name)
@@ -187,7 +112,6 @@ where
             SkillRagIndexStatus::Failed
         };
         let state = SkillRagIndexRecord {
-            workspace_code,
             skill_name,
             source_version: SKILL_SOURCE_VERSION.into(),
             desired_enabled: false,
@@ -203,9 +127,46 @@ where
         Ok(state.summary())
     }
 
+    pub async fn remove_skill_index(&self, name: &str) -> Result<(), SkillError> {
+        let _guard = self.skills.index_lock.lock().await;
+        self.remove_skill_index_inner(name).await
+    }
+    /// Delete catalog rows under the indexing lock so a concurrent scan cannot
+    /// recreate disabled index state between source cleanup and catalog removal.
+    pub async fn remove_pack_skills(&self, pack: &str) -> Result<(), SkillError> {
+        let _guard = self.skills.index_lock.lock().await;
+        let names = self
+            .skills
+            .repository
+            .lock()
+            .unwrap()
+            .list_registry_skills()?
+            .into_iter()
+            .filter(|s| s.provider_pack_id.as_deref() == Some(pack))
+            .map(|s| s.skill_name)
+            .collect::<Vec<_>>();
+        for name in names {
+            self.remove_skill_index_inner(&name).await?;
+        }
+        self.skills.delete_pack_skills(pack)?;
+        Ok(())
+    }
+    async fn remove_skill_index_inner(&self, name: &str) -> Result<(), SkillError> {
+        let summary = self.disable_skill_inner(name).await?;
+        if summary.vector_status == SkillRagIndexStatus::Failed
+            || summary.graph_status == SkillRagIndexStatus::Failed
+        {
+            return Err(SkillError::StorageFailure);
+        }
+        self.skills
+            .repository
+            .lock()
+            .unwrap()
+            .delete_rag_index_state(name)
+    }
+
     pub fn state_summary(
         &self,
-        workspace_code: &str,
         skill_name: &str,
     ) -> Result<Option<crate::domain::skill::SkillRagIndexSummary>, SkillError> {
         Ok(self
@@ -213,7 +174,7 @@ where
             .repository
             .lock()
             .expect("skill registry repository mutex poisoned")
-            .get_rag_index_state(workspace_code, skill_name)?
+            .get_rag_index_state(skill_name)?
             .map(|state| state.summary()))
     }
 
@@ -323,7 +284,6 @@ where
         };
 
         let state = SkillRagIndexRecord {
-            workspace_code: workspace_code.to_string(),
             skill_name: skill.skill_name.clone(),
             source_version: SKILL_SOURCE_VERSION.into(),
             desired_enabled: true,
@@ -375,15 +335,12 @@ where
             .collect())
     }
 
-    fn list_index_states(
-        &self,
-        workspace_code: Option<&str>,
-    ) -> Result<Vec<SkillRagIndexRecord>, SkillError> {
+    fn list_index_states(&self) -> Result<Vec<SkillRagIndexRecord>, SkillError> {
         self.skills
             .repository
             .lock()
             .expect("skill registry repository mutex poisoned")
-            .list_rag_index_states(workspace_code)
+            .list_rag_index_states()
     }
 
     fn upsert_state(&self, state: &SkillRagIndexRecord) -> Result<(), SkillError> {
@@ -396,7 +353,7 @@ where
 
     fn failed_state(
         &self,
-        workspace_code: &str,
+        _workspace_code: &str,
         skill_name: &str,
         desired_enabled: bool,
         content_hash: Option<String>,
@@ -404,7 +361,6 @@ where
         error: &str,
     ) -> SkillRagIndexRecord {
         SkillRagIndexRecord {
-            workspace_code: workspace_code.to_string(),
             skill_name: skill_name.to_string(),
             source_version: SKILL_SOURCE_VERSION.into(),
             desired_enabled,
@@ -451,12 +407,4 @@ fn merge_summary(
     } else {
         batch.warning_count += 1;
     }
-}
-
-fn merge_batch(target: &mut SkillRagIndexBatchSummary, source: SkillRagIndexBatchSummary) {
-    target.indexed_count += source.indexed_count;
-    target.disabled_count += source.disabled_count;
-    target.failed_count += source.failed_count;
-    target.warning_count += source.warning_count;
-    target.warnings.extend(source.warnings);
 }

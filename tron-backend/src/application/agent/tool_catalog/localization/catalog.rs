@@ -107,7 +107,7 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.domains.skill.name" => "Skill Tools",
         "agent.toolCatalog.domains.skill.description" => {
-            "Inspect workspace skill bindings and registry entries."
+            "Inspect skills assigned to the current Agent."
         }
         "agent.toolCatalog.domains.task.name" => "Task Tools",
         "agent.toolCatalog.domains.task.description" => "Read and create workspace tasks.",
@@ -261,10 +261,10 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.task.create.params.appCode" => "Optional related app code.",
         "agent.toolCatalog.tools.skill.view.name" => "View skill",
         "agent.toolCatalog.tools.skill.view.description" => {
-            "View one workspace skill's progressive-disclosure details, including SKILL.md content and files."
+            "View one assigned skill's progressive-disclosure details, including SKILL.md content and files."
         }
         "agent.toolCatalog.tools.skill.view.sampleResultSummary" => {
-            "Returns one workspace skill detail with skillMarkdown and files."
+            "Returns one assigned skill detail with skillMarkdown and files."
         }
         "agent.toolCatalog.tools.skill.view.params.workspaceCode" => {
             "Optional workspace code. Uses the current workspace when omitted."
@@ -381,7 +381,7 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
             "返回已创建服务器账号的编码和类型。"
         }
         "agent.toolCatalog.domains.skill.name" => "技能工具",
-        "agent.toolCatalog.domains.skill.description" => "查看工作区技能绑定和注册项。",
+        "agent.toolCatalog.domains.skill.description" => "查看当前 Agent 已分配的技能。",
         "agent.toolCatalog.domains.task.name" => "任务工具",
         "agent.toolCatalog.domains.task.description" => "读取并创建工作区任务。",
         "agent.toolCatalog.domains.variable.name" => "变量工具",
@@ -486,10 +486,10 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.task.create.params.appCode" => "可选的关联应用编码。",
         "agent.toolCatalog.tools.skill.view.name" => "查看技能",
         "agent.toolCatalog.tools.skill.view.description" => {
-            "查看一个工作区技能的渐进式披露详情，包括 SKILL.md 内容和文件列表。"
+            "查看一个已分配技能的渐进式披露详情，包括 SKILL.md 内容和文件列表。"
         }
         "agent.toolCatalog.tools.skill.view.sampleResultSummary" => {
-            "返回单个工作区技能详情，包含 skillMarkdown 和 files。"
+            "返回单个已分配技能详情，包含 skillMarkdown 和 files。"
         }
         "agent.toolCatalog.tools.skill.view.params.workspaceCode" => {
             "可选工作区编码；缺省时使用当前工作区。"

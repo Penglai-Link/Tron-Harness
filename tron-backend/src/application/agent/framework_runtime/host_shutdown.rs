@@ -112,12 +112,9 @@ impl FrameworkHost {
             .map(|(key, _)| key.clone())
             .collect::<std::collections::BTreeSet<_>>();
         for agent in self.initialized_internal_agents().into_iter().chain(
-            [
-                self.0.external_agent.get().cloned(),
-                self.0.continuation_agent.get().cloned(),
-            ]
-            .into_iter()
-            .flatten(),
+            [self.0.external_agent.get(), self.0.continuation_agent.get()]
+                .into_iter()
+                .flatten(),
         ) {
             poll_owner(
                 "SDK agent",
@@ -195,14 +192,12 @@ impl FrameworkHost {
                     .collect::<Vec<_>>();
                 for agent in late_internal.into_iter().chain(
                     [
-                        (!initialized_default)
-                            .then(|| host.0.agent.get().cloned())
-                            .flatten(),
+                        (!initialized_default).then(|| host.0.agent.get()).flatten(),
                         (!initialized_external)
-                            .then(|| host.0.external_agent.get().cloned())
+                            .then(|| host.0.external_agent.get())
                             .flatten(),
                         (!initialized_continuation)
-                            .then(|| host.0.continuation_agent.get().cloned())
+                            .then(|| host.0.continuation_agent.get())
                             .flatten(),
                     ]
                     .into_iter()

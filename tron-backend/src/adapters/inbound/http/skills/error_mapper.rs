@@ -6,8 +6,9 @@ use axum::{
 
 use crate::{domain::skill::SkillError, response::ApiResponse};
 
-pub fn skill_error_response(error: SkillError) -> Response {
-    let (status, code, message) = match error {
+pub fn skill_error_response(error: SkillError, locale: &str) -> Response {
+    let descriptor = error.descriptor();
+    let (status, _legacy_code, message) = match error {
         SkillError::SearchQueryRequired => (
             StatusCode::BAD_REQUEST,
             "SKILL_SEARCH_QUERY_REQUIRED",
@@ -23,25 +24,25 @@ pub fn skill_error_response(error: SkillError) -> Response {
             "SKILL_NAME_REQUIRED",
             "skillName is required",
         ),
-        SkillError::WorkspaceRequired => (
+        SkillError::InvalidAgent => (
             StatusCode::BAD_REQUEST,
-            "SKILL_WORKSPACE_REQUIRED",
-            "workspaceCode is required",
+            "SKILL_AGENT_INVALID",
+            "internal agent was not found",
         ),
-        SkillError::InvalidWorkspace => (
+        SkillError::Unavailable => (
             StatusCode::BAD_REQUEST,
-            "SKILL_WORKSPACE_INVALID",
-            "skill workspace must reference an active workspace",
+            "SKILL_UNAVAILABLE",
+            "skill is unavailable",
         ),
         SkillError::NotFound => (
             StatusCode::NOT_FOUND,
             "SKILL_NOT_FOUND",
             "skill was not found",
         ),
-        SkillError::DuplicateBinding => (
+        SkillError::DuplicateSkill => (
             StatusCode::CONFLICT,
-            "SKILL_BINDING_DUPLICATE",
-            "skill binding already exists in the workspace",
+            "SKILL_NAME_CONFLICT",
+            "skill name conflicts with an installed skill",
         ),
         SkillError::InvalidRegistryPath => (
             StatusCode::BAD_REQUEST,
@@ -60,5 +61,29 @@ pub fn skill_error_response(error: SkillError) -> Response {
         ),
     };
 
-    (status, Json(ApiResponse::error(code, message))).into_response()
+    let translated = match descriptor.message_key {
+        "tron.skill.searchqueryrequired" => "搜索内容不能为空",
+        "tron.skill.sourcerefrequired" => "技能来源不能为空",
+        "tron.skill.skillnamerequired" => "技能名称不能为空",
+        "tron.skill.invalidagent" => "内部 Agent 不存在",
+        "tron.skill.unavailable" => "技能不可分配：所属能力包已禁用或资源不存在",
+        "tron.skill.notfound" => "技能不存在",
+        "tron.skill.duplicateskill" => "技能名称与已安装技能冲突",
+        "tron.skill.invalidregistrypath" => "技能目录无效",
+        "tron.skill.storagefailure" => "技能存储操作失败",
+        "tron.skill.commandfailed" => "技能安装命令执行失败",
+        _ => "技能操作失败",
+    };
+    (
+        status,
+        Json(ApiResponse::protocol_error(
+            descriptor.code,
+            if locale.starts_with("en") {
+                message
+            } else {
+                translated
+            },
+        )),
+    )
+        .into_response()
 }

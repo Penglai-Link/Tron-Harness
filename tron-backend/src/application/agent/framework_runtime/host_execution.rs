@@ -175,12 +175,9 @@ impl FrameworkHost {
                     )
                     .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
                 let design = management
-                    .loop_design(
-                        policy
-                            .loop_code
-                            .as_deref()
-                            .ok_or_else(|| AgentError::InvalidConfiguration("agent loop is not configured".into()))?,
-                    )
+                    .loop_design(policy.loop_code.as_deref().ok_or_else(|| {
+                        AgentError::InvalidConfiguration("agent loop is not configured".into())
+                    })?)
                     .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
                 request.extensions.insert(design);
             }
@@ -236,6 +233,21 @@ impl FrameworkHost {
                 },
             )),
         );
+        if let Some(skills) = self.0.skill_registry.get() {
+            let agent = context.agent_code.as_deref().unwrap_or("main-agent");
+            let names = skills
+                .effective_agent_skills(agent)
+                .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?
+                .into_iter()
+                .filter(|s| s.assigned && s.available)
+                .map(|s| s.skill_name);
+            request.extensions.insert(fw::SkillAccess {
+                names: names.collect(),
+            });
+            request
+                .extensions
+                .insert(crate::application::skill::SkillAgentIdentity(agent.into()));
+        }
         request.extensions.insert(HostExecution {
             harness: harness.clone(),
             state: state.clone(),

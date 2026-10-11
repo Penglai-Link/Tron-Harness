@@ -2,9 +2,16 @@ export type AgentStatus = "Enabled" | "Disabled" | "Unavailable";
 
 export type ToolAssignmentMode = "all_platform_tools" | "selected_tools";
 export type ToolExposureMode = "direct_list" | "domain_discovery";
-export type ExpandedDomainPersistenceMode = "sticky_expanded" | "ephemeral_expanded";
-export type WorkspaceInternalAgentPolicySource = "platform_default" | "workspace_override";
-export type McpAccessMode = "disabled" | "all_enabled_servers" | "selected_servers";
+export type ExpandedDomainPersistenceMode =
+  | "sticky_expanded"
+  | "ephemeral_expanded";
+export type WorkspaceInternalAgentPolicySource =
+  | "platform_default"
+  | "workspace_override";
+export type McpAccessMode =
+  | "disabled"
+  | "all_enabled_servers"
+  | "selected_servers";
 // Client configuration scope; never sent as a workspace identifier to the backend.
 export const PLATFORM_INTERNAL_AGENT_SCOPE = "$platform";
 
@@ -51,6 +58,9 @@ export interface ToolCatalogDomainRecord {
 }
 
 export interface PlatformToolRecord {
+  providerPackId?: string | null;
+  assignable?: boolean;
+  disabledReason?: string | null;
   toolCode: string;
   toolName: string;
   domainCode: string;

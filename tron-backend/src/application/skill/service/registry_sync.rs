@@ -20,13 +20,17 @@ impl SkillRegistryService {
         let mut seen = BTreeSet::new();
 
         for skill_dir in &skill_dirs {
-            let Some(skill_name) = skill_dir.file_name().and_then(|value| value.to_str()) else {
-                continue;
-            };
-            seen.insert(skill_name.to_owned());
+            let skill_markdown = read_skill_markdown(skill_dir)?;
+            let skill_name = parse_skill_name(&skill_markdown)?;
+            if !seen.insert(skill_name.clone()) {
+                return Err(SkillError::DuplicateSkill);
+            }
+            let skill_name = skill_name.as_str();
             let lock_entry = lock_entries.get(skill_name);
             let existing_skill = existing.get(skill_name);
-            let skill_markdown = read_skill_markdown(skill_dir)?;
+            if existing_skill.is_some_and(|s| s.provider_pack_id.is_some()) {
+                return Err(SkillError::DuplicateSkill);
+            }
             let frontmatter = parse_skill_frontmatter(&skill_markdown);
             let managed_by = if lock_entry.is_some() {
                 SkillManagedBy::Cli
@@ -56,6 +60,8 @@ impl SkillRegistryService {
             };
             let skill = RegistrySkill {
                 skill_name: skill_name.to_owned(),
+                provider_pack_id: None,
+                available: true,
                 source_ref,
                 source_type,
                 registry_path: skill_dir.display().to_string(),
@@ -85,7 +91,10 @@ impl SkillRegistryService {
         }
 
         let mut removed_count = 0;
-        for skill_name in existing.keys() {
+        for (skill_name, skill) in &existing {
+            if skill.provider_pack_id.is_some() {
+                continue;
+            }
             if seen.contains(skill_name) {
                 continue;
             }

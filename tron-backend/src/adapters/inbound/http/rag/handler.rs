@@ -171,7 +171,7 @@ pub async fn submit(
             state.rag.clone(),
         );
         tokio::spawn(async move {
-            let _ = indexer.index_all_active_workspaces().await;
+            let _ = indexer.index_all().await;
         });
     } else if input.corpus_id == "memory-card" {
         let records = match state.rag.record_task_views(user) {
@@ -320,11 +320,8 @@ async fn control(
                 state.skills.clone(),
                 state.rag.clone(),
             );
-            // Reload the registry and current workspace binding before recreating evidence.
-            return match indexer
-                .index_workspace_skill(&task.workspace_code, &name)
-                .await
-            {
+            // Reload the registry and current Agent assignment before recreating evidence.
+            return match indexer.index_registry_skill(&name).await {
                 Ok(_) => Json(ApiResponse::success(json!({"accepted":true}))).into_response(),
                 Err(error) => failure(error),
             };

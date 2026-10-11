@@ -254,11 +254,8 @@ impl AppState {
             variables.clone(),
             runtime_http_client.clone(),
         );
-        let skills = build_skill_registry_service(
-            &config.database_url,
-            workspaces.clone(),
-            &config.skills_registry_root,
-        );
+        let skills =
+            build_skill_registry_service(&config.database_url, &config.skills_registry_root);
         let agent_management = build_agent_management_service(
             &config.database_url,
             workspaces.clone(),
@@ -284,11 +281,8 @@ impl AppState {
             .with_model_executor(model_providers.model_executor())
             .with_runtime_config(runtime_config.clone()),
         );
-        let prompts = build_prompt_service(
-            &config.database_url,
-            variables.clone(),
-            id_provider.clone(),
-        );
+        let prompts =
+            build_prompt_service(&config.database_url, variables.clone(), id_provider.clone());
         let llm_runtime = LlmRuntimeService::new(
             Arc::new(ProviderAwareLlmRuntimeResolver::new(
                 models.clone(),
@@ -363,7 +357,31 @@ impl AppState {
         agent_framework
             .bind_personai(model_providers.clone())
             .expect("initial PersonAI tool credentials");
+        skills.bind_agents(agent_management.clone());
+        knowledge_bases.bind_skills(skills.clone());
         agent_framework.bind_agent_management(agent_management.clone());
+        let capability_resources=crate::application::capability::CapabilityResources::new(crate::adapters::outbound::persistence::sqlite::capability_repository::SqliteCapabilityRepository::connect(&config.database_url).expect("capability resource storage"));
+        agent_management.bind_capabilities(capability_resources.clone());
+        mcp.bind_capabilities(capability_resources.clone());
+        agent_management.bind_mcp(mcp.clone());
+        skills.bind_capabilities(capability_resources.clone());
+        agent_framework
+            .bind_skills(
+                skills.clone(),
+                capability_resources,
+                mcp.clone(),
+                rag.clone(),
+            )
+            .expect("capability resource catalog");
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let indexer =
+                crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone());
+            runtime.spawn(async move {
+                if let Err(error) = indexer.index_all().await {
+                    eprintln!("platform skill index synchronization failed: {error}");
+                }
+            });
+        }
         agui_replay_store
             .bind_framework(&agent_framework)
             .expect("Framework replay storage");

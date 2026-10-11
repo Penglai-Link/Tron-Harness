@@ -4,12 +4,12 @@ pub mod fidelity; // Legacy finding types and read guards for persisted document
 pub mod ingestion;
 pub(crate) mod ingestion_worker;
 pub mod local_documents;
+mod managed_retrieval;
 pub mod office_visuals;
 pub mod parsing;
 mod parsing_cache;
 pub mod pdf_visual_source;
 mod platform_catalog;
-mod managed_retrieval;
 mod publication_resources;
 mod source_locations;
 mod visual_evidence;
@@ -172,6 +172,7 @@ pub struct KnowledgeBaseContext {
 }
 #[derive(Clone)]
 pub struct KnowledgeBaseService {
+    skills: Arc<std::sync::OnceLock<crate::application::skill::SkillRegistryService>>,
     pub(crate) cleanup_gate: Arc<std::sync::Mutex<()>>,
     pub(crate) queue: Arc<dyn ingestion::KnowledgeIngestionQueue>,
     ingestion_config: crate::config::KnowledgeIngestionConfig,
@@ -189,6 +190,22 @@ pub struct KnowledgeBaseService {
     pub(crate) runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
 }
 impl KnowledgeBaseService {
+    pub fn bind_skills(&self, skills: crate::application::skill::SkillRegistryService) {
+        let _ = self.skills.set(skills);
+    }
+    fn allowed_skill_sources(&self, agent: &str) -> Result<Vec<String>, RagError> {
+        let Some(skills) = self.skills.get() else {
+            return Ok(vec![]);
+        };
+        Ok(skills
+            .effective_agent_skills(agent)
+            .map_err(|_| RagError::SearchScopeInvalid)?
+            .into_iter()
+            .filter(|s| s.available && s.assigned)
+            .map(|s| format!("skill:PLATFORM:{}", s.skill_name))
+            .collect())
+    }
+
     pub fn new(
         repository: SqliteKnowledgeBaseRepository,
         rag: AppRagService,
@@ -202,6 +219,7 @@ impl KnowledgeBaseService {
                 .expect("knowledge ingestion schema"),
         );
         Self {
+            skills: Default::default(),
             cleanup_gate: Default::default(),
             queue,
             ingestion_config: Default::default(),
@@ -1018,7 +1036,8 @@ impl KnowledgeBaseService {
     fn rag_ranges_for_libraries(
         &self,
         allowed: Vec<KnowledgeBase>,
-    ) -> Result<(Vec<AuthorizedRagRange>, Vec<KnowledgeBase>, Vec<String>), KnowledgeBaseError> {
+    ) -> Result<(Vec<AuthorizedRagRange>, Vec<KnowledgeBase>, Vec<String>), KnowledgeBaseError>
+    {
         let mut versions = vec![];
         let mut ranges = vec![];
         for kb in &allowed {
@@ -1379,10 +1398,18 @@ impl RagAccessResolver for KnowledgeBaseService {
             .map_err(|_| RagError::SearchScopeInvalid)?;
         for corpus in ["memory-card", "skill"] {
             let settings = self.rag.settings_for_corpus(corpus)?;
+            let skill_sources = if corpus == "skill" {
+                self.allowed_skill_sources(&identity.agent_code)?
+            } else {
+                vec![]
+            };
+            if corpus == "skill" && skill_sources.is_empty() {
+                continue;
+            }
             let scopes = if corpus == "skill" {
                 vec![RagSearchScope {
                     scope_type: "SPACE".into(),
-                    scope_code: identity.workspace_code.clone(),
+                    scope_code: "PLATFORM".into(),
                 }]
             } else {
                 vec![
@@ -1411,7 +1438,7 @@ impl RagAccessResolver for KnowledgeBaseService {
                 filters: if corpus == "memory-card" {
                     json!({"memoryStatus":"ACTIVE","reviewStatus":"APPROVED","injectable":true,"expiresAt":{"op":"gtOrNull","value":chrono::Utc::now().timestamp_millis()}})
                 } else {
-                    json!({})
+                    json!({"sourceCode":{"op":"in","value":skill_sources}})
                 },
                 embedding_model_code: settings.embedding_model_code,
                 embedding_dimension: Some(TRON_VECTOR_INDEX_DIMENSION),
@@ -1440,6 +1467,10 @@ impl RagAccessResolver for KnowledgeBaseService {
             result,
         )
         .map_err(|_| RagError::SearchScopeInvalid)?;
+        let allowed_skills = self.allowed_skill_sources(&identity.agent_code)?;
+        result.hits.retain(|hit| {
+            hit.row.corpus_id != "skill" || allowed_skills.contains(&hit.row.source_code)
+        });
         let now = chrono::Utc::now().timestamp_millis();
         result.hits.retain(|hit| {
             hit.row.corpus_id != "memory-card"

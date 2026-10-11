@@ -5,7 +5,7 @@ impl FrameworkHost {
         let framework = self.framework().await?;
         let (packs, extensions) = self.capability_state();
         let mut selection = self
-            .main_selection(framework, &packs, &extensions)
+            .main_selection(&framework, &packs, &extensions)
             .map_err(fw::AgentError::InvalidConfiguration)?;
         selection.agent_loop = Some(
             if external {

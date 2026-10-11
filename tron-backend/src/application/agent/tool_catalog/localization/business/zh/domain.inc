@@ -6,11 +6,11 @@
     ("agent.toolCatalog.tools.skill.page.name", "分页查询技能"),
     (
         "agent.toolCatalog.tools.skill.page.description",
-        "分页查询工作区技能绑定和注册项。",
+        "分页查询当前 Agent 已分配的技能。",
     ),
     (
         "agent.toolCatalog.tools.skill.page.sampleResultSummary",
-        "返回分页后的工作区技能记录。",
+        "返回分页后的已分配技能记录。",
     ),
     (
         "agent.toolCatalog.tools.skill.page.params.search",

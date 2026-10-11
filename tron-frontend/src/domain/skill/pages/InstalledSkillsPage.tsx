@@ -1,622 +1,472 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { createPortal } from "react-dom";
-import {
-  CircleAlert,
-  Maximize2,
-  Plus,
-  RefreshCcw,
-  RefreshCw,
-  Trash2,
-  X,
-} from "lucide-react";
-
-import { cn } from "@/shared/lib/utils";
-import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table";
-import { DetailField } from "@/components/detail-field";
-import { MarkdownContent } from "@/components/markdown-content";
 import { SearchField } from "@/components/search-field";
+import { MarkdownContent } from "@/components/markdown-content";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { TablePagination } from "@/components/table-pagination";
-import {
-  PageHeader,
-  SurfaceCard,
-  useLocaleFormatters,
-  useTablePagination,
-} from "@/shared";
+import { useTablePagination } from "@/shared/hooks/useTablePagination";
+import { PageHeader, SurfaceCard } from "@/shared";
 import { useToast } from "@/components/ui/toast";
-
 import {
-  fetchRegistrySkill,
   fetchRegistrySkills,
-  rescanRegistrySkills,
+  fetchRegistrySkill,
+  fetchSkillAgents,
+  setSkillAgents,
   uninstallRegistrySkill,
+  rescanRegistrySkills,
   updateRegistrySkills,
+  CAPABILITY_RESOURCES_CHANGED,
+  notifyCapabilityResourcesChanged,
 } from "@/domain/skill/api";
 import type {
-  RegistrySkillDetail,
   RegistrySkillRecord,
-  SkillSourceType,
-  SkillUpdateStatus,
+  RegistrySkillDetail,
 } from "@/domain/skill/model";
-import { skillIndexWarningMessage } from "@/domain/skill/utils/ragIndexWarning";
-
-function getSourceTone(sourceType: SkillSourceType) {
-  switch (sourceType) {
-    case "GitHub":
-    case "Marketplace":
-      return "info" as const;
-    case "Manual":
-      return "warning" as const;
-    default:
-      return "info" as const;
-  }
-}
-
-function getUpdateTone(updateStatus: SkillUpdateStatus) {
-  switch (updateStatus) {
-    case "UpToDate":
-      return "success" as const;
-    case "UpdateAvailable":
-      return "warning" as const;
-    case "Error":
-      return "error" as const;
-    case "Manual":
-      return "info" as const;
-    default:
-      return "info" as const;
-  }
-}
+import { fetchWorkspaceInternalAgents } from "@/domain/agent/api/agentManagementApi";
+import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
+import { DisabledResourceReason } from "@/domain/agent/components/InternalAgentSkillField";
 
 export function InstalledSkillsPage() {
+  const { t } = useTranslation("pages");
   const navigate = useNavigate();
-  const { t } = useTranslation(["pages", "common"]);
   const toast = useToast();
-  const { formatDateTime, formatNumber } = useLocaleFormatters();
   const [skills, setSkills] = useState<RegistrySkillRecord[]>([]);
-  const [selectedSkillName, setSelectedSkillName] = useState("");
-  const [selectedSkill, setSelectedSkill] = useState<RegistrySkillDetail | null>(null);
-  const [searchInput, setSearchInput] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [syncing, setSyncing] = useState<"refresh" | "update" | null>(null);
-  const [uninstallingSkillName, setUninstallingSkillName] = useState("");
-  const [uninstallTarget, setUninstallTarget] = useState<RegistrySkillRecord | null>(null);
-  const [skillMarkdownFullscreenOpen, setSkillMarkdownFullscreenOpen] = useState(false);
-  const detailRequestIdRef = useRef(0);
-  const pagination = useTablePagination(skills);
-  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`pages:installedSkills.${key}`, { defaultValue, ...options })
+  const [search, setSearch] = useState("");
+  const [detail, setDetail] = useState<RegistrySkillDetail | null>(null);
+  const [selected, setSelected] = useState("");
+  const [grant, setGrant] = useState<RegistrySkillRecord | null>(null);
+  const [uninstall, setUninstall] = useState<RegistrySkillRecord | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
+  const pagination = useTablePagination(
+    skills.filter((s) =>
+      `${s.skillName} ${s.description ?? ""} ${s.sourceRef}`
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    )
   );
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(searchInput.trim());
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
-
-  async function loadRegistry() {
+  const text = (key: string) => t(`agentSkills.${key}`);
+  async function load() {
     setLoading(true);
     try {
-      const records = await fetchRegistrySkills({
-        search: debouncedSearch || undefined,
-      });
-      setSkills(records);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : pageT("errors.load", "Installed skills could not be loaded");
-      toast.error(message);
+      setSkills(await fetchRegistrySkills());
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
   }
-
   useEffect(() => {
-    void loadRegistry();
-  }, [debouncedSearch]);
-
+    void load();
+    const changed = () => {
+      setGrant(null);
+      void load();
+    };
+    window.addEventListener(CAPABILITY_RESOURCES_CHANGED, changed);
+    return () =>
+      window.removeEventListener(CAPABILITY_RESOURCES_CHANGED, changed);
+  }, []);
   useEffect(() => {
-    if (!skills.length) {
-      setSelectedSkillName("");
-      setUninstallTarget(null);
+    let active = true;
+    if (!selected) {
+      setDetail(null);
       return;
     }
-    if (!skills.some((skill) => skill.skillName === selectedSkillName)) {
-      setSelectedSkillName(skills[0].skillName);
-    }
-    if (
-      uninstallTarget
-      && !skills.some((skill) => skill.skillName === uninstallTarget.skillName)
-    ) {
-      setUninstallTarget(null);
-    }
-  }, [skills, selectedSkillName, uninstallTarget]);
-
-  useEffect(() => {
-    if (!selectedSkillName) {
-      setSelectedSkill(null);
-      return;
-    }
-
-    const requestId = detailRequestIdRef.current + 1;
-    detailRequestIdRef.current = requestId;
-    setDetailLoading(true);
-    setSelectedSkill(null);
-    fetchRegistrySkill(selectedSkillName)
-      .then((detail) => {
-        if (detailRequestIdRef.current !== requestId) {
-          return;
-        }
-        setSelectedSkill(detail);
+    setDetail(null);
+    void fetchRegistrySkill(selected)
+      .then((d) => {
+        if (active) setDetail(d);
       })
-      .catch((error) => {
-        if (detailRequestIdRef.current !== requestId) {
-          return;
-        }
-        const message =
-          error instanceof Error ? error.message : pageT("errors.detail", "Skill detail could not be loaded");
-        toast.error(message);
-      })
-      .finally(() => {
-        if (detailRequestIdRef.current === requestId) {
-          setDetailLoading(false);
-        }
+      .catch((e) => {
+        if (active) setError(e.message);
       });
-  }, [selectedSkillName, toast]);
-
-  useEffect(() => {
-    if (!skillMarkdownFullscreenOpen) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSkillMarkdownFullscreenOpen(false);
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
     return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
+      active = false;
     };
-  }, [skillMarkdownFullscreenOpen]);
-
-  useEffect(() => {
-    if (!uninstallTarget) return;
-
-    const originalOverflow = document.body.style.overflow;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !uninstallingSkillName) {
-        setUninstallTarget(null);
-      }
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [uninstallTarget, uninstallingSkillName]);
-
-  async function handleRegistrySync(mode: "refresh" | "update") {
-    setSyncing(mode);
+  }, [selected, skills]);
+  async function sync(update: boolean) {
+    setBusy(true);
     try {
-      const result = mode === "refresh"
-        ? await rescanRegistrySkills()
-        : await updateRegistrySkills();
-      const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
-      if (mode === "refresh") {
-        if (warning) {
-          toast.warning(warning);
-        } else {
-          toast.success(pageT("messages.discovered", "Discovered {{count}} installed skills", { count: formatNumber(result.discoveredCount) }));
-        }
-      } else if (warning) {
-        toast.warning(warning);
-      } else {
-        toast.success(pageT("messages.updated", "Registry skills updated"));
-      }
-      await loadRegistry();
-      if (selectedSkillName) {
-        const detail = await fetchRegistrySkill(selectedSkillName);
-        if (detail.skillName === selectedSkillName) {
-          setSelectedSkill(detail);
-        }
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : pageT("errors.registry", "Registry operation failed");
-      toast.error(message);
+      const result = await (update
+        ? updateRegistrySkills()
+        : rescanRegistrySkills());
+      if (result.ragIndex?.failedCount)
+        toast.warning(result.ragIndex.warnings.join("; "));
+      notifyCapabilityResourcesChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
     } finally {
-      setSyncing(null);
+      setBusy(false);
     }
   }
-
-  async function executeUninstall(skill: RegistrySkillRecord, removeBindings: boolean) {
-    setUninstallingSkillName(skill.skillName);
+  async function remove() {
+    if (!uninstall) return;
+    setBusy(true);
     try {
-      const result = await uninstallRegistrySkill(skill.skillName, removeBindings);
-      await loadRegistry();
-      setSelectedSkill(null);
-      setUninstallTarget(null);
-      const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
-      if (warning) {
-        toast.warning(warning);
-      } else if (result.removedBindingsCount > 0) {
-        toast.success(
-          pageT("messages.uninstalledRemoved", "{{name}} uninstalled and removed from {{count}} workspace binding{{suffix}}", {
-            name: skill.skillName,
-            count: formatNumber(result.removedBindingsCount),
-            suffix: result.removedBindingsCount === 1 ? "" : "s",
-          }),
-        );
-      } else if (result.keptBindingsCount > 0) {
-        toast.success(
-          pageT("messages.uninstalledKept", "{{name}} uninstalled. {{count}} workspace binding{{suffix}} remain and will show as deleted.", {
-            name: skill.skillName,
-            count: formatNumber(result.keptBindingsCount),
-            suffix: result.keptBindingsCount === 1 ? "" : "s",
-          }),
-        );
-      } else {
-        toast.success(pageT("messages.uninstalled", "{{name}} uninstalled", { name: skill.skillName }));
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : pageT("errors.uninstall", "Skill uninstall failed");
-      toast.error(message);
+      await uninstallRegistrySkill(uninstall.skillName);
+      if (selected === uninstall.skillName) setSelected("");
+      setUninstall(null);
+      notifyCapabilityResourcesChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
     } finally {
-      setUninstallingSkillName("");
+      setBusy(false);
     }
   }
-
   return (
     <>
       <PageHeader
-        title={pageT("title", "Skill Center")}
-        actions={(
+        title={t("installedSkills.title")}
+        actions={
           <>
             <Button
-              size='lg'
+              size="lg"
               variant="outline"
-              disabled={syncing !== null}
-              aria-busy={syncing === "update"}
-              onClick={() => void handleRegistrySync("update")}
+              disabled={busy}
+              onClick={() => void sync(true)}
             >
-              {syncing === "update" ? pageT("actions.updating", "Updating...") : pageT("actions.update", "Update")}
+              {t("installedSkills.actions.update")}
             </Button>
-            <Button size='lg' onClick={() => navigate("/settings/skills/sync")}>
-              {pageT("actions.sync", "Sync")}
+            <Button size="lg" onClick={() => navigate("/settings/skills/sync")}>
+              {t("installedSkills.actions.sync")}
             </Button>
           </>
-        )}
+        }
       />
-
+      {error ? (
+        <p role="alert">
+          {error}
+          <Button variant="outline" onClick={() => void load()}>
+            {text("retry")}
+          </Button>
+        </p>
+      ) : null}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <SurfaceCard className="p-0">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-4">
-            <div className="min-w-[16rem] flex-1">
-              <SearchField
-                ariaLabel={pageT("search.ariaLabel", "Filter installed skills")}
-                clearLabel={pageT("search.clear", "Clear installed skill search")}
-                placeholder={pageT("search.placeholder", "Filter installed skills...")}
-                value={searchInput}
-                onChange={setSearchInput}
-              />
-            </div>
-            <div className="flex items-center gap-[12px]">
-              <Button
-                size="lg"
-                disabled={syncing !== null}
-                aria-busy={syncing === "refresh"}
-                onClick={() => void handleRegistrySync("refresh")}
-              >
-                {syncing === "refresh" ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
-              </Button>
-              {loading ? <Badge variant="info">{pageT("loading.badge", "Loading")}</Badge> : null}
-            </div>
+          <div className="flex gap-3 p-4">
+            <SearchField
+              className="flex-1"
+              ariaLabel={text("search")}
+              placeholder={text("search")}
+              value={search}
+              onChange={setSearch}
+            />
+            <Button
+              variant="outline"
+              disabled={busy || loading}
+              onClick={() => void sync(false)}
+            >
+              {t("installedSkills.actions.refresh")}
+            </Button>
           </div>
           <DataTable<RegistrySkillRecord>
             variant="embedded"
-            onRowClick={(row) => setSelectedSkillName(row.skillName)}
+            pagination={
+              <TablePagination
+                itemLabel={t("installedSkills.pagination.itemLabel")}
+                {...pagination.paginationProps}
+              />
+            }
             rows={pagination.visibleItems}
-            pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "skills")} {...pagination.paginationProps} />}
-            rowKey={(row) => row.skillName}
-            isRowSelected={(row) => row.skillName === selectedSkillName}
-            emptyState={(
-              <div className="space-y-2">
-                <p>{pageT("emptyState.title", "No installed skills match the current filters.")}</p>
-                <p className="text-xs">{pageT("emptyState.body", "Use “Sync” to search `skills.sh` and add one to the local registry.")}</p>
-              </div>
-            )}
+            rowKey={(s) => s.skillName}
+            onRowClick={(s) => setSelected(s.skillName)}
+            isRowSelected={(s) => s.skillName === selected}
+            emptyState={<p>{loading ? text("loading") : text("empty")}</p>}
             columns={[
               {
-                id: "skillName",
-                header: pageT("columns.skill", "Skill"),
-                render: (row) => (
-                  <div
-                    className={cn(
-                      "rounded-md px-1 py-0.5 text-left font-medium",
-                      row.skillName === selectedSkillName
-                        ? "text-[var(--color-primary)]"
-                        : "text-[var(--color-on-surface)]",
-                    )}
-                  >
-                    <span className="block">{row.skillName}</span>
-                    <span className="block max-w-[22rem] truncate text-[12px] text-[var(--color-on-surface-variant)]">
-                      {row.sourceRef}
+                id: "name",
+                header: t("installedSkills.columns.skill"),
+                render: (s) => (
+                  <div>
+                    <span className="block font-medium">{s.skillName}</span>
+                    <span className="text-xs text-[var(--color-on-surface-variant)]">
+                      {s.sourceRef}
                     </span>
                   </div>
                 ),
               },
               {
-                id: "version",
-                header: pageT("columns.version", "Version"),
-                render: (row) => row.declaredVersion ?? pageT("status.unspecified", "Unspecified"),
-              },
-              {
-                id: "sourceType",
-                header: pageT("columns.source", "Source"),
-                render: (row) => (
-                  <Badge variant={getSourceTone(row.sourceType)}>{row.sourceType}</Badge>
+                id: "source",
+                header: t("installedSkills.columns.source"),
+                render: (s) => (
+                  <Badge variant="outline">
+                    {s.providerPackId || s.sourceType}
+                  </Badge>
                 ),
               },
               {
-                id: "updateStatus",
-                header: pageT("columns.update", "Update"),
-                render: (row) => (
-                  <Badge variant={getUpdateTone(row.updateStatus)}>{row.updateStatus}</Badge>
+                id: "status",
+                header: text("availability"),
+                render: (s) => (
+                  <span>
+                    <Badge variant={s.available ? "success" : "warning"}>
+                      {text(s.available ? "available" : "unavailable")}
+                    </Badge>
+                    <DisabledResourceReason reason={s.disabledReason} />
+                  </span>
                 ),
               },
               {
-                id: "enabledWorkspaceCount",
-                header: pageT("columns.workspaces", "Workspaces"),
-                headerClassName: "w-20",
-                cellClassName: "w-20",
-                render: (row) => formatNumber(row.enabledWorkspaceCount),
+                id: "agents",
+                header: text("assignedAgents"),
+                render: (s) => s.assignedAgentCount,
               },
               {
-                id: "action",
-                header: pageT("columns.action", "Action"),
-                align: "right",
-                render: (row) => {
-                  const uninstalling = uninstallingSkillName === row.skillName;
-                  return (
-                    <div className="flex min-w-[12rem] justify-end">
+                id: "actions",
+                header: t("installedSkills.columns.action"),
+                render: (s) => (
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy || !s.available}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setGrant(s);
+                      }}
+                    >
+                      {text("assignAgents")}
+                    </Button>
+                    {!s.providerPackId ? (
                       <Button
                         size="sm"
-                        type="button"
                         variant="ghost"
-                        disabled={uninstalling}
-                        aria-busy={uninstalling}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setUninstallTarget(row);
+                        disabled={busy}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUninstall(s);
                         }}
                       >
-                        <Trash2 size={14} aria-hidden="true" />
-                        {uninstalling ? pageT("actions.uninstalling", "Uninstalling...") : pageT("actions.uninstall", "Uninstall")}
+                        {t("installedSkills.actions.uninstall")}
                       </Button>
-                    </div>
-                  );
-                },
+                    ) : null}
+                  </div>
+                ),
               },
             ]}
           />
         </SurfaceCard>
-
-        <SurfaceCard className="space-y-5">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-              {pageT("detail.label", "Skill Detail")}
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold">
-              {selectedSkillName || pageT("detail.select", "Select a Skill")}
-            </h2>
-          </div>
-
-          {!selectedSkillName && !detailLoading ? (
-            <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] px-5 py-6 text-sm text-[var(--color-on-surface-variant)]">
-              {pageT("detail.empty", "Select an installed skill to review its source, files, and markdown preview.")}
-            </div>
-          ) : null}
-
-          {detailLoading ? (
-            <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] px-5 py-6 text-sm text-[var(--color-on-surface-variant)]">
-              {pageT("detail.loading", "Loading skill detail...")}
-            </div>
-          ) : null}
-
-          {selectedSkill ? (
+        <SurfaceCard className="min-w-0 space-y-4">
+          <h2 className="text-xl font-semibold">
+            {selected || t("installedSkills.detail.select")}
+          </h2>
+          {detail ? (
             <>
-              <div className="flex flex-wrap gap-[12px]">
-                <Badge variant={getSourceTone(selectedSkill.sourceType)}>
-                  {selectedSkill.sourceType}
-                </Badge>
-                <Badge variant={getUpdateTone(selectedSkill.updateStatus)}>
-                  {selectedSkill.updateStatus}
-                </Badge>
-                <Badge variant="info">{selectedSkill.managedBy === "Cli" ? pageT("detail.managedByCli", "CLI Managed") : pageT("detail.managedByManual", "Manual")}</Badge>
+              <p className="break-all text-sm text-[var(--color-on-surface-variant)]">
+                {detail.sourceRef}
+              </p>
+              <p className="text-sm">
+                {text("assignedAgents")}: {detail.assignedAgentCount}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {detail.files.map((f) => (
+                  <Badge key={f.path} variant="outline">
+                    {f.path}
+                  </Badge>
+                ))}
               </div>
-
-              <div className="rounded-2xl border border-[var(--color-outline-variant)] px-4 py-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <DetailField label={pageT("detail.source", "Source")} value={selectedSkill.sourceRef} />
-                  <DetailField label={pageT("detail.registryPath", "Registry Path")} value={selectedSkill.registryPath} />
-                  <DetailField label={pageT("detail.version", "Version")} value={selectedSkill.declaredVersion ?? pageT("status.unspecified", "Unspecified")} />
-                  <DetailField label={pageT("detail.lastChecked", "Last Checked")} value={selectedSkill.lastCheckedAt ? formatDateTime(selectedSkill.lastCheckedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")} />
-                  <DetailField label={pageT("detail.lastUpdated", "Last Updated")} value={selectedSkill.lastUpdatedAt ? formatDateTime(selectedSkill.lastUpdatedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")} />
-                  <DetailField label={pageT("detail.enabledWorkspaces", "Enabled Workspaces")} value={String(selectedSkill.enabledWorkspaceCount)} />
-                </div>
-              </div>
-
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                  {pageT("detail.files", "Files")}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-[12px]">
-                  {selectedSkill.files.length ? (
-                    selectedSkill.files.map((file) => (
-                      <Badge key={file.path} variant={file.isMarkdown ? "info" : "outline"}>
-                        {file.path}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-sm text-[var(--color-on-surface-variant)]">
-                      {pageT("detail.filesEmpty", "No files discovered.")}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex flex-wrap items-center justify-between gap-[12px]">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                    {pageT("detail.markdownPreviewLabel", "SKILL.md Preview")}
-                  </p>
-                  <Button
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                    aria-label={pageT("aria.openMarkdownFullscreen", "Open skill markdown fullscreen")}
-                    onClick={() => setSkillMarkdownFullscreenOpen(true)}
-                  >
-                    <Maximize2 size={14} aria-hidden="true" />
-                    {pageT("detail.fullscreen", "Fullscreen")}
-                  </Button>
-                </div>
-                <div className="mt-2 max-h-[24rem] min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-4 py-3">
-                  <MarkdownContent
-                    ariaLabel={pageT("aria.skillMarkdownPreview", "Skill markdown preview")}
-                    className="max-w-full pr-1"
-                    content={selectedSkill.skillMarkdown}
-                  />
-                </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFullscreen(true)}
+              >
+                {t("installedSkills.detail.fullscreen")}
+              </Button>
+              <div className="max-h-[60dvh] overflow-y-auto">
+                <MarkdownContent content={detail.skillMarkdown} />
               </div>
             </>
           ) : null}
         </SurfaceCard>
       </div>
-      {uninstallTarget ? (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-          <div
-            className="w-[min(92vw,32rem)] rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog" data-theme-anchor="dialog"
-            aria-modal="true"
-            aria-label={pageT("aria.uninstallConfirmation", "Uninstall skill confirmation")}
-          >
-            <div className="flex items-start gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
-              <div className="mt-0.5 rounded-full bg-[var(--color-error-container)] p-2 text-[var(--color-on-error-container)]">
-                <CircleAlert size={18} aria-hidden="true" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">
-                  {pageT("uninstallDialog.title", "Uninstall {{name}}", { name: uninstallTarget.skillName })}
-                </h2>
-                <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-                  {uninstallTarget.enabledWorkspaceCount > 0
-                    ? pageT("uninstallDialog.usedByWorkspaces", "{{name}} is currently used by {{count}} workspace{{suffix}}. Do you also want to uninstall the corresponding workspace skills?", {
-                      name: uninstallTarget.skillName,
-                      count: uninstallTarget.enabledWorkspaceCount,
-                      suffix: uninstallTarget.enabledWorkspaceCount === 1 ? "" : "s",
-                    })
-                    : pageT("uninstallDialog.removeLocal", "This will remove the local skill files from Skill Center.")}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-3 px-5 py-4">
-              {uninstallTarget.enabledWorkspaceCount > 0 ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full justify-center"
-                    disabled={uninstallingSkillName === uninstallTarget.skillName}
-                    aria-busy={uninstallingSkillName === uninstallTarget.skillName}
-                    onClick={() => void executeUninstall(uninstallTarget, false)}
-                  >
-                    {pageT("uninstallDialog.keepWorkspaceSkills", "Keep Workspace Skills")}
-                  </Button>
-                  <Button
-                    type="button"
-                    className="w-full justify-center"
-                    disabled={uninstallingSkillName === uninstallTarget.skillName}
-                    aria-busy={uninstallingSkillName === uninstallTarget.skillName}
-                    onClick={() => void executeUninstall(uninstallTarget, true)}
-                  >
-                    {pageT("uninstallDialog.uninstallWorkspaceToo", "Uninstall Workspace Skills Too")}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  className="w-full justify-center"
-                  disabled={uninstallingSkillName === uninstallTarget.skillName}
-                  aria-busy={uninstallingSkillName === uninstallTarget.skillName}
-                  onClick={() => void executeUninstall(uninstallTarget, false)}
-                >
-                  {uninstallingSkillName === uninstallTarget.skillName ? pageT("uninstallDialog.uninstalling", "Uninstalling...") : pageT("uninstallDialog.uninstall", "Uninstall")}
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full justify-center"
-                disabled={uninstallingSkillName === uninstallTarget.skillName}
-                onClick={() => setUninstallTarget(null)}
-              >
-                {pageT("uninstallDialog.cancel", "Cancel")}
-              </Button>
-            </div>
-          </div>
-        </div>
+      {grant ? (
+        <SkillAgentGrants
+          skill={grant}
+          onClose={() => setGrant(null)}
+          onSaved={() => {
+            setGrant(null);
+            notifyCapabilityResourcesChanged();
+          }}
+        />
       ) : null}
-      {skillMarkdownFullscreenOpen && selectedSkill ? createPortal(
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
-          <div
-            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] min-w-0 max-w-full flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog" data-theme-anchor="dialog"
-            aria-modal="true"
-            aria-label={pageT("aria.skillMarkdownFullscreenPreview", "Skill markdown fullscreen preview")}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
-              <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("detail.markdownFullscreenTitle", "SKILL.md")}</h2>
-                <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">
-                  {pageT("detail.markdownFullscreenDescription", "Preview the rendered markdown for this skill package.")}
-                </p>
-              </div>
+      {uninstall ? (
+        <Dialog
+          open
+          disablePointerDismissal
+          onOpenChange={(o) => {
+            if (!o && !busy) setUninstall(null);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {t("installedSkills.actions.uninstall")} {uninstall.skillName}
+              </DialogTitle>
+              <DialogDescription>{text("uninstallHint")}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
               <Button
-                size="icon"
-                type="button"
-                variant="ghost"
-                aria-label={pageT("aria.closeMarkdownFullscreen", "Close skill markdown fullscreen")}
-                onClick={() => setSkillMarkdownFullscreenOpen(false)}
+                variant="outline"
+                disabled={busy}
+                onClick={() => setUninstall(null)}
               >
-                <X size={16} aria-hidden="true" />
+                {text("cancel")}
               </Button>
-            </div>
-            <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5 py-4">
-              <MarkdownContent
-                ariaLabel={pageT("aria.skillMarkdownFullscreen", "Skill markdown fullscreen")}
-                className="max-w-none pr-1"
-                content={selectedSkill.skillMarkdown}
-              />
-            </div>
-          </div>
-        </div>,
-        document.body,
+              <Button disabled={busy} onClick={() => void remove()}>
+                {t("installedSkills.actions.uninstall")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {fullscreen && detail ? (
+        <Dialog open onOpenChange={setFullscreen}>
+          <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>{detail.skillName} · SKILL.md</DialogTitle>
+            </DialogHeader>
+            <MarkdownContent content={detail.skillMarkdown} />
+          </DialogContent>
+        </Dialog>
       ) : null}
     </>
+  );
+}
+function SkillAgentGrants({
+  skill,
+  onClose,
+  onSaved,
+}: {
+  skill: RegistrySkillRecord;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useTranslation("pages");
+  const toast = useToast();
+  const client = useQueryClient();
+  const [agents, setAgents] = useState<{ agentCode: string; name: string }[]>(
+    []
+  );
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const text = (k: string) => t(`agentSkills.${k}`);
+  async function load() {
+    setLoading(true);
+    try {
+      const [a, g] = await Promise.all([
+        fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE),
+        fetchSkillAgents(skill.skillName),
+      ]);
+      setAgents(a);
+      setSelected(g.agentCodes);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, [skill.skillName]);
+  async function save() {
+    setBusy(true);
+    try {
+      await setSkillAgents(skill.skillName, selected);
+      await client.invalidateQueries({ queryKey: ["agent-skills"] });
+      onSaved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog
+      open
+      disablePointerDismissal
+      onOpenChange={(o) => {
+        if (!o && !busy) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{text("assignAgents")}</DialogTitle>
+          <DialogDescription>{skill.skillName}</DialogDescription>
+        </DialogHeader>
+        <SearchField
+          ariaLabel={text("searchAgents")}
+          placeholder={text("searchAgents")}
+          value={search}
+          onChange={setSearch}
+        />
+        {error ? (
+          <p role="alert">
+            {error}
+            <Button onClick={() => void load()}>{text("retry")}</Button>
+          </p>
+        ) : null}
+        <div className="max-h-[50dvh] space-y-2 overflow-y-auto">
+          {agents
+            .filter((a) =>
+              `${a.name} ${a.agentCode}`
+                .toLowerCase()
+                .includes(search.toLowerCase())
+            )
+            .map((a) => (
+              <label
+                key={a.agentCode}
+                className="flex items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] p-3"
+              >
+                <input
+                  type="checkbox"
+                  disabled={busy}
+                  checked={selected.includes(a.agentCode)}
+                  onChange={(e) =>
+                    setSelected(
+                      e.currentTarget.checked
+                        ? [...selected, a.agentCode]
+                        : selected.filter((c) => c !== a.agentCode)
+                    )
+                  }
+                />
+                <span>
+                  {a.name}
+                  <span className="block text-xs">{a.agentCode}</span>
+                </span>
+              </label>
+            ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            {text("cancel")}
+          </Button>
+          <Button
+            disabled={busy || loading || !!error}
+            onClick={() => void save()}
+          >
+            {text("save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

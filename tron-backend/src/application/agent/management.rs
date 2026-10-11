@@ -87,6 +87,15 @@ pub struct ResolvedAgentRuntime {
 const MAIN_AGENT_CODE: &str = "main-agent";
 
 pub trait AgentManagementRepository: Send {
+    fn replace_workspace_resource_assignments(
+        &mut self,
+        _policy: &WorkspaceInternalAgentPolicy,
+        _mcp: bool,
+        _codes: &[String],
+    ) -> Result<(), AgentManagementError> {
+        Err(AgentManagementError::StorageFailure)
+    }
+
     fn list_internal_agent_groups(
         &mut self,
         scope: &str,
@@ -265,6 +274,8 @@ struct SupportedSystemAgentDefinition {
 #[derive(Clone)]
 pub struct AgentManagementService {
     repository: Arc<Mutex<Box<dyn AgentManagementRepository>>>,
+    mcp: Arc<std::sync::OnceLock<crate::application::mcp::McpService>>,
+    capabilities: Arc<std::sync::OnceLock<crate::application::capability::CapabilityResources>>,
     workspaces: WorkspaceService,
     supported_agents: Vec<SupportedSystemAgentDefinition>,
     probe: Arc<dyn SystemCommandProbe>,
@@ -297,6 +308,8 @@ impl AgentManagementService {
             supported_agents,
             probe,
             model_catalog: Arc::new(Mutex::new(HashMap::new())),
+            mcp: Default::default(),
+            capabilities: Default::default(),
         }
     }
 
@@ -325,23 +338,65 @@ impl AgentManagementService {
                     })
             }));
         }
+        if let Some(capabilities) = self.capabilities.get() {
+            for tool in &mut records {
+                if !capabilities.available("tool", &tool.tool_code) {
+                    tool.availability_state = crate::domain::agent::ToolAvailabilityState::Disabled;
+                }
+            }
+        }
         records
     }
 
-    pub fn tool(&self, tool_code: &str, locale: &str) -> Option<ToolCatalogRecord> {
-        BusinessToolCatalog::tool(tool_code, locale).or_else(|| {
+    pub fn bind_mcp(&self, mcp: crate::application::mcp::McpService) {
+        let _ = self.mcp.set(mcp);
+    }
+    pub(super) fn mcp_assignable(&self, code: &str) -> bool {
+        self.capability_available("mcp", code)
+            && self
+                .mcp
+                .get()
+                .is_none_or(|m| m.get_platform_server(code).is_ok_and(|s| s.enabled))
+    }
+    pub fn bind_capabilities(
+        &self,
+        resources: crate::application::capability::CapabilityResources,
+    ) {
+        let _ = self.capabilities.set(resources);
+    }
+    pub fn capability_resource(
+        &self,
+        kind: &str,
+        code: &str,
+    ) -> Option<crate::application::capability::CapabilityResource> {
+        self.capabilities.get()?.resource(kind, code).ok().flatten()
+    }
+    pub fn capability_available(&self, kind: &str, code: &str) -> bool {
+        self.capabilities
+            .get()
+            .is_none_or(|c| c.available(kind, code))
+    }
+    pub fn persist_internal_agent_defaults(&self) -> Result<(), AgentManagementError> {
+        for config in self.platform_internal_agent_configs()? {
             self.repository()
-                .list_discovered_tools()
-                .ok()?
-                .into_iter()
-                .find(|tool| tool.tool_code == tool_code)
-        })
+                .upsert_platform_internal_agent_config(&config)?;
+        }
+        Ok(())
+    }
+
+    pub fn tool(&self, tool_code: &str, locale: &str) -> Option<ToolCatalogRecord> {
+        self.list_tools(None, None, locale)
+            .into_iter()
+            .find(|t| t.tool_code == tool_code)
     }
 
     fn tool_codes(&self) -> Vec<String> {
         let mut codes = self
             .list_tools(None, None, "en-US")
             .into_iter()
+            .filter(|tool| {
+                tool.availability_state == crate::domain::agent::ToolAvailabilityState::Available
+            })
             .map(|tool| tool.tool_code)
             .collect::<Vec<_>>();
         codes.sort_unstable();

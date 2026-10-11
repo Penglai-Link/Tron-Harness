@@ -1,10 +1,5 @@
 import { routeActiveProfileApi } from "./support/resource-ui-harness";
-import {
-  expect,
-  test,
-  type Page,
-  type Route,
-} from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import {
   spawnManagedProcess,
   stopManagedProcess,
@@ -86,7 +81,11 @@ async function waitForFrontend(url: string) {
     await delay(250);
   }
 
-  throw new Error(`Frontend dev server did not become ready: ${String(lastError)}\n${frontendLogs}`);
+  throw new Error(
+    `Frontend dev server did not become ready: ${String(
+      lastError
+    )}\n${frontendLogs}`
+  );
 }
 
 function successEnvelope(data: unknown) {
@@ -97,7 +96,10 @@ function successEnvelope(data: unknown) {
   };
 }
 
-function unauthorizedEnvelope(code = "AUTH_UNAUTHORIZED", message = "authentication required") {
+function unauthorizedEnvelope(
+  code = "AUTH_UNAUTHORIZED",
+  message = "authentication required"
+) {
   return {
     code,
     message,
@@ -113,7 +115,9 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
   });
 }
 
-async function routeAuthApi(page: Page) { await routeActiveProfileApi(page); }
+async function routeAuthApi(page: Page) {
+  await routeActiveProfileApi(page);
+}
 async function signIn(page: Page, targetPath: string) {
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}${targetPath}`);
@@ -121,17 +125,20 @@ async function signIn(page: Page, targetPath: string) {
 
 async function seedWorkspaceSelection(page: Page) {
   await page.addInitScript((snapshot) => {
-    window.localStorage.setItem("tron-app-shell", JSON.stringify({
-      state: {
-        openSections: { Core: true },
-        selectedPrimarySpaceId: "ENTERPRISE",
-        selectedSecondarySpaceId: "TRON_CORE",
-        rightSidebarCollapsed: false,
-        sidebarCollapsed: false,
-        workspaceSwitcherSnapshot: snapshot,
-      },
-      version: 9,
-    }));
+    window.localStorage.setItem(
+      "tron-app-shell",
+      JSON.stringify({
+        state: {
+          openSections: { Core: true },
+          selectedPrimarySpaceId: "ENTERPRISE",
+          selectedSecondarySpaceId: "TRON_CORE",
+          rightSidebarCollapsed: false,
+          sidebarCollapsed: false,
+          workspaceSwitcherSnapshot: snapshot,
+        },
+        version: 9,
+      })
+    );
   }, getWorkspaceSwitcherMock());
 }
 
@@ -153,11 +160,22 @@ async function expectRightSidebarClosed(page: Page) {
 }
 
 async function openRightSidebar(page: Page) {
-  await expect.poll(async () => (
-    await rightSidebarOpenControl(page).isVisible().catch(() => false)
-    || await rightSidebarCloseControl(page).isVisible().catch(() => false)
-  )).toBe(true);
-  if (await rightSidebarOpenControl(page).isVisible().catch(() => false)) {
+  await expect
+    .poll(
+      async () =>
+        (await rightSidebarOpenControl(page)
+          .isVisible()
+          .catch(() => false)) ||
+        (await rightSidebarCloseControl(page)
+          .isVisible()
+          .catch(() => false))
+    )
+    .toBe(true);
+  if (
+    await rightSidebarOpenControl(page)
+      .isVisible()
+      .catch(() => false)
+  ) {
     await rightSidebarOpenControl(page).click();
   }
   await expect(rightSidebarCloseControl(page)).toBeVisible();
@@ -173,7 +191,9 @@ async function closeRightSidebar(page: Page) {
 
 async function selectTaskSessions(page: Page) {
   await page.getByRole("tab", { name: "Task sessions" }).click();
-  await expect(page.getByRole("button", { name: "Auth latency rollback" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Auth latency rollback" })
+  ).toBeVisible();
 }
 
 async function expectNoStaleInspector(page: Page) {
@@ -182,9 +202,22 @@ async function expectNoStaleInspector(page: Page) {
     await expect(rightSidebarOpenControl(page)).toHaveCount(0);
     return;
   }
-  await expect(rightSidebar(page).getByRole("tab", { name: "Short-term memory", exact: true })).toHaveCount(0);
-  await expect(rightSidebar(page).getByText("Task Metadata", { exact: true })).toHaveCount(0);
-  await expect.poll(async () => await rightSidebarOpenControl(page).isVisible() || await rightSidebarCloseControl(page).isVisible()).toBe(true);
+  await expect(
+    rightSidebar(page).getByRole("tab", {
+      name: "Short-term memory",
+      exact: true,
+    })
+  ).toHaveCount(0);
+  await expect(
+    rightSidebar(page).getByText("Task Metadata", { exact: true })
+  ).toHaveCount(0);
+  await expect
+    .poll(
+      async () =>
+        (await rightSidebarOpenControl(page).isVisible()) ||
+        (await rightSidebarCloseControl(page).isVisible())
+    )
+    .toBe(true);
 }
 
 test.beforeAll(async () => {
@@ -193,7 +226,16 @@ test.beforeAll(async () => {
 
   frontendProcess = spawnManagedProcess(
     "npm",
-    ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+    [
+      "run",
+      "dev",
+      "--",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--strictPort",
+    ],
     {
       cwd: frontendRoot,
       env: {
@@ -219,7 +261,7 @@ test.beforeAll(async () => {
         VITE_TRON_VARIABLE_DATA_SOURCE: "mock",
       },
       stdio: ["ignore", "pipe", "pipe"],
-    },
+    }
   );
   frontendProcess.stdout.on("data", appendFrontendLog);
   frontendProcess.stderr.on("data", appendFrontendLog);
@@ -235,40 +277,61 @@ test.afterAll(async () => {
   }
 });
 
-test("AC-RCS-01: desktop right sidebar collapses out of layout, restores width, and reopens", async ({ page }) => {
+test("AC-RCS-01: desktop right sidebar collapses out of layout, restores width, and reopens", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await routeAuthApi(page);
   await signIn(page, "/apps");
-  await expect(page.getByRole("tab", { name: "Apps", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Apps", exact: true })
+  ).toBeVisible();
   await expectRightSidebarClosed(page);
   const mainBefore = await page.locator("main").first().boundingBox();
-  expect(mainBefore, "The shell main region should be rendered before opening the default-collapsed sidebar.").not.toBeNull();
+  expect(
+    mainBefore,
+    "The shell main region should be rendered before opening the default-collapsed sidebar."
+  ).not.toBeNull();
 
   await rightSidebarOpenControl(page).click();
 
   await expect(rightSidebar(page)).toBeVisible();
-  await expect(rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })
+  ).toBeVisible();
   await expect(rightSidebarOpenControl(page)).toHaveCount(0);
 
   const mainAfterOpen = await page.locator("main").first().boundingBox();
-  expect(mainAfterOpen, "The shell main region should remain rendered after opening the sidebar.").not.toBeNull();
+  expect(
+    mainAfterOpen,
+    "The shell main region should remain rendered after opening the sidebar."
+  ).not.toBeNull();
   expect(mainBefore!.width).toBeGreaterThan(mainAfterOpen!.width + 250);
 
   await closeRightSidebar(page);
-  await expect(rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })).toBeHidden();
+  await expect(
+    rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })
+  ).toBeHidden();
 
   const mainAfterCollapse = await page.locator("main").first().boundingBox();
-  expect(mainAfterCollapse, "The shell main region should remain rendered after collapse.").not.toBeNull();
+  expect(
+    mainAfterCollapse,
+    "The shell main region should remain rendered after collapse."
+  ).not.toBeNull();
   expect(mainAfterCollapse!.width).toBeGreaterThan(mainAfterOpen!.width + 250);
 
   await rightSidebarOpenControl(page).click();
 
   await expect(rightSidebar(page)).toBeVisible();
-  await expect(rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })
+  ).toBeVisible();
   await expect(rightSidebarOpenControl(page)).toHaveCount(0);
 });
 
-test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all required paths", async ({ page }) => {
+test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all required paths", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await routeAuthApi(page);
   await signIn(page, "/apps");
@@ -276,14 +339,25 @@ test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all requir
   const drawerToggle = page.getByRole("button", { name: "Open right sidebar" });
   await expect(drawerToggle).toBeVisible();
   await expect(page.getByTestId("tron-mobile-right-sidebar")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "New Tab", exact: true })).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "New Tab", exact: true })
+  ).not.toBeVisible();
 
   await drawerToggle.click();
   await expect(page.getByTestId("tron-mobile-right-sidebar")).toBeVisible();
-  await expect(page.getByTestId("tron-mobile-right-sidebar").getByRole("button", { name: "New Tab", exact: true })).toBeVisible();
-  await expect(page.getByTestId("tron-mobile-right-sidebar-backdrop")).toBeVisible();
+  await expect(
+    page
+      .getByTestId("tron-mobile-right-sidebar")
+      .getByRole("button", { name: "New Tab", exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("tron-mobile-right-sidebar-backdrop")
+  ).toBeVisible();
 
-  await page.getByRole("banner").getByRole("button", { name: "Close right sidebar" }).click();
+  await page
+    .getByRole("banner")
+    .getByRole("button", { name: "Close right sidebar" })
+    .click();
   await expect(page.getByTestId("tron-mobile-right-sidebar")).toHaveCount(0);
 
   await drawerToggle.click();
@@ -300,11 +374,15 @@ test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all requir
   await expect(page.getByTestId("tron-mobile-right-sidebar")).toBeVisible();
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/apps`);
-  await expect(page.getByRole("tab", { name: "Apps", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Apps", exact: true })
+  ).toBeVisible();
   await expect(page.getByTestId("tron-mobile-right-sidebar")).toHaveCount(0);
 });
 
-test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show no stale controls", async ({ page }) => {
+test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show no stale controls", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedWorkspaceSelection(page);
   await routeAuthApi(page);
@@ -312,27 +390,42 @@ test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show 
   await expect(page).toHaveURL(/sessionCode=SESSION-8842$/);
   await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-REFACTOR`);
   await openRightSidebar(page);
-  await rightSidebar(page).getByRole("tab", { name: "Short-term memory" }).click();
-  await expect(rightSidebar(page).getByRole("heading", { name: "Short-Term Memory", exact: true })).toBeVisible();
+  await rightSidebar(page)
+    .getByRole("tab", { name: "Short-term memory" })
+    .click();
+  await expect(
+    rightSidebar(page).getByRole("heading", {
+      name: "Short-Term Memory",
+      exact: true,
+    })
+  ).toBeVisible();
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}`);
   await openRightSidebar(page);
-  await expect(rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })
+  ).toBeVisible();
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/apps`);
-  await expect(page.getByRole("tab", { name: "Apps", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Apps", exact: true })
+  ).toBeVisible();
   await expectNoStaleInspector(page);
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/general`);
-  await expect(page.getByRole("spinbutton", { name: "AG-UI recent work turn limit" })).toBeVisible();
+  await expect(
+    page.getByRole("spinbutton", { name: "AG-UI recent work turn limit" })
+  ).toBeVisible();
   await expect(page.locator("#tron-workspace-trigger")).toHaveCount(0);
   await expectNoStaleInspector(page);
 });
 
-test("AC-STM-08: chat right sidebar renders short-term memory state and compaction action", async ({ page }) => {
+test("AC-STM-08: chat right sidebar renders short-term memory state and compaction action", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedWorkspaceSelection(page);
   await routeAuthApi(page);
@@ -343,82 +436,136 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
   const sidebar = rightSidebar(page);
   await expect(sidebar.getByRole("heading", { name: "Goal" })).toBeVisible();
   await expect(sidebar.getByRole("heading", { name: "Todo" })).toBeVisible();
-  await expect(sidebar.getByText("Validate transcript storage after the next chat turn")).toBeVisible();
-  await expect(sidebar.getByText("Review compaction checkpoint output")).toBeVisible();
+  await expect(
+    sidebar.getByText("Validate transcript storage after the next chat turn")
+  ).toBeVisible();
+  await expect(
+    sidebar.getByText("Review compaction checkpoint output")
+  ).toBeVisible();
   await expect(sidebar.getByText("In progress")).toBeVisible();
   await expect(sidebar.getByText("Pending", { exact: true })).toBeVisible();
 
   await sidebar.getByRole("tab", { name: "Short-term memory" }).click();
-  await expect(sidebar.getByTestId("context-short-term-memory-card")).toBeVisible();
-  await expect(sidebar.getByText("Short-Term Memory", { exact: true })).toBeVisible();
-  await expect(sidebar.getByTestId("context-runtime-notice")).toContainText("Context compacted");
-  await expect(sidebar.getByRole("button", { name: /^Tool Schema/ })).toContainText("1.8k / 6k");
+  await expect(
+    sidebar.getByTestId("context-short-term-memory-card")
+  ).toBeVisible();
+  await expect(
+    sidebar.getByText("Short-Term Memory", { exact: true })
+  ).toBeVisible();
+  await expect(sidebar.getByTestId("context-runtime-notice")).toContainText(
+    "Context compacted"
+  );
+  await expect(
+    sidebar.getByRole("button", { name: /^Tool Schema/ })
+  ).toContainText("1.8k / 6k");
   await expect(sidebar.getByText("Current Session Checkpoint")).toBeVisible();
-  await expect(sidebar.getByText("· 1 checkpoint", { exact: true })).toBeVisible();
+  await expect(
+    sidebar.getByText("· 1 checkpoint", { exact: true })
+  ).toBeVisible();
 
   await sidebar.getByRole("button", { name: "Create checkpoint" }).click();
 
-  await expect(page.getByText("Session checkpoint created", { exact: true })).toBeVisible();
-  await expect(sidebar.getByRole("button", { name: "Create checkpoint" })).toBeEnabled();
+  await expect(
+    page.getByText("Session checkpoint created", { exact: true })
+  ).toBeVisible();
+  await expect(
+    sidebar.getByRole("button", { name: "Create checkpoint" })
+  ).toBeEnabled();
 
   await page.getByRole("button", { name: "Open user menu" }).click();
   await page.locator("#tron-locale-select").click();
   await page.getByRole("menuitemradio", { name: "Simplified Chinese" }).click();
   await page.keyboard.press("Escape");
-  await expect(sidebar.getByRole("heading", { name: "短期记忆", exact: true })).toBeVisible();
-  await expect(sidebar.getByTestId("context-runtime-notice")).toContainText("上下文已压缩");
-  await expect(sidebar.getByRole("button", { name: /^工具定义/ })).toContainText("1.8k / 6k");
+  await expect(
+    sidebar.getByRole("heading", { name: "短期记忆", exact: true })
+  ).toBeVisible();
+  await expect(sidebar.getByTestId("context-runtime-notice")).toContainText(
+    "上下文已压缩"
+  );
+  await expect(
+    sidebar.getByRole("button", { name: /^工具定义/ })
+  ).toContainText("1.8k / 6k");
 });
 
-test("AC-CHAT-SESSION-SIDEBAR-01: manual history collapse survives opening the right sidebar", async ({ page }) => {
+test("AC-CHAT-SESSION-SIDEBAR-01: manual history collapse survives opening the right sidebar", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedWorkspaceSelection(page);
   await routeAuthApi(page);
   await signIn(page, "/chats?sessionCode=SESSION-8842");
   await expect(page).toHaveURL(/sessionCode=SESSION-8842$/);
 
-  await page.getByRole("button", { name: "Close navigation menu", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Open navigation menu", exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Close navigation menu", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Open navigation menu", exact: true })
+  ).toBeVisible();
   await openRightSidebar(page);
-  await expect(page.getByRole("button", { name: "Open navigation menu", exact: true })).toBeVisible();
-  await expect(rightSidebar(page).getByRole("tab", { name: "Short-term memory", exact: true })).toBeVisible();
-
+  await expect(
+    page.getByRole("button", { name: "Open navigation menu", exact: true })
+  ).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("tab", {
+      name: "Short-term memory",
+      exact: true,
+    })
+  ).toBeVisible();
 });
 
-test("AC-RCS-04: graph inspector stays inline and memory inspectors preserve selected context", async ({ page }) => {
+test("AC-RCS-04: graph inspector stays inline and memory inspectors preserve selected context", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedWorkspaceSelection(page);
   await routeAuthApi(page);
   await signIn(page, "/knowledge-graph");
 
-  await expect(page.getByRole("tab", { name: "KnowledgeGraph", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "KnowledgeGraph", exact: true })
+  ).toBeVisible();
   await expectNoStaleInspector(page);
-  await page.getByRole("searchbox", { name: "Locate graph node" }).fill("RAG_REVIEWER");
+  await page
+    .getByRole("searchbox", { name: "Locate graph node" })
+    .fill("RAG_REVIEWER");
   await page.getByRole("option", { name: /RAG_REVIEWER/ }).click();
   await expect(page.getByText("Node Inspector")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "RAG_REVIEWER" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "RAG_REVIEWER" })
+  ).toBeVisible();
   await expectNoStaleInspector(page);
   await page.getByRole("button", { name: "Close node inspector" }).click();
   await expect(page.getByText("Node Inspector")).toHaveCount(0);
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/knowledge-graph`);
-  await expect(page.getByRole("tab", { name: "KnowledgeGraph", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "KnowledgeGraph", exact: true })
+  ).toBeVisible();
   await expectNoStaleInspector(page);
-  await page.getByRole("searchbox", { name: "Locate graph node" }).fill("RAG_REVIEWER");
+  await page
+    .getByRole("searchbox", { name: "Locate graph node" })
+    .fill("RAG_REVIEWER");
   await page.getByRole("option", { name: /RAG_REVIEWER/ }).click();
   await expect(page.getByText("Node Inspector")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "RAG_REVIEWER" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "RAG_REVIEWER" })
+  ).toBeVisible();
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/memory`);
-  await expect(page.getByRole("heading", { name: "Memory" }).first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Memory" }).first()
+  ).toBeVisible();
   await expectNoStaleInspector(page);
   await expect(page.getByText("manual lookup")).toBeVisible();
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/memory/details`);
-  await expect(page.getByRole("heading", { name: "Memory" }).first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Memory" }).first()
+  ).toBeVisible();
   await expectNoStaleInspector(page);
 });
 
@@ -428,14 +575,22 @@ test("memory empty state uses neutral copy", async ({ page }) => {
   await routeAuthApi(page);
   await signIn(page, "/memory");
 
-  await page.getByRole("searchbox", { name: "Search" }).fill("zz-empty-memory-copy");
+  await page
+    .getByRole("searchbox", { name: "Search" })
+    .fill("zz-empty-memory-copy");
 
   await expect(page.getByText("No memories found")).toBeVisible();
-  await expect(page.getByText('No memories in Tron Core match "zz-empty-memory-copy".', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('No memories in Tron Core match "zz-empty-memory-copy".', {
+      exact: true,
+    })
+  ).toBeVisible();
   await expect(page.getByText(/mock memories/i)).toHaveCount(0);
 });
 
-test("memory domain preview omits instructional helper copy", async ({ page }) => {
+test("memory domain preview omits instructional helper copy", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedWorkspaceSelection(page);
   await routeAuthApi(page);
@@ -445,12 +600,22 @@ test("memory domain preview omits instructional helper copy", async ({ page }) =
 
   const dialog = page.getByRole("dialog", { name: "Memory Domain" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Review the selected domain before switching to edit mode.")).toHaveCount(0);
-  await expect(dialog.getByText("Domain-scoped memory targets use this catalog.")).toHaveCount(0);
-  await expect(dialog.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Backend Engineering");
+  await expect(
+    dialog.getByText(
+      "Review the selected domain before switching to edit mode."
+    )
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByText("Domain-scoped memory targets use this catalog.")
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByRole("textbox", { name: "Name", exact: true })
+  ).toHaveValue("Backend Engineering");
 });
 
-test("AC-RCS-05: management inspectors render in shell right sidebar and preserve page actions", async ({ page }) => {
+test("AC-RCS-05: management inspectors render in shell right sidebar and preserve page actions", async ({
+  page,
+}) => {
   // This acceptance flow visits nine management pages and exercises their inspectors.
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -459,38 +624,72 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
 
   await signIn(page, "/tasks/detail?taskCode=TSK-SEED-FEATURE");
   await openRightSidebar(page);
-  await expect(rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()).toBeVisible();
-  await expect(page.locator("p.font-mono", { hasText: "TSK-SEED-FEATURE" }).first()).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()
+  ).toBeVisible();
+  await expect(
+    page.locator("p.font-mono", { hasText: "TSK-SEED-FEATURE" }).first()
+  ).toBeVisible();
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-SEED-BUG`);
   await expect(page).toHaveURL(/taskCode=TSK-SEED-BUG$/);
   await openRightSidebar(page);
-  await expect(rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()).toBeVisible();
-  await expect(page.locator("p.font-mono", { hasText: "TSK-SEED-BUG" }).first()).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()
+  ).toBeVisible();
+  await expect(
+    page.locator("p.font-mono", { hasText: "TSK-SEED-BUG" }).first()
+  ).toBeVisible();
   await page.getByRole("button", { name: "Edit" }).click();
-  await expect(page.locator('input[aria-label="Task detail title"]')).toHaveValue("Fix task board workflow regression");
+  await expect(
+    page.locator('input[aria-label="Task detail title"]')
+  ).toHaveValue("Fix task board workflow regression");
   await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()
+  ).toBeVisible();
   await closeRightSidebar(page);
   await rightSidebarOpenControl(page).click();
-  await expect(rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()).toBeVisible();
-  await expect(page.locator("p.font-mono", { hasText: "TSK-SEED-BUG" }).first()).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()
+  ).toBeVisible();
+  await expect(
+    page.locator("p.font-mono", { hasText: "TSK-SEED-BUG" }).first()
+  ).toBeVisible();
 
   await routeActiveProfileApi(page);
-  await page.goto(`${frontendBaseUrl}/automations/executions?automationCode=AUT-734600000000000001`);
-  await expect(page.getByRole("columnheader", { name: "Execution", exact: true })).toBeVisible();
+  await page.goto(
+    `${frontendBaseUrl}/automations/executions?automationCode=AUT-734600000000000001`
+  );
+  await expect(
+    page.getByRole("columnheader", { name: "Execution", exact: true })
+  ).toBeVisible();
   await page.getByRole("row", { name: /AEX-734600000000000001/ }).click();
   await openRightSidebar(page);
-  await expect(rightSidebar(page).getByRole("heading", { name: "Session detail" })).toBeVisible();
-  await expect(rightSidebar(page).getByText("AEX-734600000000000001", { exact: true })).toBeVisible();
-  await page.getByRole("columnheader", { name: "Execution", exact: true }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole("columnheader", { name: "Execution" })).toBeVisible();
+  await expect(
+    rightSidebar(page).getByRole("heading", { name: "Session detail" })
+  ).toBeVisible();
+  await expect(
+    rightSidebar(page).getByText("AEX-734600000000000001", { exact: true })
+  ).toBeVisible();
+  await page
+    .getByRole("columnheader", { name: "Execution", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("columnheader", { name: "Execution" })
+  ).toBeVisible();
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/apps/detail?appCode=APP-TRON-CONSOLE`);
   await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("App Metadata").first()).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "APP-TRON-CONSOLE" })).toBeVisible();
+  await expect(
+    rightSidebar(page).getByText("App Metadata").first()
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .filter({ hasText: "APP-TRON-CONSOLE" })
+  ).toBeVisible();
   await closeRightSidebar(page);
   await rightSidebarOpenControl(page).click();
   await expect(rightSidebar(page).getByText("Identifier")).toBeVisible();
@@ -501,41 +700,46 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   await expectNoStaleInspector(page);
   await page.getByRole("row").filter({ hasText: "ROLE_MAIN_AGENT" }).click();
   await expect(page).toHaveURL(/\/settings\/prompts\/detail\?promptCode=/);
-  await expect(page.getByRole("textbox", { name: "Prompt code", exact: true })).toHaveAttribute("readonly", "");
+  await expect(
+    page.getByRole("textbox", { name: "Prompt code", exact: true })
+  ).toHaveAttribute("readonly", "");
   await expectNoStaleInspector(page);
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/variables`);
   await expectNoStaleInspector(page);
   const firstVariableRow = page.locator("tbody tr").first();
-  const variableKey = (await firstVariableRow.locator("td").first().locator("p").first().textContent())?.trim();
+  const variableKey = (
+    await firstVariableRow
+      .locator("td")
+      .first()
+      .locator("p")
+      .first()
+      .textContent()
+  )?.trim();
   await firstVariableRow.click();
   await expectNoStaleInspector(page);
   if (variableKey) {
-    await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: variableKey })).toBeVisible();
+    await expect(
+      page
+        .getByRole("navigation", { name: "Breadcrumb" })
+        .filter({ hasText: variableKey })
+    ).toBeVisible();
   }
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/knowledge-base`);
   await expect(rightSidebarOpenControl(page)).toBeVisible();
-  await page.locator("tbody tr").filter({ hasText: "Operations SOP Library" }).click();
-  await expect(rightSidebar(page).getByText("Selected KnowledgeBase")).toBeVisible();
-  await expect(rightSidebar(page).getByText("Operations SOP Library")).toBeVisible();
-
-  await routeActiveProfileApi(page);
-  await page.goto(`${frontendBaseUrl}/skills`);
-  await expect(rightSidebarOpenControl(page)).toBeVisible();
-  const skillRows = page.locator("tbody tr");
-  const skillRowsCount = await skillRows.count();
-  if (skillRowsCount > 0) {
-    const firstCellText = (await skillRows.first().locator("td").first().textContent({ timeout: 1000 }).catch(() => ""))?.trim();
-    const skillName = firstCellText?.split(/\s+/)[0];
-    if (skillName && !firstCellText?.includes("No workspace skills")) {
-      await skillRows.first().click();
-      await expect(rightSidebar(page)).toBeVisible();
-      await expect(rightSidebar(page).getByText(skillName)).toBeVisible();
-    }
-  }
+  await page
+    .locator("tbody tr")
+    .filter({ hasText: "Operations SOP Library" })
+    .click();
+  await expect(
+    rightSidebar(page).getByText("Selected KnowledgeBase")
+  ).toBeVisible();
+  await expect(
+    rightSidebar(page).getByText("Operations SOP Library")
+  ).toBeVisible();
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/skills`);

@@ -29,28 +29,49 @@ export interface ExtensionImplementationRecord {
 }
 
 export function listCapabilityPacks(signal?: AbortSignal) {
-  return requestApi<CapabilityPackRecord[]>("GET /api/v1/capabilities/packs", { signal });
+  return requestApi<CapabilityPackRecord[]>("GET /api/v1/capabilities/packs", {
+    signal,
+  });
 }
 
 export function listExtensionImplementations(signal?: AbortSignal) {
-  return requestApi<ExtensionImplementationRecord[]>("GET /api/v1/capabilities/extensions", { signal });
+  return requestApi<ExtensionImplementationRecord[]>(
+    "GET /api/v1/capabilities/extensions",
+    { signal }
+  );
 }
 
 export function setCapabilityPackEnabled(packId: string, enabled: boolean) {
-  return requestApi<CapabilityPackRecord>("PUT /api/v1/capabilities/packs/{id}/enabled", {
-    pathParams: { id: packId },
-    body: { enabled },
-  });
+  return requestApi<CapabilityPackRecord>(
+    "PUT /api/v1/capabilities/packs/{id}/enabled",
+    {
+      pathParams: { id: packId },
+      body: { enabled },
+    }
+  );
 }
 
 export function setExtensionEnabled(extensionPoint: string, enabled: boolean) {
-  return requestApi<ExtensionImplementationRecord[]>("PUT /api/v1/capabilities/extensions/{point}/enabled", {
-    pathParams: { point: extensionPoint }, body: { enabled },
-  });
+  return requestApi<ExtensionImplementationRecord[]>(
+    "PUT /api/v1/capabilities/extensions/{point}/enabled",
+    {
+      pathParams: { point: extensionPoint },
+      body: { enabled },
+    }
+  );
 }
 
 export function importCapabilityPack(file: File) {
   const body = new FormData();
   body.append("file", file);
-  return requestApi<CapabilityPackRecord>("POST /api/v1/capabilities/packs/import", { body });
+  return requestApi<CapabilityPackRecord>(
+    "POST /api/v1/capabilities/packs/import",
+    { body }
+  );
+}
+
+export function uninstallCapabilityPack(id: string) {
+  return requestApi<unknown>("DELETE /api/v1/capabilities/packs/{id}", {
+    pathParams: { id },
+  });
 }

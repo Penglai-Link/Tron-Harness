@@ -1,9 +1,6 @@
 use crate::{
     app::AppState,
-    application::agent::{
-        extension_implementation_catalog_with_state, install_capability_pack,
-        installed_capability_packs,
-    },
+    application::agent::{extension_implementation_catalog_with_state, installed_capability_packs},
     response::ApiResponse,
 };
 use axum::{
@@ -11,13 +8,14 @@ use axum::{
     extract::{DefaultBodyLimit, Multipart, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use serde::Deserialize;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/capabilities/packs", get(list_capability_packs))
+        .route("/api/v1/capabilities/packs/{id}", delete(uninstall_pack))
         .route(
             "/api/v1/capabilities/packs/import",
             post(import_pack).layer(DefaultBodyLimit::max(128 * 1024 * 1024)),
@@ -84,10 +82,9 @@ async fn set_pack_enabled(
     Path(id): Path<String>,
     Json(request): Json<EnabledRequest>,
 ) -> Response {
-    let is_builtin = matches!(
-        id.as_str(),
-        "framework.external-agent" | "framework.local.scoped" | "tron.harness"
-    );
+    let is_builtin = crate::application::agent::capability_pack_catalog()
+        .iter()
+        .any(|p| p.id == id);
     if !is_builtin {
         let root = state.agent_framework.pack_root().to_path_buf();
         let package = id.clone();
@@ -202,17 +199,75 @@ async fn import_pack(State(state): State<AppState>, mut multipart: Multipart) ->
             "file field is required".into(),
         );
     };
-    let root = state.agent_framework.pack_root().to_path_buf();
-    match tokio::task::spawn_blocking(move || install_capability_pack(&root, &bytes)).await {
-        Ok(Ok(pack)) => Json(ApiResponse::success(pack)).into_response(),
-        Ok(Err(error)) => failure(StatusCode::BAD_REQUEST, "CAPABILITY_IMPORT_REJECTED", error),
-        Err(error) => failure(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CAPABILITY_IMPORT_FAILED",
-            error.to_string(),
-        ),
+    match state.agent_framework.import_pack(bytes.to_vec()).await {
+        Ok(pack) => Json(ApiResponse::protocol_success(pack)).into_response(),
+        Err(error) => failure(StatusCode::CONFLICT, "CAPABILITY_IMPORT_REJECTED", error),
     }
 }
 fn failure(status: StatusCode, code: &'static str, message: String) -> Response {
     (status, Json(ApiResponse::error(code, message))).into_response()
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UninstallPackVo {
+    id: String,
+    uninstalled: bool,
+}
+
+async fn uninstall_pack(
+    auth: crate::adapters::inbound::http::auth::RequestAuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Response {
+    match state.agent_framework.uninstall_pack(&id).await {
+        Ok(()) => Json(ApiResponse::protocol_success(UninstallPackVo {
+            id,
+            uninstalled: true,
+        }))
+        .into_response(),
+        Err(error) => {
+            let zh = auth.locale.starts_with("zh");
+            let (code, message) = if error.contains("bundled") {
+                (
+                    "101031001",
+                    if zh {
+                        "随程序发布的能力包不能单独卸载"
+                    } else {
+                        "Bundled capability packs cannot be uninstalled"
+                    },
+                )
+            } else if error.contains("referenced")
+                || error.contains("Busy")
+                || error.contains("busy")
+                || error.contains("active")
+            {
+                (
+                    "101031002",
+                    if zh {
+                        "能力包仍被运行或持久续跑引用，请结束运行后重试"
+                    } else {
+                        "Capability pack is in use by a running or durable session"
+                    },
+                )
+            } else {
+                (
+                    "101031003",
+                    if zh {
+                        "能力包卸载未完成，资源已停用，请重试"
+                    } else {
+                        "Capability pack cleanup is incomplete; retry the uninstall"
+                    },
+                )
+            };
+            (
+                StatusCode::CONFLICT,
+                Json(ApiResponse::protocol_error(
+                    code,
+                    format!("{message}: {error}"),
+                )),
+            )
+                .into_response()
+        }
+    }
 }

@@ -16,6 +16,6 @@ impl FrameworkHost {
     pub async fn storage_framework(
         &self,
     ) -> Result<eliteforge_agent_framework::Framework, eliteforge_agent_core::AgentError> {
-        self.framework().await.cloned()
+        self.framework().await
     }
 }

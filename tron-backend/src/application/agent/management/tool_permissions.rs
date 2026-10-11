@@ -54,9 +54,10 @@ impl AgentManagementService {
             .map(|r| r.tool_code);
         let settings = self.repository().list_tool_permissions()?;
         Ok(code.is_none_or(|code| {
-            !settings
-                .iter()
-                .any(|s| s.tool_code == code && s.permission == ToolPermission::No)
+            self.capability_available("tool", &code)
+                && !settings
+                    .iter()
+                    .any(|s| s.tool_code == code && s.permission == ToolPermission::No)
         }))
     }
 }

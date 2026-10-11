@@ -58,6 +58,7 @@ pub trait McpRepository: Send {
 #[derive(Clone)]
 pub struct McpService {
     repository: Arc<Mutex<Box<dyn McpRepository>>>,
+    capabilities: Arc<std::sync::OnceLock<crate::application::capability::CapabilityResources>>,
     workspaces: WorkspaceService,
     variables: VariableService,
     http_client: Client,
@@ -72,12 +73,93 @@ impl McpService {
     ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
+            capabilities: Default::default(),
             workspaces,
             variables,
             http_client,
         }
     }
 
+    pub fn bind_capabilities(
+        &self,
+        resources: crate::application::capability::CapabilityResources,
+    ) {
+        let _ = self.capabilities.set(resources);
+    }
+    pub fn capability_resource(
+        &self,
+        code: &str,
+    ) -> Option<crate::application::capability::CapabilityResource> {
+        self.capabilities
+            .get()?
+            .resource("mcp", code)
+            .ok()
+            .flatten()
+    }
+    pub fn capability_available(&self, code: &str) -> bool {
+        self.capabilities
+            .get()
+            .is_none_or(|c| c.available("mcp", code))
+    }
+    pub fn register_pack_server(
+        &self,
+        declaration: &eliteforge_agent_capability_runtime::McpDeclaration,
+        enabled: bool,
+        directory: &std::path::Path,
+    ) -> Result<(), McpError> {
+        if self
+            .repository
+            .lock()
+            .unwrap()
+            .get_platform_server(&declaration.id)?
+            .is_some()
+        {
+            return Ok(());
+        }
+        let (transport_kind, url, command, args) = match &declaration.transport {
+            eliteforge_agent_capability_runtime::McpDeclarationTransport::Http { url } => (
+                McpServerTransportKind::StreamableHttp,
+                url.clone(),
+                String::new(),
+                vec![],
+            ),
+            eliteforge_agent_capability_runtime::McpDeclarationTransport::Stdio {
+                program,
+                args,
+            } => (
+                McpServerTransportKind::Stdio,
+                String::new(),
+                program.clone(),
+                args.clone(),
+            ),
+        };
+        let now = current_timestamp();
+        self.repository
+            .lock()
+            .unwrap()
+            .upsert_platform_server(&PlatformMcpServerRecord {
+                server_code: declaration.id.clone(),
+                name: declaration.id.clone(),
+                description: None,
+                transport_kind,
+                url,
+                command,
+                args,
+                auth_kind: crate::domain::mcp::McpServerAuthKind::None,
+                auth_payload: None,
+                headers: Default::default(),
+                headers_variable_refs: Default::default(),
+                env_variable_refs: Default::default(),
+                env_passthrough_refs: vec![],
+                working_directory: Some(directory.display().to_string()),
+                enabled,
+                last_health_status: McpHealthStatus::NeverChecked,
+                last_health_message: None,
+                last_health_checked_at: None,
+                created_at: now.clone(),
+                updated_at: now,
+            })
+    }
     pub fn list_platform_servers(
         &self,
         query: PlatformMcpServerListQuery,
@@ -89,6 +171,9 @@ impl McpService {
             .lock()
             .expect("MCP repository mutex poisoned")
             .list_platform_servers()?;
+        for record in &mut records {
+            record.enabled &= self.capability_available(&record.server_code);
+        }
         records.retain(|record| {
             validation::matches_platform_status(record, status)
                 && search
@@ -485,6 +570,11 @@ impl McpService {
         enabled: bool,
     ) -> Result<PlatformMcpServerRecord, McpError> {
         let normalized_server_code = normalize_mcp_server_code(server_code)?;
+        if enabled && !self.capability_available(&normalized_server_code) {
+            return Err(McpError::RuntimeDiscoveryFailed(
+                "owning capability pack is disabled".into(),
+            ));
+        }
         let mut repository = self
             .repository
             .lock()
@@ -542,7 +632,9 @@ impl McpService {
                 let workspace_override_disabled = override_policy
                     .map(|policy| !policy.enabled)
                     .unwrap_or(false);
-                let effective_enabled = server.enabled && !workspace_override_disabled;
+                let effective_enabled = server.enabled
+                    && !workspace_override_disabled
+                    && self.capability_available(&server.server_code);
                 WorkspaceEffectiveMcpServerRecord {
                     server_code: server.server_code,
                     name: server.name,

@@ -29,3 +29,5 @@ pub mod workspace;
 pub mod skin;
 
 pub mod knowledge_base;
+
+pub mod capability;

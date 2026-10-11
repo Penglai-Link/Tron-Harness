@@ -120,14 +120,10 @@ fn build_mcp_service(
     McpService::new(repository, workspaces, variables, runtime_http_client)
 }
 
-fn build_skill_registry_service(
-    database_url: &str,
-    workspaces: WorkspaceService,
-    registry_root: &str,
-) -> SkillRegistryService {
+fn build_skill_registry_service(database_url: &str, registry_root: &str) -> SkillRegistryService {
     let repository = SqliteSkillRegistryRepository::connect(database_url)
         .expect("skill registry SQLite repository should initialize");
-    SkillRegistryService::new(repository, workspaces, registry_root)
+    SkillRegistryService::new(repository, registry_root)
 }
 
 fn build_model_service(

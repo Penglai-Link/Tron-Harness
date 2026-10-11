@@ -1,3 +1,4 @@
+import { DisabledResourceReason } from "./InternalAgentSkillField";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -43,11 +44,16 @@ export function InternalAgentToolSelector({
   const [toolSearch, setToolSearch] = useState("");
   const [debouncedToolSearch, setDebouncedToolSearch] = useState("");
   const [activeDomainCode, setActiveDomainCode] = useState("");
-  const selectedToolSet = useMemo(() => new Set(selectedToolCodes), [selectedToolCodes]);
-
-  const internalPageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`pages:workspaceAgents.internal.${key}`, { defaultValue, ...options })
+  const selectedToolSet = useMemo(
+    () => new Set(selectedToolCodes),
+    [selectedToolCodes]
   );
+
+  const internalPageT = (
+    key: string,
+    defaultValue: string,
+    options?: Record<string, unknown>
+  ) => t(`pages:workspaceAgents.internal.${key}`, { defaultValue, ...options });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -67,7 +73,9 @@ export function InternalAgentToolSelector({
     grouped.forEach((items, domainCode) => {
       grouped.set(
         domainCode,
-        [...items].sort((left, right) => left.toolCode.localeCompare(right.toolCode)),
+        [...items].sort((left, right) =>
+          left.toolCode.localeCompare(right.toolCode)
+        )
       );
     });
 
@@ -83,26 +91,35 @@ export function InternalAgentToolSelector({
         return accum;
       }
 
-      const matchesDomain = normalizedSearch.length === 0
-        || [
+      const matchesDomain =
+        normalizedSearch.length === 0 ||
+        [
           domain.domainCode,
           domain.name,
           domain.description,
           domain.sampleTools.join(" "),
-        ].join(" ").toLowerCase().includes(normalizedSearch);
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearch);
 
       const visibleTools = matchesDomain
         ? domainTools
-        : domainTools.filter((tool) => (
-          [
-            tool.toolCode,
-            tool.domainCode,
-            tool.name,
-            tool.description,
-            tool.operationKind,
-            t(`common:toolOperationKind.${tool.operationKind}`, { defaultValue: tool.operationKind }),
-          ].join(" ").toLowerCase().includes(normalizedSearch)
-        ));
+        : domainTools.filter((tool) =>
+            [
+              tool.toolCode,
+              tool.domainCode,
+              tool.name,
+              tool.description,
+              tool.operationKind,
+              t(`common:toolOperationKind.${tool.operationKind}`, {
+                defaultValue: tool.operationKind,
+              }),
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(normalizedSearch)
+          );
 
       if (!visibleTools.length) {
         return accum;
@@ -110,7 +127,10 @@ export function InternalAgentToolSelector({
 
       accum.push({
         domain,
-        selectedCount: domainTools.filter((tool) => selectedToolSet.has(tool.toolCode)).length,
+        selectedCount: domainTools.filter(
+          (tool) =>
+            tool.assignable !== false && selectedToolSet.has(tool.toolCode)
+        ).length,
         visibleTools,
       });
 
@@ -126,29 +146,50 @@ export function InternalAgentToolSelector({
       return;
     }
 
-    const activeStillVisible = domainEntries.some((entry) => entry.domain.domainCode === activeDomainCode);
+    const activeStillVisible = domainEntries.some(
+      (entry) => entry.domain.domainCode === activeDomainCode
+    );
     if (!activeStillVisible) {
       setActiveDomainCode(domainEntries[0].domain.domainCode);
     }
   }, [activeDomainCode, domainEntries]);
 
-  const activeEntry = useMemo(() => (
-    domainEntries.find((entry) => entry.domain.domainCode === activeDomainCode) ?? null
-  ), [activeDomainCode, domainEntries]);
+  const activeEntry = useMemo(
+    () =>
+      domainEntries.find(
+        (entry) => entry.domain.domainCode === activeDomainCode
+      ) ?? null,
+    [activeDomainCode, domainEntries]
+  );
 
   const activeDomainTools = activeEntry?.visibleTools ?? [];
-  const allActiveToolsSelected = activeDomainTools.length > 0
-    && activeDomainTools.every((tool) => selectedToolSet.has(tool.toolCode));
-  const hasAnyActiveToolSelected = activeDomainTools.some((tool) => selectedToolSet.has(tool.toolCode));
+  const assignableTools = activeDomainTools.filter(
+    (tool) => tool.assignable !== false
+  );
+  const allActiveToolsSelected =
+    assignableTools.length > 0 &&
+    assignableTools.every((tool) => selectedToolSet.has(tool.toolCode));
+  const hasAnyActiveToolSelected = activeDomainTools.some((tool) =>
+    selectedToolSet.has(tool.toolCode)
+  );
 
   return (
     <div className={cn("mt-5 space-y-3", className)}>
       <div className="grid gap-4 md:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
-        <Field className="w-full min-w-0 pr-1" label={internalPageT("toolSelection.title", "Selected tools")}>
+        <Field
+          className="w-full min-w-0 pr-1"
+          label={internalPageT("toolSelection.title", "Selected tools")}
+        >
           <SearchField
             className="w-full"
-            ariaLabel={internalPageT("toolSelection.searchAria", "Search tools")}
-            placeholder={internalPageT("toolSelection.searchPlaceholder", "Search tools...")}
+            ariaLabel={internalPageT(
+              "toolSelection.searchAria",
+              "Search tools"
+            )}
+            placeholder={internalPageT(
+              "toolSelection.searchPlaceholder",
+              "Search tools..."
+            )}
             value={toolSearch}
             onChange={setToolSearch}
           />
@@ -157,7 +198,10 @@ export function InternalAgentToolSelector({
 
       {domainEntries.length === 0 ? (
         <p className="text-sm text-[var(--color-on-surface-variant)]">
-          {internalPageT("toolSelection.empty", "No tools match the search query.")}
+          {internalPageT(
+            "toolSelection.empty",
+            "No tools match the search query."
+          )}
         </p>
       ) : (
         <div className="grid gap-4 md:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
@@ -173,7 +217,7 @@ export function InternalAgentToolSelector({
                       "w-full rounded-[18px] border p-3 text-left shadow-[0_8px_18px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow]",
                       isActive
                         ? "border-[var(--color-primary)] bg-[var(--color-primary)]/8 shadow-[0_12px_24px_rgba(15,23,42,0.06)]"
-                        : "border-[var(--color-card-border)] bg-[var(--color-surface-container-lowest)] hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-hover-surface)]",
+                        : "border-[var(--color-card-border)] bg-[var(--color-surface-container-lowest)] hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-hover-surface)]"
                     )}
                     type="button"
                     onClick={() => {
@@ -187,24 +231,42 @@ export function InternalAgentToolSelector({
                         </p>
                       </div>
                       <span className="rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">
-                        {internalPageT("toolSelection.selectedCount", "{{count}} selected", {
-                          count: entry.selectedCount,
-                        })}
+                        {internalPageT(
+                          "toolSelection.selectedCount",
+                          "{{count}} selected",
+                          {
+                            count: entry.selectedCount,
+                          }
+                        )}
                       </span>
                     </div>
                     <p className="mt-2 line-clamp-2 text-[12px] text-[var(--color-on-surface-variant)]">
-                      {entry.domain.description || internalPageT("toolSelection.noDescription", "No description available.")}
+                      {entry.domain.description ||
+                        internalPageT(
+                          "toolSelection.noDescription",
+                          "No description available."
+                        )}
                     </p>
                     <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-[var(--color-on-surface-variant)]">
                       <span>
                         {entry.domain.hasMutationTools
-                          ? internalPageT("toolSelection.hasMutation", "Contains mutation tools")
-                          : internalPageT("toolSelection.noMutation", "Read-only only")}
+                          ? internalPageT(
+                              "toolSelection.hasMutation",
+                              "Contains mutation tools"
+                            )
+                          : internalPageT(
+                              "toolSelection.noMutation",
+                              "Read-only only"
+                            )}
                       </span>
                       <span>
-                        {internalPageT("toolSelection.toolsCount", "{{count}} tools", {
-                          count: entry.visibleTools.length,
-                        })}
+                        {internalPageT(
+                          "toolSelection.toolsCount",
+                          "{{count}} tools",
+                          {
+                            count: entry.visibleTools.length,
+                          }
+                        )}
                       </span>
                     </div>
                   </button>
@@ -223,8 +285,11 @@ export function InternalAgentToolSelector({
                         {activeEntry.domain.name}
                       </p>
                       <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-                        {activeEntry.domain.description
-                          || internalPageT("toolSelection.noDescription", "No description available.")}
+                        {activeEntry.domain.description ||
+                          internalPageT(
+                            "toolSelection.noDescription",
+                            "No description available."
+                          )}
                       </p>
                     </div>
 
@@ -234,17 +299,26 @@ export function InternalAgentToolSelector({
                         size="sm"
                         variant="secondary"
                         onClick={() => {
-                          onSetToolsChecked(activeDomainTools.map((tool) => tool.toolCode), true);
+                          onSetToolsChecked(
+                            assignableTools.map((tool) => tool.toolCode),
+                            true
+                          );
                         }}
                       >
-                        {internalPageT("toolSelection.selectVisible", "Select all")}
+                        {internalPageT(
+                          "toolSelection.selectVisible",
+                          "Select all"
+                        )}
                       </Button>
                       <Button
                         disabled={busy || !hasAnyActiveToolSelected}
                         size="sm"
                         variant="secondary"
                         onClick={() => {
-                          onSetToolsChecked(activeDomainTools.map((tool) => tool.toolCode), false);
+                          onSetToolsChecked(
+                            activeDomainTools.map((tool) => tool.toolCode),
+                            false
+                          );
                         }}
                       >
                         {internalPageT("toolSelection.clearVisible", "Clear")}
@@ -254,20 +328,32 @@ export function InternalAgentToolSelector({
 
                   <ul className="tron-scrollbar mt-4 max-h-[36rem] space-y-2 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1">
                     {activeDomainTools.map((tool) => {
-                      const checked = selectedToolSet.has(tool.toolCode);
+                      const checked =
+                        tool.assignable !== false &&
+                        selectedToolSet.has(tool.toolCode);
                       return (
                         <li
                           className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3"
                           key={tool.toolCode}
                         >
-                          <label className="flex items-start gap-3">
+                          <DisabledResourceReason
+                            reason={tool.disabledReason}
+                          />
+                          <label
+                            className={`flex items-start gap-3 ${
+                              tool.assignable === false ? "opacity-60" : ""
+                            }`}
+                          >
                             <input
                               checked={checked}
                               className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-primary)]"
-                              disabled={busy}
+                              disabled={busy || tool.assignable === false}
                               type="checkbox"
                               onChange={(event) => {
-                                onToggleTool(tool.toolCode, event.target.checked);
+                                onToggleTool(
+                                  tool.toolCode,
+                                  event.target.checked
+                                );
                               }}
                             />
                             <div className="min-w-0">
@@ -276,15 +362,21 @@ export function InternalAgentToolSelector({
                                   {tool.name}
                                 </span>
                                 <span className="rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">
-                                  {t(`common:toolOperationKind.${tool.operationKind}`, { defaultValue: tool.operationKind })}
+                                  {t(
+                                    `common:toolOperationKind.${tool.operationKind}`,
+                                    { defaultValue: tool.operationKind }
+                                  )}
                                 </span>
                               </div>
                               <p className="mt-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">
                                 {tool.toolCode}
                               </p>
                               <p className="mt-2 text-[13px] text-[var(--color-on-surface-variant)]">
-                                {tool.description
-                                  || internalPageT("toolSelection.noDescription", "No description available.")}
+                                {tool.description ||
+                                  internalPageT(
+                                    "toolSelection.noDescription",
+                                    "No description available."
+                                  )}
                               </p>
                             </div>
                           </label>
@@ -295,7 +387,10 @@ export function InternalAgentToolSelector({
                 </>
               ) : (
                 <p className="text-sm text-[var(--color-on-surface-variant)]">
-                  {internalPageT("toolSelection.emptyPanel", "Select a domain to review its tools.")}
+                  {internalPageT(
+                    "toolSelection.emptyPanel",
+                    "Select a domain to review its tools."
+                  )}
                 </p>
               )}
             </div>

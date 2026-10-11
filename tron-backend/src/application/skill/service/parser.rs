@@ -266,3 +266,18 @@ pub(super) fn optional_trimmed(value: Option<String>) -> Option<String> {
 pub(super) fn normalized_search(value: Option<String>) -> Option<String> {
     optional_trimmed(value).map(|search| search.to_lowercase())
 }
+
+pub(super) fn parse_skill_name(markdown: &str) -> Result<String, SkillError> {
+    let fm = markdown
+        .strip_prefix("---")
+        .and_then(|s| s.split_once("---"))
+        .ok_or(SkillError::SkillNameRequired)?
+        .0;
+    let yaml: serde_yaml::Value =
+        serde_yaml::from_str(fm).map_err(|_| SkillError::SkillNameRequired)?;
+    let name = yaml["name"]
+        .as_str()
+        .filter(|s| !s.trim().is_empty() && s.trim() == *s)
+        .ok_or(SkillError::SkillNameRequired)?;
+    Ok(name.into())
+}

@@ -32,7 +32,14 @@ export interface AppRoute {
 }
 
 const registeredRoutes: AppRoute[] = [
-  { pageId: "observability.index", route: "/observability", activeNav: "Observability", title: "Observability", titleTranslationKey: "observability:title", archetype: "data-table" },
+  {
+    pageId: "observability.index",
+    route: "/observability",
+    activeNav: "Observability",
+    title: "Observability",
+    titleTranslationKey: "observability:title",
+    archetype: "data-table",
+  },
   {
     pageId: "admin.archivedChats",
     route: "/settings/archived-chats",
@@ -225,14 +232,6 @@ const registeredRoutes: AppRoute[] = [
     title: "Automation Executions",
     archetype: "data-table",
     shellConfig: { searchPlaceholder: "Search automations..." },
-  },
-  {
-    pageId: "skills.bind",
-    route: "/skills/bind",
-    activeNav: "Skills",
-    title: "Bind Skill",
-    archetype: "form-inspector",
-    shellConfig: { searchPlaceholder: "Search installed skills..." },
   },
   {
     pageId: "tasks.new",
@@ -431,14 +430,6 @@ const registeredRoutes: AppRoute[] = [
       contentClassName: "px-6 py-6 lg:overflow-y-auto lg:pb-0",
       searchPlaceholder: "Search workspaces...",
     },
-  },
-  {
-    pageId: "skills.index",
-    route: "/skills",
-    activeNav: "Skills",
-    title: "Workspace Skills",
-    archetype: "split-pane",
-    shellConfig: { searchPlaceholder: "Search installed skills..." },
   },
   {
     pageId: "tasks.detail",
@@ -812,16 +803,35 @@ const registeredRoutes: AppRoute[] = [
 ] as const;
 
 const platformDataLabels: Record<string, string> = {
-  memory: "Memory", knowledgeGraph: "KnowledgeGraph", knowledgeBase: "KnowledgeBase", rag: "RAG",
+  memory: "Memory",
+  knowledgeGraph: "KnowledgeGraph",
+  knowledgeBase: "KnowledgeBase",
+  rag: "RAG",
 };
 export const appRoutes: AppRoute[] = registeredRoutes.flatMap((route) => {
   const label = platformDataLabels[route.pageId.split(".")[0]];
   if (label) {
-    const settingsRoute = { ...route, layout: "settings" as const, activeNav: "Settings", settingsNav: label };
-    return [settingsRoute, { ...settingsRoute, route: `/settings${route.route}` }];
+    const settingsRoute = {
+      ...route,
+      layout: "settings" as const,
+      activeNav: "Settings",
+      settingsNav: label,
+    };
+    return [
+      settingsRoute,
+      { ...settingsRoute, route: `/settings${route.route}` },
+    ];
   }
   if (route.pageId.startsWith("agents.")) {
-    return [{ ...route, pageId: "settings.agents", layout: "settings" as const, activeNav: "Settings", settingsNav: "Agents" }];
+    return [
+      {
+        ...route,
+        pageId: "settings.agents",
+        layout: "settings" as const,
+        activeNav: "Settings",
+        settingsNav: "Agents",
+      },
+    ];
   }
   return [route];
 });

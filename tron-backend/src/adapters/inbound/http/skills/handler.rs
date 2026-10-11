@@ -1,3 +1,5 @@
+use super::response::*;
+use crate::adapters::inbound::http::auth::RequestAuthContext;
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -8,17 +10,15 @@ use axum::{
 use crate::{
     app::AppRagService,
     application::skill::{SkillRagIndexService, SkillRegistryService},
-    domain::skill::{
-        RegistrySkillListQuery, SkillRagIndexBatchSummary, SkillRagIndexStatus, SkillSearchMode,
-    },
+    domain::skill::{RegistrySkillListQuery, SkillRagIndexBatchSummary, SkillSearchMode},
     response::ApiResponse,
 };
 
 use super::{
     error_mapper::skill_error_response,
     request::{
-        InstallRegistrySkillRequest, RegistrySkillDetailQuery, RegistrySkillUninstallQuery,
-        SearchSkillsRequest, WorkspaceSkillBindingRequest, WorkspaceSkillsQuery,
+        AgentSkillsRequest, InstallRegistrySkillRequest, RegistrySkillsQuery, SearchSkillsRequest,
+        SkillAgentsRequest,
     },
 };
 
@@ -30,6 +30,7 @@ type AppSkillRagIndexService = SkillRagIndexService<
 >;
 
 pub async fn search_skills(
+    auth: RequestAuthContext,
     State(skills): State<SkillRegistryService>,
     Json(request): Json<SearchSkillsRequest>,
 ) -> Response {
@@ -37,232 +38,146 @@ pub async fn search_skills(
         &request.query,
         request.mode.unwrap_or(SkillSearchMode::Find),
     ) {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
-        Err(error) => skill_error_response(error),
+        Ok(records) => Json(ApiResponse::protocol_success(
+            records
+                .into_iter()
+                .map(SkillSearchCandidateVo::from)
+                .collect::<Vec<_>>(),
+        ))
+        .into_response(),
+        Err(error) => skill_error_response(error, &auth.locale),
     }
 }
 
 pub async fn list_registry_skills(
+    auth: RequestAuthContext,
     State(skills): State<SkillRegistryService>,
-    Query(query): Query<RegistrySkillListQuery>,
+    Query(query): Query<RegistrySkillsQuery>,
 ) -> Response {
-    match skills.list_registry(query) {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
-        Err(error) => skill_error_response(error),
-    }
-}
-
-pub async fn list_workspace_skills(
-    State(skills): State<SkillRegistryService>,
-    Path(workspace_code): Path<String>,
-    Query(query): Query<WorkspaceSkillsQuery>,
-) -> Response {
-    match skills.list_workspace_skills(&workspace_code, query) {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
-        Err(error) => skill_error_response(error),
+    match skills.list_registry(RegistrySkillListQuery {
+        search: query.search,
+    }) {
+        Ok(records) => Json(ApiResponse::protocol_success(skill_list(
+            records,
+            &auth.locale,
+        )))
+        .into_response(),
+        Err(error) => skill_error_response(error, &auth.locale),
     }
 }
 
 pub async fn get_registry_skill(
+    auth: RequestAuthContext,
     State(skills): State<SkillRegistryService>,
     Path(skill_name): Path<String>,
-    Query(query): Query<RegistrySkillDetailQuery>,
 ) -> Response {
-    match skills.get_registry_skill(&skill_name, query.workspace_code.as_deref()) {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
-        Err(error) => skill_error_response(error),
-    }
-}
-
-pub async fn get_workspace_skill(
-    State(skills): State<SkillRegistryService>,
-    Path((workspace_code, skill_name)): Path<(String, String)>,
-) -> Response {
-    match skills.get_workspace_skill(&workspace_code, &skill_name) {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
-        Err(error) => skill_error_response(error),
+    match skills.get_registry_skill(&skill_name) {
+        Ok(record) => {
+            let mut vo = RegistrySkillDetailVo::from(record);
+            if !vo.available && auth.locale.starts_with("en") {
+                vo.disabled_reason = Some(format!(
+                    "Capability pack {} is disabled",
+                    vo.provider_pack_id.as_deref().unwrap_or("")
+                ));
+            }
+            Json(ApiResponse::protocol_success(vo)).into_response()
+        }
+        Err(error) => skill_error_response(error, &auth.locale),
     }
 }
 
 pub async fn install_registry_skill(
+    auth: RequestAuthContext,
     State(skills): State<SkillRegistryService>,
     State(rag): State<AppRagService>,
     Json(request): Json<InstallRegistrySkillRequest>,
 ) -> Response {
     match skills.install_skill(request.into()) {
         Ok(mut record) => {
-            if let Some(workspace_code) = record.workspace_code.clone() {
-                let indexer = SkillRagIndexService::new(skills, rag);
-                record.rag_index =
-                    index_workspace_skill_summary(&indexer, &workspace_code, &record.skill_name)
-                        .await;
-            }
-            (StatusCode::CREATED, Json(ApiResponse::success(record))).into_response()
+            let indexer = SkillRagIndexService::new(skills, rag);
+            record.rag_index = indexer.index_registry_skill(&record.skill_name).await.ok();
+            (
+                StatusCode::CREATED,
+                Json(ApiResponse::protocol_success(
+                    SkillRegistryMutationResultVo::from(record),
+                )),
+            )
+                .into_response()
         }
-        Err(error) => skill_error_response(error),
+        Err(error) => skill_error_response(error, &auth.locale),
     }
 }
 
 pub async fn uninstall_registry_skill(
+    auth: RequestAuthContext,
     State(skills): State<SkillRegistryService>,
     State(rag): State<AppRagService>,
     Path(skill_name): Path<String>,
-    Query(query): Query<RegistrySkillUninstallQuery>,
 ) -> Response {
-    match skills.uninstall_skill(&skill_name, query.remove_bindings.unwrap_or(false)) {
+    match skills.uninstall_skill(&skill_name) {
         Ok(mut record) => {
             let indexer = SkillRagIndexService::new(skills, rag);
-            record.rag_index = Some(index_all_workspaces_summary(&indexer).await);
-            Json(ApiResponse::success(record)).into_response()
+            record.rag_index = Some(index_platform_summary(&indexer).await);
+            Json(ApiResponse::protocol_success(
+                SkillRegistryUninstallResultVo::from(record),
+            ))
+            .into_response()
         }
-        Err(error) => skill_error_response(error),
+        Err(error) => skill_error_response(error, &auth.locale),
     }
 }
 
 pub async fn rescan_registry_skills(
+    auth: RequestAuthContext,
     State(skills): State<SkillRegistryService>,
     State(rag): State<AppRagService>,
 ) -> Response {
     match skills.rescan_registry() {
         Ok(mut record) => {
             let indexer = SkillRagIndexService::new(skills, rag);
-            record.rag_index = Some(index_all_workspaces_summary(&indexer).await);
-            Json(ApiResponse::success(record)).into_response()
+            record.rag_index = Some(index_platform_summary(&indexer).await);
+            Json(ApiResponse::protocol_success(
+                SkillRegistrySyncResultVo::from(record),
+            ))
+            .into_response()
         }
-        Err(error) => skill_error_response(error),
+        Err(error) => skill_error_response(error, &auth.locale),
     }
 }
 
-pub async fn check_registry_skill_updates(State(skills): State<SkillRegistryService>) -> Response {
+pub async fn check_registry_skill_updates(
+    auth: RequestAuthContext,
+    State(skills): State<SkillRegistryService>,
+) -> Response {
     match skills.check_updates() {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
-        Err(error) => skill_error_response(error),
-    }
-}
-
-pub async fn refresh_workspace_skills(
-    State(skills): State<SkillRegistryService>,
-    State(rag): State<AppRagService>,
-    Path(workspace_code): Path<String>,
-) -> Response {
-    match skills.refresh_workspace_skills(&workspace_code) {
-        Ok(mut record) => {
-            let indexer = SkillRagIndexService::new(skills, rag);
-            record.rag_index = Some(index_workspace_summary(&indexer, &workspace_code).await);
-            Json(ApiResponse::success(record)).into_response()
-        }
-        Err(error) => skill_error_response(error),
-    }
-}
-
-pub async fn retry_workspace_skill_rag_index(
-    State(skills): State<SkillRegistryService>,
-    State(rag): State<AppRagService>,
-    Path((workspace_code, skill_name)): Path<(String, String)>,
-) -> Response {
-    let indexer = SkillRagIndexService::new(skills, rag);
-    match indexer
-        .index_workspace_skill(&workspace_code, &skill_name)
-        .await
-    {
-        Ok(summary) => Json(ApiResponse::success(summary)).into_response(),
-        Err(error) => skill_error_response(error),
+        Ok(record) => Json(ApiResponse::protocol_success(
+            SkillRegistrySyncResultVo::from(record),
+        ))
+        .into_response(),
+        Err(error) => skill_error_response(error, &auth.locale),
     }
 }
 
 pub async fn update_registry_skills(
+    auth: RequestAuthContext,
     State(skills): State<SkillRegistryService>,
     State(rag): State<AppRagService>,
 ) -> Response {
     match skills.update_registry() {
         Ok(mut record) => {
             let indexer = SkillRagIndexService::new(skills, rag);
-            record.rag_index = Some(index_all_workspaces_summary(&indexer).await);
-            Json(ApiResponse::success(record)).into_response()
+            record.rag_index = Some(index_platform_summary(&indexer).await);
+            Json(ApiResponse::protocol_success(
+                SkillRegistrySyncResultVo::from(record),
+            ))
+            .into_response()
         }
-        Err(error) => skill_error_response(error),
+        Err(error) => skill_error_response(error, &auth.locale),
     }
 }
 
-pub async fn bind_workspace_skill(
-    State(skills): State<SkillRegistryService>,
-    State(rag): State<AppRagService>,
-    Path(workspace_code): Path<String>,
-    Json(request): Json<WorkspaceSkillBindingRequest>,
-) -> Response {
-    match skills.bind_workspace_skill(
-        &workspace_code,
-        &request.skill_name,
-        request.enabled.unwrap_or(true),
-    ) {
-        Ok(mut record) => {
-            let indexer = SkillRagIndexService::new(skills, rag);
-            record.rag_index =
-                index_workspace_skill_summary(&indexer, &workspace_code, &record.skill_name).await;
-            Json(ApiResponse::success(record)).into_response()
-        }
-        Err(error) => skill_error_response(error),
-    }
-}
-
-pub async fn unbind_workspace_skill(
-    State(skills): State<SkillRegistryService>,
-    State(rag): State<AppRagService>,
-    Path((workspace_code, skill_name)): Path<(String, String)>,
-) -> Response {
-    match skills.unbind_workspace_skill(&workspace_code, &skill_name) {
-        Ok(mut record) => {
-            let indexer = SkillRagIndexService::new(skills, rag);
-            record.rag_index =
-                index_workspace_skill_summary(&indexer, &workspace_code, &record.skill_name).await;
-            Json(ApiResponse::success(record)).into_response()
-        }
-        Err(error) => skill_error_response(error),
-    }
-}
-
-async fn index_workspace_skill_summary(
-    indexer: &AppSkillRagIndexService,
-    workspace_code: &str,
-    skill_name: &str,
-) -> Option<crate::domain::skill::SkillRagIndexSummary> {
-    match indexer
-        .index_workspace_skill(workspace_code, skill_name)
-        .await
-    {
-        Ok(summary) => Some(summary),
-        Err(error) => Some(crate::domain::skill::SkillRagIndexSummary {
-            desired_enabled: true,
-            source_version: "v1".into(),
-            vector_status: SkillRagIndexStatus::Failed,
-            graph_status: SkillRagIndexStatus::Failed,
-            content_hash: None,
-            structure_hash: None,
-            last_indexed_at: None,
-            updated_at: crate::shared::time::current_timestamp(),
-            last_error: Some(error.to_string()),
-            warnings: vec![error.to_string()],
-        }),
-    }
-}
-
-async fn index_workspace_summary(
-    indexer: &AppSkillRagIndexService,
-    workspace_code: &str,
-) -> SkillRagIndexBatchSummary {
-    indexer
-        .index_workspace(workspace_code)
-        .await
-        .unwrap_or_else(index_error_batch)
-}
-
-async fn index_all_workspaces_summary(
-    indexer: &AppSkillRagIndexService,
-) -> SkillRagIndexBatchSummary {
-    indexer
-        .index_all_active_workspaces()
-        .await
-        .unwrap_or_else(index_error_batch)
+async fn index_platform_summary(indexer: &AppSkillRagIndexService) -> SkillRagIndexBatchSummary {
+    indexer.index_all().await.unwrap_or_else(index_error_batch)
 }
 
 fn index_error_batch(error: crate::domain::skill::SkillError) -> SkillRagIndexBatchSummary {
@@ -270,5 +185,60 @@ fn index_error_batch(error: crate::domain::skill::SkillError) -> SkillRagIndexBa
         failed_count: 1,
         warnings: vec![error.to_string()],
         ..SkillRagIndexBatchSummary::default()
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillAgentsVo {
+    agent_codes: Vec<String>,
+}
+
+pub async fn get_skill_agents(
+    auth: RequestAuthContext,
+    State(skills): State<SkillRegistryService>,
+    Path(name): Path<String>,
+) -> Response {
+    match skills.skill_agents(&name) {
+        Ok(agent_codes) => {
+            Json(ApiResponse::protocol_success(SkillAgentsVo { agent_codes })).into_response()
+        }
+        Err(e) => skill_error_response(e, &auth.locale),
+    }
+}
+pub async fn put_skill_agents(
+    auth: RequestAuthContext,
+    State(skills): State<SkillRegistryService>,
+    Path(name): Path<String>,
+    Json(body): Json<SkillAgentsRequest>,
+) -> Response {
+    match skills.replace_skill_agents(&name, &body.agent_codes) {
+        Ok(()) => get_skill_agents(auth, State(skills), Path(name)).await,
+        Err(e) => skill_error_response(e, &auth.locale),
+    }
+}
+pub async fn get_agent_skills(
+    auth: RequestAuthContext,
+    State(skills): State<SkillRegistryService>,
+    Path(agent): Path<String>,
+) -> Response {
+    match skills.agent_skills(&agent) {
+        Ok(items) => Json(ApiResponse::protocol_success(skill_list(
+            items,
+            &auth.locale,
+        )))
+        .into_response(),
+        Err(e) => skill_error_response(e, &auth.locale),
+    }
+}
+pub async fn put_agent_skills(
+    auth: RequestAuthContext,
+    State(skills): State<SkillRegistryService>,
+    Path(agent): Path<String>,
+    Json(body): Json<AgentSkillsRequest>,
+) -> Response {
+    match skills.replace_agent_skills(&agent, &body.skill_names) {
+        Ok(()) => get_agent_skills(auth, State(skills), Path(agent)).await,
+        Err(e) => skill_error_response(e, &auth.locale),
     }
 }

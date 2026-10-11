@@ -45,11 +45,32 @@ pub async fn patch_gateway(
 }
 
 pub async fn list_platform_servers(
+    auth: crate::adapters::inbound::http::auth::RequestAuthContext,
     State(mcp): State<McpService>,
     Query(query): Query<PlatformMcpServerListQuery>,
 ) -> Response {
     match mcp.list_platform_servers(query) {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Ok(records) => Json(ApiResponse::protocol_success(
+            records
+                .into_iter()
+                .map(|server| {
+                    let owner = mcp.capability_resource(&server.server_code);
+                    PlatformMcpAssignmentVo {
+                        provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
+                        assignable: server.enabled,
+                        disabled_reason: owner.filter(|o| !o.available).map(|o| {
+                            if auth.locale.starts_with("zh") {
+                                format!("能力包 {} 已禁用", o.pack_id)
+                            } else {
+                                format!("Capability pack {} is disabled", o.pack_id)
+                            }
+                        }),
+                        server,
+                    }
+                })
+                .collect::<Vec<_>>(),
+        ))
+        .into_response(),
         Err(error) => mcp_error_response(error),
     }
 }
@@ -150,12 +171,33 @@ pub async fn delete_platform_server(
 }
 
 pub async fn list_workspace_effective_servers(
+    auth: crate::adapters::inbound::http::auth::RequestAuthContext,
     State(mcp): State<McpService>,
     Path(workspace_code): Path<String>,
     Query(query): Query<WorkspaceMcpServerListQuery>,
 ) -> Response {
     match mcp.list_workspace_effective_servers(&workspace_code, query) {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Ok(records) => Json(ApiResponse::protocol_success(
+            records
+                .into_iter()
+                .map(|server| {
+                    let owner = mcp.capability_resource(&server.server_code);
+                    WorkspaceMcpAssignmentVo {
+                        provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
+                        assignable: server.effective_enabled,
+                        disabled_reason: owner.filter(|o| !o.available).map(|o| {
+                            if auth.locale.starts_with("zh") {
+                                format!("能力包 {} 已禁用", o.pack_id)
+                            } else {
+                                format!("Capability pack {} is disabled", o.pack_id)
+                            }
+                        }),
+                        server,
+                    }
+                })
+                .collect::<Vec<_>>(),
+        ))
+        .into_response(),
         Err(error) => mcp_error_response(error),
     }
 }
@@ -178,4 +220,23 @@ pub async fn disable_workspace_server(
         Ok(record) => Json(ApiResponse::success(record)).into_response(),
         Err(error) => mcp_error_response(error),
     }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlatformMcpAssignmentVo {
+    #[serde(flatten)]
+    server: crate::domain::mcp::PlatformMcpServerRecord,
+    provider_pack_id: Option<String>,
+    assignable: bool,
+    disabled_reason: Option<String>,
+}
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceMcpAssignmentVo {
+    #[serde(flatten)]
+    server: crate::domain::mcp::WorkspaceEffectiveMcpServerRecord,
+    provider_pack_id: Option<String>,
+    assignable: bool,
+    disabled_reason: Option<String>,
 }

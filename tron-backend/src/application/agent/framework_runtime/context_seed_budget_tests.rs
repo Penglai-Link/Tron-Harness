@@ -146,6 +146,8 @@ async fn fixture(
     let reports = Reports::default();
     let (mut packs, extensions) = host.capability_state();
     packs.insert("tron.harness".into(), false);
+    packs.insert("framework.local.scoped".into(), true);
+    *host.0.capability_state.write().unwrap() = packs.clone();
     let framework = host
         .framework_builder(&packs, &extensions)
         .await
@@ -158,8 +160,10 @@ async fn fixture(
         .build()
         .await
         .unwrap();
-    *host.0.skills.write().unwrap() =
-        std::collections::BTreeMap::from([("fixture".into(), vec!["review".into()])]);
+    *host.0.skills.write().unwrap() = std::collections::BTreeMap::from([(
+        "framework.local.scoped".into(),
+        vec!["review".into()],
+    )]);
     let mut selection = host
         .main_selection(&framework, &packs, &extensions)
         .unwrap();

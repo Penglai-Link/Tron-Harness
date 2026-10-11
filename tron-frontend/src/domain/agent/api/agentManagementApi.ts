@@ -24,20 +24,37 @@ function internalAgentEndpoint(endpoint: string, workspaceCode: string) {
     : endpoint;
 }
 
-
 export interface ToolListPayload {
   domainCode?: string;
   search?: string;
 }
 
-type AgentStatusApi = "ENABLED" | "DISABLED" | "UNAVAILABLE" | PlatformSystemAgentRecord["status"];
+type AgentStatusApi =
+  | "ENABLED"
+  | "DISABLED"
+  | "UNAVAILABLE"
+  | PlatformSystemAgentRecord["status"];
 type AgentSourceApi = "SYSTEM" | PlatformSystemAgentRecord["source"];
-type ToolOperationKindApi = PlatformToolRecord["operationKind"] | "QUERY" | "COMMAND";
-type ToolAssignmentModeApi = WorkspaceInternalAgentRecord["toolAssignmentMode"] | Uppercase<WorkspaceInternalAgentRecord["toolAssignmentMode"]>;
-type ToolExposureModeApi = WorkspaceInternalAgentRecord["toolExposureMode"] | Uppercase<WorkspaceInternalAgentRecord["toolExposureMode"]>;
-type ExpandedDomainPersistenceModeApi = WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"] | Uppercase<WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"]>;
-type WorkspaceInternalAgentSourceApi = WorkspaceInternalAgentRecord["source"] | "PLATFORM_DEFAULT" | "WORKSPACE_OVERRIDE";
-type McpAccessModeApi = WorkspaceInternalAgentRecord["mcpAccessMode"] | Uppercase<WorkspaceInternalAgentRecord["mcpAccessMode"]>;
+type ToolOperationKindApi =
+  | PlatformToolRecord["operationKind"]
+  | "QUERY"
+  | "COMMAND";
+type ToolAssignmentModeApi =
+  | WorkspaceInternalAgentRecord["toolAssignmentMode"]
+  | Uppercase<WorkspaceInternalAgentRecord["toolAssignmentMode"]>;
+type ToolExposureModeApi =
+  | WorkspaceInternalAgentRecord["toolExposureMode"]
+  | Uppercase<WorkspaceInternalAgentRecord["toolExposureMode"]>;
+type ExpandedDomainPersistenceModeApi =
+  | WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"]
+  | Uppercase<WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"]>;
+type WorkspaceInternalAgentSourceApi =
+  | WorkspaceInternalAgentRecord["source"]
+  | "PLATFORM_DEFAULT"
+  | "WORKSPACE_OVERRIDE";
+type McpAccessModeApi =
+  | WorkspaceInternalAgentRecord["mcpAccessMode"]
+  | Uppercase<WorkspaceInternalAgentRecord["mcpAccessMode"]>;
 
 interface ManagedSystemAgentRecordApi {
   agentCode: string;
@@ -64,6 +81,9 @@ interface ToolCatalogDomainRecordApi {
 }
 
 interface ToolRecordApi {
+  providerPackId?: string | null;
+  assignable?: boolean;
+  disabledReason?: string | null;
   toolCode: string;
   toolName: string;
   domainCode: string;
@@ -115,7 +135,9 @@ interface PlatformSystemAgentRescanResultApi {
   records: ManagedSystemAgentRecordApi[];
 }
 
-function normalizeToolOperationKind(kind: ToolOperationKindApi): PlatformToolRecord["operationKind"] {
+function normalizeToolOperationKind(
+  kind: ToolOperationKindApi
+): PlatformToolRecord["operationKind"] {
   switch (kind) {
     case "COMMAND":
       return "command";
@@ -130,7 +152,9 @@ function normalizeToolOperationKind(kind: ToolOperationKindApi): PlatformToolRec
   }
 }
 
-function normalizeToolAssignmentMode(mode: ToolAssignmentModeApi): WorkspaceInternalAgentRecord["toolAssignmentMode"] {
+function normalizeToolAssignmentMode(
+  mode: ToolAssignmentModeApi
+): WorkspaceInternalAgentRecord["toolAssignmentMode"] {
   switch (mode) {
     case "ALL_PLATFORM_TOOLS":
     case "all_platform_tools":
@@ -143,7 +167,9 @@ function normalizeToolAssignmentMode(mode: ToolAssignmentModeApi): WorkspaceInte
   }
 }
 
-function normalizeToolExposureMode(mode: ToolExposureModeApi): WorkspaceInternalAgentRecord["toolExposureMode"] {
+function normalizeToolExposureMode(
+  mode: ToolExposureModeApi
+): WorkspaceInternalAgentRecord["toolExposureMode"] {
   switch (mode) {
     case "DOMAIN_DISCOVERY":
     case "domain_discovery":
@@ -157,7 +183,7 @@ function normalizeToolExposureMode(mode: ToolExposureModeApi): WorkspaceInternal
 }
 
 function normalizeExpandedDomainPersistenceMode(
-  mode: ExpandedDomainPersistenceModeApi,
+  mode: ExpandedDomainPersistenceModeApi
 ): WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"] {
   switch (mode) {
     case "EPHEMERAL_EXPANDED":
@@ -172,7 +198,7 @@ function normalizeExpandedDomainPersistenceMode(
 }
 
 function normalizeWorkspaceInternalAgentSource(
-  source: WorkspaceInternalAgentSourceApi | undefined,
+  source: WorkspaceInternalAgentSourceApi | undefined
 ): WorkspaceInternalAgentRecord["source"] {
   switch (source) {
     case "WORKSPACE_OVERRIDE":
@@ -184,7 +210,9 @@ function normalizeWorkspaceInternalAgentSource(
   }
 }
 
-function normalizeMcpAccessMode(mode: McpAccessModeApi | undefined): WorkspaceInternalAgentRecord["mcpAccessMode"] {
+function normalizeMcpAccessMode(
+  mode: McpAccessModeApi | undefined
+): WorkspaceInternalAgentRecord["mcpAccessMode"] {
   switch (mode) {
     case "ALL_ENABLED_SERVERS":
     case "all_enabled_servers":
@@ -197,7 +225,9 @@ function normalizeMcpAccessMode(mode: McpAccessModeApi | undefined): WorkspaceIn
   }
 }
 
-function normalizeToolCatalogDomainRecord(record: ToolCatalogDomainRecordApi): ToolCatalogDomainRecord {
+function normalizeToolCatalogDomainRecord(
+  record: ToolCatalogDomainRecordApi
+): ToolCatalogDomainRecord {
   return {
     description: record.description,
     domainCode: record.domainCode,
@@ -212,6 +242,9 @@ function normalizeToolCatalogDomainRecord(record: ToolCatalogDomainRecordApi): T
 
 function normalizeToolRecord(record: ToolRecordApi): PlatformToolRecord {
   return {
+    providerPackId: record.providerPackId,
+    assignable: record.assignable,
+    disabledReason: record.disabledReason,
     description: record.description,
     domainCode: record.domainCode,
     name: record.name,
@@ -221,7 +254,9 @@ function normalizeToolRecord(record: ToolRecordApi): PlatformToolRecord {
   };
 }
 
-function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRecordApi): WorkspaceInternalAgentRecord {
+function normalizeWorkspaceInternalAgentRecord(
+  record: WorkspaceInternalAgentRecordApi
+): WorkspaceInternalAgentRecord {
   return {
     agentCode: record.agentCode,
     description: record.description,
@@ -230,25 +265,42 @@ function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRec
     avatarId: record.avatarId || "robot",
     groupName: record.groupName || null,
     builtIn: record.builtIn ?? false,
-    platformDefined: record.platformDefined ?? record.agentCode === "main-agent",
-    expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(record.expandedDomainPersistenceMode),
+    platformDefined:
+      record.platformDefined ?? record.agentCode === "main-agent",
+    expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(
+      record.expandedDomainPersistenceMode
+    ),
     mcpAccessMode: normalizeMcpAccessMode(record.mcpAccessMode),
     name: record.name,
-    maxSteps: typeof record.maxSteps === "number" && Number.isFinite(record.maxSteps) ? record.maxSteps : 100,
-    maxToolCalls: typeof record.maxToolCalls === "number" && Number.isFinite(record.maxToolCalls) ? record.maxToolCalls : 100,
+    maxSteps:
+      typeof record.maxSteps === "number" && Number.isFinite(record.maxSteps)
+        ? record.maxSteps
+        : 100,
+    maxToolCalls:
+      typeof record.maxToolCalls === "number" &&
+      Number.isFinite(record.maxToolCalls)
+        ? record.maxToolCalls
+        : 100,
     maxParallelToolCalls:
-      typeof record.maxParallelToolCalls === "number" && Number.isFinite(record.maxParallelToolCalls)
+      typeof record.maxParallelToolCalls === "number" &&
+      Number.isFinite(record.maxParallelToolCalls)
         ? record.maxParallelToolCalls
         : 4,
     source: normalizeWorkspaceInternalAgentSource(record.source),
-    selectedServerCodes: Array.isArray(record.selectedServerCodes) ? [...new Set(record.selectedServerCodes)] : [],
-    selectedToolCodes: Array.isArray(record.selectedToolCodes) ? [...new Set(record.selectedToolCodes)] : [],
+    selectedServerCodes: Array.isArray(record.selectedServerCodes)
+      ? [...new Set(record.selectedServerCodes)]
+      : [],
+    selectedToolCodes: Array.isArray(record.selectedToolCodes)
+      ? [...new Set(record.selectedToolCodes)]
+      : [],
     toolAssignmentMode: normalizeToolAssignmentMode(record.toolAssignmentMode),
     toolExposureMode: normalizeToolExposureMode(record.toolExposureMode),
   };
 }
 
-function normalizeAgentStatus(status: AgentStatusApi): PlatformSystemAgentRecord["status"] {
+function normalizeAgentStatus(
+  status: AgentStatusApi
+): PlatformSystemAgentRecord["status"] {
   switch (status) {
     case "ENABLED":
       return "Enabled";
@@ -270,7 +322,7 @@ function normalizeAgentSource(source: AgentSourceApi) {
 }
 
 function normalizePlatformSystemAgentRecord(
-  record: ManagedSystemAgentRecordApi,
+  record: ManagedSystemAgentRecordApi
 ): PlatformSystemAgentRecord {
   return {
     agentCode: record.agentCode,
@@ -286,14 +338,15 @@ function normalizePlatformSystemAgentRecord(
 }
 
 function normalizeWorkspaceSystemAgentRecord(
-  record: ManagedSystemAgentRecordApi,
+  record: ManagedSystemAgentRecordApi
 ): WorkspaceSystemAgentRecord {
   return {
     agentCode: record.agentCode,
     available: record.available,
     description: record.description,
     enabled: record.enabled,
-    inheritedFrom: (record.inheritedFrom ?? "Platform") as WorkspaceSystemAgentRecord["inheritedFrom"],
+    inheritedFrom: (record.inheritedFrom ??
+      "Platform") as WorkspaceSystemAgentRecord["inheritedFrom"],
     lastScannedAt: record.lastScannedAt,
     models: normalizeAgentModels(record.models),
     name: record.name,
@@ -307,57 +360,84 @@ function normalizeWorkspaceSystemAgentRecord(
 export function fetchPlatformSystemAgents(signal?: AbortSignal) {
   return requestApi<ManagedSystemAgentRecordApi[]>(
     agentApiEndpoints.listPlatformSystemAgents,
-    { signal },
+    { signal }
   ).then((records) => records.map(normalizePlatformSystemAgentRecord));
 }
 
 export function rescanPlatformSystemAgents() {
-  return requestApi<PlatformSystemAgentRescanResultApi>(agentApiEndpoints.rescanPlatformSystemAgents, {
-    body: {},
-  }).then((result): PlatformSystemAgentRescanResult => ({
-    ...result,
-    records: result.records.map(normalizePlatformSystemAgentRecord),
-  }));
+  return requestApi<PlatformSystemAgentRescanResultApi>(
+    agentApiEndpoints.rescanPlatformSystemAgents,
+    {
+      body: {},
+    }
+  ).then(
+    (result): PlatformSystemAgentRescanResult => ({
+      ...result,
+      records: result.records.map(normalizePlatformSystemAgentRecord),
+    })
+  );
 }
 
 export function enablePlatformSystemAgent(agentCode: string) {
-  return requestApi<ManagedSystemAgentRecordApi>(agentApiEndpoints.enablePlatformSystemAgent, {
-    pathParams: { agentCode },
-  }).then(normalizePlatformSystemAgentRecord);
+  return requestApi<ManagedSystemAgentRecordApi>(
+    agentApiEndpoints.enablePlatformSystemAgent,
+    {
+      pathParams: { agentCode },
+    }
+  ).then(normalizePlatformSystemAgentRecord);
 }
 
 export function disablePlatformSystemAgent(agentCode: string) {
-  return requestApi<ManagedSystemAgentRecordApi>(agentApiEndpoints.disablePlatformSystemAgent, {
-    pathParams: { agentCode },
-  }).then(normalizePlatformSystemAgentRecord);
+  return requestApi<ManagedSystemAgentRecordApi>(
+    agentApiEndpoints.disablePlatformSystemAgent,
+    {
+      pathParams: { agentCode },
+    }
+  ).then(normalizePlatformSystemAgentRecord);
 }
 
-export function fetchWorkspaceSystemAgents(workspaceCode: string, signal?: AbortSignal) {
+export function fetchWorkspaceSystemAgents(
+  workspaceCode: string,
+  signal?: AbortSignal
+) {
   return requestApi<ManagedSystemAgentRecordApi[]>(
     agentApiEndpoints.listWorkspaceSystemAgents,
     {
       pathParams: { workspaceCode },
       signal,
-    },
+    }
   ).then((records) => records.map(normalizeWorkspaceSystemAgentRecord));
 }
 
-export function enableWorkspaceSystemAgent(workspaceCode: string, agentCode: string) {
-  return requestApi<ManagedSystemAgentRecordApi>(agentApiEndpoints.enableWorkspaceSystemAgent, {
-    pathParams: { workspaceCode, agentCode },
-  }).then(normalizeWorkspaceSystemAgentRecord);
+export function enableWorkspaceSystemAgent(
+  workspaceCode: string,
+  agentCode: string
+) {
+  return requestApi<ManagedSystemAgentRecordApi>(
+    agentApiEndpoints.enableWorkspaceSystemAgent,
+    {
+      pathParams: { workspaceCode, agentCode },
+    }
+  ).then(normalizeWorkspaceSystemAgentRecord);
 }
 
-export function disableWorkspaceSystemAgent(workspaceCode: string, agentCode: string) {
-  return requestApi<ManagedSystemAgentRecordApi>(agentApiEndpoints.disableWorkspaceSystemAgent, {
-    pathParams: { workspaceCode, agentCode },
-  }).then(normalizeWorkspaceSystemAgentRecord);
+export function disableWorkspaceSystemAgent(
+  workspaceCode: string,
+  agentCode: string
+) {
+  return requestApi<ManagedSystemAgentRecordApi>(
+    agentApiEndpoints.disableWorkspaceSystemAgent,
+    {
+      pathParams: { workspaceCode, agentCode },
+    }
+  ).then(normalizeWorkspaceSystemAgentRecord);
 }
 
 export function fetchToolDomains(signal?: AbortSignal) {
-  return requestApi<ToolCatalogDomainRecordApi[]>(agentApiEndpoints.getToolDomains, { signal }).then(
-    (records) => records.map(normalizeToolCatalogDomainRecord),
-  );
+  return requestApi<ToolCatalogDomainRecordApi[]>(
+    agentApiEndpoints.getToolDomains,
+    { signal }
+  ).then((records) => records.map(normalizeToolCatalogDomainRecord));
 }
 
 export function listTools(payload: ListToolsQuery = {}, signal?: AbortSignal) {
@@ -370,95 +450,179 @@ export function listTools(payload: ListToolsQuery = {}, signal?: AbortSignal) {
   }).then((records) => records.map(normalizeToolRecord));
 }
 
-export function fetchWorkspaceInternalAgents(workspaceCode: string, signal?: AbortSignal) {
-  return requestApi<WorkspaceInternalAgentRecordApi[]>(internalAgentEndpoint(agentApiEndpoints.listWorkspaceInternalAgents, workspaceCode), {
-    pathParams: { workspaceCode },
-    signal,
-  }).then((records) => records.map(normalizeWorkspaceInternalAgentRecord));
+export function fetchWorkspaceInternalAgents(
+  workspaceCode: string,
+  signal?: AbortSignal
+) {
+  return requestApi<WorkspaceInternalAgentRecordApi[]>(
+    internalAgentEndpoint(
+      agentApiEndpoints.listWorkspaceInternalAgents,
+      workspaceCode
+    ),
+    {
+      pathParams: { workspaceCode },
+      signal,
+    }
+  ).then((records) => records.map(normalizeWorkspaceInternalAgentRecord));
 }
 
-export function createWorkspaceInternalAgent(workspaceCode: string, payload: CreateInternalAgentPayload) {
-  return requestApi<{ agentCode: string; name: string; rolePrompt: string; loopCode?: string | null; avatarId: string; groupName: string | null }>(
-    internalAgentEndpoint("POST /api/v1/agents/workspaces/{workspaceCode}/internal", workspaceCode),
-    { pathParams: { workspaceCode }, body: payload },
+export function createWorkspaceInternalAgent(
+  workspaceCode: string,
+  payload: CreateInternalAgentPayload
+) {
+  return requestApi<{
+    agentCode: string;
+    name: string;
+    rolePrompt: string;
+    loopCode?: string | null;
+    avatarId: string;
+    groupName: string | null;
+  }>(
+    internalAgentEndpoint(
+      "POST /api/v1/agents/workspaces/{workspaceCode}/internal",
+      workspaceCode
+    ),
+    { pathParams: { workspaceCode }, body: payload }
   );
 }
 
-export function deleteWorkspaceInternalAgent(workspaceCode: string, agentCode: string) {
+export function deleteWorkspaceInternalAgent(
+  workspaceCode: string,
+  agentCode: string
+) {
   return requestApi<Record<string, never>>(
-    internalAgentEndpoint(agentApiEndpoints.deleteWorkspaceInternalAgent, workspaceCode),
-    { pathParams: { workspaceCode, agentCode } },
+    internalAgentEndpoint(
+      agentApiEndpoints.deleteWorkspaceInternalAgent,
+      workspaceCode
+    ),
+    { pathParams: { workspaceCode, agentCode } }
   );
 }
 
-export function patchWorkspaceInternalAgentDefinition(workspaceCode: string, agentCode: string, payload: UpdateInternalAgentDefinitionPayload) {
-  return requestApi<{ agentCode: string; name: string; rolePrompt: string; loopCode?: string | null; avatarId: string; groupName: string | null }>(
-    internalAgentEndpoint("PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/definition", workspaceCode),
-    { pathParams: { workspaceCode, agentCode }, body: payload },
+export function patchWorkspaceInternalAgentDefinition(
+  workspaceCode: string,
+  agentCode: string,
+  payload: UpdateInternalAgentDefinitionPayload
+) {
+  return requestApi<{
+    agentCode: string;
+    name: string;
+    rolePrompt: string;
+    loopCode?: string | null;
+    avatarId: string;
+    groupName: string | null;
+  }>(
+    internalAgentEndpoint(
+      "PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/definition",
+      workspaceCode
+    ),
+    { pathParams: { workspaceCode, agentCode }, body: payload }
   );
 }
 
 export function fetchWorkspaceInternalAgent(
   workspaceCode: string,
   agentCode: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.getWorkspaceInternalAgent, workspaceCode), {
-    pathParams: { workspaceCode, agentCode },
-    signal,
-  }).then(normalizeWorkspaceInternalAgentRecord);
+  return requestApi<WorkspaceInternalAgentRecordApi>(
+    internalAgentEndpoint(
+      agentApiEndpoints.getWorkspaceInternalAgent,
+      workspaceCode
+    ),
+    {
+      pathParams: { workspaceCode, agentCode },
+      signal,
+    }
+  ).then(normalizeWorkspaceInternalAgentRecord);
 }
 
 export function patchWorkspaceInternalAgentPolicy(
   workspaceCode: string,
   agentCode: string,
-  payload: WorkspaceInternalAgentPolicyPayload,
+  payload: WorkspaceInternalAgentPolicyPayload
 ) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.patchWorkspaceInternalAgentPolicy, workspaceCode), {
-    pathParams: { workspaceCode, agentCode },
-    body: payload,
-  }).then(normalizeWorkspaceInternalAgentRecord);
+  return requestApi<WorkspaceInternalAgentRecordApi>(
+    internalAgentEndpoint(
+      agentApiEndpoints.patchWorkspaceInternalAgentPolicy,
+      workspaceCode
+    ),
+    {
+      pathParams: { workspaceCode, agentCode },
+      body: payload,
+    }
+  ).then(normalizeWorkspaceInternalAgentRecord);
 }
 
-export function updateWorkspaceInternalAgentToolAssignments(workspaceCode: string, agentCode: string, toolCodes: string[]) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.updateWorkspaceInternalAgentToolAssignments, workspaceCode), {
-    pathParams: { workspaceCode, agentCode },
-    body: { toolCodes },
-  }).then(normalizeWorkspaceInternalAgentRecord);
+export function updateWorkspaceInternalAgentToolAssignments(
+  workspaceCode: string,
+  agentCode: string,
+  toolCodes: string[]
+) {
+  return requestApi<WorkspaceInternalAgentRecordApi>(
+    internalAgentEndpoint(
+      agentApiEndpoints.updateWorkspaceInternalAgentToolAssignments,
+      workspaceCode
+    ),
+    {
+      pathParams: { workspaceCode, agentCode },
+      body: { toolCodes },
+    }
+  ).then(normalizeWorkspaceInternalAgentRecord);
 }
 
 export function patchWorkspaceInternalAgentMcpPolicy(
   workspaceCode: string,
   agentCode: string,
-  payload: WorkspaceInternalAgentMcpPolicyPayload,
+  payload: WorkspaceInternalAgentMcpPolicyPayload
 ) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.patchWorkspaceInternalAgentMcpPolicy, workspaceCode), {
-    pathParams: { workspaceCode, agentCode },
-    body: payload,
-  }).then(normalizeWorkspaceInternalAgentRecord);
+  return requestApi<WorkspaceInternalAgentRecordApi>(
+    internalAgentEndpoint(
+      agentApiEndpoints.patchWorkspaceInternalAgentMcpPolicy,
+      workspaceCode
+    ),
+    {
+      pathParams: { workspaceCode, agentCode },
+      body: payload,
+    }
+  ).then(normalizeWorkspaceInternalAgentRecord);
 }
 
 export function updateWorkspaceInternalAgentMcpServerAssignments(
   workspaceCode: string,
   agentCode: string,
-  serverCodes: string[],
+  serverCodes: string[]
 ) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(internalAgentEndpoint(agentApiEndpoints.updateWorkspaceInternalAgentMcpServerAssignments, workspaceCode), {
-    pathParams: { workspaceCode, agentCode },
-    body: { serverCodes },
-  }).then(normalizeWorkspaceInternalAgentRecord);
+  return requestApi<WorkspaceInternalAgentRecordApi>(
+    internalAgentEndpoint(
+      agentApiEndpoints.updateWorkspaceInternalAgentMcpServerAssignments,
+      workspaceCode
+    ),
+    {
+      pathParams: { workspaceCode, agentCode },
+      body: { serverCodes },
+    }
+  ).then(normalizeWorkspaceInternalAgentRecord);
 }
 
-export function resetWorkspaceInternalAgentPolicy(workspaceCode: string, agentCode: string) {
-  return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.resetWorkspaceInternalAgentPolicy, {
-    pathParams: { workspaceCode, agentCode },
-  }).then(normalizeWorkspaceInternalAgentRecord);
+export function resetWorkspaceInternalAgentPolicy(
+  workspaceCode: string,
+  agentCode: string
+) {
+  return requestApi<WorkspaceInternalAgentRecordApi>(
+    agentApiEndpoints.resetWorkspaceInternalAgentPolicy,
+    {
+      pathParams: { workspaceCode, agentCode },
+    }
+  ).then(normalizeWorkspaceInternalAgentRecord);
 }
 
 function internalGroupEndpoint(workspaceCode: string) {
   return workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE
     ? "GET /api/v1/agents/registry/internal-groups"
-    : `GET /api/v1/agents/workspaces/${encodeURIComponent(workspaceCode)}/internal-groups`;
+    : `GET /api/v1/agents/workspaces/${encodeURIComponent(
+        workspaceCode
+      )}/internal-groups`;
 }
 
 export function fetchInternalAgentGroups(workspaceCode: string) {
@@ -466,9 +630,15 @@ export function fetchInternalAgentGroups(workspaceCode: string) {
 }
 
 export function createInternalAgentGroup(workspaceCode: string, name: string) {
-  return requestApi<{ name: string }>(internalGroupEndpoint(workspaceCode).replace("GET ", "POST "), { body: { name } });
+  return requestApi<{ name: string }>(
+    internalGroupEndpoint(workspaceCode).replace("GET ", "POST "),
+    { body: { name } }
+  );
 }
 
 export function deleteInternalAgentGroup(workspaceCode: string, name: string) {
-  return requestApi<Record<string, never>>(internalGroupEndpoint(workspaceCode).replace("GET ", "DELETE "), { body: { name } });
+  return requestApi<Record<string, never>>(
+    internalGroupEndpoint(workspaceCode).replace("GET ", "DELETE "),
+    { body: { name } }
+  );
 }

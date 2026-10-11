@@ -29,8 +29,10 @@ export const mcpApiEndpoints = {
   healthPlatformServer: "POST /api/v1/mcp/servers/{serverCode}/health",
   deletePlatformServer: "DELETE /api/v1/mcp/servers/{serverCode}",
   listWorkspaceServers: "GET /api/v1/mcp/workspaces/{workspaceCode}/servers",
-  enableWorkspaceServer: "POST /api/v1/mcp/workspaces/{workspaceCode}/servers/{serverCode}/enable",
-  disableWorkspaceServer: "POST /api/v1/mcp/workspaces/{workspaceCode}/servers/{serverCode}/disable",
+  enableWorkspaceServer:
+    "POST /api/v1/mcp/workspaces/{workspaceCode}/servers/{serverCode}/enable",
+  disableWorkspaceServer:
+    "POST /api/v1/mcp/workspaces/{workspaceCode}/servers/{serverCode}/disable",
 } as const;
 
 interface PlatformMcpGatewayApi {
@@ -41,6 +43,9 @@ interface PlatformMcpGatewayApi {
 }
 
 interface PlatformMcpServerRecordApi {
+  providerPackId?: string | null;
+  assignable?: boolean;
+  disabledReason?: string | null;
   serverCode: string;
   name: string;
   description?: string | null;
@@ -64,6 +69,9 @@ interface PlatformMcpServerRecordApi {
 }
 
 interface WorkspaceMcpServerRecordApi {
+  providerPackId?: string | null;
+  assignable?: boolean;
+  disabledReason?: string | null;
   serverCode: string;
   name: string;
   description?: string | null;
@@ -83,7 +91,9 @@ interface PlatformMcpDeleteResultApi {
   deleted: boolean;
 }
 
-function normalizeHealthStatus(status: PlatformMcpServerRecordApi["lastHealthStatus"]): McpHealthStatus {
+function normalizeHealthStatus(
+  status: PlatformMcpServerRecordApi["lastHealthStatus"]
+): McpHealthStatus {
   switch (status) {
     case "healthy":
     case "HEALTHY":
@@ -96,7 +106,9 @@ function normalizeHealthStatus(status: PlatformMcpServerRecordApi["lastHealthSta
   }
 }
 
-function normalizeAuthKind(kind: PlatformMcpServerRecordApi["authKind"]): McpAuthKind {
+function normalizeAuthKind(
+  kind: PlatformMcpServerRecordApi["authKind"]
+): McpAuthKind {
   switch (kind) {
     case "BEARER_STATIC":
     case "bearer_static":
@@ -106,7 +118,9 @@ function normalizeAuthKind(kind: PlatformMcpServerRecordApi["authKind"]): McpAut
   }
 }
 
-function normalizeTransportKind(kind: PlatformMcpServerRecordApi["transportKind"]): McpServerTransportKind {
+function normalizeTransportKind(
+  kind: PlatformMcpServerRecordApi["transportKind"]
+): McpServerTransportKind {
   switch (kind) {
     case "stdio":
     case "STDIO":
@@ -122,7 +136,7 @@ function normalizeRecordMap(value: Record<string, string> | null | undefined) {
   }
 
   return Object.fromEntries(
-    Object.entries(value).filter(([key]) => key.trim().length > 0),
+    Object.entries(value).filter(([key]) => key.trim().length > 0)
   );
 }
 
@@ -131,12 +145,12 @@ function normalizeRecordList(value: string[] | null | undefined) {
     return [];
   }
 
-  return value
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
+  return value.map((item) => item.trim()).filter((item) => item.length > 0);
 }
 
-function normalizePlatformGateway(record: PlatformMcpGatewayApi): PlatformMcpGatewayConfig {
+function normalizePlatformGateway(
+  record: PlatformMcpGatewayApi
+): PlatformMcpGatewayConfig {
   return {
     gatewayEnabled: record.gatewayEnabled,
     variablesEndpointEnabled: record.variablesEndpointEnabled,
@@ -145,22 +159,31 @@ function normalizePlatformGateway(record: PlatformMcpGatewayApi): PlatformMcpGat
   };
 }
 
-function normalizePlatformServer(record: PlatformMcpServerRecordApi): PlatformMcpServerRecord {
+function normalizePlatformServer(
+  record: PlatformMcpServerRecordApi
+): PlatformMcpServerRecord {
   return {
+    providerPackId: record.providerPackId,
+    assignable: record.assignable,
+    disabledReason: record.disabledReason,
     serverCode: record.serverCode,
     name: record.name,
     description: record.description?.trim() ?? "",
     transportKind: normalizeTransportKind(record.transportKind),
     url: record.url,
     authKind: normalizeAuthKind(record.authKind),
-    authPayload: record.authPayload ? normalizeRecordMap(record.authPayload) : null,
+    authPayload: record.authPayload
+      ? normalizeRecordMap(record.authPayload)
+      : null,
     headers: normalizeRecordMap(record.headers),
     headersVariableRefs: normalizeRecordMap(record.headersVariableRefs),
     command: record.command?.trim() ?? "",
     args: normalizeRecordList(record.args),
     envVariableRefs: normalizeRecordMap(record.envVariableRefs),
     envPassthroughRefs: normalizeRecordList(record.envPassthroughRefs),
-    workingDirectory: record.workingDirectory?.trim() ? record.workingDirectory.trim() : null,
+    workingDirectory: record.workingDirectory?.trim()
+      ? record.workingDirectory.trim()
+      : null,
     enabled: record.enabled,
     lastHealthStatus: normalizeHealthStatus(record.lastHealthStatus),
     lastHealthMessage: record.lastHealthMessage ?? null,
@@ -170,8 +193,13 @@ function normalizePlatformServer(record: PlatformMcpServerRecordApi): PlatformMc
   };
 }
 
-function normalizeWorkspaceServer(record: WorkspaceMcpServerRecordApi): WorkspaceMcpServerRecord {
+function normalizeWorkspaceServer(
+  record: WorkspaceMcpServerRecordApi
+): WorkspaceMcpServerRecord {
   return {
+    providerPackId: record.providerPackId,
+    assignable: record.assignable,
+    disabledReason: record.disabledReason,
     serverCode: record.serverCode,
     name: record.name,
     description: record.description?.trim() ?? "",
@@ -187,12 +215,16 @@ function normalizeWorkspaceServer(record: WorkspaceMcpServerRecordApi): Workspac
   };
 }
 
-function normalizePayload(payload: PlatformMcpServerDefinitionPayload | PlatformMcpServerPayload) {
+function normalizePayload(
+  payload: PlatformMcpServerDefinitionPayload | PlatformMcpServerPayload
+) {
   return {
     ...payload,
     description: payload.description.trim(),
     url: payload.url.trim(),
-    authPayload: payload.authPayload ? normalizeRecordMap(payload.authPayload) : null,
+    authPayload: payload.authPayload
+      ? normalizeRecordMap(payload.authPayload)
+      : null,
     headers: normalizeRecordMap(payload.headers),
     headersVariableRefs: normalizeRecordMap(payload.headersVariableRefs),
     command: payload.command.trim(),
@@ -204,109 +236,177 @@ function normalizePayload(payload: PlatformMcpServerDefinitionPayload | Platform
 }
 
 export function fetchPlatformMcpGateway(signal?: AbortSignal) {
-  return requestApi<PlatformMcpGatewayApi>(mcpApiEndpoints.getPlatformGateway, { signal }).then(normalizePlatformGateway);
-}
-
-export function updatePlatformMcpGateway(payload: PlatformMcpGatewayPayload) {
-  return requestApi<PlatformMcpGatewayApi>(mcpApiEndpoints.updatePlatformGateway, {
-    body: payload,
+  return requestApi<PlatformMcpGatewayApi>(mcpApiEndpoints.getPlatformGateway, {
+    signal,
   }).then(normalizePlatformGateway);
 }
 
-export function fetchPlatformMcpServers(query: ListPlatformMcpServersQuery = {}, signal?: AbortSignal) {
-  return requestApi<PlatformMcpServerRecordApi[]>(mcpApiEndpoints.listPlatformServers, {
-    queryParams: {
-      search: query.search,
-      status: query.status,
-    },
-    signal,
-  }).then((records) => records.map(normalizePlatformServer));
+export function updatePlatformMcpGateway(payload: PlatformMcpGatewayPayload) {
+  return requestApi<PlatformMcpGatewayApi>(
+    mcpApiEndpoints.updatePlatformGateway,
+    {
+      body: payload,
+    }
+  ).then(normalizePlatformGateway);
 }
 
-export function fetchPlatformMcpServer(serverCode: string, signal?: AbortSignal) {
-  return requestApi<PlatformMcpServerRecordApi>(mcpApiEndpoints.getPlatformServer, {
-    pathParams: { serverCode },
-    signal,
-  }).then(normalizePlatformServer);
+export function fetchPlatformMcpServers(
+  query: ListPlatformMcpServersQuery = {},
+  signal?: AbortSignal
+) {
+  return requestApi<PlatformMcpServerRecordApi[]>(
+    mcpApiEndpoints.listPlatformServers,
+    {
+      queryParams: {
+        search: query.search,
+        status: query.status,
+      },
+      signal,
+    }
+  ).then((records) => records.map(normalizePlatformServer));
+}
+
+export function fetchPlatformMcpServer(
+  serverCode: string,
+  signal?: AbortSignal
+) {
+  return requestApi<PlatformMcpServerRecordApi>(
+    mcpApiEndpoints.getPlatformServer,
+    {
+      pathParams: { serverCode },
+      signal,
+    }
+  ).then(normalizePlatformServer);
 }
 
 export function createPlatformMcpServer(payload: PlatformMcpServerPayload) {
   const requestPayload = normalizePayload(payload);
-  return requestApi<PlatformMcpServerRecordApi>(mcpApiEndpoints.createPlatformServer, {
-    body: requestPayload,
-  }).then(normalizePlatformServer);
+  return requestApi<PlatformMcpServerRecordApi>(
+    mcpApiEndpoints.createPlatformServer,
+    {
+      body: requestPayload,
+    }
+  ).then(normalizePlatformServer);
 }
 
-export function verifyPlatformMcpServerDraft(payload: VerifyPlatformMcpServerDraftPayload) {
-  return requestApi<PlatformMcpServerRecordApi>(mcpApiEndpoints.verifyPlatformServerDraft, {
-    body: {
-      workspaceCode: payload.workspaceCode,
-      definition: normalizePayload(payload.definition),
-    },
-  }).then(normalizePlatformServer);
-}
-
-export function updatePlatformMcpServer(serverCode: string, payload: PlatformMcpServerDefinitionPayload) {
-  return requestApi<PlatformMcpServerRecordApi>(mcpApiEndpoints.updatePlatformServer, {
-    pathParams: { serverCode },
-    body: normalizePayload(payload),
-  }).then(normalizePlatformServer);
-}
-
-export function verifyPlatformMcpServer(serverCode: string, payload?: VerifyPlatformMcpServerPayload) {
-  return requestApi<PlatformMcpServerRecordApi>(mcpApiEndpoints.verifyPlatformServer, {
-    pathParams: { serverCode },
-    body: payload?.definition
-      ? {
+export function verifyPlatformMcpServerDraft(
+  payload: VerifyPlatformMcpServerDraftPayload
+) {
+  return requestApi<PlatformMcpServerRecordApi>(
+    mcpApiEndpoints.verifyPlatformServerDraft,
+    {
+      body: {
         workspaceCode: payload.workspaceCode,
         definition: normalizePayload(payload.definition),
-      }
-      : {
-        workspaceCode: payload?.workspaceCode,
       },
-  }).then(normalizePlatformServer);
+    }
+  ).then(normalizePlatformServer);
+}
+
+export function updatePlatformMcpServer(
+  serverCode: string,
+  payload: PlatformMcpServerDefinitionPayload
+) {
+  return requestApi<PlatformMcpServerRecordApi>(
+    mcpApiEndpoints.updatePlatformServer,
+    {
+      pathParams: { serverCode },
+      body: normalizePayload(payload),
+    }
+  ).then(normalizePlatformServer);
+}
+
+export function verifyPlatformMcpServer(
+  serverCode: string,
+  payload?: VerifyPlatformMcpServerPayload
+) {
+  return requestApi<PlatformMcpServerRecordApi>(
+    mcpApiEndpoints.verifyPlatformServer,
+    {
+      pathParams: { serverCode },
+      body: payload?.definition
+        ? {
+            workspaceCode: payload.workspaceCode,
+            definition: normalizePayload(payload.definition),
+          }
+        : {
+            workspaceCode: payload?.workspaceCode,
+          },
+    }
+  ).then(normalizePlatformServer);
 }
 
 export function enablePlatformMcpServer(serverCode: string) {
-  return requestApi<PlatformMcpServerRecordApi>(mcpApiEndpoints.enablePlatformServer, {
-    pathParams: { serverCode },
-  }).then(normalizePlatformServer);
+  return requestApi<PlatformMcpServerRecordApi>(
+    mcpApiEndpoints.enablePlatformServer,
+    {
+      pathParams: { serverCode },
+    }
+  ).then(normalizePlatformServer);
 }
 
 export function disablePlatformMcpServer(serverCode: string) {
-  return requestApi<PlatformMcpServerRecordApi>(mcpApiEndpoints.disablePlatformServer, {
-    pathParams: { serverCode },
-  }).then(normalizePlatformServer);
+  return requestApi<PlatformMcpServerRecordApi>(
+    mcpApiEndpoints.disablePlatformServer,
+    {
+      pathParams: { serverCode },
+    }
+  ).then(normalizePlatformServer);
 }
 
 export function healthCheckPlatformMcpServer(serverCode: string) {
-  return requestApi<PlatformMcpServerRecordApi>(mcpApiEndpoints.healthPlatformServer, {
-    pathParams: { serverCode },
-  }).then(normalizePlatformServer);
+  return requestApi<PlatformMcpServerRecordApi>(
+    mcpApiEndpoints.healthPlatformServer,
+    {
+      pathParams: { serverCode },
+    }
+  ).then(normalizePlatformServer);
 }
 
 export function deletePlatformMcpServer(serverCode: string) {
-  return requestApi<PlatformMcpDeleteResultApi>(mcpApiEndpoints.deletePlatformServer, {
-    pathParams: { serverCode },
-  });
+  return requestApi<PlatformMcpDeleteResultApi>(
+    mcpApiEndpoints.deletePlatformServer,
+    {
+      pathParams: { serverCode },
+    }
+  );
 }
 
-export function fetchWorkspaceMcpServers(workspaceCode: string, search?: string, signal?: AbortSignal) {
-  return requestApi<WorkspaceMcpServerRecordApi[]>(mcpApiEndpoints.listWorkspaceServers, {
-    pathParams: { workspaceCode },
-    queryParams: { search },
-    signal,
-  }).then((records) => records.map(normalizeWorkspaceServer));
+export function fetchWorkspaceMcpServers(
+  workspaceCode: string,
+  search?: string,
+  signal?: AbortSignal
+) {
+  return requestApi<WorkspaceMcpServerRecordApi[]>(
+    mcpApiEndpoints.listWorkspaceServers,
+    {
+      pathParams: { workspaceCode },
+      queryParams: { search },
+      signal,
+    }
+  ).then((records) => records.map(normalizeWorkspaceServer));
 }
 
-export function enableWorkspaceMcpServer(workspaceCode: string, serverCode: string) {
-  return requestApi<WorkspaceMcpServerRecordApi>(mcpApiEndpoints.enableWorkspaceServer, {
-    pathParams: { workspaceCode, serverCode },
-  }).then(normalizeWorkspaceServer);
+export function enableWorkspaceMcpServer(
+  workspaceCode: string,
+  serverCode: string
+) {
+  return requestApi<WorkspaceMcpServerRecordApi>(
+    mcpApiEndpoints.enableWorkspaceServer,
+    {
+      pathParams: { workspaceCode, serverCode },
+    }
+  ).then(normalizeWorkspaceServer);
 }
 
-export function disableWorkspaceMcpServer(workspaceCode: string, serverCode: string) {
-  return requestApi<WorkspaceMcpServerRecordApi>(mcpApiEndpoints.disableWorkspaceServer, {
-    pathParams: { workspaceCode, serverCode },
-  }).then(normalizeWorkspaceServer);
+export function disableWorkspaceMcpServer(
+  workspaceCode: string,
+  serverCode: string
+) {
+  return requestApi<WorkspaceMcpServerRecordApi>(
+    mcpApiEndpoints.disableWorkspaceServer,
+    {
+      pathParams: { workspaceCode, serverCode },
+    }
+  ).then(normalizeWorkspaceServer);
 }

@@ -143,7 +143,7 @@ impl FrameworkHost {
             .await
             .map_err(|e| map(e.into()))?
             .transaction(async {
-                super::host_interactions::apply_answers(agent, &session, &answers, &mut request)
+                super::host_interactions::apply_answers(&agent, &session, &answers, &mut request)
                     .await
                     .map_err(|e| fw::StateError::Backend(e.to_string()))
             })

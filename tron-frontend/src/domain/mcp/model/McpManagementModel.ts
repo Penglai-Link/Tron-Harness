@@ -1,7 +1,10 @@
 export type McpHealthStatus = "HEALTHY" | "UNHEALTHY" | "NEVER_CHECKED";
 export type McpAuthKind = "none" | "bearer_static";
 export type McpServerTransportKind = "streamable_http" | "stdio";
-export type McpAccessMode = "disabled" | "all_enabled_servers" | "selected_servers";
+export type McpAccessMode =
+  | "disabled"
+  | "all_enabled_servers"
+  | "selected_servers";
 
 export interface PlatformMcpGatewayConfig {
   gatewayEnabled: boolean;
@@ -11,6 +14,9 @@ export interface PlatformMcpGatewayConfig {
 }
 
 export interface PlatformMcpServerRecord {
+  providerPackId?: string | null;
+  assignable?: boolean;
+  disabledReason?: string | null;
   serverCode: string;
   name: string;
   description: string;
@@ -34,6 +40,9 @@ export interface PlatformMcpServerRecord {
 }
 
 export interface WorkspaceMcpServerRecord {
+  providerPackId?: string | null;
+  assignable?: boolean;
+  disabledReason?: string | null;
   serverCode: string;
   name: string;
   description: string;
@@ -69,7 +78,8 @@ export interface PlatformMcpServerDefinitionPayload {
   workingDirectory: string;
 }
 
-export interface PlatformMcpServerPayload extends PlatformMcpServerDefinitionPayload {
+export interface PlatformMcpServerPayload
+  extends PlatformMcpServerDefinitionPayload {
   serverCode: string;
 }
 

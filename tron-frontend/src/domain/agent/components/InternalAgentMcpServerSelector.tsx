@@ -1,8 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { DisabledResourceReason } from "./InternalAgentSkillField";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
@@ -47,11 +44,20 @@ export function InternalAgentMcpServerSelector({
   const { t } = useTranslation(["pages"]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const selectedServerSet = useMemo(() => new Set(selectedServerCodes), [selectedServerCodes]);
-
-  const internalPageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`pages:workspaceAgents.internal.mcpSelection.${key}`, { defaultValue, ...options })
+  const selectedServerSet = useMemo(
+    () => new Set(selectedServerCodes),
+    [selectedServerCodes]
   );
+
+  const internalPageT = (
+    key: string,
+    defaultValue: string,
+    options?: Record<string, unknown>
+  ) =>
+    t(`pages:workspaceAgents.internal.mcpSelection.${key}`, {
+      defaultValue,
+      ...options,
+    });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -74,21 +80,34 @@ export function InternalAgentMcpServerSelector({
         server.description,
         server.lastHealthStatus,
         server.lastHealthMessage ?? "",
-      ].join(" ").toLowerCase().includes(normalizedSearch);
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearch);
     });
   }, [debouncedSearch, servers]);
 
-  const assignableVisibleServers = visibleServers.filter((server) => server.effectiveEnabled);
-  const allVisibleSelected = assignableVisibleServers.length > 0
-    && assignableVisibleServers.every((server) => selectedServerSet.has(server.serverCode));
-  const hasAnyVisibleSelected = assignableVisibleServers.some((server) => selectedServerSet.has(server.serverCode));
+  const assignableVisibleServers = visibleServers.filter(
+    (server) => server.effectiveEnabled && server.assignable !== false
+  );
+  const allVisibleSelected =
+    assignableVisibleServers.length > 0 &&
+    assignableVisibleServers.every((server) =>
+      selectedServerSet.has(server.serverCode)
+    );
+  const hasAnyVisibleSelected = assignableVisibleServers.some((server) =>
+    selectedServerSet.has(server.serverCode)
+  );
 
   return (
     <div className={cn("mt-5 space-y-3", className)}>
       <Field label={internalPageT("title", "Selected MCP servers")}>
         <SearchField
           ariaLabel={internalPageT("searchAria", "Search MCP servers")}
-          placeholder={internalPageT("searchPlaceholder", "Search MCP servers...")}
+          placeholder={internalPageT(
+            "searchPlaceholder",
+            "Search MCP servers..."
+          )}
           value={search}
           onChange={setSearch}
         />
@@ -96,18 +115,29 @@ export function InternalAgentMcpServerSelector({
 
       <div className="flex flex-wrap items-center justify-between gap-[12px]">
         <p className="text-xs text-[var(--color-on-surface-variant)]">
-          {internalPageT("showing", "Showing {{visible}} of {{total}} servers", {
-            visible: visibleServers.length,
-            total: servers.length,
-          })}
+          {internalPageT(
+            "showing",
+            "Showing {{visible}} of {{total}} servers",
+            {
+              visible: visibleServers.length,
+              total: servers.length,
+            }
+          )}
         </p>
         <div className="flex flex-wrap gap-[12px]">
           <Button
-            disabled={busy || allVisibleSelected || assignableVisibleServers.length === 0}
+            disabled={
+              busy ||
+              allVisibleSelected ||
+              assignableVisibleServers.length === 0
+            }
             size="sm"
             variant="secondary"
             onClick={() => {
-              onSetServersChecked(assignableVisibleServers.map((server) => server.serverCode), true);
+              onSetServersChecked(
+                assignableVisibleServers.map((server) => server.serverCode),
+                true
+              );
             }}
           >
             {internalPageT("selectVisible", "Select visible")}
@@ -117,7 +147,10 @@ export function InternalAgentMcpServerSelector({
             size="sm"
             variant="secondary"
             onClick={() => {
-              onSetServersChecked(assignableVisibleServers.map((server) => server.serverCode), false);
+              onSetServersChecked(
+                assignableVisibleServers.map((server) => server.serverCode),
+                false
+              );
             }}
           >
             {internalPageT("clearVisible", "Clear visible")}
@@ -132,17 +165,28 @@ export function InternalAgentMcpServerSelector({
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {visibleServers.map((server) => {
-            const disabled = !server.effectiveEnabled;
-            const checked = selectedServerSet.has(server.serverCode);
+            const disabled =
+              !server.effectiveEnabled || server.assignable === false;
+            const checked =
+              !disabled && selectedServerSet.has(server.serverCode);
 
             return (
               <label
                 key={server.serverCode}
-                className={`rounded-2xl border p-4 transition-colors ${checked
+                className={`rounded-2xl border p-4 transition-colors ${
+                  checked
                     ? "border-[var(--color-primary)] bg-[var(--color-primary)]/8"
                     : "border-[var(--color-card-border)] bg-[var(--color-surface-container-lowest)]"
-                  } ${disabled ? "opacity-70" : ""}`}
+                } ${disabled ? "opacity-70" : ""}`}
               >
+                <DisabledResourceReason
+                  reason={
+                    server.disabledReason ||
+                    (disabled
+                      ? internalPageT("disabledHint", "Resource is disabled")
+                      : undefined)
+                  }
+                />
                 <div className="flex items-start gap-3">
                   <input
                     checked={checked}
@@ -150,7 +194,10 @@ export function InternalAgentMcpServerSelector({
                     disabled={busy || disabled}
                     type="checkbox"
                     onChange={(event) => {
-                      onToggleServer(server.serverCode, event.currentTarget.checked);
+                      onToggleServer(
+                        server.serverCode,
+                        event.currentTarget.checked
+                      );
                     }}
                   />
                   <div className="min-w-0 flex-1">
@@ -163,12 +210,18 @@ export function InternalAgentMcpServerSelector({
                       </Badge>
                       {!server.platformEnabled ? (
                         <Badge variant="warning">
-                          {internalPageT("platformDisabled", "Platform disabled")}
+                          {internalPageT(
+                            "platformDisabled",
+                            "Platform disabled"
+                          )}
                         </Badge>
                       ) : null}
                       {server.workspaceOverrideDisabled ? (
                         <Badge variant="warning">
-                          {internalPageT("workspaceDisabled", "Locally disabled")}
+                          {internalPageT(
+                            "workspaceDisabled",
+                            "Locally disabled"
+                          )}
                         </Badge>
                       ) : null}
                     </div>
@@ -176,7 +229,11 @@ export function InternalAgentMcpServerSelector({
                       {server.serverCode}
                     </p>
                     <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-                      {server.description || internalPageT("noDescription", "No description available.")}
+                      {server.description ||
+                        internalPageT(
+                          "noDescription",
+                          "No description available."
+                        )}
                     </p>
                     {server.lastHealthMessage ? (
                       <p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">
@@ -187,7 +244,7 @@ export function InternalAgentMcpServerSelector({
                       <p className="mt-2 text-xs text-[var(--color-warning)]">
                         {internalPageT(
                           "disabledHint",
-                          "Only workspace-effective enabled servers can be assigned.",
+                          "Only workspace-effective enabled servers can be assigned."
                         )}
                       </p>
                     ) : null}

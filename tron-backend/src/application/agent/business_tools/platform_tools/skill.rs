@@ -4,15 +4,10 @@ use serde::Deserialize;
 
 use crate::{
     application::skill::SkillRegistryService,
-    domain::{
-        agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolRequest},
-        skill::WorkspaceSkillListQuery,
-    },
+    domain::agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolRequest},
 };
 
-use super::common::{
-    json_observation, page_records, parse_tool_input, resolve_workspace_code, service_tool_error,
-};
+use super::common::{json_observation, page_records, parse_tool_input, service_tool_error};
 
 pub(super) fn tools(skills: SkillRegistryService) -> Vec<Arc<dyn Tool>> {
     vec![
@@ -31,11 +26,9 @@ struct SkillPageTool {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SkillPageInput {
-    workspace_code: Option<String>,
     current: Option<usize>,
     size: Option<usize>,
     search: Option<String>,
-    include_disabled: Option<bool>,
 }
 
 impl Tool for SkillPageTool {
@@ -49,19 +42,19 @@ impl Tool for SkillPageTool {
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
         let input: SkillPageInput = parse_tool_input(request.input)?;
-        let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
+        let agent = context.agent_code.as_deref().unwrap_or("main-agent");
         let mut records = self
             .skills
-            .list_workspace_skills(
-                workspace_code.as_str(),
-                WorkspaceSkillListQuery {
-                    search: input.search,
-                },
-            )
+            .effective_agent_skills(agent)
             .map_err(service_tool_error)?;
-        if !input.include_disabled.unwrap_or(false) {
-            records.retain(|item| item.enabled);
-        }
+        records.retain(|s| {
+            s.available
+                && s.assigned
+                && input
+                    .search
+                    .as_ref()
+                    .is_none_or(|q| s.skill_name.contains(q))
+        });
         let output = page_records(records, input.current, input.size);
         json_observation(self.name(), &output)
     }
@@ -75,7 +68,6 @@ struct SkillViewTool {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SkillViewInput {
-    workspace_code: Option<String>,
     skill_name: String,
 }
 
@@ -90,16 +82,27 @@ impl Tool for SkillViewTool {
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
         let input: SkillViewInput = parse_tool_input(request.input)?;
-        let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
+        let agent = context.agent_code.as_deref().unwrap_or("main-agent");
         let skill_name = input.skill_name.trim();
         if skill_name.is_empty() {
             return Err(ToolError::ExecutionFailed(
                 "skillName is required".to_string(),
             ));
         }
+        if !self
+            .skills
+            .effective_agent_skills(agent)
+            .map_err(service_tool_error)?
+            .iter()
+            .any(|s| s.skill_name == skill_name && s.assigned && s.available)
+        {
+            return Err(service_tool_error(
+                crate::domain::skill::SkillError::Unavailable,
+            ));
+        }
         let output = self
             .skills
-            .get_workspace_skill(workspace_code.as_str(), skill_name)
+            .get_registry_skill(skill_name)
             .map_err(service_tool_error)?;
         json_observation(self.name(), &output)
     }

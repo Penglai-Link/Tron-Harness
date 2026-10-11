@@ -15,6 +15,7 @@ const fixture = vi.hoisted(() => ({
   patch: vi.fn(),
   error: vi.fn(),
   assignServers: vi.fn(),
+  assignSkills: vi.fn(),
   patchMcp: vi.fn(),
   patchDefinition: vi.fn(),
   create: vi.fn(),
@@ -94,9 +95,12 @@ vi.mock("@/domain/agent/components", () => ({
       onSetToolsChecked(["fs.read_text"], true);
     }}>Select tools consecutively</button>
     <button onClick={() => onSetToolsChecked(["fs.read_text"], false)}>Remove read tool</button>
+    <button onClick={() => onSetToolsChecked(["bash.exec"], false)}>Remove bash tool</button>
   </div>,
 }));
 
+vi.mock("@/domain/skill/api", () => ({ setAgentSkills: fixture.assignSkills, CAPABILITY_RESOURCES_CHANGED: "tron:capability-resources-changed" }));
+vi.mock("../components/InternalAgentSkillField", () => ({ InternalAgentSkillField: ({ selectedNames, onSelectionChange }: { selectedNames?: string[]; onSelectionChange: (names: string[]) => void }) => <><output aria-label="Skill draft">{selectedNames?.join(",")}</output><button onClick={() => onSelectionChange(["optional"])}>Choose skill draft</button></> }));
 vi.mock("../components/InternalAgentKnowledgeField", () => ({ InternalAgentKnowledgeField: ({ agentCode, onSelectionChange }: {agentCode:string; onSelectionChange?: (ids: string[]) => void}) => <><output aria-label={`Knowledge libraries for ${agentCode}`}>platform</output><button onClick={() => onSelectionChange?.(["kb-shared"])}>Choose knowledge</button></> }));
 
 import { WorkspaceAgentsPage } from "./WorkspaceAgentsPage";
@@ -165,6 +169,61 @@ async function openEditor(scope: "workspace" | "platform" = "workspace") {
 function save() { fireEvent.click(screen.getByRole("button", { name: "Save" })); }
 
 describe("internal agent cards and manual editing", () => {
+  it("saves the refreshed resource draft after a lifecycle event while preserving text edits", async () => {
+    fixture.record.toolAssignmentMode = "selected_tools";
+    fixture.record.mcpAccessMode = "selected_servers";
+    fixture.record.selectedServerCodes = ["revoked-server"];
+    const dialog = await openEditor("platform");
+    const name = within(dialog).getByRole<HTMLInputElement>("textbox", { name: "Name" });
+    fireEvent.change(name, { target: { value: "Draft agent name" } });
+    fixture.record.selectedToolCodes = [];
+    fixture.record.selectedServerCodes = [];
+    act(() => window.dispatchEvent(new Event("tron:capability-resources-changed")));
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Choose tools (0)" })).toBeTruthy());
+    expect(within(dialog).getByRole("button", { name: "Choose servers (0)" })).toBeTruthy();
+    expect(name.value).toBe("Draft agent name");
+    // A subsequent normal edit must not bring the old resource selections back.
+    fireEvent.change(name, { target: { value: "Final agent name" } });
+    expect(within(dialog).getByRole("button", { name: "Choose tools (0)" })).toBeTruthy();
+    save();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patchDefinition).toHaveBeenCalledWith("$platform", "main-agent", { name: "Final agent name" });
+    for (const call of fixture.assign.mock.calls) expect(call[2]).toEqual([]);
+    for (const call of fixture.assignServers.mock.calls) expect(call[2]).toEqual([]);
+    expect(fixture.error).not.toHaveBeenCalled();
+  });
+
+  it("keeps confirmed skill, tool and MCP draft edits when an unrelated package is disabled", async () => {
+    const api = await import("@/domain/agent/api");
+    const mcp = await import("@/domain/mcp");
+    vi.mocked(api.listTools).mockResolvedValue(["bash.exec", "fs.read_text"].map((toolCode) => ({ toolCode, toolName: toolCode, name: toolCode, description: "", domainCode: "test", operationKind: "query" as const, assignable: true })));
+    vi.mocked(mcp.fetchPlatformMcpServers).mockResolvedValue(["old-server", "new-server"].map((serverCode) => ({ serverCode, name: serverCode, enabled: true, assignable: true })) as Awaited<ReturnType<typeof mcp.fetchPlatformMcpServers>>);
+    fixture.record.toolAssignmentMode = "selected_tools";
+    fixture.record.selectedToolCodes = ["bash.exec", "revoked-tool"];
+    fixture.record.mcpAccessMode = "selected_servers";
+    fixture.record.selectedServerCodes = ["old-server"];
+    const dialog = await openEditor("platform");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Choose tools (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select tools consecutively" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove bash tool" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Choose servers (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose new MCP server" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Choose skill draft" }));
+    fixture.record.selectedToolCodes = ["bash.exec"];
+    act(() => window.dispatchEvent(new Event("tron:capability-resources-changed")));
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Choose tools (1)" })).toBeTruthy());
+    expect(within(dialog).getByLabelText("Skill draft").textContent).toBe("optional");
+    save();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.assign).toHaveBeenCalledWith("$platform", "main-agent", ["fs.read_text"]);
+    expect(fixture.assignServers).toHaveBeenCalledWith("$platform", "main-agent", ["new-server"]);
+    expect(fixture.assignSkills).toHaveBeenCalledWith("main-agent", ["optional"]);
+    vi.mocked(api.listTools).mockResolvedValue([]);
+    vi.mocked(mcp.fetchPlatformMcpServers).mockResolvedValue([]);
+  });
+
   it("shows compact cards and opens only the chosen agent", async () => {
     fixture.additionalRecords = [{ ...fixture.record, agentCode: "reviewer", name: "Reviewer" }];
     render(<WorkspaceAgentsPage category="internal" />);
@@ -295,6 +354,7 @@ describe("internal agent cards and manual editing", () => {
     await screen.findByRole("button", { name: "Edit Main Agent" });
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("combobox", {name:"Agent Loop"}), {target:{value:"review-flow"}});
     expect(within(dialog).getAllByRole("button", { pressed: false })).toHaveLength(11);
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
@@ -350,6 +410,7 @@ describe("internal agent cards and manual editing", () => {
     await screen.findByRole("button", { name: "Edit Main Agent" });
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("combobox", {name:"Agent Loop"}), {target:{value:"review-flow"}});
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
@@ -391,6 +452,7 @@ describe("internal agent groups and built-in platform editing", () => {
     await screen.findByRole("button", { name: "Edit Main Agent" });
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("combobox", {name:"Agent Loop"}), {target:{value:"review-flow"}});
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "grouped" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Grouped" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "New group" }));
@@ -428,7 +490,7 @@ describe("internal agent groups and built-in platform editing", () => {
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Edited Main Agent" } });
     save();
     await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledWith("$platform", "main-agent", { name: "Edited Main Agent" }));
-    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(fixture.patch).not.toHaveBeenCalled();
   });
   it("allows built-in definitions and saves their platform workspace grants", async () => {
@@ -476,7 +538,7 @@ describe("internal agent groups and built-in platform editing", () => {
     expect(fixture.patchDefinition).not.toHaveBeenCalled();
     expect(fixture.workspaceGrants).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Edit Main Agent" }));
-    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Group" }).value).toBe("ungrouped");
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Group" }).value).toBe("group:主智能体");
   });
 
   it("retains workspace draft when the final authoritative refresh fails", async () => {

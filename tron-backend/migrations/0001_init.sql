@@ -663,13 +663,15 @@ CREATE TABLE rag_skill_text_units (
 
 CREATE TABLE registry_skills (
     skill_name TEXT PRIMARY KEY,
+    provider_pack_id TEXT,
+    available INTEGER NOT NULL DEFAULT 1,
     source_ref TEXT NOT NULL,
-    source_type TEXT NOT NULL CHECK (source_type IN ('Marketplace', 'GitHub', 'Git', 'Url', 'Local', 'Manual')),
+    source_type TEXT NOT NULL CHECK (source_type IN ('Marketplace', 'GitHub', 'Git', 'Url', 'Local', 'Manual', 'BuiltIn')),
     registry_path TEXT NOT NULL,
     declared_version TEXT NULL,
     compatibility TEXT NULL,
     update_status TEXT NOT NULL CHECK (update_status IN ('Unknown', 'UpToDate', 'UpdateAvailable', 'Manual', 'Error')),
-    managed_by TEXT NOT NULL CHECK (managed_by IN ('Cli', 'Manual')),
+    managed_by TEXT NOT NULL CHECK (managed_by IN ('Cli', 'Manual', 'BuiltIn')),
     last_checked_at INTEGER NULL,
     last_updated_at INTEGER NULL,
     last_error TEXT NULL,
@@ -769,7 +771,6 @@ CREATE TABLE resource_servers (
 );
 
 CREATE TABLE skill_rag_index_states (
-    workspace_code TEXT NOT NULL,
     skill_name TEXT NOT NULL,
     source_version TEXT NOT NULL,
     desired_enabled INTEGER NOT NULL,
@@ -780,7 +781,7 @@ CREATE TABLE skill_rag_index_states (
     last_indexed_at INTEGER NULL,
     last_error TEXT NULL,
     updated_at INTEGER NOT NULL,
-    PRIMARY KEY (workspace_code, skill_name)
+    PRIMARY KEY (skill_name)
 );
 
 CREATE TABLE system_agent_registries (
@@ -918,13 +919,19 @@ CREATE TABLE workspace_mcp_server_policies (
 
 CREATE TABLE workspace_session_links (session_id TEXT PRIMARY KEY, workspace_code TEXT NOT NULL, business_json TEXT NOT NULL);
 
-CREATE TABLE workspace_skill_bindings (
-    workspace_code TEXT NOT NULL,
-    skill_name TEXT NOT NULL,
+CREATE TABLE agent_skill_assignments (
+    agent_code TEXT NOT NULL,
+    skill_name TEXT NOT NULL REFERENCES registry_skills(skill_name) ON DELETE CASCADE,
     enabled INTEGER NOT NULL DEFAULT 1,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY (workspace_code, skill_name)
+    PRIMARY KEY (agent_code, skill_name)
+);
+
+CREATE TABLE capability_resource_ownership (
+    pack_id TEXT NOT NULL,
+    resource_kind TEXT NOT NULL CHECK(resource_kind IN ('skill','tool','mcp')),
+    resource_code TEXT NOT NULL,
+    available INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY(resource_kind, resource_code)
 );
 
 CREATE TABLE workspace_system_agent_policies (
@@ -1112,7 +1119,7 @@ CREATE INDEX idx_resource_servers_workspace
     ON resource_servers (workspace_code);
 
 CREATE INDEX idx_skill_rag_index_states_status
-    ON skill_rag_index_states(workspace_code, vector_status, graph_status);
+    ON skill_rag_index_states(vector_status, graph_status);
 
 CREATE INDEX idx_task_agent_links_task_code ON task_agent_links(task_code);
 
@@ -1145,11 +1152,7 @@ CREATE INDEX idx_workspace_internal_agent_tool_assignments_workspace_code
 CREATE INDEX idx_workspace_mcp_server_policies_workspace_code
     ON workspace_mcp_server_policies (workspace_code);
 
-CREATE INDEX idx_workspace_skill_bindings_skill
-    ON workspace_skill_bindings(skill_name);
 
-CREATE INDEX idx_workspace_skill_bindings_workspace
-    ON workspace_skill_bindings(workspace_code);
 
 CREATE INDEX idx_workspace_system_agent_policies_workspace_code
     ON workspace_system_agent_policies (workspace_code);
@@ -1263,7 +1266,6 @@ INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, 
     (734510000000000005, 'AGENT_OPERATIONS', 'BuiltIn', 'Group', NULL, NULL, 'Bot', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000008, 'MCP_SERVERS', 'BuiltIn', 'Internal', 'mcpServers.index', NULL, 'PlugZap', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000010, 'MODELS', 'BuiltIn', 'Internal', 'models.index', NULL, 'Sparkles', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000011, 'SKILLS', 'BuiltIn', 'Internal', 'skills.index', NULL, 'Wrench', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000012, 'DATA', 'BuiltIn', 'Group', NULL, NULL, 'Database', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000017, 'RESOURCE_MANAGEMENT', 'BuiltIn', 'Group', NULL, NULL, 'Archive', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000018, 'FILE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.files', NULL, 'Folder', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
@@ -1293,8 +1295,6 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734530000000000016, 734510000000000008, 'en-US', 'MCP Servers'),
     (734530000000000019, 734510000000000010, 'zh-CN', '模型'),
     (734530000000000020, 734510000000000010, 'en-US', 'Models'),
-    (734530000000000021, 734510000000000011, 'zh-CN', '技能'),
-    (734530000000000022, 734510000000000011, 'en-US', 'Skills'),
     (734530000000000023, 734510000000000012, 'zh-CN', '数据'),
     (734530000000000024, 734510000000000012, 'en-US', 'Data'),
     (734530000000000033, 734510000000000017, 'zh-CN', '资源管理'),
@@ -1339,7 +1339,6 @@ INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, po
     (734520000000000005, 734500000000000001, 734510000000000005, NULL, 1, 'Flyout'),
     (734520000000000008, 734500000000000001, 734510000000000008, 734520000000000005, 1, 'Inline'),
     (734520000000000010, 734500000000000001, 734510000000000010, 734520000000000005, 3, 'Inline'),
-    (734520000000000011, 734500000000000001, 734510000000000011, 734520000000000005, 4, 'Inline'),
     (734520000000000012, 734500000000000001, 734510000000000012, NULL, 2, 'Flyout'),
     (734520000000000017, 734500000000000001, 734510000000000017, 734520000000000012, 4, 'Inline'),
     (734520000000000018, 734500000000000001, 734510000000000018, 734520000000000017, 0, 'Inline'),
@@ -1367,7 +1366,7 @@ INSERT INTO task_flow_statuses (flow_code, status_code, name, position, required
 -- rag_corpora
 INSERT INTO rag_corpora (corpus_id, display_name, status, description, capabilities_json, filter_schema_json, field_mapping_json, storage_binding_json, created_at, updated_at) VALUES
     ('memory-card', '记忆', 'enabled', 'User, agent, and space scoped memory cards.', '{"fulltext":true,"vector":true,"metadataGroups":[{"name":"memory","fields":["memoryType","memoryStatus","reviewStatus","version","supersededBy","conflictGroup","duplicateGroup","injectable","importanceScore","confidenceScore","qualityScore","pinLevel","expiresAt","derivedSourceType","derivedSourceCode"]}],"settings":{"fulltext":true,"vector":true,"graph":false,"embeddingModelCode":null,"rerankModelCode":null,"graphModelCode":null},"graph":false}', '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"memoryType":{"type":"string","column":"memory_type"},"memoryStatus":{"type":"string","column":"memory_status"},"reviewStatus":{"type":"string","column":"review_status"},"version":{"type":"string","column":"version"},"supersededBy":{"type":"string","column":"superseded_by"},"conflictGroup":{"type":"string","column":"conflict_group"},"duplicateGroup":{"type":"string","column":"duplicate_group"},"injectable":{"type":"boolean","column":"injectable"},"importanceScore":{"type":"integer","column":"importance_score","operators":["eq","in","gt","gte","lt","lte"]},"confidenceScore":{"type":"integer","column":"confidence_score","operators":["eq","in","gt","gte","lt","lte"]},"qualityScore":{"type":"integer","column":"quality_score","operators":["eq","in","gt","gte","lt","lte"]},"pinLevel":{"type":"integer","column":"pin_level","operators":["eq","in","gt","gte","lt","lte"]},"expiresAt":{"type":"integer","column":"expires_at","operators":["eq","in","gt","gte","lt","lte","gtOrNull"]},"derivedSourceType":{"type":"string","column":"derived_source_type"},"derivedSourceCode":{"type":"string","column":"derived_source_code"}}}', '{"source":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","memoryType":"memory_type","memoryStatus":"memory_status","reviewStatus":"review_status","version":"version","supersededBy":"superseded_by","conflictGroup":"conflict_group","duplicateGroup":"duplicate_group","injectable":"injectable","importanceScore":"importance_score","confidenceScore":"confidence_score","qualityScore":"quality_score","pinLevel":"pin_level","expiresAt":"expires_at","derivedSourceType":"derived_source_type","derivedSourceCode":"derived_source_code","sourceCreatedAt":"source_created_at","sourceUpdatedAt":"source_updated_at"},"textUnit":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","textUnitStatus":"status","text":"text"}}', '{"mode":"TARGETED","bindings":{"source":"memory-store","textUnit":"memory-store","fulltext":"memory-store","vector":"memory-store","diagnostics":"diagnostics-store"},"targets":[{"id":"memory-store","backend":"SQLITE","layout":"TABLE","table":"rag_memory_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}', 1772294400000, 1781568000000),
-    ('skill', '技能', 'enabled', 'Workspace-scoped skill content and source-linked graph evidence.', '{"fulltext":true,"vector":true,"metadataGroups":[{"name":"skill","fields":["skillName","skillDescription"]}],"settings":{"fulltext":true,"vector":true,"graph":true,"embeddingModelCode":null,"rerankModelCode":null,"graphModelCode":null},"graph":true}', '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"skillName":{"type":"string","column":"skill_name"}}}', '{"source":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","skillName":"skill_name","skillDescription":"skill_description"},"textUnit":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","textUnitStatus":"status","text":"text"}}', '{"mode":"TARGETED","bindings":{"source":"skill-store","textUnit":"skill-store","fulltext":"skill-store","vector":"skill-store","diagnostics":"diagnostics-store"},"targets":[{"id":"skill-store","backend":"SQLITE","layout":"TABLE","table":"rag_skill_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}', 1780339200000, 1780339200000);
+    ('skill', '技能', 'enabled', 'Platform-shared skill content filtered by Agent assignment and source-linked graph evidence.', '{"fulltext":true,"vector":true,"metadataGroups":[{"name":"skill","fields":["skillName","skillDescription"]}],"settings":{"fulltext":true,"vector":true,"graph":true,"embeddingModelCode":null,"rerankModelCode":null,"graphModelCode":null},"graph":true}', '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"skillName":{"type":"string","column":"skill_name"}}}', '{"source":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","skillName":"skill_name","skillDescription":"skill_description"},"textUnit":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","textUnitStatus":"status","text":"text"}}', '{"mode":"TARGETED","bindings":{"source":"skill-store","textUnit":"skill-store","fulltext":"skill-store","vector":"skill-store","diagnostics":"diagnostics-store"},"targets":[{"id":"skill-store","backend":"SQLITE","layout":"TABLE","table":"rag_skill_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}', 1780339200000, 1780339200000);
 
 CREATE TABLE IF NOT EXISTS tron_schema_initialized (scope TEXT PRIMARY KEY);
 INSERT INTO tron_schema_initialized (scope) VALUES ('business');

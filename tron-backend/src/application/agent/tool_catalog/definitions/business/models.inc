@@ -166,11 +166,11 @@ fn skill_page_definition() -> ToolCatalogDefinition {
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.skill.page.description",
-            json!([{ "workspaceCode": "TRON_CORE", "current": 1, "size": 20, "search": "eliteforge", "includeDisabled": false }]),
-            workspace_scoped_page_schema(json!({
-                "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.skill.page.params.search" },
-                "includeDisabled": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.tools.skill.page.params.includeDisabled" }
-            })),
+            json!([{ "current": 1, "size": 20, "search": "eliteforge" }]),
+            json!({"type":"object","properties":{
+                "current":{"type":"integer","minimum":1},"size":{"type":"integer","minimum":1,"maximum":100},
+                "search":{"type":"string","x-i18n-description-key":"agent.toolCatalog.tools.skill.page.params.search"}
+            },"additionalProperties":false}),
         ),
     )
 }
@@ -182,12 +182,11 @@ fn skill_view_definition() -> ToolCatalogDefinition {
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.skill.view.description",
-            json!([{ "workspaceCode": "TRON_CORE", "skillName": "eliteforge-brainstorming" }]),
+            json!([{ "skillName": "eliteforge-brainstorming" }]),
             json!({
                 "type": "object",
                 "required": ["skillName"],
                 "properties": {
-                    "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.workspaceCode" },
                     "skillName": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.skill.view.params.skillName" }
                 },
                 "additionalProperties": false

@@ -18,11 +18,11 @@ use crate::{
 };
 
 use self::codecs::{
-    expanded_domain_persistence_mode_from_storage,
-    expanded_domain_persistence_mode_to_storage, mcp_access_mode_from_storage,
-    mcp_access_mode_to_storage, runtime_type_from_storage, runtime_type_to_storage, storage_error,
-    tool_assignment_mode_from_storage, tool_assignment_mode_to_storage,
-    tool_exposure_mode_from_storage, tool_exposure_mode_to_storage,
+    expanded_domain_persistence_mode_from_storage, expanded_domain_persistence_mode_to_storage,
+    mcp_access_mode_from_storage, mcp_access_mode_to_storage, runtime_type_from_storage,
+    runtime_type_to_storage, storage_error, tool_assignment_mode_from_storage,
+    tool_assignment_mode_to_storage, tool_exposure_mode_from_storage,
+    tool_exposure_mode_to_storage,
 };
 
 struct SqliteAgentManagementRepositorySql<'a> {
@@ -56,6 +56,76 @@ fn ensure_internal_agent_code_available(
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
+    fn replace_workspace_resource_assignments(
+        &mut self,
+        policy: &WorkspaceInternalAgentPolicy,
+        mcp: bool,
+        codes: &[String],
+    ) -> Result<(), AgentManagementError> {
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        let (table, column) = if mcp {
+            (
+                "workspace_internal_agent_mcp_server_assignments",
+                "server_code",
+            )
+        } else {
+            ("workspace_internal_agent_tool_assignments", "tool_code")
+        };
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE workspace_code=?1 AND agent_code=?2"),
+            params![policy.workspace_code, policy.agent_code],
+        )
+        .map_err(storage_error)?;
+        for code in codes {
+            tx.execute(&format!("INSERT INTO {table}(workspace_code,agent_code,{column},created_at,updated_at) VALUES(?1,?2,?3,?4,?4)"),params![policy.workspace_code,policy.agent_code,code,chrono::Utc::now().timestamp_millis()]).map_err(storage_error)?;
+        }
+        tx.execute(
+            "INSERT INTO workspace_internal_agent_policies (
+                    workspace_code,
+                    agent_code,
+                    tool_assignment_mode,
+                    mcp_access_mode,
+                    tool_exposure_mode,
+                    expanded_domain_persistence_mode,
+                    max_steps,
+                    max_tool_calls,
+                    max_parallel_tool_calls,
+                    created_at,
+                    updated_at,
+                    overridden_fields
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
+                    tool_assignment_mode = excluded.tool_assignment_mode,
+                    mcp_access_mode = excluded.mcp_access_mode,
+                    tool_exposure_mode = excluded.tool_exposure_mode,
+                    expanded_domain_persistence_mode = excluded.expanded_domain_persistence_mode,
+                    max_steps = excluded.max_steps,
+                    max_tool_calls = excluded.max_tool_calls,
+                    max_parallel_tool_calls = excluded.max_parallel_tool_calls,
+                    overridden_fields = excluded.overridden_fields,
+                    updated_at = excluded.updated_at",
+            params![
+                policy.workspace_code,
+                policy.agent_code,
+                tool_assignment_mode_to_storage(policy.tool_assignment_mode),
+                mcp_access_mode_to_storage(policy.mcp_access_mode),
+                tool_exposure_mode_to_storage(policy.tool_exposure_mode),
+                expanded_domain_persistence_mode_to_storage(
+                    policy.expanded_domain_persistence_mode
+                ),
+                policy.max_steps,
+                policy.max_tool_calls,
+                policy.max_parallel_tool_calls,
+                timestamp_to_millis(&policy.created_at),
+                timestamp_to_millis(&policy.updated_at),
+                serde_json::to_string(&policy.overridden_fields)
+                    .map_err(|_| AgentManagementError::StorageFailure)?,
+            ],
+        )
+        .map_err(storage_error)?;
+        tx.commit().map_err(storage_error)
+    }
+
     fn list_internal_agent_groups(
         &mut self,
         scope: &str,
@@ -360,6 +430,12 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         if removed == 0 {
             return Ok(false);
         }
+        transaction
+            .execute(
+                "DELETE FROM agent_skill_assignments WHERE agent_code=?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
         transaction
             .execute(
                 "DELETE FROM workspace_internal_agent_mcp_server_assignments WHERE agent_code = ?1",
@@ -1000,6 +1076,23 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepository {
+    fn replace_workspace_resource_assignments(
+        &mut self,
+        policy: &WorkspaceInternalAgentPolicy,
+        mcp: bool,
+        codes: &[String],
+    ) -> Result<(), AgentManagementError> {
+        let policy = policy.clone();
+        let codes = codes.to_vec();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .replace_workspace_resource_assignments(&policy, mcp, &codes)
+            },
+            || AgentManagementError::StorageFailure,
+        )
+    }
+
     fn list_internal_agent_groups(
         &mut self,
         scope: &str,

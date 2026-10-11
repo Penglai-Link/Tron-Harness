@@ -15,11 +15,11 @@
     ("agent.toolCatalog.tools.skill.page.name", "Page skills"),
     (
         "agent.toolCatalog.tools.skill.page.description",
-        "Page workspace skill bindings and registry entries.",
+        "Page skills assigned to the current Agent.",
     ),
     (
         "agent.toolCatalog.tools.skill.page.sampleResultSummary",
-        "Returns paged workspace skill records.",
+        "Returns paged assigned skill records.",
     ),
     (
         "agent.toolCatalog.tools.skill.page.params.search",

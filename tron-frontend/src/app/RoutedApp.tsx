@@ -41,66 +41,45 @@ export default function RoutedApp() {
       <TabPanelRegistryProvider>
         <ServerAuthDeviceUnboundHandler />
         <Routes>
-        <Route path="/" element={<EntryRoutePage />} />
-        <Route path="/profiles" element={<ProfileSelectionPage />} />
-        <Route path="/home" element={<Navigate replace to="/workspace" />} />
-        <Route path="/design-standard" element={<Navigate replace to="/workspace" />} />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <Navigate replace to="/settings/general" />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/platform/models"
-          element={
-            <ProtectedRoute>
-              <Navigate replace to="/settings/models" />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/skills/installed"
-          element={
-            <ProtectedRoute>
-              <Navigate replace to="/settings/skills" />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/skills/installed/new"
-          element={
-            <ProtectedRoute>
-              <Navigate replace to="/settings/skills/sync" />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/skills/new"
-          element={
-            <ProtectedRoute>
-              <Navigate replace to="/settings/skills/sync" />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/resource-management/files/new"
-          element={
-            <ProtectedRoute>
-              <Navigate replace to="/resource-management/files" />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="*"
-          element={
-            <ProtectedRoute>
-              <AppRoutePage />
-            </ProtectedRoute>
-          }
-        />
+          <Route path="/" element={<EntryRoutePage />} />
+          <Route path="/profiles" element={<ProfileSelectionPage />} />
+          <Route path="/home" element={<Navigate replace to="/workspace" />} />
+          <Route
+            path="/design-standard"
+            element={<Navigate replace to="/workspace" />}
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Navigate replace to="/settings/general" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/platform/models"
+            element={
+              <ProtectedRoute>
+                <Navigate replace to="/settings/models" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/resource-management/files/new"
+            element={
+              <ProtectedRoute>
+                <Navigate replace to="/resource-management/files" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <ProtectedRoute>
+                <AppRoutePage />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </TabPanelRegistryProvider>
     </FilePanelHostProvider>

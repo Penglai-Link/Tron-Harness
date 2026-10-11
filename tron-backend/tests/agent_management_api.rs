@@ -31,7 +31,26 @@ fn app() -> Router {
 }
 fn app_with_config(config: AppConfig) -> Router {
     common::app_with_state_setup(common::prepared_config(config), |state| {
-        state.knowledge_bases.stop_ingestion_workers()
+        state.knowledge_bases.stop_ingestion_workers();
+        // Runtime tests explicitly configure a React loop, just as Agent forms require.
+        if !state
+            .agent_management
+            .list_loop_designs()
+            .unwrap()
+            .iter()
+            .any(|d| d.loop_code == "test-react")
+        {
+            state.agent_management.save_loop_design(serde_json::from_value(json!({"loopCode":"test-react","name":"Test React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(),0).unwrap();
+        }
+        for agent in state
+            .agent_management
+            .list_platform_internal_agents()
+            .unwrap()
+        {
+            if agent.loop_code.is_none() {
+                state.agent_management.update_platform_internal_agent_definition(&agent.agent_code, tron_backend::application::agent::UpdateWorkspaceInternalAgentDefinitionCommand { loop_code: Some("test-react".into()), ..Default::default() }).unwrap();
+            }
+        }
     })
 }
 
@@ -409,6 +428,18 @@ async fn request_with_locale(
     authorization_header: &str,
     locale: &str,
 ) -> axum::response::Response {
+    let mut body = body;
+    if method == Method::POST {
+        if let Some(object) = body.as_mut().and_then(Value::as_object_mut) {
+            if uri.ends_with("/internal") {
+                object.entry("loopCode").or_insert(json!("test-react"));
+            }
+            if uri == "/api/v1/agents/loops" {
+                object.remove("version");
+                object.remove("updatedAt");
+            }
+        }
+    }
     let mut builder = Request::builder()
         .method(method)
         .uri(uri)
@@ -743,7 +774,7 @@ async fn startup_scan_loads_system_agent_models_and_rescan_refreshes_models() {
 }
 
 #[tokio::test]
-async fn legacy_main_agent_guidance_still_drives_runs_while_definition_api_is_read_only() {
+async fn platform_main_agent_guidance_is_editable_and_legacy_storage_still_drives_runs() {
     let codex_command = temp_command_path("codex-main");
     let opencode_command = temp_command_path("opencode-main");
     write_fake_command(&codex_command);
@@ -775,7 +806,7 @@ async fn legacy_main_agent_guidance_still_drives_runs_while_definition_api_is_re
         "en-US",
     )
     .await;
-    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    assert_eq!(denied.status(), StatusCode::OK);
     let mut legacy = internal_agent_api(
         &app,
         &authorization,
@@ -786,7 +817,7 @@ async fn legacy_main_agent_guidance_still_drives_runs_while_definition_api_is_re
     .await;
     legacy["rolePrompt"] = json!(guidance);
     let connection = rusqlite::Connection::open(&config.database_url).unwrap();
-    connection.execute("INSERT INTO platform_internal_agent_configs(agent_code, config_json) VALUES('main-agent',?1)", [legacy.to_string()]).unwrap();
+    connection.execute("INSERT INTO platform_internal_agent_configs(agent_code, config_json) VALUES('main-agent',?1) ON CONFLICT(agent_code) DO UPDATE SET config_json=excluded.config_json", [legacy.to_string()]).unwrap();
     let saved = internal_agent_api(
         &app,
         &authorization,
@@ -1005,10 +1036,16 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
     let first_tools = recorded_requests[0]["tools"]
         .as_array()
         .expect("first request tools should be an array");
-    assert_eq!(first_tools.len(), 1);
-    assert_eq!(
-        first_tools[0]["function"]["name"],
-        json!("discovery_expand_tool_domain")
+    assert!(
+        first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("discovery_expand_tool_domain"))
+    );
+    assert!(
+        !first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("fs_write_text")),
+        "workspace tools must remain hidden before domain expansion"
     );
     let first_messages = recorded_requests[0]["messages"]
         .as_array()
@@ -1016,17 +1053,10 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
     assert!(first_messages.iter().any(|message| {
         message["role"] == json!("system")
             && message["content"].as_str().is_some_and(|content| {
-                content.contains("domain_discovery")
-                    && content.contains("discovery_expand_tool_domain")
-                    && (content.contains("Never guess or call a hidden tool")
-                        || content.contains("绝不要猜测工具名"))
+                content.contains("discovery_expand_tool_domain")
+                    && (content.contains("never call hidden tools directly before expanding")
+                        || content.contains("不要在展开领域前直接调用隐藏工具"))
             })
-    }));
-    assert!(first_messages.iter().any(|message| {
-        message["role"] == json!("system")
-            && message["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("\"domainCode\":\"workspace\""))
     }));
 
     let second_tools = recorded_requests[1]["tools"]
@@ -1182,10 +1212,16 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
     let first_tools = recorded_requests[0]["tools"]
         .as_array()
         .expect("first request tools should be an array");
-    assert_eq!(first_tools.len(), 1);
-    assert_eq!(
-        first_tools[0]["function"]["name"],
-        json!("discovery_expand_tool_domain")
+    assert!(
+        first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("discovery_expand_tool_domain"))
+    );
+    assert!(
+        !first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("fs_write_text")),
+        "workspace tools must remain hidden before domain expansion"
     );
 
     let second_tools = recorded_requests[1]["tools"]
@@ -1270,6 +1306,15 @@ Progressive disclosure instructions loaded.\n",
     let app = app_with_config(config);
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    internal_agent_api(&app, &authorization, Method::POST, "/api/v1/agents/loops", Some(json!({"loopCode":"skill-fixture","name":"Skill fixture","kind":"React","nodes":[],"edges":[],"maxParallelNodes":1}))).await;
+    internal_agent_api(
+        &app,
+        &authorization,
+        Method::PATCH,
+        "/api/v1/agents/registry/internal/main-agent/definition",
+        Some(json!({"loopCode":"skill-fixture"})),
+    )
+    .await;
     common::enable_direct_list(&app).await;
 
     let tool_response = request_with_headers(
@@ -1302,12 +1347,9 @@ Progressive disclosure instructions loaded.\n",
 
     let bind_response = request_with_headers(
         &app,
-        Method::POST,
-        "/api/v1/skills/workspaces/TRON_CORE/bindings",
-        Some(json!({
-            "skillName": "progressive-reviewer",
-            "enabled": true
-        })),
+        Method::PUT,
+        "/api/v1/agents/registry/internal/main-agent/skills",
+        Some(json!({"skillNames": ["progressive-reviewer"]})),
         None,
         Some(&authorization),
     )
@@ -1327,8 +1369,8 @@ Progressive disclosure instructions loaded.\n",
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
                 "modelName": "gpt-test",
-                // Direct-list exposes the complete 102-tool schema within the SDK budget.
-                "contextWindowTokens": 65536
+                // Reserve room for the complete catalog and native capability schemas.
+                "contextWindowTokens": 131072
             }
         })),
         None,
@@ -1428,17 +1470,16 @@ async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schem
     let tools = recorded_requests[0]["tools"]
         .as_array()
         .expect("tools should be an array");
-    assert_eq!(tools.len(), 1);
+    let discovery_tool = tools
+        .iter()
+        .find(|tool| tool["function"]["name"] == json!("discovery_expand_tool_domain"))
+        .expect("discovery tool must be exposed");
     assert_eq!(
-        tools[0]["function"]["name"],
-        json!("discovery_expand_tool_domain")
-    );
-    assert_eq!(
-        tools[0]["function"]["description"],
+        discovery_tool["function"]["description"],
         json!("展开一个可见工具领域，加载其中可直接调用的具体工具。")
     );
     assert_eq!(
-        tools[0]["function"]["parameters"]["properties"]["domainCode"]["description"],
+        discovery_tool["function"]["parameters"]["properties"]["domainCode"]["description"],
         json!("需要展开的可见领域编码。")
     );
 
@@ -1448,7 +1489,8 @@ async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schem
     assert!(messages.iter().any(|message| {
         message["role"] == json!("system")
             && message["content"].as_str().is_some_and(|content| {
-                content.contains("当前 tool exposure mode 为 domain_discovery")
+                content.contains("使用可见但尚未展开的领域前")
+                    && content.contains("discovery_expand_tool_domain")
             })
     }));
 }
@@ -1531,7 +1573,10 @@ async fn capability_catalog_exposes_installed_packs_and_extension_implementation
             eliteforge_agent_official_plugin_tools_local::TOOL_IMPLEMENTATION_DESCRIPTION
         )
     );
-    let harness = packs.iter().find(|pack| pack["id"] == "tron.harness").unwrap();
+    let harness = packs
+        .iter()
+        .find(|pack| pack["id"] == "tron.harness")
+        .unwrap();
     assert!(harness["contents"].as_array().unwrap().iter().any(|item| {
         item["kind"] == "Policy"
             && item["description"] == tron_harness_capability::TOOL_IMPLEMENTATION_DESCRIPTION
@@ -2243,6 +2288,7 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
     let app = app_with_config(test_config(&codex_command, &opencode_command));
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    common::enable_direct_list(&app).await;
 
     let create_server = request_with_headers(
         &app,
@@ -2294,7 +2340,8 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
                     "protocol": "CHAT_COMPLETIONS",
                     "baseUrl": run_model_base_url,
                     "apiKey": "sk-test-api",
-                    "modelName": "gpt-test"
+                    "modelName": "gpt-test",
+                    "contextWindowTokens": 131072
                 }
             })),
             None,
@@ -2374,7 +2421,8 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
                 "protocol": "CHAT_COMPLETIONS",
                 "baseUrl": second_model_server.base_url,
                 "apiKey": "sk-test-api",
-                "modelName": "gpt-test"
+                "modelName": "gpt-test",
+                    "contextWindowTokens": 131072
             }
         })),
         None,
@@ -2498,8 +2546,8 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
                 "modelName": "gpt-test",
-                // Direct-list exposes the complete 102-tool schema within the SDK budget.
-                "contextWindowTokens": 65536
+                // Reserve room for the complete catalog and native capability schemas.
+                "contextWindowTokens": 131072
             }
         })),
         None,
@@ -2710,8 +2758,8 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
                 "modelName": "gpt-test",
-                // Direct-list exposes the complete 102-tool schema within the SDK budget.
-                "contextWindowTokens": 65536
+                // Reserve room for the complete catalog and native capability schemas.
+                "contextWindowTokens": 131072
             }
         })),
         None,
@@ -2861,8 +2909,8 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
                 "modelName": "gpt-test",
-                // Direct-list exposes the complete 102-tool schema within the SDK budget.
-                "contextWindowTokens": 65536
+                // Reserve room for the complete catalog and native capability schemas.
+                "contextWindowTokens": 131072
             }
         })),
         None,
@@ -3368,8 +3416,8 @@ async fn concurrent_internal_agent_creation_preserves_the_first_definition() {
         } else {
             "global-race"
         };
-        let first_body = json!({"agentCode":code,"name":"First","rolePrompt":"First role"});
-        let second_body = json!({"agentCode":code,"name":"Second","rolePrompt":"Second role"});
+        let first_body = json!({"agentCode":code,"name":"First","rolePrompt":"First role","loopCode":"test-react"});
+        let second_body = json!({"agentCode":code,"name":"Second","rolePrompt":"Second role","loopCode":"test-react"});
         let (first, second) = tokio::join!(
             request_with_headers(
                 &router,
@@ -3673,7 +3721,14 @@ async fn agent_loop_custom_workflow_runs_all_stages() {
     let router = app();
     let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
     let design = serde_json::json!({"loopCode":"review-three","name":"Review","kind":"Workflow","version":0,"updatedAt":0,"maxParallelNodes":1,"edges":[],"nodes":[{"id":"draft","kind":"Model","instructions":"Draft stage","join":"Selected","condition":null},{"id":"review","kind":"Model","instructions":"Review stage","join":"Selected","condition":null},{"id":"finalize","kind":"Model","instructions":"Finalize stage","join":"Selected","condition":null}]});
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(design)).await;
+    internal_agent_api(
+        &router,
+        &auth,
+        Method::POST,
+        "/api/v1/agents/loops",
+        Some(design),
+    )
+    .await;
     internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"custom-review","name":"Review","rolePrompt":"CUSTOM_ROLE","loopCode":"review-three"}))).await;
     let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
         "prompt":"Draft a proposal.","workspaceCode":"TRON_CORE","agentCode":"custom-review",
@@ -3708,8 +3763,11 @@ async fn agent_loop_custom_workflow_runs_all_stages() {
 
 #[tokio::test]
 async fn agent_loop_custom_analysis_joins_roots_and_selects_each_exit() {
-    let app_config = AppConfig { database_url: temp_database_url("custom-analysis-loop"), ..AppConfig::default() };
     for approved in [true, false] {
+        let app_config = AppConfig {
+            database_url: temp_database_url("custom-analysis-loop"),
+            ..AppConfig::default()
+        };
         let response = |content: String| json!({"choices":[{"message":{"role":"assistant","content":content}}]});
         let design = serde_json::json!({"loopCode":"analysis-dag","name":"Analysis","kind":"Dag","version":0,"updatedAt":0,"maxParallelNodes":2,"nodes":[{"id":"solution","kind":"Model","instructions":"Solution analysis","join":"Selected","condition":null},{"id":"risks","kind":"Model","instructions":"Risk analysis","join":"Selected","condition":null},{"id":"decision","kind":"Model","instructions":"Decision stage","join":"All","condition":null},{"id":"route","kind":"Branch","instructions":"","join":"Selected","condition":{"sourceNode":"decision","pointer":"/approved","equals":true,"matchTarget":"action","elseTarget":"clarify"}},{"id":"action","kind":"Model","instructions":"Action stage","join":"All","condition":null},{"id":"clarify","kind":"Model","instructions":"Clarification stage","join":"All","condition":null}],"edges":[{"from":"solution","to":"decision"},{"from":"risks","to":"decision"},{"from":"decision","to":"route"},{"from":"route","to":"action"},{"from":"route","to":"clarify"},{"from":"decision","to":"action"},{"from":"decision","to":"clarify"}]});
         let server = scripted_model_server(vec![
@@ -3721,7 +3779,14 @@ async fn agent_loop_custom_analysis_joins_roots_and_selects_each_exit() {
         .await;
         let router = app_with_config(app_config.clone());
         let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-        internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(design.clone())).await;
+        internal_agent_api(
+            &router,
+            &auth,
+            Method::POST,
+            "/api/v1/agents/loops",
+            Some(design.clone()),
+        )
+        .await;
         internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"custom-analysis","name":"Analysis","rolePrompt":"CUSTOM_ROLE","loopCode":"analysis-dag"}))).await;
         let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
             "prompt":"Review a proposal.","workspaceCode":"TRON_CORE","agentCode":"custom-analysis",
@@ -3917,9 +3982,12 @@ async fn internal_agent_group_api_persists_catalog_and_guards_builtin_definition
         )
         .await;
         assert_eq!(created["name"], "Engineering");
-        assert_eq!(
-            internal_agent_api(&router, &auth, Method::GET, &endpoint, None).await,
-            json!(["Engineering"])
+        assert!(
+            internal_agent_api(&router, &auth, Method::GET, &endpoint, None)
+                .await
+                .as_array()
+                .unwrap()
+                .contains(&json!("Engineering"))
         );
         let definition = format!("/api/v1/agents/{scope}/internal/main-agent/definition");
         for body in [
@@ -3928,6 +3996,7 @@ async fn internal_agent_group_api_persists_catalog_and_guards_builtin_definition
             json!({"avatarId":"fox"}),
             json!({"loopCode":"missing-loop"}),
         ] {
+            let missing_loop = body.get("loopCode").is_some();
             let denied = request_with_locale(
                 &router,
                 Method::PATCH,
@@ -3937,10 +4006,21 @@ async fn internal_agent_group_api_persists_catalog_and_guards_builtin_definition
                 "en-US",
             )
             .await;
-            assert_eq!(denied.status(), StatusCode::FORBIDDEN);
-            let denied = response_json(denied).await;
-            assert_eq!(denied["code"], "101028017");
-            assert!(denied["data"].is_object());
+            if scope == "registry" {
+                assert_eq!(
+                    denied.status(),
+                    if missing_loop {
+                        StatusCode::NOT_FOUND
+                    } else {
+                        StatusCode::OK
+                    }
+                );
+            } else {
+                assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+                let denied = response_json(denied).await;
+                assert_eq!(denied["code"], "101028017");
+                assert!(denied["data"].is_object());
+            }
         }
     }
     let created = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/registry/internal", Some(json!({"agentCode":"group-api","name":"Group API","rolePrompt":"","groupName":"Engineering"}))).await;

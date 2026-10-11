@@ -133,16 +133,45 @@ pub async fn list_tool_domains(
 }
 
 pub async fn list_tools(
+    State(state): State<AppState>,
     State(agent_management): State<AgentManagementService>,
     auth: RequestAuthContext,
     Query(query): Query<ListToolsQuery>,
 ) -> Response {
+    if let Err(error) = state.agent_framework.ensure_capability_catalog().await {
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse::error("CAPABILITY_CATALOG_FAILED", error)),
+        )
+            .into_response();
+    }
     let tools = agent_management.list_tools(
         query.domain_code.as_deref(),
         query.search.as_deref(),
         &auth.locale,
     );
-    Json(ApiResponse::success(tools)).into_response()
+    Json(ApiResponse::success(
+        tools
+            .into_iter()
+            .map(|tool| {
+                let owner = agent_management.capability_resource("tool", &tool.tool_code);
+                ToolAssignmentVo {
+                    provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
+                    assignable: tool.availability_state
+                        == crate::domain::agent::ToolAvailabilityState::Available,
+                    disabled_reason: owner.filter(|o| !o.available).map(|o| {
+                        if auth.locale.starts_with("zh") {
+                            format!("能力包 {} 已禁用", o.pack_id)
+                        } else {
+                            format!("Capability pack {} is disabled", o.pack_id)
+                        }
+                    }),
+                    tool,
+                }
+            })
+            .collect::<Vec<_>>(),
+    ))
+    .into_response()
 }
 
 pub async fn get_tool(
@@ -561,4 +590,14 @@ pub async fn list_agui_stream_protocol_events(
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_agui_error_response(error, &auth.locale),
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolAssignmentVo {
+    #[serde(flatten)]
+    tool: crate::domain::agent::ToolCatalogRecord,
+    provider_pack_id: Option<String>,
+    assignable: bool,
+    disabled_reason: Option<String>,
 }

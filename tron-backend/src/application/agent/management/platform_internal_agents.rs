@@ -191,6 +191,7 @@ impl AgentManagementService {
         code: &str,
         tools: Vec<String>,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        let _capability_guard = self.capabilities.get().map(|c| c.assignment_guard());
         // Dynamic catalog lookups also lock the repository. Validate before the
         // config mutation acquires its guard, and reject the whole selection on error.
         let tools = normalize_string_codes(tools);
@@ -215,6 +216,14 @@ impl AgentManagementService {
         code: &str,
         servers: Vec<String>,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        let _capability_guard = self.capabilities.get().map(|c| c.assignment_guard());
+        for server in &servers {
+            if !self.mcp_assignable(server) {
+                return Err(AgentManagementError::InternalMcpServerAssignmentStale(
+                    server.clone(),
+                ));
+            }
+        }
         self.change_platform_internal_agent(code, |config| {
             config.selected_server_codes = normalize_string_codes(servers);
             Ok(())

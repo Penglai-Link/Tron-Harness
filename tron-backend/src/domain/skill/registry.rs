@@ -10,6 +10,7 @@ pub enum SkillSourceType {
     Url,
     Local,
     Manual,
+    BuiltIn,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,20 +26,7 @@ pub enum SkillUpdateStatus {
 pub enum SkillManagedBy {
     Cli,
     Manual,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SkillWorkspaceSourceKind {
-    Registry,
-    Local,
-    Inherited,
-    Override,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SkillRegistryState {
-    Present,
-    Deleted,
+    BuiltIn,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +50,8 @@ pub enum SkillSearchMode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegistrySkill {
     pub skill_name: String,
+    pub provider_pack_id: Option<String>,
+    pub available: bool,
     pub source_ref: String,
     pub source_type: SkillSourceType,
     pub registry_path: String,
@@ -76,17 +66,14 @@ pub struct RegistrySkill {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkspaceSkillBinding {
-    pub workspace_code: String,
+pub struct AgentSkillAssignment {
+    pub agent_code: String,
     pub skill_name: String,
     pub enabled: bool,
-    pub created_at: String,
-    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkillRagIndexRecord {
-    pub workspace_code: String,
     pub skill_name: String,
     pub source_version: String,
     pub desired_enabled: bool,
@@ -158,6 +145,8 @@ fn split_rag_index_warnings(message: &str) -> Vec<String> {
 #[serde(rename_all = "camelCase")]
 pub struct RegistrySkillListItem {
     pub skill_name: String,
+    pub provider_pack_id: Option<String>,
+    pub available: bool,
     pub source_ref: String,
     pub description: Option<String>,
     pub source_type: SkillSourceType,
@@ -168,16 +157,9 @@ pub struct RegistrySkillListItem {
     pub last_checked_at: Option<String>,
     pub last_updated_at: Option<String>,
     pub last_error: Option<String>,
-    pub enabled: bool,
-    pub source_kind: SkillWorkspaceSourceKind,
-    pub source_workspace_code: Option<String>,
-    pub source_workspace_name: Option<String>,
-    pub source_label: Option<String>,
-    pub shadowed_workspace_code: Option<String>,
-    pub shadowed_workspace_name: Option<String>,
-    pub shadowed_label: Option<String>,
-    pub shadowed_enabled: Option<bool>,
-    pub enabled_workspace_count: usize,
+    pub assigned_agent_count: usize,
+    pub assigned: bool,
+    pub disabled_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -191,6 +173,8 @@ pub struct RegistrySkillFile {
 #[serde(rename_all = "camelCase")]
 pub struct RegistrySkillDetail {
     pub skill_name: String,
+    pub provider_pack_id: Option<String>,
+    pub available: bool,
     pub source_ref: String,
     pub source_type: SkillSourceType,
     pub registry_path: String,
@@ -202,70 +186,8 @@ pub struct RegistrySkillDetail {
     pub last_error: Option<String>,
     pub skill_markdown: String,
     pub files: Vec<RegistrySkillFile>,
-    pub enabled: bool,
-    pub source_kind: SkillWorkspaceSourceKind,
-    pub source_workspace_code: Option<String>,
-    pub source_workspace_name: Option<String>,
-    pub source_label: Option<String>,
-    pub shadowed_workspace_code: Option<String>,
-    pub shadowed_workspace_name: Option<String>,
-    pub shadowed_label: Option<String>,
-    pub shadowed_enabled: Option<bool>,
-    pub enabled_workspace_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceSkillListItem {
-    pub skill_name: String,
-    pub source_ref: Option<String>,
-    pub source_type: Option<SkillSourceType>,
-    pub registry_path: Option<String>,
-    pub declared_version: Option<String>,
-    pub update_status: Option<SkillUpdateStatus>,
-    pub managed_by: Option<SkillManagedBy>,
-    pub last_checked_at: Option<String>,
-    pub last_updated_at: Option<String>,
-    pub last_error: Option<String>,
-    pub enabled: bool,
-    pub source_kind: SkillWorkspaceSourceKind,
-    pub source_workspace_code: Option<String>,
-    pub source_workspace_name: Option<String>,
-    pub source_label: Option<String>,
-    pub shadowed_workspace_code: Option<String>,
-    pub shadowed_workspace_name: Option<String>,
-    pub shadowed_label: Option<String>,
-    pub shadowed_enabled: Option<bool>,
-    pub registry_state: SkillRegistryState,
-    pub rag_index: Option<SkillRagIndexSummary>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceSkillDetail {
-    pub skill_name: String,
-    pub source_ref: Option<String>,
-    pub source_type: Option<SkillSourceType>,
-    pub registry_path: Option<String>,
-    pub declared_version: Option<String>,
-    pub update_status: Option<SkillUpdateStatus>,
-    pub managed_by: Option<SkillManagedBy>,
-    pub last_checked_at: Option<String>,
-    pub last_updated_at: Option<String>,
-    pub last_error: Option<String>,
-    pub skill_markdown: Option<String>,
-    pub files: Vec<RegistrySkillFile>,
-    pub enabled: bool,
-    pub source_kind: SkillWorkspaceSourceKind,
-    pub source_workspace_code: Option<String>,
-    pub source_workspace_name: Option<String>,
-    pub source_label: Option<String>,
-    pub shadowed_workspace_code: Option<String>,
-    pub shadowed_workspace_name: Option<String>,
-    pub shadowed_label: Option<String>,
-    pub shadowed_enabled: Option<bool>,
-    pub registry_state: SkillRegistryState,
-    pub rag_index: Option<SkillRagIndexSummary>,
+    pub assigned_agent_count: usize,
+    pub disabled_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -283,8 +205,6 @@ pub struct SkillSearchCandidate {
 #[serde(rename_all = "camelCase")]
 pub struct SkillRegistryMutationResult {
     pub skill_name: String,
-    pub workspace_code: Option<String>,
-    pub enabled: bool,
     pub rag_index: Option<SkillRagIndexSummary>,
 }
 
@@ -292,18 +212,8 @@ pub struct SkillRegistryMutationResult {
 #[serde(rename_all = "camelCase")]
 pub struct SkillRegistryUninstallResult {
     pub skill_name: String,
-    pub removed_bindings_count: usize,
-    pub kept_bindings_count: usize,
+    pub removed_assignments_count: usize,
     pub rag_index: Option<SkillRagIndexBatchSummary>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillBindingMutationResult {
-    pub workspace_code: String,
-    pub skill_name: String,
-    pub enabled: bool,
-    pub rag_index: Option<SkillRagIndexSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -317,32 +227,9 @@ pub struct SkillRegistrySyncResult {
     pub rag_index: Option<SkillRagIndexBatchSummary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PreparedWorkspaceSkill {
-    pub skill_name: String,
-    pub source_path: String,
-    pub target_path: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PreparedWorkspaceSkills {
-    pub workspace_code: String,
-    pub worktree_path: String,
-    pub skills: Vec<PreparedWorkspaceSkill>,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistrySkillListQuery {
-    pub workspace_code: Option<String>,
-    pub search: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceSkillListQuery {
     pub search: Option<String>,
 }
 
@@ -351,10 +238,10 @@ pub enum SkillError {
     SearchQueryRequired,
     SourceRefRequired,
     SkillNameRequired,
-    WorkspaceRequired,
-    InvalidWorkspace,
+    InvalidAgent,
+    Unavailable,
     NotFound,
-    DuplicateBinding,
+    DuplicateSkill,
     InvalidRegistryPath,
     StorageFailure,
     CommandFailed,
@@ -366,13 +253,11 @@ impl fmt::Display for SkillError {
             Self::SearchQueryRequired => formatter.write_str("search query is required"),
             Self::SourceRefRequired => formatter.write_str("sourceRef is required"),
             Self::SkillNameRequired => formatter.write_str("skillName is required"),
-            Self::WorkspaceRequired => formatter.write_str("workspaceCode is required"),
-            Self::InvalidWorkspace => {
-                formatter.write_str("skill workspace must reference an active workspace")
-            }
+            Self::InvalidAgent => formatter.write_str("internal agent was not found"),
+            Self::Unavailable => formatter.write_str("skill is unavailable"),
             Self::NotFound => formatter.write_str("skill was not found"),
-            Self::DuplicateBinding => {
-                formatter.write_str("skill binding already exists in the workspace")
+            Self::DuplicateSkill => {
+                formatter.write_str("skill name conflicts with an installed skill")
             }
             Self::InvalidRegistryPath => formatter.write_str("invalid skill registry path"),
             Self::StorageFailure => formatter.write_str("skill storage failure"),

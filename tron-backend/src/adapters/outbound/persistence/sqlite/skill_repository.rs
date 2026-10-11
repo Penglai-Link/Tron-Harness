@@ -1,11 +1,10 @@
-
 use rusqlite::{Connection, params};
 
 use crate::{
     application::skill::SkillRegistryRepository,
     domain::skill::{
-        RegistrySkill, SkillError, SkillManagedBy, SkillRagIndexRecord, SkillRagIndexStatus,
-        SkillSourceType, SkillUpdateStatus, WorkspaceSkillBinding,
+        AgentSkillAssignment, RegistrySkill, SkillError, SkillManagedBy, SkillRagIndexRecord,
+        SkillRagIndexStatus, SkillSourceType, SkillUpdateStatus,
     },
     shared::time::{
         option_timestamp_from_millis, option_timestamp_to_millis, timestamp_from_millis,
@@ -29,7 +28,6 @@ impl<'a> SqliteSkillRegistryRepositorySql<'a> {
             .map_err(storage_error)?;
         Ok(Self { connection })
     }
-
 }
 
 impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
@@ -39,7 +37,7 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
             .prepare(
                 "SELECT skill_name, source_ref, source_type, registry_path, declared_version, compatibility,
                         update_status, managed_by, last_checked_at, last_updated_at, last_error,
-                        created_at, updated_at
+                        created_at, updated_at, provider_pack_id, available
                  FROM registry_skills
                  ORDER BY skill_name ASC",
             )
@@ -47,6 +45,8 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
         statement
             .query_map([], |row| {
                 Ok(RegistrySkill {
+                    provider_pack_id: row.get(13)?,
+                    available: row.get(14)?,
                     skill_name: row.get(0)?,
                     source_ref: row.get(1)?,
                     source_type: source_type_from_storage(&row.get::<_, String>(2)?)?,
@@ -72,9 +72,11 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
                 "INSERT INTO registry_skills (
                     skill_name, source_ref, source_type, registry_path, declared_version,
                     compatibility, update_status, managed_by, last_checked_at, last_updated_at,
-                    last_error, created_at, updated_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                    last_error, created_at, updated_at, provider_pack_id, available
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                  ON CONFLICT(skill_name) DO UPDATE SET
+                    provider_pack_id = excluded.provider_pack_id,
+                    available = excluded.available,
                     source_ref = excluded.source_ref,
                     source_type = excluded.source_type,
                     registry_path = excluded.registry_path,
@@ -100,6 +102,8 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
                     skill.last_error,
                     timestamp_to_millis(&skill.created_at),
                     timestamp_to_millis(&skill.updated_at),
+                    skill.provider_pack_id,
+                    skill.available,
                 ],
             )
             .map_err(storage_error)?;
@@ -117,167 +121,136 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
         Ok(deleted_rows > 0)
     }
 
-    fn list_workspace_bindings(
-        &mut self,
-        workspace_code: Option<&str>,
-    ) -> Result<Vec<WorkspaceSkillBinding>, SkillError> {
-        let sql = if workspace_code.is_some() {
-            "SELECT workspace_code, skill_name, enabled, created_at, updated_at
-             FROM workspace_skill_bindings
-             WHERE workspace_code = ?1
-             ORDER BY skill_name ASC"
-        } else {
-            "SELECT workspace_code, skill_name, enabled, created_at, updated_at
-             FROM workspace_skill_bindings
-             ORDER BY workspace_code ASC, skill_name ASC"
-        };
-        let mut statement = self.connection.prepare(sql).map_err(storage_error)?;
-        if let Some(workspace_code) = workspace_code {
-            statement
-                .query_map(params![workspace_code], |row| {
-                    Ok(WorkspaceSkillBinding {
-                        workspace_code: row.get(0)?,
-                        skill_name: row.get(1)?,
-                        enabled: row.get::<_, i64>(2)? != 0,
-                        created_at: timestamp_from_millis(row.get(3)?),
-                        updated_at: timestamp_from_millis(row.get(4)?),
-                    })
-                })
-                .map_err(storage_error)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(storage_error)
-        } else {
-            statement
-                .query_map([], |row| {
-                    Ok(WorkspaceSkillBinding {
-                        workspace_code: row.get(0)?,
-                        skill_name: row.get(1)?,
-                        enabled: row.get::<_, i64>(2)? != 0,
-                        created_at: timestamp_from_millis(row.get(3)?),
-                        updated_at: timestamp_from_millis(row.get(4)?),
-                    })
-                })
-                .map_err(storage_error)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(storage_error)
-        }
-    }
-
-    fn upsert_workspace_binding(
-        &mut self,
-        binding: &WorkspaceSkillBinding,
-    ) -> Result<(), SkillError> {
-        self.connection
-            .execute(
-                "INSERT INTO workspace_skill_bindings (
-                    workspace_code, skill_name, enabled, created_at, updated_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT(workspace_code, skill_name) DO UPDATE SET
-                    enabled = excluded.enabled,
-                    updated_at = excluded.updated_at",
-                params![
-                    binding.workspace_code,
-                    binding.skill_name,
-                    if binding.enabled { 1_i64 } else { 0_i64 },
-                    timestamp_to_millis(&binding.created_at),
-                    timestamp_to_millis(&binding.updated_at),
-                ],
-            )
-            .map_err(storage_error)?;
-        Ok(())
-    }
-
-    fn delete_workspace_binding(
-        &mut self,
-        workspace_code: &str,
-        skill_name: &str,
-    ) -> Result<bool, SkillError> {
-        let deleted_rows = self
+    fn list_assignments(&mut self) -> Result<Vec<AgentSkillAssignment>, SkillError> {
+        let mut q = self
             .connection
-            .execute(
-                "DELETE FROM workspace_skill_bindings
-                 WHERE workspace_code = ?1 AND skill_name = ?2",
-                params![workspace_code, skill_name],
-            )
+            .prepare("SELECT agent_code,skill_name,enabled FROM agent_skill_assignments")
             .map_err(storage_error)?;
-        Ok(deleted_rows > 0)
+        q.query_map([], |r| {
+            Ok(AgentSkillAssignment {
+                agent_code: r.get(0)?,
+                skill_name: r.get(1)?,
+                enabled: r.get(2)?,
+            })
+        })
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)
     }
-
-    fn delete_bindings_for_skill(&mut self, skill_name: &str) -> Result<(), SkillError> {
-        self.connection
-            .execute(
-                "DELETE FROM workspace_skill_bindings WHERE skill_name = ?1",
-                params![skill_name],
+    fn replace_agent_skills(&mut self, agent: &str, names: &[String]) -> Result<(), SkillError> {
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        // Disabled rows are tombstones: scans must never restore a user's deselection.
+        tx.execute("INSERT OR IGNORE INTO agent_skill_assignments SELECT ?1,skill_name,0 FROM registry_skills",[agent]).map_err(storage_error)?;
+        tx.execute(
+            "UPDATE agent_skill_assignments SET enabled=0 WHERE agent_code=?1",
+            [agent],
+        )
+        .map_err(storage_error)?;
+        for name in names {
+            let available: bool = tx
+                .query_row(
+                    "SELECT available FROM registry_skills WHERE skill_name=?1",
+                    [name],
+                    |r| r.get(0),
+                )
+                .map_err(|_| SkillError::Unavailable)?;
+            if !available {
+                return Err(SkillError::Unavailable);
+            }
+            tx.execute("INSERT INTO agent_skill_assignments VALUES(?1,?2,1) ON CONFLICT(agent_code,skill_name) DO UPDATE SET enabled=1",params![agent,name]).map_err(storage_error)?;
+        }
+        tx.commit().map_err(storage_error)
+    }
+    fn replace_skill_agents(&mut self, name: &str, agents: &[String]) -> Result<(), SkillError> {
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        let available: bool = tx
+            .query_row(
+                "SELECT available FROM registry_skills WHERE skill_name=?1",
+                [name],
+                |r| r.get(0),
             )
-            .map_err(storage_error)?;
+            .map_err(|_| SkillError::NotFound)?;
+        if !available && !agents.is_empty() {
+            return Err(SkillError::Unavailable);
+        }
+        tx.execute(
+            "UPDATE agent_skill_assignments SET enabled=0 WHERE skill_name=?1",
+            [name],
+        )
+        .map_err(storage_error)?;
+        for agent in agents {
+            tx.execute("INSERT INTO agent_skill_assignments VALUES(?1,?2,1) ON CONFLICT(agent_code,skill_name) DO UPDATE SET enabled=1",params![agent,name]).map_err(storage_error)?;
+        }
+        tx.commit().map_err(storage_error)
+    }
+    fn initialize_agent_skills(&mut self, agent: &str) -> Result<(), SkillError> {
+        self.connection.execute("INSERT OR IGNORE INTO agent_skill_assignments SELECT ?1,skill_name,available FROM registry_skills WHERE provider_pack_id IS NOT NULL",[agent]).map_err(storage_error)?;
         Ok(())
+    }
+    fn delete_pack_skills(&mut self, pack: &str) -> Result<Vec<String>, SkillError> {
+        let names = self
+            .list_registry_skills()?
+            .into_iter()
+            .filter(|s| s.provider_pack_id.as_deref() == Some(pack))
+            .map(|s| s.skill_name)
+            .collect::<Vec<_>>();
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        tx.execute(
+            "DELETE FROM registry_skills WHERE provider_pack_id=?1",
+            [pack],
+        )
+        .map_err(storage_error)?;
+        tx.commit().map_err(storage_error)?;
+        Ok(names)
     }
 
     fn get_rag_index_state(
         &mut self,
-        workspace_code: &str,
         skill_name: &str,
     ) -> Result<Option<SkillRagIndexRecord>, SkillError> {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT workspace_code, skill_name, source_version, desired_enabled,
+                "SELECT skill_name, source_version, desired_enabled,
                         vector_status, graph_status, content_hash, structure_hash,
                         last_indexed_at, last_error, updated_at
                  FROM skill_rag_index_states
-                 WHERE workspace_code = ?1 AND skill_name = ?2",
+                 WHERE skill_name = ?1",
             )
             .map_err(storage_error)?;
-        match statement.query_row(params![workspace_code, skill_name], map_rag_index_state_row) {
+        match statement.query_row(params![skill_name], map_rag_index_state_row) {
             Ok(state) => Ok(Some(state)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(error) => Err(storage_error(error)),
         }
     }
 
-    fn list_rag_index_states(
-        &mut self,
-        workspace_code: Option<&str>,
-    ) -> Result<Vec<SkillRagIndexRecord>, SkillError> {
-        let sql = if workspace_code.is_some() {
-            "SELECT workspace_code, skill_name, source_version, desired_enabled,
-                    vector_status, graph_status, content_hash, structure_hash,
-                    last_indexed_at, last_error, updated_at
-             FROM skill_rag_index_states
-             WHERE workspace_code = ?1
-             ORDER BY skill_name ASC"
-        } else {
-            "SELECT workspace_code, skill_name, source_version, desired_enabled,
-                    vector_status, graph_status, content_hash, structure_hash,
-                    last_indexed_at, last_error, updated_at
-             FROM skill_rag_index_states
-             ORDER BY workspace_code ASC, skill_name ASC"
-        };
-        let mut statement = self.connection.prepare(sql).map_err(storage_error)?;
-        if let Some(workspace_code) = workspace_code {
-            statement
-                .query_map(params![workspace_code], map_rag_index_state_row)
-                .map_err(storage_error)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(storage_error)
-        } else {
-            statement
-                .query_map([], map_rag_index_state_row)
-                .map_err(storage_error)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(storage_error)
-        }
+    fn list_rag_index_states(&mut self) -> Result<Vec<SkillRagIndexRecord>, SkillError> {
+        let mut q = self.connection.prepare("SELECT skill_name,source_version,desired_enabled,vector_status,graph_status,content_hash,structure_hash,last_indexed_at,last_error,updated_at FROM skill_rag_index_states ORDER BY skill_name").map_err(storage_error)?;
+        q.query_map([], map_rag_index_state_row)
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
     }
 
+    fn delete_rag_index_state(&mut self, name: &str) -> Result<(), SkillError> {
+        self.connection
+            .execute(
+                "DELETE FROM skill_rag_index_states WHERE skill_name=?1",
+                [name],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
     fn upsert_rag_index_state(&mut self, state: &SkillRagIndexRecord) -> Result<(), SkillError> {
         self.connection
             .execute(
                 "INSERT INTO skill_rag_index_states (
-                    workspace_code, skill_name, source_version, desired_enabled,
+                    skill_name, source_version, desired_enabled,
                     vector_status, graph_status, content_hash, structure_hash,
                     last_indexed_at, last_error, updated_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                 ON CONFLICT(workspace_code, skill_name) DO UPDATE SET
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ON CONFLICT(skill_name) DO UPDATE SET
                     source_version = excluded.source_version,
                     desired_enabled = excluded.desired_enabled,
                     vector_status = excluded.vector_status,
@@ -288,7 +261,6 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
                     last_error = excluded.last_error,
                     updated_at = excluded.updated_at",
                 params![
-                    state.workspace_code,
                     state.skill_name,
                     state.source_version,
                     if state.desired_enabled { 1_i64 } else { 0_i64 },
@@ -308,17 +280,16 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
 
 fn map_rag_index_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SkillRagIndexRecord> {
     Ok(SkillRagIndexRecord {
-        workspace_code: row.get(0)?,
-        skill_name: row.get(1)?,
-        source_version: row.get(2)?,
-        desired_enabled: row.get::<_, i64>(3)? != 0,
-        vector_status: rag_status_from_storage(&row.get::<_, String>(4)?)?,
-        graph_status: rag_status_from_storage(&row.get::<_, String>(5)?)?,
-        content_hash: row.get(6)?,
-        structure_hash: row.get(7)?,
-        last_indexed_at: option_timestamp_from_millis(row.get(8)?),
-        last_error: row.get(9)?,
-        updated_at: timestamp_from_millis(row.get(10)?),
+        skill_name: row.get(0)?,
+        source_version: row.get(1)?,
+        desired_enabled: row.get::<_, i64>(2)? != 0,
+        vector_status: rag_status_from_storage(&row.get::<_, String>(3)?)?,
+        graph_status: rag_status_from_storage(&row.get::<_, String>(4)?)?,
+        content_hash: row.get(5)?,
+        structure_hash: row.get(6)?,
+        last_indexed_at: option_timestamp_from_millis(row.get(7)?),
+        last_error: row.get(8)?,
+        updated_at: timestamp_from_millis(row.get(9)?),
     })
 }
 
@@ -330,6 +301,7 @@ fn source_type_to_storage(value: SkillSourceType) -> &'static str {
         SkillSourceType::Url => "Url",
         SkillSourceType::Local => "Local",
         SkillSourceType::Manual => "Manual",
+        SkillSourceType::BuiltIn => "BuiltIn",
     }
 }
 
@@ -341,6 +313,7 @@ fn source_type_from_storage(value: &str) -> Result<SkillSourceType, rusqlite::Er
         "Url" => Ok(SkillSourceType::Url),
         "Local" => Ok(SkillSourceType::Local),
         "Manual" => Ok(SkillSourceType::Manual),
+        "BuiltIn" => Ok(SkillSourceType::BuiltIn),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -393,6 +366,7 @@ fn managed_by_to_storage(value: SkillManagedBy) -> &'static str {
     match value {
         SkillManagedBy::Cli => "Cli",
         SkillManagedBy::Manual => "Manual",
+        SkillManagedBy::BuiltIn => "BuiltIn",
     }
 }
 
@@ -400,6 +374,7 @@ fn managed_by_from_storage(value: &str) -> Result<SkillManagedBy, rusqlite::Erro
     match value {
         "Cli" => Ok(SkillManagedBy::Cli),
         "Manual" => Ok(SkillManagedBy::Manual),
+        "BuiltIn" => Ok(SkillManagedBy::BuiltIn),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -427,7 +402,7 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
             move |connection| {
                 SqliteSkillRegistryRepositorySql { connection }.list_registry_skills()
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
         )
     }
     fn upsert_registry_skill(&mut self, skill: &RegistrySkill) -> Result<(), SkillError> {
@@ -436,7 +411,7 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
             move |connection| {
                 SqliteSkillRegistryRepositorySql { connection }.upsert_registry_skill(&skill)
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
         )
     }
     fn delete_registry_skill(&mut self, skill_name: &str) -> Result<bool, SkillError> {
@@ -445,85 +420,80 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
             move |connection| {
                 SqliteSkillRegistryRepositorySql { connection }.delete_registry_skill(&skill_name)
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
         )
     }
-    fn list_workspace_bindings(
-        &mut self,
-        workspace_code: Option<&str>,
-    ) -> Result<Vec<WorkspaceSkillBinding>, SkillError> {
-        let workspace_code = workspace_code.map(ToOwned::to_owned);
+    fn list_assignments(&mut self) -> Result<Vec<AgentSkillAssignment>, SkillError> {
         self.connection.call(
-            move |connection| {
-                SqliteSkillRegistryRepositorySql { connection }
-                    .list_workspace_bindings(workspace_code.as_deref())
-            },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            move |connection| SqliteSkillRegistryRepositorySql { connection }.list_assignments(),
+            || SkillError::StorageFailure,
         )
     }
-    fn upsert_workspace_binding(
-        &mut self,
-        binding: &WorkspaceSkillBinding,
-    ) -> Result<(), SkillError> {
-        let binding = binding.to_owned();
+    fn replace_agent_skills(&mut self, agent: &str, names: &[String]) -> Result<(), SkillError> {
+        let agent = agent.to_owned();
+        let names = names.to_owned();
         self.connection.call(
             move |connection| {
-                SqliteSkillRegistryRepositorySql { connection }.upsert_workspace_binding(&binding)
+                SqliteSkillRegistryRepositorySql { connection }.replace_agent_skills(&agent, &names)
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
         )
     }
-    fn delete_workspace_binding(
-        &mut self,
-        workspace_code: &str,
-        skill_name: &str,
-    ) -> Result<bool, SkillError> {
-        let workspace_code = workspace_code.to_owned();
-        let skill_name = skill_name.to_owned();
+    fn replace_skill_agents(&mut self, name: &str, agents: &[String]) -> Result<(), SkillError> {
+        let name = name.to_owned();
+        let agents = agents.to_owned();
         self.connection.call(
             move |connection| {
-                SqliteSkillRegistryRepositorySql { connection }
-                    .delete_workspace_binding(&workspace_code, &skill_name)
+                SqliteSkillRegistryRepositorySql { connection }.replace_skill_agents(&name, &agents)
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
         )
     }
-    fn delete_bindings_for_skill(&mut self, skill_name: &str) -> Result<(), SkillError> {
-        let skill_name = skill_name.to_owned();
+    fn initialize_agent_skills(&mut self, agent: &str) -> Result<(), SkillError> {
+        let agent = agent.to_owned();
         self.connection.call(
             move |connection| {
-                SqliteSkillRegistryRepositorySql { connection }
-                    .delete_bindings_for_skill(&skill_name)
+                SqliteSkillRegistryRepositorySql { connection }.initialize_agent_skills(&agent)
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
+        )
+    }
+    fn delete_pack_skills(&mut self, pack: &str) -> Result<Vec<String>, SkillError> {
+        let pack = pack.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }.delete_pack_skills(&pack)
+            },
+            || SkillError::StorageFailure,
         )
     }
     fn get_rag_index_state(
         &mut self,
-        workspace_code: &str,
         skill_name: &str,
     ) -> Result<Option<SkillRagIndexRecord>, SkillError> {
-        let workspace_code = workspace_code.to_owned();
         let skill_name = skill_name.to_owned();
         self.connection.call(
             move |connection| {
-                SqliteSkillRegistryRepositorySql { connection }
-                    .get_rag_index_state(&workspace_code, &skill_name)
+                SqliteSkillRegistryRepositorySql { connection }.get_rag_index_state(&skill_name)
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
         )
     }
-    fn list_rag_index_states(
-        &mut self,
-        workspace_code: Option<&str>,
-    ) -> Result<Vec<SkillRagIndexRecord>, SkillError> {
-        let workspace_code = workspace_code.map(ToOwned::to_owned);
+    fn list_rag_index_states(&mut self) -> Result<Vec<SkillRagIndexRecord>, SkillError> {
         self.connection.call(
             move |connection| {
-                SqliteSkillRegistryRepositorySql { connection }
-                    .list_rag_index_states(workspace_code.as_deref())
+                SqliteSkillRegistryRepositorySql { connection }.list_rag_index_states()
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
+        )
+    }
+    fn delete_rag_index_state(&mut self, name: &str) -> Result<(), SkillError> {
+        let name = name.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteSkillRegistryRepositorySql { connection }.delete_rag_index_state(&name)
+            },
+            || SkillError::StorageFailure,
         )
     }
     fn upsert_rag_index_state(&mut self, state: &SkillRagIndexRecord) -> Result<(), SkillError> {
@@ -532,7 +502,7 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
             move |connection| {
                 SqliteSkillRegistryRepositorySql { connection }.upsert_rag_index_state(&state)
             },
-            || storage_error(rusqlite::Error::InvalidQuery),
+            || SkillError::StorageFailure,
         )
     }
 }
