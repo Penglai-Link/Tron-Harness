@@ -203,7 +203,7 @@ impl Runtime {
             .map_err(failure)?;
         let harness = harness.framework_with_model_router(router);
         let mut command: AgentInvocationCommand = serde_json::from_value(serde_json::json!({
-            "prompt": preparation_prompt, "workspaceCode": base.workspace_code,
+            "prompt": preparation_prompt, "workspaceCode": base.workspace_code, "conversationCode": session,
             "agentCode": code, "model": model,
         }))
         .map_err(failure)?;
@@ -233,11 +233,16 @@ impl Runtime {
             Some(&context.run_code),
         );
         context.auto_model_route = Some(route);
-        context.messages.pop();
-        context.messages.push(
+        let current_input =
             super::super::messages::decode(&fw::Message::user(request.input.clone()))
-                .map_err(failure)?,
-        );
+                .map_err(failure)?;
+        if let Some(memory) = &mut context.short_term_memory {
+            memory.current_input_message =
+                (!request.input.text().is_empty()).then_some(current_input);
+        } else {
+            context.messages.pop();
+            context.messages.push(current_input);
+        }
         authorize_tools(&host, context);
         let agent = host.internal_agent(&context.workspace_code, &code).await?;
         request.session_id = session.clone();
