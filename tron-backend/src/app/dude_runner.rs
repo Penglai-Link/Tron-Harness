@@ -188,7 +188,7 @@ impl DudeExecutor for PlatformDudeExecutor {
         let (model, route) = router
             .resolve_initial("", &session.session_code, &event.dude_code, None)
             .map_err(DudeError::Runtime)?;
-        let prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
+        let mut prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
         if event.source != DudeEventSource::UserMessage {
             prompt.push_str(&format!("\n事件数据：{}", event.payload));
         }

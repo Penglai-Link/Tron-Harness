@@ -22,6 +22,9 @@ impl ChatService {
         command: CreateChatSessionCommand,
         user_code: Option<String>,
     ) -> Result<ChatSession, ChatError> {
+        if command.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:")) {
+            return Err(ChatError::WorkspaceForbidden);
+        }
         let workspace_code =
             normalized_required(command.workspace_code).ok_or(ChatError::WorkspaceRequired)?;
         let id = self

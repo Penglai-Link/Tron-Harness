@@ -27,23 +27,107 @@ pub async fn require_workspace(
     }
     // Dude namespace is explicit and verified against durable ownership. A page
     // workspace selection never changes a platform conversation's execution scope.
-    if let Some(dude_code)=request.headers().get("x-dude-code").and_then(|v|v.to_str().ok()).map(str::to_owned) {
-        if state.dudes.get(&dude_code).is_err(){return chat_error_response(ChatError::SessionNotFound)}
-        let mut payload=serde_json::Value::Null;
-        if request.headers().get("content-type").and_then(|v|v.to_str().ok()).is_some_and(|v|v.starts_with("application/json")) {
-            let body=std::mem::replace(request.body_mut(),Body::empty());
-            let bytes=match to_bytes(body,1024*1024).await{Ok(v)=>v,Err(_)=>return chat_error_response(ChatError::MessageRequired)};
-            payload=match serde_json::from_slice(&bytes){Ok(v)=>v,Err(_)=>return chat_error_response(ChatError::MessageRequired)};
-            *request.body_mut()=Body::from(bytes);
+    if let Some(dude_code) = request
+        .headers()
+        .get("x-dude-code")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned)
+    {
+        if state.dudes.get(&dude_code).is_err() {
+            return chat_error_response(ChatError::SessionNotFound);
         }
-        let query:std::collections::BTreeMap<String,String>=url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes()).into_owned().collect();
-        let mut candidates=vec![];
-        for key in ["sessionCode","conversationCode"]{if let Some(v)=payload[key].as_str(){candidates.push(v.to_owned())}if let Some(v)=query.get(key){candidates.push(v.clone())}}
-        for prefix in ["/api/v1/chats/sessions/","/api/v1/agents/agui/streams/","/api/v1/agents/runs/"]{
-            if let Some(tail)=path.strip_prefix(prefix){if let Some(code)=tail.split('/').next(){if state.dudes.session(code).ok().flatten().is_some(){candidates.push(code.to_owned())}}}
+        let mut payload = serde_json::Value::Null;
+        if request
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.starts_with("application/json"))
+        {
+            let body = std::mem::replace(request.body_mut(), Body::empty());
+            let bytes = match to_bytes(body, 1024 * 1024).await {
+                Ok(v) => v,
+                Err(_) => return chat_error_response(ChatError::MessageRequired),
+            };
+            payload = match serde_json::from_slice(&bytes) {
+                Ok(v) => v,
+                Err(_) => return chat_error_response(ChatError::MessageRequired),
+            };
+            *request.body_mut() = Body::from(bytes);
         }
-        if candidates.is_empty(){return chat_error_response(ChatError::SessionNotFound)}
-        for code in candidates {match state.dudes.session(&code){Ok(Some(d)) if d.dude_code==dude_code=>{},_=>return chat_error_response(ChatError::SessionNotFound)}}
+        let query: std::collections::BTreeMap<String, String> =
+            url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
+                .into_owned()
+                .collect();
+        let mut candidates = vec![];
+        for key in ["sessionCode", "conversationCode"] {
+            if let Some(v) = payload[key].as_str() {
+                candidates.push(v.to_owned())
+            }
+            if let Some(v) = query.get(key) {
+                candidates.push(v.clone())
+            }
+        }
+        for prefix in ["/api/v1/chats/sessions/"] {
+            if let Some(tail) = path.strip_prefix(prefix) {
+                if let Some(code) = tail.split('/').next() {
+                    if state.dudes.session(code).ok().flatten().is_some() {
+                        candidates.push(code.to_owned())
+                    }
+                }
+            }
+        }
+        for prefix in ["/api/v1/agents/agui/streams/", "/api/v1/agents/runs/"] {
+            if let Some(code) = path
+                .strip_prefix(prefix)
+                .and_then(|tail| tail.split('/').next())
+            {
+                let session = if replay && state.chats.get_session(code).is_ok() {
+                    Some(code.to_owned())
+                } else if let Ok(record) = state.agent_runs.get_run(code) {
+                    record.conversation_code
+                } else if let Ok(id) = eliteforge_agent_core::RunId::parse_str(code) {
+                    match state.agent_framework.storage_framework().await {
+                        Ok(framework) => match framework.runs() {
+                            Ok(runs) => runs.get(id).await.ok().map(|run| run.session_id),
+                            Err(_) => None,
+                        },
+                        Err(_) => None,
+                    }
+                } else {
+                    None
+                };
+                let Some(session) = session else {
+                    return chat_error_response(ChatError::SessionNotFound);
+                };
+                candidates.push(session);
+            }
+        }
+        if candidates.is_empty() {
+            return chat_error_response(ChatError::SessionNotFound);
+        }
+        for code in &candidates {
+            match state.dudes.session(code) {
+                Ok(Some(d)) if d.dude_code == dude_code => {}
+                _ => return chat_error_response(ChatError::SessionNotFound),
+            }
+        }
+        if runs && path == "/api/v1/agents/runs" {
+            // Native chat admission derives ownership from the persisted session.
+            if request.method() != axum::http::Method::GET {
+                return chat_error_response(ChatError::SessionNotFound);
+            }
+            if !query.contains_key("conversationCode") {
+                let mut pairs = url::form_urlencoded::Serializer::new(String::new());
+                pairs.extend_pairs(query.iter());
+                pairs.append_pair("conversationCode", &candidates[0]);
+                let mut parts = request.uri().clone().into_parts();
+                parts.path_and_query = format!("{path}?{}", pairs.finish()).parse().ok();
+                match axum::http::Uri::from_parts(parts) {
+                    Ok(uri) => *request.uri_mut() = uri,
+                    Err(_) => return chat_error_response(ChatError::SessionNotFound),
+                }
+            }
+        }
         return next.run(request).await;
     }
     let query: std::collections::BTreeMap<String, String> =
@@ -183,7 +267,9 @@ pub async fn require_workspace(
             Ok(record) => record,
             Err(error) => return chat_error_response(error),
         };
-        if state.dudes.session(&session).ok().flatten().is_some() {return chat_error_response(ChatError::SessionNotFound)}
+        if state.dudes.session(&session).ok().flatten().is_some() {
+            return chat_error_response(ChatError::SessionNotFound);
+        }
         if record.workspace_code != workspace {
             return chat_error_response(ChatError::SessionNotFound);
         }

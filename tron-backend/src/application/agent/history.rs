@@ -35,6 +35,13 @@ impl AgentRunHistoryService {
         &self,
         query: AgentRunHistoryQuery,
     ) -> Result<PagedAgentRunHistoryRecords<AgentRunHistoryRecord>, AgentRunHistoryError> {
+        self.list_runs_excluding(query, &std::collections::BTreeSet::new())
+    }
+    pub(crate) fn list_runs_excluding(
+        &self,
+        query: AgentRunHistoryQuery,
+        excluded: &std::collections::BTreeSet<String>,
+    ) -> Result<PagedAgentRunHistoryRecords<AgentRunHistoryRecord>, AgentRunHistoryError> {
         let current = query.current.unwrap_or(1).max(1);
         let size = query.size.unwrap_or(20).clamp(1, 100);
         let mut records = self
@@ -42,6 +49,12 @@ impl AgentRunHistoryService {
             .lock()
             .expect("agent run history repository mutex poisoned")
             .list_runs()?;
+        records.retain(|record| {
+            !record
+                .conversation_code
+                .as_ref()
+                .is_some_and(|code| excluded.contains(code))
+        });
         if let Some(workspace_code) = normalized_optional(query.workspace_code) {
             records.retain(|record| record.workspace_code == workspace_code);
         }

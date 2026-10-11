@@ -74,9 +74,31 @@ pub async fn create_agent_run(
 pub async fn list_agent_runs(
     State(state): State<AppState>,
     _auth: RequestAuthContext,
+    headers: axum::http::HeaderMap,
     Query(query): Query<AgentRunHistoryQuery>,
 ) -> Response {
-    match state.agent_runs.list_runs(query) {
+    let excluded = if headers.contains_key("x-dude-code") {
+        std::collections::BTreeSet::new()
+    } else {
+        match state.dudes.list().and_then(|dudes| {
+            dudes
+                .into_iter()
+                .map(|dude| state.dudes.sessions(&dude.dude_code))
+                .collect::<Result<Vec<_>, _>>()
+        }) {
+            Ok(sessions) => sessions
+                .into_iter()
+                .flatten()
+                .map(|session| session.session_code)
+                .collect(),
+            Err(_) => {
+                return agent_history_error_response(
+                    crate::domain::agent::AgentRunHistoryError::StorageFailure,
+                );
+            }
+        }
+    };
+    match state.agent_runs.list_runs_excluding(query, &excluded) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_history_error_response(error),
     }
