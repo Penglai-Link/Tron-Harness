@@ -66,7 +66,7 @@ impl Tool for MemorySkillTool {
         let owner = context
             .collaboration_owner
             .as_ref()
-            .filter(|o| o.kind == "Dude")
+            .filter(|o| o.kind.eq_ignore_ascii_case("DUDE"))
             .ok_or_else(|| ToolError::UnauthorizedTool(self.name().into()))?;
         let user = context
             .user_code

@@ -39,7 +39,7 @@ impl DudeMemorySourceCollector {
                 for row in query.query_map([&user],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?)))? {
                     let(id,workspace,kind,owner,json)=row?;let value:Value=serde_json::from_str(&json).unwrap_or(Value::Null);
                     let lineage=value["lineageDudeCodes"].as_array().map(|a|a.iter().filter_map(|v|v.as_str().map(str::to_owned)).collect()).unwrap_or_default();
-                    sessions.insert(id,(workspace,(kind=="Dude").then_some(owner),lineage));
+                    sessions.insert(id,(workspace,(kind.eq_ignore_ascii_case("DUDE")).then_some(owner),lineage));
                 }
             }
             if exists("dude_sessions")? {
