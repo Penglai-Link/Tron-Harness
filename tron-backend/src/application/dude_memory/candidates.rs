@@ -11,6 +11,7 @@ use crate::{
 pub struct SkillAuthoringContext {
     pub candidate: SkillCandidate,
     pub creator_markdown: Option<String>,
+    pub creator_files: Vec<SkillArtifactFile>,
 }
 impl DudeMemoryService {
     pub fn begin_skill_authoring(
@@ -49,6 +50,7 @@ impl DudeMemoryService {
             return Ok(SkillAuthoringContext {
                 candidate,
                 creator_markdown: None,
+                creator_files: Vec::new(),
             });
         }
         // An unchanged rejected experience is suppressed even if a later batch repeats it.
@@ -61,6 +63,7 @@ impl DudeMemoryService {
             return Ok(SkillAuthoringContext {
                 candidate,
                 creator_markdown: None,
+                creator_files: Vec::new(),
             });
         }
         let installed_files = installed_artifact(&self.skills, skill_name)?;
@@ -102,17 +105,17 @@ impl DudeMemoryService {
         candidate.author_session_code = session.into();
         candidate.updated_at = now();
         let creator = load_creator(&self.skills);
-        let markdown = match creator {
-            Ok((receipt, markdown)) => {
+        let (markdown, creator_files) = match creator {
+            Ok((receipt, markdown, files)) => {
                 candidate.creator = Some(receipt);
                 candidate.status = SkillCandidateStatus::Authoring;
                 candidate.last_error = None;
-                Some(markdown)
+                (Some(markdown), files)
             }
             Err(error) => {
                 candidate.status = SkillCandidateStatus::WaitingDependency;
                 candidate.last_error = Some(error.to_string());
-                None
+                (None, Vec::new())
             }
         };
         repository.save_candidate(previous.as_ref(), &candidate)?;
@@ -127,6 +130,7 @@ impl DudeMemoryService {
         Ok(SkillAuthoringContext {
             candidate,
             creator_markdown: markdown,
+            creator_files,
         })
     }
     /// This host tool must be called from the author session that received the installed skill-creator instructions.
@@ -145,7 +149,7 @@ impl DudeMemoryService {
         {
             return Err(DudeMemoryError::Conflict);
         }
-        let (creator, _) = load_creator(&self.skills)?;
+        let (creator, _, _) = load_creator(&self.skills)?;
         if previous.creator.as_ref() != Some(&creator) {
             return Err(DudeMemoryError::Dependency(
                 "skill-creator changed; reload it before authoring".into(),
@@ -482,7 +486,7 @@ fn check_request(
 }
 fn load_creator(
     skills: &SkillRegistryService,
-) -> Result<(CreatorReceipt, String), DudeMemoryError> {
+) -> Result<(CreatorReceipt, String, Vec<SkillArtifactFile>), DudeMemoryError> {
     let creator = skills
         .get_registry_skill("skill-creator")
         .map_err(|_| DudeMemoryError::Dependency("skill-creator is not installed".into()))?;
@@ -502,6 +506,7 @@ fn load_creator(
             content_hash,
         },
         creator.skill_markdown,
+        files,
     ))
 }
 fn installed_artifact(
