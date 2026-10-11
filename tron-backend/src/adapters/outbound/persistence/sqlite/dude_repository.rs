@@ -75,7 +75,7 @@ impl DudeRepository for SqliteDudeRepository {
     }
     fn save(&mut self, d: &Dude) -> Result<(), DudeError> {
         let d = d.clone();
-        self.call(move|c|{c.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at,is_main) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(dude_code) DO UPDATE SET record_json=excluded.record_json,enabled=excluded.enabled,heartbeat_minutes=excluded.heartbeat_minutes",params![d.dude_code,encode(&d)?,d.enabled,d.heartbeat_minutes,d.updated_at+i64::from(d.heartbeat_minutes)*60000,d.is_main]).map_err(storage)?;Ok(())})
+        self.call(move|c|{c.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at,is_main) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(dude_code) DO UPDATE SET record_json=excluded.record_json,enabled=excluded.enabled,heartbeat_minutes=excluded.heartbeat_minutes,next_heartbeat_at=CASE WHEN dudes.heartbeat_minutes!=excluded.heartbeat_minutes OR (dudes.enabled=0 AND excluded.enabled=1) THEN excluded.next_heartbeat_at ELSE dudes.next_heartbeat_at END",params![d.dude_code,encode(&d)?,d.enabled,d.heartbeat_minutes,d.updated_at+i64::from(d.heartbeat_minutes)*60000,d.is_main]).map_err(storage)?;Ok(())})
     }
     fn delete(&mut self, code: &str) -> Result<(), DudeError> {
         let code = code.to_owned();
