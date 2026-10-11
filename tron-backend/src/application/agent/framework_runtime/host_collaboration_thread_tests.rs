@@ -194,3 +194,33 @@ async fn restart_reconciles_real_native_run_completion_and_does_not_reexecute_mo
         "completed delegated work"
     );
 }
+
+#[tokio::test]
+async fn recovery_reports_abandoned_admission_without_replaying_external_actions() {
+    let host = FrameworkHost::temporary(None).unwrap();
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let _agent = recovery_agent(&host, calls.clone()).await;
+    let mut thread = record("thread-abandoned");
+    thread.summary.status = fw::ThreadStatus::Running;
+    thread.completion = None;
+    thread.feedback_pending = false;
+    thread.run_admitted_at_ms = fw::lifecycle_time_ms().saturating_sub(31_000);
+    host.persist_thread(&mut thread, true).await.unwrap();
+    let sink = Arc::new(Sink {
+        fail: AtomicBool::new(false),
+        events: Default::default(),
+    });
+    host.set_thread_feedback_sink(sink.clone()).unwrap();
+    assert_eq!(host.recover_collaboration_threads().await.unwrap(), 1);
+    assert_eq!(calls.load(Ordering::Acquire), 0);
+    let events = sink.events.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].status, fw::ThreadStatus::Failed);
+    assert!(
+        events[0]
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("did not start")
+    );
+}
