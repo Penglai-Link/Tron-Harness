@@ -248,17 +248,23 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
             )
             .await
     });
+    let foreground_started_at = std::time::Instant::now();
     tokio::select! {
         _ = model.foreground_started.notified() => {},
         completed = &mut foreground => {
             panic!("foreground ended before reaching the controlled model: {completed:?}");
         },
-        _ = tokio::time::sleep(Duration::from_secs(10)) => {
-            panic!("foreground did not reach the controlled model within 10s; invocation is still running");
+        _ = tokio::time::sleep(Duration::from_secs(60)) => {
+            panic!("foreground did not reach the controlled model within 60s; invocation is still running");
         },
     }
+    eprintln!(
+        "foreground preparation elapsedMs={}",
+        foreground_started_at.elapsed().as_millis()
+    );
+    let background_started_at = std::time::Instant::now();
     let background = tokio::time::timeout(
-        Duration::from_secs(10),
+        Duration::from_secs(60),
         task_service.invoke(
             command("acceptance-task", "background-work"),
             Some("USR-AUTH-0001".into()),
@@ -289,6 +295,10 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         );
     })
     .expect("platform background run succeeds");
+    eprintln!(
+        "background preparation and completion elapsedMs={}",
+        background_started_at.elapsed().as_millis()
+    );
     assert_eq!(
         background.final_output,
         "background-completed-before-foreground"

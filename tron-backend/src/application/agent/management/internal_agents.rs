@@ -61,9 +61,11 @@ impl AgentManagementService {
                 .push(assignment.server_code);
         }
         let mut policies = Vec::new();
-        let dudes=self.repository().list_dude_codes()?;
+        let dudes = self.repository().list_dude_codes()?;
         for definition in self.internal_agent_definitions(workspace_code)? {
-            if dudes.contains(&definition.agent_code){continue}
+            if dudes.contains(&definition.agent_code) {
+                continue;
+            }
             let agent_code = definition.agent_code.clone();
             let override_policy = overrides.get(&definition.agent_code);
             let default_policy = to_internal_policy_record(workspace_code, &definition);
@@ -343,9 +345,9 @@ impl AgentManagementService {
     ) -> Result<Vec<ToolCatalogRecord>, AgentManagementError> {
         self.workspace_internal_agent_policy(workspace_code, agent_code)?;
         let tool_codes = self.resolve_internal_agent_tool_codes(workspace_code, agent_code)?;
-        Ok(tool_codes
+        Ok(self
+            .tools_by_codes(&tool_codes, locale)
             .into_iter()
-            .filter_map(|tool_code| self.tool(&tool_code, locale))
             .filter(|tool| {
                 tool.availability_state == crate::domain::agent::ToolAvailabilityState::Available
             })

@@ -35,10 +35,9 @@ impl AgentManagementService {
         locale: &str,
     ) -> Result<Vec<ToolCatalogRecord>, AgentManagementError> {
         let policy = self.platform_internal_agent_policy(code)?;
-        Ok(policy
-            .selected_tool_codes
+        Ok(self
+            .tools_by_codes(&policy.selected_tool_codes, locale)
             .into_iter()
-            .filter_map(|code| self.tool(&code, locale))
             .filter(|tool| {
                 tool.availability_state == crate::domain::agent::ToolAvailabilityState::Available
             })

@@ -405,6 +405,21 @@ impl AgentManagementService {
             .find(|t| t.tool_code == tool_code)
     }
 
+    /// Resolve one invocation against a fresh catalog snapshot. Rebuilding the
+    /// complete catalog for every assigned code makes all-tools agents quadratic.
+    pub(super) fn tools_by_codes(&self, codes: &[String], locale: &str) -> Vec<ToolCatalogRecord> {
+        let mut catalog = std::collections::HashMap::new();
+        for tool in self.list_tools(None, None, locale) {
+            // `tool()` selects the first matching catalog entry. Keep that
+            // precedence if a discovered resource repeats a built-in code.
+            catalog.entry(tool.tool_code.clone()).or_insert(tool);
+        }
+        codes
+            .iter()
+            .filter_map(|code| catalog.get(code).cloned())
+            .collect()
+    }
+
     fn tool_codes(&self) -> Vec<String> {
         let mut codes = self
             .list_tools(None, None, "en-US")
