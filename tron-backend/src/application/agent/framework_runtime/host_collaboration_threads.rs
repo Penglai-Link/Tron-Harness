@@ -8,6 +8,8 @@ use store::{ThreadRecord, owner};
 
 #[path = "host_collaboration_thread_feedback.rs"]
 mod feedback;
+#[path = "host_collaboration_thread_intervention.rs"]
+mod intervention;
 pub use feedback::{ThreadFeedback, ThreadFeedbackSink};
 
 pub(in crate::application::agent::framework_runtime::host) type Threads =
@@ -104,7 +106,7 @@ impl Runtime {
         &self,
         thread: Arc<Thread>,
         request: fw::RunRequest,
-        parent: &fw::RunContext,
+        parent: Option<&fw::RunContext>,
         cause: fw::ThreadRunCause,
         interaction_id: Option<fw::RunId>,
     ) -> Result<fw::ThreadSummary, fw::AgentError> {
@@ -147,25 +149,28 @@ impl Runtime {
             state.summary.status = fw::ThreadStatus::Running;
             state.summary.latest_run_id = Some(run_id);
             state.completion = receiver;
-            state.origin_execution_id = parent.execution_id();
+            state.origin_execution_id =
+                parent.map_or_else(fw::RunId::nil, fw::RunContext::execution_id);
             state.summary.clone()
         };
-        let origin = parent.clone();
+        let origin = parent.cloned();
         let returned = summary.clone();
         let feedback_host = host.clone();
         // Move the RunHandle into its background owner before another await.
         // Cancelling the initiating tool/Run must not cancel this independent Thread.
         crate::app::telemetry::spawn_traced(async move {
-            origin
-                .emit(fw::AgentEvent::Collaboration(Box::new(
-                    fw::CollaborationEvent::ThreadRunStarted {
-                        thread_id: summary.thread_id.clone(),
-                        run_id,
-                        cause,
-                        interaction_id,
-                    },
-                )))
-                .await;
+            if let Some(origin) = &origin {
+                origin
+                    .emit(fw::AgentEvent::Collaboration(Box::new(
+                        fw::CollaborationEvent::ThreadRunStarted {
+                            thread_id: summary.thread_id.clone(),
+                            run_id,
+                            cause,
+                            interaction_id,
+                        },
+                    )))
+                    .await;
+            }
             let result = thread
                 .agent
                 .wait(handle)
@@ -200,20 +205,22 @@ impl Runtime {
             if let Err(error) = feedback_host.flush_thread_feedback().await {
                 tracing::warn!(%error, "Thread feedback remains pending");
             }
-            origin
-                .emit(fw::AgentEvent::Collaboration(Box::new(
-                    fw::CollaborationEvent::ThreadRunFinished {
-                        thread_id: summary.thread_id,
-                        run_id,
-                        status: status.clone(),
-                        interactions: result
-                            .as_ref()
-                            .map(|r| r.interactions.clone())
-                            .unwrap_or_default(),
-                        error: result.as_ref().err().map(ToString::to_string),
-                    },
-                )))
-                .await;
+            if let Some(origin) = &origin {
+                origin
+                    .emit(fw::AgentEvent::Collaboration(Box::new(
+                        fw::CollaborationEvent::ThreadRunFinished {
+                            thread_id: summary.thread_id,
+                            run_id,
+                            status: status.clone(),
+                            interactions: result
+                                .as_ref()
+                                .map(|r| r.interactions.clone())
+                                .unwrap_or_default(),
+                            error: result.as_ref().err().map(ToString::to_string),
+                        },
+                    )))
+                    .await;
+            }
             sender.send_replace(Some((status, result.map_err(|error| error.to_string()))));
         });
         Ok(returned)
@@ -385,7 +392,7 @@ impl AgentCollaborationRuntime for Runtime {
             .launch(
                 thread.clone(),
                 request,
-                parent,
+                Some(parent),
                 fw::ThreadRunCause::Created,
                 None,
             )
@@ -431,7 +438,7 @@ impl AgentCollaborationRuntime for Runtime {
         self.launch(
             thread.clone(),
             request,
-            parent,
+            Some(parent),
             fw::ThreadRunCause::Message,
             None,
         )
@@ -463,7 +470,7 @@ impl AgentCollaborationRuntime for Runtime {
         self.launch(
             thread.clone(),
             request,
-            parent,
+            Some(parent),
             fw::ThreadRunCause::InteractionResponse,
             Some(interaction),
         )
