@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -16,7 +16,8 @@ let api = "";
 let foregroundStarted = false;
 let releaseForeground = () => {};
 let backendLogs = "";
-const evidence = new WeakMap<Page, { errors: string[]; messages: string[] }>();
+const evidence = new WeakMap<Page, { errors: string[]; messages: string[]; chatRequests: unknown[]; chatResponses: { status: number; url: string; body: string }[] }>();
+const providerRequests: unknown[] = [];
 
 // Match common::app_with_state_setup rather than the resource-only shell's
 // USR-RESOURCE-0001/resource-ui-token identity. Product endpoints remain real.
@@ -35,12 +36,25 @@ async function routeAcceptanceProfile(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  const captured = { errors: [] as string[], messages: [] as string[] };
+  const captured = { errors: [] as string[], messages: [] as string[], chatRequests: [] as unknown[], chatResponses: [] as { status: number; url: string; body: string }[] };
   evidence.set(page, captured);
   page.on("pageerror", error => captured.errors.push(error.stack ?? error.message));
   page.on("console", message => { if (message.type() === "error" || message.type() === "warning") captured.messages.push(`${message.type()}: ${message.text()}`); });
   page.on("requestfailed", failed => captured.messages.push(`requestfailed: ${failed.method()} ${failed.url()} ${failed.failure()?.errorText}`));
-  page.on("response", response => { if (response.status() >= 400) captured.messages.push(`HTTP ${response.status()}: ${response.url()}`); });
+  page.on("request", outgoing => {
+    if (outgoing.method() === "POST" && /\/api\/v1\/(?:chats|agents)\//.test(outgoing.url())) {
+      captured.chatRequests.push({ url: outgoing.url(), body: outgoing.postData() });
+    }
+  });
+  page.on("response", response => {
+    if (response.status() >= 400) captured.messages.push(`HTTP ${response.status()}: ${response.url()}`);
+    if (response.request().method() === "POST" && /\/api\/v1\/(?:chats|agents)\//.test(response.url())) {
+      // For a streaming chat this resolves when it closes, including a 200
+      // stream that ends with RUN_ERROR before ever contacting the provider.
+      void response.text().then(body => captured.chatResponses.push({ status: response.status(), url: response.url(), body: body.slice(-16000) }))
+        .catch(error => captured.messages.push(`response body: ${response.url()} ${error}`));
+    }
+  });
 });
 
 test.afterEach(async ({ page }, testInfo) => {
@@ -48,11 +62,14 @@ test.afterEach(async ({ page }, testInfo) => {
   const captured = evidence.get(page);
   const snapshot = await page.locator("body").ariaSnapshot({ timeout: 2000 }).catch(error => `snapshot failed: ${error}`);
   const html = await page.content().catch(error => `content failed: ${error}`);
-  await testInfo.attach("dude-page-diagnostics", { contentType: "application/json", body: JSON.stringify({
-    url: page.url(), ...captured, snapshot, html: html.slice(0, 20000), frontend: frontend?.logs(), backend: backendLogs.slice(-10000),
-  }, null, 2) });
-  const screenshot = await page.screenshot({ animations: "disabled", timeout: 3000 }).catch(() => null);
-  if (screenshot) await testInfo.attach("dude-failure-screen", { contentType: "image/png", body: screenshot });
+  const diagnosticsPath = testInfo.outputPath("dude-page-diagnostics.json");
+  await writeFile(diagnosticsPath, JSON.stringify({
+    url: page.url(), ...captured, providerRequests, snapshot, html: html.slice(0, 20000), frontend: frontend?.logs(), backend: backendLogs.slice(-16000),
+  }, null, 2));
+  await testInfo.attach("dude-page-diagnostics", { contentType: "application/json", path: diagnosticsPath });
+  const screenshotPath = testInfo.outputPath("dude-failure-screen.png");
+  const screenshot = await page.screenshot({ path: screenshotPath, animations: "disabled", timeout: 3000 }).catch(() => null);
+  if (screenshot) await testInfo.attach("dude-failure-screen", { contentType: "image/png", path: screenshotPath });
 });
 
 async function request(method: string, path: string, body?: unknown) {
@@ -70,6 +87,9 @@ test.beforeAll(async () => {
     for await (const chunk of incoming) body += chunk;
     const payload = JSON.parse(body);
     const input = JSON.stringify(payload.messages ?? []);
+    providerRequests.push({ path: incoming.url, model: payload.model, stream: payload.stream,
+      foreground: input.includes("acceptance-foreground-hold"), background: input.includes("acceptance-background-work"),
+      messageCount: payload.messages?.length ?? 0, lastMessage: JSON.stringify(payload.messages?.at(-1) ?? null).slice(0, 2000) });
     if (payload.stream && input.includes("acceptance-foreground-hold")) {
       foregroundStarted = true;
       await new Promise<void>(resolveGate => { releaseForeground = resolveGate; });
