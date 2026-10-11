@@ -37,7 +37,7 @@ impl AgentRunContextBuilder {
         let mut tools = requested_tools;
         let mut effective_tools = tools.clone();
         let mut tool_exposure = AgentToolExposureState::default();
-        let internal_agents = if workspace_code.is_empty() {
+        let internal_agents = if self.platform_scope || workspace_code.is_empty() {
             self.management.list_platform_internal_agents()
         } else {
             self.management
@@ -49,7 +49,7 @@ impl AgentRunContextBuilder {
             .any(|policy| policy.agent_code.eq_ignore_ascii_case(agent_code))
         {
             Some(
-                if workspace_code.is_empty() {
+                if self.platform_scope || workspace_code.is_empty() {
                     self.management.platform_internal_agent_policy(agent_code)
                 } else {
                     self.management
@@ -65,7 +65,7 @@ impl AgentRunContextBuilder {
             // Saved policy owns internal-agent authority. Request DTOs only narrow
             // that authority by name; their descriptions/schemas are never trusted.
             // An empty request keeps the legacy contract: use the saved policy.
-            let effective_tool_records = if workspace_code.is_empty() {
+            let effective_tool_records = if self.platform_scope || workspace_code.is_empty() {
                 self.management
                     .resolve_platform_agent_effective_tool_definitions(agent_code, locale)
             } else {

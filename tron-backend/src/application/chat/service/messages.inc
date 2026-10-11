@@ -76,7 +76,7 @@ impl ChatService {
             let service = agent.with_collaboration_owner(crate::domain::agent::AgentCollaborationOwner {
                 kind: "DUDE".into(), code: dude_code.into(), origin_session_code: Some(session.session_code.clone()), task_code: session.task_code.clone(),
             });
-            if session.workspace_code.is_empty() { service.with_platform_scope() } else { service }
+            service.with_platform_scope()
         } else { agent };
         let (attachments, invocation_attachments) = self
             .prepare_session_attachments(&session, attachments)
