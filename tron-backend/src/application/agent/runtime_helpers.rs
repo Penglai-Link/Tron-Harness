@@ -75,7 +75,13 @@ pub(super) fn validate_context(context: &AgentRunContext) -> Result<(), AgentErr
             "runCode is required".into(),
         ));
     }
-    if context.workspace_code.trim().is_empty() {
+    // Only host-derived Dude ownership authorizes execution without a workspace.
+    // The context builder has already resolved the platform definition and user.
+    let platform_dude = context
+        .collaboration_owner
+        .as_ref()
+        .is_some_and(|owner| owner.kind == "DUDE" && !owner.code.trim().is_empty());
+    if context.workspace_code.trim().is_empty() && !platform_dude {
         return Err(AgentError::InvalidConfiguration(
             "workspaceCode is required".into(),
         ));
