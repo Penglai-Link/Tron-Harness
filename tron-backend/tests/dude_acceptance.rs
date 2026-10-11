@@ -7,6 +7,7 @@ use axum::{
     http::{Method, StatusCode},
 };
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tron_backend::config::{AppConfig, ResourceConfig};
 
 use common::{app_with_config, authenticated_request, response_json};
@@ -15,6 +16,7 @@ struct Fixture {
     _directory: tempfile::TempDir,
     config: AppConfig,
     router: Router,
+    next_graph_instance: AtomicUsize,
 }
 
 impl Fixture {
@@ -34,12 +36,29 @@ impl Fixture {
             _directory: directory,
             config,
             router,
+            next_graph_instance: AtomicUsize::new(1),
         }
+    }
+
+    fn reconstruction_config(&self) -> AppConfig {
+        let mut config = self.config.clone();
+        // These assertions concern the shared SQLite product state. Native
+        // background workers can retain the prior AppState's Grafeo handle,
+        // so each reconstructed state needs a separate unrelated graph store.
+        // The Dude/session/task/notification database remains exactly the same.
+        let instance = self.next_graph_instance.fetch_add(1, Ordering::Relaxed);
+        config.graph_storage_path = self
+            ._directory
+            .path()
+            .join(format!("dude-state-{instance}.grafeo"))
+            .display()
+            .to_string();
+        config
     }
 
     fn restart(&mut self) {
         drop(std::mem::replace(&mut self.router, Router::new()));
-        self.router = app_with_config(self.config.clone());
+        self.router = app_with_config(self.reconstruction_config());
     }
 }
 
@@ -288,10 +307,10 @@ async fn dude_tasks_use_the_task_module_start_before_due_and_invalidate_stale_re
     );
 
     let mut task_service = None;
-    let _second_router =
-        common::app_with_state_setup(common::prepared_config(fixture.config.clone()), |state| {
-            task_service = Some(state.tasks.clone())
-        });
+    let _second_router = common::app_with_state_setup(
+        common::prepared_config(fixture.reconstruction_config()),
+        |state| task_service = Some(state.tasks.clone()),
+    );
     let tasks = task_service.unwrap();
     let version = task["scheduleVersion"]
         .as_i64()
