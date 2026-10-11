@@ -43,6 +43,7 @@ impl DudeMemoryService {
                     c.status,
                     SkillCandidateStatus::RevisionRequested
                         | SkillCandidateStatus::WaitingDependency
+                        | SkillCandidateStatus::Authoring
                 )
         }) {
             return Ok(SkillAuthoringContext {

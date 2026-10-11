@@ -33,6 +33,7 @@ pub struct MemoryNotice {
     pub user_code: String,
     pub dude_code: String,
     pub related_code: String,
+    pub revision: u32,
     pub kind: &'static str,
     pub message: String,
 }
@@ -75,6 +76,7 @@ impl DudeMemoryService {
                 user_code: candidate.user_code.clone(),
                 dude_code: candidate.dude_code.clone(),
                 related_code: candidate.candidate_code.clone(),
+                revision: candidate.revision,
                 kind,
                 message,
             })?;
@@ -104,4 +106,15 @@ pub(super) fn new_code(prefix: &str) -> String {
         NEXT.fetch_add(1, Ordering::Relaxed),
         rand::random::<u64>()
     )
+}
+
+pub struct CallbackDudeMemoryNotifications<
+    F: Fn(MemoryNotice) -> Result<(), DudeMemoryError> + Send + Sync,
+>(pub F);
+impl<F: Fn(MemoryNotice) -> Result<(), DudeMemoryError> + Send + Sync> DudeMemoryNotifications
+    for CallbackDudeMemoryNotifications<F>
+{
+    fn publish(&self, notice: MemoryNotice) -> Result<(), DudeMemoryError> {
+        (self.0)(notice)
+    }
 }

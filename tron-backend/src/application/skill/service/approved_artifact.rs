@@ -43,6 +43,18 @@ impl SkillRegistryService {
             return Err(DudeMemoryError::Conflict);
         }
         let destination = self.skills_dir().join(name);
+        // The durable journal survives process death between the two filesystem renames.
+        let journal = self
+            .registry_root()
+            .join(".approved-artifacts")
+            .join(name)
+            .join(approved_hash);
+        let stage = journal.join("artifact");
+        let backup = journal.join("previous");
+        if !destination.exists() && backup.exists() {
+            fs::rename(&backup, &destination)
+                .map_err(|e| DudeMemoryError::Installation(e.to_string()))?;
+        }
         let current_hash = if destination.exists() {
             Some(artifact_hash(
                 &crate::application::dude_memory::read_artifact(&destination)?,
@@ -54,18 +66,23 @@ impl SkillRegistryService {
         if current_hash.as_deref() == Some(approved_hash) {
             self.sync_registry(false, false)
                 .map_err(|e| DudeMemoryError::Installation(e.to_string()))?;
+            if journal.exists() {
+                fs::remove_dir_all(&journal)
+                    .map_err(|e| DudeMemoryError::Installation(e.to_string()))?;
+            }
             return Ok(());
         }
         if current_hash.as_deref() != expected_base {
             return Err(DudeMemoryError::Conflict);
         }
-        let temporary = tempfile::Builder::new()
-            .prefix("approved-skill-")
-            .tempdir_in(self.registry_root())
-            .map_err(|e| DudeMemoryError::Installation(e.to_string()))?;
-        let stage = temporary.path().join("artifact");
+        fs::create_dir_all(&journal).map_err(|e| DudeMemoryError::Installation(e.to_string()))?;
+        if stage.exists() {
+            fs::remove_dir_all(&stage).map_err(|e| DudeMemoryError::Installation(e.to_string()))?;
+        }
         materialize_artifact(&stage, files)?;
-        let backup = temporary.path().join("previous");
+        if backup.exists() {
+            return Err(DudeMemoryError::Conflict);
+        }
         if destination.exists() {
             fs::rename(&destination, &backup)
                 .map_err(|e| DudeMemoryError::Installation(e.to_string()))?;
@@ -90,6 +107,7 @@ impl SkillRegistryService {
         if actual != approved_hash {
             return Err(DudeMemoryError::Conflict);
         }
+        fs::remove_dir_all(&journal).map_err(|e| DudeMemoryError::Installation(e.to_string()))?;
         Ok(())
     }
 }
