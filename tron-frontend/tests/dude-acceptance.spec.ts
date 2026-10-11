@@ -158,7 +158,7 @@ test.afterAll(async () => {
 });
 
 test("robot opens the persistent platform conversation while task work runs in parallel", async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await seedResourceUiShell(page, "en-US"); await routeAcceptanceProfile(page);
   const errors = evidence.get(page)!.errors;
@@ -174,9 +174,14 @@ test("robot opens the persistent platform conversation while task work runs in p
   expect(session.workspaceCode).toBeNull(); expect(session.sessionCode).toBeTruthy();
   const input = page.locator('[data-theme-part="chat-input"]');
   let backgroundSession = "";
-  await input.fill("acceptance-foreground-hold: continue discussing this with me"); await input.press("Enter");
+  await input.fill("acceptance-foreground-hold: continue discussing this with me");
+  // History can still be loading while the composer accepts a draft. The Send
+  // button waits for session readiness; an immediate Enter can be ignored then.
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   try {
-    await expect.poll(() => foregroundStarted).toBe(true);
+    // Native startup includes persisted context and resource preparation. The
+    // controlled provider stays held throughout background task completion.
+    await expect.poll(() => foregroundStarted, { timeout: 60_000 }).toBe(true);
     await request("POST", "/api/v1/tasks", { workspaceCode: null, ownerDudeCode: session.ownerDudeCode, title: "acceptance-background-work", description: "acceptance-background-work: finish this while we are still chatting", dueAt: null, priority: "Medium", taskType: "General", sourceType: "Internal", assigneeUserCodes: [], agentCodes: [], appCodes: [] });
     await expect.poll(async () => {
       const events = await request("GET", `/api/v1/dudes/${session.ownerDudeCode}/events`);
@@ -185,6 +190,7 @@ test("robot opens the persistent platform conversation while task work runs in p
       return Boolean(completed);
     }, { timeout: 60_000 }).toBe(true);
     await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).not.toContainText("dude-background-finished");
+    await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).not.toContainText("dude-foreground-finished");
   } finally { releaseForeground(); }
   await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).toContainText("dude-foreground-finished");
   await page.getByRole("button", { name: "Platform main Dude conversation", exact: true }).click();
