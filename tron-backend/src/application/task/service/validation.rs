@@ -14,10 +14,14 @@ impl TaskService {
     pub(super) fn ensure_valid_parent(
         &self,
         parent_task_code: &str,
-        workspace_code: &str,
+        workspace_code: Option<&str>,
+        owner_dude_code: Option<&str>,
     ) -> Result<(), TaskError> {
         let parent = self.get_task_record(parent_task_code)?;
-        if parent.workspace_code != workspace_code || parent.archived_at.is_some() {
+        if parent.workspace_code.as_deref() != workspace_code
+            || parent.owner_dude_code.as_deref() != owner_dude_code
+            || parent.archived_at.is_some()
+        {
             return Err(TaskError::InvalidParent);
         }
         Ok(())
@@ -40,6 +44,19 @@ impl TaskService {
                 })
             })
             .collect()
+    }
+
+    pub(super) fn validate_scope_app_links(
+        &self,
+        workspace_code: Option<&str>,
+        codes: Vec<String>,
+    ) -> Result<Vec<TaskCodeLink>, TaskError> {
+        let links = normalized_code_links(codes);
+        match workspace_code {
+            Some(workspace) => self.validated_app_links(workspace, links),
+            None if links.is_empty() => Ok(links),
+            None => Err(TaskError::InvalidApp),
+        }
     }
 
     pub(super) fn validated_app_links(

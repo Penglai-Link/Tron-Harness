@@ -10,6 +10,47 @@ use tron_backend::config::AppConfig;
 use common::{app_with_config, authenticated_request, response_json};
 
 #[tokio::test]
+async fn platform_general_tasks_have_nullable_workspace_and_clearable_deadline() {
+    let router = task_app("platform-general");
+    let response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/tasks",
+        Some(json!({
+            "title": "Prepare report", "dueAt": 2_000_000_000_000_i64
+        })),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created = response_json(response).await;
+    assert_eq!(created["data"]["workspaceCode"], Value::Null);
+    assert_eq!(created["data"]["taskType"], "General");
+    let code = created["data"]["taskCode"].as_str().unwrap();
+    let response = authenticated_request(
+        &router,
+        Method::PATCH,
+        &format!("/api/v1/tasks/{code}"),
+        Some(json!({"dueAt": null})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated = response_json(response).await;
+    assert_eq!(updated["data"]["dueAt"], Value::Null);
+    let response = authenticated_request(&router, Method::GET, "/api/v1/tasks", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response_json(response).await["data"]["total"], 1);
+    let response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/tasks?workspaceCode=TRON_CORE",
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response_json(response).await["data"]["total"], 0);
+}
+
+#[tokio::test]
 async fn task_options_and_default_kanban_exclude_archived_tasks_and_seed_data() {
     let router = task_app("options-kanban");
 
@@ -31,7 +72,10 @@ async fn task_options_and_default_kanban_exclude_archived_tasks_and_seed_data() 
             .collect::<Vec<_>>(),
         vec!["NOT_STARTED", "IN_PROGRESS", "REOPEN", "CLOSED"]
     );
-    assert_eq!(options["data"]["taskTypes"], json!(["Feature", "Bug"]));
+    assert_eq!(
+        options["data"]["taskTypes"],
+        json!(["General", "Feature", "Bug"])
+    );
     assert_eq!(
         options["data"]["priorities"],
         json!(["Low", "Medium", "High", "Extra High"])

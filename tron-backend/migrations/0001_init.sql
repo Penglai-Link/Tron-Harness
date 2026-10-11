@@ -834,7 +834,13 @@ CREATE TABLE task_flows (
 CREATE TABLE "tasks" (
                 id INTEGER PRIMARY KEY,
                 task_code TEXT NOT NULL UNIQUE,
-                workspace_code TEXT NOT NULL,
+                workspace_code TEXT NULL,
+                owner_dude_code TEXT NULL,
+                due_at INTEGER NULL,
+                planned_start_at INTEGER NULL,
+                next_followup_at INTEGER NULL,
+                work_session_code TEXT NULL,
+                schedule_version INTEGER NOT NULL DEFAULT 0,
                 parent_task_code TEXT NULL REFERENCES tasks(task_code),
                 title TEXT NOT NULL,
                 description TEXT NULL,
@@ -843,7 +849,7 @@ CREATE TABLE "tasks" (
                 status TEXT NOT NULL,
                 previous_status TEXT NULL,
                 priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Extra High')),
-                task_type TEXT NOT NULL CHECK (task_type IN ('Feature', 'Bug')),
+                task_type TEXT NOT NULL CHECK (task_type IN ('General', 'Feature', 'Bug')),
                 source_type TEXT NOT NULL CHECK (source_type IN ('Internal', 'GitHub', 'GitLab')),
                 source_url TEXT NULL,
                 agent_code TEXT NOT NULL DEFAULT 'main-agent',
@@ -1129,6 +1135,8 @@ CREATE INDEX idx_task_app_links_task_code ON task_app_links(task_code);
 CREATE INDEX idx_task_flow_statuses_flow_position
     ON task_flow_statuses(flow_code, position);
 
+CREATE INDEX idx_tasks_dude_followup ON tasks(owner_dude_code, next_followup_at) WHERE owner_dude_code IS NOT NULL AND archived_at IS NULL;
+
 CREATE INDEX idx_tasks_parent_task_code ON tasks(parent_task_code);
 
 CREATE INDEX idx_tasks_workspace_flow ON tasks(workspace_code, flow_code);
@@ -1368,6 +1376,44 @@ INSERT INTO rag_corpora (corpus_id, display_name, status, description, capabilit
 CREATE TABLE IF NOT EXISTS tron_schema_initialized (scope TEXT PRIMARY KEY);
 INSERT INTO tron_schema_initialized (scope) VALUES ('business');
 
+
+-- Platform-owned always-on agents, sessions and durable delivery.
+CREATE TABLE dudes (
+ dude_code TEXT PRIMARY KEY, record_json TEXT NOT NULL, enabled INTEGER NOT NULL,
+ heartbeat_minutes INTEGER NOT NULL CHECK(heartbeat_minutes>0), next_heartbeat_at INTEGER NOT NULL,
+ is_main INTEGER NOT NULL DEFAULT 0 CHECK(is_main IN (0,1))
+);
+CREATE UNIQUE INDEX dudes_single_main ON dudes(is_main) WHERE is_main=1;
+CREATE TABLE dude_sessions (
+ session_code TEXT PRIMARY KEY, dude_code TEXT NOT NULL REFERENCES dudes(dude_code),
+ purpose TEXT NOT NULL, correlation_key TEXT NOT NULL, record_json TEXT NOT NULL,
+ UNIQUE(dude_code,purpose,correlation_key)
+);
+CREATE TABLE dude_events (
+ event_id TEXT PRIMARY KEY, dude_code TEXT NOT NULL REFERENCES dudes(dude_code),
+ dedup_key TEXT NOT NULL UNIQUE, source TEXT NOT NULL, session_code TEXT,
+ status TEXT NOT NULL, available_at INTEGER NOT NULL, lease_until INTEGER, lease_token TEXT,
+ attempts INTEGER NOT NULL DEFAULT 0, record_json TEXT NOT NULL
+);
+CREATE INDEX dude_events_ready ON dude_events(status,available_at,lease_until);
+CREATE TABLE platform_notifications (
+ notification_id TEXT PRIMARY KEY, dedup_key TEXT NOT NULL UNIQUE, record_json TEXT NOT NULL,
+ created_at INTEGER NOT NULL
+);
+CREATE TABLE collaboration_threads (
+ thread_code TEXT PRIMARY KEY, workspace_code TEXT NOT NULL, user_code TEXT,
+ owner_kind TEXT NOT NULL, owner_code TEXT NOT NULL, record_json TEXT NOT NULL,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX collaboration_threads_owner ON collaboration_threads(owner_kind,owner_code,workspace_code);
+
+CREATE TABLE collaboration_thread_feedback(event_key TEXT PRIMARY KEY, thread_code TEXT NOT NULL, payload_json TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX collaboration_thread_feedback_pending ON collaboration_thread_feedback(delivered,created_at);
+CREATE TABLE dude_memory_batches(batch_code TEXT PRIMARY KEY,user_code TEXT NOT NULL,dude_code TEXT NOT NULL,status TEXT NOT NULL,record_json TEXT NOT NULL,created_at INTEGER NOT NULL);
+CREATE UNIQUE INDEX dude_memory_one_active ON dude_memory_batches(user_code,dude_code) WHERE status='Active';
+CREATE TABLE dude_memory_cursors(user_code TEXT NOT NULL,dude_code TEXT NOT NULL,source_key TEXT NOT NULL,source_version TEXT NOT NULL,PRIMARY KEY(user_code,dude_code,source_key));
+CREATE TABLE dude_skill_candidates(candidate_code TEXT PRIMARY KEY,user_code TEXT NOT NULL,dude_code TEXT NOT NULL,batch_code TEXT NOT NULL,skill_name TEXT NOT NULL,record_json TEXT NOT NULL,created_at INTEGER NOT NULL,UNIQUE(batch_code,skill_name));
+CREATE INDEX dude_skill_candidates_user ON dude_skill_candidates(user_code,created_at);
 -- tron:profiles
 
 CREATE TABLE profile_avatar_cache (

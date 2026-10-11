@@ -20,3 +20,5 @@ pub mod variable;
 pub mod workspace;
 
 pub mod skin;
+
+pub mod dude;

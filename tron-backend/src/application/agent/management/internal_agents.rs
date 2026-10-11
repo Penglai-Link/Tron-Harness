@@ -61,7 +61,9 @@ impl AgentManagementService {
                 .push(assignment.server_code);
         }
         let mut policies = Vec::new();
+        let dudes=self.repository().list_dude_codes()?;
         for definition in self.internal_agent_definitions(workspace_code)? {
+            if dudes.contains(&definition.agent_code){continue}
             let agent_code = definition.agent_code.clone();
             let override_policy = overrides.get(&definition.agent_code);
             let default_policy = to_internal_policy_record(workspace_code, &definition);

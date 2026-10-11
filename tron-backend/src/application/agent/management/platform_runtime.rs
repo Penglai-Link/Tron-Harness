@@ -6,7 +6,7 @@ impl AgentManagementService {
         &self,
         code: &str,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
-        self.list_platform_internal_agents()?
+        self.all_platform_internal_agents()?
             .into_iter()
             .find(|policy| policy.agent_code.eq_ignore_ascii_case(code))
             .ok_or(AgentManagementError::InternalAgentNotFound)

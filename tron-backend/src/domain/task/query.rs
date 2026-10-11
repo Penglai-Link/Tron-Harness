@@ -2,10 +2,11 @@ use serde::Deserialize;
 
 use super::{TaskPriority, TaskSourceType, TaskType};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskListQuery {
     pub workspace_code: Option<String>,
+    pub owner_dude_code: Option<String>,
     pub current: Option<usize>,
     pub size: Option<usize>,
     pub search: Option<String>,
