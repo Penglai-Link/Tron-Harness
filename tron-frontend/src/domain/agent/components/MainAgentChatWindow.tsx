@@ -13,6 +13,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -83,10 +84,16 @@ export function MainAgentChatWindow({
       toast.error(t("chat.markdownLink.openExternalFailed"));
     });
   }, [desktopBridge, t, toast]);
+  const platformSessionRef = useRef<ChatSession | null>(null);
   const adapter = useMemo(() => createInternalChatAdapter({
     workspaceCode: null,
     getAccessToken: getApiAccessToken,
-    getHeaders: () => applyCurrentLocaleHeader(new Headers()),
+    getHeaders: () => {
+      const headers = applyCurrentLocaleHeader(new Headers());
+      const owner = platformSessionRef.current?.ownerDudeCode;
+      if (owner) headers.set("X-Dude-Code", owner);
+      return headers;
+    },
   }), []);
   const controlledWindowState = Boolean(windowState && onWindowStateChange);
   const [localWindowState, setLocalWindowState] = useState<ChatFloatingState>(
@@ -97,6 +104,7 @@ export function MainAgentChatWindow({
     ? (windowState as ChatFloatingState)
     : localWindowState;
   const [persistedSession, setPersistedSession] = useState<ChatSession | null>(null);
+  platformSessionRef.current = persistedSession;
   const [resolutionError, setResolutionError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -123,6 +131,7 @@ export function MainAgentChatWindow({
   const windowConfig = useMemo(() => ({
     agentCode: persistedSession?.agentCode ?? undefined,
     floating: true,
+    showNewSession: false,
     inputPlaceholder: t("dude.messagePlaceholder"),
     storageKey: MAIN_AGENT_WINDOW_STORAGE_KEY,
     title: t("dude.mainConversation"),

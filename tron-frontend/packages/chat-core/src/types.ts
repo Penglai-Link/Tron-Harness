@@ -489,6 +489,7 @@ export interface ChatClientConfig {
   resizable?: boolean;
   showAgui?: boolean;
   showSessionList?: boolean;
+  showNewSession?: boolean;
   storageKey?: string;
   taskCode?: string;
   title?: string;

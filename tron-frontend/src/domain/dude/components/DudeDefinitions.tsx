@@ -24,7 +24,7 @@ export function DudeDefinitions() {
       {query.data?.map(dude => <div key={dude.dudeCode} className="flex flex-wrap items-center gap-3 py-3">
         <AgentAvatar avatarId={dude.avatarId} className="size-10 rounded-md" />
         <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="font-medium">{dude.name}</span>{dude.isMain ? <Badge variant="secondary">{t("dude.main")}</Badge> : null}{dude.kind === "Memory" ? <Badge variant="outline">{t("dude.memory")}</Badge> : null}</div><p className="text-xs text-[var(--color-on-surface-variant)]">{dude.dudeCode} · {t(dude.enabled ? "dude.running" : "dude.paused")}</p></div>
-        <Button size="sm" variant="ghost" render={<Link to={`/dudes?dude=${encodeURIComponent(dude.dudeCode)}`} />}>{t("dude.open")}</Button>
+        <Button size="sm" variant="ghost" nativeButton={false} render={<Link to={`/dudes?dude=${encodeURIComponent(dude.dudeCode)}`} />}>{t("dude.open")}</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => setEditor(dude)}>{t("dude.edit")}</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void change(() => updateDude(dude.dudeCode, { enabled: !dude.enabled }))}>{t(dude.enabled ? "dude.pause" : "dude.resume")}</Button>
         {!dude.isMain ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void change(() => setMainDude(dude.dudeCode))}>{t("dude.makeMain")}</Button> : null}
