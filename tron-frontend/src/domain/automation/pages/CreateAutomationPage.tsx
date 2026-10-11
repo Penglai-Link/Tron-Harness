@@ -1,3 +1,4 @@
+import { Maximize2, X } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -261,7 +262,9 @@ export function CreateAutomationPage() {
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                 {pageT("fields.prompt", "Prompt body")}
               </span>
-              <Button aria-label={pageT("aria.openPrompt", "Fullscreen")} size="lg" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>{pageT("aria.openPrompt", "Fullscreen")}</Button>
+              <Button aria-label={pageT("aria.openPrompt", "Fullscreen")} size="lg" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
+                <Maximize2 size={14} aria-hidden="true" />
+              </Button>
             </div>
             <TextArea
               aria-label={pageT("aria.prompt", "Automation prompt")}
@@ -288,7 +291,9 @@ export function CreateAutomationPage() {
                   {pageT("promptFullscreenHint", "Write the long-form prompt that will be dispatched whenever this automation runs.")}
                 </p>
               </div>
-              <Button size="sm" type="button" variant="ghost" aria-label={pageT("aria.closePrompt", "Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>{pageT("aria.closePrompt", "Close prompt fullscreen")}</Button>
+              <Button size="icon" type="button" variant="ghost" aria-label={pageT("aria.closePrompt", "Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>
+                <X size={16} aria-hidden="true" />
+              </Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               <TextArea

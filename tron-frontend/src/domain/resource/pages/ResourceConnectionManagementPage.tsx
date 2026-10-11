@@ -1,3 +1,4 @@
+import { MoreHorizontal, RefreshCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -260,11 +261,13 @@ export function ResourceConnectionManagementPage({
                 render={(
                   <Button
                     aria-label={pageT("columns.actions")}
-                    size="sm"
+                    size="icon"
                     variant="ghost"
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
-                  >{pageT("columns.actions")}</Button>
+                  >
+                    <MoreHorizontal aria-hidden="true" size={16} />
+                  </Button>
                 )}
               />
               <DropdownMenuContent align="end">
@@ -374,7 +377,9 @@ export function ResourceConnectionManagementPage({
               onClick={() => {
                 void resourceTable.refresh();
               }}
-            >{pageT("actions.refresh")}</Button>
+            >
+              <RefreshCcw aria-hidden="true" size={15} />
+            </Button>
             <Button
               disabled={!workspace}
               size="lg"

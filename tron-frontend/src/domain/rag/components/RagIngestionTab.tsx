@@ -1,6 +1,6 @@
+import { MoreHorizontal, FileText, Scissors, Layers3, CircleCheck } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FileText, Scissors, Layers3, CircleCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -120,7 +120,7 @@ export function RagIngestionTab({ corpora, tasks, selected, onSelect, stateFilte
         const isSelected = canRebuildTask(task) && selectedTaskIds.has(task.id);
         return <TableRow key={task.id} data-state={isSelected ? "selected" : undefined}><TableCell><input type="checkbox" className="size-4 accent-[var(--color-primary)]" aria-label={t("ragUnified.selectTask", { name: task.title })} checked={isSelected} disabled={!!pending || !canRebuildTask(task)} onChange={(event) => toggleTask(task.id, event.target.checked)} /></TableCell><TableCell><div>{task.title}</div>{task.error ? <p className="mt-1 max-w-lg whitespace-pre-wrap text-sm text-destructive">{task.error}</p> : null}</TableCell><TableCell className="whitespace-nowrap tabular-nums">{formatFileSize(task.fileSizeBytes, i18n.resolvedLanguage ?? i18n.language)}</TableCell><TableCell>{taskCorpus?.name ?? task.corpusId}</TableCell><TableCell><Badge variant="secondary">{t(`ragUnified.states.${task.state}`, { defaultValue: task.state })}</Badge></TableCell><TableCell>{t(`ragUnified.stages.${task.stage}`, { defaultValue: task.stage })}</TableCell><TableCell>{task.totalUnits > 0 ? number.format(task.totalUnits) : "—"}</TableCell><TableCell className="text-right">
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="sm" disabled={!canCancel && !canRetry && !canPreview} aria-label={t("ragUnified.taskActions", { name: task.title })}>{t("ragUnified.taskActions", { name: task.title })}</Button>} />
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon" disabled={!canCancel && !canRetry && !canPreview} aria-label={t("ragUnified.taskActions", { name: task.title })}><MoreHorizontal size={16} aria-hidden="true" /></Button>} />
             <DropdownMenuContent align="end">
               {canCancel ? <DropdownMenuItem disabled={!!pending} onClick={() => void act(task.id, "cancel")}>{t("ragUnified.cancel")}</DropdownMenuItem> : null}
               {canRetry ? <DropdownMenuItem disabled={!!pending} onClick={() => void act(task.id, "retry")}>{t("ragUnified.retry")}</DropdownMenuItem> : null}

@@ -1,4 +1,4 @@
-import { Folder } from "lucide-react";
+import { RefreshCw, Folder } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,9 @@ export function SessionApplicationsPanel({ session, active }: { session: ChatSes
     <section className="mt-5 text-sm" data-testid="session-applications">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="font-medium">{t("chat.applications.title")}</h3>
-        <Button variant="ghost" size="sm" onClick={query.retry} disabled={query.loading} aria-label={t("chat.applications.refresh")}>{t("chat.applications.refresh")}</Button>
+        <Button variant="ghost" size="icon-sm" onClick={query.retry} disabled={query.loading} aria-label={t("chat.applications.refresh")}>
+          <RefreshCw className={query.loading ? "size-4 animate-spin" : "size-4"} />
+        </Button>
       </div>
       {query.error ? <p role="alert" className="text-[var(--color-error)]">{t("chat.applications.loadFailed")}</p> : query.loading && query.data.applications.length === 0 ? <p role="status">{t("chat.applications.loading")}</p> : query.data.applications.length === 0 ? <p className="text-[var(--color-on-surface-variant)]">{t("chat.applications.empty")}</p> : (
         <div className="divide-y divide-[var(--color-outline-variant)]">

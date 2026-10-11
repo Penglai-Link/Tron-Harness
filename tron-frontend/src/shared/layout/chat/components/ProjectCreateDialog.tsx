@@ -1,4 +1,4 @@
-import { Folder } from "lucide-react";
+import { X, Folder } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppOptions } from "@/domain/app";
@@ -137,11 +137,11 @@ export function ProjectCreateDialog({
                   ) : null}
                   <Button
                     className="shrink-0 w-auto"
-                    size="sm"
+                    size="icon"
                     variant="link"
                     onClick={() => toggleApp(app.appCode)}
                   >
-                    {t("common:actions.remove", "Remove")}
+                    <X size={16} />
                   </Button>
                 </div>
               ))}

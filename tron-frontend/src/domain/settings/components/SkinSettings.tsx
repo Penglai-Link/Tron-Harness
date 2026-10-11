@@ -1,3 +1,4 @@
+import { Trash2, Check } from "lucide-react";
 import { OnlineSkinMarket } from "./OnlineSkinMarket";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -89,18 +90,20 @@ export function SkinSettings() {
               </span>
               <span className="flex min-w-0 items-center justify-between gap-2 px-3 py-2.5">
                 <span className="truncate">{label(skin)}</span>
-
+                {selected ? <Check className="size-4 shrink-0" aria-hidden="true" /> : null}
               </span>
             </Button>
             {imported ? <Button
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               aria-label={t("settingsAppearance.uninstallSkin", { name: label(skin) })}
               title={t("settingsAppearance.uninstallSkin", { name: label(skin) })}
               disabled={loading}
               onClick={() => setSkinToUninstall(skin)}
               className="absolute right-2 top-2 z-10 border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]/90 text-[var(--color-error)] shadow-sm hover:bg-[var(--color-elevated-surface)]"
-            >{t("settingsAppearance.uninstallSkin", { name: label(skin) })}</Button> : null}
+            >
+              <Trash2 aria-hidden="true" />
+            </Button> : null}
           </div>;
         })}
       </div>

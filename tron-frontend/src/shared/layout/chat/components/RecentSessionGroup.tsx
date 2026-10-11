@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import MessageItem from "./MessageItem";
@@ -42,14 +43,14 @@ export default function RecentSessionGroup({
         right={
           <ActionButton
             className={
-              "shrink-0"
+              open ? "transition-transform" : "-rotate-90 transition-transform"
             }
             aria-label={t(open ? "common:actions.collapse" : "common:actions.expand", open ? "Collapse" : "Expand")}
             onClick={(event) => {
               event.stopPropagation();
               setOpen((value) => !value);
             }}
-          />
+          ><ChevronDown size={16} aria-hidden="true" /></ActionButton>
         }
       />
       {open ? (

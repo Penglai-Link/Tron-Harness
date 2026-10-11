@@ -1,6 +1,6 @@
+import { MoreHorizontal, Boxes, Database, UserRound } from "lucide-react";
 import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, Database, UserRound } from "lucide-react";
 
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
 
@@ -377,11 +377,13 @@ function MemoryRecordsTable({
               render={
                 <Button
                   aria-label={t("pages:memory.aria.actionsFor", "Open actions for {{title}}", { title: row.original.title })}
-                  size="sm"
+                  size="icon"
                   variant="ghost"
                   onClick={(event) => event.stopPropagation()}
                   onKeyDown={(event) => event.stopPropagation()}
-                >{t("pages:memory.aria.actionsFor", "Open actions for {{title}}", { title: row.original.title })}</Button>
+                >
+                  <MoreHorizontal size={16} aria-hidden="true" />
+                </Button>
               }
             />
             <DropdownMenuContent align="end" className="w-44">

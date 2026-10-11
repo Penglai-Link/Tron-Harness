@@ -1,3 +1,4 @@
+import { MoreHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -358,13 +359,15 @@ export function VariablesPage() {
                 <DropdownMenuTrigger
                   render={(
                     <Button
-                      size="sm"
+                      size="icon"
                       variant="ghost"
                       aria-label={pageT("aria.actionsFor", "Open actions for {{key}}", { key: row.original.key })}
                       disabled={isBusy}
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
-                    >{pageT("aria.actionsFor", "Open actions for {{key}}", { key: row.original.key })}</Button>
+                    >
+                      <MoreHorizontal size={16} aria-hidden="true" />
+                    </Button>
                   )}
                 />
                 <DropdownMenuContent align="end" className="w-36">

@@ -1,5 +1,5 @@
+import { X, Download, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Download, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -97,7 +97,9 @@ export function UpdateNotification() {
                 className="rounded-md p-1 text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
                 type="button"
                 onClick={() => setDismissed(true)}
-              >{t("update.actions.dismiss")}</button>
+              >
+                <X size={15} aria-hidden="true" />
+              </button>
             ) : null}
           </div>
 

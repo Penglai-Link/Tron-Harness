@@ -1,3 +1,14 @@
+import {
+  Settings2,
+  Bot,
+  ChevronDown,
+  MoreHorizontal,
+  PanelBottomClose,
+  PanelBottomOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  ChevronsUpDown,
+} from "lucide-react";
 import { ShinyText } from "@/shared/motion";
 import { setApiWorkspaceCode } from "@/shared/api/httpClient";
 import { defaultMainAgentWindowState, MAIN_AGENT_WINDOW_STORAGE_KEY } from "@/domain/agent/model/mainAgentWindowState";
@@ -24,7 +35,6 @@ import {
   type ChatFloatingState,
 } from "@tron/chat-core";
 
-import { Bot, ChevronDown, MoreHorizontal, PanelBottomClose, PanelBottomOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   useLocation,
@@ -870,12 +880,14 @@ export function TronShell({
         <div className="flex items-center gap-1" style={{ paddingLeft: `${nestingLevel * 8}px` }}>
           {hasChildren ? (
             <button
-              className="flex w-auto shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-menu-hover-surface)] hover:text-[var(--color-on-surface)]"
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-menu-hover-surface)] hover:text-[var(--color-on-surface)]"
               type="button"
               aria-label={`${expanded ? "Collapse" : "Expand"} ${workspacePathLabel}`}
               aria-expanded={expanded}
               onClick={() => toggleWorkspaceExpanded(space.workspaceCode)}
-            >{`${expanded ? "Collapse" : "Expand"} ${workspacePathLabel}`}</button>
+            >
+              <ChevronDown className={cn("transition-transform", expanded ? "rotate-180" : "-rotate-90")} size={14} aria-hidden="true" />
+            </button>
           ) : (
             <span className="block size-0 shrink-0" aria-hidden="true" />
           )}
@@ -992,7 +1004,7 @@ export function TronShell({
                 {email ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{email}</span> : null}
                 {!email && personAiPlan ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{personAiPlan}</span> : null}
               </span>
-
+              <ChevronsUpDown className="shrink-0 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
             </>
           )}
         </button>
@@ -1023,12 +1035,14 @@ export function TronShell({
                 </span>
               </a>
               <button
-                className="inline-flex w-auto shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]"
                 type="button"
                 aria-label={t("shell:aria.openSystemSettings")}
                 title={t("shell:aria.openSystemSettings")}
                 onClick={openSystemSettings}
-              >{t("shell:aria.openSystemSettings")}</button>
+              >
+                <Settings2 size={16} aria-hidden="true" />
+              </button>
               {userMenuContent ? <div className="shrink-0">{userMenuContent}</div> : null}
             </div>
             {authSession ? (
@@ -1077,7 +1091,7 @@ export function TronShell({
           ) : (
             <span className="min-w-0 truncate">{domainName}</span>
           )}
-
+          <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)]", compact ? "hidden" : "")} size={16} aria-hidden="true" />
         </button>
         {utilityPanel === "domain" ? (
           <div

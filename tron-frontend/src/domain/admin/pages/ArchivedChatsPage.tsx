@@ -1,3 +1,4 @@
+import { Eye, RefreshCcw, RotateCcw, Trash2 } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -235,7 +236,7 @@ export function ArchivedChatsPage() {
             <div className="ml-auto flex items-center gap-2">
               {failedCodes.length > 0 && <Button variant="secondary" disabled={busy} onClick={() => void deleteSelected(failedCodes)}>{t("pages:archivedChats.retryFailures", { count: failedCodes.length })}</Button>}
               {selectedCodes.size > 0 && <Button variant="destructive" disabled={busy} onClick={() => void deleteSelected([...selectedCodes])}>{t("pages:archivedChats.deleteSelected", { count: selectedCodes.size })}</Button>}
-              <Button variant="ghost" size="sm" aria-label={t("pages:archivedChats.refresh")} title={t("pages:archivedChats.refresh")} disabled={loading || busy} onClick={() => void loadSessions(current)}>{t("pages:archivedChats.refresh")}</Button>
+              <Button variant="ghost" size="icon" aria-label={t("pages:archivedChats.refresh")} title={t("pages:archivedChats.refresh")} disabled={loading || busy} onClick={() => void loadSessions(current)}><RefreshCcw /></Button>
             </div>
           </>
         )}
@@ -256,9 +257,9 @@ export function ArchivedChatsPage() {
           { id: "workspace", header: t("pages:archivedChats.workspace"), width: "180px", render: (session) => <p className="truncate" title={session.workspaceCode}>{workspaceLabels.get(session.workspaceCode) ?? session.workspaceCode}</p> },
           { id: "updatedAt", header: t("pages:archivedChats.updatedAt"), width: "210px", render: (session) => <time className="text-xs">{displayTimestamp(session.updatedAt)}</time> },
           { id: "actions", header: t("pages:archivedChats.actions"), width: "152px", align: "right", headerClassName: "sticky right-0 z-20 border-l border-[var(--color-outline-variant)] bg-[var(--tron-table-header-bg,var(--color-elevated-surface))]", cellClassName: "sticky right-0 z-10 border-l border-[var(--color-outline-variant)] bg-[var(--_tron-row-bg)]", render: (session) => <div className="flex justify-end gap-1">
-            <Button variant="ghost" size="sm" title={t("pages:archivedChats.view")} aria-label={t("pages:archivedChats.view")} disabled={busy} onClick={() => void openSession(session)}>{t("pages:archivedChats.view")}</Button>
-            <Button variant="ghost" size="sm" title={t("pages:archivedChats.restore")} aria-label={t("pages:archivedChats.restore")} disabled={busy} onClick={() => void restoreSession(session)}>{t("pages:archivedChats.restore")}</Button>
-            <Button variant="ghost" size="sm" className="text-[var(--color-error)]" title={t("pages:archivedChats.delete")} aria-label={t("pages:archivedChats.delete")} disabled={busy} onClick={() => void deleteSelected([session.sessionCode])}>{t("pages:archivedChats.delete")}</Button>
+            <Button variant="ghost" size="icon" title={t("pages:archivedChats.view")} aria-label={t("pages:archivedChats.view")} disabled={busy} onClick={() => void openSession(session)}><Eye /></Button>
+            <Button variant="ghost" size="icon" title={t("pages:archivedChats.restore")} aria-label={t("pages:archivedChats.restore")} disabled={busy} onClick={() => void restoreSession(session)}><RotateCcw /></Button>
+            <Button variant="ghost" size="icon" className="text-[var(--color-error)]" title={t("pages:archivedChats.delete")} aria-label={t("pages:archivedChats.delete")} disabled={busy} onClick={() => void deleteSelected([session.sessionCode])}><Trash2 /></Button>
           </div> },
         ]}
       />

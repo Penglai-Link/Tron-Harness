@@ -1,3 +1,4 @@
+import { Minimize2 } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -281,13 +282,15 @@ export function GraphPage() {
           {canvasPanel}
           <Button
             className="absolute right-4 top-4 z-40 bg-[var(--color-elevated-surface)]/90 shadow-[0_10px_28px_rgba(15,23,42,0.10)] backdrop-blur-sm"
-            size="sm"
+            size="icon"
             variant="ghost"
             type="button"
             aria-label={pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen")}
             title={pageT("toolbar.fullscreen.exit", "Exit fullscreen")}
             onClick={() => setGraphFullscreenActive(false)}
-          >{pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen")}</Button>
+          >
+            <Minimize2 size={16} aria-hidden="true" />
+          </Button>
         </div>,
         document.body,
       ) : (

@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router";
@@ -335,12 +336,14 @@ export function ProfileSelectionPage() {
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
+                size="icon-sm"
                 className="ml-auto shrink-0 text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)]"
                 aria-label={t("personAiProfiles.remove.ariaLabel")}
                 title={t("personAiProfiles.remove.ariaLabel")}
                 onClick={(event) => { event.stopPropagation(); setError(null); setProfileToRemove(profile); }}
-              >{t("personAiProfiles.remove.ariaLabel")}</Button>
+              >
+                <Trash2 className="size-4" />
+              </Button>
             </div>
             ))}
             <Button

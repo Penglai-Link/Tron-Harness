@@ -1,3 +1,4 @@
+import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 
 import { useTranslation } from "react-i18next";
@@ -81,7 +82,7 @@ const ActionsMenu = ({
               needHover
               onClick={(event) => event.stopPropagation()}
               aria-label={t("common:actions.more", "More")}
-            />
+            ><MoreHorizontal size={16} aria-hidden="true" /></ActionButton>
           }
         />
         <DropdownMenuContent

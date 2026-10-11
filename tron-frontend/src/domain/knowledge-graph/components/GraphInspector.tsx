@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -58,7 +59,9 @@ export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: Gr
             <Badge variant={node.properties.status === "ACTIVE" ? "success" : "info"}>{formatValue(node.properties.status ?? "ACTIVE")}</Badge>
           </div>
         </div>
-        <Button size="sm" variant="ghost" type="button" aria-label={pageT("inspector.closeAria", "Close node inspector")} onClick={onClose}>{pageT("inspector.closeAria", "Close node inspector")}</Button>
+        <Button size="icon" variant="ghost" type="button" aria-label={pageT("inspector.closeAria", "Close node inspector")} onClick={onClose}>
+          <X size={16} aria-hidden="true" />
+        </Button>
       </div>
 
       <section className="space-y-2">

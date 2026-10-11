@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -33,8 +34,8 @@ export function ResourceFilePreviewDialog({ workspaceCode, resourceCode, fileNam
 
             {fullscreenLabel}
           </Button>
-          <DialogClose render={<Button variant="ghost" size="sm" aria-label={t("resourceEditor.preview.close")} />}>
-            {t("resourceEditor.preview.close")}
+          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label={t("resourceEditor.preview.close")} />}>
+            <X size={16} aria-hidden="true" />
           </DialogClose>
         </div>
       </DialogHeader>

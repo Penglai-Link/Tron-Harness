@@ -1,3 +1,4 @@
+import { MoreHorizontal } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -478,7 +479,9 @@ export function ModelRegistryPage() {
                 return (
                   <div className="flex justify-end">
                     <DropdownMenu>
-                      <DropdownMenuTrigger disabled={isBusy} aria-label={pageT("aria.openActions", "Open actions for {{name}}", { name: row.displayName })} onClick={(event) => event.stopPropagation()}>{t("common:actions.more")}</DropdownMenuTrigger>
+                      <DropdownMenuTrigger disabled={isBusy} aria-label={pageT("aria.openActions", "Open actions for {{name}}", { name: row.displayName })} onClick={(event) => event.stopPropagation()}>
+                        <MoreHorizontal size={16} aria-hidden="true" />
+                      </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44">
                         {row.enabled && !row.isDefault ? (
                           <DropdownMenuItem

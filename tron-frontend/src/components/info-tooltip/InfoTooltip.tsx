@@ -17,7 +17,7 @@ export function InfoTooltip({
   align,
   ariaLabel,
   children,
-  variant = "text",
+  variant = "icon",
 }: InfoTooltipProps) {
   const { t } = useTranslation("common");
 

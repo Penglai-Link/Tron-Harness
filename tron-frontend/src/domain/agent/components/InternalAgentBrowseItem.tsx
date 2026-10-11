@@ -1,3 +1,4 @@
+import { ShieldCheck, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -21,15 +22,17 @@ export function InternalAgentBrowseItem({ agent, name, groupLabel, disabled, can
       </span>
       <span className="max-w-full truncate text-xs font-normal text-[var(--color-on-surface-variant)]" title={groupLabel}>{groupLabel}</span>
     </Button>
-    {canDelete && onDelete ? <Button type="button" variant="ghost" size="sm" disabled={disabled}
+    {canDelete && onDelete ? <Button type="button" variant="ghost" size="icon-sm" disabled={disabled}
       aria-label={t("pages:workspaceAgents.internal.groups.deleteAgent", { defaultValue: "Delete {{name}}", name })}
       title={t("pages:workspaceAgents.internal.groups.deleteAgent", { defaultValue: "Delete {{name}}", name })}
-      className="absolute right-1 top-1 text-[var(--color-error)]" onClick={onDelete}>{t("pages:workspaceAgents.internal.groups.deleteAgent", { defaultValue: "Delete {{name}}", name })}</Button> : null}
+      className="absolute right-1 top-1 text-[var(--color-error)]" onClick={onDelete}>
+      <Trash2 aria-hidden="true" />
+    </Button> : null}
     {agent.builtIn ? <Tooltip>
       <TooltipTrigger aria-label={builtInLabel}
-        className="absolute left-1 top-1 flex h-6 px-1 text-xs items-center justify-center rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface-variant)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+        className="absolute left-[calc(50%+1.5rem)] top-[5.25rem] flex size-6 items-center justify-center rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface-variant)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
 >
-        {builtInLabel}
+        <ShieldCheck size={14} aria-hidden="true" />
       </TooltipTrigger>
       <TooltipContent>{builtInLabel}</TooltipContent>
     </Tooltip> : null}

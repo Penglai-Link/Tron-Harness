@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ReactNode } from "react";
 
@@ -39,7 +40,9 @@ export function EditableTabList({
             renderAddTrigger ? (
               renderAddTrigger({ onAdd })
             ) : (
-              <Button aria-label={t("content.addTab", "Add tab")} onClick={onAdd} size="sm" type="button" variant="ghost">{t("content.addTab", "Add tab")}</Button>
+              <Button aria-label={t("content.addTab", "Add tab")} onClick={onAdd} size="icon-sm" type="button" variant="ghost">
+                <Plus aria-hidden="true" />
+              </Button>
             )
           ) : null}
         </TabsList>

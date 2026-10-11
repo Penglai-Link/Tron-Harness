@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { InputHTMLAttributes } from "react";
 import { useTranslation } from "react-i18next";
 import { useMemo, useState, useEffect } from "react";
@@ -65,12 +66,14 @@ export function SearchField({
       {localValue ? (
         <Button
           aria-label={clearLabel ?? t("search.clear")}
-          className="absolute right-1 top-1/2 w-auto -translate-y-1/2"
-          size="sm"
+          className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+          size="icon"
           type="button"
           variant="ghost"
           onClick={handleClear}
-        >{clearLabel ?? t("search.clear")}</Button>
+        >
+          <X size={14} aria-hidden="true" />
+        </Button>
       ) : null}
     </div>
   );

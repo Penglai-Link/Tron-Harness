@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useNavigate } from "react-router";
@@ -85,10 +86,10 @@ export function TaskFlowsPage() {
               <Button
                 aria-label={t("pages:tasks.taskFlows.aria.deleteFlow", "Delete {{name}}", { name: taskFlowDisplayName(flow, flowT) })}
                 disabled={flow.flowCode === "DEFAULT"}
-                size="sm"
+                size="icon"
                 variant="ghost"
                 onClick={(event) => { event.stopPropagation(); setFlowToDelete(flow); }}
-              >{t("pages:tasks.taskFlows.aria.deleteFlow", "Delete {{name}}", { name: taskFlowDisplayName(flow, flowT) })}</Button>
+              ><Trash2 size={16} /></Button>
             ),
           },
         ]}

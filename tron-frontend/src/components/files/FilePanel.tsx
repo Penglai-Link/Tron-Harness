@@ -1,3 +1,4 @@
+import { ChevronDown, FilePlus2, FolderOpen, FolderPlus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -388,23 +389,27 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
         </span>
         <div className="flex shrink-0 items-center gap-0.5">
           <Button
-            size="sm"
+            size="icon-sm"
             variant="ghost"
             type="button"
             title={t("files.openFolder")}
             aria-label={t("files.openFolder")}
             onClick={() => void handlePick()}
-          >{t("files.openFolder")}</Button>
+          >
+            <FolderOpen size={14} aria-hidden="true" />
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <Button
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
                   type="button"
                   title={t("files.openOptions")}
                   aria-label={t("files.openOptions")}
-                >{t("files.openOptions")}</Button>
+                >
+                  <ChevronDown size={13} aria-hidden="true" />
+                </Button>
               }
             />
             <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-56">
@@ -438,21 +443,25 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
         <ResizablePanel defaultSize="280px" minSize="20px" className="flex min-w-0 flex-col">
           <div className="flex h-10 items-center gap-1 border-b border-[var(--color-outline-variant)] px-2">
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               type="button"
               title={t("files.createFile")}
               aria-label={t("files.createFile")}
               onClick={() => handleAction("createFile", "", { name: "", isDir: false, isFile: true, isSymlink: false, size: 0 })}
-            >{t("files.createFile")}</Button>
+            >
+              <FilePlus2 size={14} aria-hidden="true" />
+            </Button>
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               type="button"
               title={t("files.createDirectory")}
               aria-label={t("files.createDirectory")}
               onClick={() => handleAction("createDirectory", "", { name: "", isDir: true, isFile: false, isSymlink: false, size: 0 })}
-            >{t("files.createDirectory")}</Button>
+            >
+              <FolderPlus size={14} aria-hidden="true" />
+            </Button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <FileTree

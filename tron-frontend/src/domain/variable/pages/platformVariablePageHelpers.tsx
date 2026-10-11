@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import type { MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -133,12 +134,14 @@ export function SensitiveRevealIconButton({
   return (
     <Button
       type="button"
-      size="sm"
+      size="icon"
       variant="ghost"
       aria-label={`${label} ${variableKey}`}
       title={label}
       onClick={onClick}
-    >{`${label} ${variableKey}`}</Button>
+    >
+      {revealed ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+    </Button>
   );
 }
 

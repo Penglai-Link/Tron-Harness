@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, MoreHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useNavigate } from "react-router";
@@ -302,29 +303,35 @@ export function NavigationDomainsPage() {
               return (
                 <div className="flex justify-end gap-1">
                   <Button
-                    size="sm"
+                    size="icon"
                     variant="ghost"
                     aria-label={text("aria.moveDomainUp", `上移 ${row.domainCode}`, `Move ${row.domainCode} up`)}
                     title={text("aria.moveDomainUp", `上移 ${row.domainCode}`, `Move ${row.domainCode} up`)}
                     disabled={reordering || rowIndex <= 0}
                     onClick={() => void moveDomain(row, -1)}
-                  >{text("aria.moveDomainUp", `上移 ${row.domainCode}`, `Move ${row.domainCode} up`)}</Button>
+                  >
+                    <ArrowUp size={16} aria-hidden="true" />
+                  </Button>
                   <Button
-                    size="sm"
+                    size="icon"
                     variant="ghost"
                     aria-label={text("aria.moveDomainDown", `下移 ${row.domainCode}`, `Move ${row.domainCode} down`)}
                     title={text("aria.moveDomainDown", `下移 ${row.domainCode}`, `Move ${row.domainCode} down`)}
                     disabled={reordering || rowIndex < 0 || rowIndex >= records.length - 1}
                     onClick={() => void moveDomain(row, 1)}
-                  >{text("aria.moveDomainDown", `下移 ${row.domainCode}`, `Move ${row.domainCode} down`)}</Button>
+                  >
+                    <ArrowDown size={16} aria-hidden="true" />
+                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="ghost"
                           aria-label={text("aria.domainActions", `打开 ${row.domainCode} 操作`, `Open actions for ${row.domainCode}`)}
-                        >{text("aria.domainActions", `打开 ${row.domainCode} 操作`, `Open actions for ${row.domainCode}`)}</Button>
+                        >
+                          <MoreHorizontal size={16} aria-hidden="true" />
+                        </Button>
                       }
                     />
                     <DropdownMenuContent align="end" className="w-36">

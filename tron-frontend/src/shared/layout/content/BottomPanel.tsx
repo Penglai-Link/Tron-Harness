@@ -1,3 +1,4 @@
+import { Maximize2, Minimize2, Plus, ChevronDown } from "lucide-react";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -185,14 +186,16 @@ export default function BottomPanel({
           preserveInternalTabs={false}
           renderAddTrigger={({ onAdd }) => (
             <>
-              <button type="button" aria-label={t("agentTerminal.newTab")} title={t("agentTerminal.newTab")} className="shrink-0 rounded p-1 hover:bg-background" onClick={onAdd}>{t("agentTerminal.newTab")}</button>
+              <button type="button" aria-label={t("agentTerminal.newTab")} title={t("agentTerminal.newTab")} className="shrink-0 rounded p-1 hover:bg-background" onClick={onAdd}>
+                <Plus aria-hidden="true" size={16} />
+              </button>
               {sessionCode && runningTerminals.length > 0 ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     render={
                       <button type="button" className="flex max-w-48 shrink-0 items-center gap-1 rounded border bg-background px-2 py-1 text-xs hover:bg-accent" aria-label={t("agentTerminal.open")}>
                         <span className="truncate">{t("agentTerminal.open")}</span>
-
+                        <ChevronDown aria-hidden="true" size={14} />
                       </button>
                     }
                   />
@@ -214,7 +217,9 @@ export default function BottomPanel({
               title={t(maximized ? "agentTerminal.restorePanel" : "agentTerminal.maximizePanel")}
               className="shrink-0 rounded p-1 text-muted-foreground hover:bg-background hover:text-foreground"
               onClick={toggleMaximized}
-            >{t(maximized ? "agentTerminal.restorePanel" : "agentTerminal.maximizePanel")}</button>
+            >
+              {maximized ? <Minimize2 aria-hidden="true" size={16} /> : <Maximize2 aria-hidden="true" size={16} />}
+            </button>
           )}
         />
       </ResizablePanel>

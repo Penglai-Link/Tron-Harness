@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -410,11 +411,13 @@ function KeyValueListSection({
               )))}
             />
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
               aria-label={`Remove ${label.toLowerCase()} row ${index + 1}`}
               onClick={() => onChange(rows.length > 1 ? rows.filter((_, rowIndex) => rowIndex !== index) : [{ key: "", value: "" }])}
-            >{`Remove ${label.toLowerCase()} row ${index + 1}`}</Button>
+            >
+              <Trash2 size={16} aria-hidden="true" />
+            </Button>
           </div>
         ))}
       </div>
@@ -465,11 +468,13 @@ function StringListSection({
               )))}
             />
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
               aria-label={`Remove ${label.toLowerCase()} item ${index + 1}`}
               onClick={() => onChange(rows.length > 1 ? rows.filter((_, rowIndex) => rowIndex !== index) : [{ value: "" }])}
-            >{`Remove ${label.toLowerCase()} item ${index + 1}`}</Button>
+            >
+              <Trash2 size={16} aria-hidden="true" />
+            </Button>
           </div>
         ))}
       </div>

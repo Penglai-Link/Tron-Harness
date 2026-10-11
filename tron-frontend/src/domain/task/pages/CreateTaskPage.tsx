@@ -1,3 +1,4 @@
+import { Maximize2, X } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -291,7 +292,9 @@ export function CreateTaskPage() {
                 variant="ghost"
                 aria-label={pageT("aria.openDescription", "Open description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(true)}
-              >{pageT("aria.openDescription", "Open description fullscreen")}</Button>
+              >
+                <Maximize2 size={14} aria-hidden="true" />
+              </Button>
             </div>
             <TextArea
               aria-label={pageT("aria.description", "Task description")}
@@ -319,12 +322,14 @@ export function CreateTaskPage() {
                 </p>
               </div>
               <Button
-                size="sm"
+                size="icon"
                 type="button"
                 variant="ghost"
                 aria-label={pageT("aria.closeDescription", "Close description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(false)}
-              >{pageT("aria.closeDescription", "Close description fullscreen")}</Button>
+              >
+                <X size={16} aria-hidden="true" />
+              </Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               <TextArea

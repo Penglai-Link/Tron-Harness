@@ -1,3 +1,27 @@
+import {
+  BookmarkPlus,
+  Copy,
+  Ellipsis,
+  Pencil,
+  AlarmClock,
+  Bot,
+  CheckCircle2,
+  CircleAlert,
+  CircleDot,
+  ListTodo,
+  LoaderCircle,
+  MessageCircleQuestionMark,
+  MessageSquareText,
+  Pause,
+  Paperclip,
+  Plus,
+  UserRound,
+  type LucideIcon,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { ShinyText } from "@/shared/motion";
 import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
@@ -9,7 +33,6 @@ import { openAgentTerminalFromLiveResult } from "../terminal/store";
 import { SessionApplicationsPanel } from "@/domain/chat/components/SessionApplicationsPanel";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { AlarmClock, Bot, CheckCircle2, CircleAlert, CircleDot, ListTodo, LoaderCircle, MessageCircleQuestionMark, MessageSquareText, Pause, Paperclip, Plus, UserRound, type LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -289,11 +312,11 @@ function ChatAttachmentChip({
         ) : null}
         <Button
           aria-label={t("chat.management.composer.removeAttachment", { label })}
-          size="sm"
+          size="icon"
           variant="outline"
-          className="absolute right-1 top-1 h-6 w-auto rounded-full bg-[var(--color-on-surface)] px-2 text-[var(--color-surface)]"
+          className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
           onClick={onRemove}
-        >{t("common:actions.remove")}</Button>
+        ><X aria-hidden="true" size={14} /></Button>
       </div>
     );
   }
@@ -312,11 +335,11 @@ function ChatAttachmentChip({
       </span>
       <Button
         aria-label={t("chat.management.composer.removeAttachment", { label })}
-        size="sm"
+        size="icon"
         variant="outline"
-        className="absolute right-1 top-1 h-6 w-auto rounded-full bg-[var(--color-on-surface)] px-2 text-[var(--color-surface)]"
+        className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
         onClick={onRemove}
-      >{t("common:actions.remove")}</Button>
+      ><X aria-hidden="true" size={14} /></Button>
     </div>
   );
 }
@@ -2127,7 +2150,7 @@ function stoppedAguiEvents(sessionCode: string, runCodes: Iterable<string>): Cha
 
 function iconButtonClass(active = false) {
   return cn(
-    "inline-flex flex-none min-h-8 px-2 items-center justify-center rounded-md border border-transparent text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex size-8 flex-none items-center justify-center rounded-md border border-transparent text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50",
     active && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
   );
 }
@@ -2208,7 +2231,7 @@ function SessionActionMenu({
     <div className="relative">
       <button
         ref={triggerRef}
-        className="inline-flex w-auto items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+        className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
         type="button"
         aria-label={t("chat.management.sidebar.openActionsAria", { title: session.title })}
         aria-expanded={open}
@@ -2217,7 +2240,9 @@ function SessionActionMenu({
           event.stopPropagation();
           setOpen((value) => !value);
         }}
-      >{t("common:actions.more")}</button>
+      >
+        <Ellipsis size={16} />
+      </button>
       {open ? (
         <div
           ref={menuRef}
@@ -2600,7 +2625,9 @@ function ContextOverviewPanel({
             title={t("chat.shortTermMemory.createCheckpoint")}
             type="button"
             onClick={onCreateCompaction}
-          >{t("chat.shortTermMemory.createCheckpoint")}</button>
+          >
+            {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <BookmarkPlus size={15} />}
+          </button>
         </div>
       </div>
       <div className="flex min-w-0 items-baseline justify-between gap-3">
@@ -3506,7 +3533,7 @@ function ChatModelSelector({
         >
 
           <span className="truncate">{selectedModelLabel}</span>
-
+          <ChevronDown aria-hidden="true" size={14} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
@@ -3617,7 +3644,7 @@ function ChatAgentSelector({
         >
 
           <span className="truncate">{loading ? t("chat.management.agentSelector.loading") : selectedAgent?.name ?? t("chat.management.agentSelector.mainAgent")}</span>
-
+          <ChevronDown aria-hidden="true" size={14} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-72 min-w-[180px] max-w-[260px] overflow-y-auto p-1.5" side="top" sideOffset={8}>
           {agents.map((agent) => (
@@ -3631,7 +3658,7 @@ function ChatAgentSelector({
                 onSelect(agent.agentCode);
               }}
             >
-
+              {agent.agentCode === selectedAgentCode ? <Check aria-hidden="true" className="absolute right-2 top-2 size-4" /> : null}
               <span className="block min-w-0 truncate font-medium">{agent.name}</span>
               <span className="mt-0.5 block min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">
                 {agent.agentCode}
@@ -3812,17 +3839,24 @@ function SessionSidebar({
               title={t("chat.management.sidebar.newSession")}
               disabled={creatingSession}
               onClick={onCreateSession}
-            >{t("chat.management.sidebar.newSession")}</button>
+            ><Plus aria-hidden="true" size={17} /></button>
           </div>
           <div className="mx-auto mt-4 h-px w-6 bg-[rgba(15,23,42,0.06)]" />
           <div className="mt-3 flex flex-1 flex-col items-center gap-1 overflow-y-auto">
             {activeFlatSessions.map((session) => (
               <Tooltip key={session.sessionCode}>
-                <TooltipTrigger render={<button type="button" />}
+                <TooltipTrigger
+                  render={<button type="button" />}
                   className={iconButtonClass(activeSessionCode === session.sessionCode)}
                   aria-label={t("chat.management.sidebar.openAria", { title: session.title })}
                   onClick={() => onSessionSelect(session, activeSourceTab)}
-                >{t("chat.management.sidebar.openAria", { title: session.title })}</TooltipTrigger>
+                >
+                  {pendingUserInputSessionCodes.has(session.sessionCode) ? (
+                    <MessageCircleQuestionMark aria-hidden="true" className="text-[var(--color-focus-ring)]" size={17} />
+                  ) : (
+                    <MessageSquareText aria-hidden="true" className={sessionAgentIconTone(session.agentCode)} size={17} />
+                  )}
+                </TooltipTrigger>
                 <TooltipContent side="right">
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide">{sessionAgentTagLabel(session.agentCode)}</p>
@@ -3849,7 +3883,7 @@ function SessionSidebar({
                 title={t("chat.management.sidebar.newSession")}
                 disabled={creatingSession}
                 onClick={onCreateSession}
-              >{t("chat.management.sidebar.newSession")}</button>
+              ><Plus aria-hidden="true" size={17} /></button>
             </div>
           </div>
           <div className="h-[calc(100%-3.5rem)] overflow-y-auto px-3 py-4">
@@ -3906,7 +3940,7 @@ function SessionSidebar({
                     }}
                   >
                     <span>{group.taskTitle}</span>
-
+                    {closed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                   </button>
                   {!closed ? (
                     <div className="space-y-1">
@@ -3974,12 +4008,14 @@ function ChatBubble({
               />
               <button
                 aria-label={t("chat.management.bubble.editMessage")}
-                className="inline-flex w-auto items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
+                className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
                 disabled={!message.content || !onEditMessage}
                 title={t("chat.management.bubble.editMessage")}
                 type="button"
                 onClick={() => void handleEditMessage()}
-              >{t("chat.management.bubble.editMessage")}</button>
+              >
+                <Pencil size={14} />
+              </button>
             </>
           ) : null}
           <span className="text-xs text-[var(--color-on-surface-variant)]">{formatTime(message.createdAt)}</span>
@@ -4054,7 +4090,7 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
           </span>
         </div>
         <span className="mt-0.5 shrink-0 text-[var(--color-on-surface-variant)]">
-
+          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </span>
       </button>
       {expanded ? (
@@ -4119,12 +4155,14 @@ function CopyValueButton({
   return (
     <button
       aria-label={ariaLabel}
-      className="inline-flex w-auto items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
+      className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
       disabled={!value.trim()}
       title={title}
       type="button"
       onClick={() => void handleCopy()}
-    >{ariaLabel}</button>
+    >
+      {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+    </button>
   );
 }
 
@@ -4206,7 +4244,7 @@ function CompactToolRow({
           </div>
         </div>
         <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
-
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
       </button>
       {expanded ? (
@@ -4313,7 +4351,7 @@ function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
           </span>
         </span>
         <span className="shrink-0 text-[var(--color-on-surface-variant)]">
-
+          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </span>
       </button>
       {expanded ? (
@@ -5649,7 +5687,7 @@ export function ChatManagementPage() {
             >
 
               <span className="min-w-0 truncate">{selectedReasoningEffortLabel}</span>
-
+              <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" sideOffset={8}>
               {selectedModelDefaultReasoningEffort ? null : (
@@ -5657,7 +5695,7 @@ export function ChatManagementPage() {
                   className="relative pr-8"
                   onClick={() => setSelectedReasoningEffort(null)}
                 >
-
+                  {selectedReasoningEffortControlValue === modelDefaultReasoningEffortValue ? <Check aria-hidden="true" className="absolute right-2 size-4" /> : null}
                   {selectedReasoningEffortDefaultLabel}
                 </DropdownMenuItem>
               )}
@@ -5671,7 +5709,7 @@ export function ChatManagementPage() {
                       option.value === selectedModelDefaultReasoningEffort ? null : option.value as ReasoningEffort,
                     )}
                   >
-
+                    {selected ? <Check aria-hidden="true" className="absolute right-2 size-4" /> : null}
                     {option.label}
                   </DropdownMenuItem>
                 );

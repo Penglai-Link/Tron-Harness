@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import {
   useEffect,
@@ -566,7 +567,9 @@ export function AutomationDetailsPage() {
                     : pt("Preview the rendered prompt that the scheduler will dispatch for this automation.")}
                 </p>
               </div>
-              <Button size="sm" type="button" variant="ghost" aria-label={pt("Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>{pt("Close prompt fullscreen")}</Button>
+              <Button size="icon" type="button" variant="ghost" aria-label={pt("Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>
+                <X size={16} aria-hidden="true" />
+              </Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               {editing ? (

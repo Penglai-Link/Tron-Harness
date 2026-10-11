@@ -1,3 +1,4 @@
+import { Maximize2, Minimize2, X, AlertCircle, CheckCircle2, Code2 } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -5,7 +6,6 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, CheckCircle2, Code2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Field, TextArea } from "@/components/forms";
@@ -180,7 +180,9 @@ export function JsonSchemaDraft7Editor({
 
             {tr("actions.test", "Test entry")}
           </Button>
-          <Button aria-label={isFullscreen ? tr("actions.exitFullscreen", "Exit fullscreen") : tr("actions.fullscreen", "Open fullscreen")} size="sm" variant="ghost" onClick={() => setIsFullscreen((current) => !current)}>{isFullscreen ? tr("actions.exitFullscreen", "Exit fullscreen") : tr("actions.fullscreen", "Open fullscreen")}</Button>
+          <Button aria-label={isFullscreen ? tr("actions.exitFullscreen", "Exit fullscreen") : tr("actions.fullscreen", "Open fullscreen")} size="icon-sm" variant="ghost" onClick={() => setIsFullscreen((current) => !current)}>
+            {isFullscreen ? <Minimize2 aria-hidden="true" size={15} /> : <Maximize2 aria-hidden="true" size={15} />}
+          </Button>
         </div>
       </header>
 
@@ -216,7 +218,7 @@ export function JsonSchemaDraft7Editor({
               <h2 id="json-schema-test-title" className="text-lg font-semibold">{tr("test.title", "Test entry")}</h2>
                 <p className="mt-0.5 text-[12px] text-[var(--color-on-surface-variant)]">{tr("test.description", "Check an entry against the current field rules.")}</p>
               </div>
-              <Button aria-label={tr("test.close", "Close test data dialog")} size="sm" variant="ghost" onClick={() => setTestOpen(false)}>{tr("test.close", "Close test data dialog")}</Button>
+              <Button aria-label={tr("test.close", "Close test data dialog")} size="icon-sm" variant="ghost" onClick={() => setTestOpen(false)}><X aria-hidden="true" size={15} /></Button>
             </header>
             <div className="space-y-4 p-5">
               <Field label={tr("test.data", "Entry data (JSON)")}>

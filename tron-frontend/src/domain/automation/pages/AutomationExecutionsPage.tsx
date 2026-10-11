@@ -1,3 +1,4 @@
+import { MoreHorizontal } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import {
   useEffect,
@@ -439,14 +440,16 @@ export function AutomationExecutionsPage() {
                       aria-haspopup="menu"
                       aria-label={pt("Open actions for {{code}}", { code: row.executionCode })}
                       disabled={busy}
-                      size="sm"
+                      size="icon"
                       type="button"
                       variant="ghost"
                       onClick={(event) => {
                         event.stopPropagation();
                         toggleExecutionRowMenu(row, event.currentTarget);
                       }}
-                    >{pt("Open actions for {{code}}", { code: row.executionCode })}</Button>
+                    >
+                      <MoreHorizontal size={16} aria-hidden="true" />
+                    </Button>
                   );
                 },
               },

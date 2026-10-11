@@ -1,6 +1,6 @@
+import { ChevronDown, ChevronRight, Plus, FolderTree } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FolderTree } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,13 +68,17 @@ function TreeNode({
     <div>
       <div className={`group flex min-w-0 items-center gap-1 rounded-md border-s-2 py-1 pe-1 ps-0 transition-colors ${selected ? "border-[var(--color-accent)] bg-[var(--color-surface-container-high)]" : "border-transparent hover:bg-[var(--color-surface-container)]"}`}>
         {record.children.length ? (
-          <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onToggle} aria-label={expanded ? labels.collapse : labels.expand} aria-expanded={expanded}>{expanded ? labels.collapse : labels.expand}</Button>
+          <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" onClick={onToggle} aria-label={expanded ? labels.collapse : labels.expand} aria-expanded={expanded}>
+            {expanded ? <ChevronDown /> : <ChevronRight />}
+          </Button>
         ) : <span aria-hidden="true" className="inline-block size-8 shrink-0" />}
         <button type="button" aria-current={selected ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left" onClick={onSelect}>
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{record.name}</span>
           <span className="hidden max-w-28 truncate font-mono text-xs text-[var(--color-on-surface-variant)] xl:block">{record.workspaceCode}</span>
         </button>
-        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-[var(--color-on-surface-variant)]" onClick={onCreateChild} aria-label={labels.createChild}>{labels.createChild}</Button>
+        <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-[var(--color-on-surface-variant)]" onClick={onCreateChild} aria-label={labels.createChild}>
+          <Plus />
+        </Button>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { MoreHorizontal, RefreshCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router";
@@ -273,13 +274,13 @@ export function ResourcesPage() {
                         aria-label={pageT("actions.forResource", {
                           name: row.original.name,
                         })}
-                        size="sm"
+                        size="icon"
                         variant="ghost"
                         onClick={(event) => event.stopPropagation()}
                         onKeyDown={(event) => event.stopPropagation()}
-                      >{pageT("actions.forResource", {
-                          name: row.original.name,
-                        })}</Button>
+                      >
+                        <MoreHorizontal aria-hidden="true" size={16} />
+                      </Button>
                     )}
                   />
                   <DropdownMenuContent align="end">
@@ -451,7 +452,9 @@ export function ResourcesPage() {
               onClick={() => {
                 void resourceTable.refresh();
               }}
-            >{pageT("actions.refresh")}</Button>
+            >
+              <RefreshCcw aria-hidden="true" size={15} />
+            </Button>
             <Button
               disabled={!activeWorkspace}
               size="lg"

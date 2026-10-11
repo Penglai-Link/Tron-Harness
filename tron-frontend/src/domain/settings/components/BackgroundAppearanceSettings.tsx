@@ -1,6 +1,6 @@
+import { Trash2, Image as ImageIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OptionSelect } from "@/components/option-select/OptionSelect";
@@ -79,11 +79,13 @@ export function BackgroundAppearanceSettings() {
               <Button
                 aria-label={t("settingsAppearance.backgroundImageRemove")}
                 disabled={savingImage}
-                size="sm"
+                size="icon-sm"
                 title={t("settingsAppearance.backgroundImageRemove")}
                 variant="ghost"
                 onClick={() => void removeImage()}
-              >{t("settingsAppearance.backgroundImageRemove")}</Button>
+              >
+                <Trash2 aria-hidden="true" />
+              </Button>
             ) : null}
             <input
               accept="image/avif,image/gif,image/jpeg,image/png,image/webp"

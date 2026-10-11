@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { ChatSession } from "@/domain/chat/model";
@@ -18,7 +19,7 @@ const CreateByProject = ({ project }: { project: ProjectRecord; sessions: ChatSe
         event.stopPropagation();
         create();
       }}
-    />
+    ><Plus size={16} aria-hidden="true" /></ActionButton>
   );
 };
 

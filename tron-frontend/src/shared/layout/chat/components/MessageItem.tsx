@@ -1,3 +1,4 @@
+import { Archive, LoaderCircle } from "lucide-react";
 import { memo, useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -110,13 +111,14 @@ const MessageItem = ({
               }}
               disabled={archiving || running}
               aria-label={t("common:actions.archive", "Archive")}
-            />
+            ><Archive size={16} aria-hidden="true" /></ActionButton>
             {running ? (
               <ActionButton
                 needHover
                 className="shrink-0 items-center justify-center pointer-events-none"
+                aria-label={t("common:status.running", "Running")}
               >
-                {t("common:status.running", "Running")}
+                <LoaderCircle aria-hidden="true" size={14} className="animate-spin" />
               </ActionButton>
             ) : null}
           </div>

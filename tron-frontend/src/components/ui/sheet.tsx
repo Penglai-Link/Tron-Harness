@@ -1,3 +1,4 @@
+import { XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next"
 import * as React from "react"
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
@@ -66,12 +67,12 @@ function SheetContent({
               <Button
                 variant="ghost"
                 className="absolute top-3 right-3"
-                size="sm"
+                size="icon-sm"
               />
             }
           >
-
-            <span>{t("actions.close")}</span>
+            <XIcon aria-hidden="true" />
+            <span className="sr-only">{t("actions.close")}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>

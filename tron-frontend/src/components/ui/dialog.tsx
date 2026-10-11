@@ -1,3 +1,4 @@
+import { XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next"
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
@@ -68,12 +69,12 @@ function DialogContent({
               <Button
                 variant="ghost"
                 className="absolute top-2 right-2"
-                size="sm"
+                size="icon-sm"
               />
             }
           >
-
-            <span >{closeLabel ?? t("actions.close")}</span>
+            <XIcon aria-hidden="true" />
+            <span className="sr-only">{closeLabel ?? t("actions.close")}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>

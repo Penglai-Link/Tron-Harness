@@ -1,3 +1,4 @@
+import { ArrowUp, ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -520,11 +521,13 @@ export function LoopDesigner() {
                                   patch({ nodes });
                                   setSelected(selected + offset);
                                 }}
-                              >{t(
-                                  offset < 0
-                                    ? "agentLoops.moveUp"
-                                    : "agentLoops.moveDown",
-                                )}</Button>
+                              >
+                                {offset < 0 ? (
+                                  <ArrowUp size={16} />
+                                ) : (
+                                  <ArrowDown size={16} />
+                                )}
+                              </Button>
                             ))
                           : null}
                         <Button

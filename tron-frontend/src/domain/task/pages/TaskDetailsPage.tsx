@@ -1,3 +1,4 @@
+import { Maximize2, X } from "lucide-react";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import {
   useCallback,
@@ -787,7 +788,9 @@ export function TaskDetailsPage() {
                 variant="ghost"
                 aria-label={pageT("aria.openDescription", "Open description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(true)}
-              >{pageT("aria.openDescription", "Open description fullscreen")}</Button>
+              >
+                <Maximize2 size={14} aria-hidden="true" />
+              </Button>
             </div>
             {detailEditable ? (
               <TextArea aria-label={pageT("detail.descriptionAria", "Task detail description")} className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
@@ -805,7 +808,9 @@ export function TaskDetailsPage() {
                 aria-label={pageT("detail.openExecutionResultFullscreen", "Open execution result fullscreen")}
                 disabled={!task.executionResult}
                 onClick={() => setExecutionResultFullscreenOpen(true)}
-              >{pageT("detail.openExecutionResultFullscreen", "Open execution result fullscreen")}</Button>
+              >
+                <Maximize2 size={14} aria-hidden="true" />
+              </Button>
             </div>
             <MarkdownContent ariaLabel={pageT("detail.executionResultMarkdownAria", "Task execution result markdown")} className="max-h-80 overflow-y-auto pr-2" content={task.executionResult} />
           </div>
@@ -827,12 +832,14 @@ export function TaskDetailsPage() {
                 </p>
               </div>
               <Button
-                size="sm"
+                size="icon"
                 type="button"
                 variant="ghost"
                 aria-label={pageT("aria.closeDescription", "Close description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(false)}
-              >{pageT("aria.closeDescription", "Close description fullscreen")}</Button>
+              >
+                <X size={16} aria-hidden="true" />
+              </Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               {detailEditable ? (
@@ -866,12 +873,14 @@ export function TaskDetailsPage() {
                 <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">{pageT("detail.executionResultHint", "Preview the final agent reply recorded for this task execution.")}</p>
               </div>
               <Button
-                size="sm"
+                size="icon"
                 type="button"
                 variant="ghost"
                 aria-label={pageT("detail.closeExecutionResultFullscreen", "Close execution result fullscreen")}
                 onClick={() => setExecutionResultFullscreenOpen(false)}
-              >{pageT("detail.closeExecutionResultFullscreen", "Close execution result fullscreen")}</Button>
+              >
+                <X size={16} aria-hidden="true" />
+              </Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               <div className="h-full overflow-y-auto pr-1">

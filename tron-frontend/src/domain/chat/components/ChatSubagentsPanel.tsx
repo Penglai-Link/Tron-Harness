@@ -1,3 +1,4 @@
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import { ShinyText } from "@/shared/motion";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,7 +30,7 @@ export function ChatSubagentsPanel({ sessionCode, workspaceCode }: { sessionCode
             <span className="block truncate font-medium">{item.agentName}</span>
             <span className="mt-1 line-clamp-2 whitespace-normal text-xs font-normal text-[var(--color-on-surface-variant)]">{item.task}</span>
           </span>
-
+          <ChevronRight aria-hidden className="size-4 shrink-0" />
         </Button>
       </li>)}
     </ul>
@@ -42,7 +43,7 @@ function SubagentSession({ parent, workspace, item, onBack }: { parent: string; 
   const { detail, error } = useChatSubagentDetail(parent, workspace, item.runId, visible);
   return <section className="flex h-full min-h-0 flex-col" aria-label={t("chat.subagents.session")}>
     <header className="flex items-center gap-2 border-b border-[var(--color-outline-variant)]/40 px-3 py-2">
-      <Button size="sm" variant="ghost" aria-label={t("chat.subagents.back")} onClick={onBack}>{t("chat.subagents.back")}</Button>
+      <Button size="icon" variant="ghost" aria-label={t("chat.subagents.back")} onClick={onBack}><ArrowLeft aria-hidden className="size-4" /></Button>
       <SubagentAvatar avatarId={item.avatarId} name={item.agentName} status={detail?.status ?? item.status} />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.agentName}</span>
     </header>

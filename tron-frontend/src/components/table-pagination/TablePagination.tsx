@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
@@ -74,7 +75,9 @@ export function TablePagination({
             {pageSizeOptions.map((item) => <SelectItem key={item} value={item}>{formatNumber(item)}</SelectItem>)}
           </SelectInput>
         </label>
-        <Button size="sm" variant="secondary" aria-label={t("pagination.previousPage")} disabled={!canGoPrevious} onClick={() => onPageChange?.(page - 1)}>{t("pagination.previousPage")}</Button>
+        <Button size="icon" variant="secondary" aria-label={t("pagination.previousPage")} disabled={!canGoPrevious} onClick={() => onPageChange?.(page - 1)}>
+          <ChevronLeft size={14} aria-hidden="true" />
+        </Button>
         <label className="flex items-center gap-[12px]">
           <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.page")}</span>
           <TextInput
@@ -89,7 +92,9 @@ export function TablePagination({
           />
           <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.of")} {pageCountLabel}</span>
         </label>
-        <Button size="sm" variant="secondary" aria-label={t("pagination.nextPage")} disabled={!canGoNext} onClick={() => onPageChange?.(page + 1)}>{t("pagination.nextPage")}</Button>
+        <Button size="icon" variant="secondary" aria-label={t("pagination.nextPage")} disabled={!canGoNext} onClick={() => onPageChange?.(page + 1)}>
+          <ChevronRight size={14} aria-hidden="true" />
+        </Button>
       </div>
     </div>
   );

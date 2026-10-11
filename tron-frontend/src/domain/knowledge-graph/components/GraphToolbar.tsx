@@ -1,3 +1,4 @@
+import { Maximize2, Minimize2, Minus, Plus, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -326,27 +327,35 @@ export function GraphToolbar({
               ) : null}
             </Button>
             <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-[12px]">
-              <Button className="w-auto sm:w-auto" size="sm" variant="ghost" type="button" aria-label={pageT("toolbar.zoomIn", "Zoom in")} title={pageT("toolbar.zoomIn", "Zoom in")} onClick={() => onZoomChange(10)}>{pageT("toolbar.zoomIn", "Zoom in")}</Button>
-              <Button className="w-auto sm:w-auto" size="sm" variant="ghost" type="button" aria-label={pageT("toolbar.zoomOut", "Zoom out")} title={pageT("toolbar.zoomOut", "Zoom out")} onClick={() => onZoomChange(-10)}>{pageT("toolbar.zoomOut", "Zoom out")}</Button>
+              <Button className="size-8 sm:size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomIn", "Zoom in")} title={pageT("toolbar.zoomIn", "Zoom in")} onClick={() => onZoomChange(10)}>
+                <Plus size={16} aria-hidden="true" />
+              </Button>
+              <Button className="size-8 sm:size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomOut", "Zoom out")} title={pageT("toolbar.zoomOut", "Zoom out")} onClick={() => onZoomChange(-10)}>
+                <Minus size={16} aria-hidden="true" />
+              </Button>
               <Button
-                className="w-auto sm:w-auto"
-                size="sm"
+                className="size-8 sm:size-9"
+                size="icon"
                 variant={fullscreenActive ? "secondary" : "ghost"}
                 type="button"
                 aria-label={fullscreenActive ? pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen") : pageT("toolbar.fullscreen.openAria", "Open graph fullscreen")}
                 title={fullscreenActive ? pageT("toolbar.fullscreen.exit", "Exit fullscreen") : pageT("toolbar.fullscreen.open", "Fullscreen")}
                 onClick={onToggleFullscreen}
-              >{fullscreenActive ? pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen") : pageT("toolbar.fullscreen.openAria", "Open graph fullscreen")}</Button>
+              >
+                {fullscreenActive ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
+              </Button>
               <Button
-                className="w-auto sm:w-auto"
-                size="sm"
+                className="size-8 sm:size-9"
+                size="icon"
                 variant="ghost"
                 type="button"
                 aria-label={pageT("actions.refresh", "Refresh graph")}
                 title={pageT("actions.refresh", "Refresh graph")}
                 disabled={!namespace || refreshing}
                 onClick={onRefresh}
-              >{pageT("actions.refresh", "Refresh graph")}</Button>
+              >
+                <RefreshCw className={refreshing ? "animate-spin" : undefined} size={16} aria-hidden="true" />
+              </Button>
             </div>
           </div>
         </div>

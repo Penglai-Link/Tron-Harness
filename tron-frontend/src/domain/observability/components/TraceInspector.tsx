@@ -1,3 +1,4 @@
+import { Copy } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -63,10 +64,12 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             aria-label={t("copyTraceId")}
             onClick={() => void copy()}
-          >{t("copyTraceId")}</Button>
+          >
+            <Copy />
+          </Button>
           <Button
             variant="secondary"
             nativeButton={false}

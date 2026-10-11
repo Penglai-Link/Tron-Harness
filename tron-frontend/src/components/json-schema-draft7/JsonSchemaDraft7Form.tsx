@@ -1,6 +1,6 @@
+import { Trash2, Braces, KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Braces, KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
@@ -345,10 +345,12 @@ function AdditionalPropertiesEditor({
               <Button
                 aria-label={t("jsonSchemaForm.removeProperty", { defaultValue: "Remove property" })}
                 className="mt-0.5"
-                size="sm"
+                size="icon-sm"
                 variant="ghost"
                 onClick={() => onChange(Object.fromEntries(entries.filter(([entryName]) => entryName !== name)))}
-              >{t("jsonSchemaForm.removeProperty", { defaultValue: "Remove property" })}</Button>
+              >
+                <Trash2 aria-hidden="true" size={14} />
+              </Button>
             ) : null}
           </div>
         ))}
@@ -499,10 +501,12 @@ function ArrayValueEditor({
                 <Button
                   aria-label={t("jsonSchemaForm.removeItem", { defaultValue: "Remove item {{index}}", index: index + 1 })}
                   disabled={schema.minItems !== undefined && arrayValue.length <= schema.minItems}
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
                   onClick={() => onChange(arrayValue.filter((_, entryIndex) => entryIndex !== index))}
-                >{t("jsonSchemaForm.removeItem", { defaultValue: "Remove item {{index}}", index: index + 1 })}</Button>
+                >
+                  <Trash2 aria-hidden="true" size={14} />
+                </Button>
               ) : null}
             </div>
           );

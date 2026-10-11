@@ -1,6 +1,6 @@
+import { ChevronRight, File as FileIcon, Folder, FolderOpen } from "lucide-react";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import { File as FileIcon, Folder, FolderOpen } from "lucide-react";
 
 import {
   ContextMenu,
@@ -85,14 +85,20 @@ function FileTreeNode({
               {isDir ? (
                 <button
                   type="button"
-                  className="flex w-auto shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
+                  className="flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
                   aria-label={isExpanded ? t("common:actions.collapse", "Collapse") : t("common:actions.expand", "Expand")}
                   aria-expanded={isExpanded}
                   onClick={(event) => {
                     event.stopPropagation();
                     onToggleDir(path);
                   }}
-                >{isExpanded ? t("common:actions.collapse", "Collapse") : t("common:actions.expand", "Expand")}</button>
+                >
+                  <ChevronRight
+                    size={14}
+                    className={cn("transition-transform", isExpanded && "rotate-90")}
+                    aria-hidden="true"
+                  />
+                </button>
               ) : (
                 <span className="block size-5 shrink-0" aria-hidden="true" />
               )}

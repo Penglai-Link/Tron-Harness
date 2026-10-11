@@ -1,8 +1,9 @@
 "use client";
 
+import { XIcon, ChevronsUpDownIcon } from "lucide-react";
+
 import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
 import { useTranslation } from "react-i18next";
-import { ChevronsUpDownIcon } from "lucide-react";
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -94,7 +95,7 @@ export function ComboboxInput({
         className={cn(
           startAddon &&
             "data-[size=sm]:*:data-[slot=combobox-input]:ps-[calc(--spacing(7.5)-1px)] *:data-[slot=combobox-input]:ps-[calc(--spacing(8.5)-1px)] sm:data-[size=sm]:*:data-[slot=combobox-input]:ps-[calc(--spacing(7)-1px)] sm:*:data-[slot=combobox-input]:ps-[calc(--spacing(8)-1px)]",
-          showClear ? "*:data-[slot=combobox-input]:pe-16" : sizeValue === "sm"
+          sizeValue === "sm"
             ? "has-[+[data-slot=combobox-trigger],+[data-slot=combobox-clear]]:*:data-[slot=combobox-input]:pe-6.5"
             : "has-[+[data-slot=combobox-trigger],+[data-slot=combobox-clear]]:*:data-[slot=combobox-input]:pe-7",
           className,
@@ -129,13 +130,14 @@ export function ComboboxInput({
       )}
       {showClear && (
         <ComboboxClear
+          aria-label={t("search.clear", "Clear")}
           className={cn(
-            "absolute top-1/2 inline-flex h-8 w-auto px-2 shrink-0 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border border-transparent opacity-80 outline-none transition-opacity pointer-coarse:after:absolute pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 hover:opacity-100 has-[+[data-slot=combobox-clear]]:hidden sm:h-7 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+            "absolute top-1/2 inline-flex size-8 shrink-0 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border border-transparent opacity-80 outline-none transition-opacity pointer-coarse:after:absolute pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 hover:opacity-100 has-[+[data-slot=combobox-clear]]:hidden sm:size-7 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
             sizeValue === "sm" ? "end-0" : "end-0.5",
           )}
           {...clearProps}
         >
-          {t("search.clear", "Clear")}
+          <XIcon />
         </ComboboxClear>
       )}
     </ComboboxPrimitive.InputGroup>
@@ -440,7 +442,7 @@ export function ComboboxChipRemove(
       data-slot="combobox-chip-remove"
       {...props}
     >
-      {t("actions.remove", "Remove")}
+      <XIcon />
     </ComboboxPrimitive.ChipRemove>
   );
 }

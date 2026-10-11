@@ -1,3 +1,4 @@
+import { ChevronDown, Plus } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -142,13 +143,15 @@ export const ChatSidebarPanel = memo(function ChatSidebarPanel({
                     className="opacity-0 transition-opacity group-hover/projects:opacity-100"
                     onClick={() => setProjectCreateOpen(true)}
                     aria-label={t("common:actions.create", "Create")}
-                  />
+                  ><Plus size={16} aria-hidden="true" /></ActionButton>
                   <ActionButton
                     className={
-                      "shrink-0"
+                      projectListExpanded
+                        ? "transition-transform"
+                        : "-rotate-90 transition-transform"
                     }
                     aria-label={t(projectListExpanded ? "common:actions.collapse" : "common:actions.expand", projectListExpanded ? "Collapse" : "Expand")}
-                  />
+                  ><ChevronDown size={16} aria-hidden="true" /></ActionButton>
                 </div>
               }
             />

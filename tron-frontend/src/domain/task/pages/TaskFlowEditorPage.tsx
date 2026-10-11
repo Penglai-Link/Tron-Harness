@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useNavigate, useSearchParams } from "react-router";
@@ -106,7 +107,7 @@ export function TaskFlowEditorPage() {
               <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] gap-2" key={`${status.statusCode}-${index}`}>
                 <TextInput disabled={status.required} placeholder={flowT("editor.statusCode", "Status code")} value={status.statusCode} onChange={(event) => updateStatus(index, "statusCode", event.target.value)} />
                 <TextInput disabled={status.required} placeholder={flowT("editor.statusName", "Status name")} value={status.required ? taskFlowStatusDisplayName(status, flowT) : status.name} onChange={(event) => updateStatus(index, "name", event.target.value)} />
-                <Button aria-label={flowT("aria.deleteStatus", "Delete status")} disabled={status.required} size="sm" variant="ghost" onClick={() => setStatuses((current) => current.filter((_, currentIndex) => currentIndex !== index))}>{flowT("aria.deleteStatus", "Delete status")}</Button>
+                <Button aria-label={flowT("aria.deleteStatus", "Delete status")} disabled={status.required} size="icon" variant="ghost" onClick={() => setStatuses((current) => current.filter((_, currentIndex) => currentIndex !== index))}><Trash2 size={16} /></Button>
               </div>
             ))}
           </div>

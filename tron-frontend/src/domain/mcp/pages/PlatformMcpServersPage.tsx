@@ -1,3 +1,4 @@
+import { MoreHorizontal } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -410,7 +411,7 @@ export function PlatformMcpServersPage() {
                 return (
                   <div className="flex justify-end">
                     <Button
-                      size="sm"
+                      size="icon"
                       variant="ghost"
                       aria-label={pageT("table.actions.open", "Open actions for {{name}}", { name: row.name })}
                       aria-expanded={isMenuOpen}
@@ -419,7 +420,9 @@ export function PlatformMcpServersPage() {
                         event.stopPropagation();
                         toggleRowMenu(row, event.currentTarget);
                       }}
-                    >{pageT("table.actions.open", "Open actions for {{name}}", { name: row.name })}</Button>
+                    >
+                      <MoreHorizontal size={16} aria-hidden="true" />
+                    </Button>
                   </div>
                 );
               },

@@ -1,3 +1,4 @@
+import { Clipboard, X } from "lucide-react";
 import {
   type ReactNode,
   useEffect,
@@ -675,7 +676,7 @@ export function PromptEditorPage({
                 <Field label={pt("fields.promptCode", "Prompt code")}>
                   <div className="relative w-full min-w-0">
                     <ReadOnlyValue className="pr-12 font-mono">{record?.promptCode ?? promptCode}</ReadOnlyValue>
-                    <Button className="absolute right-1 top-1/2 -translate-y-1/2" size="sm" variant="ghost" disabled={loading || submitting || translating} aria-label={pt("aria.copyPromptCode", "Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("messages.codeCopied", "Prompt code copied")); }}>{pt("aria.copyPromptCode", "Copy prompt code")}</Button>
+                    <Button className="absolute right-1 top-1/2 -translate-y-1/2" size="icon" variant="ghost" disabled={loading || submitting || translating} aria-label={pt("aria.copyPromptCode", "Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("messages.codeCopied", "Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
                   </div>
                 </Field>
               ) : categoryField}
@@ -873,7 +874,7 @@ export function PromptEditorPage({
             <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("fields.promptBody", "Prompt body")}</h2>
               <Button
-                size="sm"
+                size="icon"
                 type="button"
                 variant="ghost"
                 aria-label={pt("aria.closePromptBodyFullscreen", "Close prompt body fullscreen")}
@@ -881,7 +882,9 @@ export function PromptEditorPage({
                   setPromptBodyFullscreenOpen(false);
                   setPromptVariablePickerTrigger(null);
                 }}
-              >{pt("aria.closePromptBodyFullscreen", "Close prompt body fullscreen")}</Button>
+              >
+                <X size={16} aria-hidden="true" />
+              </Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               {isReadOnlyDetail ? (

@@ -1,3 +1,4 @@
+import { MoreHorizontal, Boxes } from "lucide-react";
 import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import {
   useEffect,
@@ -7,7 +8,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Boxes } from "lucide-react";
 
 import {
   createMemoryDomain,
@@ -592,7 +592,7 @@ export function PlatformMemoryDomainsPage() {
               render: (row) => (
                 <div className="flex justify-end">
                   <Button
-                    size="sm"
+                    size="icon"
                     variant="ghost"
                     aria-expanded={openRowMenu?.domainCode === row.domainCode}
                     aria-label={`Open actions for ${row.domainCode}`}
@@ -601,7 +601,9 @@ export function PlatformMemoryDomainsPage() {
                       event.stopPropagation();
                       toggleRowMenu(row, event.currentTarget);
                     }}
-                  >{`Open actions for ${row.domainCode}`}</Button>
+                  >
+                    <MoreHorizontal size={16} aria-hidden="true" />
+                  </Button>
                 </div>
               ),
             },

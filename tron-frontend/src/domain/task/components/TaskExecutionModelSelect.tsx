@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -170,7 +171,7 @@ export function TaskExecutionModelSelect({
         >
 
           <span className="min-w-0 flex-1 truncate text-left">{selectedModelLabel}</span>
-
+          <ChevronDown aria-hidden="true" className="shrink-0 text-[var(--color-on-surface-variant)]" size={15} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"

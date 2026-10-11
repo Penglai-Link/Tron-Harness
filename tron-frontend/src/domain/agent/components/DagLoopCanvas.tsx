@@ -1,3 +1,4 @@
+import { ZoomIn, ZoomOut, Maximize, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -242,7 +243,7 @@ export function DagLoopCanvas({
           {edge !== null && design.edges[edge] ? (
             <Button
               type="button"
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               disabled={disabled}
               aria-label={t("agentLoops.removeEdge")}
@@ -250,32 +251,40 @@ export function DagLoopCanvas({
                 onDisconnect(edge);
                 setEdge(null);
               }}
-            >{t("agentLoops.removeEdge")}</Button>
+            >
+              <Trash2 size={14} />
+            </Button>
           ) : null}
           <Button
             type="button"
-            size="sm"
+            size="icon-sm"
             variant="ghost"
             aria-label={t("agentLoops.zoomOut")}
             onClick={() => zoom(1 / 1.2)}
-          >{t("agentLoops.zoomOut")}</Button>
+          >
+            <ZoomOut size={14} />
+          </Button>
           <span className="w-10 text-center text-xs text-[var(--color-on-surface-variant)]">
             {Math.round(camera.zoom * 1000) / 10}%
           </span>
           <Button
             type="button"
-            size="sm"
+            size="icon-sm"
             variant="ghost"
             aria-label={t("agentLoops.zoomIn")}
             onClick={() => zoom(1.2)}
-          >{t("agentLoops.zoomIn")}</Button>
+          >
+            <ZoomIn size={14} />
+          </Button>
           <Button
             type="button"
-            size="sm"
+            size="icon-sm"
             variant="ghost"
             aria-label={t("agentLoops.fitCanvas")}
             onClick={fit}
-          >{t("agentLoops.fitCanvas")}</Button>
+          >
+            <Maximize size={14} />
+          </Button>
         </div>
       </div>
       <div

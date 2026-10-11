@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -261,10 +262,12 @@ const RightPanelTabs = memo(function RightPanelTabs({
             render={
               <Button
                 aria-label={t("content.addTab")}
-                size="sm"
+                size="icon-sm"
                 type="button"
                 variant="ghost"
-              >{t("content.addTab")}</Button>
+              >
+                <Plus aria-hidden="true" />
+              </Button>
             }
           />
           <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-44">

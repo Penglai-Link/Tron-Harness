@@ -1,3 +1,4 @@
+import { MoreHorizontal, ExternalLink } from "lucide-react";
 import {
   type SyntheticEvent,
   useEffect,
@@ -6,7 +7,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import { ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -79,11 +79,13 @@ function AppActions({
         render={
           <Button
             aria-label={pageT("aria.actionsFor", { name: app.name })}
-            size="sm"
+            size="icon"
             type="button"
             variant="ghost"
             onClick={(event) => event.stopPropagation()}
-          >{pageT("aria.actionsFor", { name: app.name })}</Button>
+          >
+            <MoreHorizontal size={16} aria-hidden="true" />
+          </Button>
         }
       />
       <DropdownMenuContent align="end" onClick={stopRowNavigation}>

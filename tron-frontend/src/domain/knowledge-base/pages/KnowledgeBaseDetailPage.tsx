@@ -1,3 +1,4 @@
+import { MoreHorizontal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useSearchParams } from "react-router";
@@ -220,7 +221,7 @@ function KnowledgeDetail({ id }: { id: string }) {
           </TableCell>
           <TableCell>{number(doc.chunkCount)}</TableCell>
           <TableCell className="text-right"><DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="sm" disabled={busy} aria-label={t("knowledgeLibrary.documentActions", { name: doc.fileName })}>{t("knowledgeLibrary.documentActions", { name: doc.fileName })}</Button>} />
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon" disabled={busy} aria-label={t("knowledgeLibrary.documentActions", { name: doc.fileName })}><MoreHorizontal size={16} aria-hidden="true" /></Button>} />
             <DropdownMenuContent align="end">
               {inProgress(doc) ? <Tooltip><TooltipTrigger render={<span className="block cursor-not-allowed" />}><DropdownMenuItem disabled className="data-disabled:opacity-35">{text("settings")}</DropdownMenuItem></TooltipTrigger><TooltipContent side="left">{text("settingsDisabledProcessing")}</TooltipContent></Tooltip> : <DropdownMenuItem onClick={() => setSelected(doc)}>{text("settings")}</DropdownMenuItem>}
               <DropdownMenuItem onClick={() => operation.mutate({ type: "download", document: doc })}>{text("downloadAction")}</DropdownMenuItem>

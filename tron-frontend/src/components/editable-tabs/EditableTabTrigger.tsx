@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { MouseEvent } from "react";
 
@@ -42,11 +43,13 @@ export function EditableTabTrigger({ tab, onClose }: EditableTabTriggerProps) {
       {tab.closable !== false ? (
         <Button
           aria-label={t("actions.closeTab", "Close tab")}
-          size="sm"
+          size="icon-sm"
           variant="ghost"
           className="flex-shrink-0"
           onClick={handleClose}
-        >{t("actions.close", "Close")}</Button>
+        >
+          <X size={12} aria-hidden="true" />
+        </Button>
       ) : null}
     </div>
   );
