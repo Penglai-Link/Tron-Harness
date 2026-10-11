@@ -7,7 +7,7 @@ impl ChatService {
         let session=ChatSession {
             id:self.id_provider.next_id().map_err(|_|ChatError::StorageFailure)?.value(),
             session_code:dude.session_code.clone(), workspace_code:dude.workspace_code.clone().unwrap_or_default(),
-            project_code:None,user_code,app_code:None,task_code:None,source_type:ChatSessionSourceType::Manual,
+            project_code:None,user_code,app_code:None,task_code:(dude.purpose == crate::domain::dude::DudeSessionPurpose::Task).then(|| dude.correlation_key.clone()),source_type:ChatSessionSourceType::Manual,
             source_code:Some(format!("__dude:{}",dude.dude_code)),agent_code:Some(dude.dude_code.clone()),
             system_agent_session_id:None,title:dude.title.clone(),status:ChatSessionStatus::Active,
             last_run_code:None,last_run_status:None,created_at:now.clone(),updated_at:now,

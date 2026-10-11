@@ -380,13 +380,14 @@ async fn resolve_session(
 }
 async fn sessions(
     State(s): State<AppState>,
+    auth: RequestAuthContext,
     Path(code): Path<String>,
 ) -> Result<Json<ApiResponse<Vec<ListDudeSessionResponse>>>, DudeApiError> {
     let mut result = vec![];
     for d in s.dudes.sessions(&code)? {
         let chat = s
             .chats
-            .ensure_dude_session(&d, None)
+            .ensure_dude_session(&d, Some(auth.user().user_code.clone()))
             .map_err(|_| DudeError::Storage)?;
         result.push(ListDudeSessionResponse::from_record(chat, d));
     }
