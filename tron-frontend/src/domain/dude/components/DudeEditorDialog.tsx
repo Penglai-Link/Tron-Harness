@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Field, SelectInput, TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { createDude, updateDude, type Dude, type DudeInput } from "../api/dudeAp
 
 export function DudeEditorDialog({ dude, onClose, onSaved }: { dude?: Dude; onClose: () => void; onSaved: () => Promise<unknown> }) {
   const { t } = useTranslation("pages");
+  const labelId = useId();
   const [draft, setDraft] = useState<DudeInput>(() => ({ dudeCode: dude?.dudeCode ?? "", name: dude?.name ?? "", rolePrompt: dude?.rolePrompt ?? "", loopCode: dude?.loopCode ?? "", avatarId: dude?.avatarId ?? "robot", candidateModelCodes: dude?.candidateModelCodes ?? [], groupName: dude?.groupName ?? "", enabled: dude?.enabled ?? true, heartbeatMinutes: dude?.heartbeatMinutes ?? 30, memoryAutoApprove: dude?.memoryAutoApprove ?? false, kind: dude?.kind === "Memory" ? "Memory" : "Custom" }));
   const createdCode = useRef<string | null>(null);
   const resources = useRef<DudeResourceFieldsHandle>(null);
@@ -46,9 +47,9 @@ export function DudeEditorDialog({ dude, onClose, onSaved }: { dude?: Dude; onCl
         <AgentCandidateModelsField workspaceCode="$platform" value={draft.candidateModelCodes} disabled={saving} onChange={value => field("candidateModelCodes", value)} />
         <AgentRolePromptField rows={8} value={draft.rolePrompt} disabled={saving} onChange={value => field("rolePrompt", value)} />
         {dude ? <DudeResourceFields ref={resources} dudeCode={dude.dudeCode} disabled={saving} /> : null}
-        <label className="flex items-center justify-between gap-3 text-sm"><span>{t("dude.backgroundEnabled")}</span><Switch aria-label={t("dude.backgroundEnabled")} checked={draft.enabled} disabled={saving} onCheckedChange={value => field("enabled", value)} /></label>
+        <div className="flex items-center justify-between gap-3 text-sm"><span id={`${labelId}-background`}>{t("dude.backgroundEnabled")}</span><Switch aria-labelledby={`${labelId}-background`} checked={draft.enabled} disabled={saving} onCheckedChange={value => field("enabled", value)} /></div>
         <Field label={t("dude.heartbeatMinutes")}><TextInput type="number" min={1} max={10080} aria-label={t("dude.heartbeatMinutes")} value={draft.heartbeatMinutes} disabled={saving} onChange={event => field("heartbeatMinutes", Number(event.target.value))} /></Field>
-        {draft.kind === "Memory" ? <label className="flex items-start justify-between gap-3 text-sm"><span>{t("dude.autoApprove")}<span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{t("dude.autoApproveHelp")}</span></span><Switch aria-label={t("dude.autoApprove")} checked={draft.memoryAutoApprove} disabled={saving} onCheckedChange={value => field("memoryAutoApprove", value)} /></label> : null}
+        {draft.kind === "Memory" ? <div className="flex items-start justify-between gap-3 text-sm"><span><span id={`${labelId}-auto-approve`}>{t("dude.autoApprove")}</span><span id={`${labelId}-auto-approve-help`} className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{t("dude.autoApproveHelp")}</span></span><Switch aria-labelledby={`${labelId}-auto-approve`} aria-describedby={`${labelId}-auto-approve-help`} checked={draft.memoryAutoApprove} disabled={saving} onCheckedChange={value => field("memoryAutoApprove", value)} /></div> : null}
         {error ? <p role="alert" className="text-sm text-[var(--color-error)]">{error}</p> : null}
         <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={onClose}>{t("dude.cancel")}</Button><Button type="submit" disabled={saving || !valid}>{t(saving ? "dude.saving" : "dude.save")}</Button></DialogFooter>
       </form>
