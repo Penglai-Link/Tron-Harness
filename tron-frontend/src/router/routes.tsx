@@ -32,6 +32,8 @@ export interface AppRoute {
 }
 
 const registeredRoutes: AppRoute[] = [
+  { pageId: "dudes.index", route: "/dudes", activeNav: "Dude", title: "Dude", titleTranslationKey: "pages:dude.title", archetype: "split-pane" },
+  { pageId: "notifications.index", route: "/notifications", activeNav: "Notifications", title: "Notifications", titleTranslationKey: "pages:notifications.title", archetype: "data-table" },
   {pageId:"observability.logs", layout: "settings",route:"/settings/observability/logs",activeNav:"Logs",title:"Logs",titleTranslationKey:"observability:logs",archetype:"data-table"},
   {pageId:"observability.dashboard", layout: "settings",route:"/settings/observability/dashboard",activeNav:"Dashboard",title:"Dashboard",titleTranslationKey:"observability:dashboard",archetype:"dashboard"},
   { pageId: "observability.traceDetail", layout: "settings", settingsNav: "Traces", route: "/settings/observability/traces/:traceId", activeNav: "Traces", title: "Trace detail", titleTranslationKey: "observability:detail", archetype: "detail" },

@@ -23,7 +23,7 @@ export const shell = {
   },
   assistant: {
     body: "Contextual assistant entry is open. Step 3 pages can bind route-specific prompts here.",
-    title: "Main Agent",
+    title: "Platform main Dude conversation",
   },
   chatSidebar: {
     confirmations: {
@@ -75,6 +75,8 @@ export const shell = {
   },
   nav: {
     items: {
+      dudes: "Dude",
+      notifications: "Notifications",
       agents: "Agents",
       apps: "Apps",
       auditLogs: "Audit Logs",

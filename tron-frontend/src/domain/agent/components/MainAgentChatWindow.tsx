@@ -1,7 +1,5 @@
-import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
 import { defaultMainAgentWindowState, MAIN_AGENT_WINDOW_STORAGE_KEY } from "@/domain/agent/model/mainAgentWindowState";
 import {
-  normalizeChatSession,
   readFloatingState,
   writeFloatingState,
   type ChatFloatingState,
@@ -23,13 +21,14 @@ import { useTranslation } from "react-i18next";
 import { MarkdownLink } from "@/components/markdown-link";
 import { useChatWorkRailLabels, useChatHistoryLabels } from "@/domain/chat";
 import { getApiAccessToken } from "@/shared/api/httpClient";
-import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { useToast } from "@/components/ui/toast";
 import { useTheme } from "@/shared";
 import { applyCurrentLocaleHeader } from "@/i18n";
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
+import { resolveMainDudeSession } from "@/domain/dude/api/dudeApi";
+import { Button } from "@/components/ui/button";
 
 interface MainAgentChatWindowProps {
   currentUserDisplayName?: string;
@@ -42,52 +41,22 @@ interface MainAgentChatWindowProps {
   onWindowStateChange?: (state: ChatFloatingState) => void;
 }
 
-const MAIN_AGENT_SESSION_STORAGE_PREFIX = "tron.main-agent.session";
-const pendingMainAgentSessions = new Map<string, Promise<ChatSession>>();
-
-function mainAgentSessionStorageKey(workspaceCode: string) {
-  const normalizedWorkspaceCode = workspaceCode.trim();
-  return `${MAIN_AGENT_SESSION_STORAGE_PREFIX}:${normalizedWorkspaceCode || "__default__"}`;
-}
-
-function readPersistedMainAgentSession(storageKey: string) {
-  if (typeof window === "undefined" || !storageKey) return null;
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return null;
-    return normalizeChatSession(JSON.parse(raw) as ChatSession);
-  } catch {
-    return null;
+// Resolution is server-owned and platform-wide, including across browser tabs.
+let pendingMainDudeSession: Promise<ChatSession> | null = null;
+function resolvePlatformSession() {
+  if (!pendingMainDudeSession) {
+    pendingMainDudeSession = resolveMainDudeSession().finally(() => { pendingMainDudeSession = null; });
   }
-}
-
-function writePersistedMainAgentSession(
-  storageKey: string,
-  session: ChatSession | null,
-) {
-  if (typeof window === "undefined" || !storageKey) return;
-  if (!session) {
-    window.localStorage.removeItem(storageKey);
-    return;
-  }
-  window.localStorage.setItem(
-    storageKey,
-    JSON.stringify(normalizeChatSession(session)),
-  );
-}
-
-function isMissingPersistedSessionError(message: string, title?: string) {
-  return title === "Chat load failed"
-    && message.trim().toLowerCase() === "chat session was not found";
+  return pendingMainDudeSession;
 }
 
 export function MainAgentChatWindow({
   currentUserDisplayName,
-  floatingSubtitle = "Workspace Coordinator",
-  floatingTitle = "Main Agent",
+  floatingSubtitle,
+  floatingTitle,
   footerAddon,
   pageContext,
-  workspaceCode = "",
+  workspaceCode: _workspaceCode,
   windowState,
   onWindowStateChange,
 }: MainAgentChatWindowProps) {
@@ -114,17 +83,11 @@ export function MainAgentChatWindow({
       toast.error(t("chat.markdownLink.openExternalFailed"));
     });
   }, [desktopBridge, t, toast]);
-  const adapter = useMemo(
-    () =>
-      getServiceDataSource("chat") === "mock"
-        ? createTronMockChatAdapter()
-        : createInternalChatAdapter({
-          workspaceCode,
-          getAccessToken: getApiAccessToken,
-          getHeaders: () => applyCurrentLocaleHeader(new Headers()),
-        }),
-    [workspaceCode],
-  );
+  const adapter = useMemo(() => createInternalChatAdapter({
+    workspaceCode: null,
+    getAccessToken: getApiAccessToken,
+    getHeaders: () => applyCurrentLocaleHeader(new Headers()),
+  }), []);
   const controlledWindowState = Boolean(windowState && onWindowStateChange);
   const [localWindowState, setLocalWindowState] = useState<ChatFloatingState>(
     () =>
@@ -133,23 +96,14 @@ export function MainAgentChatWindow({
   const resolvedWindowState = controlledWindowState
     ? (windowState as ChatFloatingState)
     : localWindowState;
-  const sessionStorageKey = useMemo(
-    () => mainAgentSessionStorageKey(workspaceCode),
-    [workspaceCode],
-  );
-  const [persistedSession, setPersistedSession] = useState<ChatSession | null>(
-    () => readPersistedMainAgentSession(sessionStorageKey),
-  );
-
+  const [persistedSession, setPersistedSession] = useState<ChatSession | null>(null);
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!controlledWindowState) {
       writeFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, localWindowState);
     }
   }, [controlledWindowState, localWindowState]);
-
-  useEffect(() => {
-    setPersistedSession(readPersistedMainAgentSession(sessionStorageKey));
-  }, [sessionStorageKey]);
 
   const handleWindowStateChange = useCallback(
     (nextState: ChatFloatingState) => {
@@ -162,30 +116,26 @@ export function MainAgentChatWindow({
     [controlledWindowState, onWindowStateChange],
   );
 
-  const handleSessionChange = useCallback(
-    (nextSession: ChatSession | null) => {
-      setPersistedSession(nextSession);
-      writePersistedMainAgentSession(sessionStorageKey, nextSession);
-    },
-    [sessionStorageKey],
-  );
+  const handleSessionChange = useCallback((nextSession: ChatSession | null) => {
+    setPersistedSession(nextSession);
+  }, []);
 
   const windowConfig = useMemo(() => ({
-    agentCode: "main-agent",
+    agentCode: persistedSession?.agentCode ?? undefined,
     floating: true,
-    inputPlaceholder: "Message Main Agent...",
+    inputPlaceholder: t("dude.messagePlaceholder"),
     storageKey: MAIN_AGENT_WINDOW_STORAGE_KEY,
-    title: "Main Agent",
+    title: t("dude.mainConversation"),
     workRailLabels,
     historyLabels,
-    workspaceCode,
-  }), [workRailLabels, historyLabels, workspaceCode]);
+    workspaceCode: undefined,
+  }), [workRailLabels, historyLabels, persistedSession?.agentCode, t]);
   const createSendInput = useCallback((
     session: ChatSession,
     content: string,
     attachments: NonNullable<SendChatMessageInput["attachments"]>,
   ): SendChatMessageInput => ({
-    agentCode: "main-agent",
+    agentCode: session.agentCode,
     appCode: session.appCode,
     attachments: attachments.length ? attachments : undefined,
     clientCapabilities: { userInputRequests: true },
@@ -193,76 +143,33 @@ export function MainAgentChatWindow({
     modelSelection: { kind: "Auto" },
     pageContext,
     taskCode: session.taskCode,
-    workspaceCode: session.workspaceCode,
+    workspaceCode: null,
   }), [pageContext]);
 
   const handleError = useCallback((message: string, title?: string) => {
-    if (persistedSession && isMissingPersistedSessionError(message, title)) {
-      setPersistedSession(null);
-      writePersistedMainAgentSession(sessionStorageKey, null);
-      return;
-    }
     feedback.error(message, title);
-  }, [persistedSession, sessionStorageKey, feedback.error]);
+  }, [feedback.error]);
 
   const handleInfo = useCallback((message: string, title?: string) => {
     feedback.info(message, title);
   }, [feedback.info]);
 
   useEffect(() => {
-    if (
-      !resolvedWindowState.open ||
-      persistedSession ||
-      !workspaceCode.trim()
-    ) {
-      return;
-    }
-
+    if (!resolvedWindowState.open) return;
     let active = true;
-    const pendingSession =
-      pendingMainAgentSessions.get(sessionStorageKey) ??
-      adapter.createSession({
-        agentCode: "main-agent",
-        title: floatingTitle,
-        workspaceCode: workspaceCode.trim(),
-      });
+    setResolutionError(null);
+    void resolvePlatformSession().then(session => {
+      if (active) setPersistedSession(session);
+    }).catch((reason: unknown) => {
+      if (active) setResolutionError(reason instanceof Error ? reason.message : String(reason));
+    });
+    return () => { active = false; };
+  }, [resolvedWindowState.open, retry]);
 
-    pendingMainAgentSessions.set(sessionStorageKey, pendingSession);
-
-    void pendingSession
-      .then((createdSession) => {
-        if (!active) return;
-        setPersistedSession(createdSession);
-        writePersistedMainAgentSession(sessionStorageKey, createdSession);
-      })
-      .catch((error) => {
-        if (!active) return;
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Main Agent session could not be created";
-        toast.error(message, { title: "Main Agent failed" });
-      })
-      .finally(() => {
-        if (
-          pendingMainAgentSessions.get(sessionStorageKey) === pendingSession
-        ) {
-          pendingMainAgentSessions.delete(sessionStorageKey);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [
-    adapter,
-    floatingTitle,
-    persistedSession,
-    resolvedWindowState.open,
-    sessionStorageKey,
-    toast,
-    workspaceCode,
-  ]);
+  if (!persistedSession) return resolvedWindowState.open ? <div role="dialog" aria-label={t("dude.mainConversation")} className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-4 shadow-lg">
+    {resolutionError ? <><p role="alert">{resolutionError}</p><Button className="mt-3" onClick={() => setRetry(value => value + 1)}>{t("dude.retry")}</Button></> : <p role="status">{t("dude.loading")}</p>}
+    <Button className="ml-2" variant="ghost" onClick={() => handleWindowStateChange({ ...resolvedWindowState, open: false })}>{t("dude.close")}</Button>
+  </div> : null;
 
   return (
     <>
@@ -273,8 +180,8 @@ export function MainAgentChatWindow({
         config={windowConfig}
         createSendInput={createSendInput}
         currentUserDisplayName={currentUserDisplayName}
-        floatingSubtitle={floatingSubtitle}
-        floatingTitle={floatingTitle}
+        floatingSubtitle={floatingSubtitle ?? t("dude.platform")}
+        floatingTitle={floatingTitle ?? t("dude.mainConversation")}
         footerAddon={footerAddon}
         initialSession={persistedSession}
         onError={handleError}
