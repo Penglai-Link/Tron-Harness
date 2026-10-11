@@ -69,7 +69,7 @@ pub async fn approve(
         &body.artifact_hash,
     ) {
         Ok(item) => {
-            index_if_installed(&state, &item).await;
+            let item = index_if_installed(&state, &item).await;
             Json(ApiResponse::protocol_success(ApproveCandidateVo::from(
                 item,
             )))
@@ -129,7 +129,7 @@ pub async fn retry_install(
         &body.artifact_hash,
     ) {
         Ok(item) => {
-            index_if_installed(&state, &item).await;
+            let item = index_if_installed(&state, &item).await;
             Json(ApiResponse::protocol_success(
                 RetryCandidateInstallVo::from(item),
             ))
@@ -138,16 +138,16 @@ pub async fn retry_install(
         Err(e) => error(e, &auth.locale),
     }
 }
-async fn index_if_installed(state: &AppState, candidate: &SkillCandidate) {
-    if candidate.status == SkillCandidateStatus::Installed {
-        if let Err(error) = crate::application::skill::SkillRagIndexService::new(
-            state.skills.clone(),
-            state.rag.clone(),
-        )
-        .index_registry_skill(&candidate.skill_name)
+async fn index_if_installed(state: &AppState, candidate: &SkillCandidate) -> SkillCandidate {
+    match state
+        .dude_memory
+        .index_installed(candidate, state.rag.clone())
         .await
-        {
-            tracing::warn!(candidate_code=%candidate.candidate_code,%error,"approved Skill registry index needs retry");
+    {
+        Ok(candidate) => candidate,
+        Err(error) => {
+            tracing::warn!(candidate_code=%candidate.candidate_code,%error,"approved Skill registry index checkpoint needs retry");
+            candidate.clone()
         }
     }
 }
