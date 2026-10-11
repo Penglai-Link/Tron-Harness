@@ -18,17 +18,25 @@ impl TaskService {
         &self,
         query: &TaskListQuery,
     ) -> Result<Vec<TaskListItem>, TaskError> {
-        let workspace_code = query
-            .workspace_code
-            .as_deref()
-            .and_then(|value| normalized_required(value.to_owned()))
-            .ok_or(TaskError::WorkspaceRequired)?;
-        self.ensure_active_workspace(&workspace_code)?;
+        let workspace_code = optional_trimmed(query.workspace_code.clone());
+        let owner_dude_code = optional_trimmed(query.owner_dude_code.clone());
+        if let Some(workspace) = workspace_code.as_deref() {
+            self.ensure_active_workspace(workspace)?;
+        }
         let include_archived = query.include_archived.unwrap_or(false);
         let all_tasks = self.all_tasks()?;
         let mut records = all_tasks
             .iter()
-            .filter(|task| task.workspace_code == workspace_code)
+            .filter(|task| {
+                owner_dude_code
+                    .as_ref()
+                    .is_some_and(|owner| task.owner_dude_code.as_ref() == Some(owner))
+                    || (owner_dude_code.is_none() && task.owner_dude_code.is_none())
+            })
+            .filter(|task| {
+                owner_dude_code.is_some() && workspace_code.is_none()
+                    || task.workspace_code == workspace_code
+            })
             .filter(|task| include_archived || task.archived_at.is_none())
             .filter(|task| {
                 query
@@ -104,6 +112,12 @@ impl TaskService {
             id: task.id.as_decimal_string(),
             task_code: task.task_code,
             workspace_code: task.workspace_code,
+            owner_dude_code: task.owner_dude_code,
+            due_at: task.due_at,
+            planned_start_at: task.planned_start_at,
+            next_followup_at: task.next_followup_at,
+            work_session_code: task.work_session_code,
+            schedule_version: task.schedule_version,
             parent_task_code: task.parent_task_code,
             title: task.title,
             description: task.description,
@@ -137,6 +151,12 @@ impl TaskService {
         Ok(TaskListItem {
             task_code: task.task_code.clone(),
             workspace_code: task.workspace_code.clone(),
+            owner_dude_code: task.owner_dude_code.clone(),
+            due_at: task.due_at.clone(),
+            planned_start_at: task.planned_start_at.clone(),
+            next_followup_at: task.next_followup_at.clone(),
+            work_session_code: task.work_session_code.clone(),
+            schedule_version: task.schedule_version.clone(),
             parent_task_code: task.parent_task_code.clone(),
             title: task.title.clone(),
             flow_code: task.flow_code.clone(),

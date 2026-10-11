@@ -21,6 +21,7 @@ pub fn task_priority_from_storage(value: &str) -> Result<TaskPriority, TaskError
 
 pub fn task_type_to_storage(task_type: TaskType) -> &'static str {
     match task_type {
+        TaskType::General => "General",
         TaskType::Feature => "Feature",
         TaskType::Bug => "Bug",
     }
@@ -28,6 +29,7 @@ pub fn task_type_to_storage(task_type: TaskType) -> &'static str {
 
 pub fn task_type_from_storage(value: &str) -> Result<TaskType, TaskError> {
     match value {
+        "General" => Ok(TaskType::General),
         "Feature" => Ok(TaskType::Feature),
         "Bug" => Ok(TaskType::Bug),
         _ => Err(TaskError::InvalidRequest),

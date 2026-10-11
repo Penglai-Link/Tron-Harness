@@ -11,6 +11,7 @@ pub enum TaskPriority {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskType {
+    General,
     Feature,
     Bug,
 }
