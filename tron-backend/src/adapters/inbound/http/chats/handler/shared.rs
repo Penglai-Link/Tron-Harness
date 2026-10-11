@@ -218,11 +218,10 @@ pub(crate) fn resolve_chat_agent_runtime(
     request: &SendChatMessageCommand,
 ) -> Result<ResolvedAgentRuntime, ChatSendError> {
     let effective_agent_code = effective_agent_code(session, request);
-    let runtime = if session.workspace_code.is_empty()
-        && session
-            .source_code
-            .as_deref()
-            .is_some_and(|source| source.starts_with("__dude:"))
+    let runtime = if session
+        .source_code
+        .as_deref()
+        .is_some_and(|source| source.starts_with("__dude:"))
     {
         state
             .agent_management

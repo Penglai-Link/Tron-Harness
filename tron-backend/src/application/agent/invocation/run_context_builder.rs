@@ -244,7 +244,7 @@ impl AgentRunContextBuilder {
         {
             return Err(AgentInvocationError::WorkspaceInvalid);
         }
-        let resolved_agent = if workspace.is_some() {
+        let resolved_agent = if workspace.is_some() && !self.platform_scope {
             resolve_invocation_agent(&self.management, workspace_code, requested_agent_code)?
         } else {
             self.management
@@ -353,7 +353,7 @@ impl AgentRunContextBuilder {
         let mut prompt_prefix_sources = Vec::new();
         let empty_runtime_prompt_values = HashMap::new();
         if matches!(resolved_agent.runtime_type, AgentRuntimeType::React) {
-            let guidance = if workspace.is_some() {
+            let guidance = if workspace.is_some() && !self.platform_scope {
                 self.management
                     .current_internal_agent_guidance(workspace_code, &resolved_agent.agent_code)
             } else {

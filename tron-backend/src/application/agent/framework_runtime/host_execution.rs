@@ -168,7 +168,7 @@ impl FrameworkHost {
             .map_err(|e| map_error(e.into()))?;
         if request.resume.is_none() {
             if let Some(management) = self.0.agent_management.get() {
-                let policy = if context.workspace_code.is_empty() {
+                let policy = if context.uses_platform_agent_definition() {
                     management.platform_internal_agent_policy(
                         context.agent_code.as_deref().unwrap_or("main-agent"),
                     )
