@@ -266,6 +266,40 @@ async fn dude_memory_runner_resumes_real_memory_writes_without_replanning_or_cur
             }
         );
     }
+    let user_memory_code = done
+        .memory_receipts
+        .iter()
+        .find(|receipt| receipt.claim_kind == MemoryClaimKind::UserDecision)
+        .unwrap()
+        .memory_code
+        .clone();
+    let next_batch = reopened
+        .prepare_batch(
+            "memory-dude",
+            USER,
+            vec![source("TRON_CORE", "repeated-global-decision")],
+        )
+        .unwrap()
+        .unwrap();
+    let next_agent = Arc::new(PlannedAgent {
+        calls: AtomicUsize::new(0),
+        output: json!({"summary":"Same global preference in another workspace","memories":[proposal("TRON_CORE","global-preference","UserDecision","User","repeated-global-decision")],"skills":[]}),
+    });
+    let next_runner = DudeMemoryRunner::with_agent(
+        reopened,
+        f.state.memory.clone(),
+        f.state.agent_framework.clone(),
+        next_agent,
+        sessions(),
+    );
+    let next_done = next_runner
+        .execute_batch(USER, &next_batch.batch_code, "next-batch-session", false)
+        .await
+        .unwrap();
+    assert_eq!(
+        next_done.memory_receipts[0].memory_code, user_memory_code,
+        "global preferences keep one identity across workspaces"
+    );
     f.state.agent_framework.close().await;
 }
 
