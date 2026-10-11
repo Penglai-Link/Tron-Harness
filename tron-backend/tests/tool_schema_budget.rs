@@ -41,6 +41,7 @@ fn tool(name: &str, domain: &str, description_len: usize) -> EffectiveTool {
 
 fn context() -> AgentRunContext {
     AgentRunContext {
+        collaboration_owner: None,
         agent_code: None,
         conversation_code: None,
         run_code: eliteforge_agent_core::RunId::new_v4().to_string(),

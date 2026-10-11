@@ -141,9 +141,21 @@ fn default_max_parallel_tool_calls() -> u32 {
     4
 }
 
+/// Trusted ownership supplied by the host; never accepted from tool arguments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCollaborationOwner {
+    pub kind: String,
+    pub code: String,
+    pub origin_session_code: Option<String>,
+    pub task_code: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRunContext {
+    #[serde(default)]
+    pub collaboration_owner: Option<AgentCollaborationOwner>,
     /// Server-resolved identity; older saved runs omit it and receive no KB context.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_code: Option<String>,
@@ -181,6 +193,17 @@ pub struct AgentRunContext {
 }
 
 impl AgentRunContext {
+    pub(crate) fn memory_scope(
+        &self,
+        session: &str,
+    ) -> Result<eliteforge_agent_memory::MemoryScope, eliteforge_agent_core::MemoryError> {
+        if self.workspace_code.is_empty() {
+            eliteforge_agent_memory::MemoryScope::platform(session)
+        } else {
+            eliteforge_agent_memory::MemoryScope::new(&self.workspace_code, session)
+        }
+    }
+
     pub fn authorized_tools(&self) -> &[EffectiveTool] {
         if self.effective_tools.is_empty() {
             &self.tools
@@ -225,6 +248,7 @@ mod tests {
     #[test]
     fn domain_discovery_hidden_tools_remain_policy_authorized_without_effective_snapshot() {
         let context = AgentRunContext {
+            collaboration_owner: None,
             agent_code: None,
             conversation_code: None,
             run_code: "run".into(),
