@@ -134,7 +134,14 @@ async fn storage_agent(
     tools: Vec<fw::ToolBinding>,
 ) -> Agent {
     let artifacts = host.0.path.with_extension("artifacts");
-    std::fs::create_dir_all(&artifacts).unwrap();
+    let mut directory = std::fs::DirBuilder::new();
+    directory.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        directory.mode(0o700);
+    }
+    directory.create(&artifacts).unwrap();
     let agent = eliteforge_agent_test_support::TestBuilder::new()
         .default_models(false)
         .plugin(eliteforge_agent_framework::ModelRuntimePlugin::new(
