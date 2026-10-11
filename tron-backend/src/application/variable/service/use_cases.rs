@@ -374,6 +374,28 @@ impl VariableService {
         reveal_stored_value(self.cipher.as_ref(), &variable, aad.as_bytes())
     }
 
+    pub fn platform_runtime_variables(&self) -> Result<Vec<RuntimeVariable>, VariableError> {
+        self.all_platform_variables()?
+            .into_iter()
+            .map(|variable| {
+                let aad = PlatformVariableIdentity::new(&variable.key).aad();
+                let key = variable.key.clone();
+                let sensitive = variable.is_sensitive;
+                let value = reveal_stored_value(
+                    self.cipher.as_ref(),
+                    &platform_to_variable(variable),
+                    aad.as_bytes(),
+                )?;
+                Ok(RuntimeVariable {
+                    key,
+                    value,
+                    source: "Platform Configuration".into(),
+                    is_sensitive: sensitive,
+                })
+            })
+            .collect()
+    }
+
     pub fn runtime_variables(
         &self,
         workspace_code: &str,

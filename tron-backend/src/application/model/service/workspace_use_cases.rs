@@ -13,9 +13,12 @@ impl ModelService {
         &self,
         workspace_code: &str,
     ) -> Result<Vec<ModelSelectOption>, ModelError> {
-        let catalog = self.list_workspace_models(workspace_code)?;
-        Ok(catalog
-            .records
+        let records = if workspace_code.is_empty() {
+            self.list_platform_models()?
+        } else {
+            self.list_workspace_models(workspace_code)?.records
+        };
+        Ok(records
             .into_iter()
             .map(|record| {
                 let model_code = record.model_code.clone();
@@ -104,6 +107,33 @@ impl ModelService {
         model_code: Option<&str>,
         reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<Option<AgentModelConfig>, ModelError> {
+        if workspace_code.is_empty() {
+            let requested = model_code.map(str::trim).filter(|code| !code.is_empty());
+            let views = self.list_platform_models()?;
+            let Some(view) = views.iter().find(|view| {
+                view.enabled
+                    && view.model_type == ModelType::Text
+                    && requested.map_or(view.is_default, |code| view.model_code == code)
+            }) else {
+                return Ok(None);
+            };
+            if reasoning_effort
+                .is_some_and(|effort| !view.supported_reasoning_efforts.contains(&effort))
+            {
+                return Err(ModelError::ReasoningEffortUnsupported);
+            }
+            let models = self.all_models()?;
+            let model = models
+                .iter()
+                .find(|model| model.model_code == view.model_code)
+                .ok_or(ModelError::NotFound)?;
+            let api_key = self.reveal_api_key_ref(&model.api_key_ref)?;
+            let mut config = agent_model_config_from_view(view, &api_key);
+            if let (Some(config), Some(effort)) = (&mut config, reasoning_effort) {
+                config.reasoning_effort = Some(effort);
+            }
+            return Ok(config);
+        }
         let workspace = self.active_workspace_detail(workspace_code)?;
         let catalog_state = self.resolve_workspace_catalog_state(&workspace)?;
         let requested_model_code = model_code.map(str::trim).filter(|value| !value.is_empty());

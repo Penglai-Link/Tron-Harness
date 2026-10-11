@@ -49,14 +49,14 @@ pub(super) async fn assemble(
             .collect::<Vec<_>>();
         crate::application::short_term_memory::PreparedContextSources {
             revision: memory::MemoryRevision {
-                scope: memory::MemoryScope::new(
-                    &context.workspace_code,
-                    context
-                        .conversation_code
-                        .as_deref()
-                        .unwrap_or(&context.run_code),
-                )
-                .expect("validated run scope"),
+                scope: context
+                    .memory_scope(
+                        context
+                            .conversation_code
+                            .as_deref()
+                            .unwrap_or(&context.run_code),
+                    )
+                    .expect("validated run scope"),
                 generation: input.history.generation.clone(),
                 revision: input.history.revision,
             },
@@ -500,14 +500,12 @@ impl memory::MemoryContextRevisionGuard for LiveSourceGuard {
             let generation =
                 fingerprint(&(&id, &entries, Some(&policy), checkpoint, &context.user_code))
                     .map_err(|_| fw::MemoryError::Conflict)?;
-            let scope = memory::MemoryScope::new(
-                &context.workspace_code,
-                context
+            let scope = context.memory_scope(
+                &context
                     .short_term_memory
                     .as_ref()
                     .ok_or(fw::MemoryError::Conflict)?
-                    .session_code
-                    .clone(),
+                    .session_code,
             )?;
             if expected.scope == scope && expected.generation == generation {
                 Ok(())
