@@ -54,6 +54,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(app_routes())
         .merge(agent_routes())
         .merge(crate::adapters::inbound::http::dudes::routes())
+        .merge(crate::adapters::inbound::http::skill_candidates::routes())
         .merge(mcp_management_routes())
         .merge(task_routes())
         .merge(variable_routes())

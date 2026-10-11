@@ -319,7 +319,7 @@ async fn main_session(
         .resolve_session(&code, DudeSessionPurpose::Interactive, "interactive", None)?;
     let chat = s
         .chats
-        .ensure_dude_session(&d, Some(auth.user_code))
+        .ensure_dude_session(&d, Some(auth.user().user_code.clone()))
         .map_err(|_| DudeError::Storage)?;
     Ok(Json(ApiResponse::protocol_success(
         MainDudeSessionResponse::from_record(chat, d),
@@ -335,7 +335,7 @@ async fn resolve_session(
         .resolve_session(&code, DudeSessionPurpose::Interactive, "interactive", None)?;
     let chat = s
         .chats
-        .ensure_dude_session(&d, Some(auth.user_code))
+        .ensure_dude_session(&d, Some(auth.user().user_code.clone()))
         .map_err(|_| DudeError::Storage)?;
     Ok(Json(ApiResponse::protocol_success(
         ResolveDudeSessionResponse::from_record(chat, d),

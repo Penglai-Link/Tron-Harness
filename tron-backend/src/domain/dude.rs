@@ -110,3 +110,34 @@ impl std::fmt::Display for DudeError {
     }
 }
 impl std::error::Error for DudeError {}
+
+impl DudeEvent {
+    pub fn completion_notification(
+        &self,
+        status: DudeEventStatus,
+        summary: &str,
+        now: i64,
+    ) -> Option<PlatformNotification> {
+        if self.source == DudeEventSource::Heartbeat && status == DudeEventStatus::Completed {
+            return None;
+        }
+        Some(PlatformNotification {
+            id: format!("notification:{}:{status:?}", self.event_id),
+            dedup_key: format!("event:{}:{status:?}", self.event_id),
+            dude_code: Some(self.dude_code.clone()),
+            title: match status {
+                DudeEventStatus::Failed => "Dude 工作需要处理",
+                DudeEventStatus::AwaitingInput => "Dude 需要你的回答",
+                _ => "Dude 已完成工作",
+            }
+            .into(),
+            body: summary.into(),
+            category: format!("{status:?}"),
+            target: serde_json::json!({"sessionCode":self.session_code,"taskCode":self.task_code,"eventId":self.event_id}),
+            read_at: None,
+            resolved_at: None,
+            archived_at: None,
+            created_at: now,
+        })
+    }
+}
