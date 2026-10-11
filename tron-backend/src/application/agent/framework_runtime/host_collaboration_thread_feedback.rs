@@ -120,8 +120,9 @@ impl FrameworkHost {
             let native = store.get_run(run_id).await;
             let completion = match native {
                 // A continuation reuses its RunId. Do not mistake the previous
-                // waiting result for the newly admitted execution.
-                Ok(run) if run.finished_at_ms.is_some_and(|finished| finished < record.run_admitted_at_ms) => {
+                // waiting result for the newly admitted execution, even if
+                // both admissions share the same millisecond timestamp.
+                Ok(run) if record.resumed_interaction_id.is_some_and(|id| run.result.as_ref().is_some_and(|result| result.interactions.iter().any(|interaction| interaction.id == id))) => {
                     if fw::lifecycle_time_ms().saturating_sub(record.run_admitted_at_ms) < 30_000 { None }
                     else { Some((fw::ThreadStatus::Failed,Err("Thread continuation was admitted but did not start; previous execution remains intact".into()))) }
                 }

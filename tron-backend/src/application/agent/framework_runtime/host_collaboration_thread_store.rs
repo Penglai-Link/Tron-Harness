@@ -21,6 +21,7 @@ pub(super) struct ThreadRecord {
     pub revision: u64,
     pub run_admitted_at_ms: u64,
     pub execution_sequence: u64,
+    pub resumed_interaction_id: Option<fw::RunId>,
 }
 impl ThreadRecord {
     pub fn authorized(&self, context: &AgentRunContext) -> bool {

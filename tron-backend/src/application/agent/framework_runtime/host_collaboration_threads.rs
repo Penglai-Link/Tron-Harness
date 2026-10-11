@@ -129,6 +129,7 @@ impl Runtime {
             .checked_add(1)
             .ok_or_else(|| failure("Thread execution sequence overflow"))?;
         record.run_admitted_at_ms = fw::lifecycle_time_ms();
+        record.resumed_interaction_id = interaction_id;
         record.summary.status = fw::ThreadStatus::Running;
         record.summary.latest_run_id = Some(run_id);
         record.completion = None;
@@ -364,6 +365,7 @@ impl AgentCollaborationRuntime for Runtime {
             revision: 0,
             run_admitted_at_ms: fw::lifecycle_time_ms(),
             execution_sequence: 0,
+            resumed_interaction_id: None,
         };
         let host = self.host()?;
         let admission = host.0.config_lock.lock().await;
