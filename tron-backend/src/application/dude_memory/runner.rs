@@ -241,6 +241,14 @@ impl DudeMemoryRunner {
         session: &str,
         auto_approve: bool,
     ) -> Result<MemoryBatch, DudeMemoryError> {
+        let previous = self.service.get_batch(user, batch_code)?;
+        if previous.status == MemoryBatchStatus::Completed {
+            return if previous.session_code.as_deref() == Some(session) {
+                Ok(previous)
+            } else {
+                Err(DudeMemoryError::Conflict)
+            };
+        }
         let batch = self
             .service
             .attach_batch_session(user, batch_code, session)?;
