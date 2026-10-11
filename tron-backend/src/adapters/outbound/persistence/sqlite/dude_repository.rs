@@ -42,6 +42,21 @@ fn load_events(
         .collect()
 }
 impl DudeRepository for SqliteDudeRepository {
+    fn create(
+        &mut self,
+        d: &Dude,
+        definition: &crate::domain::agent::PlatformInternalAgentConfig,
+    ) -> Result<(), DudeError> {
+        let (d, definition) = (d.clone(), definition.clone());
+        self.call(move|c|{
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            tx.execute("INSERT INTO platform_internal_agent_configs(agent_code,config_json) VALUES(?1,?2)",params![definition.agent_code,encode(&definition)?]).map_err(storage)?;
+            tx.execute("INSERT INTO agent_workspace_grant_policies(agent_code) VALUES(?1)",[&d.dude_code]).map_err(storage)?;
+            tx.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at,is_main) VALUES(?1,?2,?3,?4,?5,0)",params![d.dude_code,encode(&d)?,d.enabled,d.heartbeat_minutes,d.created_at+i64::from(d.heartbeat_minutes)*60000]).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
+    }
+
     fn list(&mut self) -> Result<Vec<Dude>, DudeError> {
         self.call(|c| {
             let mut q = c

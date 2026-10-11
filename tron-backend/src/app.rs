@@ -145,6 +145,26 @@ pub struct AppState {
 }
 
 impl AppState {
+    pub(crate) fn dude_invocation_service(&self) -> AgentInvocationService {
+        AgentInvocationService::new(
+            self.workspaces.clone(),
+            self.apps.clone(),
+            self.variables.clone(),
+            self.skills.clone(),
+            self.agent_management.clone(),
+            self.agent_runs.clone(),
+            self.mcp.clone(),
+            self.event_bus.clone(),
+            self.agent_model_client.clone(),
+            self.agent_tool_registry.clone(),
+            self.runtime_http_client.clone(),
+        )
+        .with_framework_host(self.agent_framework.clone())
+        .with_active_runs(self.active_runs.clone())
+        .with_short_term_memory(self.short_term_memory.clone())
+        .with_prompt_service(self.prompts.clone())
+        .with_platform_scope()
+    }
     pub fn new(config: AppConfig) -> Result<Self, AppBootstrapError> {
         Self::new_with_id_provider(config, Arc::new(SnowflakedSnowflakeIdProvider::default()))
     }
@@ -264,6 +284,9 @@ impl AppState {
             workspaces.clone(),
             &config.system_agents,
         );
+        agent_management
+            .initialize_default_main_loop()
+            .expect("default main Agent loop");
         if let Err(error) = agent_management.bootstrap_registry() {
             tracing::error!("agent management bootstrap scan failed: {error:?}");
         }
@@ -515,11 +538,22 @@ impl AppState {
         automations
             .bootstrap_scheduler()
             .expect("automation scheduler should initialize");
-        let dudes=crate::application::dude::DudeService::new(
-            crate::adapters::outbound::persistence::sqlite::SqliteDudeRepository::connect(&config.database_url).expect("Dude storage"),agent_management.clone());
+        let dudes = crate::application::dude::DudeService::new(
+            crate::adapters::outbound::persistence::sqlite::SqliteDudeRepository::connect(
+                &config.database_url,
+            )
+            .expect("Dude storage"),
+            agent_management.clone(),
+        );
         dudes.bootstrap().expect("Dude defaults");
-        let dude_memory=crate::application::dude_memory::DudeMemoryService::new(
-          crate::adapters::outbound::persistence::sqlite::SqliteDudeMemoryRepository::connect(&config.database_url).expect("Dude memory storage"),skills.clone(),std::path::Path::new(&config.skills_registry_root).join(".dude-candidates"));
+        let dude_memory = crate::application::dude_memory::DudeMemoryService::new(
+            crate::adapters::outbound::persistence::sqlite::SqliteDudeMemoryRepository::connect(
+                &config.database_url,
+            )
+            .expect("Dude memory storage"),
+            skills.clone(),
+            std::path::Path::new(&config.skills_registry_root).join(".dude-candidates"),
+        );
         dude_memory.set_notifications(Arc::new(dude_runner::MemoryNotifications(dudes.clone())));
 
         let readiness = AppReadiness::validated_ready();

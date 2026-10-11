@@ -90,7 +90,17 @@ pub struct ResolvedAgentRuntime {
 const MAIN_AGENT_CODE: &str = "main-agent";
 
 pub trait AgentManagementRepository: Send {
-    fn list_dude_codes(&mut self)->Result<Vec<String>,AgentManagementError>{Ok(vec![])}
+    fn copy_initial_agent_skills(
+        &mut self,
+        _from: &str,
+        _to: &str,
+    ) -> Result<(), AgentManagementError> {
+        Ok(())
+    }
+
+    fn list_dude_codes(&mut self) -> Result<Vec<String>, AgentManagementError> {
+        Ok(vec![])
+    }
 
     fn replace_workspace_resource_assignments(
         &mut self,
