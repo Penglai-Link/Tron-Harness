@@ -74,7 +74,7 @@ impl ShortTermMemoryService {
             .map_err(error)?
             .call(move |c| {
                 c.query_row(
-                    "SELECT workspace_code FROM workspace_session_links WHERE session_id=?1",
+                    "SELECT workspace_code FROM collaboration_threads WHERE thread_code=?1 UNION ALL SELECT workspace_code FROM workspace_session_links WHERE session_id=?1 LIMIT 1",
                     [id],
                     |r| r.get(0),
                 )
@@ -83,6 +83,30 @@ impl ShortTermMemoryService {
             .await
             .map_err(|_| ShortTermMemoryError::StorageFailure)?
             .ok_or(ShortTermMemoryError::SessionNotFound)
+    }
+    /// Native Thread bindings are authoritative; caller context can only match them.
+    fn ensure_context_session(
+        &self,
+        context: &AgentRunContext,
+        id: &str,
+    ) -> Result<String, ShortTermMemoryError> {
+        blocking(async {
+            let workspace = self.ensure_session_async(id).await?;
+            if workspace != context.workspace_code {
+                return Err(ShortTermMemoryError::SessionNotFound);
+            }
+            let id = id.to_owned();
+            let binding = self.host.shared_database().await.map_err(error)?.call(move |c| {
+                c.query_row("SELECT user_code,owner_kind,owner_code FROM collaboration_threads WHERE thread_code=?1", [id], |r| Ok((r.get::<_,Option<String>>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?))).optional()
+            }).await.map_err(|_| ShortTermMemoryError::StorageFailure)?;
+            if let Some((user, kind, code)) = binding {
+                let (caller_kind, caller_code) = memory_owner(context);
+                if user != context.user_code || kind != caller_kind || code != caller_code {
+                    return Err(ShortTermMemoryError::SessionNotFound);
+                }
+            }
+            Ok(workspace)
+        })
     }
     /// Keep the native lifecycle check and synchronous business SQL on one task,
     /// so both operations use the host's connection and transaction binding.
@@ -191,7 +215,7 @@ impl ShortTermMemoryService {
             .as_ref()
             .filter(|m| m.todo_enabled)
             .ok_or(ShortTermMemoryError::TodoInvalid)?;
-        let workspace = self.ensure_session(&memory.session_code)?;
+        let workspace = self.ensure_context_session(context, &memory.session_code)?;
         if workspace != context.workspace_code || items.len() > 50 {
             return Err(ShortTermMemoryError::TodoInvalid);
         }
@@ -570,7 +594,7 @@ impl ShortTermMemoryService {
             .short_term_memory
             .as_ref()
             .ok_or(ShortTermMemoryError::SessionNotFound)?;
-        if self.ensure_session(&memory.session_code)? != context.workspace_code {
+        if self.ensure_context_session(context, &memory.session_code)? != context.workspace_code {
             return Err(ShortTermMemoryError::SessionNotFound);
         }
         let entries = match id {
@@ -835,29 +859,64 @@ impl ShortTermMemoryService {
         &self,
         context: &AgentRunContext,
     ) -> Result<Vec<AgentMessage>, ShortTermMemoryError> {
-        // Only related sessions in the same workspace are authorized as family data.
+        // Source association, profile and root owner all come from durable host bindings.
         blocking(async {
             let db = self.host.shared_database().await.map_err(error)?;
             let workspace = context.workspace_code.clone();
-            let current = context.conversation_code.clone();
-            let app = context.execution_scope.app_code.clone();
-            let task = context.execution_scope.task_code.clone();
-            let links=db.call(move|c|{let mut q=c.prepare("SELECT session_id,business_json FROM workspace_session_links WHERE workspace_code=?1")?;q.query_map([workspace],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()}).await.map_err(|_|ShortTermMemoryError::StorageFailure)?;
+            let user = context.user_code.clone();
+            let (kind, code) = memory_owner(context);
+            let (mut links, threads) = db.call(move |c| {
+                let mut query = c.prepare("SELECT session_id,business_json FROM workspace_session_links WHERE workspace_code=?1 ORDER BY session_id")?;
+                let links = query.query_map([&workspace], |r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+                let mut query = c.prepare("SELECT thread_code,record_json FROM collaboration_threads WHERE workspace_code=?1 AND user_code IS ?2 AND owner_kind=?3 AND owner_code=?4 ORDER BY thread_code")?;
+                let threads = query.query_map(rusqlite::params![workspace,user,kind,code], |r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+                Ok::<_,rusqlite::Error>((links,threads))
+            }).await.map_err(|_|ShortTermMemoryError::StorageFailure)?;
+            let current = context.conversation_code.as_deref();
+            let mut native_origin = None;
+            for (id, value) in threads {
+                let record: Value = serde_json::from_str(&value)
+                    .map_err(|_| ShortTermMemoryError::StorageFailure)?;
+                if Some(id.as_str()) == current {
+                    native_origin = record["originSessionCode"].as_str().map(str::to_owned);
+                }
+                let source = (record["owner"]["kind"] == "DUDE").then(|| {
+                    format!(
+                        "__dude:{}",
+                        record["owner"]["code"].as_str().unwrap_or_default()
+                    )
+                });
+                let task = record["owner"]["taskCode"]
+                    .as_str()
+                    .or_else(|| record["executionScope"]["taskCode"].as_str());
+                let link = json!({"source_code":source,"user_code":record["userCode"],"app_code":record["executionScope"]["appCode"],"task_code":task,"origin_session_code":record["originSessionCode"]});
+                links.push((id, link.to_string()));
+            }
+            let task = context.execution_scope.task_code.as_deref().or_else(|| {
+                context
+                    .collaboration_owner
+                    .as_ref()
+                    .and_then(|owner| owner.task_code.as_deref())
+            });
+            let app = context.execution_scope.app_code.as_deref();
             let sessions = self
                 .framework()
                 .await?
                 .sessions()
                 .map_err(|_| ShortTermMemoryError::StorageFailure)?;
             let mut result = vec![];
-            for (id, link) in links {
-                if Some(&id) == current.as_ref() {
+            for (id, value) in links {
+                if Some(id.as_str()) == current {
                     continue;
                 }
-                let link: Value = serde_json::from_str(&link)
+                let link: Value = serde_json::from_str(&value)
                     .map_err(|_| ShortTermMemoryError::StorageFailure)?;
+                if link["user_code"].as_str() != context.user_code.as_deref() {
+                    continue;
+                }
                 let source = link["source_code"].as_str().unwrap_or_default();
                 let authorized = match context.collaboration_owner.as_ref() {
-                    Some(owner) if owner.kind.eq_ignore_ascii_case("DUDE") => {
+                    Some(owner) if owner.kind == "DUDE" => {
                         source == format!("__dude:{}", owner.code)
                     }
                     _ => !source.starts_with("__dude:"),
@@ -865,13 +924,14 @@ impl ShortTermMemoryService {
                 if !authorized {
                     continue;
                 }
-                if !(task
-                    .as_deref()
-                    .is_some_and(|v| link["task_code"].as_str() == Some(v))
-                    || app
-                        .as_deref()
-                        .is_some_and(|v| link["app_code"].as_str() == Some(v)))
-                {
+                let linked_task =
+                    task.is_some_and(|value| link["task_code"].as_str() == Some(value));
+                let linked_app = app.is_some_and(|value| link["app_code"].as_str() == Some(value));
+                let origin = link["origin_session_code"].as_str();
+                let linked_origin = Some(id.as_str()) == native_origin.as_deref()
+                    || (origin.is_some()
+                        && (origin == current || origin == native_origin.as_deref()));
+                if !(linked_task || linked_app || linked_origin) {
                     continue;
                 }
                 if let Some((_, summary)) = sessions
@@ -896,4 +956,16 @@ impl ShortTermMemoryService {
             Ok(result)
         })
     }
+}
+fn memory_owner(context: &AgentRunContext) -> (String, String) {
+    context
+        .collaboration_owner
+        .as_ref()
+        .map(|owner| (owner.kind.clone(), owner.code.clone()))
+        .unwrap_or_else(|| {
+            (
+                "USER".into(),
+                context.user_code.clone().unwrap_or_else(|| "system".into()),
+            )
+        })
 }

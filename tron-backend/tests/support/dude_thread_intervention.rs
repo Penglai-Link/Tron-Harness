@@ -73,6 +73,13 @@ impl ModelClient for HumanScript {
                 }
                 self.questions.fetch_add(1, Ordering::AcqRel);
                 assert!(request.tools.iter().any(|t| t.call_name == "chat_ask_user"));
+                assert!(
+                    request
+                        .messages
+                        .iter()
+                        .any(|message| message.content.text().contains("trusted-dude-family-note")),
+                    "native Thread must load its own authorized STM family source"
+                );
                 return Ok(ModelResponse::tool_call(
                     "chat_ask_user",
                     json!({"intro":"Choose deployment target","questions":[{"question":"Which target?","options":[{"label":"Staging"},{"label":"Production"}]}]}),
@@ -176,9 +183,39 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         EventBusHandle::disabled(),
     )
     .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(f.state.short_term_memory.clone()))
     .with_auto_model_router(Some(router))
     .build()
     .unwrap();
+    f.state
+        .chats
+        .ensure_dude_session(
+            &tron_backend::domain::dude::DudeSession {
+                session_code: "original-dude-work-session".into(),
+                dude_code: "main-agent".into(),
+                purpose: tron_backend::domain::dude::DudeSessionPurpose::Task,
+                correlation_key: "dude-task".into(),
+                title: "Dude work".into(),
+                workspace_code: Some(WORKSPACE.into()),
+                created_at: 0,
+                updated_at: 0,
+            },
+            Some(USER.into()),
+        )
+        .unwrap();
+    host.storage_framework()
+        .await
+        .unwrap()
+        .sessions()
+        .unwrap()
+        .write_context(
+            "original-dude-work-session",
+            "tron.session-summary-view",
+            None,
+            json!({"summary":"trusted-dude-family-note"}),
+        )
+        .await
+        .unwrap();
     let mut parent = context("root:dude-native");
     parent.conversation_code = Some("original-dude-work-session".into());
     parent.collaboration_owner = Some(AgentCollaborationOwner {
@@ -347,6 +384,21 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
             .all(|message| message.provenance.as_ref().is_some_and(
                 |p| p.sender.kind == "AGENT" && p.sender.id.as_deref() == Some("reviewer")
             ))
+    );
+    let groups = f
+        .state
+        .chats
+        .list_session_groups(tron_backend::application::chat::ChatSessionQuery {
+            workspace_code: Some(WORKSPACE.into()),
+        })
+        .unwrap();
+    assert!(
+        groups
+            .iter()
+            .flat_map(|group| &group.sessions)
+            .all(|session| session.session_code != id
+                && session.session_code != "original-dude-work-session"),
+        "neither Dude parent nor native Thread appears in ordinary user Chats"
     );
     let catalog = host.dude_thread_catalog("main-agent").await.unwrap();
     assert_eq!(catalog.len(), 1);

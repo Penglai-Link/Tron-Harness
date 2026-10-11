@@ -343,3 +343,147 @@ async fn continuation_recovery_uses_answered_interaction_identity_when_timestamp
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].status, fw::ThreadStatus::Completed);
 }
+
+fn memory_context(record: &ThreadRecord) -> AgentRunContext {
+    serde_json::from_value(serde_json::json!({
+        "agentCode":record.agent_code,"runCode":fw::RunId::new_v4().to_string(),"conversationCode":record.summary.thread_id,"workspaceCode":record.workspace_code,"userCode":record.user_code,"collaborationOwner":record.owner,"locale":"en-US","agentKind":"REACT",
+        "model":{"modelCode":"fixture","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"synthetic","modelName":"fixture","maxTokens":2048,"contextWindowTokens":32000},
+        "variables":[],"skills":[],"tools":[],"executionScope":record.execution_scope,"limits":{"maxSteps":12,"maxToolCalls":12,"maxParallelToolCalls":1},"messages":[],"observations":[],"startedAt":"fixture",
+        "shortTermMemory":{"sessionCode":record.summary.thread_id,"inputCode":"input","inputKind":"USER_PROMPT","promptPrefix":[],"todoEnabled":false}
+    })).unwrap()
+}
+#[tokio::test]
+async fn native_thread_stm_scope_and_family_come_from_durable_owner_without_user_chat_link() {
+    use crate::application::short_term_memory::{ShortTermMemoryConfig, ShortTermMemoryService};
+    let host = FrameworkHost::temporary(None).unwrap();
+    let agent = recovery_agent(&host, Arc::new(std::sync::atomic::AtomicUsize::new(0))).await;
+    let sessions = host.storage_framework().await.unwrap().sessions().unwrap();
+    let mut current = record("memory-current");
+    current.feedback_pending = false;
+    host.persist_thread(&mut current, true).await.unwrap();
+    for (id, owner, user, workspace, origin, task, summary) in [
+        (
+            "memory-current",
+            "main-dude",
+            "profile",
+            "",
+            "dude-work-session",
+            "task-1",
+            "current",
+        ),
+        (
+            "memory-sibling",
+            "main-dude",
+            "profile",
+            "",
+            "dude-work-session",
+            "task-1",
+            "authorized-family",
+        ),
+        (
+            "memory-other-dude",
+            "other-dude",
+            "profile",
+            "",
+            "dude-work-session",
+            "task-1",
+            "other-dude-secret",
+        ),
+        (
+            "memory-other-user",
+            "main-dude",
+            "other-profile",
+            "",
+            "dude-work-session",
+            "task-1",
+            "other-user-secret",
+        ),
+        (
+            "memory-other-workspace",
+            "main-dude",
+            "profile",
+            "other-workspace",
+            "dude-work-session",
+            "task-1",
+            "other-workspace-secret",
+        ),
+        (
+            "memory-unrelated",
+            "main-dude",
+            "profile",
+            "",
+            "other-origin",
+            "other-task",
+            "unrelated-secret",
+        ),
+    ] {
+        if id != "memory-current" {
+            let mut related = record(id);
+            related.owner.code = owner.into();
+            related.user_code = Some(user.into());
+            related.workspace_code = workspace.into();
+            related.origin_session_code = origin.into();
+            related.owner.task_code = Some(task.into());
+            related.feedback_pending = false;
+            host.persist_thread(&mut related, true).await.unwrap();
+        }
+        let mut request = fw::RunRequest::new(id, "seed native history");
+        request.model = Some(fw::ModelRef::new("fixture", "complete"));
+        agent.run(request).await.unwrap();
+        sessions
+            .write_context(
+                id,
+                "tron.session-summary-view",
+                None,
+                serde_json::json!({"summary":summary}),
+            )
+            .await
+            .unwrap();
+    }
+    let service = ShortTermMemoryService::with_host(host.clone(), ShortTermMemoryConfig::default());
+    let context = memory_context(&current);
+    let prepared = service
+        .prepare_model_context_with_tool_schema_estimate(&context, 0)
+        .unwrap();
+    assert_eq!(
+        prepared.sources.unwrap().revision.scope,
+        context.memory_scope("memory-current").unwrap()
+    );
+    let family = service
+        .framework_data_source(&context, "session_family_context")
+        .unwrap()
+        .0;
+    assert_eq!(family.len(), 1);
+    assert!(family[0].text_content().contains("authorized-family"));
+    for change in ["owner", "user", "workspace"] {
+        let mut forged = context.clone();
+        match change {
+            "owner" => forged.collaboration_owner.as_mut().unwrap().code = "other-dude".into(),
+            "user" => forged.user_code = Some("other-profile".into()),
+            _ => forged.workspace_code = "other-workspace".into(),
+        }
+        assert!(
+            service
+                .framework_data_source(&forged, "session_family_context")
+                .is_err(),
+            "caller cannot forge {change} to rebind native Thread STM"
+        );
+    }
+    let count = host
+        .shared_database()
+        .await
+        .unwrap()
+        .call(|connection| {
+            connection.query_row(
+                "SELECT count(*) FROM workspace_session_links WHERE session_id LIKE 'memory-%'",
+                [],
+                |row| row.get::<_, usize>(0),
+            )
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        count, 0,
+        "native Thread STM never fabricates a product/user Chat link"
+    );
+}
