@@ -466,9 +466,10 @@ fn dude_memory_creator_changes_invalidate_loaded_author_receipt() {
         .path()
         .join("registry/.agents/skills/skill-creator/SKILL.md");
     let mut markdown = std::fs::read_to_string(&creator).unwrap();
+    markdown = markdown.replace("1.2.3", "2.0.0");
     markdown.push_str("New required validation rule.\n");
     std::fs::write(&creator, markdown).unwrap();
-    service.skills.rescan_registry().unwrap();
+    // No rescan: author instructions must still match the actual artifact receipt.
     assert!(matches!(
         service.submit_candidate(
             "user",
@@ -496,6 +497,10 @@ fn dude_memory_creator_changes_invalidate_loaded_author_receipt() {
         )
         .unwrap();
     assert_ne!(first.candidate.creator, reloaded.candidate.creator);
+    assert_eq!(
+        reloaded.candidate.creator.as_ref().unwrap().version,
+        "2.0.0"
+    );
     assert!(
         reloaded
             .creator_markdown

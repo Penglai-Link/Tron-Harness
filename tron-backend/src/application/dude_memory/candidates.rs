@@ -424,6 +424,14 @@ impl DudeMemoryService {
             candidate.reason = Some(text);
         }
         repository.save_candidate(Some(&previous), &candidate)?;
+        drop(repository);
+        if !revise {
+            self.notify(
+                &candidate,
+                "SkillRejected",
+                format!("Skill {} candidate was rejected", candidate.skill_name),
+            )?;
+        }
         Ok(candidate)
     }
     pub fn retry_install(
@@ -531,15 +539,49 @@ fn load_creator(
     }
     let files = read_artifact(std::path::Path::new(&creator.registry_path))?;
     let content_hash = artifact_hash(&files)?;
+    // Instructions and receipt must come from the same filesystem snapshot. Registry
+    // display metadata may lag behind a user's direct file edit until the next scan.
+    let markdown = files
+        .iter()
+        .find(|file| file.path == "SKILL.md")
+        .and_then(|file| super::artifacts::artifact_bytes(file).ok())
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .ok_or_else(|| {
+            DudeMemoryError::Dependency("skill-creator has no readable SKILL.md".into())
+        })?;
+    let frontmatter = markdown
+        .strip_prefix("---\n")
+        .and_then(|text| text.split_once("\n---"))
+        .and_then(|(yaml, _)| serde_yaml::from_str::<serde_yaml::Value>(yaml).ok())
+        .ok_or_else(|| {
+            DudeMemoryError::Dependency("skill-creator frontmatter is invalid".into())
+        })?;
+    if frontmatter["name"].as_str() != Some("skill-creator") {
+        return Err(DudeMemoryError::Dependency(
+            "loaded skill-creator artifact has a different name".into(),
+        ));
+    }
+    let version = frontmatter
+        .get("version")
+        .or_else(|| {
+            frontmatter
+                .get("metadata")
+                .and_then(|metadata| metadata.get("version"))
+        })
+        .and_then(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .or_else(|| value.as_i64().map(|value| value.to_string()))
+        })
+        .unwrap_or_else(|| content_hash.clone());
     Ok((
         CreatorReceipt {
             skill_name: "skill-creator".into(),
-            version: creator
-                .declared_version
-                .unwrap_or_else(|| content_hash.clone()),
+            version,
             content_hash,
         },
-        creator.skill_markdown,
+        markdown,
         files,
     ))
 }
