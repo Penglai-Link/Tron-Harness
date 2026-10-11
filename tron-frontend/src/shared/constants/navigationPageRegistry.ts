@@ -1,4 +1,6 @@
 export const navigationPageRegistry: Record<string, string> = {
+  "dudes.index": "/dudes",
+  "notifications.index": "/notifications",
   "agents.index": "/agents",
   "agents.internal": "/agents/internal",
   "agents.system": "/agents/system",

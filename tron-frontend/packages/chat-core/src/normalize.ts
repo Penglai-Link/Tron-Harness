@@ -32,6 +32,8 @@ function normalizeUnixMilliseconds(value: unknown): number {
 export function normalizeChatSession(session: ChatSession): ChatSession {
   return {
     ...session,
+    createdAt: typeof session.createdAt === "number" ? new Date(session.createdAt).toISOString() : session.createdAt,
+    updatedAt: typeof session.updatedAt === "number" ? new Date(session.updatedAt).toISOString() : session.updatedAt,
     lastRunStatus: session.lastRunStatus ? toScreamingSnakeCase(session.lastRunStatus) : session.lastRunStatus,
     sourceType: session.sourceType
       ? toScreamingSnakeCase(session.sourceType) as ChatSession["sourceType"]
