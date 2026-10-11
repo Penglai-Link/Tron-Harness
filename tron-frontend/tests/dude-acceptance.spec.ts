@@ -137,7 +137,7 @@ test("robot opens the persistent platform conversation while task work runs in p
   await expect(notice.getByRole("button", { name: "Mark unread", exact: true })).toBeVisible();
   await page.reload();
   await expect(notice.getByRole("button", { name: "Mark unread", exact: true })).toBeVisible();
-  await notice.getByRole("link", { name: "View", exact: true }).click();
+  await notice.locator('a[href*="/dudes?"]').click();
   await expect(page).toHaveURL(new RegExp(`session=${backgroundSession}`));
   const workHistory = page.getByRole("region", { name: "Chat transcript", exact: true });
   await expect(workHistory).toContainText("dude-background-finished");
