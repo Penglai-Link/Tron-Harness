@@ -15,7 +15,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
@@ -98,7 +98,7 @@ impl DudeMemoryAgentRuntime for NativeDudeMemoryAgentRuntime {
                 Some("zh-CN".into()),
             )
             .await
-            .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+            .map_err(|e| DudeMemoryError::Storage(format!("{e:?}")))?;
         if result.status != "COMPLETED" {
             return Err(DudeMemoryError::Invalid(format!(
                 "memory agent has not completed: {}",
