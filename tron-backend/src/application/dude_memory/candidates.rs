@@ -21,6 +21,22 @@ impl DudeMemoryService {
         skill_name: &str,
         session: &str,
     ) -> Result<SkillAuthoringContext, DudeMemoryError> {
+        let batch = self.get_batch(user, batch_code)?;
+        let sources = batch
+            .sources
+            .iter()
+            .map(|source| source.source_code.clone())
+            .collect::<Vec<_>>();
+        self.begin_skill_authoring_for_sources(user, batch_code, skill_name, session, &sources)
+    }
+    pub fn begin_skill_authoring_for_sources(
+        &self,
+        user: &str,
+        batch_code: &str,
+        skill_name: &str,
+        session: &str,
+        source_codes: &[String],
+    ) -> Result<SkillAuthoringContext, DudeMemoryError> {
         if skill_name == "skill-creator"
             || skill_name.is_empty()
             || skill_name.len() >= 64
@@ -53,8 +69,26 @@ impl DudeMemoryService {
                 creator_files: Vec::new(),
             });
         }
-        // An unchanged rejected experience is suppressed even if a later batch repeats it.
-        let evidence: Vec<SkillEvidence> = batch.sources.iter().map(SkillEvidence::from).collect();
+        if source_codes.is_empty()
+            || source_codes.iter().any(|code| {
+                !batch
+                    .sources
+                    .iter()
+                    .any(|source| source.source_code == *code)
+            })
+        {
+            return Err(DudeMemoryError::Invalid(
+                "Skill evidence must identify sources in the current batch".into(),
+            ));
+        }
+        // Only this experience's evidence participates in rejection deduplication. Unrelated
+        // new conversations in the batch cannot make a rejected experience appear new.
+        let evidence: Vec<SkillEvidence> = batch
+            .sources
+            .iter()
+            .filter(|source| source_codes.contains(&source.source_code))
+            .map(SkillEvidence::from)
+            .collect();
         if let Some(candidate) = repository.list_candidates(user)?.into_iter().find(|c| {
             c.skill_name == skill_name
                 && c.status == SkillCandidateStatus::Rejected
