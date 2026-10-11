@@ -22,6 +22,7 @@ mod registry_sync;
 #[cfg(test)]
 mod tests;
 mod use_cases;
+mod approved_artifact;
 pub use provider::SkillAgentIdentity;
 mod projection;
 
@@ -60,6 +61,7 @@ pub struct SkillRegistryService {
     capabilities: Arc<std::sync::OnceLock<crate::application::capability::CapabilityResources>>,
     index_lock: Arc<tokio::sync::Mutex<()>>,
     registry_root: PathBuf,
+    mutation_lock: Arc<Mutex<()>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -100,6 +102,7 @@ impl SkillRegistryService {
             capabilities: Default::default(),
             index_lock: Default::default(),
             registry_root: registry_root.into(),
+            mutation_lock: Default::default(),
         }
     }
 }
