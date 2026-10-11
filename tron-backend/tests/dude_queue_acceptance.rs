@@ -184,3 +184,55 @@ fn notification_delivery_is_idempotent_and_read_does_not_resolve_action() {
         .unwrap();
     assert_eq!(restarted.notifications().unwrap()[0].archived_at, Some(102));
 }
+
+#[test]
+fn completing_event_and_creating_notification_commit_or_retry_together() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("completion.sqlite3");
+    let mut queue = repository(&path);
+    queue.save(&dude()).unwrap();
+    queue
+        .enqueue(&event("completion", "completion-logical", "work"))
+        .unwrap();
+    let claim = queue.claim(100, 1000).unwrap().unwrap();
+    let injector = rusqlite::Connection::open(&path).unwrap();
+    injector.execute_batch("CREATE TRIGGER fail_notice BEFORE INSERT ON platform_notifications BEGIN SELECT RAISE(ABORT, 'simulated notification persistence outage'); END;").unwrap();
+    assert!(
+        queue
+            .finish(
+                &claim.event_id,
+                claim.lease_token.as_deref().unwrap(),
+                DudeEventStatus::Completed,
+                "completed work",
+                101
+            )
+            .is_err()
+    );
+    let not_committed = queue.events("queue-dude").unwrap();
+    assert_eq!(
+        not_committed[0].status,
+        DudeEventStatus::Running,
+        "notification failure must not strand an unreported completed event"
+    );
+    assert!(queue.notifications().unwrap().is_empty());
+    injector.execute_batch("DROP TRIGGER fail_notice;").unwrap();
+    queue
+        .finish(
+            &claim.event_id,
+            claim.lease_token.as_deref().unwrap(),
+            DudeEventStatus::Completed,
+            "completed work",
+            102,
+        )
+        .unwrap();
+    drop(queue);
+    let mut restarted = repository(&path);
+    assert_eq!(
+        restarted.events("queue-dude").unwrap()[0].status,
+        DudeEventStatus::Completed
+    );
+    let notices = restarted.notifications().unwrap();
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].body, "completed work");
+    assert_eq!(notices[0].target["eventId"], "completion");
+}
