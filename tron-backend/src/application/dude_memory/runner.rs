@@ -108,12 +108,42 @@ impl DudeMemoryAgentRuntime for NativeDudeMemoryAgentRuntime {
         Ok(result.final_output)
     }
 }
+#[async_trait]
+pub trait DudeMemorySessionFactory: Send + Sync {
+    async fn author_session(
+        &self,
+        dude: &str,
+        user: &str,
+        batch: &str,
+        skill: &str,
+    ) -> Result<String, DudeMemoryError>;
+}
+pub type MemorySessionFuture =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, DudeMemoryError>> + Send>>;
+pub struct CallbackDudeMemorySessionFactory<
+    F: Fn(String, String, String, String) -> MemorySessionFuture + Send + Sync,
+>(pub F);
+#[async_trait]
+impl<F: Fn(String, String, String, String) -> MemorySessionFuture + Send + Sync>
+    DudeMemorySessionFactory for CallbackDudeMemorySessionFactory<F>
+{
+    async fn author_session(
+        &self,
+        dude: &str,
+        user: &str,
+        batch: &str,
+        skill: &str,
+    ) -> Result<String, DudeMemoryError> {
+        (self.0)(dude.into(), user.into(), batch.into(), skill.into()).await
+    }
+}
 #[derive(Clone)]
 pub struct DudeMemoryRunner {
     service: DudeMemoryService,
     memory: AppMemoryService,
     collector: DudeMemorySourceCollector,
     agent: Arc<dyn DudeMemoryAgentRuntime>,
+    sessions: Arc<dyn DudeMemorySessionFactory>,
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -167,12 +197,14 @@ impl DudeMemoryRunner {
         host: FrameworkHost,
         invocation: AgentInvocationService,
         router: crate::application::model_router::AgentModelRouter,
+        sessions: Arc<dyn DudeMemorySessionFactory>,
     ) -> Self {
         Self::with_agent(
             service,
             memory,
             host,
             Arc::new(NativeDudeMemoryAgentRuntime::new(invocation, router)),
+            sessions,
         )
     }
     pub fn with_agent(
@@ -180,12 +212,14 @@ impl DudeMemoryRunner {
         memory: AppMemoryService,
         host: FrameworkHost,
         agent: Arc<dyn DudeMemoryAgentRuntime>,
+        sessions: Arc<dyn DudeMemorySessionFactory>,
     ) -> Self {
         Self {
             service,
             memory,
             collector: DudeMemorySourceCollector::new(host),
             agent,
+            sessions,
         }
     }
     pub async fn prepare_wakeup(
@@ -193,7 +227,11 @@ impl DudeMemoryRunner {
         dude: &str,
         user: &str,
     ) -> Result<Option<MemoryBatch>, DudeMemoryError> {
-        let sources = self.collector.collect(user, dude).await?;
+        let cursors = self.service.cursor_snapshot(user, dude)?;
+        let sources = self
+            .collector
+            .collect_incremental(user, dude, &cursors)
+            .await?;
         self.service.prepare_batch(dude, user, sources)
     }
     pub async fn execute_batch(
@@ -329,10 +367,20 @@ impl DudeMemoryRunner {
         &self,
         user: &str,
         batch: &MemoryBatch,
-        session: &str,
+        _batch_session: &str,
         experience: &ExperienceProposal,
         auto_approve: bool,
     ) -> Result<(), DudeMemoryError> {
+        let author_session = self
+            .sessions
+            .author_session(
+                &batch.dude_code,
+                user,
+                &batch.batch_code,
+                &experience.skill_name,
+            )
+            .await?;
+        let session = author_session.as_str();
         let context = self.service.begin_skill_authoring(
             user,
             &batch.batch_code,

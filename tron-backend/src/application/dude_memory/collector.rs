@@ -17,13 +17,23 @@ impl DudeMemorySourceCollector {
         user: &str,
         memory_dude: &str,
     ) -> Result<Vec<MemorySource>, DudeMemoryError> {
+        self.collect_incremental(user, memory_dude, &BTreeMap::new())
+            .await
+    }
+    pub async fn collect_incremental(
+        &self,
+        user: &str,
+        memory_dude: &str,
+        cursors: &BTreeMap<String, String>,
+    ) -> Result<Vec<MemorySource>, DudeMemoryError> {
         let database = self
             .host
             .shared_database()
             .await
             .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+        let profile_user = user.to_owned();
         let user = user.to_owned();
-        let links=database.call(move|c| {
+        let mut links=database.call(move|c| {
             let mut sessions=BTreeMap::<String,(String,Option<String>,Vec<String>)>::new();
             let mut query=c.prepare("SELECT session_id,workspace_code,business_json FROM workspace_session_links")?;
             for row in query.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)))? {
@@ -47,7 +57,7 @@ impl DudeMemorySourceCollector {
                 for row in query.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)))? {
                     let(id,owner,json)=row?;let value:Value=serde_json::from_str(&json).unwrap_or(Value::Null);
                     // Platform sessions have no workspace; user-scoped facts still use the current profile.
-                    if value["userCode"].as_str().is_some_and(|code|code!=user) { continue; }
+                    if value["userCode"].as_str()!=Some(user.as_str()) && !sessions.contains_key(&id) { continue; }
                     let workspace=value["workspaceCode"].as_str().unwrap_or("").to_owned();
                     sessions.insert(id,(workspace,Some(owner),Vec::new()));
                 }
@@ -59,6 +69,24 @@ impl DudeMemorySourceCollector {
             .storage_framework()
             .await
             .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+        // Native subagents are indexed under their trusted root session, including descendants.
+        for (root, (workspace, owner, lineage)) in links.clone() {
+            if owner.as_deref() == Some(memory_dude)
+                || lineage.iter().any(|code| code == memory_dude)
+            {
+                continue;
+            }
+            let children = self
+                .host
+                .subagents(&root, &profile_user)
+                .await
+                .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+            for child in children {
+                links
+                    .entry(child.record.session_id)
+                    .or_insert_with(|| (workspace.clone(), owner.clone(), lineage.clone()));
+            }
+        }
         let history = framework
             .history()
             .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
@@ -106,7 +134,13 @@ impl DudeMemorySourceCollector {
                             &lineage,
                             MemorySourceKind::Conversation,
                             &format!("{} {:?}: {}", message.created_at_ms, message.role, text),
+                            cursors,
                         );
+                        if sources.len() >= 64
+                            || sources.iter().map(|s| s.excerpt.len()).sum::<usize>() >= 112 * 1024
+                        {
+                            return Ok(sources);
+                        }
                     }
                 }
                 for tool in &page.records.tool_invocations {
@@ -128,7 +162,13 @@ impl DudeMemorySourceCollector {
                             &lineage,
                             MemorySourceKind::TaskResult,
                             &format!("Verified successful tool outcome: {json}"),
+                            cursors,
                         );
+                        if sources.len() >= 64
+                            || sources.iter().map(|s| s.excerpt.len()).sum::<usize>() >= 112 * 1024
+                        {
+                            return Ok(sources);
+                        }
                     }
                 }
                 cursor = page.next_cursor;
@@ -150,11 +190,12 @@ fn append_chunks(
     lineage: &[String],
     kind: MemorySourceKind,
     text: &str,
+    cursors: &BTreeMap<String, String>,
 ) {
     let chars: Vec<_> = text.chars().collect();
     for (index, chunk) in chars.chunks(8192).enumerate() {
         let excerpt: String = chunk.iter().collect();
-        sources.push(MemorySource {
+        let source = MemorySource {
             source_code: format!("{session}/{record}/{index}"),
             workspace_code: workspace.into(),
             version: hex::encode(Sha256::digest(excerpt.as_bytes())),
@@ -162,6 +203,16 @@ fn append_chunks(
             root_owner_dude_code: owner.clone(),
             lineage_dude_codes: lineage.to_vec(),
             kind,
-        });
+        };
+        if cursors.get(&source.identity()) == Some(&source.version) {
+            continue;
+        }
+        if sources.len() >= 64
+            || sources.iter().map(|s| s.excerpt.len()).sum::<usize>() + source.excerpt.len()
+                > 128 * 1024
+        {
+            return;
+        }
+        sources.push(source);
     }
 }
