@@ -27,6 +27,7 @@ fn record(id: &str) -> ThreadRecord {
         feedback_pending: true,
         revision: 0,
         run_admitted_at_ms: fw::lifecycle_time_ms(),
+        execution_sequence: 0,
     }
 }
 struct Sink {
@@ -51,7 +52,7 @@ async fn durable_thread_outbox_survives_host_and_parent_exit_and_retries_once() 
     let mut first = record("thread-1");
     host.persist_thread(&mut first, true).await.unwrap();
     // A second run must not replace undelivered feedback from the first run.
-    first.summary.latest_run_id = Some(fw::RunId::new_v4());
+    first.execution_sequence += 1;
     host.persist_thread(&mut first, false).await.unwrap();
     drop(host);
     let host = FrameworkHost::persistent(&path, None);

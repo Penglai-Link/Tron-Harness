@@ -124,6 +124,10 @@ impl Runtime {
         let mut request = request;
         request.run_id = Some(run_id);
         let mut record = thread.state.lock().unwrap().record.clone();
+        record.execution_sequence = record
+            .execution_sequence
+            .checked_add(1)
+            .ok_or_else(|| failure("Thread execution sequence overflow"))?;
         record.run_admitted_at_ms = fw::lifecycle_time_ms();
         record.summary.status = fw::ThreadStatus::Running;
         record.summary.latest_run_id = Some(run_id);
@@ -350,6 +354,7 @@ impl AgentCollaborationRuntime for Runtime {
             feedback_pending: false,
             revision: 0,
             run_admitted_at_ms: fw::lifecycle_time_ms(),
+            execution_sequence: 0,
         };
         let host = self.host()?;
         let admission = host.0.config_lock.lock().await;
