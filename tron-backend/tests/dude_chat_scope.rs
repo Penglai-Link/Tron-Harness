@@ -69,11 +69,11 @@ async fn platform_chat_reads_require_persisted_dude_and_profile_ownership() {
         .unwrap()["dudeCode"]
         .as_str()
         .unwrap();
-    // Seed an empty real native session: no model, synthetic history, or fake workspace.
+    // The product endpoint already creates the real native session. Verify that
+    // projection directly, without introducing a second session or fake workspace.
     let framework = state.agent_framework.storage_framework().await.unwrap();
-    let mut record = eliteforge_agent_core::SessionRecord::new("Platform scope acceptance");
-    record.id = session.into();
-    framework.sessions().unwrap().create(record).await.unwrap();
+    let native = framework.sessions().unwrap().get(session).await.unwrap();
+    assert_eq!(native.id, session);
     let reads = [
         (
             Method::POST,
