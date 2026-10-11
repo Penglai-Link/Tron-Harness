@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { useEffect, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -64,8 +65,8 @@ function DudeThreadHistory({ dudeCode, thread, active }: { dudeCode: string; thr
   }
   return <div className="space-y-3">{query.error ? <div role="alert">{query.error.message}<Button size="sm" variant="outline" onClick={() => void query.refetch()}>{t("dude.retry")}</Button></div> : null}
     {actionError ? <p role="alert">{actionError}</p> : null}
-    <div className="h-[min(65dvh,800px)] min-h-80"><ChatPanel disabledInput={query.isPending || busy || thread.status === "Running" || requests.length > 0} draft={draft} onDraftChange={setDraft} onSend={send} sending={busy} sendDisabled={!draft.trim()} userInputRequest={requests[0] ?? null} userInputRequests={requests} userInputLabels={userInputLabels} userInputAnswerPending={busy} onAnswerUserInput={answer} currentUserDisplayName={auth.session?.user.displayName ?? ""} messages={messages} historyLabels={historyLabels} workRailLabels={workRailLabels} historyLoading={query.isPending} historyLoadingOlder={query.isFetchingNextPage} onLoadOlderHistory={query.hasNextPage ? () => void query.fetchNextPage() : undefined} showStop={false} showHeader={false} title={thread.title ?? thread.threadCode}
+    <div className="flex h-[min(65dvh,800px)] min-h-80 flex-col"><ChatPanel disabledInput={query.isPending || busy || thread.status === "Running" || requests.length > 0} draft={draft} onDraftChange={setDraft} onSend={send} sending={busy} sendDisabled={!draft.trim()} userInputRequest={requests[0] ?? null} userInputRequests={requests} userInputLabels={userInputLabels} userInputAnswerPending={busy} onAnswerUserInput={answer} currentUserDisplayName={auth.session?.user.displayName ?? ""} messages={messages} historyLabels={historyLabels} workRailLabels={workRailLabels} historyLoading={query.isPending} historyLoadingOlder={query.isFetchingNextPage} onLoadOlderHistory={query.hasNextPage ? () => void query.fetchNextPage() : undefined} showStop={false} showHeader={false} title={thread.title ?? thread.threadCode}
       session={{ id: thread.threadCode, sessionId: history?.sessionId ?? thread.threadCode, title: thread.title ?? thread.threadCode, status: "ACTIVE", createdAt: history?.runs[0] ? new Date(history.runs[0].startedAtMs).toISOString() : "", updatedAt: "" }} />
-    </div><div className="flex justify-end"><Button size="sm" variant="ghost" onClick={() => void query.refetch()}>{t("dude.refresh")}</Button></div>
+    </div><div className="flex justify-end gap-2"><Button size="sm" variant="ghost" nativeButton={false} render={<Link to={`/settings/observability/traces?sessionCode=${encodeURIComponent(thread.threadCode)}`} />}>{t("dude.viewTraces")}</Button><Button size="sm" variant="ghost" onClick={() => void query.refetch()}>{t("dude.refresh")}</Button></div>
   </div>;
 }

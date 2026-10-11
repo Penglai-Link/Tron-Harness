@@ -2,6 +2,22 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   "dude": {
+  "selectDude": "选择 Dude",
+  "activity": "活动记录",
+  "viewResult": "查看结果",
+  "profileSection": "基本信息",
+  "backgroundSection": "后台运行",
+  "resourcesSection": "能力资源",
+
+  "threadStatuses": {
+    "Running": "运行中",
+    "Completed": "已完成",
+    "Failed": "失败",
+    "AwaitingInput": "等待输入",
+    "Cancelled": "已取消",
+    "StepLimit": "达到步骤上限",
+    "ToolCallLimit": "达到工具调用上限",
+  },
   "threads": "派发会话",
   "backToThreads": "返回派发列表",
   "noThreads": "暂无派发会话。",

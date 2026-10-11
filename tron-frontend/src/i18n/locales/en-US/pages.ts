@@ -2,6 +2,22 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   "dude": {
+  "selectDude": "Select Dude",
+  "activity": "Activity",
+  "viewResult": "View result",
+  "profileSection": "Profile",
+  "backgroundSection": "Background",
+  "resourcesSection": "Resources",
+
+  "threadStatuses": {
+    "Running": "Running",
+    "Completed": "Completed",
+    "Failed": "Failed",
+    "AwaitingInput": "Awaiting input",
+    "Cancelled": "Cancelled",
+    "StepLimit": "Step limit reached",
+    "ToolCallLimit": "Tool call limit reached",
+  },
   "threads": "Delegated threads",
   "backToThreads": "Back to delegated threads",
   "noThreads": "No delegated threads yet.",
