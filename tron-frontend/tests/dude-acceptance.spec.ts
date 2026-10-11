@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer } from "node:net";
@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnManagedProcess, stopManagedProcess, type ManagedProcess } from "./support/managed-process";
-import { routeActiveProfileApi, seedResourceUiShell, startResourceUiFrontend, stopResourceUiFrontend, type ResourceUiFrontend } from "./support/resource-ui-harness";
+import { seedResourceUiShell, startResourceUiFrontend, stopResourceUiFrontend, type ResourceUiFrontend } from "./support/resource-ui-harness";
 
 let backend: ManagedProcess | undefined;
 let frontend: ResourceUiFrontend | undefined;
@@ -15,6 +15,45 @@ let directory = "";
 let api = "";
 let foregroundStarted = false;
 let releaseForeground = () => {};
+let backendLogs = "";
+const evidence = new WeakMap<Page, { errors: string[]; messages: string[] }>();
+
+// Match common::app_with_state_setup rather than the resource-only shell's
+// USR-RESOURCE-0001/resource-ui-token identity. Product endpoints remain real.
+async function routeAcceptanceProfile(page: Page) {
+  const profile = { profileId: "PROFILE-ACCEPTANCE", personAiUserId: "USR-AUTH-0001",
+    personAiUsername: "profile.operator", status: "ACTIVE", createdAt: "2026-09-27T00:00:00Z",
+    lastActivatedAt: null, avatarUrl: null };
+  await page.route(/\/api\/v1\/(?:bootstrap\/status|profiles(?:\/active\/token|\/events)?)(?:\?.*)?$/, async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/profiles/events") return route.fulfill({ status: 204 });
+    const data = path === "/api/v1/bootstrap/status"
+      ? { hasProfiles: true, activeProfileId: profile.profileId, activeProfile: profile, avatarUrl: null, account: null }
+      : path === "/api/v1/profiles" ? [profile] : { token: "profile-test-token" };
+    await route.fulfill({ json: { code: "SUCCESS", data, message: "ok" } });
+  });
+}
+
+test.beforeEach(async ({ page }) => {
+  const captured = { errors: [] as string[], messages: [] as string[] };
+  evidence.set(page, captured);
+  page.on("pageerror", error => captured.errors.push(error.stack ?? error.message));
+  page.on("console", message => { if (message.type() === "error" || message.type() === "warning") captured.messages.push(`${message.type()}: ${message.text()}`); });
+  page.on("requestfailed", failed => captured.messages.push(`requestfailed: ${failed.method()} ${failed.url()} ${failed.failure()?.errorText}`));
+  page.on("response", response => { if (response.status() >= 400) captured.messages.push(`HTTP ${response.status()}: ${response.url()}`); });
+});
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const captured = evidence.get(page);
+  const snapshot = await page.locator("body").ariaSnapshot({ timeout: 2000 }).catch(error => `snapshot failed: ${error}`);
+  const html = await page.content().catch(error => `content failed: ${error}`);
+  await testInfo.attach("dude-page-diagnostics", { contentType: "application/json", body: JSON.stringify({
+    url: page.url(), ...captured, snapshot, html: html.slice(0, 20000), frontend: frontend?.logs(), backend: backendLogs.slice(-10000),
+  }, null, 2) });
+  const screenshot = await page.screenshot({ animations: "disabled", timeout: 3000 }).catch(() => null);
+  if (screenshot) await testInfo.attach("dude-failure-screen", { contentType: "image/png", body: screenshot });
+});
 
 async function request(method: string, path: string, body?: unknown) {
   const response = await fetch(`${api}${path}`, { method, headers: { "Content-Type": "application/json", Authorization: "Bearer profile-test-token" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -56,21 +95,21 @@ test.beforeAll(async () => {
     });
   });
   api = `http://127.0.0.1:${port}`;
-  let logs = "";
+  backendLogs = "";
   backend = spawnManagedProcess("rtk", ["make", "be-ui-acceptance"], {
     cwd: resolve(fileURLToPath(import.meta.url), "../../.."),
     env: { ...process.env, CARGO_BUILD_JOBS: "2", TRON_ACCEPTANCE_DIRECTORY: directory, TRON_ACCEPTANCE_PORT: String(port) }, stdio: "pipe",
   });
-  backend.stdout.on("data", data => logs += data.toString()); backend.stderr.on("data", data => logs += data.toString());
+  backend.stdout.on("data", data => backendLogs += data.toString()); backend.stderr.on("data", data => backendLogs += data.toString());
   const deadline = Date.now() + 270_000;
   let ready = false;
   while (Date.now() < deadline) {
-    if (backend.exitCode !== null) throw new Error(logs);
+    if (backend.exitCode !== null) throw new Error(backendLogs);
     try { ready = (await fetch(`${api}/api/v1/health`)).ok; } catch { /* backend starting */ }
     if (ready) break;
     await new Promise(resolveDelay => setTimeout(resolveDelay, 250));
   }
-  if (!ready) throw new Error(logs);
+  if (!ready) throw new Error(backendLogs);
   // Configure an executable loop through the same public management API as an
   // existing user. This fixture tests parallel execution, not bootstrap policy.
   await request("POST", "/api/v1/agents/loops", {
@@ -101,9 +140,12 @@ test.afterAll(async () => {
 test("robot opens the persistent platform conversation while task work runs in parallel", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await seedResourceUiShell(page, "en-US"); await routeActiveProfileApi(page);
-  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  await seedResourceUiShell(page, "en-US"); await routeAcceptanceProfile(page);
+  const errors = evidence.get(page)!.errors;
   await page.goto(`${frontend!.baseUrl}/settings/agents`);
+  await expect(page.getByRole("button", { name: "Platform main Dude conversation", exact: true }),
+    `Robot unavailable. Page errors: ${JSON.stringify(errors)}. Frontend: ${frontend!.logs()}`)
+    .toBeVisible({ timeout: 10_000 });
   const resolveResponse = page.waitForResponse(response => response.url().endsWith("/api/v1/dudes/main/session") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Platform main Dude conversation", exact: true }).click();
   const session = (await (await resolveResponse).json()).data;
@@ -148,8 +190,11 @@ test("robot opens the persistent platform conversation while task work runs in p
 
 test("Dude creation stays in agent management with a clear consumption notice", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await seedResourceUiShell(page, "en-US"); await routeActiveProfileApi(page);
+  await seedResourceUiShell(page, "en-US"); await routeAcceptanceProfile(page);
   await page.goto(`${frontend!.baseUrl}/settings/agents?tab=dudes`);
+  await expect(page.getByRole("button", { name: "New Dude", exact: true }),
+    `Dude manager unavailable. Page errors: ${JSON.stringify(evidence.get(page)!.errors)}. Frontend: ${frontend!.logs()}`)
+    .toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "New Dude", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText(/points|credits|consumption/i);

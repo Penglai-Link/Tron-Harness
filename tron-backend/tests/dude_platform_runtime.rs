@@ -239,7 +239,7 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
     let model = Arc::new(ControlledModel::default());
     let foreground_service = service(&state, model.clone(), "acceptance-interactive");
     let task_service = service(&state, model.clone(), "acceptance-task");
-    let foreground = tokio::spawn(async move {
+    let mut foreground = tokio::spawn(async move {
         foreground_service
             .invoke(
                 command("acceptance-interactive", "foreground-hold"),
@@ -248,9 +248,15 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
             )
             .await
     });
-    tokio::time::timeout(Duration::from_secs(10), model.foreground_started.notified())
-        .await
-        .expect("foreground reached the real model with platform STM");
+    tokio::select! {
+        _ = model.foreground_started.notified() => {},
+        completed = &mut foreground => {
+            panic!("foreground ended before reaching the controlled model: {completed:?}");
+        },
+        _ = tokio::time::sleep(Duration::from_secs(10)) => {
+            panic!("foreground did not reach the controlled model within 10s; invocation is still running");
+        },
+    }
     let background = tokio::time::timeout(
         Duration::from_secs(10),
         task_service.invoke(
