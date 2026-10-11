@@ -28,6 +28,7 @@ fn record(id: &str) -> ThreadRecord {
         revision: 0,
         run_admitted_at_ms: fw::lifecycle_time_ms(),
         execution_sequence: 0,
+        resumed_interaction_id: None,
     }
 }
 struct Sink {
@@ -125,6 +126,13 @@ impl fw::ChatModel for CompletionModel {
     }
 }
 async fn recovery_agent(host: &FrameworkHost, calls: Arc<std::sync::atomic::AtomicUsize>) -> Agent {
+    storage_agent(host, Arc::new(CompletionModel(calls)), vec![]).await
+}
+async fn storage_agent(
+    host: &FrameworkHost,
+    model: Arc<dyn fw::ChatModel>,
+    tools: Vec<fw::ToolBinding>,
+) -> Agent {
     let artifacts = host.0.path.with_extension("artifacts");
     std::fs::create_dir_all(&artifacts).unwrap();
     let agent = eliteforge_agent_test_support::TestBuilder::new()
@@ -137,9 +145,17 @@ async fn recovery_agent(host: &FrameworkHost, calls: Arc<std::sync::atomic::Atom
         ))
         .plugin(fw::ModelConnectionPlugin::new(fw::ModelConnection::new(
             "fixture",
-            Arc::new(CompletionModel(calls)),
-            vec![fw::ModelDescriptor::new("complete")],
+            model,
+            vec![{
+                let mut descriptor = fw::ModelDescriptor::new("complete");
+                descriptor.supports_tools = Some(true);
+                descriptor
+            }],
         )))
+        .plugin(fw::ToolProviderPlugin::new(
+            "fixture.tools",
+            fw::StaticToolProvider::new(tools),
+        ))
         .plugin(
             eliteforge_agent_official_plugin_storage_local::LocalStoragePlugin::new(
                 &host.0.path,
@@ -225,4 +241,105 @@ async fn recovery_reports_abandoned_admission_without_replaying_external_actions
             .unwrap()
             .contains("did not start")
     );
+}
+
+struct AskModel;
+#[async_trait::async_trait]
+impl fw::ChatModel for AskModel {
+    async fn generate(
+        &self,
+        _: &str,
+        request: fw::ChatRequest,
+        _: &dyn fw::ChatStream,
+    ) -> Result<fw::ChatResponse, fw::ModelError> {
+        if request
+            .messages
+            .iter()
+            .any(|message| message.role == fw::Role::Tool)
+        {
+            return Ok(fw::ChatResponse::text("answered"));
+        }
+        Ok(fw::ChatResponse::tool_calls(vec![fw::ToolCall::new(
+            "ask",
+            "ask",
+            serde_json::json!({}),
+        )]))
+    }
+}
+struct AskTool;
+#[async_trait::async_trait]
+impl fw::Tool for AskTool {
+    async fn call(
+        &self,
+        _: serde_json::Value,
+        _: &fw::RunContext,
+    ) -> Result<fw::ToolOutput, fw::ToolError> {
+        Ok(fw::ToolOutput::text("choose").request_input(
+            fw::InteractionRequest::input("choose", serde_json::json!({"type":"boolean"})).unwrap(),
+        ))
+    }
+}
+#[tokio::test]
+async fn continuation_recovery_uses_answered_interaction_identity_when_timestamps_are_equal() {
+    let host = FrameworkHost::temporary(None).unwrap();
+    let agent = storage_agent(
+        &host,
+        Arc::new(AskModel),
+        vec![fw::ToolBinding::new(
+            fw::ToolDescriptor::new("ask", "ask", "choose", serde_json::json!({"type":"object"})),
+            AskTool,
+        )],
+    )
+    .await;
+    let mut thread = record("same-millisecond");
+    let mut request = fw::RunRequest::new("same-millisecond", "start");
+    request.run_id = thread.summary.latest_run_id;
+    request.model = Some(fw::ModelRef::new("fixture", "complete"));
+    let awaiting = agent.run(request).await.unwrap();
+    assert_eq!(awaiting.status, fw::RunStatus::AwaitingInput);
+    let interaction = awaiting.interactions[0].id;
+    let run_id = thread.summary.latest_run_id.unwrap();
+    let native = host
+        .storage_framework()
+        .await
+        .unwrap()
+        .sessions()
+        .unwrap()
+        .store
+        .get_run(run_id)
+        .await
+        .unwrap();
+    thread.summary.status = fw::ThreadStatus::Running;
+    thread.completion = None;
+    thread.feedback_pending = false;
+    thread.execution_sequence = 2;
+    thread.resumed_interaction_id = Some(interaction);
+    // Deterministically reproduce an answer admitted in the same millisecond as the previous result.
+    thread.run_admitted_at_ms = native.finished_at_ms.unwrap();
+    host.persist_thread(&mut thread, true).await.unwrap();
+    let sink = Arc::new(Sink {
+        fail: AtomicBool::new(false),
+        events: Default::default(),
+    });
+    host.set_thread_feedback_sink(sink.clone()).unwrap();
+    assert_eq!(
+        host.recover_collaboration_threads().await.unwrap(),
+        0,
+        "old waiting result is not the admitted continuation result"
+    );
+    assert!(sink.events.lock().unwrap().is_empty());
+    let mut resume = agent
+        .answer("same-millisecond", interaction, serde_json::json!(true))
+        .await
+        .unwrap();
+    resume.model = Some(fw::ModelRef::new("fixture", "complete"));
+    assert_eq!(
+        agent.run(resume).await.unwrap().status,
+        fw::RunStatus::Completed
+    );
+    assert_eq!(host.recover_collaboration_threads().await.unwrap(), 1);
+    assert_eq!(host.recover_collaboration_threads().await.unwrap(), 0);
+    let events = sink.events.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].status, fw::ThreadStatus::Completed);
 }
