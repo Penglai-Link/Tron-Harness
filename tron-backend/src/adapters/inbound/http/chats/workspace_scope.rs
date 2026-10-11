@@ -1,5 +1,6 @@
 //! Normal session access is always constrained by the caller's workspace.
 use super::error_mapper::chat_error_response;
+use crate::adapters::inbound::http::auth::RequestAuthContext;
 use crate::{
     app::AppState,
     domain::chat::{ChatError, ChatSessionStatus},
@@ -70,8 +71,10 @@ pub async fn require_workspace(
         for prefix in ["/api/v1/chats/sessions/"] {
             if let Some(tail) = path.strip_prefix(prefix) {
                 if let Some(code) = tail.split('/').next() {
-                    if state.dudes.session(code).ok().flatten().is_some() {
-                        candidates.push(code.to_owned())
+                    // The path is authoritative even when it names an ordinary,
+                    // missing, or foreign session. A query must never substitute it.
+                    if !is_session_operation(code) {
+                        candidates.push(code.to_owned());
                     }
                 }
             }
@@ -105,10 +108,31 @@ pub async fn require_workspace(
         if candidates.is_empty() {
             return chat_error_response(ChatError::SessionNotFound);
         }
+        let Some(auth) = request.extensions().get::<RequestAuthContext>() else {
+            return chat_error_response(ChatError::SessionNotFound);
+        };
         for code in &candidates {
-            match state.dudes.session(code) {
-                Ok(Some(d)) if d.dude_code == dude_code => {}
+            let d = match state.dudes.session(code) {
+                Ok(Some(d)) if d.dude_code == dude_code => d,
                 _ => return chat_error_response(ChatError::SessionNotFound),
+            };
+            let chat = match state.chats.get_session(code) {
+                Ok(chat) => chat,
+                Err(_) => return chat_error_response(ChatError::SessionNotFound),
+            };
+            let expected_source = format!("__dude:{dude_code}");
+            if chat.source_code.as_deref() != Some(expected_source.as_str())
+                || chat.agent_code.as_deref() != Some(dude_code.as_str())
+                || chat.workspace_code != d.workspace_code.as_deref().unwrap_or_default()
+                || chat
+                    .user_code
+                    .as_deref()
+                    .is_some_and(|user| user != auth.user().user_code)
+            {
+                return chat_error_response(ChatError::SessionNotFound);
+            }
+            if chat.status != ChatSessionStatus::Active {
+                return chat_error_response(ChatError::SessionArchived);
             }
         }
         if runs && path == "/api/v1/agents/runs" {
@@ -278,4 +302,27 @@ pub async fn require_workspace(
         }
     }
     next.run(request).await
+}
+
+// These routes address the session in their body/query rather than the path.
+fn is_session_operation(code: &str) -> bool {
+    matches!(
+        code,
+        "applications"
+            | "get-active-run"
+            | "steer-message"
+            | "stop-run"
+            | "get-todos"
+            | "get-context-detail"
+            | "get-latest-compaction"
+            | "create-compaction"
+            | "get-goal"
+            | "get-latest-goal"
+            | "set-goal"
+            | "pause-goal"
+            | "resume-goal"
+            | "cancel-goal"
+            | "clear-goal"
+            | "update-goal"
+    )
 }
