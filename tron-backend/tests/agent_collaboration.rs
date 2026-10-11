@@ -24,7 +24,7 @@ struct Script {
     requests: Mutex<Vec<fw::ChatRequest>>,
     configs: Mutex<Vec<AgentModelConfig>>,
     management: Option<tron_backend::application::agent::AgentManagementService>,
-    thread_id: Mutex<Option<String>>,
+    session_id: Mutex<Option<String>>,
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
     child_tool_goal: usize,
@@ -70,7 +70,7 @@ impl ModelClient for Script {
                 }
                 Some("root:read-other") if results.is_empty() => ModelResponse::tool_call(
                     "thread_read",
-                    json!({"thread_id":self.thread_id.lock().unwrap().clone().unwrap()}),
+                    json!({"session_id":self.session_id.lock().unwrap().clone().unwrap()}),
                 ),
                 Some("root:thread-leave" | "root:thread-revoke") if results.is_empty() => {
                     ModelResponse::tool_call(
@@ -80,10 +80,10 @@ impl ModelClient for Script {
                 }
                 Some("root:thread-leave" | "root:thread-revoke") => {
                     let created: Value = serde_json::from_str(&results[0]).unwrap();
-                    let id = created["thread_id"].as_str().unwrap();
-                    *self.thread_id.lock().unwrap() = Some(id.into());
+                    let id = created["session_id"].as_str().unwrap();
+                    *self.session_id.lock().unwrap() = Some(id.into());
                     if results.len() == 1 {
-                        ModelResponse::tool_call("thread_wait", json!({"thread_id":id}))
+                        ModelResponse::tool_call("thread_wait", json!({"session_id":id}))
                     } else if root.as_deref() == Some("root:thread-revoke") && results.len() == 2 {
                         self.management
                             .as_ref()
@@ -92,7 +92,7 @@ impl ModelClient for Script {
                             .unwrap();
                         ModelResponse::tool_call(
                             "thread_send",
-                            json!({"thread_id":id,"message":"child:denied"}),
+                            json!({"session_id":id,"message":"child:denied"}),
                         )
                     } else {
                         ModelResponse::final_output(results.join("\n"))
@@ -125,16 +125,16 @@ impl ModelClient for Script {
                 Some("root:thread") => {
                     let created: Value = serde_json::from_str(&results[0])
                         .map_err(|e| format!("thread result: {e}: {}", results[0]))?;
-                    let id = created["thread_id"].as_str().ok_or("missing thread ID")?;
+                    let id = created["session_id"].as_str().ok_or("missing thread ID")?;
                     match results.len() {
-                        1 => ModelResponse::tool_call("thread_wait", json!({"thread_id":id})),
+                        1 => ModelResponse::tool_call("thread_wait", json!({"session_id":id})),
                         2 => ModelResponse::tool_call(
                             "thread_send",
-                            json!({"thread_id":id,"message":"child:second"}),
+                            json!({"session_id":id,"message":"child:second"}),
                         ),
-                        3 => ModelResponse::tool_call("thread_wait", json!({"thread_id":id})),
-                        4 => ModelResponse::tool_call("thread_read", json!({"thread_id":id})),
-                        5 => ModelResponse::tool_call("thread_close", json!({"thread_id":id})),
+                        3 => ModelResponse::tool_call("thread_wait", json!({"session_id":id})),
+                        4 => ModelResponse::tool_call("thread_read", json!({"session_id":id})),
+                        5 => ModelResponse::tool_call("thread_close", json!({"session_id":id})),
                         _ => ModelResponse::final_output(results.join("\n")),
                     }
                 }

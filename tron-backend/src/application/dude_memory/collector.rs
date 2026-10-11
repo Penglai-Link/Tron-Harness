@@ -45,7 +45,7 @@ impl DudeMemorySourceCollector {
             }
             let exists=|table:&str|c.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",[table],|r|r.get::<_,bool>(0));
             if exists("collaboration_threads")? {
-                let mut query=c.prepare("SELECT thread_code,workspace_code,owner_kind,owner_code,record_json FROM collaboration_threads WHERE user_code=?1")?;
+                let mut query=c.prepare("SELECT session_id,workspace_code,owner_kind,owner_code,record_json FROM collaboration_threads WHERE user_code=?1")?;
                 for row in query.query_map([&user],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?)))? {
                     let(id,workspace,kind,owner,json)=row?;let value:Value=serde_json::from_str(&json).unwrap_or(Value::Null);
                     let lineage=value["lineageDudeCodes"].as_array().map(|a|a.iter().filter_map(|v|v.as_str().map(str::to_owned)).collect()).unwrap_or_default();

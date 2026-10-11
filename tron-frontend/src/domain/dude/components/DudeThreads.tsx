@@ -23,16 +23,16 @@ export function DudeThreads({ dudeCode, active, requestedThread }: { dudeCode: s
   const { t } = useTranslation("pages"); const [selected, setSelected] = useState<string | null>(requestedThread ?? null);
   const query = useQuery({ queryKey: ["dude-threads", dudeCode], queryFn: ({ signal }) => listDudeThreads(dudeCode, signal), enabled: active, refetchInterval: active ? 5000 : false });
   useEffect(() => { setSelected(requestedThread ?? null); }, [requestedThread]);
-  const thread = query.data?.find(item => item.threadCode === selected);
+  const thread = query.data?.find(item => item.sessionCode === selected);
   return <section className="space-y-3" aria-label={t("dude.threads")}><h2 className="font-medium">{t("dude.threads")}</h2>
     {query.isPending ? <p role="status">{t("dude.loading")}</p> : null}{query.error ? <div role="alert">{query.error.message}<Button size="sm" variant="outline" onClick={() => void query.refetch()}>{t("dude.retry")}</Button></div> : null}
-    {thread ? <><div className="flex items-center justify-between gap-3"><span className="truncate text-sm">{thread.title ?? thread.threadCode}</span><Button size="sm" variant="outline" onClick={() => setSelected(null)}>{t("dude.backToThreads")}</Button></div><DudeThreadHistory key={thread.threadCode} dudeCode={dudeCode} thread={thread} active={active} /></> : <div className="divide-y divide-[var(--color-outline-variant)]">{query.data?.map(item => <div key={item.threadCode} className="flex items-center gap-3 py-3"><span className="min-w-0 flex-1 truncate text-sm">{item.title ?? item.threadCode}</span><Badge variant="outline">{t(`dude.threadStatuses.${item.status}`, { defaultValue: item.status })}</Badge><Button size="sm" variant="outline" onClick={() => setSelected(item.threadCode)}>{t("dude.open")}</Button></div>)}{query.data?.length === 0 ? <p className="py-2 text-sm text-[var(--color-on-surface-variant)]">{t("dude.noThreads")}</p> : null}</div>}
+    {thread ? <><div className="flex items-center justify-between gap-3"><span className="truncate text-sm">{thread.title ?? thread.sessionCode}</span><Button size="sm" variant="outline" onClick={() => setSelected(null)}>{t("dude.backToThreads")}</Button></div><DudeThreadHistory key={thread.sessionCode} dudeCode={dudeCode} thread={thread} active={active} /></> : <div className="divide-y divide-[var(--color-outline-variant)]">{query.data?.map(item => <div key={item.sessionCode} className="flex items-center gap-3 py-3"><span className="min-w-0 flex-1 truncate text-sm">{item.title ?? item.sessionCode}</span><Badge variant="outline">{t(`dude.threadStatuses.${item.status}`, { defaultValue: item.status })}</Badge><Button size="sm" variant="outline" onClick={() => setSelected(item.sessionCode)}>{t("dude.open")}</Button></div>)}{query.data?.length === 0 ? <p className="py-2 text-sm text-[var(--color-on-surface-variant)]">{t("dude.noThreads")}</p> : null}</div>}
   </section>;
 }
 function DudeThreadHistory({ dudeCode, thread, active }: { dudeCode: string; thread: DudeThread; active: boolean }) {
   const { t } = useTranslation("pages"); const client = useQueryClient(); const [draft, setDraft] = useState(""); const [busy, setBusy] = useState(false); const [actionError, setActionError] = useState(""); const auth = useAuthSession(); const historyLabels = useChatHistoryLabels(); const workRailLabels = useChatWorkRailLabels();
-  const query = useInfiniteQuery({ queryKey: ["dude-thread-history", dudeCode, thread.threadCode], initialPageParam: null as HistoryCursor | null,
-    queryFn: ({ signal, pageParam }) => getDudeThreadHistory(dudeCode, thread.threadCode, { limit: 100, cursor: pageParam }, signal), getNextPageParam: page => page.nextCursor ?? undefined,
+  const query = useInfiniteQuery({ queryKey: ["dude-thread-history", dudeCode, thread.sessionCode], initialPageParam: null as HistoryCursor | null,
+    queryFn: ({ signal, pageParam }) => getDudeThreadHistory(dudeCode, thread.sessionCode, { limit: 100, cursor: pageParam }, signal), getNextPageParam: page => page.nextCursor ?? undefined,
     enabled: active, refetchInterval: active && (busy || thread.status === "Running" || thread.status === "AwaitingInput") ? 1500 : false });
   const history = mergePages(query.data?.pages ?? []); const messages = history ? historyMessages(history) : [];
   const userInputLabels: ChatUserInputLabels = {
@@ -53,20 +53,20 @@ function DudeThreadHistory({ dudeCode, thread, active }: { dudeCode: string; thr
   }
   function send() {
     const content = draft.trim(); if (!content) return;
-    void perform(async () => { await sendDudeThreadMessage(dudeCode, thread.threadCode, content); setDraft(""); });
+    void perform(async () => { await sendDudeThreadMessage(dudeCode, thread.sessionCode, content); setDraft(""); });
   }
   function answer(answers: ChatUserInputAnswer[]) {
     const request = requests[0]; if (!request) return;
     void perform(async () => {
       const entry = nativeUserInputAnswer(request, answers).resume?.[0];
       if (!entry) throw new Error(t("chat.userInput.ariaLabel"));
-      await answerDudeThreadInteraction(dudeCode, thread.threadCode, entry.interruptId, entry.payload);
+      await answerDudeThreadInteraction(dudeCode, thread.sessionCode, entry.interruptId, entry.payload);
     });
   }
   return <div className="space-y-3">{query.error ? <div role="alert">{query.error.message}<Button size="sm" variant="outline" onClick={() => void query.refetch()}>{t("dude.retry")}</Button></div> : null}
     {actionError ? <p role="alert">{actionError}</p> : null}
-    <div className="flex h-[min(65dvh,800px)] min-h-80 flex-col"><ChatPanel disabledInput={query.isPending || busy || thread.status === "Running" || requests.length > 0} draft={draft} onDraftChange={setDraft} onSend={send} sending={busy} sendDisabled={!draft.trim()} userInputRequest={requests[0] ?? null} userInputRequests={requests} userInputLabels={userInputLabels} userInputAnswerPending={busy} onAnswerUserInput={answer} currentUserDisplayName={auth.session?.user.displayName ?? ""} messages={messages} historyLabels={historyLabels} workRailLabels={workRailLabels} historyLoading={query.isPending} historyLoadingOlder={query.isFetchingNextPage} onLoadOlderHistory={query.hasNextPage ? () => void query.fetchNextPage() : undefined} showStop={false} showHeader={false} title={thread.title ?? thread.threadCode}
-      session={{ id: thread.threadCode, sessionId: history?.sessionId ?? thread.threadCode, title: thread.title ?? thread.threadCode, status: "ACTIVE", createdAt: history?.runs[0] ? new Date(history.runs[0].startedAtMs).toISOString() : "", updatedAt: "" }} />
-    </div><div className="flex justify-end gap-2"><Button size="sm" variant="ghost" nativeButton={false} render={<Link to={`/settings/observability/traces?sessionCode=${encodeURIComponent(thread.threadCode)}`} />}>{t("dude.viewTraces")}</Button><Button size="sm" variant="ghost" onClick={() => void query.refetch()}>{t("dude.refresh")}</Button></div>
+    <div className="flex h-[min(65dvh,800px)] min-h-80 flex-col"><ChatPanel disabledInput={query.isPending || busy || thread.status === "Running" || requests.length > 0} draft={draft} onDraftChange={setDraft} onSend={send} sending={busy} sendDisabled={!draft.trim()} userInputRequest={requests[0] ?? null} userInputRequests={requests} userInputLabels={userInputLabels} userInputAnswerPending={busy} onAnswerUserInput={answer} currentUserDisplayName={auth.session?.user.displayName ?? ""} messages={messages} historyLabels={historyLabels} workRailLabels={workRailLabels} historyLoading={query.isPending} historyLoadingOlder={query.isFetchingNextPage} onLoadOlderHistory={query.hasNextPage ? () => void query.fetchNextPage() : undefined} showStop={false} showHeader={false} title={thread.title ?? thread.sessionCode}
+      session={{ id: thread.sessionCode, sessionId: history?.sessionId ?? thread.sessionCode, title: thread.title ?? thread.sessionCode, status: "ACTIVE", createdAt: history?.runs[0] ? new Date(history.runs[0].startedAtMs).toISOString() : "", updatedAt: "" }} />
+    </div><div className="flex justify-end gap-2"><Button size="sm" variant="ghost" nativeButton={false} render={<Link to={`/settings/observability/traces?sessionCode=${encodeURIComponent(thread.sessionCode)}`} />}>{t("dude.viewTraces")}</Button><Button size="sm" variant="ghost" onClick={() => void query.refetch()}>{t("dude.refresh")}</Button></div>
   </div>;
 }

@@ -146,7 +146,6 @@ export function DudesPage() {
       current.set("dude", code);
       current.set("tab", next);
       current.delete("session");
-      current.delete("thread");
       current.delete("task");
       return current;
     });
@@ -314,7 +313,7 @@ export function DudesPage() {
                 key={code}
                 dudeCode={code}
                 active={visible && tab === "work"}
-                requestedThread={search.get("thread")}
+                requestedThread={search.get("session")}
               />
               <h2 className="mt-6 border-t border-[var(--color-outline-variant)] pt-4 font-medium">
                 {t("dude.activity")}

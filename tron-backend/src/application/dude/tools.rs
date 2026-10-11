@@ -28,7 +28,7 @@ struct DudeNotify {
 struct NotifyInput {
     title: String,
     body: String,
-    thread_code: Option<String>,
+    session_code: Option<String>,
     task_code: Option<String>,
 }
 impl Tool for DudeNotify {
@@ -84,14 +84,14 @@ impl Tool for DudeNotify {
                     ));
                 }
             }
-            if let Some(thread) = input.thread_code.as_deref() {
+            if let Some(thread) = input.session_code.as_deref() {
                 if !self
                     .host
                     .dude_thread_catalog(&owner.code)
                     .await
                     .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
                     .iter()
-                    .any(|item| item.summary.thread_id == thread)
+                    .any(|item| item.summary.session_id == thread)
                 {
                     return Err(ToolError::ExecutionFailed(
                         "Thread is outside the current Dude".into(),
@@ -112,7 +112,7 @@ impl Tool for DudeNotify {
                 dedup_key: format!("dude-notify:{}:{invocation}", owner.code),
                 dude_code: Some(owner.code.clone()), title: input.title.trim().into(),
                 body: input.body.trim().into(), category: "Dude".into(),
-                target: serde_json::json!({"sessionCode":session,"threadCode":input.thread_code,"taskCode":input.task_code}),
+                target: serde_json::json!({"sessionCode":input.session_code.as_ref().or(session.as_ref()),"sessionKind":if input.session_code.is_some() { "Thread" } else { "Dude" },"originSessionCode":session,"taskCode":input.task_code}),
             }).map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
             Ok(ToolExecutionResult::observation(ToolObservation {
                 tool_name: self.name().into(),

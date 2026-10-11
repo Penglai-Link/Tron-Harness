@@ -173,7 +173,7 @@ impl Runtime {
                 origin
                     .emit(fw::AgentEvent::Collaboration(Box::new(
                         fw::CollaborationEvent::ThreadRunStarted {
-                            thread_id: summary.thread_id.clone(),
+                            session_id: summary.session_id.clone(),
                             run_id,
                             cause,
                             interaction_id,
@@ -209,7 +209,7 @@ impl Runtime {
                 record.feedback_pending = record.owner.kind == "DUDE";
                 // Completion and pending feedback are one durable write. Sink failure is retried.
                 if let Err(error) = feedback_host.persist_thread(&mut record, false).await {
-                    tracing::error!(thread_code = %record.summary.thread_id, %error, "persist Thread completion failed; native run remains authoritative");
+                    tracing::error!(session_id = %record.summary.session_id, %error, "persist Thread completion failed; native run remains authoritative");
                 } else {
                     let mut state = thread.state.lock().unwrap();
                     state.summary.status = status.clone();
@@ -223,7 +223,7 @@ impl Runtime {
                 origin
                     .emit(fw::AgentEvent::Collaboration(Box::new(
                         fw::CollaborationEvent::ThreadRunFinished {
-                            thread_id: summary.thread_id,
+                            session_id: summary.session_id,
                             run_id,
                             status: status.clone(),
                             interactions: result
@@ -332,14 +332,14 @@ impl AgentCollaborationRuntime for Runtime {
         {
             return Err(failure("invalid thread title"));
         }
-        let id = format!("thread-{}", fw::RunId::new_v4());
+        let id = fw::RunId::new_v4().to_string();
         let (agent, request, prepared) = self
             .prepare(request, id.clone(), None, parent, ExecutionLimits::Request)
             .await?;
         let (_, completion) = watch::channel(None);
         let mut record = ThreadRecord {
             summary: fw::ThreadSummary {
-                thread_id: id.clone(),
+                session_id: id.clone(),
                 title: title.clone(),
                 status: fw::ThreadStatus::Running,
                 latest_run_id: request.run_id,
@@ -381,7 +381,7 @@ impl AgentCollaborationRuntime for Runtime {
             transition: Mutex::new(()),
             state: std::sync::Mutex::new(ThreadState {
                 summary: fw::ThreadSummary {
-                    thread_id: id.clone(),
+                    session_id: id.clone(),
                     title,
                     status: fw::ThreadStatus::Running,
                     latest_run_id: request.run_id,
@@ -518,7 +518,7 @@ impl AgentCollaborationRuntime for Runtime {
                     parent
                         .emit(fw::AgentEvent::Collaboration(Box::new(
                             fw::CollaborationEvent::ThreadRunFinished {
-                                thread_id: id.into(),
+                                session_id: id.into(),
                                 run_id,
                                 status,
                                 interactions: result
@@ -594,7 +594,7 @@ impl AgentCollaborationRuntime for Runtime {
         parent
             .emit(fw::AgentEvent::Collaboration(Box::new(
                 fw::CollaborationEvent::ThreadClosed {
-                    thread_id: id.into(),
+                    session_id: id.into(),
                 },
             )))
             .await;

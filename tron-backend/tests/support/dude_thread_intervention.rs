@@ -15,7 +15,7 @@ struct HumanScript {
     release: tokio::sync::Notify,
     child_started: AtomicBool,
     questions: AtomicUsize,
-    thread_id: Mutex<Option<String>>,
+    session_id: Mutex<Option<String>>,
 }
 impl ModelClient for HumanScript {
     fn generate<'a>(
@@ -51,10 +51,10 @@ impl ModelClient for HumanScript {
                 }
                 let created: Value = serde_json::from_str(&results[0])
                     .map_err(|e| format!("{e}: {}", results[0]))?;
-                let id = created["thread_id"]
+                let id = created["session_id"]
                     .as_str()
                     .ok_or_else(|| format!("thread did not start: {created}"))?;
-                *self.thread_id.lock().unwrap() = Some(id.into());
+                *self.session_id.lock().unwrap() = Some(id.into());
                 return Ok(ModelResponse::final_output("parent-finished-before-child"));
             }
             if request
@@ -234,7 +234,7 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         .unwrap()
         .unwrap();
     assert_eq!(parent.final_output, "parent-finished-before-child");
-    let id = script.thread_id.lock().unwrap().clone().unwrap();
+    let id = script.session_id.lock().unwrap().clone().unwrap();
     tokio::time::timeout(Duration::from_secs(30), script.entered.notified())
         .await
         .unwrap();
@@ -246,6 +246,20 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
     sink.until(1).await;
     let first = sink.events.lock().unwrap()[0].clone();
     assert_eq!(first.status, fw::ThreadStatus::AwaitingInput);
+    assert_eq!(first.session_id, id);
+    let native = host
+        .storage_framework()
+        .await
+        .unwrap()
+        .sessions()
+        .unwrap()
+        .get(&id)
+        .await
+        .unwrap();
+    assert_eq!(
+        native.id, id,
+        "delegation feedback addresses the same native session"
+    );
     assert_eq!(first.owner.code, "main-agent");
     assert_eq!(first.owner.task_code.as_deref(), Some("dude-task"));
     assert_eq!(first.origin_session_code, "original-dude-work-session");

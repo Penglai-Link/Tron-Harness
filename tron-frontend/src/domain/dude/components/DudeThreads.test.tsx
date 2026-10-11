@@ -18,7 +18,7 @@ vi.mock("@eliteforge/agent-ui-chat-react", () => ({ ChatPanel: (props: any) => <
 </div> }));
 const initial: SessionHistory = { sessionId: "thread-a", version: "1", nextCursor: null, runs: [], activeRuns: [], pendingInteractions: [], records: { messages: [{id:"message-a",runId:"run-a",stepId:null,role:"User",content:[{type:"Text",text:"Do work"}],structured:null,status:"Completed",createdAtMs:1,provenance:{sender:{kind:"Dude",id:"dude-a",displayName:"Dude A"}}}], steps: [], toolInvocations: [], interactions: [] } };
 function mount() { render(<MemoryRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><DudeThreads dudeCode="dude-a" active requestedThread="thread-a" /></QueryClientProvider></MemoryRouter>); }
-beforeEach(() => { vi.clearAllMocks(); api.list.mockResolvedValue([{ threadCode:"thread-a",title:"Work",status:"Completed",latestRunCode:"run-a" }]); api.history.mockResolvedValue(initial); api.send.mockResolvedValue({}); api.answer.mockResolvedValue({}); });
+beforeEach(() => { vi.clearAllMocks(); api.list.mockResolvedValue([{ sessionCode:"thread-a",title:"Work",status:"Completed",latestRunCode:"run-a" }]); api.history.mockResolvedValue(initial); api.send.mockResolvedValue({}); api.answer.mockResolvedValue({}); });
 afterEach(cleanup);
 it("keeps the Dude sender and submits human follow-up without an identity override", async () => {
   mount(); await screen.findByText("Dude A: Do work");

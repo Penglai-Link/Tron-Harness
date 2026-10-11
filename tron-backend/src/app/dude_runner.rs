@@ -249,7 +249,7 @@ impl PlatformDudeExecutor {
             prompt.push_str(&format!("\n事件数据：{}", event.payload));
         }
         if event.source == DudeEventSource::ThreadFeedback {
-            prompt.push_str("\n处理 Thread 反馈时，先读取 result.interactions。若已有上下文足以回答，调用 thread_answer，使用实际 thread_id、interaction_id 和符合 response_schema 的 answer；不要给等待回答的 Thread 发送普通消息。若需要用户补充事实或作决定，调用 dude_notify 通知用户并指向此 Thread，保留等待状态。任务完成后更新对应 task 状态。没有实际进展时保持安静。");
+            prompt.push_str("\n处理 Thread 反馈时，先读取 result.interactions。若已有上下文足以回答，调用 thread_answer，使用实际 session_id、interaction_id 和符合 response_schema 的 answer；不要给等待回答的 Thread 发送普通消息。若需要用户补充事实或作决定，调用 dude_notify 通知用户并指向此 Thread，保留等待状态。任务完成后更新对应 task 状态。没有实际进展时保持安静。");
         }
         if event.source == DudeEventSource::Heartbeat {
             prompt.push_str("\n按你的角色检查需要主动推进的事项。已由任务调度触发的工作在对应 Task 会话运行；不要在心跳会话重复执行这些任务。仅在发现实际变化、需要决策或取得有用结果时通过 dude_notify 通知；无变化保持安静。");
@@ -334,7 +334,7 @@ impl crate::application::agent::ThreadFeedbackSink for ThreadFeedbackBridge {
                 .map(|s| s.session_code),
             task_code: feedback.owner.task_code.clone(),
             workspace_code: None,
-            payload: serde_json::json!({"threadCode":feedback.thread_code,"originSessionCode":feedback.origin_session_code,"status":feedback.status,"result":feedback.result,"error":feedback.error,"content":format!("处理 Thread {} 的反馈。基于结果继续所属工作，必要时提出需要用户处理的决定。",feedback.thread_code)}),
+            payload: serde_json::json!({"sessionCode":feedback.session_id,"originSessionCode":feedback.origin_session_code,"status":feedback.status,"result":feedback.result,"error":feedback.error,"content":format!("处理 Thread {} 的反馈。基于结果继续所属工作，必要时提出需要用户处理的决定。",feedback.session_id)}),
             available_at: chrono::Utc::now().timestamp_millis(),
         };
         self.0.publish_event(input).map_err(|e| e.to_string())?;

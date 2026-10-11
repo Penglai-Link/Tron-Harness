@@ -1412,13 +1412,13 @@ CREATE TABLE platform_notifications (
  created_at INTEGER NOT NULL
 );
 CREATE TABLE collaboration_threads (
- thread_code TEXT PRIMARY KEY, workspace_code TEXT NOT NULL, user_code TEXT,
+ session_id TEXT PRIMARY KEY, workspace_code TEXT NOT NULL, user_code TEXT,
  owner_kind TEXT NOT NULL, owner_code TEXT NOT NULL, record_json TEXT NOT NULL,
  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX collaboration_threads_owner ON collaboration_threads(owner_kind,owner_code,workspace_code);
 
-CREATE TABLE collaboration_thread_feedback(event_key TEXT PRIMARY KEY, thread_code TEXT NOT NULL, payload_json TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE collaboration_thread_feedback(event_key TEXT PRIMARY KEY, session_id TEXT NOT NULL, payload_json TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX collaboration_thread_feedback_pending ON collaboration_thread_feedback(delivered,created_at);
 CREATE TABLE dude_memory_batches(batch_code TEXT PRIMARY KEY,user_code TEXT NOT NULL,dude_code TEXT NOT NULL,status TEXT NOT NULL,record_json TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE UNIQUE INDEX dude_memory_one_active ON dude_memory_batches(user_code,dude_code) WHERE status='Active';

@@ -74,7 +74,7 @@ impl ShortTermMemoryService {
             .map_err(error)?
             .call(move |c| {
                 c.query_row(
-                    "SELECT workspace_code FROM collaboration_threads WHERE thread_code=?1 UNION ALL SELECT workspace_code FROM workspace_session_links WHERE session_id=?1 LIMIT 1",
+                    "SELECT workspace_code FROM collaboration_threads WHERE session_id=?1 UNION ALL SELECT workspace_code FROM workspace_session_links WHERE session_id=?1 LIMIT 1",
                     [id],
                     |r| r.get(0),
                 )
@@ -97,7 +97,7 @@ impl ShortTermMemoryService {
             }
             let id = id.to_owned();
             let binding = self.host.shared_database().await.map_err(error)?.call(move |c| {
-                c.query_row("SELECT user_code,owner_kind,owner_code FROM collaboration_threads WHERE thread_code=?1", [id], |r| Ok((r.get::<_,Option<String>>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?))).optional()
+                c.query_row("SELECT user_code,owner_kind,owner_code FROM collaboration_threads WHERE session_id=?1", [id], |r| Ok((r.get::<_,Option<String>>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?))).optional()
             }).await.map_err(|_| ShortTermMemoryError::StorageFailure)?;
             if let Some((user, kind, code)) = binding {
                 let (caller_kind, caller_code) = memory_owner(context);
@@ -868,7 +868,7 @@ impl ShortTermMemoryService {
             let (mut links, threads) = db.call(move |c| {
                 let mut query = c.prepare("SELECT session_id,business_json FROM workspace_session_links WHERE workspace_code=?1 ORDER BY session_id")?;
                 let links = query.query_map([&workspace], |r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
-                let mut query = c.prepare("SELECT thread_code,record_json FROM collaboration_threads WHERE workspace_code=?1 AND user_code IS ?2 AND owner_kind=?3 AND owner_code=?4 ORDER BY thread_code")?;
+                let mut query = c.prepare("SELECT session_id,record_json FROM collaboration_threads WHERE workspace_code=?1 AND user_code IS ?2 AND owner_kind=?3 AND owner_code=?4 ORDER BY session_id")?;
                 let threads = query.query_map(rusqlite::params![workspace,user,kind,code], |r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
                 Ok::<_,rusqlite::Error>((links,threads))
             }).await.map_err(|_|ShortTermMemoryError::StorageFailure)?;

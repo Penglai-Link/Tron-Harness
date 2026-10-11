@@ -35,11 +35,11 @@ export const updateDudeTask = (_dudeCode: string, taskCode: string, body: { desc
 export const archiveDudeTask = (taskCode: string) => requestApi<unknown>("POST /api/v1/tasks/{taskCode}/archive", { pathParams: { taskCode } });
 export const listDudeEvents = (dudeCode: string, signal?: AbortSignal) => requestApi<DudeEvent[]>("GET /api/v1/dudes/{dudeCode}/events", { pathParams: { dudeCode }, signal });
 
-export interface DudeThread { threadCode: string; title: string | null; status: string; latestRunCode: string | null; }
+export interface DudeThread { sessionCode: string; title: string | null; status: string; latestRunCode: string | null; }
 export const listDudeThreads = (dudeCode: string, signal?: AbortSignal) => requestApi<DudeThread[]>("GET /api/v1/dudes/{dudeCode}/threads", { pathParams: { dudeCode }, signal });
-export const getDudeThreadHistory = (dudeCode: string, threadCode: string, query: import("@eliteforge/agent-ui-chat-core").HistoryQuery, signal?: AbortSignal) => requestApi<import("@eliteforge/agent-ui-chat-core").SessionHistory>("POST /api/v1/dudes/{dudeCode}/threads/{threadCode}/history/query", { pathParams: { dudeCode, threadCode }, body: { size: query.limit, cursor: query.cursor }, signal });
+export const getDudeThreadHistory = (dudeCode: string, sessionCode: string, query: import("@eliteforge/agent-ui-chat-core").HistoryQuery, signal?: AbortSignal) => requestApi<import("@eliteforge/agent-ui-chat-core").SessionHistory>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/history/query", { pathParams: { dudeCode, sessionCode }, body: { size: query.limit, cursor: query.cursor }, signal });
 
 /** Dude definitions are independent and intentionally absent from ordinary Agent lists. */
 export const getDudeResources = (dudeCode: string, signal?: AbortSignal) => requestApi<WorkspaceInternalAgentRecordApi>("GET /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode }, signal }).then(record => normalizeWorkspaceInternalAgentRecord({ ...record, description: record.description ?? "", platformDefined: true }));
-export const sendDudeThreadMessage = (dudeCode: string, threadCode: string, content: string) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{threadCode}/messages", { pathParams: { dudeCode, threadCode }, body: { content } });
-export const answerDudeThreadInteraction = (dudeCode: string, threadCode: string, interactionId: string, value: unknown) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{threadCode}/answer", { pathParams: { dudeCode, threadCode }, body: { interactionId, value } });
+export const sendDudeThreadMessage = (dudeCode: string, sessionCode: string, content: string) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/messages", { pathParams: { dudeCode, sessionCode }, body: { content } });
+export const answerDudeThreadInteraction = (dudeCode: string, sessionCode: string, interactionId: string, value: unknown) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/answer", { pathParams: { dudeCode, sessionCode }, body: { interactionId, value } });

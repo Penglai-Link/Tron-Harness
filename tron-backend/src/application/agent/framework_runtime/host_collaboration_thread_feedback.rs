@@ -7,7 +7,7 @@ use super::*;
 pub struct ThreadFeedback {
     pub event_key: String,
     pub owner: crate::domain::agent::AgentCollaborationOwner,
-    pub thread_code: String,
+    pub session_id: String,
     pub origin_session_code: String,
     pub initiator_agent_code: Option<String>,
     pub status: fw::ThreadStatus,
@@ -101,14 +101,14 @@ impl FrameworkHost {
                 .collaboration_threads
                 .read()
                 .unwrap()
-                .get(&record.summary.thread_id)
+                .get(&record.summary.session_id)
                 .cloned();
             let _transition = if let Some(thread) = cached.as_ref() {
                 Some(thread.transition.lock().await)
             } else {
                 None
             };
-            let Some(mut record) = self.thread_record(&record.summary.thread_id).await? else {
+            let Some(mut record) = self.thread_record(&record.summary.session_id).await? else {
                 continue;
             };
             if record.summary.status != fw::ThreadStatus::Running {
@@ -148,7 +148,7 @@ impl FrameworkHost {
                 .collaboration_threads
                 .read()
                 .unwrap()
-                .get(&record.summary.thread_id)
+                .get(&record.summary.session_id)
                 .cloned()
             {
                 let (_, receiver) = watch::channel(Some(completion));

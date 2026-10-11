@@ -267,14 +267,14 @@ fn dude_notify_definition() -> ToolCatalogDefinition {
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.dude.notify.description",
-            json!([{ "title": "Need your decision", "body": "Choose the deployment window.", "threadCode": "thread-id" }]),
+            json!([{ "title": "Need your decision", "body": "Choose the deployment window.", "sessionCode": "thread-id" }]),
             json!({
                 "type": "object",
                 "required": ["title", "body"],
                 "properties": {
                     "title": {"type":"string","minLength":1,"maxLength":200},
                     "body": {"type":"string","minLength":1,"maxLength":8000},
-                    "threadCode": {"type":"string","minLength":1},
+                    "sessionCode": {"type":"string","minLength":1},
                     "taskCode": {"type":"string","minLength":1}
                 },
                 "additionalProperties": false

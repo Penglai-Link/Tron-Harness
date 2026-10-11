@@ -1,4 +1,5 @@
-//! Durable Thread metadata and completion outbox. Conversations remain Framework-owned.
+//! Session-keyed collaboration metadata and completion outbox.
+//! The session_id is the Framework native identity; there is no separate Thread ID.
 use super::*;
 use crate::domain::agent::{AgentCollaborationOwner, AgentExecutionScope};
 use rusqlite::OptionalExtension;
@@ -64,7 +65,7 @@ impl FrameworkHost {
             .await?
             .call(|connection| {
                 let mut query = connection
-                    .prepare("SELECT record_json FROM collaboration_threads ORDER BY thread_code")
+                    .prepare("SELECT record_json FROM collaboration_threads ORDER BY session_id")
                     .map_err(state_error)?;
                 let rows = query
                     .query_map([], |row| row.get::<_, String>(0))
@@ -88,7 +89,7 @@ impl FrameworkHost {
             .call(move |connection| {
                 let value = connection
                     .query_row(
-                        "SELECT record_json FROM collaboration_threads WHERE thread_code=?1",
+                        "SELECT record_json FROM collaboration_threads WHERE session_id=?1",
                         [id],
                         |row| row.get::<_, String>(0),
                     )
@@ -116,7 +117,7 @@ impl FrameworkHost {
                 .ok_or_else(|| failure("thread revision overflow"))?
         };
         let value = serde_json::to_string(&next).map_err(failure)?;
-        let id = next.summary.thread_id.clone();
+        let id = next.summary.session_id.clone();
         let scope = next.workspace_code.clone();
         let user = next.user_code.clone();
         let kind = next.owner.kind.clone();
@@ -127,10 +128,10 @@ impl FrameworkHost {
                 next.summary.latest_run_id.map(|run_id| ThreadFeedback {
                     event_key: format!(
                         "thread:{}:{}:{}:finished",
-                        next.summary.thread_id, run_id, next.execution_sequence
+                        next.summary.session_id, run_id, next.execution_sequence
                     ),
                     owner: next.owner.clone(),
-                    thread_code: next.summary.thread_id.clone(),
+                    session_id: next.summary.session_id.clone(),
                     origin_session_code: next.origin_session_code.clone(),
                     initiator_agent_code: next.initiator_agent_code.clone(),
                     status: status.clone(),
@@ -144,7 +145,7 @@ impl FrameworkHost {
         let feedback = feedback
             .map(|feedback| {
                 serde_json::to_string(&feedback)
-                    .map(|value| (feedback.event_key, feedback.thread_code, value))
+                    .map(|value| (feedback.event_key, feedback.session_id, value))
             })
             .transpose()
             .map_err(failure)?;
@@ -152,13 +153,13 @@ impl FrameworkHost {
         database.transaction(async {
         database.call(move |connection| {
             let changed = if create {
-                connection.execute("INSERT INTO collaboration_threads(thread_code,workspace_code,user_code,owner_kind,owner_code,record_json) VALUES (?1,?2,?3,?4,?5,?6)", rusqlite::params![id,scope,user,kind,code,value])
+                connection.execute("INSERT INTO collaboration_threads(session_id,workspace_code,user_code,owner_kind,owner_code,record_json) VALUES (?1,?2,?3,?4,?5,?6)", rusqlite::params![id,scope,user,kind,code,value])
             } else {
-                connection.execute("UPDATE collaboration_threads SET record_json=?2,updated_at=CURRENT_TIMESTAMP WHERE thread_code=?1 AND json_extract(record_json,'$.revision')=?3", rusqlite::params![id,value,revision])
+                connection.execute("UPDATE collaboration_threads SET record_json=?2,updated_at=CURRENT_TIMESTAMP WHERE session_id=?1 AND json_extract(record_json,'$.revision')=?3", rusqlite::params![id,value,revision])
             }.map_err(state_error)?;
             if changed != 1 { return Err(fw::StateError::Conflict); }
-            if let Some((event_key,thread_code,payload)) = feedback {
-                connection.execute("INSERT OR IGNORE INTO collaboration_thread_feedback(event_key,thread_code,payload_json) VALUES (?1,?2,?3)",rusqlite::params![event_key,thread_code,payload]).map_err(state_error)?;
+            if let Some((event_key,session_id,payload)) = feedback {
+                connection.execute("INSERT OR IGNORE INTO collaboration_thread_feedback(event_key,session_id,payload_json) VALUES (?1,?2,?3)",rusqlite::params![event_key,session_id,payload]).map_err(state_error)?;
             }
             Ok(())
         }).await.map_err(state_error)

@@ -35,15 +35,15 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/dudes/{code}/events", get(events))
         .route("/api/v1/dudes/{code}/threads", get(threads))
         .route(
-            "/api/v1/dudes/{code}/threads/{thread}/messages",
+            "/api/v1/dudes/{code}/threads/{session}/messages",
             post(thread_message),
         )
         .route(
-            "/api/v1/dudes/{code}/threads/{thread}/answer",
+            "/api/v1/dudes/{code}/threads/{session}/answer",
             post(thread_answer),
         )
         .route(
-            "/api/v1/dudes/{code}/threads/{thread}/history/query",
+            "/api/v1/dudes/{code}/threads/{session}/history/query",
             post(thread_history),
         )
         .route("/api/v1/notifications", get(notifications))
@@ -477,7 +477,6 @@ async fn update_notification(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListDudeThreadResponse {
-    thread_code: String,
     session_code: String,
     title: Option<String>,
     status: String,
@@ -501,8 +500,7 @@ async fn threads(
         records
             .into_iter()
             .map(|t| ListDudeThreadResponse {
-                session_code: t.summary.thread_id.clone(),
-                thread_code: t.summary.thread_id,
+                session_code: t.summary.session_id,
                 title: t.summary.title,
                 status: format!("{:?}", t.summary.status),
                 latest_run_code: t.summary.latest_run_id.map(|r| r.to_string()),
@@ -580,7 +578,7 @@ pub struct SendDudeThreadMessageRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendDudeThreadMessageResponse {
-    thread_code: String,
+    session_code: String,
     status: String,
     latest_run_code: Option<String>,
 }
@@ -608,7 +606,7 @@ async fn thread_message(
         .map_err(|e| DudeError::Runtime(e.to_string()))?;
     Ok(Json(ApiResponse::protocol_success(
         SendDudeThreadMessageResponse {
-            thread_code: summary.thread_id,
+            session_code: summary.session_id,
             status: format!("{:?}", summary.status),
             latest_run_code: summary.latest_run_id.map(|r| r.to_string()),
         },
@@ -623,7 +621,7 @@ pub struct AnswerDudeThreadRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnswerDudeThreadResponse {
-    thread_code: String,
+    session_code: String,
     status: String,
     latest_run_code: Option<String>,
 }
@@ -651,7 +649,7 @@ async fn thread_answer(
         .map_err(|e| DudeError::Runtime(e.to_string()))?;
     Ok(Json(ApiResponse::protocol_success(
         AnswerDudeThreadResponse {
-            thread_code: summary.thread_id,
+            session_code: summary.session_id,
             status: format!("{:?}", summary.status),
             latest_run_code: summary.latest_run_id.map(|r| r.to_string()),
         },
@@ -666,7 +664,7 @@ async fn verify_thread(state: &AppState, dude: &str, thread: &str) -> Result<(),
         .await
         .map_err(|e| DudeError::Runtime(e.to_string()))?
         .iter()
-        .any(|t| t.summary.thread_id == thread)
+        .any(|t| t.summary.session_id == thread)
     {
         return Err(DudeError::NotFound);
     }

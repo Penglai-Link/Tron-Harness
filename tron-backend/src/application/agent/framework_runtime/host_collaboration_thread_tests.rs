@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 fn record(id: &str) -> ThreadRecord {
     ThreadRecord {
         summary: fw::ThreadSummary {
-            thread_id: id.into(),
+            session_id: id.into(),
             title: Some("Delegated work".into()),
             status: fw::ThreadStatus::Failed,
             latest_run_id: Some(fw::RunId::new_v4()),
@@ -353,10 +353,10 @@ async fn continuation_recovery_uses_answered_interaction_identity_when_timestamp
 
 fn memory_context(record: &ThreadRecord) -> AgentRunContext {
     serde_json::from_value(serde_json::json!({
-        "agentCode":record.agent_code,"runCode":fw::RunId::new_v4().to_string(),"conversationCode":record.summary.thread_id,"workspaceCode":record.workspace_code,"userCode":record.user_code,"collaborationOwner":record.owner,"locale":"en-US","agentKind":"REACT",
+        "agentCode":record.agent_code,"runCode":fw::RunId::new_v4().to_string(),"conversationCode":record.summary.session_id,"workspaceCode":record.workspace_code,"userCode":record.user_code,"collaborationOwner":record.owner,"locale":"en-US","agentKind":"REACT",
         "model":{"modelCode":"fixture","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"synthetic","modelName":"fixture","maxTokens":2048,"contextWindowTokens":32000},
         "variables":[],"skills":[],"tools":[],"executionScope":record.execution_scope,"limits":{"maxSteps":12,"maxToolCalls":12,"maxParallelToolCalls":1},"messages":[],"observations":[],"startedAt":"fixture",
-        "shortTermMemory":{"sessionCode":record.summary.thread_id,"inputCode":"input","inputKind":"USER_PROMPT","promptPrefix":[],"todoEnabled":false}
+        "shortTermMemory":{"sessionCode":record.summary.session_id,"inputCode":"input","inputKind":"USER_PROMPT","promptPrefix":[],"todoEnabled":false}
     })).unwrap()
 }
 // Exercise synchronous STM adapters on the same runtime flavor as production native execution.

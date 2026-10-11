@@ -292,7 +292,7 @@ impl DudeService {
                         } else {
                             (
                                 DudeSessionPurpose::Feedback,
-                                input.payload["threadCode"]
+                                input.payload["sessionCode"]
                                     .as_str()
                                     .map(|id| format!("thread:{id}"))
                                     .unwrap_or_else(|| input.dedup_key.clone()),
