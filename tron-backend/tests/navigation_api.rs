@@ -437,7 +437,6 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         "AUTOMATIONS",
         "CORE",
         "MCP_SERVERS",
-        "PROMPTS",
         "MODELS",
         "SKILLS",
         "AGENT_OPERATIONS",

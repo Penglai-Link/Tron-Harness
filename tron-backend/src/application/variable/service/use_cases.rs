@@ -38,23 +38,6 @@ impl VariableService {
             .collect())
     }
 
-    pub fn list_workspace_prompt_variable_options(
-        &self,
-        workspace_code: &str,
-        query: VariableCatalogQuery,
-    ) -> Result<Vec<PromptVariableOption>, VariableError> {
-        Ok(self
-            .list_variables(workspace_code, query)?
-            .into_iter()
-            .filter(|variable| !variable.is_sensitive && variable.has_value)
-            .map(|variable| PromptVariableOption {
-                key: variable.key,
-                description: variable.description,
-                source_label: variable.source_label,
-            })
-            .collect())
-    }
-
     pub fn list_platform_prompt_variable_options(
         &self,
         query: VariableCatalogQuery,
@@ -434,35 +417,6 @@ impl VariableService {
                 .iter()
                 .find(|record| record.variable.key == key)
                 .map(|record| record.variable.clone())
-                .ok_or(VariableError::NotFound)?;
-            let aad = if variable.workspace_code == "PLATFORM" {
-                PlatformVariableIdentity::new(&key).aad()
-            } else {
-                WorkspaceVariableIdentity::new(&variable.workspace_code, &key).aad()
-            };
-            values.insert(
-                key,
-                reveal_stored_value(self.cipher.as_ref(), &variable, aad.as_bytes())?,
-            );
-        }
-        Ok(values)
-    }
-
-    pub(crate) fn resolve_workspace_prompt_variable_values(
-        &self,
-        workspace_code: &str,
-        keys: &BTreeSet<String>,
-    ) -> Result<BTreeMap<String, String>, VariableError> {
-        let workspace = self.active_workspace_detail(workspace_code)?;
-        let resolved = self.resolve_raw_variables(&workspace)?;
-        let mut values = BTreeMap::new();
-        for key in keys {
-            let key = normalized_key(key.clone())?;
-            let variable = resolved
-                .iter()
-                .find(|record| record.variable.key == key)
-                .map(|record| record.variable.clone())
-                .filter(|variable| !variable.is_sensitive && !variable.value.is_empty())
                 .ok_or(VariableError::NotFound)?;
             let aad = if variable.workspace_code == "PLATFORM" {
                 PlatformVariableIdentity::new(&key).aad()

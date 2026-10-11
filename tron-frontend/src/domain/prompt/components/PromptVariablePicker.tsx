@@ -7,20 +7,13 @@ import {
 import { createPortal } from "react-dom";
 import { LoaderCircle } from "lucide-react";
 
-import {
-  fetchPlatformPromptVariableOptions,
-  fetchWorkspacePromptVariableOptions,
-} from "@/domain/variable/api";
-import {
-  listPlatformPromptVariableOptions,
-  listWorkspacePromptVariableOptions,
-} from "@/domain/variable/mock/data";
+import { fetchPlatformPromptVariableOptions } from "@/domain/variable/api";
+import { listPlatformPromptVariableOptions } from "@/domain/variable/mock/data";
 import type { PromptVariableOption } from "@/domain/variable/model";
 import type { ServiceDataSource } from "@/shared/api/serviceConfig";
 
 import type {
   PromptRuntimeProvider,
-  PromptScopeKind,
   PromptVariable,
 } from "@/domain/prompt/model";
 
@@ -157,18 +150,14 @@ export function PromptVariablePicker({
   labels,
   onDismiss,
   onSelect,
-  scopeKind,
   trigger,
-  workspaceCode,
 }: {
   anchorElement: HTMLTextAreaElement | null;
   dataSource: ServiceDataSource;
   labels: PromptVariablePickerLabels;
   onDismiss: () => void;
   onSelect: (option: PromptVariableOption) => void;
-  scopeKind: PromptScopeKind;
   trigger: PromptVariablePickerTrigger | null;
-  workspaceCode: string;
 }) {
   const [loading, setLoading] = useState(false);
   const [options, setOptions] = useState<PromptVariableOption[]>([]);
@@ -180,7 +169,7 @@ export function PromptVariablePicker({
     : trigger?.query ?? "";
 
   useEffect(() => {
-    if (!trigger || (scopeKind === "WORKSPACE" && !workspaceCode)) {
+    if (!trigger) {
       setLoading(false);
       setOptions([]);
       return;
@@ -190,12 +179,8 @@ export function PromptVariablePicker({
     setLoading(true);
     setOptions([]);
     const request = dataSource === "api"
-      ? (scopeKind === "WORKSPACE"
-        ? fetchWorkspacePromptVariableOptions(workspaceCode, { search: activeSearch }, controller.signal)
-        : fetchPlatformPromptVariableOptions({ search: activeSearch }, controller.signal))
-      : Promise.resolve(scopeKind === "WORKSPACE"
-        ? listWorkspacePromptVariableOptions(workspaceCode, activeSearch)
-        : listPlatformPromptVariableOptions(activeSearch));
+      ? fetchPlatformPromptVariableOptions({ search: activeSearch }, controller.signal)
+      : Promise.resolve(listPlatformPromptVariableOptions(activeSearch));
 
     request
       .then((records) => {
@@ -209,7 +194,7 @@ export function PromptVariablePicker({
       });
 
     return () => controller.abort();
-  }, [activeSearch, dataSource, scopeKind, trigger, workspaceCode]);
+  }, [activeSearch, dataSource, trigger]);
 
   useEffect(() => {
     if (!trigger) return;

@@ -32,7 +32,7 @@ impl ChatService {
         fallback_model: crate::domain::agent::AgentModelConfig,
     ) {
         let Some(prompt) =
-            manual_session_title_prompt(self.prompt_service.as_ref(), workspace_code, user_message)
+            manual_session_title_prompt(self.prompt_service.as_ref(), user_message)
         else {
             self.publish_title_generation_failure(
                 session_code,
@@ -183,7 +183,6 @@ fn is_default_session_title(title: &str) -> bool {
 
 fn manual_session_title_prompt(
     prompt_service: Option<&PromptService>,
-    workspace_code: &str,
     user_message: &str,
 ) -> Option<String> {
     let runtime_values = HashMap::from([(
@@ -192,7 +191,6 @@ fn manual_session_title_prompt(
     )]);
     prompt_service?
         .runtime_prompt_text(
-            Some(workspace_code),
             "chat.session-title",
             "en-US",
             &runtime_values,

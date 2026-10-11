@@ -44,14 +44,12 @@ const MAIN_AGENT_CODE: &str = "main-agent";
 
 fn managed_system_prompt(
     prompt_service: Option<&PromptService>,
-    workspace_code: &str,
     catalog_key: &str,
     locale: &str,
     runtime_values: &HashMap<PromptRuntimeProvider, serde_json::Value>,
 ) -> Result<String, AgentInvocationError> {
     if let Some(prompt_service) = prompt_service {
         match prompt_service.runtime_prompt_text(
-            Some(workspace_code),
             catalog_key,
             locale,
             runtime_values,
@@ -333,7 +331,6 @@ impl AgentRunContextBuilder {
         {
             messages.push(AgentMessage::system(managed_system_prompt(
                 self.prompt_service.as_ref(),
-                &workspace.workspace_code,
                 "agent.final-output",
                 &locale,
                 &empty_runtime_prompt_values,
@@ -349,7 +346,6 @@ impl AgentRunContextBuilder {
         {
             messages.push(AgentMessage::system(managed_system_prompt(
                 self.prompt_service.as_ref(),
-                &workspace.workspace_code,
                 "chat.ask-user",
                 &locale,
                 &empty_runtime_prompt_values,
@@ -370,7 +366,6 @@ impl AgentRunContextBuilder {
             );
             messages.push(AgentMessage::system(managed_system_prompt(
                 self.prompt_service.as_ref(),
-                &workspace.workspace_code,
                 "agent.domain-discovery",
                 &locale,
                 &runtime_values,

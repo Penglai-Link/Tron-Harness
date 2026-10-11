@@ -7,6 +7,12 @@ pub(super) fn default_main_agent_role_prompt() -> String {
         .to_owned()
 }
 
+fn builtin_role_prompt(catalog_key: &str) -> String {
+    crate::domain::prompt::builtin_prompt_text(catalog_key, "zh-CN")
+        .unwrap_or_default()
+        .to_owned()
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct InternalAgentDefinition {
     pub(super) agent_code: String,
@@ -30,7 +36,7 @@ pub(super) struct InternalAgentDefinition {
 }
 
 pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
-    vec![InternalAgentDefinition {
+    let mut definitions = vec![InternalAgentDefinition {
         agent_code: MAIN_AGENT_CODE.to_string(),
         name: "Main Agent".to_string(),
         description: "Primary workspace internal agent with access to platform business tools."
@@ -50,7 +56,52 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         selected_server_codes: vec![],
         platform_defined: true,
         built_in: true,
-    }]
+    }];
+    for (agent_code, name, description, catalog_key, group_name) in [
+        (
+            "explore",
+            "探索智能体",
+            "只读探索任务使用的内置智能体。",
+            "agent.role.explorer",
+            "探索",
+        ),
+        (
+            "full-stack",
+            "全栈工程师",
+            "用于全栈开发任务的内置智能体。",
+            "agent.role.full-stack-developer",
+            "开发",
+        ),
+        (
+            "product",
+            "杨布斯",
+            "用于产品分析与设计任务的内置智能体。",
+            "agent.role.product-manager",
+            "设计",
+        ),
+    ] {
+        definitions.push(InternalAgentDefinition {
+            agent_code: agent_code.to_owned(),
+            name: name.to_owned(),
+            description: description.to_owned(),
+            role_prompt: builtin_role_prompt(catalog_key),
+            avatar_id: "robot".into(),
+            group_name: Some(group_name.to_owned()),
+            loop_code: None,
+            tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
+            mcp_access_mode: McpAccessMode::AllEnabledServers,
+            tool_exposure_mode: ToolExposureMode::DomainDiscovery,
+            expanded_domain_persistence_mode: ExpandedDomainPersistenceMode::StickyExpanded,
+            max_steps: 100,
+            max_tool_calls: 100,
+            max_parallel_tool_calls: 4,
+            selected_tool_codes: vec![],
+            selected_server_codes: vec![],
+            platform_defined: true,
+            built_in: true,
+        });
+    }
+    definitions
 }
 
 impl AgentManagementService {
@@ -68,7 +119,7 @@ impl AgentManagementService {
         if !valid {
             return Err(AgentManagementError::InternalAgentCodeInvalid);
         }
-        if code == MAIN_AGENT_CODE
+        if is_builtin_agent(code)
             || self
                 .supported_agents
                 .iter()

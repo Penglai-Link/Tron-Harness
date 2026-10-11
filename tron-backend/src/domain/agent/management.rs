@@ -265,6 +265,7 @@ pub enum AgentManagementError {
     InvalidWorkspace,
     InternalAgentDefinitionInvalid,
     InternalAgentGroupInvalid,
+    PlatformAgentReadOnly,
     BuiltinAgentReadOnly,
     LoopInvalid,
     LoopNotFound,

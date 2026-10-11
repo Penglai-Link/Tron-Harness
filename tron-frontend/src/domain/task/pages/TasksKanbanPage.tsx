@@ -47,6 +47,10 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { cn } from "@/shared/lib/utils";
 import { SelectItem } from "@/components/ui/select";
 import { useTranslation } from "react-i18next";
+import { AgentAvatar } from "@/domain/agent/components/AgentAvatarPicker";
+import { fetchWorkspaceInternalAgents } from "@/domain/agent/api";
+import { listWorkspaceInternalAgentsMock } from "@/domain/agent/mock";
+import type { WorkspaceInternalAgentRecord } from "@/domain/agent/model";
 
 type BoardScalePreset = "fit" | "100" | "90" | "80" | "70" | "60" | "50";
 
@@ -180,9 +184,13 @@ function KanbanCard({
   onSelect,
   pending,
   selected,
+  agentAvatarId,
+  agentName,
   task,
 }: {
   task: TaskListItem;
+  agentAvatarId?: string;
+  agentName: string;
   selected: boolean;
   compact: boolean;
   dense: boolean;
@@ -193,6 +201,8 @@ function KanbanCard({
   onSelect: () => void;
 }) {
   const { t } = useTranslation(["pages"]);
+  const priorityLabel = t(`pages:tasks.priorities.${task.priority}`, task.priority);
+  const taskTypeLabel = t(`pages:tasks.types.${task.taskType}`, task.taskType);
   return (
     <button
       aria-busy={pending}
@@ -213,19 +223,24 @@ function KanbanCard({
     >
       <div className={cn("flex min-w-0 items-center justify-between gap-[12px]", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
-        <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={task.priority} variant={taskPriorityTone(task.priority)}>{task.priority}</Badge>
+        <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={priorityLabel} variant={taskPriorityTone(task.priority)}>{priorityLabel}</Badge>
       </div>
       <div className={cn("flex min-w-0 items-start gap-[12px]", dense ? "mb-1.5" : compact ? "mb-2" : "mb-3")}>
         <span
-          aria-label={task.taskType}
+          aria-label={taskTypeLabel}
           className={cn("mt-1 h-3 w-1 shrink-0 rounded-full", taskTypeMarkerClass(task.taskType))}
-          title={task.taskType}
+          title={taskTypeLabel}
         />
         <h3 className={cn("min-w-0 flex-1 font-medium leading-5", dense ? "text-[12px]" : compact ? "text-[13px]" : "text-sm")}>{task.title}</h3>
       </div>
       <ProgressBar value={task.progress} />
       <div className={cn("flex items-center justify-between gap-[12px]", dense ? "mt-2" : compact ? "mt-2.5" : "mt-3")}>
         <span className="text-[11px] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.subtasks", "{{count}} subtasks", { count: task.subtaskCount })}</span>
+        <AgentAvatar
+          alt={agentName}
+          avatarId={agentAvatarId}
+          className="size-6 shrink-0 rounded-full border border-[var(--color-outline-variant)]"
+        />
       </div>
     </button>
   );
@@ -250,12 +265,14 @@ export function TasksKanbanPage() {
     return resolveStoredBoardScale(window.localStorage.getItem(BOARD_SCALE_STORAGE_KEY));
   });
   const [boardViewportWidth, setBoardViewportWidth] = useState(0);
+  const [workspaceInternalAgents, setWorkspaceInternalAgents] = useState<WorkspaceInternalAgentRecord[]>([]);
   const navigate = useNavigate();
   const toast = useToast();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const boardViewportRef = useRef<HTMLDivElement | null>(null);
   const dragPreviewRef = useRef<HTMLDivElement | null>(null);
   const dataSource = getServiceDataSource("task");
+  const agentDataSource = getServiceDataSource("agent");
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const workspaceCode = activeWorkspace?.workspaceCode ?? "";
   const options = useTaskOptions(workspaceCode);
@@ -263,6 +280,30 @@ export function TasksKanbanPage() {
   const [workspaceFlowCode, setWorkspaceFlowCode] = useState("");
   const [nextFlowCode, setNextFlowCode] = useState<string | null>(null);
   const [switchingFlow, setSwitchingFlow] = useState(false);
+
+  useEffect(() => {
+    if (!workspaceCode) {
+      setWorkspaceInternalAgents([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const loadAgents = agentDataSource === "api"
+      ? fetchWorkspaceInternalAgents(workspaceCode, controller.signal)
+      : Promise.resolve(listWorkspaceInternalAgentsMock(workspaceCode));
+
+    loadAgents
+      .then((agents) => {
+        if (!controller.signal.aborted) setWorkspaceInternalAgents(agents);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[task] Internal agent avatars could not be loaded.", error);
+        setWorkspaceInternalAgents([]);
+      });
+
+    return () => controller.abort();
+  }, [agentDataSource, workspaceCode]);
 
   useEffect(() => {
     if (!workspaceCode) {
@@ -306,6 +347,10 @@ export function TasksKanbanPage() {
   }), [debouncedSearch, priority, taskType, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
   const [optimisticColumns, setOptimisticColumns] = useState<KanbanColumn[] | null>(null);
+  const internalAgentsByCode = useMemo(
+    () => new Map(workspaceInternalAgents.map((agent) => [agent.agentCode, agent])),
+    [workspaceInternalAgents],
+  );
 
   useEffect(() => {
     setOptimisticColumns(null);
@@ -503,13 +548,13 @@ export function TasksKanbanPage() {
         </div>
         <div className="min-w-0">
           <SelectInput aria-label={t("pages:tasks.kanban.taskTypeFilter", "Task type filter")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
-            {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+            {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{t(`pages:tasks.types.${item}`, item)}</SelectItem>)}
           </SelectInput>
         </div>
         <div className="min-w-0">
           <SelectInput aria-label={t("pages:tasks.kanban.priorityFilter", "Task priority filter")} value={priority} onValueChange={(event) => setPriority(event!)}>
             <SelectItem value="">{t("pages:tasks.kanban.allPriorities", "All priorities")}</SelectItem>
-            {options.priorities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+            {options.priorities.map((item) => <SelectItem key={item} value={item}>{t(`pages:tasks.priorities.${item}`, item)}</SelectItem>)}
           </SelectInput>
         </div>
         <div className="min-w-0">
@@ -581,25 +626,30 @@ export function TasksKanbanPage() {
                     : t("pages:tasks.taskFlows.drag.moveDenied", "Task {{code}} cannot move into {{status}}", { code: draggedTask?.taskCode ?? "Task", status: column.title })}
                 </div>
               ) : null}
-              {column.tasks.map((task) => (
-                <KanbanCard
-                  key={task.taskCode}
-                  task={task}
-                  compact={boardLayout.compact}
-                  dense={boardLayout.dense}
-                  dragging={draggedTask?.taskCode === task.taskCode}
-                  pending={pendingTaskCode === task.taskCode}
-                  selected={selectedTaskCode === task.taskCode}
-                  onDragEnd={() => {
-                    clearDragState();
-                  }}
-                  onDragStart={(event) => handleCardDragStart(task, event)}
-                  onSelect={() => {
-                    setSelectedTaskCode(task.taskCode);
-                    navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);
-                  }}
-                />
-              ))}
+              {column.tasks.map((task) => {
+                const agent = internalAgentsByCode.get(task.agentCode);
+                return (
+                  <KanbanCard
+                    key={task.taskCode}
+                    task={task}
+                    agentAvatarId={agent?.avatarId}
+                    agentName={agent?.name || task.agentCode}
+                    compact={boardLayout.compact}
+                    dense={boardLayout.dense}
+                    dragging={draggedTask?.taskCode === task.taskCode}
+                    pending={pendingTaskCode === task.taskCode}
+                    selected={selectedTaskCode === task.taskCode}
+                    onDragEnd={() => {
+                      clearDragState();
+                    }}
+                    onDragStart={(event) => handleCardDragStart(task, event)}
+                    onSelect={() => {
+                      setSelectedTaskCode(task.taskCode);
+                      navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);
+                    }}
+                  />
+                );
+              })}
             </div>
           </section>
         ))}

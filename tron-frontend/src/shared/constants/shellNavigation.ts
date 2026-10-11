@@ -10,7 +10,6 @@ import {
   ListTodo,
   PlugZap,
   Server,
-  ScrollText,
   Sparkles,
   UserRound,
   Wrench,
@@ -34,7 +33,6 @@ export const tronNavigation: TronNavSection[] = [
     translationKey: "shell:nav.sections.agentOperations",
     items: [
       { label: "MCP Servers", href: "/mcp-servers", icon: PlugZap, translationKey: "shell:nav.items.mcpServers" },
-      { label: "Prompts", href: "/prompts", icon: ScrollText, translationKey: "shell:nav.items.prompts" },
       { label: "Models", href: "/models", icon: Sparkles, translationKey: "shell:nav.items.models" },
       { label: "Skills", href: "/skills", icon: Wrench, translationKey: "shell:nav.items.skills" },
     ],

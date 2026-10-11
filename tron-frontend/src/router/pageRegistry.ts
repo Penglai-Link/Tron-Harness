@@ -160,26 +160,6 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.CreateWorkspaceModelPage,
     })),
   ),
-  "prompts.index": lazy(() =>
-    import("@/domain/prompt/pages/PromptsPage").then((module) => ({
-      default: module.PromptsPage,
-    })),
-  ),
-  "prompts.new": lazy(() =>
-    import("@/domain/prompt/pages/CreatePromptPage").then((module) => ({
-      default: module.CreatePromptPage,
-    })),
-  ),
-  "prompts.detail": lazy(() =>
-    import("@/domain/prompt/pages/PromptDetailsPage").then((module) => ({
-      default: module.PromptDetailsPage,
-    })),
-  ),
-  "prompts.edit": lazy(() =>
-    import("@/domain/prompt/pages/PromptEditPage").then((module) => ({
-      default: module.PromptEditPage,
-    })),
-  ),
   "rag.index": lazy(() =>
     import("@/domain/rag/pages/RagPage").then((module) => ({
       default: module.RagPage,

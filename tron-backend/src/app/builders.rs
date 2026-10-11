@@ -153,13 +153,12 @@ fn build_model_provider_service(
 
 fn build_prompt_service(
     database_url: &str,
-    workspaces: WorkspaceService,
     variables: VariableService,
     id_provider: Arc<dyn IdGenerator>,
 ) -> PromptService {
     let repository = SqlitePromptRepository::connect(database_url)
         .expect("prompt SQLite repository should initialize");
-    let service = PromptService::new(repository, workspaces, variables, id_provider);
+    let service = PromptService::new(repository, variables, id_provider);
     service
         .retire_removed_builtins()
         .expect("retired bundled prompts should be removed");

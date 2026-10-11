@@ -12,11 +12,10 @@ use crate::{
         model_router::LlmModelRouter,
         prompt::{PromptPageQuery, PromptRepository},
         variable::VariableService,
-        workspace::WorkspaceService,
     },
     domain::prompt::{
-        Prompt, PromptRuntimeProvider, PromptScopeKind, PromptSourceKind, PromptVariable,
-        PromptVariableSourceKind, PromptVariableType, PromptView, analyze_template,
+        Prompt, PromptRuntimeProvider, PromptVariable, PromptVariableSourceKind,
+        PromptVariableType, analyze_template,
         render_typed_template,
     },
     shared::{
@@ -25,43 +24,50 @@ use crate::{
     },
 };
 
-mod catalog;
 mod platform;
 mod template;
 mod validation;
-mod workspace;
 
-const RETIRED_BUILTIN_PROMPT_CATALOG_KEY: &str = "agent.steer-continuity";
-const RETIRED_BUILTIN_PROMPT_CODE: &str = "SYS_AGENT_STEER_CONTINUITY";
+const RETIRED_BUILTIN_PROMPT_CATALOG_KEYS: &[&str] = &[
+    "agent.steer-continuity",
+    "memory.session-summary-system",
+    "memory.compaction-system",
+    "memory.goal-judge-system",
+    "memory.goal-judge-retry-system",
+    "rag.tree-summary",
+    "terminal.chat-system",
+    "terminal.explain-system",
+    "terminal.command-generate-system",
+];
+const RETIRED_BUILTIN_PROMPT_CODES: &[&str] = &[
+    "SYS_AGENT_STEER_CONTINUITY",
+    "SYS_MEMORY_SESSION_SUMMARY",
+    "SYS_MEMORY_COMPACTION",
+    "SYS_MEMORY_GOAL_JUDGE",
+    "SYS_MEMORY_GOAL_JUDGE_RETRY",
+    "SYS_RAG_TREE_SUMMARY",
+    "SYS_TERMINAL_CHAT",
+    "SYS_TERMINAL_EXPLAIN",
+    "SYS_TERMINAL_COMMAND_GENERATE",
+];
 
 #[derive(Clone)]
 pub struct PromptService {
     repository: Arc<Mutex<Box<dyn PromptRepository>>>,
-    workspaces: WorkspaceService,
     variables: VariableService,
     ids: Arc<dyn IdGenerator>,
     llm_runtime: Option<LlmRuntimeService>,
     llm_router: Option<LlmModelRouter>,
 }
 
-#[derive(Clone)]
-struct ResolvedPrompt {
-    view: PromptView,
-    definition: Prompt,
-    current_owned: Option<Prompt>,
-    upstream_enabled: Option<bool>,
-}
-
 impl PromptService {
     pub fn new(
         repository: impl PromptRepository + 'static,
-        workspaces: WorkspaceService,
         variables: VariableService,
         ids: Arc<dyn IdGenerator>,
     ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
-            workspaces,
             variables,
             ids,
             llm_runtime: None,
@@ -77,6 +83,13 @@ impl PromptService {
     pub fn with_llm_router(mut self, llm_router: LlmModelRouter) -> Self {
         self.llm_router = Some(llm_router);
         self
+    }
+
+    fn all_prompts(&self) -> Result<Vec<Prompt>, crate::domain::prompt::PromptError> {
+        self.repository
+            .lock()
+            .expect("prompt repository mutex poisoned")
+            .list_prompts()
     }
 
     pub fn bootstrap_builtins(&self) -> Result<(), crate::domain::prompt::PromptError> {
@@ -137,17 +150,12 @@ impl PromptService {
                         .map_err(|_| crate::domain::prompt::PromptError::StorageFailure)?
                         .value(),
                 ),
-                scope_kind: PromptScopeKind::Platform,
-                workspace_code: None,
                 prompt_code: definition.prompt_code.clone(),
                 display_name: translation.display_name.clone(),
                 category: definition.category,
                 prompt_body: translation.prompt_body.clone(),
                 description: Some(translation.description.clone()),
                 enabled: true,
-                source_kind: PromptSourceKind::Platform,
-                source_prompt_code: None,
-                allow_inheritance: None,
                 version: definition.version,
                 variables: crate::domain::prompt::builtin_prompt_variables(&definition.catalog_key)
                     .expect("builtin prompt definition must produce its variable contracts"),
@@ -183,9 +191,11 @@ impl PromptService {
             .all_prompts()?
             .into_iter()
             .filter(|prompt| {
-                prompt.catalog_key.as_deref() == Some(RETIRED_BUILTIN_PROMPT_CATALOG_KEY)
-                    || prompt.prompt_code == RETIRED_BUILTIN_PROMPT_CODE
-                    || prompt.source_prompt_code.as_deref() == Some(RETIRED_BUILTIN_PROMPT_CODE)
+                prompt
+                    .catalog_key
+                    .as_deref()
+                    .is_some_and(|key| RETIRED_BUILTIN_PROMPT_CATALOG_KEYS.contains(&key))
+                    || RETIRED_BUILTIN_PROMPT_CODES.contains(&prompt.prompt_code.as_str())
             })
             .map(|prompt| prompt.prompt_code)
             .collect::<Vec<_>>();
@@ -202,7 +212,6 @@ impl PromptService {
     pub async fn translate_prompt_draft(
         &self,
         prompt_code: Option<&str>,
-        workspace_code: Option<&str>,
         source_locale: &str,
         target_locale: &str,
         display_name: &str,
@@ -223,10 +232,6 @@ impl PromptService {
                 "sourceLocale and targetLocale must be different supported locales".into(),
             ));
         }
-        let workspace_code = workspace_code
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or(crate::domain::prompt::PromptError::WorkspaceRequired)?;
         let llm_runtime = self.llm_runtime.as_ref().ok_or_else(|| {
             crate::domain::prompt::PromptError::InvalidInput("LLM runtime is unavailable".into())
         })?;
@@ -236,7 +241,7 @@ impl PromptService {
             )
         })?;
         let runtime_config = llm_router
-            .route_text(workspace_code, None)
+            .route_text("", None)
             .map_err(crate::domain::prompt::PromptError::InvalidInput)?;
         let generated = llm_runtime
             .text_generation_call_with_config(
@@ -273,20 +278,15 @@ impl PromptService {
 
     pub fn runtime_prompt_text(
         &self,
-        workspace_code: Option<&str>,
         catalog_key: &str,
         locale: &str,
         runtime_values: &HashMap<PromptRuntimeProvider, Value>,
     ) -> Result<Option<String>, crate::domain::prompt::PromptError> {
-        let prompt = if let Some(workspace_code) = workspace_code {
-            self.workspace_detail(workspace_code, &builtin_prompt_code(catalog_key)?)
-        } else {
-            self.platform_page(PromptPageQuery {
+        let prompt = self.platform_page(PromptPageQuery {
                 current: 1,
                 size: 200,
                 search: None,
                 category: None,
-                source_kind: None,
                 enabled: None,
             })
             .and_then(|page| {
@@ -294,8 +294,7 @@ impl PromptService {
                     .into_iter()
                     .find(|record| record.catalog_key.as_deref() == Some(catalog_key))
                     .ok_or(crate::domain::prompt::PromptError::NotFound)
-            })
-        };
+            });
         let (prompt_body, variables) = match prompt {
             Ok(prompt) => {
                 if !prompt.enabled {
@@ -331,7 +330,6 @@ impl PromptService {
             Err(error) => return Err(error),
         };
         Ok(Some(self.render_prompt_body(
-            workspace_code,
             &variables,
             &prompt_body,
             runtime_values,
@@ -340,7 +338,6 @@ impl PromptService {
 
     fn render_prompt_body(
         &self,
-        workspace_code: Option<&str>,
         variables: &[PromptVariable],
         prompt_body: &str,
         runtime_values: &HashMap<PromptRuntimeProvider, Value>,
@@ -349,15 +346,9 @@ impl PromptService {
         let managed_values = if keys.is_empty() {
             BTreeMap::new()
         } else {
-            match workspace_code {
-                Some(workspace_code) => self
-                    .variables
-                    .resolve_workspace_prompt_variable_values(workspace_code, &keys),
-                None => self
-                    .variables
-                    .resolve_platform_prompt_variable_values(&keys),
-            }
-            .map_err(managed_variable_validation_error)?
+            self.variables
+                .resolve_platform_prompt_variable_values(&keys)
+                .map_err(managed_variable_validation_error)?
         };
         let mut typed_values = HashMap::with_capacity(variables.len());
         for variable in variables {
@@ -389,32 +380,6 @@ impl PromptService {
             typed_values.insert(variable.name.clone(), value);
         }
         render_typed_template(prompt_body, variables, &typed_values).map_err(Into::into)
-    }
-
-    fn validate_workspace_managed_variables(
-        &self,
-        workspace_code: &str,
-        variables: &[PromptVariable],
-    ) -> Result<(), crate::domain::prompt::PromptError> {
-        let options = self
-            .variables
-            .list_workspace_prompt_variable_options(
-                workspace_code,
-                crate::domain::variable::VariableCatalogQuery { search: None },
-            )
-            .map_err(managed_variable_validation_error)?;
-        let values = self
-            .variables
-            .resolve_workspace_prompt_variable_values(
-                workspace_code,
-                &managed_variable_keys(variables),
-            )
-            .map_err(managed_variable_validation_error)?;
-        validate_managed_variables(
-            variables,
-            options.iter().map(|option| option.key.as_str()),
-            &values,
-        )
     }
 
     fn validate_platform_managed_variables(
@@ -602,12 +567,6 @@ fn parse_translation_output(
         prompt_body,
         description,
     })
-}
-
-fn builtin_prompt_code(catalog_key: &str) -> Result<String, crate::domain::prompt::PromptError> {
-    crate::domain::prompt::builtin_prompt(catalog_key)
-        .map(|prompt| prompt.prompt_code.clone())
-        .ok_or(crate::domain::prompt::PromptError::NotFound)
 }
 
 #[cfg(test)]

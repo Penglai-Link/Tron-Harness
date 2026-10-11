@@ -384,6 +384,13 @@ export function createWorkspaceInternalAgent(workspaceCode: string, payload: Cre
   );
 }
 
+export function deleteWorkspaceInternalAgent(workspaceCode: string, agentCode: string) {
+  return requestApi<Record<string, never>>(
+    internalAgentEndpoint(agentApiEndpoints.deleteWorkspaceInternalAgent, workspaceCode),
+    { pathParams: { workspaceCode, agentCode } },
+  );
+}
+
 export function patchWorkspaceInternalAgentDefinition(workspaceCode: string, agentCode: string, payload: UpdateInternalAgentDefinitionPayload) {
   return requestApi<{ agentCode: string; name: string; rolePrompt: string; loopCode?: string | null; avatarId: string; groupName: string | null }>(
     internalAgentEndpoint("PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/definition", workspaceCode),
@@ -460,4 +467,8 @@ export function fetchInternalAgentGroups(workspaceCode: string) {
 
 export function createInternalAgentGroup(workspaceCode: string, name: string) {
   return requestApi<{ name: string }>(internalGroupEndpoint(workspaceCode).replace("GET ", "POST "), { body: { name } });
+}
+
+export function deleteInternalAgentGroup(workspaceCode: string, name: string) {
+  return requestApi<Record<string, never>>(internalGroupEndpoint(workspaceCode).replace("GET ", "DELETE "), { body: { name } });
 }

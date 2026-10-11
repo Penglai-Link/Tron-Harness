@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "./AgentAvatarPicker";
 import type { WorkspaceInternalAgentRecord } from "../model";
 
-export function InternalAgentBrowseItem({ agent, name, disabled, onOpen }: {
-  agent: WorkspaceInternalAgentRecord; name: string; disabled: boolean; onOpen: () => void;
+export function InternalAgentBrowseItem({ agent, name, disabled, canDelete = false, onOpen, onDelete }: {
+  agent: WorkspaceInternalAgentRecord; name: string; disabled: boolean; canDelete?: boolean; onOpen: () => void; onDelete?: () => void;
 }) {
   const { t } = useTranslation(["pages"]);
   const [tooltipOpen, setTooltipOpen] = useState(false);
@@ -22,6 +22,12 @@ export function InternalAgentBrowseItem({ agent, name, disabled, onOpen }: {
         <span className="mt-1 block truncate font-mono text-xs text-[var(--color-on-surface-variant)]" title={agent.agentCode}>{agent.agentCode}</span>
       </span>
     </Button>
+    {canDelete && onDelete ? <Button type="button" variant="ghost" size="icon-sm" disabled={disabled}
+      aria-label={t("pages:workspaceAgents.internal.groups.deleteAgent", { defaultValue: "Delete {{name}}", name })}
+      title={t("pages:workspaceAgents.internal.groups.deleteAgent", { defaultValue: "Delete {{name}}", name })}
+      className="absolute right-1 top-1 text-[var(--color-error)]" onClick={onDelete}>
+      <Trash2 aria-hidden="true" />
+    </Button> : null}
     {agent.builtIn ? <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
       <TooltipTrigger aria-label={builtInLabel} delay={0}
         className="absolute left-[calc(50%+1.5rem)] top-[5.25rem] flex size-6 items-center justify-center rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface-variant)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"

@@ -81,6 +81,19 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
             .map_err(storage_error)?;
         Ok(())
     }
+    fn delete_internal_agent_group(
+        &mut self,
+        scope: &str,
+        name: &str,
+    ) -> Result<bool, AgentManagementError> {
+        self.connection
+            .execute(
+                "DELETE FROM internal_agent_groups WHERE scope_code = ?1 AND name = ?2",
+                params![scope, name],
+            )
+            .map(|count| count > 0)
+            .map_err(storage_error)
+    }
 
     fn list_tool_permissions(
         &mut self,
@@ -328,6 +341,117 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         self.connection.execute("INSERT INTO platform_internal_agent_configs (agent_code, config_json) VALUES (?1, ?2)
             ON CONFLICT(agent_code) DO UPDATE SET config_json = excluded.config_json", params![config.agent_code, json]).map_err(storage_error)?;
         Ok(())
+    }
+    fn delete_platform_internal_agent_config(
+        &mut self,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError> {
+        let transaction = super::framework_storage::business_transaction(
+            self.connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(storage_error)?;
+        let removed = transaction
+            .execute(
+                "DELETE FROM platform_internal_agent_configs WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        if removed == 0 {
+            return Ok(false);
+        }
+        transaction
+            .execute(
+                "DELETE FROM workspace_internal_agent_mcp_server_assignments WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM workspace_internal_agent_tool_assignments WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM workspace_internal_agent_policies WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM workspace_internal_agent_definitions WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM agent_workspace_grants WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM agent_workspace_grant_policies WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM knowledge_base_grants WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction.commit().map_err(storage_error)?;
+        Ok(true)
+    }
+    fn delete_workspace_internal_agent(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError> {
+        let transaction = super::framework_storage::business_transaction(
+            self.connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(storage_error)?;
+        let removed = transaction
+            .execute(
+                "DELETE FROM workspace_internal_agent_definitions WHERE workspace_code = ?1 AND agent_code = ?2",
+                params![workspace_code, agent_code],
+            )
+            .map_err(storage_error)?;
+        if removed == 0 {
+            return Ok(false);
+        }
+        transaction
+            .execute(
+                "DELETE FROM workspace_internal_agent_mcp_server_assignments WHERE workspace_code = ?1 AND agent_code = ?2",
+                params![workspace_code, agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM workspace_internal_agent_tool_assignments WHERE workspace_code = ?1 AND agent_code = ?2",
+                params![workspace_code, agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM workspace_internal_agent_policies WHERE workspace_code = ?1 AND agent_code = ?2",
+                params![workspace_code, agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM knowledge_base_grants WHERE agent_code = ?1
+                 AND NOT EXISTS (SELECT 1 FROM platform_internal_agent_configs WHERE agent_code = ?1)
+                 AND NOT EXISTS (SELECT 1 FROM workspace_internal_agent_definitions WHERE agent_code = ?1)",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction.commit().map_err(storage_error)?;
+        Ok(true)
     }
     fn delete_workspace_internal_agent_definition(
         &mut self,
@@ -888,6 +1012,21 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }
+    fn delete_internal_agent_group(
+        &mut self,
+        scope: &str,
+        name: &str,
+    ) -> Result<bool, AgentManagementError> {
+        let scope = scope.to_owned();
+        let name = name.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .delete_internal_agent_group(&scope, &name)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
     fn save_internal_agent_group(
         &mut self,
         scope: &str,
@@ -1057,6 +1196,34 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
             move |connection| {
                 SqliteAgentManagementRepositorySql { connection }
                     .upsert_platform_internal_agent_config(&config)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_platform_internal_agent_config(
+        &mut self,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError> {
+        let agent_code = agent_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .delete_platform_internal_agent_config(&agent_code)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn delete_workspace_internal_agent(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError> {
+        let workspace_code = workspace_code.to_owned();
+        let agent_code = agent_code.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .delete_workspace_internal_agent(&workspace_code, &agent_code)
             },
             || storage_error(rusqlite::Error::InvalidQuery),
         )

@@ -286,7 +286,6 @@ impl AppState {
         );
         let prompts = build_prompt_service(
             &config.database_url,
-            workspaces.clone(),
             variables.clone(),
             id_provider.clone(),
         );

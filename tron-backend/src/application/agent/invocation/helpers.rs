@@ -70,6 +70,7 @@ pub(super) fn map_agent_error(
         | AgentManagementError::LoopConflict
         | AgentManagementError::LoopInUse
         | AgentManagementError::BuiltinAgentReadOnly
+        | AgentManagementError::PlatformAgentReadOnly
         | AgentManagementError::InternalAgentGroupInvalid
         | AgentManagementError::InternalAgentDefinitionInvalid
         | AgentManagementError::ToolPermissionInvalid

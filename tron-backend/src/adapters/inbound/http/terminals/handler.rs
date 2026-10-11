@@ -46,7 +46,6 @@ pub async fn generate_command(
     }
     let runtime_values = terminal_command_runtime_values(&request.prompt);
     let prompt = match state.prompts.runtime_prompt_text(
-        Some(&request.workspace_code),
         "terminal.command-exact",
         "en-US",
         &runtime_values,

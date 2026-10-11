@@ -51,7 +51,7 @@ import {
   useTaskOptions,
   useTaskWorkspaceOptions,
 } from "@/domain/task/hooks";
-import { TaskAppSelectionField } from "@/domain/task/components";
+import { TaskAppSelectionField, TaskExecutionModelSelect } from "@/domain/task/components";
 import {
   taskFlowStatusDisplayName,
   type TaskPriority,
@@ -61,8 +61,8 @@ import {
   type UpdateTaskPayload,
 } from "@/domain/task/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
-import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api";
+import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
 import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
 import {
@@ -196,18 +196,22 @@ export function TaskDetailsPage() {
     [visibleAgentOptions],
   );
   const modelOptions = useMemo(
-    () => automationModelOptionsForAgent(workspaceModelOptions, configuredAgentOption),
-    [configuredAgentOption, workspaceModelOptions],
+    () => automationModelOptionsForAgent(workspaceModelOptions, configuredAgentOption, pageT("values.automaticModel", "Automatic")),
+    [configuredAgentOption, pageT, workspaceModelOptions],
   );
   const selectedModelCode = useMemo(() => {
     const resolvedModelCode = automationModelCodeFromOption(modelOptions, selectedModelOptionCode);
     if (resolvedModelCode) return resolvedModelCode;
-    const configuredOptionCode = optionCodeForAutomationModel(selectedAgentCode, task.modelCode ?? null);
+    const configuredOptionCode = optionCodeForAutomationModel(
+      selectedAgentCode,
+      task.modelCode ?? null,
+      configuredAgentOption.modelOptionSource,
+    );
     if (task.modelCode && selectedModelOptionCode === configuredOptionCode && !modelOptions.some((option) => option.optionCode === selectedModelOptionCode)) {
       return task.modelCode;
     }
     return null;
-  }, [modelOptions, selectedAgentCode, selectedModelOptionCode, task.modelCode]);
+  }, [configuredAgentOption.modelOptionSource, modelOptions, selectedAgentCode, selectedModelOptionCode, task.modelCode]);
   const visibleModelOptions = useMemo<AutomationModelOption[]>(() => {
     if (!selectedModelOptionCode || modelOptions.some((option) => option.optionCode === selectedModelOptionCode)) {
       return modelOptions;
@@ -219,14 +223,6 @@ export function TaskDetailsPage() {
       optionCode: selectedModelOptionCode,
     }, ...modelOptions];
   }, [modelOptions, selectedModelOptionCode, task.modelCode]);
-  const executionModelSelectOptions = useMemo(
-    () => visibleModelOptions.map((model) => ({
-      label: model.label,
-      value: model.optionCode,
-    })),
-    [visibleModelOptions],
-  );
-
   useEffect(() => {
     if (skipNextTaskSync.current) {
       skipNextTaskSync.current = false;
@@ -261,14 +257,17 @@ export function TaskDetailsPage() {
     const agentsPromise = getServiceDataSource("agent") === "api"
       ? fetchWorkspaceSystemAgents(task.workspaceCode)
       : Promise.resolve(listWorkspaceSystemAgentsMock(task.workspaceCode));
+    const internalAgentsPromise = getServiceDataSource("agent") === "api"
+      ? fetchWorkspaceInternalAgents(task.workspaceCode)
+      : Promise.resolve(listWorkspaceInternalAgentsMock(task.workspaceCode));
     const modelsPromise = getServiceDataSource("model") === "api"
       ? fetchWorkspaceSelectOptions(task.workspaceCode)
       : Promise.resolve(getWorkspaceSelectOptions(task.workspaceCode));
 
-    Promise.all([agentsPromise, modelsPromise])
-      .then(([agents, models]) => {
+    Promise.all([agentsPromise, internalAgentsPromise, modelsPromise])
+      .then(([agents, internalAgents, models]) => {
         if (!active) return;
-        setAgentOptions(availableAutomationAgents(agents));
+        setAgentOptions(availableAutomationAgents(agents, internalAgents));
         setWorkspaceModelOptions(models);
       })
       .catch((error) => {
@@ -285,6 +284,15 @@ export function TaskDetailsPage() {
       active = false;
     };
   }, [pageT, task.workspaceCode, toast]);
+
+  useEffect(() => {
+    if (configuredAgentOption.modelOptionSource !== "workspace") return;
+    setSelectedModelOptionCode(optionCodeForAutomationModel(
+      selectedAgentCode,
+      task.modelCode ?? null,
+      configuredAgentOption.modelOptionSource,
+    ));
+  }, [configuredAgentOption.modelOptionSource, selectedAgentCode, task.modelCode]);
 
   useEffect(() => {
     if (visibleAgentOptions.some((agent) => agent.agentCode === selectedAgentCode)) return;
@@ -529,7 +537,12 @@ export function TaskDetailsPage() {
   }
 
   function handleProgressBlur() {
-    void saveUpdateFields({ progress: progressValue(progress) });
+    void saveUpdateFields({ progress: progressValue(progressRef.current) });
+  }
+
+  function handleProgressChange(nextProgress: string) {
+    progressRef.current = nextProgress;
+    setProgress(nextProgress);
   }
 
   function handleAgentCodesBlur() {
@@ -643,19 +656,36 @@ export function TaskDetailsPage() {
             </Field>
             <Field label={t("pages:tasks.detail.progress", "Progress")}>
               {updatesEditable ? (
-                <TextInput
-                  aria-label={t("pages:tasks.detail.progressAria", "Task detail progress")}
-                  disabled={progressManagedBySubtasks}
-                  max="100"
-                  min="0"
-                  type="number"
-                  value={progressManagedBySubtasks ? String(task.progress) : progress}
-                  onChange={(event) => setProgress(event.target.value)}
-                  onBlur={handleProgressBlur}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
+                <div className="flex min-w-0 items-center gap-3">
+                  <input
+                    aria-label={t("pages:tasks.detail.progressSliderAria", "Task detail progress slider")}
+                    className="h-5 min-w-0 flex-1 cursor-pointer accent-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={progressManagedBySubtasks}
+                    max="100"
+                    min="0"
+                    step="1"
+                    type="range"
+                    value={progressManagedBySubtasks ? task.progress : progressValue(progress)}
+                    onChange={(event) => handleProgressChange(String(event.currentTarget.valueAsNumber))}
+                    onPointerUp={(event) => event.currentTarget.blur()}
+                    onBlur={handleProgressBlur}
+                  />
+                  <TextInput
+                    aria-label={t("pages:tasks.detail.progressAria", "Task detail progress")}
+                    className="w-20 shrink-0 text-right tabular-nums"
+                    disabled={progressManagedBySubtasks}
+                    max="100"
+                    min="0"
+                    type="number"
+                    value={progressManagedBySubtasks ? String(task.progress) : progress}
+                    onChange={(event) => handleProgressChange(event.target.value)}
+                    onBlur={handleProgressBlur}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
+                  <span className="shrink-0 text-sm text-[var(--color-on-surface-variant)]">%</span>
+                </div>
               ) : (
                 <ReadValue>{task.progress}%</ReadValue>
               )}
@@ -693,18 +723,18 @@ export function TaskDetailsPage() {
             </Field>
             <Field label={pageT("fields.executionModel", "Execution Model")}>
               {detailEditable ? (
-                <OptionSelect
+                <TaskExecutionModelSelect
                   ariaLabel={pageT("aria.executionModel", "Task execution model")}
                   emptyLabel={pageT("values.noModels", "No executable models")}
                   disabled={executionOptionsLoading || !visibleModelOptions.length}
                   loading={executionOptionsLoading}
                   loadingLabel={pageT("values.loadingModels", "Loading models...")}
-                  options={executionModelSelectOptions}
+                  options={visibleModelOptions}
                   value={selectedModelOptionCode}
                   onChange={setSelectedModelOptionCode}
                 />
               ) : (
-                <ReadValue>{task.modelCode || "Workspace default text model"}</ReadValue>
+                <ReadValue>{task.modelCode || pageT("values.automaticModel", "Automatic")}</ReadValue>
               )}
             </Field>
             <Field label={pageT("fields.title", "Title")}>

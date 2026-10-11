@@ -177,6 +177,18 @@ pub async fn create_platform_internal_agent(
     Ok(Json(ApiResponse::success(record.into())))
 }
 
+pub async fn delete_platform_internal_agent(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Path(code): Path<String>,
+) -> Result<Json<ApiResponse<crate::response::EmptyData>>, InternalAgentApiError> {
+    state
+        .agent_management
+        .delete_platform_internal_agent(&code)
+        .map(|()| Json(ApiResponse::success(crate::response::EmptyData {})))
+        .map_err(|error| InternalAgentApiError(error, auth.locale))
+}
+
 pub async fn update_platform_internal_agent_definition(
     State(state): State<AppState>,
     auth: RequestAuthContext,

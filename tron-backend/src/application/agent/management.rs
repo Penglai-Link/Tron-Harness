@@ -96,6 +96,11 @@ pub trait AgentManagementRepository: Send {
         scope: &str,
         name: &str,
     ) -> Result<(), AgentManagementError>;
+    fn delete_internal_agent_group(
+        &mut self,
+        scope: &str,
+        name: &str,
+    ) -> Result<bool, AgentManagementError>;
 
     fn list_tool_permissions(
         &mut self,
@@ -163,6 +168,15 @@ pub trait AgentManagementRepository: Send {
         &mut self,
         config: &PlatformInternalAgentConfig,
     ) -> Result<(), AgentManagementError>;
+    fn delete_platform_internal_agent_config(
+        &mut self,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError>;
+    fn delete_workspace_internal_agent(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError>;
     fn delete_workspace_internal_agent_definition(
         &mut self,
         workspace: &str,

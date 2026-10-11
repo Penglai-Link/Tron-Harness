@@ -21,13 +21,13 @@ use super::handler::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/agents/registry/internal-groups", get(super::internal_groups::list_platform).post(super::internal_groups::create_platform))
-        .route("/api/v1/agents/workspaces/{workspace_code}/internal-groups", get(super::internal_groups::list_workspace).post(super::internal_groups::create_workspace))
+        .route("/api/v1/agents/registry/internal-groups", get(super::internal_groups::list_platform).post(super::internal_groups::create_platform).delete(super::internal_groups::delete_platform))
+        .route("/api/v1/agents/workspaces/{workspace_code}/internal-groups", get(super::internal_groups::list_workspace).post(super::internal_groups::create_workspace).delete(super::internal_groups::delete_workspace))
         .route("/api/v1/agents/loops", get(super::loop_designs::list).post(super::loop_designs::create))
         .route("/api/v1/agents/loops/{loop_code}", put(super::loop_designs::update).delete(super::loop_designs::delete))
         .route("/api/v1/agents/registry/{agent_code}/workspace-grants", get(super::workspace_grants::list).put(super::workspace_grants::replace))
         .route("/api/v1/agents/registry/internal", get(platform::list_platform_internal_agents).post(platform::create_platform_internal_agent))
-        .route("/api/v1/agents/registry/internal/{agent_code}", get(platform::get_platform_internal_agent))
+        .route("/api/v1/agents/registry/internal/{agent_code}", get(platform::get_platform_internal_agent).delete(platform::delete_platform_internal_agent))
         .route("/api/v1/agents/registry/internal/{agent_code}/definition", patch(platform::update_platform_internal_agent_definition))
         .route("/api/v1/agents/registry/internal/{agent_code}/policy", patch(platform::update_platform_internal_agent_policy))
         .route("/api/v1/agents/registry/internal/{agent_code}/mcp-policy", patch(platform::update_platform_internal_agent_mcp_policy))
@@ -81,7 +81,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}",
-            get(get_workspace_internal_agent),
+            get(get_workspace_internal_agent).delete(super::internal_definitions::delete_internal_agent),
         )
         .route(
             "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}/definition",

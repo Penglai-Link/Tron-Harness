@@ -27,10 +27,10 @@ import {
   useTaskOptions,
   useTaskWorkspaceOptions,
 } from "@/domain/task/hooks";
-import { TaskAppSelectionField } from "@/domain/task/components";
+import { TaskAppSelectionField, TaskExecutionModelSelect } from "@/domain/task/components";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
-import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api";
+import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
 import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
 import {
@@ -38,6 +38,7 @@ import {
   automationModelOptionsForAgent,
   availableAutomationAgents,
   mainAutomationAgentOption,
+  optionCodeForAutomationModel,
 } from "@/domain/automation/pages/automationExecutionOptions";
 import type { AutomationAgentOption } from "@/domain/automation/pages/automationExecutionOptions";
 import type {
@@ -51,15 +52,12 @@ function toggleCode(codes: string[], code: string) {
   return codes.includes(code) ? codes.filter((item) => item !== code) : [...codes, code];
 }
 
-function splitCodes(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
-}
-
 export function CreateTaskPage() {
   const { t } = useTranslation(["pages"]);
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`tasks.${key}`, { defaultValue, ...options })
   );
+  const automaticModelLabel = pageT("values.automaticModel", "Automatic");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [taskType, setTaskType] = useState<TaskType>("Feature");
@@ -68,10 +66,11 @@ export function CreateTaskPage() {
   const [priority, setPriority] = useState<TaskPriority>("Medium");
   const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>(() => [mainAutomationAgentOption]);
   const [selectedAgentCode, setSelectedAgentCode] = useState(mainAutomationAgentOption.agentCode);
-  const [selectedModelOptionCode, setSelectedModelOptionCode] = useState("");
+  const [selectedModelOptionCode, setSelectedModelOptionCode] = useState(() =>
+    optionCodeForAutomationModel(mainAutomationAgentOption.agentCode, null, "workspace"),
+  );
   const [workspaceModelOptions, setWorkspaceModelOptions] = useState<ReturnType<typeof getWorkspaceSelectOptions>>(() => []);
   const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
-  const [agentCodesInput, setAgentCodesInput] = useState("");
   const [selectedAppCodes, setSelectedAppCodes] = useState<string[]>([]);
   const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -95,15 +94,8 @@ export function CreateTaskPage() {
     [agentOptions, selectedAgentCode],
   );
   const modelOptions = useMemo(
-    () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent),
-    [selectedAgent, workspaceModelOptions],
-  );
-  const executionModelSelectOptions = useMemo(
-    () => modelOptions.map((model) => ({
-      label: model.label,
-      value: model.optionCode,
-    })),
-    [modelOptions],
+    () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent, automaticModelLabel),
+    [automaticModelLabel, selectedAgent, workspaceModelOptions],
   );
   const selectedModelCode = useMemo(
     () => automationModelCodeFromOption(modelOptions, selectedModelOptionCode),
@@ -136,14 +128,17 @@ export function CreateTaskPage() {
     const agentsPromise = getServiceDataSource("agent") === "api"
       ? fetchWorkspaceSystemAgents(activeWorkspaceCode)
       : Promise.resolve(listWorkspaceSystemAgentsMock(activeWorkspaceCode));
+    const internalAgentsPromise = getServiceDataSource("agent") === "api"
+      ? fetchWorkspaceInternalAgents(activeWorkspaceCode)
+      : Promise.resolve(listWorkspaceInternalAgentsMock(activeWorkspaceCode));
     const modelsPromise = getServiceDataSource("model") === "api"
       ? fetchWorkspaceSelectOptions(activeWorkspaceCode)
       : Promise.resolve(getWorkspaceSelectOptions(activeWorkspaceCode));
 
-    Promise.all([agentsPromise, modelsPromise])
-      .then(([agents, models]) => {
+    Promise.all([agentsPromise, internalAgentsPromise, modelsPromise])
+      .then(([agents, internalAgents, models]) => {
         if (!active) return;
-        setAgentOptions(availableAutomationAgents(agents));
+        setAgentOptions(availableAutomationAgents(agents, internalAgents));
         setWorkspaceModelOptions(models);
       })
       .catch((error) => {
@@ -194,7 +189,7 @@ export function CreateTaskPage() {
     setSubmitting(true);
     const payload = {
       agentCode: selectedAgentCode,
-      agentCodes: splitCodes(agentCodesInput),
+      agentCodes: [],
       appCodes: selectedAppCodes,
       assigneeUserCodes: [],
       description,
@@ -234,24 +229,24 @@ export function CreateTaskPage() {
         )}
       />
       <div className="space-y-6">
-        <Field label={pageT("fields.title", "Task Title")}>
-          <TextInput aria-label={pageT("fields.title", "Task title")} className="w-full" value={title} onChange={(event) => setTitle(event.target.value)} />
+        <Field label={pageT("fields.title", "Task Title")} required>
+          <TextInput aria-label={pageT("fields.title", "Task title")} aria-required="true" className="w-full" required value={title} onChange={(event) => setTitle(event.target.value)} />
         </Field>
         <div className="grid gap-6 xl:grid-cols-2">
-          <Field label={pageT("fields.priority", "Priority")}>
-            <SelectInput aria-label={pageT("fields.priority", "Priority")} value={priority} onValueChange={(event) => setPriority(event as TaskPriority)}>
+          <Field label={pageT("fields.priority", "Priority")} required>
+            <SelectInput aria-label={pageT("fields.priority", "Priority")} aria-required="true" required value={priority} onValueChange={(event) => setPriority(event as TaskPriority)}>
               {options.priorities.map((item) => <SelectItem key={item} value={item}>{pageT(`priorities.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label={pageT("fields.taskType", "Task Type")}>
-            <SelectInput aria-label={pageT("fields.taskType", "Task Type")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
+          <Field label={pageT("fields.taskType", "Task Type")} required>
+            <SelectInput aria-label={pageT("fields.taskType", "Task Type")} aria-required="true" required value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
               {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{pageT(`types.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
-          <Field label={pageT("fields.sourceType", "Source Type")}>
-            <SelectInput aria-label={pageT("fields.sourceType", "Source Type")} value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
+          <Field label={pageT("fields.sourceType", "Source Type")} required>
+            <SelectInput aria-label={pageT("fields.sourceType", "Source Type")} aria-required="true" required value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
               {options.sourceTypes.map((item) => <SelectItem key={item} value={item}>{pageT(`sourceTypes.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
@@ -270,31 +265,26 @@ export function CreateTaskPage() {
             />
           </Field>
           <Field label={pageT("fields.executionModel", "Execution Model")}>
-            <OptionSelect
+            <TaskExecutionModelSelect
               ariaLabel={pageT("aria.executionModel", "Task execution model")}
               emptyLabel={pageT("values.noModels", "No executable models")}
               disabled={executionOptionsLoading || !activeWorkspaceCode || !modelOptions.length}
               loading={executionOptionsLoading}
               loadingLabel={pageT("values.loadingModels", "Loading models...")}
-              options={executionModelSelectOptions}
+              options={modelOptions}
               value={selectedModelOptionCode}
               onChange={setSelectedModelOptionCode}
             />
           </Field>
-          <Field label={pageT("fields.agentCodes", "Agent Codes")}>
-            <TextInput aria-label={pageT("fields.agentCodes", "Agent Codes")} placeholder={pageT("placeholders.agentCodes", "agent-reviewer, agent-builder")} value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
+          <Field label={pageT("fields.apps", "Apps")} hint={pageT("hints.apps", "Select active apps from the current workspace.")}>
+            <TaskAppSelectionField
+              availableApps={appOptions}
+              emptyMessage={activeWorkspaceCode ? pageT("values.noActiveApps", "No active apps are available in this workspace.") : pageT("errors.workspaceRequiredApps", "Select a workspace in the shell header to choose apps.")}
+              loading={workspaceOptionsLoading}
+              selectedAppCodes={selectedAppCodes}
+              onToggle={(appCode) => setSelectedAppCodes((current) => toggleCode(current, appCode))}
+            />
           </Field>
-          <div className="lg:col-span-2">
-            <Field label={pageT("fields.apps", "Apps")} hint={pageT("hints.apps", "Select active apps from the current workspace.")}>
-              <TaskAppSelectionField
-                availableApps={appOptions}
-                emptyMessage={activeWorkspaceCode ? pageT("values.noActiveApps", "No active apps are available in this workspace.") : pageT("errors.workspaceRequiredApps", "Select a workspace in the shell header to choose apps.")}
-                loading={workspaceOptionsLoading}
-                selectedAppCodes={selectedAppCodes}
-                onToggle={(appCode) => setSelectedAppCodes((current) => toggleCode(current, appCode))}
-              />
-            </Field>
-          </div>
         </div>
         <SurfaceCard className="rounded-[4px]">
           <div className="grid gap-1.5">

@@ -254,6 +254,28 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     toolAssignmentMode: "all_platform_tools",
     toolExposureMode: "domain_discovery",
   },
+  ...[
+    { agentCode: "explore", name: "探索智能体", promptCode: "ROLE_EXPLORER", groupName: "探索" },
+    { agentCode: "full-stack", name: "全栈工程师", promptCode: "ROLE_FULL_STACK_DEVELOPER", groupName: "开发" },
+    { agentCode: "product", name: "杨布斯", promptCode: "ROLE_PRODUCT_MANAGER", groupName: "设计" },
+  ].map(({ agentCode, name, promptCode, groupName }) => ({
+    agentCode,
+    name,
+    groupName,
+    description: "Platform built-in internal agent.",
+    rolePrompt: agentRolePromptSeeds.find((seed) => seed.promptCode === promptCode)?.translations["zh-CN"].promptBody ?? "",
+    loopCode: "",
+    avatarId: "robot",
+    expandedDomainPersistenceMode: "sticky_expanded" as const,
+    maxSteps: 100,
+    maxToolCalls: 100,
+    maxParallelToolCalls: 4,
+    mcpAccessMode: "all_enabled_servers" as const,
+    selectedServerCodes: [],
+    selectedToolCodes: [],
+    toolAssignmentMode: "all_platform_tools" as const,
+    toolExposureMode: "domain_discovery" as const,
+  })),
 ];
 
 type InternalAgentOverride = Pick<WorkspaceInternalAgentSeed, "agentCode"> & Partial<WorkspaceInternalAgentSeed>;
@@ -470,7 +492,7 @@ export function createWorkspaceInternalAgentMock(workspaceCode: string, payload:
   const scopes = workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE
     ? Object.keys(workspaceInternalAgentDefinitions)
     : [workspaceCode];
-  if (agentCode === "main-agent" || systemAgentRegistry.some((agent) => agent.agentCode === agentCode)
+  if (workspaceInternalAgentSeed.some((agent) => agent.agentCode === agentCode) || systemAgentRegistry.some((agent) => agent.agentCode === agentCode)
     || listWorkspaceInternalAgentRecords(workspaceCode).some((agent) => agent.agentCode === agentCode)
     || scopes.some((scope) => workspaceInternalAgentDefinitions[scope]?.some((agent) => agent.agentCode === agentCode))) {
     throw new Error("Agent code is already in use; choose another code");
@@ -479,6 +501,26 @@ export function createWorkspaceInternalAgentMock(workspaceCode: string, payload:
   const agent = { ...workspaceInternalAgentSeed[0], ...payload, groupName, agentCode, loopCode: payload.loopCode ?? "", name: payload.name.trim(), description: "Workspace internal agent." };
   workspaceInternalAgentDefinitions[workspaceCode] = [...(workspaceInternalAgentDefinitions[workspaceCode] ?? []), agent];
   return buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode);
+}
+
+export function deleteWorkspaceInternalAgentMock(workspaceCode: string, agentCode: string) {
+  if (workspaceInternalAgentSeed.some((agent) => agent.agentCode === agentCode)) throw new Error("Built-in agent definitions are read-only");
+  const isPlatformAgent = (workspaceInternalAgentDefinitions[PLATFORM_INTERNAL_AGENT_SCOPE] ?? []).some((agent) => agent.agentCode === agentCode);
+  if (workspaceCode !== PLATFORM_INTERNAL_AGENT_SCOPE && isPlatformAgent) throw new Error("Platform agents can only be deleted in platform settings");
+  const current = workspaceInternalAgentDefinitions[workspaceCode] ?? [];
+  const next = current.filter((agent) => agent.agentCode !== agentCode);
+  if (next.length === current.length) throw new Error(`Internal agent ${agentCode} was not found.`);
+  workspaceInternalAgentDefinitions[workspaceCode] = next;
+  const scopes = workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE
+    ? Object.keys(workspaceOverrides)
+    : [workspaceCode];
+  workspaceOverrides = {
+    ...workspaceOverrides,
+    ...Object.fromEntries(scopes.map((scope) => [
+      scope,
+      (workspaceOverrides[scope] ?? []).filter((agent) => agent.agentCode !== agentCode),
+    ])),
+  };
 }
 
 export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string; avatarId?: string; groupName?: string | null }) {
@@ -711,7 +753,9 @@ export function isLoopUsedByAgentMock(loopCode: string) {
   return [...scopes].some(scope => listWorkspaceInternalAgentRecords(scope).some(agent => agent.loopCode === loopCode));
 }
 
-const internalAgentGroups: Record<string, string[]> = {};
+const internalAgentGroups: Record<string, string[]> = {
+  [PLATFORM_INTERNAL_AGENT_SCOPE]: ["探索", "开发", "设计"],
+};
 export function listInternalAgentGroupsMock(workspaceCode: string) {
   return [...new Set([...(internalAgentGroups[workspaceCode] ?? []), ...listWorkspaceInternalAgentRecords(workspaceCode).flatMap((agent) => agent.groupName ? [agent.groupName] : [])])].sort();
 }
@@ -720,6 +764,25 @@ export function createInternalAgentGroupMock(workspaceCode: string, name: string
   if (!name || [...name].length > 60 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error("Invalid group name");
   internalAgentGroups[workspaceCode] = [...new Set([...(internalAgentGroups[workspaceCode] ?? []), name])];
   return { name };
+}
+
+export function deleteInternalAgentGroupMock(workspaceCode: string, name: string) {
+  if (!listInternalAgentGroupsMock(workspaceCode).includes(name)) throw new Error("Invalid internal agent group");
+  internalAgentGroups[workspaceCode] = (internalAgentGroups[workspaceCode] ?? []).filter((group) => group !== name);
+  if (workspaceCode === PLATFORM_INTERNAL_AGENT_SCOPE) {
+    for (const agent of workspaceInternalAgentSeed) if (agent.groupName === name) agent.groupName = null;
+    workspaceInternalAgentDefinitions[workspaceCode] = (workspaceInternalAgentDefinitions[workspaceCode] ?? []).map((agent) => agent.groupName === name ? { ...agent, groupName: null } : agent);
+  } else {
+    const members = listWorkspaceInternalAgentRecords(workspaceCode).filter((agent) => agent.groupName === name);
+    for (const agent of members) {
+      upsertWorkspaceInternalAgentOverride(workspaceCode, {
+        ...getWorkspaceInternalAgentOverride(workspaceCode, agent.agentCode),
+        agentCode: agent.agentCode,
+        groupName: null,
+      });
+      workspaceInternalAgentDefinitions[workspaceCode] = (workspaceInternalAgentDefinitions[workspaceCode] ?? []).map((definition) => definition.agentCode === agent.agentCode ? { ...definition, groupName: null } : definition);
+    }
+  }
 }
 
 function validateInternalAgentGroupMock(workspaceCode: string, value: string | null | undefined) {

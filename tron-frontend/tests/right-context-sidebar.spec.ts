@@ -496,11 +496,11 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   await expect(rightSidebar(page).getByText("Identifier")).toBeVisible();
 
   await routeActiveProfileApi(page);
-  await page.goto(`${frontendBaseUrl}/prompts`);
+  await page.goto(`${frontendBaseUrl}/settings/prompts`);
   await openRightSidebar(page);
   await expectNoStaleInspector(page);
-  await page.getByRole("row").filter({ hasText: "Tron Incident Summary" }).click();
-  await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=/);
+  await page.getByRole("row").filter({ hasText: "ROLE_MAIN_AGENT" }).click();
+  await expect(page).toHaveURL(/\/settings\/prompts\/detail\?promptCode=/);
   await expect(page.getByRole("textbox", { name: "Prompt code", exact: true })).toHaveAttribute("readonly", "");
   await expectNoStaleInspector(page);
 

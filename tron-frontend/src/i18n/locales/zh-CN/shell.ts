@@ -86,7 +86,6 @@ export const shell = {
       mcpServers: "MCP 服务",
       memory: "记忆",
       models: "模型",
-      prompts: "提示词",
       rag: "RAG",
       resources: "资源",
       resourceManagement: "资源管理",

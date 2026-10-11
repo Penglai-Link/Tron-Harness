@@ -21,6 +21,8 @@ pub struct BuiltinPromptDefinition {
     pub runtime_required: bool,
     #[serde(default)]
     pub parameters: Vec<BuiltinPromptParameter>,
+    #[serde(default)]
+    pub runtime_variables: Vec<BuiltinPromptParameter>,
     pub translations: BTreeMap<String, BuiltinPromptTranslation>,
 }
 
@@ -95,7 +97,12 @@ pub fn registered_runtime_prompt_variables() -> impl Iterator<Item = &'static Bu
 {
     builtin_prompts()
         .iter()
-        .flat_map(|definition| definition.parameters.iter())
+        .flat_map(|definition| {
+            definition
+                .parameters
+                .iter()
+                .chain(definition.runtime_variables.iter())
+        })
 }
 
 pub fn registered_runtime_prompt_variable(

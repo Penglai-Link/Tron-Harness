@@ -93,7 +93,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
           {createdAgentCode ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:platformData.createdAssignmentPending")}</p> : null}
           <InternalAgentGroupField workspaceCode={workspaceCode} value={groupName} disabled={definitionDisabled} onChange={setGroupName} />
           <AgentLoopField value={loopCode} disabled={definitionDisabled} onChange={setLoopCode} />
-          <AgentRolePromptField workspaceCode={workspaceCode} rows={8} disabled={definitionDisabled} value={rolePrompt} onChange={setRolePrompt} />
+          <AgentRolePromptField rows={8} disabled={definitionDisabled} value={rolePrompt} onChange={setRolePrompt} />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>{text("cancel", "Cancel")}</Button>
             <Button type="submit" disabled={saving || !codeValid || !name.trim() || !loopCode}>{saving ? text("saving", "Saving...") : createdAgentCode ? t("pages:platformData.save") : text("create", "New")}</Button>

@@ -120,6 +120,18 @@ pub async fn update_internal_agent_definition(
     )))
 }
 
+pub async fn delete_internal_agent(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Path((workspace, agent)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<EmptyData>>, InternalAgentApiError> {
+    state
+        .agent_management
+        .delete_internal_agent(&workspace, &agent)
+        .map(|()| Json(ApiResponse::success(EmptyData {})))
+        .map_err(|error| InternalAgentApiError(error, auth.locale))
+}
+
 pub(super) struct InternalAgentApiError(pub(super) AgentManagementError, pub(super) String);
 impl IntoResponse for InternalAgentApiError {
     fn into_response(self) -> Response {
@@ -129,6 +141,11 @@ impl IntoResponse for InternalAgentApiError {
                 StatusCode::FORBIDDEN,
                 "内置智能体定义为只读",
                 "Built-in agent definitions are read-only",
+            ),
+            "tron.agent.platform_read_only" => (
+                StatusCode::FORBIDDEN,
+                "平台智能体只能在平台设置中删除",
+                "Platform agents can only be deleted in platform settings",
             ),
             "tron.agent.group_invalid" => (
                 StatusCode::BAD_REQUEST,

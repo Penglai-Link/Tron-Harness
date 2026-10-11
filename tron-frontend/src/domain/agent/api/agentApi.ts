@@ -10,6 +10,7 @@ export const agentApiEndpoints = {
   enableWorkspaceSystemAgent: "POST /api/v1/agents/workspaces/{workspaceCode}/system/{agentCode}/enable",
   disableWorkspaceSystemAgent: "POST /api/v1/agents/workspaces/{workspaceCode}/system/{agentCode}/disable",
   listWorkspaceInternalAgents: "GET /api/v1/agents/workspaces/{workspaceCode}/internal",
+  deleteWorkspaceInternalAgent: "DELETE /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}",
   getWorkspaceInternalAgent: "GET /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}",
   patchWorkspaceInternalAgentPolicy:
     "PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/policy",

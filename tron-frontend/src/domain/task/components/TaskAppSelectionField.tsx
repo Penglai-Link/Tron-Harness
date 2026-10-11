@@ -60,17 +60,21 @@ export function TaskAppSelectionField({
 
   return (
     <div className="space-y-3 w-full">
-      <MultiSelectDropdown
-        ariaLabel={text("ariaLabel", "Task apps")}
-        disabled={disabled}
-        emptyMessage={emptyMessage}
-        loading={loading}
-        loadingMessage={text("loading", "Loading app options...")}
-        options={appOptions}
-        placeholder={text("placeholder", "Select apps")}
-        selectedValues={selectedKnownCodes}
-        onToggle={onToggle}
-      />
+      {!loading && appOptions.length === 0 ? (
+        <p className="py-1 text-sm text-[var(--color-on-surface-variant)]">{emptyMessage}</p>
+      ) : (
+        <MultiSelectDropdown
+          ariaLabel={text("ariaLabel", "Task apps")}
+          disabled={disabled}
+          emptyMessage={emptyMessage}
+          loading={loading}
+          loadingMessage={text("loading", "Loading app options...")}
+          options={appOptions}
+          placeholder={text("placeholder", "Select apps")}
+          selectedValues={selectedKnownCodes}
+          onToggle={onToggle}
+        />
+      )}
       {legacyAppCodes.length ? (
         <div className="space-y-2">
           <p className="text-[12px] text-[var(--color-on-surface-variant)]">

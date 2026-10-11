@@ -195,7 +195,6 @@ pub async fn execute_task(
         return task_error_response(TaskError::ArchivedMutationDenied);
     }
     let prompt = match state.prompts.runtime_prompt_text(
-        Some(&task.workspace_code),
         "task.execution",
         &auth.locale,
         &task_execution_runtime_values(&task),

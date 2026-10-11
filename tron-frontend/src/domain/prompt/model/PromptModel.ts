@@ -1,6 +1,4 @@
 export type PromptCategory = "SYSTEM" | "PERSONA" | "AGENT_ROLE" | "TOOL" | "TEMPLATE" | "ACTION";
-export type PromptScopeKind = "PLATFORM" | "WORKSPACE";
-export type PromptSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
 export type PromptVariableType = "STRING" | "NUMBER" | "BOOLEAN" | "JSON";
 export type PromptVariableSourceKind = "MANAGED" | "RUNTIME";
 export type PromptRuntimeProvider =
@@ -51,26 +49,13 @@ export interface PromptAnalyzedVariable {
   type: PromptVariableType;
 }
 
-export interface PromptWorkspacePathItem {
-  workspaceCode: string;
-  name: string;
-}
-
 export interface PromptRecord {
   promptCode: string;
-  scopeKind: PromptScopeKind;
-  workspaceCode: string | null;
   displayName: string;
   category: PromptCategory;
   promptBody: string;
   description: string | null;
   enabled: boolean;
-  sourceKind: PromptSourceKind;
-  sourceLabel: string;
-  sourceWorkspaceCode: string | null;
-  sourceWorkspaceName: string | null;
-  sourceWorkspacePath: PromptWorkspacePathItem[];
-  allowInheritance: boolean | null;
   variables: PromptVariable[];
   translations?: PromptTranslation[];
   builtIn?: boolean;
@@ -91,14 +76,12 @@ export interface PromptPage<T> {
 export interface PromptPageQuery {
   current: number;
   size: number;
-  workspaceCode?: string;
   search?: string;
   category?: PromptCategory;
-  sourceKind?: PromptSourceKind;
   enabled?: boolean;
 }
 
-export interface PromptCreateFields {
+export interface PromptCreatePayload {
   displayName: string;
   category: PromptCategory;
   promptBody: string;
@@ -108,14 +91,7 @@ export interface PromptCreateFields {
   translations?: PromptTranslationPayload[];
 }
 
-export interface WorkspacePromptCreatePayload extends PromptCreateFields {
-  workspaceCode: string;
-  allowInheritance: boolean;
-}
-
-export type PlatformPromptCreatePayload = PromptCreateFields;
-
-export interface PromptUpdateFields {
+export interface PromptUpdatePayload {
   promptCode: string;
   expectedVersion: number;
   displayName: string;
@@ -126,16 +102,8 @@ export interface PromptUpdateFields {
   translations?: PromptTranslationPayload[];
 }
 
-export interface WorkspacePromptUpdatePayload extends PromptUpdateFields {
-  allowInheritance?: boolean;
-  workspaceCode: string;
-}
-
-export type PlatformPromptUpdatePayload = PromptUpdateFields;
-
 export interface PromptDetailPayload {
   promptCode: string;
-  workspaceCode?: string;
 }
 
 export interface PromptDuplicatePayload extends PromptDetailPayload {
@@ -149,15 +117,9 @@ export interface PromptAnalyzeResult {
 
 export interface PromptTranslationDraftPayload {
   promptCode?: string;
-  workspaceCode?: string;
   sourceLocale: "en-US" | "zh-CN";
   targetLocale: "en-US" | "zh-CN";
   displayName: string;
   promptBody: string;
   description?: string | null;
-}
-
-export interface PromptExportResult {
-  fileName: string;
-  content: string;
 }

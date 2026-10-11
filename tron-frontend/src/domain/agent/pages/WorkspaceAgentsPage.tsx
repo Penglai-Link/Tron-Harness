@@ -10,6 +10,7 @@ import { ChevronDown } from "lucide-react";
 import {
   fetchToolDomains,
   fetchWorkspaceInternalAgents,
+  deleteWorkspaceInternalAgent,
   fetchWorkspaceSystemAgents,
   listTools,
   patchWorkspaceInternalAgentMcpPolicy,
@@ -25,6 +26,7 @@ import {
 } from "@/domain/agent/components";
 import {
   translateInheritedFrom,
+  translateInternalAgentGroupName,
   translateInternalAgentName,
   translateSystemAgentDescription,
   translateSystemAgentSource,
@@ -33,6 +35,7 @@ import {
   listToolDomainsMock,
   listToolsMock,
   listWorkspaceInternalAgentsMock,
+  deleteWorkspaceInternalAgentMock,
   patchWorkspaceInternalAgentMcpPolicyMock,
   patchWorkspaceInternalAgentPolicyMock,
   patchWorkspaceInternalAgentDefinitionMock,
@@ -261,7 +264,10 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
   const [internalSaveErrors, setInternalSaveErrors] = useState<Record<string, string>>({});
   const [internalSearch, setInternalSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
-  const { groups: catalogGroups, create: createGroup } = useInternalAgentGroups(category === "internal" ? activeWorkspaceCode : "");
+  const { groups: catalogGroups, create: createGroup, remove: removeGroup } = useInternalAgentGroups(category === "internal" ? activeWorkspaceCode : "");
+  const [groupManagerOpen, setGroupManagerOpen] = useState(false);
+  const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
+  const [agentToDelete, setAgentToDelete] = useState<WorkspaceInternalAgentRecord | null>(null);
   const [systemSearch, setSystemSearch] = useState("");
   const [debouncedSystemSearch, setDebouncedSystemSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -538,6 +544,41 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
     ])));
   }
 
+  async function handleDeleteGroup(name: string) {
+    try {
+      await removeGroup(name);
+      if (groupFilter === `group:${name}`) setGroupFilter("all");
+      await refreshCreatedAgent();
+      notifyInternalAgentRegistryChanged();
+      toast.success(internalPageT("groups.deleted", "Group deleted"));
+      setGroupToDelete(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : internalPageT("groups.deleteFailed", "Could not delete group"));
+    }
+  }
+
+  async function handleDeleteAgent(agent: WorkspaceInternalAgentRecord) {
+    const key = `internal-delete:${agent.agentCode}`;
+    if (isBusy(key)) return;
+    setBusy(key, true);
+    try {
+      if (dataSource === "api") await deleteWorkspaceInternalAgent(activeWorkspaceCode, agent.agentCode);
+      else deleteWorkspaceInternalAgentMock(activeWorkspaceCode, agent.agentCode);
+      setAgentToDelete(null);
+      internalDraftsRef.current = Object.fromEntries(Object.entries(internalDraftsRef.current).filter(([code]) => code !== agent.agentCode));
+      setInternalDrafts((current) => { const next = { ...current }; delete next[agent.agentCode]; return next; });
+      setInternalAgents((current) => current.filter((record) => record.agentCode !== agent.agentCode));
+      await refreshCreatedAgent();
+      await Promise.all(["knowledge-base-agents", "knowledge-library-agent-grants"].map((keyName) => queryClient.invalidateQueries({ queryKey: [keyName] })));
+      notifyInternalAgentRegistryChanged();
+      toast.success(internalPageT("groups.agentDeleted", "Agent deleted"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : internalPageT("groups.deleteAgentFailed", "Could not delete agent"));
+    } finally {
+      setBusy(key, false);
+    }
+  }
+
   async function refreshInternalAgent(agentCode: string, submittedDraft?: InternalAgentDraft) {
     if (!activeWorkspaceCode) return;
 
@@ -763,9 +804,12 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
           <SelectInput aria-label={internalPageT("groups.label", "Group")} className="w-full sm:w-48" value={groupFilter} onValueChange={(value) => setGroupFilter(value || "all")}>
             <SelectItem value="all">{internalPageT("groups.all", "All groups")}</SelectItem>
             <SelectItem value="ungrouped">{internalPageT("groups.ungrouped", "Ungrouped")}</SelectItem>
-            {[...new Set([...catalogGroups, ...internalAgents.map((agent) => internalAgentGroupName(agent, (item) => translateInternalAgentName(t, item))).filter(Boolean)])].sort().map((name) => <SelectItem key={name} value={`group:${name}`}>{name}</SelectItem>)}
+            {[...new Set([...catalogGroups, ...internalAgents.map((agent) => internalAgentGroupName(agent, (item) => translateInternalAgentName(t, item))).filter(Boolean)])].sort().map((name) => <SelectItem key={name} value={`group:${name}`}>{translateInternalAgentGroupName(t, name)}</SelectItem>)}
           </SelectInput>
-          {allowCreate ? <div className="sm:ml-auto"><CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} allowWorkspaceAssignment={scope === "platform"} onCreated={refreshCreatedAgent} /></div> : null}
+          {allowCreate ? <>
+            <Button type="button" variant="outline" onClick={() => { setGroupToDelete(null); setGroupManagerOpen(true); }}>{internalPageT("groups.manage", "Manage groups")}</Button>
+            <div className="sm:ml-auto"><CreateInternalAgentDialog key={activeWorkspaceCode} workspaceCode={activeWorkspaceCode} allowWorkspaceAssignment={scope === "platform"} onCreated={refreshCreatedAgent} /></div>
+          </> : null}
         </div>
         {groupInternalAgents(internalAgents, internalSearch, groupFilter, (agent) => translateInternalAgentName(t, agent)).length === 0 ? (
           <p className="px-1 py-2 text-sm text-[var(--color-on-surface-variant)]">
@@ -776,7 +820,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         {groupInternalAgents(internalAgents, internalSearch, groupFilter, (agent) => translateInternalAgentName(t, agent)).map(({ name: groupName, agents }) => <details key={`${activeWorkspaceCode}:${groupName}`} open className="group/section border-t border-[var(--color-outline-variant)] pt-3">
           <summary className="mb-3 flex cursor-pointer list-none items-center gap-2 text-sm font-medium marker:hidden [&::-webkit-details-marker]:hidden">
             <ChevronDown aria-hidden="true" size={16} className="-rotate-90 transition-transform group-open/section:rotate-0" />
-            <span className="min-w-0 truncate" title={groupName || undefined}>{groupName || internalPageT("groups.ungrouped", "Ungrouped")}</span>
+            <span className="min-w-0 truncate" title={groupName || undefined}>{groupName ? translateInternalAgentGroupName(t, groupName) : internalPageT("groups.ungrouped", "Ungrouped")}</span>
             <span className="text-xs font-normal text-[var(--color-on-surface-variant)]">{agents.length}</span>
           </summary>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,128px),1fr))] gap-x-4 gap-y-5">
@@ -803,7 +847,8 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
 
           return (
             <Fragment key={agent.agentCode}>
-              <InternalAgentBrowseItem agent={agent} name={translateInternalAgentName(t, agent)} disabled={loading} onOpen={() => {
+              <InternalAgentBrowseItem agent={agent} name={translateInternalAgentName(t, agent)} disabled={loading || isBusy(`internal-delete:${agent.agentCode}`)}
+                canDelete={!agent.builtIn && (scope === "platform" || !agent.platformDefined)} onDelete={() => setAgentToDelete(agent)} onOpen={() => {
                 const nextDraft = draftFromRecord(agent);
                 internalDraftsRef.current = { ...internalDraftsRef.current, [agent.agentCode]: nextDraft };
                 setInternalDrafts((current) => ({ ...current, [agent.agentCode]: nextDraft }));
@@ -841,7 +886,7 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
                 </Field>
                 {scope === "platform" ? <AgentWorkspaceField code={agent.agentCode} name={draft.name} disabled={internalBusy} selectedCodes={workspaceDrafts[agent.agentCode]} onSelectionChange={(codes) => setWorkspaceDrafts((current) => ({ ...current, [agent.agentCode]: codes }))} /> : null}
                 <InternalAgentGroupField workspaceCode={activeWorkspaceCode} value={draft.groupName} disabled={editingDisabled} onChange={(groupName) => setInternalDraft(agent.agentCode, { groupName })} />
-                <AgentRolePromptField key={`${activeWorkspaceCode}:${agent.agentCode}`} workspaceCode={activeWorkspaceCode} disabled={editingDisabled} value={draft.rolePrompt} onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })} />
+                <AgentRolePromptField key={`${activeWorkspaceCode}:${agent.agentCode}`} disabled={editingDisabled} value={draft.rolePrompt} onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })} />
               </div>
 
               <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -1109,6 +1154,47 @@ export function WorkspaceAgentsPage({ category, scope = "workspace", allowCreate
         ]}
         />
       ) : null}
+      <Dialog open={groupManagerOpen} onOpenChange={(open) => { if (!open && !groupToDelete) setGroupManagerOpen(false); }}>
+        <DialogContent className="sm:max-w-lg" showCloseButton={!groupToDelete} closeLabel={internalPageT("definition.close", "Close")}>
+          {groupToDelete ? <>
+            <DialogHeader>
+              <DialogTitle>{internalPageT("groups.confirmDeleteTitle", "Delete group?")}</DialogTitle>
+              <DialogDescription>{internalPageT("groups.confirmDeleteDescription", "Agents in this group will become ungrouped.")}</DialogDescription>
+            </DialogHeader>
+            <p className="text-sm font-medium">{translateInternalAgentGroupName(t, groupToDelete)}</p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setGroupToDelete(null)}>{internalPageT("definition.cancel", "Cancel")}</Button>
+              <Button type="button" variant="destructive" onClick={() => void handleDeleteGroup(groupToDelete)}>{internalPageT("groups.delete", "Delete group")}</Button>
+            </DialogFooter>
+          </> : <>
+            <DialogHeader>
+              <DialogTitle>{internalPageT("groups.manage", "Manage groups")}</DialogTitle>
+              <DialogDescription>{internalPageT("groups.manageDescription", "Remove groups that are no longer needed.")}</DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[55dvh] space-y-2 overflow-y-auto">
+              {catalogGroups.length ? catalogGroups.map((name) => <div key={name} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-outline-variant)] px-3 py-2">
+                <span className="min-w-0 truncate text-sm">{translateInternalAgentGroupName(t, name)}</span>
+                <Button type="button" size="sm" variant="destructive" onClick={() => setGroupToDelete(name)}>{internalPageT("groups.delete", "Delete group")}</Button>
+              </div>) : <p className="py-4 text-sm text-[var(--color-on-surface-variant)]">{internalPageT("groups.noGroups", "No groups to manage")}</p>}
+            </div>
+            <DialogFooter><Button type="button" variant="outline" onClick={() => setGroupManagerOpen(false)}>{internalPageT("definition.cancel", "Close")}</Button></DialogFooter>
+          </>}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(agentToDelete)} onOpenChange={(open) => { if (!open) setAgentToDelete(null); }}>
+        <DialogContent className="sm:max-w-md" closeLabel={internalPageT("definition.close", "Close")}>
+          <DialogHeader>
+            <DialogTitle>{internalPageT("groups.confirmDeleteAgentTitle", "Delete internal agent?")}</DialogTitle>
+            <DialogDescription>{internalPageT("groups.confirmDeleteAgentDescription", "Its settings and workspace assignments will be removed.")}</DialogDescription>
+          </DialogHeader>
+          <p className="text-sm font-medium">{agentToDelete ? translateInternalAgentName(t, agentToDelete) : ""}</p>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={Boolean(agentToDelete && isBusy(`internal-delete:${agentToDelete.agentCode}`))} onClick={() => setAgentToDelete(null)}>{internalPageT("definition.cancel", "Cancel")}</Button>
+            <Button type="button" variant="destructive" disabled={Boolean(agentToDelete && isBusy(`internal-delete:${agentToDelete.agentCode}`))}
+              onClick={() => { if (agentToDelete) void handleDeleteAgent(agentToDelete); }}>{internalPageT("groups.deleteAgent", "Delete agent")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

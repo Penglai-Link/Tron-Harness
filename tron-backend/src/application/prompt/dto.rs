@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::domain::prompt::{
     PromptCategory, PromptRuntimeProvider, PromptTranslationStatus, PromptVariableSourceKind,
-    PromptVariableType, PromptView, PromptViewSourceKind,
+    PromptVariableType, PromptView,
 };
 
 #[derive(Debug, Clone)]
@@ -38,7 +38,6 @@ pub struct PromptTranslationSpecCommand {
 pub struct CreatePromptCommand {
     pub category: PromptCategory,
     pub spec: PromptSpecCommand,
-    pub allow_inheritance: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -47,7 +46,6 @@ pub struct PromptPageQuery {
     pub size: usize,
     pub search: Option<String>,
     pub category: Option<PromptCategory>,
-    pub source_kind: Option<PromptViewSourceKind>,
     pub enabled: Option<bool>,
 }
 
@@ -62,7 +60,6 @@ pub struct PromptPage {
 
 #[derive(Debug, Clone)]
 pub struct UpdatePromptCommand {
-    pub allow_inheritance: Option<bool>,
     pub prompt_code: String,
     pub expected_version: u64,
     pub spec: PromptSpecCommand,
@@ -71,7 +68,6 @@ pub struct UpdatePromptCommand {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptDeleteResult {
-    pub workspace_code: Option<String>,
     pub prompt_code: String,
 }
 
@@ -88,11 +84,4 @@ pub struct PromptAnalyzedVariable {
     pub name: String,
     #[serde(rename = "type")]
     pub variable_type: PromptVariableType,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptExportResult {
-    pub file_name: String,
-    pub content: String,
 }

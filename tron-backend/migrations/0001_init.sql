@@ -108,6 +108,11 @@ CREATE TABLE internal_agent_groups (
     PRIMARY KEY (scope_code, name)
 );
 
+INSERT INTO internal_agent_groups(scope_code, name) VALUES
+    ('', '探索'),
+    ('', '开发'),
+    ('', '设计');
+
 CREATE TABLE knowledge_base_derived_resources (
  document_id TEXT NOT NULL, workspace_code TEXT NOT NULL, resource_code TEXT NOT NULL,
  PRIMARY KEY(document_id,workspace_code,resource_code));
@@ -416,40 +421,18 @@ CREATE TABLE prompt_variables (
 
 CREATE TABLE prompts (
     id INTEGER PRIMARY KEY,
-    scope_kind TEXT NOT NULL CHECK (scope_kind IN ('PLATFORM', 'WORKSPACE')),
-    workspace_code TEXT NULL,
     prompt_code TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL,
     category TEXT NOT NULL CHECK (category IN ('SYSTEM', 'PERSONA', 'TOOL', 'TEMPLATE', 'ACTION', 'AGENT_ROLE')),
     prompt_body TEXT NOT NULL,
     description TEXT NULL,
     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
-    source_kind TEXT NOT NULL CHECK (source_kind IN (
-        'PLATFORM', 'WORKSPACE_LOCAL', 'WORKSPACE_OVERRIDE', 'WORKSPACE_STATUS_PATCH'
-    )),
-    source_prompt_code TEXT NULL REFERENCES prompts(prompt_code) ON DELETE CASCADE,
-    allow_inheritance INTEGER NULL CHECK (allow_inheritance IN (0, 1)),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     built_in INTEGER NOT NULL DEFAULT 0 CHECK (built_in IN (0, 1)),
     runtime_required INTEGER NOT NULL DEFAULT 0 CHECK (runtime_required IN (0, 1)),
-    catalog_key TEXT NULL,
-    CHECK (
-        (scope_kind = 'PLATFORM' AND workspace_code IS NULL AND source_kind = 'PLATFORM'
-            AND source_prompt_code IS NULL AND allow_inheritance IS NULL)
-        OR
-        (scope_kind = 'WORKSPACE' AND workspace_code IS NOT NULL
-            AND source_kind IN ('WORKSPACE_LOCAL', 'WORKSPACE_OVERRIDE', 'WORKSPACE_STATUS_PATCH'))
-    ),
-    CHECK (
-        (source_kind = 'WORKSPACE_LOCAL' AND source_prompt_code IS NULL
-            AND allow_inheritance IS NOT NULL)
-        OR
-        (source_kind IN ('WORKSPACE_OVERRIDE', 'WORKSPACE_STATUS_PATCH')
-            AND source_prompt_code IS NOT NULL AND allow_inheritance IS NULL)
-        OR source_kind = 'PLATFORM'
-    )
+    catalog_key TEXT NULL
 );
 
 CREATE TABLE provider_authorization_sessions (
@@ -1070,20 +1053,8 @@ CREATE UNIQUE INDEX idx_prompts_catalog_key
     ON prompts(catalog_key)
     WHERE catalog_key IS NOT NULL;
 
-CREATE UNIQUE INDEX idx_prompts_platform_display_name
-    ON prompts(display_name)
-    WHERE scope_kind = 'PLATFORM';
-
-CREATE INDEX idx_prompts_scope_workspace
-    ON prompts(scope_kind, workspace_code);
-
-CREATE UNIQUE INDEX idx_prompts_workspace_definition_display_name
-    ON prompts(workspace_code, display_name)
-    WHERE source_kind IN ('WORKSPACE_LOCAL', 'WORKSPACE_OVERRIDE');
-
-CREATE UNIQUE INDEX idx_prompts_workspace_source_slot
-    ON prompts(workspace_code, source_prompt_code)
-    WHERE source_prompt_code IS NOT NULL;
+CREATE UNIQUE INDEX idx_prompts_display_name
+    ON prompts(display_name);
 
 CREATE INDEX idx_provider_authorization_sessions_provider_updated
     ON provider_authorization_sessions(provider_code, updated_at DESC);
@@ -1250,8 +1221,6 @@ BEFORE UPDATE ON prompts
 FOR EACH ROW
 WHEN NEW.prompt_code <> OLD.prompt_code
     OR NEW.category <> OLD.category
-    OR NEW.scope_kind <> OLD.scope_kind
-    OR COALESCE(NEW.workspace_code, '') <> COALESCE(OLD.workspace_code, '')
 BEGIN
     SELECT RAISE(ABORT, 'prompt identity fields are immutable');
 END;
@@ -1293,7 +1262,6 @@ INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, 
     (734510000000000004, 'AUTOMATIONS', 'BuiltIn', 'Internal', 'automations.index', NULL, 'AlarmClock', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000005, 'AGENT_OPERATIONS', 'BuiltIn', 'Group', NULL, NULL, 'Bot', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000008, 'MCP_SERVERS', 'BuiltIn', 'Internal', 'mcpServers.index', NULL, 'PlugZap', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000009, 'PROMPTS', 'BuiltIn', 'Internal', 'prompts.index', NULL, 'ScrollText', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000010, 'MODELS', 'BuiltIn', 'Internal', 'models.index', NULL, 'Sparkles', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000011, 'SKILLS', 'BuiltIn', 'Internal', 'skills.index', NULL, 'Wrench', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000012, 'DATA', 'BuiltIn', 'Group', NULL, NULL, 'Database', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
@@ -1323,8 +1291,6 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734530000000000010, 734510000000000005, 'en-US', 'Agent Operations'),
     (734530000000000015, 734510000000000008, 'zh-CN', 'MCP 服务'),
     (734530000000000016, 734510000000000008, 'en-US', 'MCP Servers'),
-    (734530000000000017, 734510000000000009, 'zh-CN', '提示词'),
-    (734530000000000018, 734510000000000009, 'en-US', 'Prompts'),
     (734530000000000019, 734510000000000010, 'zh-CN', '模型'),
     (734530000000000020, 734510000000000010, 'en-US', 'Models'),
     (734530000000000021, 734510000000000011, 'zh-CN', '技能'),
@@ -1372,7 +1338,6 @@ INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, po
     (734520000000000004, 734500000000000001, 734510000000000004, 734520000000000001, 2, 'Inline'),
     (734520000000000005, 734500000000000001, 734510000000000005, NULL, 1, 'Flyout'),
     (734520000000000008, 734500000000000001, 734510000000000008, 734520000000000005, 1, 'Inline'),
-    (734520000000000009, 734500000000000001, 734510000000000009, 734520000000000005, 2, 'Inline'),
     (734520000000000010, 734500000000000001, 734510000000000010, 734520000000000005, 3, 'Inline'),
     (734520000000000011, 734500000000000001, 734510000000000011, 734520000000000005, 4, 'Inline'),
     (734520000000000012, 734500000000000001, 734510000000000012, NULL, 2, 'Flyout'),

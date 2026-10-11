@@ -3,10 +3,7 @@ use crate::{
         CreatePromptCommand, PromptDeleteResult, PromptPage, PromptPageQuery, PromptSpecCommand,
         PromptTranslationSpecCommand, PromptVariableSpecCommand, UpdatePromptCommand,
     },
-    domain::prompt::{
-        Prompt, PromptCategory, PromptError, PromptScopeKind, PromptSourceKind, PromptView,
-        PromptViewSourceKind,
-    },
+    domain::prompt::{Prompt, PromptCategory, PromptError, PromptView},
     shared::{id::SnowflakeId, time::current_timestamp},
 };
 
@@ -121,7 +118,6 @@ impl PromptService {
                     })
                     .collect(),
             },
-            allow_inheritance: None,
         })
     }
 
@@ -142,7 +138,6 @@ impl PromptService {
             return Err(PromptError::NotFound);
         }
         Ok(PromptDeleteResult {
-            workspace_code: None,
             prompt_code: prompt.prompt_code,
         })
     }
@@ -170,12 +165,7 @@ impl PromptService {
     }
 
     fn platform_prompts(&self) -> Result<Vec<Prompt>, PromptError> {
-        self.all_prompts().map(|prompts| {
-            prompts
-                .into_iter()
-                .filter(|prompt| prompt.scope_kind == PromptScopeKind::Platform)
-                .collect()
-        })
+        self.all_prompts()
     }
 
     fn platform_prompt(&self, prompt_code: &str) -> Result<Prompt, PromptError> {
@@ -203,17 +193,12 @@ fn new_platform_prompt(
     let translations = translation_models(&spec, &now, 1);
     Prompt {
         id: SnowflakeId::new(id),
-        scope_kind: PromptScopeKind::Platform,
-        workspace_code: None,
         prompt_code: format!("PROMPT-{id}"),
         display_name: spec.display_name,
         category,
         prompt_body: spec.prompt_body,
         description: spec.description,
         enabled: spec.enabled,
-        source_kind: PromptSourceKind::Platform,
-        source_prompt_code: None,
-        allow_inheritance: None,
         version: 1,
         variables,
         translations,
@@ -227,21 +212,12 @@ fn new_platform_prompt(
 
 fn platform_view(prompt: Prompt) -> PromptView {
     PromptView {
-        scope_kind: PromptScopeKind::Platform,
-        workspace_code: None,
         prompt_code: prompt.prompt_code,
         display_name: prompt.display_name,
         category: prompt.category,
         prompt_body: prompt.prompt_body,
         description: prompt.description,
         enabled: prompt.enabled,
-        source_kind: PromptViewSourceKind::Platform,
-        source_label: "Platform".into(),
-        source_prompt_code: None,
-        source_workspace_code: None,
-        source_workspace_name: None,
-        source_workspace_path: Vec::new(),
-        allow_inheritance: None,
         version: prompt.version,
         variables: prompt.variables,
         translations: prompt.translations,

@@ -6,6 +6,7 @@ import { cn } from "@/shared/lib/utils";
 export interface BreadcrumbItem {
   label: string;
   href?: string;
+  state?: unknown;
 }
 
 interface PageHeaderProps {
@@ -31,7 +32,7 @@ export function PageHeader({ actions, breadcrumbs, className }: PageHeaderProps)
           {visibleBreadcrumbs.map((item, index) => (
             <Fragment key={`${item.label}-${index}`}>
               {item.href ? (
-                <Link className="opacity-55" to={item.href}>
+                <Link className="opacity-55" to={item.href} state={item.state}>
                   {item.label}
                 </Link>
               ) : (

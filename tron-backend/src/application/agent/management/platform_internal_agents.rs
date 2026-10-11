@@ -57,6 +57,28 @@ impl AgentManagementService {
         Ok(platform_view(config, &self.tool_codes()))
     }
 
+    pub fn delete_platform_internal_agent(&self, code: &str) -> Result<(), AgentManagementError> {
+        let code = code.trim();
+        if internal_definitions::is_builtin_agent(code) {
+            return Err(AgentManagementError::BuiltinAgentReadOnly);
+        }
+        let Some(config) = self
+            .repository()
+            .list_platform_internal_agent_configs()?
+            .into_iter()
+            .find(|config| config.agent_code.eq_ignore_ascii_case(code))
+        else {
+            return Err(AgentManagementError::InternalAgentNotFound);
+        };
+        if !self
+            .repository()
+            .delete_platform_internal_agent_config(&config.agent_code)?
+        {
+            return Err(AgentManagementError::InternalAgentNotFound);
+        }
+        Ok(())
+    }
+
     fn change_platform_internal_agent(
         &self,
         code: &str,

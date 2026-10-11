@@ -2871,7 +2871,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
               : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
                 : detailViewMode === "preview" && block.detailCode
                   ? <ContextDetailPreview block={block.detailCode} value={parsedDetail} onOpenPrompt={(promptCode) => {
-                      const promptPath = `/prompts/detail?${new URLSearchParams({ promptCode }).toString()}`;
+                      const promptPath = `/settings/prompts/detail?${new URLSearchParams({ promptCode }).toString()}`;
                       const tabId = useTabStore.getState().addTab({ title: t("chat.shortTermMemory.contextPanel.detailPromptManagement"), path: promptPath, closable: true, activeNav: `prompt-detail:${promptCode}` });
                       useTabStore.getState().updateTab(tabId, { path: promptPath });
                       setDialogOpen(false);

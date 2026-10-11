@@ -52,16 +52,11 @@ impl Error for TemplateError {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PromptError {
-    WorkspaceRequired,
-    InvalidWorkspace,
     NotFound,
     InvalidInput(String),
     DuplicateDisplayName,
     BuiltinMutationDenied,
     RuntimeRequired,
-    InheritedMutationDenied,
-    AllowInheritanceUnsupported,
-    RevertUnsupported,
     VersionConflict,
     StorageFailure,
 }
@@ -69,28 +64,16 @@ pub enum PromptError {
 impl Display for PromptError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::WorkspaceRequired => formatter.write_str("workspaceCode is required"),
-            Self::InvalidWorkspace => {
-                formatter.write_str("prompt workspace must reference an active workspace")
-            }
             Self::NotFound => formatter.write_str("prompt not found"),
             Self::InvalidInput(message) => formatter.write_str(message),
             Self::DuplicateDisplayName => {
-                formatter.write_str("displayName already exists in prompt scope")
+                formatter.write_str("displayName already exists")
             }
             Self::BuiltinMutationDenied => {
                 formatter.write_str("built-in prompts cannot be deleted")
             }
             Self::RuntimeRequired => {
                 formatter.write_str("runtime-required prompts cannot be disabled")
-            }
-            Self::InheritedMutationDenied => formatter.write_str(
-                "inherited prompt cannot be deleted; use workspace-revert for overrides",
-            ),
-            Self::AllowInheritanceUnsupported => formatter
-                .write_str("allowInheritance is supported only for workspace-local prompts"),
-            Self::RevertUnsupported => {
-                formatter.write_str("prompt has no workspace override or status patch to revert")
             }
             Self::VersionConflict => formatter.write_str("prompt version conflict"),
             Self::StorageFailure => formatter.write_str("prompt storage operation failed"),

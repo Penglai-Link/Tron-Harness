@@ -4,6 +4,39 @@ use super::internal_definitions::InternalAgentDefinition;
 use super::*;
 
 impl AgentManagementService {
+    pub fn delete_internal_agent(
+        &self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<(), AgentManagementError> {
+        self.active_workspace_detail(workspace_code)?;
+        let agent_code = agent_code.trim();
+        if super::internal_definitions::is_builtin_agent(agent_code) {
+            return Err(AgentManagementError::BuiltinAgentReadOnly);
+        }
+        if self
+            .repository()
+            .list_platform_internal_agent_configs()?
+            .iter()
+            .any(|config| config.agent_code.eq_ignore_ascii_case(agent_code))
+        {
+            return Err(AgentManagementError::PlatformAgentReadOnly);
+        }
+        let definition = self
+            .repository()
+            .list_workspace_internal_agent_definitions(workspace_code)?
+            .into_iter()
+            .find(|definition| definition.agent_code.eq_ignore_ascii_case(agent_code))
+            .ok_or(AgentManagementError::InternalAgentNotFound)?;
+        if !self
+            .repository()
+            .delete_workspace_internal_agent(workspace_code, &definition.agent_code)?
+        {
+            return Err(AgentManagementError::InternalAgentNotFound);
+        }
+        Ok(())
+    }
+
     pub fn list_workspace_internal_agents(
         &self,
         workspace_code: &str,

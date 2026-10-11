@@ -49,21 +49,15 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "PROMPTS",
+        menu_code: "MODELS",
         parent_menu_code: Some("AGENT_OPERATIONS"),
         position: 2,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "MODELS",
-        parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 3,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
         menu_code: "SKILLS",
         parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 4,
+        position: 3,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",

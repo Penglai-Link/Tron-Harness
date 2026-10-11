@@ -68,7 +68,6 @@ impl Tool for PlatformPromptPageTool {
                 size: input.size.unwrap_or(20).clamp(1, 100),
                 search: input.search,
                 category: input.category,
-                source_kind: None,
                 enabled: input.enabled,
             })
             .map_err(service_tool_error)?;
@@ -138,7 +137,6 @@ impl Tool for PlatformPromptCreateTool {
             .create_platform_prompt(CreatePromptCommand {
                 category: input.category,
                 spec: input.into_spec(),
-                allow_inheritance: None,
             })
             .map_err(service_tool_error)?;
         json_observation(self.name(), &output)
@@ -176,7 +174,6 @@ impl Tool for PlatformPromptUpdateTool {
         let output = self
             .prompts
             .update_platform_prompt(UpdatePromptCommand {
-                allow_inheritance: None,
                 prompt_code: input.prompt_code,
                 expected_version: input.expected_version,
                 spec: PromptSpecCommand {

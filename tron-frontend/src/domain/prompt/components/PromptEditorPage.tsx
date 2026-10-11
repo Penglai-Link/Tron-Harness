@@ -1,4 +1,5 @@
 import {
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -6,6 +7,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  useLocation,
   useNavigate,
   useSearchParams,
 } from "react-router";
@@ -27,18 +29,14 @@ import {
   PageHeader,
   SurfaceCard,
   useTabPanelConfig,
-  useWorkspaceSpaces,
 } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   analyzePromptTemplateApi,
-  createPlatformPrompt,
-  createWorkspacePrompt,
-  fetchPlatformPromptDetail,
-  fetchWorkspacePromptDetail,
-  updatePlatformPrompt,
-  updateWorkspacePrompt,
+  createPrompt,
+  fetchPromptDetail,
+  updatePrompt,
   translatePromptDraft,
 } from "@/domain/prompt/api";
 import {
@@ -55,20 +53,15 @@ import { usePromptTranslation } from "@/domain/prompt/hooks";
 import {
   analyzePromptTemplateMock,
   createPlatformPromptMock,
-  createWorkspacePromptMock,
   getPlatformPromptMock,
-  getWorkspacePromptMock,
   updatePlatformPromptMock,
-  updateWorkspacePromptMock,
   translatePromptDraftMock,
 } from "@/domain/prompt/mock";
 import {
   fetchPlatformPromptVariableOptions,
-  fetchWorkspacePromptVariableOptions,
 } from "@/domain/variable/api";
 import {
   listPlatformPromptVariableOptions,
-  listWorkspacePromptVariableOptions,
 } from "@/domain/variable/mock/data";
 import type { PromptVariableOption } from "@/domain/variable/model";
 import {
@@ -80,7 +73,6 @@ import {
   type PromptAnalyzeResult,
   type PromptCategory,
   type PromptRecord,
-  type PromptScopeKind,
   type PromptTranslation,
   type PromptTranslationPayload,
   type PromptTranslationStatus,
@@ -88,8 +80,16 @@ import {
   type PromptVariableType,
 } from "@/domain/prompt/model";
 
+function ReadOnlyValue({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const isEmpty = children == null || children === "";
+  return (
+    <div className={`min-h-6 min-w-0 py-1 text-sm leading-6 text-[var(--color-on-surface)] whitespace-pre-wrap break-words [overflow-wrap:anywhere] ${className}`}>
+      {isEmpty ? <span className="text-[var(--color-on-surface-variant)]">—</span> : children}
+    </div>
+  );
+}
+
 interface PromptFormState {
-  allowInheritance: boolean;
   category: PromptCategory;
   description: string;
   displayName: string;
@@ -126,7 +126,6 @@ function emptyTranslation(locale: PromptLocale): PromptTranslation {
 
 function emptyForm(): PromptFormState {
   return {
-    allowInheritance: true,
     category: "SYSTEM",
     description: "",
     displayName: "",
@@ -153,7 +152,6 @@ function formFromRecord(record: PromptRecord): PromptFormState {
     ?? translations.find((item) => item.locale === "en-US")
     ?? translations[0];
   return {
-    allowInheritance: record.allowInheritance ?? true,
     category: record.category,
     description: defaultTranslation?.description ?? record.description ?? "",
     displayName: defaultTranslation?.displayName ?? record.displayName,
@@ -178,24 +176,19 @@ function requiredLabel(label: string) {
 
 export function PromptEditorPage({
   mode,
-  scopeKind,
   editable = mode === "create",
 }: {
   mode: "create" | "detail";
-  scopeKind: PromptScopeKind;
   editable?: boolean;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const pt = usePromptTranslation();
   const toast = useToast();
   const promptDataSource = getServiceDataSource("prompt");
   const variableDataSource = getServiceDataSource("variable");
-  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
-  const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
-  const workspaceCode = scopeKind === "WORKSPACE" ? activeWorkspace?.workspaceCode ?? "" : "";
   const promptCode = mode === "detail" ? searchParams.get("promptCode")?.trim() ?? "" : "";
-  const isOverrideMode = searchParams.get("mode") === "override";
   const isReadOnlyDetail = mode === "detail" && !editable;
   const [form, setForm] = useState<PromptFormState>(() => emptyForm());
   const [activeLocale, setActiveLocale] = useState<PromptLocale>("zh-CN");
@@ -221,9 +214,9 @@ export function PromptEditorPage({
     () => promptVariablesAreReady(form.promptBody, form.variables),
     [form.promptBody, form.variables],
   );
-  const listHref = scopeKind === "WORKSPACE" ? "/prompts" : "/settings/prompts";
-  const detailHref = scopeKind === "WORKSPACE" ? "/prompts/detail" : "/settings/prompts/detail";
-  const editHref = scopeKind === "WORKSPACE" ? "/prompts/edit" : "/settings/prompts/edit";
+  const listHref = "/settings/prompts";
+  const detailHref = "/settings/prompts/detail";
+  const editHref = "/settings/prompts/edit";
 
   useTabPanelConfig({
     searchPlaceholder: pt("shell.searchPlaceholder", "Search prompts..."),
@@ -243,20 +236,16 @@ export function PromptEditorPage({
       setLoading(false);
       return;
     }
-    if (!promptCode || (scopeKind === "WORKSPACE" && !workspaceCode)) {
+    if (!promptCode) {
       setLoading(false);
       return;
     }
 
     const controller = new AbortController();
     setLoading(true);
-    const request = scopeKind === "WORKSPACE"
-      ? (promptDataSource === "api"
-        ? fetchWorkspacePromptDetail({ promptCode, workspaceCode }, controller.signal)
-        : Promise.resolve(getWorkspacePromptMock({ promptCode, workspaceCode })))
-      : (promptDataSource === "api"
-        ? fetchPlatformPromptDetail({ promptCode }, controller.signal)
-        : Promise.resolve(getPlatformPromptMock({ promptCode })));
+    const request = promptDataSource === "api"
+      ? fetchPromptDetail({ promptCode }, controller.signal)
+      : Promise.resolve(getPlatformPromptMock({ promptCode }));
 
     request
       .then((nextRecord) => {
@@ -273,7 +262,7 @@ export function PromptEditorPage({
       });
 
     return () => controller.abort();
-  }, [mode, promptCode, promptDataSource, pt, scopeKind, toast, workspaceCode]);
+  }, [mode, promptCode, promptDataSource, pt, toast]);
 
   useEffect(() => {
     setBackendAnalysis(null);
@@ -380,7 +369,6 @@ export function PromptEditorPage({
         const draft = promptDataSource === "api"
           ? await translatePromptDraft({
             promptCode: promptCode || undefined,
-            workspaceCode: activeWorkspace?.workspaceCode || undefined,
             sourceLocale,
             targetLocale,
             displayName: form.displayName,
@@ -470,12 +458,8 @@ export function PromptEditorPage({
     if (!managedVariables.length) return;
 
     const options = variableDataSource === "api"
-      ? (scopeKind === "WORKSPACE"
-        ? await fetchWorkspacePromptVariableOptions(workspaceCode)
-        : await fetchPlatformPromptVariableOptions())
-      : (scopeKind === "WORKSPACE"
-        ? listWorkspacePromptVariableOptions(workspaceCode)
-        : listPlatformPromptVariableOptions());
+      ? await fetchPlatformPromptVariableOptions()
+      : listPlatformPromptVariableOptions();
     const availableKeys = new Set(options
       .filter((option) => option.sourceKind === "MANAGED")
       .map((option) => option.managedVariableKey ?? option.key));
@@ -514,10 +498,6 @@ export function PromptEditorPage({
       );
       setFormErrors((current) => ({ ...current, variables }));
       toast.error(variables);
-      return;
-    }
-    if (scopeKind === "WORKSPACE" && !workspaceCode) {
-      toast.error(pt("errors.workspaceRequiredForSave", "Select a workspace before saving"));
       return;
     }
     setSubmitting(true);
@@ -562,33 +542,18 @@ export function PromptEditorPage({
       };
 
       let saved: PromptRecord;
-      if (mode === "create" && scopeKind === "WORKSPACE") {
-        const payload = { ...commonFields, allowInheritance: form.allowInheritance, category: form.category, workspaceCode };
-        saved = promptDataSource === "api" ? await createWorkspacePrompt(payload) : createWorkspacePromptMock(payload);
-      } else if (mode === "create") {
+      if (mode === "create") {
         const payload = { ...commonFields, category: form.category };
-        saved = promptDataSource === "api" ? await createPlatformPrompt(payload) : createPlatformPromptMock(payload);
-      } else if (scopeKind === "WORKSPACE") {
-        if (!record) throw new Error(pt("errors.detailsNotLoaded", "Prompt details are not loaded"));
-        const payload = {
-          ...commonFields,
-          allowInheritance: record.sourceKind === "LOCAL" ? form.allowInheritance : undefined,
-          expectedVersion: record.version,
-          promptCode,
-          workspaceCode,
-        };
-        saved = promptDataSource === "api" ? await updateWorkspacePrompt(payload) : updateWorkspacePromptMock(payload);
+        saved = promptDataSource === "api" ? await createPrompt(payload) : createPlatformPromptMock(payload);
       } else {
         if (!record) throw new Error(pt("errors.detailsNotLoaded", "Prompt details are not loaded"));
         const payload = { ...commonFields, expectedVersion: record.version, promptCode };
-        saved = promptDataSource === "api" ? await updatePlatformPrompt(payload) : updatePlatformPromptMock(payload);
+        saved = promptDataSource === "api" ? await updatePrompt(payload) : updatePlatformPromptMock(payload);
       }
 
-      toast.success(isOverrideMode
-        ? pt("messages.overrideSaved", "Override saved")
-        : pt("messages.saved", "Prompt saved"));
+      toast.success(pt("messages.saved", "Prompt saved"));
       const params = new URLSearchParams({ promptCode: saved.promptCode });
-      navigate(`${scopeKind === "WORKSPACE" ? "/prompts/detail" : "/settings/prompts/detail"}?${params.toString()}`);
+      navigate(`${detailHref}?${params.toString()}`, { state: location.state });
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : pt("errors.save", "Prompt could not be saved"));
     } finally {
@@ -597,22 +562,15 @@ export function PromptEditorPage({
   }
 
   const title = mode === "create"
-    ? (scopeKind === "WORKSPACE"
-      ? pt("titles.createWorkspace", "Create Prompt")
-      : pt("titles.createPlatform", "Create Platform Prompt"))
-    : (isOverrideMode
-      ? pt("titles.createOverride", "Create Prompt Override")
-      : editable
-        ? (scopeKind === "WORKSPACE"
-          ? pt("titles.editWorkspace", "Edit Prompt")
-          : pt("titles.editPlatform", "Edit Platform Prompt"))
-        : pt("titles.details", "Prompt Details"));
+    ? pt("titles.createPlatform", "Create Platform Prompt")
+    : editable
+      ? pt("titles.editPlatform", "Edit Platform Prompt")
+      : pt("titles.details", "Prompt Details");
   const cancelHref = mode === "detail"
     ? `${detailHref}?${new URLSearchParams({ promptCode }).toString()}`
     : listHref;
   const editUrl = `${editHref}?${new URLSearchParams({
     ...(promptCode ? { promptCode } : {}),
-    ...(isOverrideMode ? { mode: "override" } : {}),
   }).toString()}`;
   const categoryField = (
     <Field label={requiredLabel(pt("fields.category", "Category"))}>
@@ -623,6 +581,11 @@ export function PromptEditorPage({
       >
         {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`categories.${option.value}`, option.label)}</SelectItem>)}
       </SelectInput>
+    </Field>
+  );
+  const categoryDetailField = (
+    <Field label={pt("fields.category", "Category")}>
+      <ReadOnlyValue>{pt(`categories.${form.category}`, promptCategoryOptions.find((option) => option.value === form.category)?.label ?? form.category)}</ReadOnlyValue>
     </Field>
   );
   const enabledField = (
@@ -637,34 +600,25 @@ export function PromptEditorPage({
       </SelectInput>
     </Field>
   );
-  const inheritanceField = (
-    <Field label={requiredLabel(pt("fields.allowInheritance", "Allow inheritance"))}>
-      <SelectInput
-        disabled={editorLocked}
-        value={form.allowInheritance ? "true" : "false"}
-        onValueChange={(value) => updateForm("allowInheritance", value === "true")}
-      >
-        <SelectItem value="true">{pt("status.inheritanceAllowed", "Allowed")}</SelectItem>
-        <SelectItem value="false">{pt("status.inheritanceDisallowed", "Not allowed")}</SelectItem>
-      </SelectInput>
+  const enabledDetailField = (
+    <Field label={pt("fields.status", "Status")}>
+      <ReadOnlyValue>{form.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</ReadOnlyValue>
     </Field>
   );
-
   return (
     <>
       <PageHeader
         breadcrumbs={[{
-          label: scopeKind === "WORKSPACE"
-            ? pt("titles.workspace", "Prompts")
-            : pt("titles.platform", "Platform Prompts"),
+          label: pt("titles.platform", "Platform Prompts"),
           href: listHref,
+          state: location.state,
         }, { label: title }]}
         title={title}
         actions={(
           isReadOnlyDetail ? (
             <>
-              <Button size="lg" variant="outline" onClick={() => navigate(listHref)}>{pt("actions.back", "Back")}</Button>
-              <Button size="lg" onClick={() => navigate(editUrl)}>{isOverrideMode ? pt("actions.edit", "Edit") : pt("actions.edit", "Edit")}</Button>
+              <Button size="lg" variant="outline" onClick={() => navigate(listHref, { state: location.state })}>{pt("actions.back", "Back")}</Button>
+              <Button size="lg" onClick={() => navigate(editUrl, { state: location.state })}>{pt("actions.edit", "Edit")}</Button>
             </>
           ) : (
             <>
@@ -686,7 +640,7 @@ export function PromptEditorPage({
                 />
                 <TooltipContent>{pt("hints.translationSync", "Uses the current language to translate and overwrite the other languages.")}</TooltipContent>
               </Tooltip>
-              <Button size="lg" variant="outline" disabled={editorLocked} onClick={() => navigate(cancelHref)}>{pt("actions.cancel", "Cancel")}</Button>
+              <Button size="lg" variant="outline" disabled={editorLocked} onClick={() => navigate(cancelHref, { state: location.state })}>{pt("actions.cancel", "Cancel")}</Button>
               <Button
                 size="lg"
                 disabled={editorLocked}
@@ -701,31 +655,9 @@ export function PromptEditorPage({
         )}
       />
       <div className="w-full">
-        {scopeKind === "WORKSPACE" && !workspaceCode ? (
-          <SurfaceCard className="text-sm text-[var(--color-on-surface-variant)]">{pt("empty.workspaceEditor", "Select a workspace to edit prompts.")}</SurfaceCard>
-        ) : (
           <SurfaceCard className="space-y-5">
-            {record ? (
-              <div className="grid gap-4 border-b border-[var(--color-outline-variant)] pb-5 sm:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <p className="text-xs font-medium text-[var(--color-on-surface-variant)]">{pt("fields.source", "Source")}</p>
-                  <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{record.sourceLabel}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-[var(--color-on-surface-variant)]">{pt("fields.sourceType", "Source type")}</p>
-                  <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{pt(`sources.${record.sourceKind}`, record.sourceKind)}</p>
-                </div>
-                {record.sourceWorkspacePath.length ? (
-                  <div>
-                    <p className="text-xs font-medium text-[var(--color-on-surface-variant)]">{pt("fields.workspacePath", "Workspace path")}</p>
-                    <p className="mt-1 break-words text-sm text-[var(--color-on-surface-variant)]">{record.sourceWorkspacePath.map((item) => item.name).join(" / ")}</p>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             <div className="grid gap-4 md:grid-cols-2 md:items-end">
-              <Field label={requiredLabel(pt("fields.language", "Language"))} hint={pt("hints.translationReview", "Edit one language at a time. Translation uses the current language to overwrite and synchronize the other languages.")}>
+              <Field label={mode === "detail" ? pt("fields.language", "Language") : requiredLabel(pt("fields.language", "Language"))} hint={mode === "detail" ? undefined : pt("hints.translationReview", "Edit one language at a time. Translation uses the current language to overwrite and synchronize the other languages.")}>
                 <SelectInput
                   aria-label={pt("fields.language", "Language")}
                   disabled={loading || submitting || translating}
@@ -749,33 +681,44 @@ export function PromptEditorPage({
               {mode === "detail" ? (
                 <Field label={pt("fields.promptCode", "Prompt code")}>
                   <div className="relative w-full min-w-0">
-                    <TextInput aria-label={pt("fields.promptCode", "Prompt code")} className="w-full min-w-0 pr-12 font-mono" disabled readOnly value={record?.promptCode ?? promptCode} />
+                    <ReadOnlyValue className="pr-12 font-mono">{record?.promptCode ?? promptCode}</ReadOnlyValue>
                     <Button className="absolute right-1 top-1/2 -translate-y-1/2" size="icon" variant="ghost" disabled={loading || submitting || translating} aria-label={pt("aria.copyPromptCode", "Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("messages.codeCopied", "Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
                   </div>
                 </Field>
               ) : categoryField}
 
-              <Field label={requiredLabel(pt("fields.name", "Name"))}>
-                <TextInput aria-invalid={Boolean(formErrors.displayName)} aria-required="true" disabled={editorLocked} value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
-                {formErrors.displayName ? <p className="text-sm text-destructive-foreground">{formErrors.displayName}</p> : null}
-              </Field>
+              {isReadOnlyDetail ? (
+                <Field label={pt("fields.name", "Name")}>
+                  <ReadOnlyValue>{form.displayName}</ReadOnlyValue>
+                </Field>
+              ) : (
+                <Field label={requiredLabel(pt("fields.name", "Name"))}>
+                  <TextInput aria-invalid={Boolean(formErrors.displayName)} aria-required="true" disabled={editorLocked} value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
+                  {formErrors.displayName ? <p className="text-sm text-destructive-foreground">{formErrors.displayName}</p> : null}
+                </Field>
+              )}
 
-              {mode === "detail" ? categoryField : enabledField}
-              {mode === "detail" ? enabledField : null}
-              {scopeKind === "WORKSPACE" && (mode === "create" || record?.sourceKind === "LOCAL") ? inheritanceField : null}
+              {mode === "detail" ? categoryDetailField : enabledField}
+              {mode === "detail" ? enabledDetailField : null}
             </div>
 
             <Field label={pt("fields.description", "Description")}>
-              <TextArea disabled={editorLocked} aria-label={pt("fields.description", "Description")} className="min-h-24 resize-y" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
+              {isReadOnlyDetail ? (
+                <ReadOnlyValue>{form.description}</ReadOnlyValue>
+              ) : (
+                <TextArea disabled={editorLocked} aria-label={pt("fields.description", "Description")} className="min-h-24 resize-y" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
+              )}
             </Field>
 
             <div className="grid gap-1.5">
               <div className="flex flex-wrap items-center justify-between gap-[12px]">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-on-surface)]">
-                  {requiredLabel(pt("fields.promptBody", "Prompt body"))}
-                  <InfoTooltip ariaLabel={pt("aria.promptBodyVariablesHelp", "Prompt variable usage help")}>
-                    {pt("hints.promptBodyVariables", "Type {{ to search and select an available variable management entry or runtime variable. Sensitive variables cannot be inserted into prompts.")}
-                  </InfoTooltip>
+                  {isReadOnlyDetail ? pt("fields.promptBody", "Prompt body") : requiredLabel(pt("fields.promptBody", "Prompt body"))}
+                  {!isReadOnlyDetail ? (
+                    <InfoTooltip ariaLabel={pt("aria.promptBodyVariablesHelp", "Prompt variable usage help")}>
+                      {pt("hints.promptBodyVariables", "Type {{ to search and select an available variable management entry or runtime variable. Sensitive variables cannot be inserted into prompts.")}
+                    </InfoTooltip>
+                  ) : null}
                 </span>
                 <Button
                   size="sm"
@@ -828,9 +771,7 @@ export function PromptEditorPage({
                       runtimeSourceLabel: (provider, fallback) => pt(`runtimeVariables.${provider}.sourceLabel`, fallback),
                       searchPlaceholder: pt("hints.variableOptionSearch", "Search variables"),
                     }}
-                    scopeKind={scopeKind}
                     trigger={promptVariablePickerTrigger}
-                    workspaceCode={workspaceCode}
                     onDismiss={() => setPromptVariablePickerTrigger(null)}
                     onSelect={selectPromptVariable}
                   />
@@ -882,29 +823,43 @@ export function PromptEditorPage({
                         </div>
                         <div className="space-y-2 md:space-y-0">
                           <span className="block text-sm font-medium md:hidden">{pt("fields.type", "Type")}</span>
-                          <SelectInput
-                            aria-label={pt("aria.variableType", "Type {{name}}", { name: variable.name })}
-                            disabled={editorLocked || variable.sourceKind === "RUNTIME"}
-                            value={variable.type}
-                            onValueChange={(value) => updateVariable(variable.name, { type: value as PromptVariableType })}
-                          >
-                            {promptVariableTypeOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                          </SelectInput>
+                          {isReadOnlyDetail ? (
+                            <ReadOnlyValue className="min-h-10">{promptVariableTypeOptions.find((option) => option.value === variable.type)?.label ?? variable.type}</ReadOnlyValue>
+                          ) : (
+                            <SelectInput
+                              aria-label={pt("aria.variableType", "Type {{name}}", { name: variable.name })}
+                              disabled={editorLocked || variable.sourceKind === "RUNTIME"}
+                              value={variable.type}
+                              onValueChange={(value) => updateVariable(variable.name, { type: value as PromptVariableType })}
+                            >
+                              {promptVariableTypeOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                              ))}
+                            </SelectInput>
+                          )}
                         </div>
                         <div className="space-y-2 md:space-y-0">
                           <span className="block text-sm font-medium md:hidden">{pt("fields.description", "Description")}</span>
-                          <TextInput
-                            aria-label={pt("aria.variableDescription", "Description {{name}}", { name: variable.name })}
-                            disabled={editorLocked || variable.sourceKind === "RUNTIME"}
-                            maxLength={promptVariableDescriptionMaxLength}
-                            value={variable.sourceKind === "RUNTIME" && variable.runtimeProvider
-                              ? pt(`runtimeVariables.${variable.runtimeProvider}.description`, variable.description)
-                              : variable.description}
-                            onChange={(event) => updateVariable(variable.name, { description: event.target.value })}
-                          />
-                          {!variable.description.trim() ? <p className="mt-2 text-xs text-destructive-foreground">{pt("validation.variableDescriptionRequired", "Variable description is required")}</p> : null}
+                          {isReadOnlyDetail ? (
+                            <ReadOnlyValue className="min-h-10">
+                              {variable.sourceKind === "RUNTIME" && variable.runtimeProvider
+                                ? pt(`runtimeVariables.${variable.runtimeProvider}.description`, variable.description)
+                                : variable.description}
+                            </ReadOnlyValue>
+                          ) : (
+                            <>
+                              <TextInput
+                                aria-label={pt("aria.variableDescription", "Description {{name}}", { name: variable.name })}
+                                disabled={editorLocked || variable.sourceKind === "RUNTIME"}
+                                maxLength={promptVariableDescriptionMaxLength}
+                                value={variable.sourceKind === "RUNTIME" && variable.runtimeProvider
+                                  ? pt(`runtimeVariables.${variable.runtimeProvider}.description`, variable.description)
+                                  : variable.description}
+                                onChange={(event) => updateVariable(variable.name, { description: event.target.value })}
+                              />
+                              {!variable.description.trim() ? <p className="mt-2 text-xs text-destructive-foreground">{pt("validation.variableDescriptionRequired", "Variable description is required")}</p> : null}
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -913,7 +868,6 @@ export function PromptEditorPage({
               ) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("empty.noVariables", "No variables detected")}</p>}
             </div>
           </SurfaceCard>
-        )}
       </div>
       {promptBodyFullscreenOpen ? createPortal(
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">

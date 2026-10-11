@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createInternalAgentGroup, fetchInternalAgentGroups } from "../api/agentManagementApi";
-import { createInternalAgentGroupMock, listInternalAgentGroupsMock } from "../mock/managementData";
+import { createInternalAgentGroup, deleteInternalAgentGroup, fetchInternalAgentGroups } from "../api/agentManagementApi";
+import { createInternalAgentGroupMock, deleteInternalAgentGroupMock, listInternalAgentGroupsMock } from "../mock/managementData";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 export function useInternalAgentGroups(workspaceCode: string) {
@@ -17,5 +17,10 @@ export function useInternalAgentGroups(workspaceCode: string) {
     client.setQueryData<string[]>(queryKey, (current = []) => [...new Set([...current, group.name])].sort());
     return group.name;
   }
-  return { ...query, groups: query.data ?? [], create };
+  async function remove(name: string) {
+    if (source === "api") await deleteInternalAgentGroup(workspaceCode, name);
+    else deleteInternalAgentGroupMock(workspaceCode, name);
+    client.setQueryData<string[]>(queryKey, (current = []) => current.filter((group) => group !== name));
+  }
+  return { ...query, groups: query.data ?? [], create, remove };
 }

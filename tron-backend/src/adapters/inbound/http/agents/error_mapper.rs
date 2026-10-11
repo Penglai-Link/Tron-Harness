@@ -143,6 +143,11 @@ pub fn agent_management_error_response(error: AgentManagementError) -> Response 
             "101028017",
             "Built-in agent definitions are read-only".to_owned(),
         ),
+        AgentManagementError::PlatformAgentReadOnly => (
+            StatusCode::FORBIDDEN,
+            "101028018",
+            "Platform agents can only be deleted in platform settings".to_owned(),
+        ),
         AgentManagementError::InternalAgentGroupInvalid => (
             StatusCode::BAD_REQUEST,
             "101028016",

@@ -4,6 +4,7 @@ import { Field, SelectInput, TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
 import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
+import { translateInternalAgentGroupName } from "../constants/agentPresentation";
 
 export function InternalAgentGroupField({ workspaceCode, value, disabled, onChange }: {
   workspaceCode: string; value: string; disabled?: boolean; onChange: (name: string) => void;
@@ -25,7 +26,7 @@ export function InternalAgentGroupField({ workspaceCode, value, disabled, onChan
   return <Field label={text("label")} error={error ? text("failed") : undefined} actions={!disabled ? <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setAdding(!adding)}>{text("new")}</Button> : undefined}>
     <SelectInput aria-label={text("label")} disabled={disabled || isPending} value={value ? `group:${value}` : "ungrouped"} onValueChange={(next) => onChange(!next || next === "ungrouped" ? "" : next.slice(6))}>
       <SelectItem value="ungrouped">{text("ungrouped")}</SelectItem>
-      {options.map((group) => <SelectItem key={group} value={`group:${group}`}>{group}</SelectItem>)}
+      {options.map((group) => <SelectItem key={group} value={`group:${group}`}>{translateInternalAgentGroupName(t, group)}</SelectItem>)}
     </SelectInput>
     {adding && !disabled ? <div className="mt-2 flex gap-2">
       <TextInput aria-label={text("name")} placeholder={text("name")} maxLength={60} disabled={disabled} value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void add(); } }} />

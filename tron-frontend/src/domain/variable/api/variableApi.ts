@@ -15,7 +15,6 @@ export const variableApiEndpoints = {
   deletePlatformVariable: "DELETE /api/v1/admin/platform/variables/{variableKey}",
   revealPlatformVariable: "POST /api/v1/admin/platform/variables/reveal-platform-variable",
   listVariables: "GET /api/v1/variables/workspaces/{workspaceCode}",
-  listWorkspacePromptOptions: "GET /api/v1/variables/workspaces/{workspaceCode}/prompt-options",
   createVariable: "POST /api/v1/variables/workspaces/{workspaceCode}",
   updateVariable: "PATCH /api/v1/variables/workspaces/{workspaceCode}/{variableKey}",
   deleteVariable: "DELETE /api/v1/variables/workspaces/{workspaceCode}/{variableKey}",
@@ -111,19 +110,6 @@ export function fetchVariableCatalog(
     queryParams: {
       search: query.search ?? "",
     },
-    signal,
-  });
-}
-
-export function fetchWorkspacePromptVariableOptions(
-  workspaceCode: string,
-  query: VariableCatalogQuery = {},
-  signal?: AbortSignal,
-) {
-  return requestApi<PromptVariableOption[]>(variableApiEndpoints.listWorkspacePromptOptions, {
-    cache: "no-store",
-    pathParams: { workspaceCode },
-    queryParams: { search: query.search ?? "" },
     signal,
   });
 }

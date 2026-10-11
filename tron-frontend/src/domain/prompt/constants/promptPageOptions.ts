@@ -1,6 +1,5 @@
 import type {
   PromptCategory,
-  PromptSourceKind,
   PromptVariableType,
 } from "@/domain/prompt/model";
 
@@ -13,11 +12,9 @@ export const promptCategoryOptions: Array<{ label: string; value: PromptCategory
   { label: "Action", value: "ACTION" },
 ];
 
-export const promptSourceOptions: Array<{ label: string; value: PromptSourceKind }> = [
-  { label: "Local", value: "LOCAL" },
-  { label: "Inherited", value: "INHERITED" },
-  { label: "Override", value: "OVERRIDE" },
-];
+export const promptFilterCategoryOptions = promptCategoryOptions.filter(
+  (option) => option.value !== "PERSONA",
+);
 
 export const promptVariableTypeOptions: Array<{ label: string; value: PromptVariableType }> = [
   { label: "STRING", value: "STRING" },

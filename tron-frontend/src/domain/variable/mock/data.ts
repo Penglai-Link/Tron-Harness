@@ -217,26 +217,6 @@ function matchesPromptVariableOption(
     .includes(normalizedSearch);
 }
 
-export function listWorkspacePromptVariableOptions(
-  workspaceCode: string,
-  search = "",
-): PromptVariableOption[] {
-  const managed = listVariableCatalog(workspaceCode)
-    .filter((variable) => !variable.isSensitive && variable.hasValue)
-    .map((variable) => ({
-      id: `MANAGED:${variable.key}`,
-      key: variable.key,
-      type: "STRING" as const,
-      description: variable.description,
-      sourceKind: "MANAGED" as const,
-      sourceLabel: variable.sourceLabel,
-      managedVariableKey: variable.key,
-      runtimeProvider: null,
-    }));
-  return [...managed, ...runtimePromptVariableOptions]
-    .filter((variable) => matchesPromptVariableOption(variable, search));
-}
-
 export function listPlatformPromptVariableOptions(search = ""): PromptVariableOption[] {
   const managed = listPlatformVariableRecords()
     .filter((variable) => !variable.isSensitive && variable.hasValue)

@@ -7,12 +7,10 @@ import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import { usePromptPage } from "@/domain/prompt/hooks/usePromptPage";
 import { usePromptTemplateDetail } from "@/domain/prompt/hooks/usePromptTemplateDetail";
 import { usePromptTranslation } from "@/domain/prompt/hooks/usePromptTranslation";
-import type { PromptPageQuery, PromptScopeKind } from "@/domain/prompt/model";
+import type { PromptPageQuery } from "@/domain/prompt/model";
 import { localizedPromptContent } from "@/domain/prompt/model/promptLocalization";
 
 interface RolePromptTemplatePickerProps {
-  scopeKind: PromptScopeKind;
-  workspaceCode?: string;
   value: string;
   disabled?: boolean;
   onApply: (promptBody: string) => void;
@@ -31,7 +29,7 @@ export function RolePromptTemplatePicker(props: RolePromptTemplatePickerProps) {
   );
 }
 
-function RolePromptTemplatePickerContent({ scopeKind, workspaceCode, value, disabled, onApply, onClose }: RolePromptTemplatePickerProps & { onClose: () => void }) {
+function RolePromptTemplatePickerContent({ value, disabled, onApply, onClose }: RolePromptTemplatePickerProps & { onClose: () => void }) {
   const pt = usePromptTranslation();
   const { currentLocale } = useLocaleFormatters();
   const [search, setSearch] = useState("");
@@ -44,9 +42,9 @@ function RolePromptTemplatePickerContent({ scopeKind, workspaceCode, value, disa
     setCurrent(1);
     setSelectedCode("");
   }, []);
-  const query = useMemo<PromptPageQuery>(() => ({ current, size, search: search.trim() || undefined, category: "AGENT_ROLE", enabled: true, workspaceCode }), [current, search, size, workspaceCode]);
-  const { page, loading, error, refresh } = usePromptPage(scopeKind, query);
-  const detail = usePromptTemplateDetail(scopeKind, workspaceCode, selectedCode);
+  const query = useMemo<PromptPageQuery>(() => ({ current, size, search: search.trim() || undefined, category: "AGENT_ROLE", enabled: true }), [current, search, size]);
+  const { page, loading, error, refresh } = usePromptPage(query);
+  const detail = usePromptTemplateDetail(selectedCode);
   const selected = detail.record?.enabled && detail.record.category === "AGENT_ROLE" ? detail.record : null;
   const content = selected ? localizedPromptContent(selected, currentLocale) : null;
 

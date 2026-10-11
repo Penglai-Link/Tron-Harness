@@ -4,8 +4,8 @@ use rusqlite::{Connection, params};
 use crate::{
     application::prompt::PromptRepository,
     domain::prompt::{
-        Prompt, PromptCategory, PromptError, PromptRuntimeProvider, PromptScopeKind,
-        PromptSourceKind, PromptTranslation, PromptTranslationStatus, PromptVariable,
+        Prompt, PromptCategory, PromptError, PromptRuntimeProvider,
+        PromptTranslation, PromptTranslationStatus, PromptVariable,
         PromptVariableSourceKind, PromptVariableType,
     },
     shared::{
@@ -37,12 +37,11 @@ impl PromptRepository for SqlitePromptRepositorySql<'_> {
         let mut prompts =
             {
                 let mut statement = self.connection.prepare(
-                "SELECT id, scope_kind, workspace_code, prompt_code, display_name, category,
-                        prompt_body, description, enabled, source_kind, source_prompt_code,
-                        allow_inheritance, version,
+                "SELECT id, prompt_code, display_name, category, prompt_body, description,
+                        enabled, version,
                         created_at, updated_at, built_in, runtime_required, catalog_key
                  FROM prompts
-                 ORDER BY scope_kind, workspace_code, display_name, prompt_code",
+                 ORDER BY display_name, prompt_code",
             ).map_err(storage_error)?;
                 statement
                     .query_map([], decode_prompt)
@@ -71,18 +70,14 @@ impl PromptRepository for SqlitePromptRepositorySql<'_> {
             .execute(
                 "UPDATE prompts
              SET display_name = ?2, prompt_body = ?3, description = ?4, enabled = ?5,
-                 source_kind = ?6, source_prompt_code = ?7, allow_inheritance = ?8,
-                 version = ?9, updated_at = ?10
-             WHERE prompt_code = ?1 AND version = ?11",
+                 version = ?6, updated_at = ?7
+             WHERE prompt_code = ?1 AND version = ?8",
                 params![
                     prompt.prompt_code,
                     prompt.display_name,
                     prompt.prompt_body,
                     prompt.description,
                     bool_to_int(prompt.enabled),
-                    source_kind_to_storage(prompt.source_kind),
-                    prompt.source_prompt_code,
-                    prompt.allow_inheritance.map(bool_to_int),
                     prompt.version,
                     timestamp_to_millis(&prompt.updated_at),
                     expected_version,

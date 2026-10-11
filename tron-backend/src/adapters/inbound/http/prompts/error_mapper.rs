@@ -10,16 +10,6 @@ use super::response::PromptApiResponse;
 
 pub fn prompt_error_response(error: PromptError) -> Response {
     let (status, code, message) = match error {
-        PromptError::WorkspaceRequired => (
-            StatusCode::BAD_REQUEST,
-            "PROMPT_WORKSPACE_REQUIRED",
-            "workspaceCode is required".into(),
-        ),
-        PromptError::InvalidWorkspace => (
-            StatusCode::BAD_REQUEST,
-            "PROMPT_WORKSPACE_INVALID",
-            "prompt workspace must reference an active workspace".into(),
-        ),
         PromptError::NotFound => (
             StatusCode::NOT_FOUND,
             "PROMPT_NOT_FOUND",
@@ -31,7 +21,7 @@ pub fn prompt_error_response(error: PromptError) -> Response {
         PromptError::DuplicateDisplayName => (
             StatusCode::CONFLICT,
             "PROMPT_DISPLAY_NAME_DUPLICATE",
-            "displayName already exists in prompt scope".into(),
+            "displayName already exists".into(),
         ),
         PromptError::BuiltinMutationDenied => (
             StatusCode::BAD_REQUEST,
@@ -42,21 +32,6 @@ pub fn prompt_error_response(error: PromptError) -> Response {
             StatusCode::BAD_REQUEST,
             "PROMPT_RUNTIME_REQUIRED",
             "runtime-required prompts cannot be disabled".into(),
-        ),
-        PromptError::InheritedMutationDenied => (
-            StatusCode::BAD_REQUEST,
-            "PROMPT_INHERITED_MUTATION_INVALID",
-            "inherited prompt cannot be deleted".into(),
-        ),
-        PromptError::AllowInheritanceUnsupported => (
-            StatusCode::BAD_REQUEST,
-            "PROMPT_ALLOW_INHERITANCE_INVALID",
-            "allowInheritance is supported only for workspace-local prompts".into(),
-        ),
-        PromptError::RevertUnsupported => (
-            StatusCode::BAD_REQUEST,
-            "PROMPT_REVERT_INVALID",
-            "prompt has no workspace override to revert".into(),
         ),
         PromptError::VersionConflict => (
             StatusCode::CONFLICT,

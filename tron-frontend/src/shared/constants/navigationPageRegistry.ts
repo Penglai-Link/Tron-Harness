@@ -10,7 +10,6 @@ export const navigationPageRegistry: Record<string, string> = {
   "memory.index": "/memory",
   "models.index": "/models",
   "observability.index": "/observability",
-  "prompts.index": "/prompts",
   "rag.index": "/rag",
   "resourceManagement.dataSources": "/resource-management/data-sources",
   "resourceManagement.files": "/resource-management/files",

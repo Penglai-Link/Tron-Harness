@@ -62,26 +62,6 @@ pub async fn list_variables(
     }
 }
 
-pub async fn list_workspace_prompt_variable_options(
-    State(state): State<AppState>,
-    Path(workspace_code): Path<String>,
-    Query(query): Query<PromptVariableOptionsQuery>,
-) -> Response {
-    match state.variables.list_workspace_prompt_variable_options(
-        &workspace_code,
-        VariableCatalogQuery {
-            search: query.search.clone(),
-        },
-    ) {
-        Ok(records) => Json(ApiResponse::success(prompt_variable_options(
-            records,
-            query.search.as_deref(),
-        )))
-        .into_response(),
-        Err(error) => variable_error_response(error),
-    }
-}
-
 pub(crate) fn prompt_variable_options(
     managed: Vec<PromptVariableOption>,
     search: Option<&str>,

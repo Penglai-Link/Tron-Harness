@@ -65,7 +65,7 @@ export function SettingsAppearancePage() {
   }, [pageT]);
 
   return (
-    <div className="w-full space-y-4">
+    <div className="flex w-full flex-col gap-4">
       <PageHeader title={shellT("settings.items.appearance")} />
       <SkinSettings />
       <BackgroundAppearanceSettings />
