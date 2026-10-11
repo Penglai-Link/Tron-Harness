@@ -74,7 +74,7 @@ impl FrameworkHost {
                 .collect()
             })
             .await
-            .map_err(Into::into)
+            .map_err(failure)
     }
     pub(super) async fn thread_record(
         &self,
@@ -97,7 +97,7 @@ impl FrameworkHost {
                     .transpose()
             })
             .await
-            .map_err(Into::into)
+            .map_err(failure)
     }
     pub(super) async fn persist_thread(
         &self,
