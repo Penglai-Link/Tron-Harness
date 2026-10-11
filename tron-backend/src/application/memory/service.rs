@@ -54,6 +54,13 @@ where
         Self { rag }
     }
 
+    pub fn rag_service(&self) -> RagService<R, E>
+    where
+        E: Clone,
+    {
+        self.rag.clone()
+    }
+
     pub async fn save(
         &self,
         context: MemoryRunContext,
