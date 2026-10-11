@@ -56,6 +56,15 @@ pub trait DudeRepository: Send {
         &mut self,
         notification: &PlatformNotification,
     ) -> Result<PlatformNotification, DudeError>;
+    /// Persist the new notice and retire prior actionable notices in one unit.
+    fn notify_replacing(
+        &mut self,
+        notification: &PlatformNotification,
+        prior_kinds: &[String],
+    ) -> Result<PlatformNotification, DudeError> {
+        let _ = prior_kinds;
+        self.notify(notification)
+    }
     fn notifications(&mut self) -> Result<Vec<PlatformNotification>, DudeError>;
     fn update_notification(
         &mut self,
@@ -392,19 +401,33 @@ impl DudeService {
         self.repo()?.schedule_heartbeats(now)
     }
     pub fn notify(&self, input: NotificationInput) -> Result<PlatformNotification, DudeError> {
-        self.repo()?.notify(&PlatformNotification {
-            id: eliteforge_agent_core::SessionRecord::new("").id,
-            dedup_key: input.dedup_key,
-            dude_code: input.dude_code,
-            title: input.title,
-            body: input.body,
-            category: input.category,
-            target: input.target,
-            read_at: None,
-            resolved_at: None,
-            archived_at: None,
-            created_at: chrono::Utc::now().timestamp_millis(),
-        })
+        self.notify_replacing(input, &[])
+    }
+    pub fn notify_replacing(
+        &self,
+        input: NotificationInput,
+        prior_kinds: &[&str],
+    ) -> Result<PlatformNotification, DudeError> {
+        let prior_kinds = prior_kinds
+            .iter()
+            .map(|kind| (*kind).to_owned())
+            .collect::<Vec<_>>();
+        self.repo()?.notify_replacing(
+            &PlatformNotification {
+                id: eliteforge_agent_core::SessionRecord::new("").id,
+                dedup_key: input.dedup_key,
+                dude_code: input.dude_code,
+                title: input.title,
+                body: input.body,
+                category: input.category,
+                target: input.target,
+                read_at: None,
+                resolved_at: None,
+                archived_at: None,
+                created_at: chrono::Utc::now().timestamp_millis(),
+            },
+            &prior_kinds,
+        )
     }
     pub fn notifications(&self) -> Result<Vec<PlatformNotification>, DudeError> {
         self.repo()?.notifications()
