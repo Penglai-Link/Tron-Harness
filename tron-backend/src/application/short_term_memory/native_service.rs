@@ -633,11 +633,9 @@ impl ShortTermMemoryService {
             let (family, _) = self.framework_data_source(context, "session_family_context")?;
             prepared.sources = Some(PreparedContextSources {
                 revision: eliteforge_agent_memory::MemoryRevision {
-                    scope: eliteforge_agent_memory::MemoryScope::new(
-                        &context.workspace_code,
-                        &memory.session_code,
-                    )
-                    .map_err(|_| ShortTermMemoryError::StorageFailure)?,
+                    scope: context
+                        .memory_scope(&memory.session_code)
+                        .map_err(|_| ShortTermMemoryError::StorageFailure)?,
                     generation: "native-history".into(),
                     revision: 0,
                 },
@@ -857,6 +855,16 @@ impl ShortTermMemoryService {
                 }
                 let link: Value = serde_json::from_str(&link)
                     .map_err(|_| ShortTermMemoryError::StorageFailure)?;
+                let source = link["source_code"].as_str().unwrap_or_default();
+                let authorized = match context.collaboration_owner.as_ref() {
+                    Some(owner) if owner.kind.eq_ignore_ascii_case("DUDE") => {
+                        source == format!("__dude:{}", owner.code)
+                    }
+                    _ => !source.starts_with("__dude:"),
+                };
+                if !authorized {
+                    continue;
+                }
                 if !(task
                     .as_deref()
                     .is_some_and(|v| link["task_code"].as_str() == Some(v))

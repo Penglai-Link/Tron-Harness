@@ -38,6 +38,8 @@ use session_summary::{
 
 #[derive(Clone)]
 pub struct AgentInvocationService {
+    platform_scope: bool,
+    collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
     workspaces: WorkspaceService,
     apps: AppService,
     variables: VariableService,
@@ -74,6 +76,8 @@ impl AgentInvocationService {
         runtime_http_client: reqwest::Client,
     ) -> Self {
         Self {
+            platform_scope: false,
+            collaboration_owner: None,
             workspaces,
             apps,
             variables,
@@ -93,6 +97,20 @@ impl AgentInvocationService {
             active_runs: ActiveRunRegistry::new(),
             framework_host: None,
         }
+    }
+
+    /// Enable platform execution on a host-owned service clone. HTTP request payloads cannot set this.
+    pub fn with_platform_scope(mut self) -> Self {
+        self.platform_scope = true;
+        self
+    }
+
+    pub fn with_collaboration_owner(
+        mut self,
+        owner: crate::domain::agent::AgentCollaborationOwner,
+    ) -> Self {
+        self.collaboration_owner = Some(owner);
+        self
     }
 
     pub fn with_framework_host(mut self, host: super::FrameworkHost) -> Self {
@@ -152,6 +170,7 @@ impl AgentInvocationService {
             self.auto_model_route.clone(),
             self.directory_inspector.clone(),
         )
+        .with_execution_identity(self.platform_scope, self.collaboration_owner.clone())
     }
 
     pub async fn generate_stateless_model(

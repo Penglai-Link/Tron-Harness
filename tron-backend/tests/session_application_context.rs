@@ -261,6 +261,7 @@ fn execution_prefix_preserves_all_directories_and_does_not_invent_a_branch() {
 fn memory_context(_run_code: &str) -> tron_backend::domain::agent::AgentRunContext {
     use tron_backend::domain::agent::*;
     AgentRunContext {
+        collaboration_owner: None,
         agent_code: None,
         conversation_code: Some("CONV-1".into()),
         run_code: eliteforge_agent_core::RunId::new_v4().to_string(),
