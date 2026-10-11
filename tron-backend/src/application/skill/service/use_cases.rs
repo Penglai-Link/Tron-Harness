@@ -112,6 +112,7 @@ impl SkillRegistryService {
         &self,
         command: InstallSkillCommand,
     ) -> Result<SkillRegistryMutationResult, SkillError> {
+        let _guard = self.mutation_lock.lock().unwrap();
         self.ensure_registry_root()?;
         let package_ref = optional_trimmed(command.package_ref)
             .or_else(|| build_package_ref(command.source_ref.clone(), command.skill_name.clone()))
@@ -152,6 +153,7 @@ impl SkillRegistryService {
     }
 
     pub fn rescan_registry(&self) -> Result<SkillRegistrySyncResult, SkillError> {
+        let _guard = self.mutation_lock.lock().unwrap();
         self.sync_registry(false, false)
     }
 
@@ -159,6 +161,7 @@ impl SkillRegistryService {
         &self,
         skill_name: &str,
     ) -> Result<SkillRegistryUninstallResult, SkillError> {
+        let _guard = self.mutation_lock.lock().unwrap();
         let skill_name = normalized_required(skill_name).ok_or(SkillError::SkillNameRequired)?;
         let registry_skill = self
             .repository
@@ -210,6 +213,7 @@ impl SkillRegistryService {
     }
 
     pub fn update_registry(&self) -> Result<SkillRegistrySyncResult, SkillError> {
+        let _guard = self.mutation_lock.lock().unwrap();
         self.ensure_registry_root()?;
         let output = self.run_skills_command(["update", "-p", "-y"], self.registry_root())?;
         if !output.status.success() {

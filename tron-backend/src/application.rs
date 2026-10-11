@@ -33,3 +33,4 @@ pub mod knowledge_base;
 pub mod capability;
 
 pub mod dude;
+pub mod dude_memory;
