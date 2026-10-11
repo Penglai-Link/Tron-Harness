@@ -87,14 +87,35 @@ test.beforeAll(async () => {
     for await (const chunk of incoming) body += chunk;
     const payload = JSON.parse(body);
     const input = JSON.stringify(payload.messages ?? []);
+    // Context compression uses a dedicated nonstream request with this exact
+    // input contract and expects {summary: nonempty string}, not a chat answer.
+    let summaryRequest: { previous_summary: string; history: unknown[]; summary_max_utf8_bytes: number } | undefined;
+    try {
+      const lastContent = payload.messages?.at(-1)?.content;
+      const candidate = typeof lastContent === "string" ? JSON.parse(lastContent) : undefined;
+      if (typeof candidate?.previous_summary === "string" && Array.isArray(candidate.history)
+        && Number.isInteger(candidate.summary_max_utf8_bytes) && candidate.summary_max_utf8_bytes > 0) {
+        summaryRequest = candidate;
+      }
+    } catch { /* Ordinary chat input is not a summary request. */ }
     providerRequests.push({ path: incoming.url, model: payload.model, stream: payload.stream,
+      purpose: summaryRequest ? "conversation_summary" : "chat",
       foreground: input.includes("acceptance-foreground-hold"), background: input.includes("acceptance-background-work"),
       messageCount: payload.messages?.length ?? 0, lastMessage: JSON.stringify(payload.messages?.at(-1) ?? null).slice(0, 2000) });
-    if (payload.stream && input.includes("acceptance-foreground-hold")) {
+    if (payload.stream && !summaryRequest && input.includes("acceptance-foreground-hold")) {
       foregroundStarted = true;
       await new Promise<void>(resolveGate => { releaseForeground = resolveGate; });
     }
-    const answer = input.includes("acceptance-background-work") ? "dude-background-finished" : input.includes("acceptance-foreground-hold") ? "dude-foreground-finished" : "Dude acceptance summary";
+    const summary = input.includes("dude-background-finished")
+      ? "The Dude completed task acceptance-background-work with result dude-background-finished."
+      : input.includes("dude-foreground-finished")
+        ? "The user discussed acceptance-foreground-hold. The Dude replied dude-foreground-finished."
+        : summaryRequest?.previous_summary || "No completed acceptance task was recorded.";
+    // These fixture summaries are ASCII, so slicing characters also enforces the
+    // framework's UTF-8 byte bound without splitting a multibyte character.
+    const answer = summaryRequest
+      ? JSON.stringify({ summary: summary.slice(0, summaryRequest.summary_max_utf8_bytes) })
+      : input.includes("acceptance-background-work") ? "dude-background-finished" : input.includes("acceptance-foreground-hold") ? "dude-foreground-finished" : "Dude acceptance summary";
     const usage = { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 };
     if (payload.stream) {
       response.writeHead(200, { "Content-Type": "text/event-stream" });
