@@ -20,7 +20,7 @@ impl SkillRegistryService {
         self.agents
             .get()
             .ok_or(SkillError::StorageFailure)?
-            .list_platform_internal_agents()
+            .all_platform_internal_agents()
             .map(|a| a.into_iter().map(|a| a.agent_code).collect())
             .map_err(|_| SkillError::StorageFailure)
     }
@@ -54,7 +54,7 @@ impl SkillRegistryService {
         }
         Ok(items)
     }
-    /// Only platform Agents receive grants. Legacy workspace-local Agents keep
+    /// Platform Agents and Dudes receive grants. Legacy workspace-local Agents keep
     /// running with an empty skill set; management APIs still reject unknown IDs.
     pub fn effective_agent_skills(
         &self,

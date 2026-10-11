@@ -100,6 +100,8 @@ async fn default_dudes_have_independent_definitions_and_survive_restart() {
         .expect("main Dude code")
         .to_owned();
     let main_prompt = main["rolePrompt"].clone();
+    assert_eq!(main["heartbeatMinutes"], 5);
+    assert!(main.get("groupName").is_none());
     assert!(
         main_prompt.is_string(),
         "Dude owns a complete agent definition"
@@ -186,7 +188,7 @@ async fn robot_entry_resolves_one_platform_session_across_workspace_inputs_and_r
 }
 
 #[tokio::test]
-async fn changing_main_dude_keeps_each_dudes_existing_conversation_and_blocks_main_deletion() {
+async fn main_dude_cannot_be_replaced_or_deleted_and_keeps_its_conversation() {
     let fixture = Fixture::new();
     let initial = dudes(&fixture.router).await;
     let old_main = initial.iter().find(|d| d["isMain"] == true).unwrap();
@@ -210,10 +212,18 @@ async fn changing_main_dude_keeps_each_dudes_existing_conversation_and_blocks_ma
         })),
     )
     .await;
-    data(
+    let replacement = authenticated_request(
         &fixture.router,
         Method::PUT,
         "/api/v1/dudes/acceptance-brother/main",
+        None,
+    )
+    .await;
+    assert_eq!(replacement.status(), StatusCode::CONFLICT);
+    data(
+        &fixture.router,
+        Method::PUT,
+        &format!("/api/v1/dudes/{old_code}/main"),
         None,
     )
     .await;
@@ -224,7 +234,7 @@ async fn changing_main_dude_keeps_each_dudes_existing_conversation_and_blocks_ma
         None,
     )
     .await;
-    assert_ne!(original["sessionCode"], next["sessionCode"]);
+    assert_eq!(original["sessionCode"], next["sessionCode"]);
     let old_session = data(
         &fixture.router,
         Method::POST,
@@ -237,7 +247,7 @@ async fn changing_main_dude_keeps_each_dudes_existing_conversation_and_blocks_ma
     let delete = authenticated_request(
         &fixture.router,
         Method::DELETE,
-        "/api/v1/dudes/acceptance-brother",
+        &format!("/api/v1/dudes/{old_code}"),
         None,
     )
     .await;
@@ -248,6 +258,18 @@ async fn changing_main_dude_keeps_each_dudes_existing_conversation_and_blocks_ma
     assert_ne!(delete.status(), StatusCode::INTERNAL_SERVER_ERROR);
     let listed = dudes(&fixture.router).await;
     assert_eq!(listed.iter().filter(|d| d["isMain"] == true).count(), 1);
+    assert_eq!(
+        listed.iter().find(|d| d["isMain"] == true).unwrap()["dudeCode"],
+        old_code
+    );
+    let other = data(
+        &fixture.router,
+        Method::POST,
+        "/api/v1/dudes/acceptance-brother/sessions",
+        None,
+    )
+    .await;
+    assert_ne!(other["sessionCode"], original["sessionCode"]);
 }
 
 #[tokio::test]

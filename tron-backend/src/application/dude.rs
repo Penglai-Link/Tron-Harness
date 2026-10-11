@@ -160,17 +160,18 @@ impl DudeService {
             if self.get(code).is_ok() { continue; }
             self.management.initialize_dude_definition(code,name,Some(prompt)).map_err(|_|DudeError::Storage)?;
             let now=chrono::Utc::now().timestamp_millis();
-            self.repo()?.save(&Dude{dude_code:code.into(),kind,enabled:true,heartbeat_minutes:if kind==DudeKind::Memory{360}else{30},memory_auto_approve:false,is_main:false,created_at:now,updated_at:now})?;
+            self.repo()?.save(&Dude{dude_code:code.into(),kind,enabled:true,heartbeat_minutes:if kind==DudeKind::Memory{360}else{5},memory_auto_approve:false,is_main:false,created_at:now,updated_at:now})?;
         }
         if self.main().is_err() {
             self.designate_main("main-dude")?;
         }
         Ok(())
     }
-    pub fn create(&self, command: CreateDudeCommand) -> Result<Dude, DudeError> {
+    pub fn create(&self, mut command: CreateDudeCommand) -> Result<Dude, DudeError> {
         if command.heartbeat_minutes == 0 || command.heartbeat_minutes > 10080 {
             return Err(DudeError::Invalid);
         }
+        command.definition.group_name = None;
         let definition = self
             .management
             .prepare_platform_internal_agent(command.definition)
@@ -225,6 +226,9 @@ impl DudeService {
     }
     pub fn designate_main(&self, code: &str) -> Result<(), DudeError> {
         self.get(code)?;
+        if self.main().is_ok_and(|main| main.dude_code != code) {
+            return Err(DudeError::Conflict);
+        }
         self.repo()?.designate_main(code)
     }
     pub fn main(&self) -> Result<Dude, DudeError> {

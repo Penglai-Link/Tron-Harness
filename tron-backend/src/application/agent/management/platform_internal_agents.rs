@@ -8,7 +8,7 @@ impl AgentManagementService {
             .repository()
             .list_dude_codes()?
             .iter()
-            .any(|code| code == agent_code))
+            .any(|code| code.eq_ignore_ascii_case(agent_code)))
     }
 
     /// Fresh installations start with a runnable main Agent. Saved choices remain authoritative.
@@ -62,6 +62,7 @@ impl AgentManagementService {
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
         config.agent_code = code.into();
         config.name = name.into();
+        config.group_name = None;
         if let Some(prompt) = role_prompt {
             config.role_prompt = prompt
         }
@@ -209,7 +210,11 @@ impl AgentManagementService {
         if let Some(loop_code) = &command.loop_code {
             self.validate_loop_selection(Some(loop_code))?;
         }
-        let group_name = self.validate_internal_agent_group("", command.group_name)?;
+        let group_name = if self.is_dude_definition(code)? {
+            Some(String::new())
+        } else {
+            self.validate_internal_agent_group("", command.group_name)?
+        };
         self.change_platform_internal_agent(code, |config| {
             if let Some(name) = group_name {
                 config.group_name = (!name.is_empty()).then_some(name);

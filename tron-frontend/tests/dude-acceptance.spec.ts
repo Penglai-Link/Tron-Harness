@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -82,6 +82,9 @@ async function request(method: string, path: string, body?: unknown) {
 test.beforeAll(async () => {
   test.setTimeout(300_000);
   directory = await mkdtemp(join(tmpdir(), "tron-dude-acceptance-"));
+  const skillDirectory = join(directory, "skills/.agents/skills/dude-ui-assignment");
+  await mkdir(skillDirectory, { recursive: true });
+  await writeFile(join(skillDirectory, "SKILL.md"), "---\nname: dude-ui-assignment\ndescription: Dude resource assignment acceptance\n---\nUse assigned resources.");
   provider = createHttpServer(async (incoming, response) => {
     let body = "";
     for await (const chunk of incoming) body += chunk;
@@ -307,6 +310,36 @@ test("Dude creation stays in agent management with a clear consumption notice", 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText(/points|credits|consumption/i);
   await expect(dialog).not.toContainText(/Points budget|Session strategy|Notification preferences|Event subscriptions/i);
+  await expect(dialog.getByText("Group", { exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("switch", { name: "Background operation", exact: true })).toBeVisible();
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("dude-creation-consumption-notice.png") });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Set as main|Make main/i })).toHaveCount(0);
+  const library = await request("POST", "/api/v1/knowledge-bases", { name: "Dude assignment acceptance", description: "" });
+  const skills = page.waitForResponse(response => response.request().method() === "GET"
+    && new URL(response.url()).pathname === "/api/v1/agents/registry/internal/main-dude/skills");
+  const knowledge = page.waitForResponse(response => response.request().method() === "GET"
+    && new URL(response.url()).pathname === "/api/v1/knowledge-bases/agent-grants/main-dude");
+  await page.getByRole("button", { name: "Edit", exact: true }).first().click();
+  expect((await skills).status()).toBe(200);
+  expect((await knowledge).status()).toBe(200);
+  await expect(dialog.getByRole("spinbutton", { name: /Heartbeat/i })).toHaveValue("5");
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByRole("button", { name: /^Select skills/ }).click();
+  const skillDialog = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Confirm selection", exact: true }) });
+  const skillName = "dude-ui-assignment";
+  const selectedSkill = skillDialog.getByRole("checkbox", { name: skillName, exact: true });
+  await selectedSkill.check();
+  await skillDialog.getByRole("button", { name: "Confirm selection", exact: true }).click();
+  await dialog.getByRole("button", { name: /^Choose knowledge bases/ }).click();
+  const knowledgeDialog = page.getByRole("dialog").filter({ has: page.getByRole("switch", { name: "Dude assignment acceptance", exact: true }) });
+  await knowledgeDialog.getByRole("switch", { name: "Dude assignment acceptance", exact: true }).click();
+  await knowledgeDialog.getByRole("button", { name: "Confirm", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const installed = await request("GET", "/api/v1/agents/registry/internal/main-dude/skills");
+  expect(installed.some((skill: any) => skill.skillName === skillName && skill.assigned)).toBe(true);
+  const granted = await request("GET", "/api/v1/knowledge-bases/agent-grants/main-dude");
+  expect(granted.some((item: any) => item.id === library.id && item.granted)).toBe(true);
+  expect(evidence.get(page)!.errors).toEqual([]);
 });

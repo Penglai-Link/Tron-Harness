@@ -5,7 +5,7 @@ impl KnowledgeBaseService {
         self.require_user(user)?;
         let agents = self
             .agents
-            .list_platform_internal_agents()
+            .all_platform_internal_agents()
             .map_err(|error| KnowledgeBaseError::Storage(format!("{error:?}")))?;
         if !agents.iter().any(|record| record.agent_code == agent) {
             return Err(KnowledgeBaseError::Invalid(

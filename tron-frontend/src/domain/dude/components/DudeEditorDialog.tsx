@@ -9,14 +9,13 @@ import { AgentAvatarPicker } from "@/domain/agent/components/AgentAvatarPicker";
 import { AgentLoopField } from "@/domain/agent/components/AgentLoopField";
 import { AgentCandidateModelsField } from "@/domain/agent/components/AgentCandidateModelsField";
 import { AgentRolePromptField } from "@/domain/agent/components/AgentRolePromptField";
-import { InternalAgentGroupField } from "@/domain/agent/components/InternalAgentGroupField";
 import { DudeResourceFields, type DudeResourceFieldsHandle } from "./DudeResourceFields";
 import { createDude, updateDude, type Dude, type DudeInput } from "../api/dudeApi";
 
 export function DudeEditorDialog({ dude, onClose, onSaved }: { dude?: Dude; onClose: () => void; onSaved: () => Promise<unknown> }) {
   const { t } = useTranslation("pages");
   const labelId = useId();
-  const [draft, setDraft] = useState<DudeInput>(() => ({ dudeCode: dude?.dudeCode ?? "", name: dude?.name ?? "", rolePrompt: dude?.rolePrompt ?? "", loopCode: dude?.loopCode ?? "", avatarId: dude?.avatarId ?? "robot", candidateModelCodes: dude?.candidateModelCodes ?? [], groupName: dude?.groupName ?? "", enabled: dude?.enabled ?? true, heartbeatMinutes: dude?.heartbeatMinutes ?? 30, memoryAutoApprove: dude?.memoryAutoApprove ?? false, kind: dude?.kind === "Memory" ? "Memory" : "Custom" }));
+  const [draft, setDraft] = useState<DudeInput>(() => ({ dudeCode: dude?.dudeCode ?? "", name: dude?.name ?? "", rolePrompt: dude?.rolePrompt ?? "", loopCode: dude?.loopCode ?? "", avatarId: dude?.avatarId ?? "robot", candidateModelCodes: dude?.candidateModelCodes ?? [], enabled: dude?.enabled ?? true, heartbeatMinutes: dude?.heartbeatMinutes ?? 30, memoryAutoApprove: dude?.memoryAutoApprove ?? false, kind: dude?.kind === "Memory" ? "Memory" : "Custom" }));
   const createdCode = useRef<string | null>(null);
   const resources = useRef<DudeResourceFieldsHandle>(null);
   const [saving, setSaving] = useState(false);
@@ -42,7 +41,6 @@ export function DudeEditorDialog({ dude, onClose, onSaved }: { dude?: Dude; onCl
         <Field label={t("dude.code")} required hint={t("dude.codeHelp")}><TextInput required aria-label={t("dude.code")} maxLength={64} disabled={saving || Boolean(dude) || Boolean(createdCode.current)} value={draft.dudeCode} onChange={event => field("dudeCode", event.target.value)} /></Field>
         <Field label={t("dude.name")} required><TextInput required aria-label={t("dude.name")} disabled={saving} value={draft.name} onChange={event => field("name", event.target.value)} /></Field>
         {!dude ? <Field label={t("dude.kind")}><SelectInput aria-label={t("dude.kind")} value={draft.kind} disabled={saving || Boolean(createdCode.current)} onValueChange={value => { if (value === "Custom" || value === "Memory") field("kind", value); }}><SelectItem value="Custom">{t("dude.custom")}</SelectItem><SelectItem value="Memory">{t("dude.memory")}</SelectItem></SelectInput></Field> : null}
-        <InternalAgentGroupField workspaceCode="$platform" value={draft.groupName ?? ""} disabled={saving} onChange={value => field("groupName", value)} />
         <AgentLoopField value={draft.loopCode} disabled={saving} onChange={value => field("loopCode", value)} />
         <AgentCandidateModelsField workspaceCode="$platform" value={draft.candidateModelCodes} disabled={saving} onChange={value => field("candidateModelCodes", value)} />
         <AgentRolePromptField rows={8} value={draft.rolePrompt} disabled={saving} onChange={value => field("rolePrompt", value)} />

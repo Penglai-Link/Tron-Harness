@@ -34,7 +34,7 @@ impl KnowledgeBaseService {
         self.library_agent_grants(user, id)?;
         let valid = self
             .agents
-            .list_platform_internal_agents()
+            .all_platform_internal_agents()
             .map_err(|e| KnowledgeBaseError::Storage(format!("{e:?}")))?;
         if agents
             .iter()

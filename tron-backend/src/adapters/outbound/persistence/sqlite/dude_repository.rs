@@ -86,8 +86,19 @@ impl DudeRepository for SqliteDudeRepository {
         self.call(move |c| {
             let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate)
                 .map_err(storage)?;
-            tx.execute("UPDATE dudes SET is_main=0 WHERE is_main=1", [])
+            let current: Option<String> = tx
+                .query_row("SELECT dude_code FROM dudes WHERE is_main=1", [], |row| {
+                    row.get(0)
+                })
+                .optional()
                 .map_err(storage)?;
+            if let Some(current) = current {
+                return if current == code {
+                    Ok(())
+                } else {
+                    Err(DudeError::Conflict)
+                };
+            }
             if tx
                 .execute("UPDATE dudes SET is_main=1 WHERE dude_code=?1", [code])
                 .map_err(storage)?

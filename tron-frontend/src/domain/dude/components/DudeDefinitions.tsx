@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AgentAvatar } from "@/domain/agent/components/AgentAvatarPicker";
 import { useDudes } from "../hooks/useDudes";
-import { deleteDude, dudeQueryKeys, setMainDude, updateDude, type Dude } from "../api/dudeApi";
+import { deleteDude, dudeQueryKeys, updateDude, type Dude } from "../api/dudeApi";
 import { DudeEditorDialog } from "./DudeEditorDialog";
 
 export function DudeDefinitions() {
@@ -27,7 +27,6 @@ export function DudeDefinitions() {
         <Button size="sm" variant="ghost" nativeButton={false} render={<Link to={`/dudes?dude=${encodeURIComponent(dude.dudeCode)}`} />}>{t("dude.open")}</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => setEditor(dude)}>{t("dude.edit")}</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void change(() => updateDude(dude.dudeCode, { enabled: !dude.enabled }))}>{t(dude.enabled ? "dude.pause" : "dude.resume")}</Button>
-        {!dude.isMain ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void change(() => setMainDude(dude.dudeCode))}>{t("dude.makeMain")}</Button> : null}
         {!dude.isMain ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDeleting(dude)}>{t("dude.delete")}</Button> : null}
       </div>)}
     </div>

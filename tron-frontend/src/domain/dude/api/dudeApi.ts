@@ -4,12 +4,12 @@ import { normalizeChatSession, type ChatSession } from "@tron/chat-core";
 
 export interface Dude {
   dudeCode: string; name: string; rolePrompt: string; loopCode: string | null;
-  avatarId: string; groupName?: string | null; candidateModelCodes: string[];
+  avatarId: string; candidateModelCodes: string[];
   enabled: boolean; heartbeatMinutes: number; memoryAutoApprove: boolean;
   kind: "Main" | "Memory" | "Custom"; isMain: boolean;
   createdAt: number; updatedAt: number;
 }
-export type DudeInput = Pick<Dude, "dudeCode" | "name" | "rolePrompt" | "loopCode" | "avatarId" | "candidateModelCodes" | "enabled" | "heartbeatMinutes" | "memoryAutoApprove"> & { kind?: "Custom" | "Memory"; groupName?: string | null };
+export type DudeInput = Pick<Dude, "dudeCode" | "name" | "rolePrompt" | "loopCode" | "avatarId" | "candidateModelCodes" | "enabled" | "heartbeatMinutes" | "memoryAutoApprove"> & { kind?: "Custom" | "Memory" };
 export interface DudeSession extends ChatSession { purpose: string; ownerDudeCode: string; }
 interface DudeSessionResponse extends Omit<DudeSession, "createdAt" | "updatedAt"> { createdAt: number; updatedAt: number; }
 function normalizeDudeSession(value: DudeSessionResponse): DudeSession {
@@ -26,7 +26,6 @@ export const listDudes = (signal?: AbortSignal) => requestApi<Dude[]>("GET /api/
 export const createDude = (body: DudeInput) => requestApi<Dude>("POST /api/v1/dudes", { body });
 export const updateDude = (dudeCode: string, body: Partial<Omit<DudeInput, "dudeCode">>) => requestApi<Dude>("PATCH /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode }, body });
 export const deleteDude = (dudeCode: string) => requestApi<void>("DELETE /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode } });
-export const setMainDude = (dudeCode: string) => requestApi<Dude>("PUT /api/v1/dudes/{dudeCode}/main", { pathParams: { dudeCode } });
 export const resolveMainDudeSession = () => requestApi<DudeSessionResponse>("POST /api/v1/dudes/main/session").then(normalizeDudeSession);
 export const resolveDudeSession = (dudeCode: string) => requestApi<DudeSessionResponse>("POST /api/v1/dudes/{dudeCode}/sessions", { pathParams: { dudeCode } }).then(normalizeDudeSession);
 export const listDudeSessions = (dudeCode: string, signal?: AbortSignal) => requestApi<DudeSessionResponse[]>("GET /api/v1/dudes/{dudeCode}/sessions", { pathParams: { dudeCode }, signal }).then(items => items.map(normalizeDudeSession));
