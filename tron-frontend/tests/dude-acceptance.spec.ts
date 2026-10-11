@@ -142,7 +142,9 @@ test("robot opens the persistent platform conversation while task work runs in p
   await page.setViewportSize({ width: 1440, height: 1000 });
   await seedResourceUiShell(page, "en-US"); await routeAcceptanceProfile(page);
   const errors = evidence.get(page)!.errors;
-  await page.goto(`${frontend!.baseUrl}/settings/agents`);
+  // The robot belongs to the main application shell. Notifications provides
+  // that shell without a second chat composer competing with the robot's one.
+  await page.goto(`${frontend!.baseUrl}/notifications`);
   await expect(page.getByRole("button", { name: "Platform main Dude conversation", exact: true }),
     `Robot unavailable. Page errors: ${JSON.stringify(errors)}. Frontend: ${frontend!.logs()}`)
     .toBeVisible({ timeout: 10_000 });
