@@ -156,7 +156,8 @@ fn intervention_service(f: &Fixture, model: Arc<HumanScript>) -> AgentInvocation
     .with_active_runs(f.state.active_runs.clone())
     .with_auto_model_route(None, Some(router))
 }
-#[tokio::test]
+// Match the production runtime: synchronous STM reads must yield while native parent/child work owns async storage gates.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_native_ownership() {
     let f = Fixture::new();
     reviewer(&f);
