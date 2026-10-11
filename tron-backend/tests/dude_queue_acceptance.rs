@@ -82,7 +82,8 @@ fn persisted_event_deduplicates_and_expired_claim_is_fenced_after_reopen() {
                 claim.lease_token.as_deref().unwrap(),
                 DudeEventStatus::Completed,
                 "stale result",
-                1102
+                1102,
+                true,
             )
             .is_err(),
         "expired worker must not overwrite the recovered claim"
@@ -94,6 +95,7 @@ fn persisted_event_deduplicates_and_expired_claim_is_fenced_after_reopen() {
             DudeEventStatus::Completed,
             "recovered result",
             1102,
+            true,
         )
         .unwrap();
     assert!(restarted.claim(1103, 1000).unwrap().is_none());
@@ -137,6 +139,7 @@ fn another_session_can_claim_while_foreground_session_remains_busy() {
             DudeEventStatus::Completed,
             "foreground done",
             101,
+            true,
         )
         .unwrap();
     let next = background.claim(102, 1000).unwrap().unwrap();
@@ -204,7 +207,8 @@ fn completing_event_and_creating_notification_commit_or_retry_together() {
                 claim.lease_token.as_deref().unwrap(),
                 DudeEventStatus::Completed,
                 "completed work",
-                101
+                101,
+                true,
             )
             .is_err()
     );
@@ -223,6 +227,7 @@ fn completing_event_and_creating_notification_commit_or_retry_together() {
             DudeEventStatus::Completed,
             "completed work",
             102,
+            true,
         )
         .unwrap();
     drop(queue);
