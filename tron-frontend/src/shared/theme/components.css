@@ -132,13 +132,12 @@
   }
 }
 
-/* Tron uses text actions in the shared chat renderer as well. The library's
-   accessible names also label its icon-only send, stop, copy and close controls. */
-[class*="ef-chat"] button svg {
+/* Transcript actions use text. Floating window controls keep the shared
+   compact icons and resize handle, with their accessible names intact. */
+.ef-chat button svg {
   display: none;
 }
-.ef-chat :is(.ef-chat__icon-button, .ef-chat__button_send, .ef-chat__jump, .ef-chat__image-preview-close, .ef-chat__runtime-attachment-remove),
-.ef-chat-window .ef-chat-window__control {
+.ef-chat :is(.ef-chat__icon-button, .ef-chat__button_send, .ef-chat__jump, .ef-chat__image-preview-close, .ef-chat__runtime-attachment-remove) {
   width: auto;
   min-width: max-content;
   /* The shared send control declares icon sizing with !important. */
@@ -146,7 +145,11 @@
   font-size: 0.875rem !important;
   border-radius: var(--tron-button-radius, 4px);
 }
-.ef-chat :is(.ef-chat__icon-button, .ef-chat__button_send, .ef-chat__jump, .ef-chat__image-preview-close, .ef-chat__runtime-attachment-remove)::after,
-.ef-chat-window .ef-chat-window__control::after {
+.ef-chat :is(.ef-chat__icon-button, .ef-chat__button_send, .ef-chat__jump, .ef-chat__image-preview-close, .ef-chat__runtime-attachment-remove)::after {
   content: attr(aria-label);
 }
+
+.ef-chat-window__title { flex: 1; }
+.ef-chat-window__title-text { min-width: 0; }
+.ef-chat-window__title-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ef-chat-window__actions { flex-shrink: 0; }
