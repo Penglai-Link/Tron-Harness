@@ -22,6 +22,7 @@ use crate::{
     },
 };
 
+mod dude_tasks;
 mod events;
 mod flows;
 mod projection;
@@ -30,11 +31,14 @@ mod task_projection;
 mod use_cases;
 mod validation;
 
+use self::dude_tasks::default_planned_start;
 use self::projection::*;
 
 #[derive(Debug, Clone)]
 pub struct CreateTaskCommand {
-    pub workspace_code: String,
+    pub workspace_code: Option<String>,
+    pub owner_dude_code: Option<String>,
+    pub due_at: Option<i64>,
     pub parent_task_code: Option<String>,
     pub title: String,
     pub description: Option<String>,
@@ -49,8 +53,9 @@ pub struct CreateTaskCommand {
     pub app_codes: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct UpdateTaskCommand {
+    pub due_at: Option<Option<i64>>,
     pub title: Option<String>,
     pub description: Option<Option<String>>,
     pub priority: Option<TaskPriority>,
@@ -72,6 +77,17 @@ pub struct UpdateTaskStatusCommand {
 
 pub trait TaskRepository: Send {
     fn list_tasks(&mut self) -> Result<Vec<Task>, TaskError>;
+    fn claim_dude_task(
+        &mut self,
+        task_code: &str,
+        expected_version: i64,
+        now_ms: i64,
+    ) -> Result<bool, TaskError>;
+    fn bind_dude_work_session(
+        &mut self,
+        task_code: &str,
+        session_code: &str,
+    ) -> Result<bool, TaskError>;
     fn list_task_flows(&mut self) -> Result<Vec<TaskFlow>, TaskError>;
     fn get_task_flow(&mut self, flow_code: &str) -> Result<Option<TaskFlow>, TaskError>;
     fn create_task_flow(&mut self, flow: &TaskFlow) -> Result<(), TaskError>;

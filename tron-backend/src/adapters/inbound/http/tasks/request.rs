@@ -8,15 +8,20 @@ use crate::{
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreateTaskRequest {
-    pub workspace_code: String,
+    pub workspace_code: Option<String>,
+    pub owner_dude_code: Option<String>,
+    pub due_at: Option<i64>,
     pub parent_task_code: Option<String>,
     pub title: String,
     pub description: Option<String>,
+    #[serde(default = "default_task_type")]
     pub task_type: TaskType,
+    #[serde(default = "default_source_type")]
     pub source_type: TaskSourceType,
     pub source_url: Option<String>,
     pub agent_code: Option<String>,
     pub model_code: Option<String>,
+    #[serde(default = "default_priority")]
     pub priority: TaskPriority,
     #[serde(default)]
     pub assignee_user_codes: Vec<String>,
@@ -30,6 +35,8 @@ impl From<CreateTaskRequest> for CreateTaskCommand {
     fn from(request: CreateTaskRequest) -> Self {
         Self {
             workspace_code: request.workspace_code,
+            owner_dude_code: request.owner_dude_code,
+            due_at: request.due_at,
             parent_task_code: request.parent_task_code,
             title: request.title,
             description: request.description,
@@ -49,6 +56,8 @@ impl From<CreateTaskRequest> for CreateTaskCommand {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateTaskRequest {
+    #[serde(default, deserialize_with = "deserialize_optional_deadline")]
+    pub due_at: Option<Option<i64>>,
     pub title: Option<String>,
     pub description: Option<Option<String>>,
     pub priority: Option<TaskPriority>,
@@ -62,9 +71,16 @@ pub struct UpdateTaskRequest {
     pub app_codes: Option<Vec<String>>,
 }
 
+fn deserialize_optional_deadline<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<i64>>, D::Error> {
+    Option::<i64>::deserialize(deserializer).map(Some)
+}
+
 impl From<UpdateTaskRequest> for UpdateTaskCommand {
     fn from(request: UpdateTaskRequest) -> Self {
         Self {
+            due_at: request.due_at,
             title: request.title,
             description: request.description,
             priority: request.priority,
@@ -141,5 +157,32 @@ impl From<UpdateTaskStatusRequest> for UpdateTaskStatusCommand {
             status: request.status,
             progress: request.progress,
         }
+    }
+}
+
+fn default_task_type() -> TaskType {
+    TaskType::General
+}
+fn default_source_type() -> TaskSourceType {
+    TaskSourceType::Internal
+}
+fn default_priority() -> TaskPriority {
+    TaskPriority::Medium
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn minimal_task_and_explicit_deadline_clear() {
+        let create: CreateTaskRequest =
+            serde_json::from_value(serde_json::json!({"title":"Prepare report"})).unwrap();
+        assert_eq!(create.task_type, TaskType::General);
+        assert_eq!(create.workspace_code, None);
+        let clear: UpdateTaskRequest =
+            serde_json::from_value(serde_json::json!({"dueAt":null})).unwrap();
+        let unchanged: UpdateTaskRequest = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(clear.due_at, Some(None));
+        assert_eq!(unchanged.due_at, None);
     }
 }

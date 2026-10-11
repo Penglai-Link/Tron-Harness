@@ -193,6 +193,14 @@ pub struct AgentRunContext {
 }
 
 impl AgentRunContext {
+    pub(crate) fn uses_platform_agent_definition(&self) -> bool {
+        self.workspace_code.is_empty()
+            || self.collaboration_owner.as_ref().is_some_and(|owner| {
+                owner.kind.eq_ignore_ascii_case("DUDE")
+                    && self.agent_code.as_deref() == Some(owner.code.as_str())
+            })
+    }
+
     pub(crate) fn memory_scope(
         &self,
         session: &str,

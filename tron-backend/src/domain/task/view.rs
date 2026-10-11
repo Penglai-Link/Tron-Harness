@@ -28,7 +28,14 @@ pub struct TaskSummary {
 pub struct TaskDetail {
     pub id: String,
     pub task_code: String,
-    pub workspace_code: String,
+    pub workspace_code: Option<String>,
+    pub owner_dude_code: Option<String>,
+    pub due_at: Option<i64>,
+    pub planned_start_at: Option<i64>,
+    pub next_followup_at: Option<i64>,
+    pub work_session_code: Option<String>,
+    pub schedule_version: i64,
+
     pub parent_task_code: Option<String>,
     pub title: String,
     pub description: Option<String>,
@@ -57,7 +64,14 @@ pub struct TaskDetail {
 #[serde(rename_all = "camelCase")]
 pub struct TaskListItem {
     pub task_code: String,
-    pub workspace_code: String,
+    pub workspace_code: Option<String>,
+    pub owner_dude_code: Option<String>,
+    pub due_at: Option<i64>,
+    pub planned_start_at: Option<i64>,
+    pub next_followup_at: Option<i64>,
+    pub work_session_code: Option<String>,
+    pub schedule_version: i64,
+
     pub parent_task_code: Option<String>,
     pub title: String,
     pub flow_code: String,

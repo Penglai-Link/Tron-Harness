@@ -134,20 +134,26 @@ pub async fn kanban(
 }
 
 pub async fn list_tasks(
-    State(tasks): State<TaskService>,
+    State(state): State<AppState>,
     Query(query): Query<TaskListQuery>,
 ) -> Response {
-    match tasks.list_tasks(query) {
+    if let Some(owner) = query.owner_dude_code.as_deref() {
+        if state.dudes.get(owner).is_err() { return task_error_response(TaskError::InvalidRequest); }
+    }
+    match state.tasks.list_tasks(query) {
         Ok(page) => Json(ApiResponse::success(page)).into_response(),
         Err(error) => task_error_response(error),
     }
 }
 
 pub async fn create_task(
-    State(tasks): State<TaskService>,
+    State(state): State<AppState>,
     Json(request): Json<CreateTaskRequest>,
 ) -> Response {
-    match tasks.create_task(request.into()) {
+    if let Some(owner) = request.owner_dude_code.as_deref() {
+        if state.dudes.get(owner).is_err() { return task_error_response(TaskError::InvalidRequest); }
+    }
+    match state.tasks.create_task(request.into()) {
         Ok(detail) => (StatusCode::CREATED, Json(ApiResponse::success(detail))).into_response(),
         Err(error) => task_error_response(error),
     }
@@ -191,6 +197,11 @@ pub async fn execute_task(
         Ok(task) => task,
         Err(error) => return task_error_response(error),
     };
+    // Dude-owned work must be dispatched by the Dude event runner so its owner,
+    // work session and feedback route survive the request lifetime.
+    if task.owner_dude_code.is_some() {
+        return task_error_response(TaskError::InvalidRequest);
+    }
     if task.archived_at.is_some() {
         return task_error_response(TaskError::ArchivedMutationDenied);
     }
@@ -205,7 +216,7 @@ pub async fn execute_task(
 
     let session = match state.chats.create_session(
         CreateChatSessionCommand {
-            workspace_code: Some(task.workspace_code.clone()),
+            workspace_code: task.workspace_code.clone(),
             project_code: None,
             title: Some(format!("Task: {}", task.title)),
             app_code: None,
@@ -228,7 +239,7 @@ pub async fn execute_task(
         a2ui_metadata: None,
         run_code: Some(run_code.clone()),
         content: Some(prompt),
-        workspace_code: Some(task.workspace_code.clone()),
+        workspace_code: task.workspace_code.clone(),
         app_code: None,
         task_code: Some(task.task_code.clone()),
         agent_code: Some(task.agent_code.clone()),

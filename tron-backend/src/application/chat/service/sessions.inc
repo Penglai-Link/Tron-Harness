@@ -1,4 +1,22 @@
 impl ChatService {
+    /// Trusted host entrypoint. Platform Dude ownership is persisted by DudeService;
+    /// public user session creation continues to require an actual workspace.
+    pub fn ensure_dude_session(&self, dude: &crate::domain::dude::DudeSession, user_code: Option<String>) -> Result<ChatSession, ChatError> {
+        if let Ok(existing)=self.repository().get_session(&dude.session_code) { return Ok(existing); }
+        let now=current_timestamp();
+        let session=ChatSession {
+            id:self.id_provider.next_id().map_err(|_|ChatError::StorageFailure)?.value(),
+            session_code:dude.session_code.clone(), workspace_code:dude.workspace_code.clone().unwrap_or_default(),
+            project_code:None,user_code,app_code:None,task_code:None,source_type:ChatSessionSourceType::Manual,
+            source_code:Some(format!("__dude:{}",dude.dude_code)),agent_code:Some(dude.dude_code.clone()),
+            system_agent_session_id:None,title:dude.title.clone(),status:ChatSessionStatus::Active,
+            last_run_code:None,last_run_status:None,created_at:now.clone(),updated_at:now,
+        };
+        let mut repository=self.repository();
+        if let Ok(existing)=repository.get_session(&dude.session_code){return Ok(existing)}
+        repository.create_session(&session)?;Ok(session)
+    }
+
     pub fn create_session(
         &self,
         command: CreateChatSessionCommand,
@@ -81,6 +99,7 @@ impl ChatService {
         let mut sessions = self.repository().list_sessions()?;
         sessions.retain(|session| {
             session.workspace_code == workspace_code
+                && !session.source_code.as_deref().is_some_and(|s|s.starts_with("__dude:"))
                 && session.status == ChatSessionStatus::Active
                 && session.source_type != ChatSessionSourceType::Terminal
         });

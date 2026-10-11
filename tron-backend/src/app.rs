@@ -5,6 +5,7 @@ use std::{
 };
 
 mod automation_runner;
+mod dude_runner;
 mod routing;
 mod startup;
 mod state_extractors;
@@ -95,6 +96,7 @@ pub type AppMemoryService = MemoryService<Arc<Mutex<SqliteRagRepository>>, Defau
 
 #[derive(Clone)]
 pub struct AppState {
+    pub dudes: crate::application::dude::DudeService,
     pub config: AppConfig,
     _temporary_database: Option<Arc<tempfile::TempDir>>,
     _agent_collaboration_builder: Arc<crate::application::agent::AgentRunContextBuilder>,
@@ -512,6 +514,9 @@ impl AppState {
         automations
             .bootstrap_scheduler()
             .expect("automation scheduler should initialize");
+        let dudes=crate::application::dude::DudeService::new(
+            crate::adapters::outbound::persistence::sqlite::SqliteDudeRepository::connect(&config.database_url).expect("Dude storage"),agent_management.clone());
+        dudes.bootstrap().expect("Dude defaults");
         let readiness = AppReadiness::validated_ready();
         let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
             config.application_config_path.clone(),
@@ -525,6 +530,7 @@ impl AppState {
             crate::adapters::outbound::skin::FileSkinStore::new(skin_root),
         ));
         Ok(Self {
+            dudes,
             config,
             _temporary_database: temporary_database,
             _agent_collaboration_builder: agent_collaboration_builder,
@@ -590,6 +596,7 @@ where
 
 /// Assemble routes from the same state owned by the host lifecycle.
 pub fn build_router_with_state(state: AppState) -> Result<Router, AppBootstrapError> {
+    dude_runner::start(state.clone());
     state.model_providers.start_background_sync();
     state.model_providers.start_person_ai_heartbeat();
     let protected_routes = build_protected_routes(&state);
