@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DudeResourceFields, type DudeResourceFieldsHandle } from "./DudeResourceFields";
 
 const api = vi.hoisted(() => ({ record: vi.fn(), domains: vi.fn(), tools: vi.fn(), policy: vi.fn(), mcp: vi.fn(), assignTools: vi.fn(), assignServers: vi.fn(), skills: vi.fn(), knowledge: vi.fn(), notify: vi.fn() }));
-vi.mock("@/domain/agent/api", () => ({ fetchWorkspaceInternalAgent: api.record, fetchToolDomains: api.domains, listTools: api.tools, patchWorkspaceInternalAgentPolicy: api.policy, patchWorkspaceInternalAgentMcpPolicy: api.mcp, updateWorkspaceInternalAgentToolAssignments: api.assignTools, updateWorkspaceInternalAgentMcpServerAssignments: api.assignServers }));
+vi.mock("@/domain/agent/api", () => ({ fetchToolDomains: api.domains, listTools: api.tools, patchWorkspaceInternalAgentPolicy: api.policy, patchWorkspaceInternalAgentMcpPolicy: api.mcp, updateWorkspaceInternalAgentToolAssignments: api.assignTools, updateWorkspaceInternalAgentMcpServerAssignments: api.assignServers }));
+vi.mock("../api/dudeApi", () => ({ getDudeResources: api.record }));
 vi.mock("@/domain/agent/model", () => ({ PLATFORM_INTERNAL_AGENT_SCOPE: "$platform", notifyInternalAgentRegistryChanged: api.notify }));
 vi.mock("@/domain/skill/api", () => ({ setAgentSkills: api.skills }));
 vi.mock("@/domain/knowledge-base/api/knowledgeBaseApi", () => ({ setAgentKnowledgeLibraries: api.knowledge }));
@@ -46,7 +47,7 @@ describe("Dude resource drafts", () => {
   it("uses platform definition and makes no writes until the parent explicitly saves", async () => {
     const ref = mount();
     await screen.findByText("Choose skill");
-    expect(api.record).toHaveBeenCalledWith("$platform", "dude-a", expect.any(AbortSignal));
+    expect(api.record).toHaveBeenCalledWith("dude-a", expect.any(AbortSignal));
     fireEvent.click(screen.getByText("Choose skill")); fireEvent.click(screen.getByText("Choose knowledge"));
     expect(api.skills).not.toHaveBeenCalled(); expect(api.knowledge).not.toHaveBeenCalled();
     await act(() => ref.current!.save());

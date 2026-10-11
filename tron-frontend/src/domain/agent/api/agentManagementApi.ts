@@ -92,7 +92,7 @@ interface ToolRecordApi {
   operationKind: ToolOperationKindApi;
 }
 
-interface WorkspaceInternalAgentRecordApi {
+export interface WorkspaceInternalAgentRecordApi {
   agentCode: string;
   name: string;
   description: string;
@@ -255,7 +255,7 @@ function normalizeToolRecord(record: ToolRecordApi): PlatformToolRecord {
   };
 }
 
-function normalizeWorkspaceInternalAgentRecord(
+export function normalizeWorkspaceInternalAgentRecord(
   record: WorkspaceInternalAgentRecordApi
 ): WorkspaceInternalAgentRecord {
   return {

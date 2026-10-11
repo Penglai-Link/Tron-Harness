@@ -23,6 +23,7 @@ vi.mock("@/components/forms", () => ({ Field: ({ label, children }: { label: str
 vi.mock("@/components/ui/select", () => ({ SelectItem: ({ value, children }: { value: string; children: ReactNode }) => <option value={value}>{children}</option> }));
 vi.mock("@/components/ui/switch", () => ({ Switch: ({ checked, disabled, onCheckedChange, ...props }: { checked: boolean; disabled?: boolean; onCheckedChange: (checked: boolean) => void }) => <input {...props} type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(event) => onCheckedChange(event.target.checked)} /> }));
 vi.mock("@/domain/resource/api/resourceApi", () => ({ downloadResourceBinary: vi.fn() }));
+vi.mock("@/domain/dude/api/dudeApi", () => ({ listDudes: vi.fn(async () => []) }));
 vi.mock("@/domain/agent/api/agentManagementApi", () => ({ fetchWorkspaceInternalAgents: vi.fn(async () => [{ agentCode: "main-agent", name: "Main Agent" }]) }));
 vi.mock("@/domain/admin/api", () => ({ fetchWorkspaceOptions: vi.fn(async () => [{ name: "Space A", label: "Space A" }, { workspaceCode: "space-b", name: "Space B", label: "Space B" }]) }));
 vi.mock("../api/knowledgeBaseApi", () => ({
