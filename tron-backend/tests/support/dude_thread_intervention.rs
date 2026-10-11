@@ -77,7 +77,19 @@ impl ModelClient for HumanScript {
                     request
                         .messages
                         .iter()
-                        .any(|message| message.content.text().contains("trusted-dude-family-note")),
+                        .filter(|message| message.role == fw::Role::User)
+                        .flat_map(|message| &message.content.0)
+                        .any(|block| match block {
+                            fw::ContentBlock::Json { value } => {
+                                let part = &value["tronMessagePart"];
+                                part["type"] == "context"
+                                    && part["kind"] == "session_family_context"
+                                    && part["text"]
+                                        .as_str()
+                                        .is_some_and(|text| text.contains("trusted-dude-family-note"))
+                            }
+                            _ => false,
+                        }),
                     "native Thread must load its own authorized STM family source"
                 );
                 return Ok(ModelResponse::tool_call(
