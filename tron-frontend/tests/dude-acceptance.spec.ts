@@ -109,13 +109,16 @@ test("robot opens the persistent platform conversation while task work runs in p
   const session = (await (await resolveResponse).json()).data;
   expect(session.workspaceCode).toBeNull(); expect(session.sessionCode).toBeTruthy();
   const input = page.locator('[data-theme-part="chat-input"]');
+  let backgroundSession = "";
   await input.fill("acceptance-foreground-hold: continue discussing this with me"); await input.press("Enter");
   try {
     await expect.poll(() => foregroundStarted).toBe(true);
     await request("POST", "/api/v1/tasks", { workspaceCode: null, ownerDudeCode: session.ownerDudeCode, title: "acceptance-background-work", description: "acceptance-background-work: finish this while we are still chatting", dueAt: null, priority: "Medium", taskType: "General", sourceType: "Internal", assigneeUserCodes: [], agentCodes: [], appCodes: [] });
     await expect.poll(async () => {
       const events = await request("GET", `/api/v1/dudes/${session.ownerDudeCode}/events`);
-      return events.some((event: { source: string; status: string; result?: string }) => event.source === "TaskReminder" && event.status === "Completed" && event.result?.includes("dude-background-finished"));
+      const completed = events.find((event: { source: string; status: string; result?: string }) => event.source === "TaskReminder" && event.status === "Completed" && event.result?.includes("dude-background-finished"));
+      backgroundSession = completed?.sessionCode ?? "";
+      return Boolean(completed);
     }, { timeout: 60_000 }).toBe(true);
     await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).not.toContainText("dude-background-finished");
   } finally { releaseForeground(); }
@@ -127,6 +130,20 @@ test("robot opens the persistent platform conversation while task work runs in p
   await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).toContainText("dude-foreground-finished");
   expect(errors).toEqual([]);
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("platform-dude-parallel-work.png") });
+  await page.getByRole("button", { name: "Platform main Dude conversation", exact: true }).click();
+  await page.goto(`${frontend!.baseUrl}/notifications`);
+  const notice = page.locator("article").filter({ hasText: "dude-background-finished" });
+  await notice.getByRole("button", { name: "Mark read", exact: true }).click();
+  await expect(notice.getByRole("button", { name: "Mark unread", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(notice.getByRole("button", { name: "Mark unread", exact: true })).toBeVisible();
+  await notice.getByRole("link", { name: "View", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`session=${backgroundSession}`));
+  const workHistory = page.getByRole("region", { name: "Chat transcript", exact: true });
+  await expect(workHistory).toContainText("dude-background-finished");
+  await expect(workHistory).not.toContainText("dude-foreground-finished");
+  expect(errors).toEqual([]);
+  await page.screenshot({ animations: "disabled", path: testInfo.outputPath("dude-notification-work-history.png") });
 });
 
 test("Dude creation stays in agent management with a clear consumption notice", async ({ page }, testInfo) => {
