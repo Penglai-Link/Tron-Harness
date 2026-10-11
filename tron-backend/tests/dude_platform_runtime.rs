@@ -13,13 +13,16 @@ use std::{
 };
 use tokio::sync::Notify;
 use tron_backend::{
+    adapters::outbound::persistence::sqlite::SqliteDudeRepository,
     app::AppState,
     application::agent::{
         AgentInvocationCommand, AgentInvocationService, CreateWorkspaceInternalAgentCommand,
         ModelClient, ModelStreamSink,
     },
+    application::{dude::DudeRepository, dude_memory::DudeMemorySourceCollector},
     config::{AppConfig, ResourceConfig},
     domain::agent::{AgentCollaborationOwner, AgentModelConfig, ModelRequest, ModelResponse},
+    domain::dude::{Dude, DudeKind, DudeSession, DudeSessionPurpose},
     shared::event_bus::EventBusHandle,
 };
 
@@ -162,6 +165,46 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         })
         .unwrap();
 
+    // Create the same durable product projection used by real Dude sessions.
+    // In particular, DudeSession has no user field: the native chat link is the
+    // authority that separates profiles during memory collection.
+    let mut repository = SqliteDudeRepository::connect(&state.config.database_url).unwrap();
+    repository
+        .save(&Dude {
+            dude_code: "acceptance-dude".into(),
+            kind: DudeKind::Custom,
+            enabled: true,
+            heartbeat_minutes: 30,
+            memory_auto_approve: false,
+            is_main: false,
+            created_at: 1,
+            updated_at: 1,
+        })
+        .unwrap();
+    for (session, user) in [
+        ("acceptance-interactive", "USR-AUTH-0001"),
+        ("acceptance-task", "USR-AUTH-0001"),
+        ("acceptance-foreign-profile", "USR-OTHER-PROFILE"),
+    ] {
+        let persisted = repository
+            .resolve_session(&DudeSession {
+                session_code: session.into(),
+                dude_code: "acceptance-dude".into(),
+                purpose: DudeSessionPurpose::Task,
+                correlation_key: session.into(),
+                title: session.into(),
+                workspace_code: None,
+                created_at: 1,
+                updated_at: 1,
+            })
+            .unwrap();
+        assert_eq!(persisted.session_code, session);
+        state
+            .chats
+            .ensure_dude_session(&persisted, Some(user.into()))
+            .unwrap();
+    }
+
     let model = Arc::new(ControlledModel::default());
     let foreground_service = service(&state, model.clone(), "acceptance-interactive");
     let task_service = service(&state, model.clone(), "acceptance-task");
@@ -208,6 +251,14 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         .unwrap()
         .unwrap();
     assert_eq!(foreground.final_output, "foreground-completed");
+    service(&state, model.clone(), "acceptance-foreign-profile")
+        .invoke(
+            command("acceptance-foreign-profile", "foreign-profile-work"),
+            Some("USR-OTHER-PROFILE".into()),
+            Some("en-US".into()),
+        )
+        .await
+        .unwrap();
     let framework = state.agent_framework.storage_framework().await.unwrap();
     for (session, expected) in [
         ("acceptance-interactive", "foreground-completed"),
@@ -220,16 +271,54 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
             .await
             .unwrap();
         assert!(
-            history
-                .records
-                .messages
-                .iter()
-                .any(|message| {
-                    message.content.iter().any(|part|
+            history.records.messages.iter().any(|message| {
+                message.content.iter().any(|part|
             matches!(part, fw::HistoryContentBlock::Text { text } if text == expected))
-                }),
+            }),
             "{session} persists its own result"
         );
     }
+
+    let collector = DudeMemorySourceCollector::new(state.agent_framework.clone());
+    let sources = collector
+        .collect("USR-AUTH-0001", "separate-memory-dude")
+        .await
+        .unwrap();
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.source_code.starts_with("acceptance-interactive/"))
+    );
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.source_code.starts_with("acceptance-task/"))
+    );
+    assert!(
+        sources
+            .iter()
+            .all(|s| !s.source_code.starts_with("acceptance-foreign-profile/")),
+        "platform Dude history must use trusted profile links even though DudeSession has no userCode"
+    );
+    let cursors = sources
+        .iter()
+        .map(|s| (s.identity(), s.version.clone()))
+        .collect();
+    assert!(
+        collector
+            .collect_incremental("USR-AUTH-0001", "separate-memory-dude", &cursors)
+            .await
+            .unwrap()
+            .is_empty(),
+        "unchanged persisted sources must not be analyzed twice"
+    );
+    assert!(
+        collector
+            .collect("USR-AUTH-0001", "acceptance-dude")
+            .await
+            .unwrap()
+            .is_empty(),
+        "a memory Dude must exclude all of its own native sessions"
+    );
     assert!(state.agent_framework.close().await.is_success());
 }
