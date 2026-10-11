@@ -70,6 +70,14 @@ impl ChatService {
         if session.status != crate::domain::chat::ChatSessionStatus::Active {
             return Err(ChatSendError::Chat(ChatError::SessionArchived));
         }
+        // Session ownership comes from persisted server state, not the caller's requested agent.
+        let dude_code = session.source_code.as_deref().and_then(|source| source.strip_prefix("__dude:"));
+        let agent = if let Some(dude_code) = dude_code {
+            let service = agent.with_collaboration_owner(crate::domain::agent::AgentCollaborationOwner {
+                kind: "DUDE".into(), code: dude_code.into(), origin_session_code: Some(session.session_code.clone()), task_code: session.task_code.clone(),
+            });
+            if session.workspace_code.is_empty() { service.with_platform_scope() } else { service }
+        } else { agent };
         let (attachments, invocation_attachments) = self
             .prepare_session_attachments(&session, attachments)
             .map_err(ChatSendError::Chat)?;
@@ -92,7 +100,7 @@ impl ChatService {
         } else {
             ChatMessageChannel::MainAgent
         };
-        let effective_agent_code = if session.last_run_code.is_some() {
+        let effective_agent_code = if session.last_run_code.is_some() || dude_code.is_some() {
             session.agent_code.clone()
         } else {
             normalized_optional(command.agent_code.clone()).or(session.agent_code.clone())
