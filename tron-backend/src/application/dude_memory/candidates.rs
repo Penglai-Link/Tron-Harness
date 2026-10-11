@@ -169,10 +169,28 @@ impl DudeMemoryService {
         std::fs::create_dir_all(&self.staging_root)
             .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
         let stage = self.staging_root.join(format!(
-            "{}-{}",
-            candidate.candidate_code, candidate.revision
+            "{}-{}-{}",
+            candidate.candidate_code, candidate.revision, candidate.artifact_hash
         ));
-        materialize_artifact(&stage, &candidate.files)?;
+        // Publish a complete stage atomically. A crash before the record CAS may leave the
+        // same immutable stage behind; retry reuses it only when its bytes still match.
+        if stage.exists() {
+            if artifact_hash(&read_artifact(&stage)?)? != candidate.artifact_hash {
+                return Err(DudeMemoryError::Conflict);
+            }
+        } else {
+            let temporary = tempfile::tempdir_in(&self.staging_root)
+                .map_err(|e| DudeMemoryError::Storage(e.to_string()))?;
+            let artifact = temporary.path().join("artifact");
+            materialize_artifact(&artifact, &candidate.files)?;
+            if let Err(error) = std::fs::rename(&artifact, &stage) {
+                if !stage.exists()
+                    || artifact_hash(&read_artifact(&stage)?)? != candidate.artifact_hash
+                {
+                    return Err(DudeMemoryError::Storage(error.to_string()));
+                }
+            }
+        }
         self.repository
             .lock()
             .unwrap()
