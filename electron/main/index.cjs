@@ -68,8 +68,7 @@ function showMainWindow() {
     // Bootstrap owns initial window creation and sidecar startup.
     if (!state.backendReady) return;
     window = createMainWindow();
-    if (state.backendReady) void window.loadURL(state.backendUrl);
-    else void showStartupMessage("Backend starting...");
+    void window.loadURL(state.backendUrl);
   }
   if (window.isMinimized()) window.restore();
   window.show();

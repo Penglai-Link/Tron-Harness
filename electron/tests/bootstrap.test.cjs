@@ -14,6 +14,8 @@ for (const scenario of [
   { name: "host development", platform: process.platform, packaged: false },
   { name: "Windows manual launch", platform: "win32", packaged: true },
   { name: "Windows startup launch", platform: "win32", packaged: true, startup: true },
+  { name: "manual launch during Windows startup", platform: "win32", packaged: true, startup: true, earlyRestore: true },
+  { name: "Windows session end", platform: "win32", packaged: true, sessionEnd: true },
   { name: "Windows tray failure", platform: "win32", packaged: true, startup: true, trayFailure: true }
 ]) {
 test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
@@ -101,7 +103,9 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
     const source = fs.readFileSync(path.join(mainDir, "index.cjs"), "utf8")
       .replace("void bootstrap();", "globalThis.startupPromise = bootstrap();");
     vm.runInContext(source, context, { filename: "index.cjs" });
+    if (scenario.earlyRestore) handlers.get("second-instance")({}, ["Tron.exe"]);
     await Promise.resolve(); await context.startupPromise;
+    assert.equal(windows.length, 1);
     assert.equal(spawnCalls.length, 1);
     const launch = spawnCalls[0];
     assert.equal(launch.options.cwd, dataDir);
@@ -109,11 +113,17 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
     assert.equal(logCalls[0], path.join(dataDir, "logs/tron-backend.log"));
     assert.equal(launch.options.env.TRON_BACKEND_DATABASE_URL, path.join(dataDir, "tron.sqlite3"));
     assert.equal(windows[0].urls.at(-1), "http://127.0.0.1:8999");
-    const background = scenario.startup && !scenario.trayFailure;
+    const background = scenario.startup && !scenario.trayFailure && !scenario.earlyRestore;
     assert.equal(Boolean(windows[0].shown), !background);
     assert.equal(Boolean(windows[0].focused), !background);
     assert.equal(launch.options.windowsHide, true);
-    if (scenario.platform === "win32" && !scenario.trayFailure) {
+    if (scenario.sessionEnd) {
+      windows[0].emit("session-end");
+      assert.equal(killCalls, 1);
+      let prevented = false;
+      windows[0].emit("close", { preventDefault() { prevented = true; } });
+      assert.equal(prevented, false, "logoff must close the window");
+    } else if (scenario.platform === "win32" && !scenario.trayFailure) {
       const window = windows[0], tray = trays[0];
       let prevented = false;
       window.emit("close", { preventDefault() { prevented = true; } });
