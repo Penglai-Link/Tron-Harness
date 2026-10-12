@@ -9,7 +9,12 @@ if (applyUpdateArgIndex >= 0) {
   const installerPath = process.argv[applyUpdateArgIndex + 1] || "";
   void runApplyUpdate(installerPath).then((code) => process.exit(code));
 } else {
-const { app, BrowserWindow, clipboard, ipcMain, Menu, shell } = require("electron");
+const { app, BrowserWindow, clipboard, ipcMain, Menu, shell, Tray } = require("electron");
+const { STARTUP_ARG, ICON_PATH, createWindowsDesktop } = require("./windows-desktop.cjs");
+
+if (process.platform === "win32" && !app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
 const { createUpdater, UPDATE_STATUS_EVENT } = require("./updater.cjs");
 
 const {
@@ -52,6 +57,29 @@ const ALLOWED_INJECTION_EVENTS = new Set([
 ]);
 const commentCapablePageIdsByWebContentsId = new Map();
 let isQuitting = false;
+let mainWindowRequested = false;
+let windowsDesktop = null;
+
+function showMainWindow() {
+  mainWindowRequested = true;
+  if (isQuitting) return;
+  let window = state.mainWindow;
+  if (!window || window.isDestroyed()) {
+    // Bootstrap owns initial window creation and sidecar startup.
+    if (!state.backendReady) return;
+    window = createMainWindow();
+    if (state.backendReady) void window.loadURL(state.backendUrl);
+    else void showStartupMessage("Backend starting...");
+  }
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+
+function quitDesktop() {
+  isQuitting = true;
+  app.quit();
+}
 
 function setCommentAvailability(webContentsId, pageId, available) {
   if (available) {
@@ -110,6 +138,7 @@ function createMainWindow() {
     show: false,
     title: "Tron",
     width: 1440,
+    ...(process.platform === "win32" ? { icon: ICON_PATH } : {}),
     webPreferences: {
       webviewTag: true,
       contextIsolation: true,
@@ -122,12 +151,18 @@ function createMainWindow() {
   state.mainWindow = window;
 
   window.on("close", (event) => {
-    if (process.platform !== "darwin" || isQuitting) {
+    if (isQuitting || (process.platform !== "darwin" && !windowsDesktop?.isResident())) {
       return;
     }
 
     event.preventDefault();
     window.hide();
+  });
+
+  // Windows shutdown/logoff must terminate the sidecar instead of hiding.
+  window.on("session-end", () => {
+    isQuitting = true;
+    stopBackend();
   });
 
   window.webContents.on("will-attach-webview", (_event, webPreferences) => {
@@ -415,6 +450,7 @@ function startBackend(resourcesDir) {
       TRON_BACKEND_LOG_STDERR: "false"
     },
     cwd: appDataDir,
+    windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"]
   });
 
@@ -483,13 +519,21 @@ async function bootstrap() {
     exit: (code) => {
       isQuitting = true;
       stopBackend();
+      windowsDesktop?.dispose();
       app.exit(code);
     }
   });
 
+  if (process.platform === "win32") {
+    windowsDesktop = createWindowsDesktop({ app, Tray, Menu, showWindow: showMainWindow, quit: quitDesktop });
+    windowsDesktop.initialize();
+  }
+
   const mainWindow = createMainWindow();
   await showStartupMessage("Backend starting...");
-  mainWindow.show();
+  if (!windowsDesktop?.isResident() || !app.isPackaged || !process.argv.includes(STARTUP_ARG) || mainWindowRequested) {
+    mainWindow.show();
+  }
   const startupScreenStartedAt = Date.now();
 
   try {
@@ -511,7 +555,7 @@ async function bootstrap() {
   if (shouldOpenMainDevTools()) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
-  mainWindow.focus();
+  if (mainWindow.isVisible()) mainWindow.focus();
 }
 
 function describeError(error) {
@@ -976,23 +1020,23 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" && !windowsDesktop?.isResident()) {
     app.quit();
   }
 });
 
 app.on("activate", () => {
-  if (!state.mainWindow || state.mainWindow.isDestroyed()) {
-    void bootstrap();
-    return;
-  }
+  showMainWindow();
+});
 
-  state.mainWindow.show();
-  state.mainWindow.focus();
+app.on("second-instance", (_event, argv) => {
+  if (!argv.includes(STARTUP_ARG)) showMainWindow();
 });
 
 app.on("before-quit", () => {
   isQuitting = true;
   stopBackend();
+  windowsDesktop?.dispose();
 });
+}
 }

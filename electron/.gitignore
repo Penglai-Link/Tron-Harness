@@ -10,7 +10,8 @@ node_modules/
 
 # Frontend build output
 dist/
-build/
+build/*
+!build/installer.nsh
 out/
 .vite/
 .next/

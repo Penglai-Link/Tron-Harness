@@ -10,13 +10,21 @@ const { finished } = require("node:stream/promises");
 
 // Run the actual bootstrap with desktop/sidecar boundaries replaced. No GUI,
 // persistent product files, network request or real subprocess is created.
-test("bootstrap passes the desktop data directory to sidecar config, logs and cwd", async () => {
+for (const scenario of [
+  { name: "host development", platform: process.platform, packaged: false },
+  { name: "Windows manual launch", platform: "win32", packaged: true },
+  { name: "Windows startup launch", platform: "win32", packaged: true, startup: true },
+  { name: "Windows tray failure", platform: "win32", packaged: true, startup: true, trayFailure: true }
+]) {
+test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "tron-bootstrap-"));
   const dataDir = path.join(root, "data");
   const resourcesDir = path.join(root, "resources");
   fs.mkdirSync(path.join(resourcesDir, "binaries"), { recursive: true });
   fs.writeFileSync(path.join(resourcesDir, "binaries", process.platform === "win32" ? "tron-backend.exe" : "tron-backend"), "fixture only");
-  const spawnCalls = [], logCalls = [], streams = [], windows = [];
+  const spawnCalls = [], logCalls = [], streams = [], windows = [], trays = [], loginCalls = [];
+  let quitCalls = 0, killCalls = 0;
+  let loginEnabled = true;
   const handlers = new Map();
   const mainDir = path.resolve(__dirname, "../main");
   const helpers = require("../main/helpers.cjs");
@@ -31,18 +39,42 @@ test("bootstrap passes the desktop data directory to sidecar config, logs and cw
     }
     async loadURL(url) { this.urls.push(url); }
     show() { this.shown = true; }
+    hide() { this.shown = false; }
     focus() { this.focused = true; }
+    isDestroyed() { return false; }
+    isVisible() { return Boolean(this.shown); }
+    isMinimized() { return Boolean(this.minimized); }
+    restore() { this.minimized = false; }
+  }
+  class FakeTray extends EventEmitter {
+    constructor() {
+      super();
+      if (scenario.trayFailure) throw new Error("tray unavailable");
+      trays.push(this);
+    }
+    setToolTip() {}
+    setContextMenu(menu) { this.menu = menu; }
+    destroy() { this.destroyed = true; }
   }
   const child = new EventEmitter();
   child.stdout = new PassThrough(); child.stderr = new PassThrough();
-  child.kill = () => { child.emit("close", 0, null); return true; };
+  child.kill = () => { killCalls++; child.emit("close", 0, null); return true; };
   const context = vm.createContext({
     console, setTimeout, clearTimeout, Date: FastClock, __dirname: mainDir,
-    process: { argv: [], env: {}, platform: process.platform },
+    process: { argv: scenario.startup ? ["--tron-startup"] : [], env: {}, platform: scenario.platform },
     require(name) {
       if (name === "electron") return {
-        app: { isPackaged: false, whenReady: () => Promise.resolve(), on: (name, cb) => handlers.set(name, cb) },
-        BrowserWindow: FakeWindow, ipcMain: { handle() {} }, clipboard: {}, Menu: {}, shell: {}
+        app: {
+          isPackaged: scenario.packaged,
+          requestSingleInstanceLock: () => true,
+          setAppUserModelId() {},
+          getLoginItemSettings: () => ({ openAtLogin: loginEnabled, executableWillLaunchAtLogin: loginEnabled }),
+          setLoginItemSettings(settings) { loginCalls.push(settings); loginEnabled = settings.openAtLogin; },
+          quit() { quitCalls++; handlers.get("before-quit")?.(); },
+          whenReady: () => Promise.resolve(), on: (name, cb) => handlers.set(name, cb)
+        },
+        BrowserWindow: FakeWindow, Tray: FakeTray, ipcMain: { handle() {} }, clipboard: {},
+        Menu: { buildFromTemplate: template => template }, shell: {}
       };
       if (name === "node:fs") return { ...fs,
         mkdirSync: (filename, options) => fs.mkdirSync(path.isAbsolute(filename) ? filename : path.join(root, filename), options),
@@ -77,11 +109,75 @@ test("bootstrap passes the desktop data directory to sidecar config, logs and cw
     assert.equal(logCalls[0], path.join(dataDir, "logs/tron-backend.log"));
     assert.equal(launch.options.env.TRON_BACKEND_DATABASE_URL, path.join(dataDir, "tron.sqlite3"));
     assert.equal(windows[0].urls.at(-1), "http://127.0.0.1:8999");
-    assert.equal(windows[0].shown, true);
-    assert.equal(windows[0].focused, true);
+    const background = scenario.startup && !scenario.trayFailure;
+    assert.equal(Boolean(windows[0].shown), !background);
+    assert.equal(Boolean(windows[0].focused), !background);
+    assert.equal(launch.options.windowsHide, true);
+    if (scenario.platform === "win32" && !scenario.trayFailure) {
+      const window = windows[0], tray = trays[0];
+      let prevented = false;
+      window.emit("close", { preventDefault() { prevented = true; } });
+      assert.equal(prevented, true);
+      assert.equal(window.shown, false);
+      assert.equal(killCalls, 0, "hiding must keep the sidecar running");
+      window.minimized = true;
+      tray.emit("click");
+      assert.equal(window.shown, true);
+      assert.equal(window.minimized, false);
+      assert.equal(window.focused, true);
+      window.hide();
+      handlers.get("second-instance")({}, ["Tron.exe", "--tron-startup"]);
+      assert.equal(window.shown, false, "duplicate startup should stay in background");
+      handlers.get("second-instance")({}, ["Tron.exe"]);
+      assert.equal(window.shown, true);
+      assert.equal(spawnCalls.length, 1, "restoring must not launch another sidecar");
+      assert.equal(loginCalls.length, 0, "normal startup must preserve OS startup preferences");
+      tray.menu.find(item => item.type === "checkbox").click({ checked: false });
+      assert.equal(loginCalls.at(-1).openAtLogin, false);
+      assert.equal(loginCalls.at(-1).name, "com.tron.desktop");
+      assert.deepEqual(loginCalls.at(-1).args, ["--tron-startup"]);
+      // Simulate enabling startup in Windows Settings while Tron is running.
+      loginEnabled = true;
+      tray.emit("right-click");
+      assert.equal(tray.menu.find(item => item.type === "checkbox").checked, true);
+      tray.menu.find(item => item.type === "checkbox").click({ checked: true });
+      assert.equal(loginCalls.at(-1).enabled, true);
+      handlers.get("window-all-closed")();
+      assert.equal(quitCalls, 0);
+      tray.menu.find(item => item.label === "退出").click();
+      assert.equal(quitCalls, 1);
+      assert.equal(killCalls, 1);
+      assert.equal(tray.destroyed, true);
+      prevented = false;
+      window.emit("close", { preventDefault() { prevented = true; } });
+      assert.equal(prevented, false, "explicit quit must allow the window to close");
+    } else if (scenario.trayFailure) {
+      let prevented = false;
+      windows[0].emit("close", { preventDefault() { prevented = true; } });
+      assert.equal(prevented, false, "tray failure must not leave an unreachable background app");
+      handlers.get("window-all-closed")();
+      assert.equal(quitCalls, 1);
+    }
   } finally {
     handlers.get("before-quit")?.();
     await Promise.all(streams.map(stream => finished(stream)));
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+}
+
+test("a second Windows process exits before registering IPC or starting a backend", () => {
+  let quitCalls = 0;
+  const source = fs.readFileSync(path.resolve(__dirname, "../main/index.cjs"), "utf8");
+  vm.runInNewContext(source, {
+    process: { argv: [], platform: "win32" },
+    require(name) {
+      if (name === "electron") return {
+        app: { requestSingleInstanceLock: () => false, quit: () => quitCalls++ }
+      };
+      if (name === "./windows-desktop.cjs") return require("../main/windows-desktop.cjs");
+      return require(name);
+    }
+  });
+  assert.equal(quitCalls, 1);
 });
