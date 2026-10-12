@@ -7,6 +7,11 @@ use std::sync::{
 };
 #[async_trait::async_trait]
 pub trait DudeExecutor: Send + Sync {
+    /// Leave events queued until the host has the context required to execute them.
+    fn is_ready(&self) -> Result<bool, DudeError> {
+        Ok(true)
+    }
+
     async fn execute(
         &self,
         event: DudeEvent,
@@ -49,17 +54,15 @@ impl DudeDispatcher {
             loop {
                 interval.tick().await;
                 while let Ok(permit) = permits.clone().try_acquire_owned() {
-                    let event = match worker
-                        .service
-                        .claim(chrono::Utc::now().timestamp_millis(), 90_000)
-                    {
-                        Ok(Some(e)) => e,
-                        Ok(None) => break,
-                        Err(e) => {
-                            tracing::error!("Dude claim: {e}");
-                            break;
-                        }
-                    };
+                    let event =
+                        match worker.claim_ready_event(chrono::Utc::now().timestamp_millis()) {
+                            Ok(Some(e)) => e,
+                            Ok(None) => break,
+                            Err(e) => {
+                                tracing::error!("Dude claim: {e}");
+                                break;
+                            }
+                        };
                     let w = worker.clone();
                     tokio::spawn(async move {
                         let _permit = permit;
@@ -72,11 +75,17 @@ impl DudeDispatcher {
     /// One bounded dispatch is also used by integration tests and embedded hosts.
     pub async fn dispatch_once(&self, now: i64) -> Result<bool, DudeError> {
         self.service.schedule_heartbeats(now)?;
-        let Some(event) = self.service.claim(now, 90_000)? else {
+        let Some(event) = self.claim_ready_event(now)? else {
             return Ok(false);
         };
         self.execute_claimed(event).await;
         Ok(true)
+    }
+    fn claim_ready_event(&self, now: i64) -> Result<Option<DudeEvent>, DudeError> {
+        if !self.executor.is_ready()? {
+            return Ok(None);
+        }
+        self.service.claim(now, 90_000)
     }
     async fn execute_claimed(&self, mut event: DudeEvent) {
         let session = match event

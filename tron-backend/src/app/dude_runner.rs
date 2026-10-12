@@ -17,6 +17,14 @@ impl PlatformDudeExecutor {
 }
 #[async_trait::async_trait]
 impl DudeExecutor for PlatformDudeExecutor {
+    fn is_ready(&self) -> Result<bool, DudeError> {
+        self.state
+            .profiles
+            .active()
+            .map(|profile| profile.is_some())
+            .map_err(|error| DudeError::Runtime(error.to_string()))
+    }
+
     async fn recover(&self, event: &DudeEvent) -> Result<Option<DudeExecutionOutcome>, DudeError> {
         let framework = self
             .state
