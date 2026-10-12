@@ -10,6 +10,15 @@ test("desktop packaging configuration passes electron-builder schema validation"
   await validateConfiguration(build, { isEnabled: false });
 });
 
+test("Linux packages include deb, rpm and AppImage with a tray icon", () => {
+  assert.ok(build.linux.target.includes("deb"));
+  assert.ok(build.linux.target.includes("rpm"));
+  assert.ok(build.linux.target.includes("AppImage"));
+  assert.equal(path.resolve(__dirname, "..", build.linux.icon), ICON_PATH);
+  assert.ok(build.linux.maintainer);
+  assert.ok(build.deb.recommends.includes("libayatana-appindicator3-1"));
+});
+
 test("Windows installer keeps the directory chooser and ships the runtime tray icon", () => {
   assert.equal(build.nsis.oneClick, false);
   assert.equal(build.nsis.allowToChangeInstallationDirectory, true);

@@ -234,6 +234,7 @@ help:
 	@echo ""
 	@echo "Desktop commands:"
 	@echo "  make desktop-build     Build desktop installer packages and sidecar binary"
+	@echo "                         Ubuntu: AppImage、deb、rpm，自动检查并安装缺失的打包工具"
 	@echo "  make desktop-test      Run Electron desktop unit tests"
 	@echo "  make desktop-dev       Build desktop dependencies and run Electron dev mode"
 	@echo "  make desktop-clean     Remove desktop build artifacts"
@@ -411,9 +412,50 @@ web-clean: fe-clean
 	$(call REMOVE,$(BACKEND_FRONTEND_DIR))
 	$(call MKDIR,$(BACKEND_FRONTEND_DIR))
 
+.PHONY: _desktop-build-tools
+_desktop-build-tools:
+ifneq ($(HOST_OS),windows)
+	@if [ "$$(uname -s)" != Linux ]; then exit 0; fi; \
+	desktop_missing_packages=""; \
+	for desktop_tool_package in rpmbuild:rpm xz:xz-utils unzip:unzip opj_decompress:libopenjp2-tools; do \
+		desktop_tool=$${desktop_tool_package%%:*}; \
+		if ! command -v "$$desktop_tool" >/dev/null 2>&1; then \
+			desktop_missing_packages="$$desktop_missing_packages $${desktop_tool_package#*:}"; \
+		fi; \
+	done; \
+	if [ -z "$$desktop_missing_packages" ]; then \
+		echo "桌面打包工具检查通过，无需安装。"; exit 0; \
+	fi; \
+	if ! command -v apt-get >/dev/null 2>&1; then \
+		echo "Linux 打包统一使用 Ubuntu；未找到 apt-get，缺少软件包：$$desktop_missing_packages" >&2; exit 1; \
+	fi; \
+	desktop_sudo=""; \
+	if [ "$$(id -u)" != 0 ]; then \
+		if ! command -v sudo >/dev/null 2>&1; then \
+			echo "安装桌面打包工具需要 sudo，请先安装 sudo 或由 root 执行。" >&2; exit 1; \
+		fi; \
+		desktop_sudo=sudo; \
+	fi; \
+	echo "正在安装缺失的桌面打包工具：$$desktop_missing_packages"; \
+	if ! $$desktop_sudo apt-get update; then \
+		echo "APT 索引更新失败，桌面构建已停止。" >&2; exit 1; \
+	fi; \
+	if ! $$desktop_sudo apt-get install -y --no-install-recommends $$desktop_missing_packages; then \
+		echo "桌面打包工具安装失败，桌面构建已停止。" >&2; exit 1; \
+	fi; \
+	for desktop_tool in rpmbuild xz unzip opj_decompress; do \
+		if ! command -v "$$desktop_tool" >/dev/null 2>&1; then \
+			echo "安装后仍未找到 $${desktop_tool}，桌面构建已停止。" >&2; exit 1; \
+		fi; \
+	done; \
+	echo "桌面打包工具检查通过。"
+endif
+
 .PHONY: desktop-build
+desktop-build: _desktop-build-tools
+	$(MAKE) desktop-clean
+	$(MAKE) web-build
 ifeq ($(HOST_OS),windows)
-desktop-build: desktop-clean web-build
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
@@ -427,7 +469,6 @@ desktop-build: desktop-clean web-build
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(NPM) run -s ensure-electron))
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) run -s package)
 else
-desktop-build: desktop-clean web-build
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)

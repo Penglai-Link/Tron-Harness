@@ -1,8 +1,4 @@
-const path = require("node:path");
-
-const APP_ID = "com.tron.desktop";
-const STARTUP_ARG = "--tron-startup";
-const ICON_PATH = path.resolve(__dirname, "..", "assets", "tron.png");
+const { APP_ID, STARTUP_ARG, ICON_PATH } = require("./desktop-constants.cjs");
 
 function createWindowsDesktop({ app, Tray, Menu, showWindow, quit, execPath = process.execPath }) {
   let tray = null;

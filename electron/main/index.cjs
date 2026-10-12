@@ -10,9 +10,11 @@ if (applyUpdateArgIndex >= 0) {
   void runApplyUpdate(installerPath).then((code) => process.exit(code));
 } else {
 const { app, BrowserWindow, clipboard, ipcMain, Menu, shell, Tray } = require("electron");
-const { STARTUP_ARG, ICON_PATH, createWindowsDesktop } = require("./windows-desktop.cjs");
+const { STARTUP_ARG, ICON_PATH } = require("./desktop-constants.cjs");
+const { createWindowsDesktop } = require("./windows-desktop.cjs");
+const { createLinuxDesktop } = require("./linux-desktop.cjs");
 
-if (process.platform === "win32" && !app.requestSingleInstanceLock()) {
+if (["win32", "linux"].includes(process.platform) && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
 const { createUpdater, UPDATE_STATUS_EVENT } = require("./updater.cjs");
@@ -58,7 +60,7 @@ const ALLOWED_INJECTION_EVENTS = new Set([
 const commentCapablePageIdsByWebContentsId = new Map();
 let isQuitting = false;
 let mainWindowRequested = false;
-let windowsDesktop = null;
+let residentDesktop = null;
 
 function showMainWindow() {
   mainWindowRequested = true;
@@ -137,7 +139,7 @@ function createMainWindow() {
     show: false,
     title: "Tron",
     width: 1440,
-    ...(process.platform === "win32" ? { icon: ICON_PATH } : {}),
+    ...(["win32", "linux"].includes(process.platform) ? { icon: ICON_PATH } : {}),
     webPreferences: {
       webviewTag: true,
       contextIsolation: true,
@@ -150,7 +152,7 @@ function createMainWindow() {
   state.mainWindow = window;
 
   window.on("close", (event) => {
-    if (isQuitting || (process.platform !== "darwin" && !windowsDesktop?.isResident())) {
+    if (isQuitting || (process.platform !== "darwin" && !residentDesktop?.isResident())) {
       return;
     }
 
@@ -518,19 +520,21 @@ async function bootstrap() {
     exit: (code) => {
       isQuitting = true;
       stopBackend();
-      windowsDesktop?.dispose();
+      residentDesktop?.dispose();
       app.exit(code);
     }
   });
 
   if (process.platform === "win32") {
-    windowsDesktop = createWindowsDesktop({ app, Tray, Menu, showWindow: showMainWindow, quit: quitDesktop });
-    windowsDesktop.initialize();
+    residentDesktop = createWindowsDesktop({ app, Tray, Menu, showWindow: showMainWindow, quit: quitDesktop });
+  } else if (process.platform === "linux") {
+    residentDesktop = createLinuxDesktop({ app, Tray, Menu, showWindow: showMainWindow, quit: quitDesktop, dataDir: appDataDir });
   }
+  residentDesktop?.initialize();
 
   const mainWindow = createMainWindow();
   await showStartupMessage("Backend starting...");
-  if (!windowsDesktop?.isResident() || !app.isPackaged || !process.argv.includes(STARTUP_ARG) || mainWindowRequested) {
+  if (!residentDesktop?.isResident() || !app.isPackaged || !process.argv.includes(STARTUP_ARG) || mainWindowRequested) {
     mainWindow.show();
   }
   const startupScreenStartedAt = Date.now();
@@ -1019,7 +1023,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin" && !windowsDesktop?.isResident()) {
+  if (process.platform !== "darwin" && !residentDesktop?.isResident()) {
     app.quit();
   }
 });
@@ -1035,7 +1039,7 @@ app.on("second-instance", (_event, argv) => {
 app.on("before-quit", () => {
   isQuitting = true;
   stopBackend();
-  windowsDesktop?.dispose();
+  residentDesktop?.dispose();
 });
 }
 }

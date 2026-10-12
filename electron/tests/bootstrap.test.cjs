@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const vm = require("node:vm");
-const { EventEmitter } = require("node:events");
+const { EventEmitter, once } = require("node:events");
 const { PassThrough } = require("node:stream");
 const { finished } = require("node:stream/promises");
 
@@ -16,7 +16,12 @@ for (const scenario of [
   { name: "Windows startup launch", platform: "win32", packaged: true, startup: true },
   { name: "manual launch during Windows startup", platform: "win32", packaged: true, startup: true, earlyRestore: true },
   { name: "Windows session end", platform: "win32", packaged: true, sessionEnd: true },
-  { name: "Windows tray failure", platform: "win32", packaged: true, startup: true, trayFailure: true }
+  { name: "Windows tray failure", platform: "win32", packaged: true, startup: true, trayFailure: true },
+  { name: "Linux manual launch", platform: "linux", packaged: true },
+  { name: "Linux startup launch", platform: "linux", packaged: true, startup: true },
+  { name: "manual launch during Linux startup", platform: "linux", packaged: true, startup: true, earlyRestore: true },
+  { name: "Linux without an indicator host", platform: "linux", packaged: true, startup: true, noTrayHost: true },
+  { name: "Linux tray failure", platform: "linux", packaged: true, startup: true, trayFailure: true }
 ]) {
 test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "tron-bootstrap-"));
@@ -30,6 +35,9 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
   const handlers = new Map();
   const mainDir = path.resolve(__dirname, "../main");
   const helpers = require("../main/helpers.cjs");
+  const linuxStartup = require("../main/linux-autostart.cjs").createLinuxAutostart({
+    dataDir, env: { XDG_CONFIG_HOME: path.join(root, "config") }, execPath: "/opt/Tron/tron"
+  });
   let clock = 0;
   class FastClock extends Date { static now() { return clock += 2000; } }
   class FakeWindow extends EventEmitter {
@@ -55,7 +63,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       trays.push(this);
     }
     setToolTip() {}
-    setContextMenu(menu) { this.menu = menu; }
+    setContextMenu(menu) { this.menu = menu; this.emit("menu-updated"); }
     destroy() { this.destroyed = true; }
   }
   const child = new EventEmitter();
@@ -95,6 +103,12 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
         findFreePort: async () => 8999, waitBackendReady: async () => true
       };
       if (name === "./updater.cjs") return { createUpdater: () => ({}), UPDATE_STATUS_EVENT: "updater-status" };
+      if (name === "./linux-desktop.cjs") return {
+        createLinuxDesktop: options => require("../main/linux-desktop.cjs").createLinuxDesktop({
+          ...options, startup: scenario.packaged ? linuxStartup : null,
+          hasTrayHost: () => !scenario.noTrayHost
+        })
+      };
       return require(name.startsWith(".") ? path.resolve(mainDir, name) : name);
     }
   });
@@ -113,7 +127,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
     assert.equal(logCalls[0], path.join(dataDir, "logs/tron-backend.log"));
     assert.equal(launch.options.env.TRON_BACKEND_DATABASE_URL, path.join(dataDir, "tron.sqlite3"));
     assert.equal(windows[0].urls.at(-1), "http://127.0.0.1:8999");
-    const background = scenario.startup && !scenario.trayFailure && !scenario.earlyRestore;
+    const background = scenario.startup && !scenario.trayFailure && !scenario.earlyRestore && !scenario.noTrayHost;
     assert.equal(Boolean(windows[0].shown), !background);
     assert.equal(Boolean(windows[0].focused), !background);
     assert.equal(launch.options.windowsHide, true);
@@ -123,7 +137,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       let prevented = false;
       windows[0].emit("close", { preventDefault() { prevented = true; } });
       assert.equal(prevented, false, "logoff must close the window");
-    } else if (scenario.platform === "win32" && !scenario.trayFailure) {
+    } else if (["win32", "linux"].includes(scenario.platform) && !scenario.trayFailure && !scenario.noTrayHost && scenario.packaged) {
       const window = windows[0], tray = trays[0];
       let prevented = false;
       window.emit("close", { preventDefault() { prevented = true; } });
@@ -143,15 +157,25 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       assert.equal(spawnCalls.length, 1, "restoring must not launch another sidecar");
       assert.equal(loginCalls.length, 0, "normal startup must preserve OS startup preferences");
       tray.menu.find(item => item.type === "checkbox").click({ checked: false });
-      assert.equal(loginCalls.at(-1).openAtLogin, false);
-      assert.equal(loginCalls.at(-1).name, "com.tron.desktop");
-      assert.deepEqual(loginCalls.at(-1).args, ["--tron-startup"]);
-      // Simulate enabling startup in Windows Settings while Tron is running.
-      loginEnabled = true;
-      tray.emit("right-click");
+      if (scenario.platform === "win32") {
+        assert.equal(loginCalls.at(-1).openAtLogin, false);
+        assert.equal(loginCalls.at(-1).name, "com.tron.desktop");
+        assert.deepEqual(loginCalls.at(-1).args, ["--tron-startup"]);
+        // Simulate enabling startup in Windows Settings while Tron is running.
+        loginEnabled = true;
+        tray.emit("right-click");
+      } else {
+        assert.equal(linuxStartup.isEnabled(), false);
+        // Desktop startup settings modify the same file; the menu follows it.
+        const menuUpdated = once(tray, "menu-updated");
+        linuxStartup.setEnabled(true);
+        await menuUpdated;
+        assert.equal(loginCalls.length, 0, "Linux must not use Windows login APIs");
+      }
       assert.equal(tray.menu.find(item => item.type === "checkbox").checked, true);
       tray.menu.find(item => item.type === "checkbox").click({ checked: true });
-      assert.equal(loginCalls.at(-1).enabled, true);
+      if (scenario.platform === "win32") assert.equal(loginCalls.at(-1).enabled, true);
+      else assert.equal(linuxStartup.isEnabled(), true);
       handlers.get("window-all-closed")();
       assert.equal(quitCalls, 0);
       tray.menu.find(item => item.label === "退出").click();
@@ -161,7 +185,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       prevented = false;
       window.emit("close", { preventDefault() { prevented = true; } });
       assert.equal(prevented, false, "explicit quit must allow the window to close");
-    } else if (scenario.trayFailure) {
+    } else if (scenario.trayFailure || scenario.noTrayHost) {
       let prevented = false;
       windows[0].emit("close", { preventDefault() { prevented = true; } });
       assert.equal(prevented, false, "tray failure must not leave an unreachable background app");
@@ -176,18 +200,19 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
 });
 }
 
-test("a second Windows process exits before registering IPC or starting a backend", () => {
+for (const platform of ["win32", "linux"]) {
+test(`a second ${platform} process exits before registering IPC or starting a backend`, () => {
   let quitCalls = 0;
   const source = fs.readFileSync(path.resolve(__dirname, "../main/index.cjs"), "utf8");
   vm.runInNewContext(source, {
-    process: { argv: [], platform: "win32" },
+    process: { argv: [], platform },
     require(name) {
       if (name === "electron") return {
         app: { requestSingleInstanceLock: () => false, quit: () => quitCalls++ }
       };
-      if (name === "./windows-desktop.cjs") return require("../main/windows-desktop.cjs");
-      return require(name);
+      return require(name.startsWith(".") ? path.resolve(__dirname, "../main", name) : name);
     }
   });
   assert.equal(quitCalls, 1);
 });
+}
