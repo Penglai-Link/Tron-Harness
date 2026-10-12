@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronRight, Globe } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +45,6 @@ export function TimeZoneMenu() {
           />
         }
       >
-        <Globe aria-hidden="true" />
         <span>{t("userMenu.timeZone")}</span>
         <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">
           {timeZone}

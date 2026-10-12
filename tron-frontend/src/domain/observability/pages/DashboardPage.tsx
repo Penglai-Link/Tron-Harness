@@ -1,5 +1,5 @@
 import { PlatformWorkspaceFilter, usePlatformDataHref } from "@/domain/settings/components/PlatformWorkspaceScope";
-import { ResourceTrendCards } from "../components/ResourceTrendCards";
+import { PluginCountCard, ResourceTrendCards } from "../components/ResourceTrendCards";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -121,11 +121,11 @@ export function DashboardPage() {
                       )}`}
                     >
                       <div
-                        className="relative w-full rounded-t bg-[var(--color-primary)]"
+                        className="relative w-full rounded-t bg-[var(--chart-1)]"
                         style={{ height: `${(b.requests / maximum) * 100}%` }}
                       >
                         <div
-                          className="absolute inset-x-0 bottom-0 bg-[var(--color-error)]"
+                          className="absolute inset-x-0 bottom-0 bg-[var(--chart-5)]"
                           style={{
                             height: `${
                               b.requests ? (b.errors / b.requests) * 100 : 0
@@ -174,6 +174,8 @@ export function DashboardPage() {
           </SurfaceCard>
         <div className="mt-4 flex flex-col gap-6 border-t-2 border-[var(--color-outline)] pt-10">
           <ResourceTrendCards />
+          <div className="grid gap-6 lg:grid-cols-3">
+          <PluginCountCard />
           <SurfaceCard className="flex flex-col">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-1">
@@ -215,6 +217,7 @@ export function DashboardPage() {
               </p>
             )}
           </SurfaceCard>
+          </div>
         <SurfaceCard>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-1">

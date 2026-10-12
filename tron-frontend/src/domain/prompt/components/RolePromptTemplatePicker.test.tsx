@@ -40,6 +40,13 @@ async function selectExplorer() {
 }
 
 describe("role prompt templates", () => {
+  it("explains where to add agent role templates", async () => {
+    render(<RolePromptTemplatePicker value="" onApply={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose template" }));
+    await screen.findByRole("dialog", { name: "Choose a role template" });
+    expect(screen.getByRole("button", { name: "Role template management help" })).toBeTruthy();
+  });
+
   it("lists only enabled agent roles, searches Chinese names, and copies the previewed localized body", async () => {
     await i18n.changeLanguage("zh-CN");
     setPlatformPromptEnabledMock({ promptCode: "ROLE_TESTER", enabled: false, expectedVersion: 1 });

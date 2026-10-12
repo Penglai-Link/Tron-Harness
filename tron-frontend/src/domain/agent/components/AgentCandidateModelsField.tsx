@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Field, TextInput } from "@/components/forms";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { Button } from "@/components/ui/button";
 import { fetchWorkspaceOptions } from "@/domain/admin/api";
 import { fetchWorkspaceSelectOptions } from "@/domain/model/api";
@@ -52,12 +53,15 @@ export function AgentCandidateModelsField({ workspaceCode, value, onChange, disa
   const codes = new Set(options.map((option) => option.optionCode || option.modelCode));
   const unavailable = value.filter((code) => !codes.has(code));
   const query = search.trim().toLowerCase();
-  return <Field label={text("label")} actions={value.length ? (
+  const candidateModelsLabel = <span className="inline-flex items-center gap-1.5">
+    <span>{text("label")}</span>
+    <InfoTooltip ariaLabel={text("label")}>{text("help")}</InfoTooltip>
+  </span>;
+  return <Field label={candidateModelsLabel} actions={value.length ? (
     <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => onChange([])}>{text("clear")}</Button>
   ) : undefined}>
-    <p className="mb-2 text-sm text-[var(--color-on-surface-variant)]">{text("help")}</p>
     <TextInput type="search" aria-label={text("search")} placeholder={text("search")} value={search} onChange={(event) => setSearch(event.target.value)} disabled={disabled || loading} />
-    <div className="mt-2 w-full max-h-56 overflow-y-auto rounded-md border border-[var(--color-outline-variant)] divide-y divide-[var(--color-outline-variant)]">
+    <div className="mt-2 w-full max-h-56 overflow-y-auto overscroll-y-contain rounded-md border border-[var(--color-outline-variant)] divide-y divide-[var(--color-outline-variant)]">
       {options.filter((option) => `${option.displayName} ${option.modelCode} ${option.vendor}`.toLowerCase().includes(query)).map((option) => {
         const code = option.optionCode || option.modelCode;
         return <label key={code} className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-[var(--color-surface-container)]">

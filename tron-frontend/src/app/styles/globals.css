@@ -125,6 +125,7 @@
 
 :root {
   --tron-system-font-size: 14px;
+  --tron-background-image-overlay-color: #ffffff;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -168,6 +169,7 @@
 
 .dark,
 [data-theme="matrix-dark"] {
+  --tron-background-image-overlay-color: #000000;
   --background: var(--color-background);
   --foreground: var(--color-on-surface);
   --card: var(--color-elevated-surface);
@@ -358,5 +360,11 @@ body[data-background-effects] [data-theme-part="app-page"] {
 }
 
 :root[data-skin="matrix-dark"] [data-theme-part="app-sidebar"] [data-slot="sidebar-inner"] {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--sidebar) 85%, var(--color-background)), var(--color-background));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, color-mix(in srgb, var(--sidebar) 85%, var(--color-background)) var(--tron-sidebar-bg-opacity, 100%), transparent),
+    color-mix(in srgb, var(--color-background) var(--tron-sidebar-bg-opacity, 100%), transparent)
+  );
+  -webkit-backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
+  backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
 }

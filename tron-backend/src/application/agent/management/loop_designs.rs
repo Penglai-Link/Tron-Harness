@@ -159,6 +159,9 @@ impl AgentManagementService {
         mut design: LoopDesign,
         expected_version: u32,
     ) -> Result<LoopDesign, AgentManagementError> {
+        if design.loop_code == DEFAULT_REACT_LOOP_CODE {
+            return Err(AgentManagementError::BuiltinAgentReadOnly);
+        }
         design.version = expected_version
             .checked_add(1)
             .ok_or(AgentManagementError::LoopInvalid)?;
@@ -170,6 +173,9 @@ impl AgentManagementService {
         Ok(design)
     }
     pub fn delete_loop_design(&self, code: &str) -> Result<(), AgentManagementError> {
+        if code == DEFAULT_REACT_LOOP_CODE {
+            return Err(AgentManagementError::BuiltinAgentReadOnly);
+        }
         self.repository().delete_loop_design(code)
     }
 }

@@ -73,6 +73,8 @@ pub trait DudeRepository: Send {
         archive: bool,
         now: i64,
     ) -> Result<(), DudeError>;
+    fn delete_archived_notification(&mut self, id: &str) -> Result<(), DudeError>;
+    fn delete_archived_notifications(&mut self) -> Result<usize, DudeError>;
 }
 #[derive(Debug, Clone)]
 pub struct CreateDudeCommand {
@@ -216,7 +218,7 @@ impl DudeService {
     }
     pub fn delete(&self, code: &str) -> Result<(), DudeError> {
         let d = self.get(code)?;
-        if d.is_main {
+        if d.is_main || d.kind != DudeKind::Custom {
             return Err(DudeError::Conflict);
         }
         self.repo()?.delete(code)?;
@@ -444,6 +446,12 @@ impl DudeService {
     ) -> Result<(), DudeError> {
         self.repo()?
             .update_notification(id, read, archive, chrono::Utc::now().timestamp_millis())
+    }
+    pub fn delete_archived_notification(&self, id: &str) -> Result<(), DudeError> {
+        self.repo()?.delete_archived_notification(id)
+    }
+    pub fn delete_archived_notifications(&self) -> Result<usize, DudeError> {
+        self.repo()?.delete_archived_notifications()
     }
 }
 

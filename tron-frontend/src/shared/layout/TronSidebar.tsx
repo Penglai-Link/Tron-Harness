@@ -185,7 +185,7 @@ export function TronSidebar({
                 </SidebarMenuButton>
               )}
             />
-            <DropdownMenuContent className="w-60 rounded-lg p-1.5" side="right" sideOffset={8}>
+            <DropdownMenuContent data-tron-sidebar-surface className="w-60 rounded-lg p-1.5" side="right" sideOffset={8}>
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="px-2 py-1.5 text-sm font-semibold text-[var(--color-on-surface)]">
                   {itemLabel}

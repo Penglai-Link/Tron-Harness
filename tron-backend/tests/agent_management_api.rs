@@ -2967,6 +2967,84 @@ async fn internal_agent_api(
 }
 
 #[tokio::test]
+async fn builtin_default_react_loop_is_named_and_read_only() {
+    let router = app();
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let loops = internal_agent_api(
+        &router,
+        &authorization,
+        Method::GET,
+        "/api/v1/agents/loops",
+        None,
+    )
+    .await;
+    let builtin = loops
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["loopCode"] == "default-react")
+        .expect("the built-in ReAct Loop is initialized");
+    assert_eq!(builtin["name"], "EliteForge ReAct");
+
+    let update = request_with_locale(
+        &router,
+        Method::PUT,
+        "/api/v1/agents/loops/default-react",
+        Some(json!({"name":"Renamed","kind":"React","nodes":[],"edges":[],"maxParallelNodes":1,"expectedVersion":builtin["version"]})),
+        &authorization,
+        "zh-CN",
+    )
+    .await;
+    assert_eq!(update.status(), StatusCode::FORBIDDEN);
+    let _ = response_json(update).await;
+
+    let delete = request_with_locale(
+        &router,
+        Method::DELETE,
+        "/api/v1/agents/loops/default-react",
+        None,
+        &authorization,
+        "zh-CN",
+    )
+    .await;
+    assert_eq!(delete.status(), StatusCode::FORBIDDEN);
+    let _ = response_json(delete).await;
+}
+
+#[tokio::test]
+async fn builtin_internal_agents_have_default_react_loop_assigned() {
+    let router =
+        common::app_with_state_setup(common::prepared_config(AppConfig::default()), |state| {
+            state.knowledge_bases.stop_ingestion_workers()
+        });
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
+    let agents = internal_agent_api(
+        &router,
+        &authorization,
+        Method::GET,
+        "/api/v1/agents/registry/internal",
+        None,
+    )
+    .await;
+    let builtins: Vec<_> = agents
+        .as_array()
+        .expect("internal agents are returned as a list")
+        .iter()
+        .filter(|agent| agent["builtIn"] == json!(true))
+        .collect();
+
+    assert!(builtins.len() >= 4, "expected the built-in internal agents");
+    for agent in builtins {
+        assert_eq!(
+            agent["loopCode"],
+            json!("default-react"),
+            "{} should have the built-in ReAct Loop assigned",
+            agent["agentCode"]
+        );
+    }
+}
+
+#[tokio::test]
 async fn internal_agent_platform_fields_inherit_override_restore_and_persist() {
     let config = AppConfig {
         database_url: temp_database_url("internal-agent-inheritance"),

@@ -54,7 +54,7 @@ export function getNavigationIcon(iconName?: string | null): LucideIcon | null {
     : null;
 }
 
-function mapMenu(menu: NavigationRuntimeMenu): TronNavItem {
+function mapMenu(menu: NavigationRuntimeMenu, locale: string): TronNavItem {
   const href = menu.menuType === "ExternalLink"
     ? menu.url ?? "#"
     : menu.menuType === "Internal"
@@ -64,14 +64,24 @@ function mapMenu(menu: NavigationRuntimeMenu): TronNavItem {
         : "";
 
   return {
-    children: menu.children.length ? menu.children.map(mapMenu) : undefined,
+    children: menu.children.length ? menu.children.map((child) => mapMenu(child, locale)) : undefined,
     external: menu.menuType === "ExternalLink",
     href,
     icon: getNavigationIcon(menu.icon) ?? Folder,
-    label: menu.label,
+    label: menu.menuCode === "DUDES"
+      ? localizedDudeLabel(menu.label, locale)
+      : menu.label,
     childDisplay: menu.childDisplay,
     translationKey: "",
   };
+}
+
+function localizedDudeLabel(label: string, locale: string): string {
+  const legacyBilingualLabel = /^(.*?)（([^）]*)）$/u.exec(label);
+  if (!legacyBilingualLabel) return label;
+  return locale.toLowerCase().startsWith("zh")
+    ? legacyBilingualLabel[2]
+    : legacyBilingualLabel[1];
 }
 
 export function mapNavigationTree(tree: NavigationRuntimeTree): TronNavSection[] {
@@ -86,7 +96,9 @@ export function mapNavigationTree(tree: NavigationRuntimeTree): TronNavSection[]
     standalone: menu.menuType !== "Group" && menu.children.length === 0,
     flyout: menu.childDisplay === "Flyout" && menu.children.length > 0,
     icon: getNavigationIcon(menu.icon) ?? Folder,
-    items: menu.children.length ? menu.children.map(mapMenu) : [mapMenu(menu)],
+    items: menu.children.length
+      ? menu.children.map((child) => mapMenu(child, tree.locale))
+      : [mapMenu(menu, tree.locale)],
     label: menu.label,
     translationKey: "",
   }));

@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -12,17 +10,20 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { AgentAvatar } from "@/domain/agent/components/AgentAvatarPicker";
+import { AgentAvatarWithActivity } from "@/domain/agent/components/AgentAvatarWithActivity";
 import { useDudes } from "../hooks/useDudes";
 import {
   deleteDude,
   dudeQueryKeys,
-  updateDude,
   type Dude,
 } from "../api/dudeApi";
 import { DudeEditorDialog } from "./DudeEditorDialog";
+import { SurfaceCard } from "@/shared";
+import { ShieldCheck } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { InfoTooltip } from "@/components/info-tooltip";
 
-export function DudeDefinitions() {
+export function DudeDefinitions({ embedded = false, title, titleHelp, titleHelpAriaLabel }: { embedded?: boolean; title?: string; titleHelp?: string; titleHelpAriaLabel?: string }) {
   const { t } = useTranslation("pages");
   const queryClient = useQueryClient();
   const query = useDudes();
@@ -45,10 +46,18 @@ export function DudeDefinitions() {
     }
   }
   return (
-    <section className="space-y-4" aria-label={t("dude.title")}>
-      <div className="flex items-center justify-end">
-        <Button onClick={() => setEditor("new")}>{t("dude.create")}</Button>
-      </div>
+    <section className={embedded ? "space-y-3" : "space-y-4"} aria-label={title ?? t("dude.title")}>
+      {embedded ? (
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1">
+            <h2 className="text-base font-semibold">{title ?? t("dude.category")}</h2>
+            {titleHelp ? <InfoTooltip ariaLabel={titleHelpAriaLabel ?? titleHelp}>{titleHelp}</InfoTooltip> : null}
+          </div>
+          <Button onClick={() => setEditor("new")}>{t("workspaceAgents.internal.definition.create")}</Button>
+        </div>
+      ) : <div className="flex items-center justify-end py-3">
+        <Button onClick={() => setEditor("new")}>{t("workspaceAgents.internal.definition.create")}</Button>
+      </div>}
       {query.isPending ? <p role="status">{t("dude.loading")}</p> : null}
       {query.error || error ? (
         <div
@@ -67,78 +76,37 @@ export function DudeDefinitions() {
           </Button>
         </div>
       ) : null}
-      <div className="divide-y divide-[var(--color-outline-variant)]">
+      <SurfaceCard className="min-h-28 p-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
         {query.data?.map((dude) => (
-          <div
-            key={dude.dudeCode}
-            className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 py-4 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
-          >
-            <AgentAvatar
-              avatarId={dude.avatarId}
-              className="size-10 rounded-md"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="break-words font-medium">{dude.name}</span>
-                {dude.isMain ? (
-                  <Badge variant="secondary">{t("dude.main")}</Badge>
-                ) : null}
-                {dude.kind === "Memory" ? (
-                  <Badge variant="outline">{t("dude.memory")}</Badge>
-                ) : null}
-              </div>
-              <p className="text-xs text-[var(--color-on-surface-variant)]">
-                {dude.dudeCode} ·{" "}
-                {t(dude.enabled ? "dude.running" : "dude.paused")}
-              </p>
-            </div>
-            <div className="col-span-2 flex flex-wrap items-center gap-1 pl-13 sm:col-span-1 sm:pl-0">
-              <Button
-                size="sm"
-                variant="ghost"
-                nativeButton={false}
-                render={
-                  <Link
-                    to={`/dudes?dude=${encodeURIComponent(dude.dudeCode)}`}
-                  />
-                }
-              >
-                {t("dude.open")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => setEditor(dude)}
-              >
-                {t("dude.edit")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  void change(() =>
-                    updateDude(dude.dudeCode, { enabled: !dude.enabled })
-                  )
-                }
-              >
-                {t(dude.enabled ? "dude.pause" : "dude.resume")}
-              </Button>
-              {!dude.isMain ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setDeleting(dude)}
+          <div key={dude.dudeCode} className="relative min-w-0">
+            <Button variant="ghost" className="h-auto w-full flex-col gap-2 whitespace-normal rounded-xl px-2 py-3 text-center" disabled={busy} onClick={() => setEditor(dude)}>
+              <AgentAvatarWithActivity
+                active={dude.enabled}
+                avatarId={dude.avatarId}
+                name={dude.name}
+              />
+              <span className="block w-full truncate text-sm font-medium">{dude.name}</span>
+              <span className="block w-full truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{dude.dudeCode}</span>
+            </Button>
+            {dude.kind === "Main" || dude.kind === "Memory" ? (
+              <Tooltip>
+                <TooltipTrigger
+                  aria-label={t("workspaceAgents.internal.groups.builtIn", { defaultValue: "Built-in agent" })}
+                  className="absolute left-[calc(50%+1.5rem)] top-[5.25rem] flex size-6 items-center justify-center rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface-variant)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                 >
-                  {t("dude.delete")}
-                </Button>
-              ) : null}
-            </div>
+                  <ShieldCheck size={14} aria-hidden="true" />
+                </TooltipTrigger>
+                <TooltipContent>{t("workspaceAgents.internal.groups.builtIn", { defaultValue: "Built-in agent" })}</TooltipContent>
+              </Tooltip>
+            ) : null}
+            {dude.kind === "Custom" && !dude.isMain ? (
+              <Button type="button" size="icon-sm" variant="ghost" aria-label={t("dude.delete")} title={t("dude.delete")} disabled={busy} className="absolute right-1 top-1" onClick={() => setDeleting(dude)}>×</Button>
+            ) : null}
           </div>
         ))}
-      </div>
+        </div>
+      </SurfaceCard>
       {query.data?.length === 0 ? <p>{t("dude.empty")}</p> : null}
       {editor ? (
         <DudeEditorDialog
@@ -147,7 +115,7 @@ export function DudeDefinitions() {
           onSaved={refresh}
         />
       ) : null}
-      {deleting ? (
+      {deleting?.kind === "Custom" && !deleting.isMain ? (
         <Dialog
           open
           onOpenChange={(open) => {

@@ -14,6 +14,7 @@ export interface TraceSummary {
   modelCount: number;
   toolCount: number;
   inputTokens: number;
+  cachedInputTokens: number;
   outputTokens: number;
 }
 export interface TraceSpan {

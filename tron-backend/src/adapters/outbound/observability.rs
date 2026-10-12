@@ -94,6 +94,7 @@ fn summary(t: TelemetryTrace, spans: &[TraceSpan]) -> TraceSummary {
         model_count: 0,
         tool_count: 0,
         input_tokens: 0,
+        cached_input_tokens: 0,
         output_tokens: 0,
     };
     for s in spans {
@@ -112,6 +113,11 @@ fn summary(t: TelemetryTrace, spans: &[TraceSpan]) -> TraceSummary {
             record.output_tokens += s
                 .attributes
                 .get("gen_ai.usage.output_tokens")
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0);
+            record.cached_input_tokens += s
+                .attributes
+                .get("gen_ai.usage.cached_input_tokens")
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(0);
         }
@@ -298,15 +304,40 @@ impl ObservabilityRepository for TelemetryProjection {
         let mut total = 0;
         let mut records = Vec::new();
         let mut page_number = 1;
+        const SCAN_PAGE_SIZE: usize = 50_000;
         loop {
-            let page = self.metric_points(name.clone(), page_number, 100)?;
+            let page = blocking(async {
+                let page = self
+                    .store
+                    .metric_points(
+                        name.clone(),
+                        (page_number - 1) * SCAN_PAGE_SIZE,
+                        SCAN_PAGE_SIZE,
+                    )
+                    .await
+                    .map_err(failure)?;
+                let records = page
+                    .records
+                    .into_iter()
+                    .map(|point| {
+                        serde_json::from_value(serde_json::to_value(point).map_err(failure)?)
+                            .map_err(failure)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok::<_, ObservabilityError>(MetricPage {
+                    current: page_number,
+                    size: SCAN_PAGE_SIZE,
+                    total: page.total,
+                    records,
+                })
+            })?;
             let count = page.records.len();
             for point in page.records {
                 let belongs = point.resource.get("tron.workspace.code") == Some(&workspace)
                     || point.data.get("attributes").and_then(|v| v.as_array()).is_some_and(|attrs| attrs.iter().any(|attr| attr.get("key").and_then(|v| v.as_str()) == Some("tron.workspace.code") && attr.pointer("/value/stringValue").and_then(|v| v.as_str()) == Some(workspace.as_str())));
                 if belongs { if total >= start && records.len() < size { records.push(point); } total += 1; }
             }
-            if page_number * 100 >= page.total || count == 0 { break; }
+            if page_number * SCAN_PAGE_SIZE >= page.total || count == 0 { break; }
             page_number += 1;
         }
         Ok(MetricPage { current, size, total, records })
@@ -359,7 +390,7 @@ mod sorting_tests {
         TraceSummary { workspace_code: "w".into(), trace_id: id.into(), session_code: "s".into(), session_name: None,
             run_code: "r".into(), agent_code: "a".into(), started_at: start, ended_at: Some(start + duration as i64),
             duration_ms: duration, status: "Completed".into(), span_count: spans, error_count: errors,
-            model_count: 0, tool_count: 0, input_tokens: tokens, output_tokens: 1 }
+            model_count: 0, tool_count: 0, input_tokens: tokens, cached_input_tokens: 0, output_tokens: 1 }
     }
     #[test]
     fn trace_sorting_uses_numeric_values_and_deterministic_ties() {

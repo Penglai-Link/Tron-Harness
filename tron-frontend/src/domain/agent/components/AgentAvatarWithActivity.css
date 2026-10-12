@@ -1,0 +1,38 @@
+.agent-activity-avatar {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 80px;
+  width: 80px;
+  height: 80px;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-activity-avatar__image {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+}
+
+.agent-activity-avatar__ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--color-outline-variant);
+  border-radius: 50%;
+}
+
+.agent-activity-avatar[data-active="true"] .agent-activity-avatar__ring {
+  border-top-color: var(--color-accent);
+  border-right-color: var(--color-accent);
+  animation: agent-avatar-orbit 2.4s linear infinite;
+}
+
+@keyframes agent-avatar-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-activity-avatar[data-active="true"] .agent-activity-avatar__ring {
+    animation: none;
+  }
+}

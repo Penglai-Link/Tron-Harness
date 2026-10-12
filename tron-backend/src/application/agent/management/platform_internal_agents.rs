@@ -13,34 +13,54 @@ impl AgentManagementService {
 
     /// Fresh installations start with a runnable main Agent. Saved choices remain authoritative.
     pub fn initialize_default_main_loop(&self) -> Result<(), AgentManagementError> {
-        if self
-            .repository()
-            .list_platform_internal_agent_configs()?
+        let code = crate::domain::agent::loop_design::DEFAULT_REACT_LOOP_CODE;
+        match self.loop_design(code) {
+            Ok(mut design) if design.name != "EliteForge ReAct" => {
+                let expected_version = design.version;
+                design.name = "EliteForge ReAct".into();
+                design.version = expected_version
+                    .checked_add(1)
+                    .ok_or(AgentManagementError::LoopInvalid)?;
+                self.repository()
+                    .save_loop_design(&design, expected_version)?;
+            }
+            Ok(_) => {}
+            Err(AgentManagementError::LoopNotFound) => {
+                self.repository().save_loop_design(
+                    &crate::domain::agent::loop_design::LoopDesign {
+                        loop_code: code.into(),
+                        name: "EliteForge ReAct".into(),
+                        kind: crate::domain::agent::loop_design::LoopKind::React,
+                        version: 1,
+                        nodes: vec![],
+                        edges: vec![],
+                        max_parallel_nodes: 1,
+                        updated_at: 0,
+                    },
+                    0,
+                )?;
+            }
+            Err(error) => return Err(error),
+        }
+        let mut repository = self.repository();
+        let mut configs = repository.list_platform_internal_agent_configs()?;
+        for config in &mut configs {
+            if internal_definitions::is_builtin_agent(&config.agent_code)
+                && config.loop_code.is_none()
+            {
+                config.loop_code = Some(code.into());
+                repository.upsert_platform_internal_agent_config(config)?;
+            }
+        }
+        if configs
             .iter()
-            .any(|c| c.agent_code == "main-agent")
+            .any(|config| config.agent_code == "main-agent")
         {
             return Ok(());
         }
-        let code = "default-react";
-        if self.loop_design(code).is_err() {
-            self.save_loop_design(
-                crate::domain::agent::loop_design::LoopDesign {
-                    loop_code: code.into(),
-                    name: "默认 ReAct".into(),
-                    kind: crate::domain::agent::loop_design::LoopKind::React,
-                    version: 0,
-                    nodes: vec![],
-                    edges: vec![],
-                    max_parallel_nodes: 1,
-                    updated_at: 0,
-                },
-                0,
-            )?;
-        }
         let mut config = default_config(internal_definitions::internal_agents().remove(0));
         config.loop_code = Some(code.into());
-        self.repository()
-            .insert_platform_internal_agent_config(&config)
+        repository.insert_platform_internal_agent_config(&config)
     }
 
     /// Initialize an independent Dude with a full copy of generic Agent policy.

@@ -7,16 +7,16 @@ import type {
 
 const internalAgentCatalogKeyByCode: Record<string, string> = {
   "main-agent": "mainAgent",
-  explore: "explore",
-  "full-stack": "fullStack",
-  product: "product",
+  "explore-agent": "explore",
+  "fullstack-agent": "fullStack",
+  "prd-agent": "product",
 };
 
 const defaultInternalAgentNameByCode: Record<string, string> = {
   "main-agent": "Main Agent",
-  explore: "探索智能体",
-  "full-stack": "全栈工程师",
-  product: "杨布斯",
+  "explore-agent": "探索智能体",
+  "fullstack-agent": "全栈工程师",
+  "prd-agent": "杨布斯",
 };
 
 const internalAgentGroupCatalogKeyByName: Record<string, string> = {

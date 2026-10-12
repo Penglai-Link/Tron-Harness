@@ -39,18 +39,27 @@ export function BackgroundLayer({
       inert
     >
       {imageUrl ? (
-        <img
-          alt=""
-          className="absolute inset-0 size-full"
-          src={imageUrl}
-          style={{
-            filter: imageSettings.blur ? `blur(${imageSettings.blur}px)` : undefined,
-            objectFit: imageSettings.fit === "fill" ? "fill" : imageSettings.fit,
-            objectPosition: imageSettings.position,
-            opacity: imageSettings.opacity,
-            transform: imageSettings.blur ? "scale(1.04)" : undefined,
-          }}
-        />
+        <>
+          <img
+            alt=""
+            className="absolute inset-0 size-full"
+            src={imageUrl}
+            style={{
+              filter: imageSettings.blur ? `blur(${imageSettings.blur}px)` : undefined,
+              objectFit: imageSettings.fit === "fill" ? "fill" : imageSettings.fit,
+              objectPosition: imageSettings.position,
+              opacity: imageSettings.opacity,
+              transform: imageSettings.blur ? "scale(1.04)" : undefined,
+            }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundColor: "var(--tron-background-image-overlay-color, #ffffff)",
+              opacity: imageSettings.overlayOpacity,
+            }}
+          />
+        </>
       ) : null}
       {effectSettings.effect === "aurora" ? (
         <div className="tron-background-aurora" style={{ opacity: effectSettings.opacity, color: effectSettings.color }}>

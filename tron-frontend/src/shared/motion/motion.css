@@ -24,11 +24,20 @@
   animation-duration: 180ms;
 }
 
-:root:is([data-tron-motion-policy="off"], [data-tron-motion-policy="reduced"]) :is([data-slot], [data-slot] *, .tron-button),
-:root:is([data-tron-motion-policy="off"], [data-tron-motion-policy="reduced"]) [data-slot]::before,
-:root:is([data-tron-motion-policy="off"], [data-tron-motion-policy="reduced"]) [data-slot]::after {
+:root[data-tron-motion-policy="off"] :is([data-slot], [data-slot] *, .tron-button),
+:root[data-tron-motion-policy="off"] [data-slot]::before,
+:root[data-tron-motion-policy="off"] [data-slot]::after {
   animation: none !important;
   transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+:root[data-tron-motion-policy="reduced"] :is([data-slot], [data-slot] *, .tron-button),
+:root[data-tron-motion-policy="reduced"] [data-slot]::before,
+:root[data-tron-motion-policy="reduced"] [data-slot]::after {
+  animation-duration: 120ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 120ms !important;
   scroll-behavior: auto !important;
 }
 

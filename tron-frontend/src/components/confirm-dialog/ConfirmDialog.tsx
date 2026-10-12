@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ export interface ConfirmDialogProps {
   onCancel: () => void;
   onConfirm: () => void;
   open: boolean;
+  pendingText?: string;
   pending?: boolean;
   title: string;
   tone?: "default" | "danger";
@@ -26,6 +27,7 @@ export function ConfirmDialog({
   onCancel,
   onConfirm,
   open,
+  pendingText,
   pending = false,
   title,
   tone = "danger",
@@ -90,7 +92,8 @@ export function ConfirmDialog({
             aria-busy={pending}
             onClick={onConfirm}
           >
-            {confirmText}
+            {pending ? <LoaderCircle className="animate-spin" size={14} aria-hidden="true" /> : null}
+            {pending ? pendingText ?? confirmText : confirmText}
           </Button>
         </div>
       </div>

@@ -132,6 +132,25 @@
   }
 }
 
+/* Only the sidebar surface changes alpha; its contents remain fully opaque. */
+[data-theme-anchor="sidebar"] {
+  background-color: color-mix(in srgb, var(--sidebar, var(--color-elevated-surface)) var(--tron-sidebar-bg-opacity, 100%), transparent);
+  -webkit-backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
+  backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
+}
+
+/* The desktop sidebar container is structural; keep it transparent so the
+   inner themed sidebar can reveal the page background at the chosen opacity. */
+[data-theme-part="app-sidebar"][data-slot="sidebar-container"] {
+  background-color: transparent;
+}
+
+[data-tron-sidebar-surface] {
+  background-color: color-mix(in srgb, var(--color-elevated-surface-strong, var(--color-elevated-surface)) var(--tron-sidebar-bg-opacity, 100%), transparent);
+  -webkit-backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
+  backdrop-filter: blur(var(--tron-sidebar-bg-blur, 0px));
+}
+
 .ef-chat-window__title { flex: 1; }
 .ef-chat-window__title-text { min-width: 0; }
 .ef-chat-window__title-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

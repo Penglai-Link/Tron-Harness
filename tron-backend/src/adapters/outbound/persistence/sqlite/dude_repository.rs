@@ -286,7 +286,7 @@ tx.commit().map_err(storage)})
                 .optional()
                 .map_err(storage)?;
             let mut n: PlatformNotification = decode(json.ok_or(DudeError::NotFound)?)?;
-            n.read_at = read.then_some(now);
+            n.read_at = (read || archive).then_some(now);
             n.archived_at = archive.then_some(now);
             c.execute(
                 "UPDATE platform_notifications SET record_json=?2 WHERE notification_id=?1",
@@ -294,6 +294,47 @@ tx.commit().map_err(storage)})
             )
             .map_err(storage)?;
             Ok(())
+        })
+    }
+    fn delete_archived_notification(&mut self, id: &str) -> Result<(), DudeError> {
+        let id = id.to_owned();
+        self.call(move |connection| {
+            let tx = business_transaction(connection, rusqlite::TransactionBehavior::Immediate)
+                .map_err(storage)?;
+            let exists: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM platform_notifications WHERE notification_id=?1)",
+                    [&id],
+                    |row| row.get(0),
+                )
+                .map_err(storage)?;
+            if !exists {
+                return Err(DudeError::NotFound);
+            }
+            let deleted = tx
+                .execute(
+                    "DELETE FROM platform_notifications WHERE notification_id=?1 AND json_extract(record_json,'$.archivedAt') IS NOT NULL",
+                    [&id],
+                )
+                .map_err(storage)?;
+            if deleted == 0 {
+                return Err(DudeError::Conflict);
+            }
+            tx.commit().map_err(storage)
+        })
+    }
+    fn delete_archived_notifications(&mut self) -> Result<usize, DudeError> {
+        self.call(|connection| {
+            let tx = business_transaction(connection, rusqlite::TransactionBehavior::Immediate)
+                .map_err(storage)?;
+            let deleted = tx
+                .execute(
+                    "DELETE FROM platform_notifications WHERE json_extract(record_json,'$.archivedAt') IS NOT NULL",
+                    [],
+                )
+                .map_err(storage)?;
+            tx.commit().map_err(storage)?;
+            Ok(deleted)
         })
     }
 }

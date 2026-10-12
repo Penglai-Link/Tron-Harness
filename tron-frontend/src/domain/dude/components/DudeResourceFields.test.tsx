@@ -28,10 +28,10 @@ const record = {
   toolAssignmentMode: "all_platform_tools", toolExposureMode: "direct_list", expandedDomainPersistenceMode: "sticky_expanded",
   maxSteps: 100, maxToolCalls: 100, maxParallelToolCalls: 4, mcpAccessMode: "disabled", selectedToolCodes: [], selectedServerCodes: [], source: "platform_default",
 };
-function mount() {
+function mount(panel: "resources" | "advanced" = "resources") {
   const ref = createRef<DudeResourceFieldsHandle>();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><DudeResourceFields dudeCode="dude-a" ref={ref} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><DudeResourceFields dudeCode="dude-a" panel={panel} ref={ref} /></QueryClientProvider>);
   return ref;
 }
 beforeEach(() => {
@@ -79,5 +79,16 @@ describe("Dude resource drafts", () => {
     expect(screen.getByRole("alert").textContent).toBe("Grant unavailable");
     await act(() => ref.current!.save());
     expect(api.skills).toHaveBeenCalledTimes(1); expect(api.knowledge).toHaveBeenCalledTimes(2);
+  });
+  it("saves advanced policy separately from capability and access assignments", async () => {
+    const ref = mount("advanced");
+    const maxSteps = await screen.findByLabelText("workspaceAgents.internal.labels.maxSteps");
+    fireEvent.change(maxSteps, { target: { value: "12" } });
+    await act(() => ref.current!.save());
+    expect(api.policy).toHaveBeenCalledWith("$platform", "dude-a", { maxSteps: 12 });
+    expect(api.assignTools).not.toHaveBeenCalled();
+    expect(api.assignServers).not.toHaveBeenCalled();
+    expect(api.skills).not.toHaveBeenCalled();
+    expect(api.knowledge).not.toHaveBeenCalled();
   });
 });

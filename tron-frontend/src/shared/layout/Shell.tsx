@@ -1,5 +1,5 @@
 import {
-  Settings2,
+  Settings,
   Bot,
   ChevronDown,
   MoreHorizontal,
@@ -421,6 +421,48 @@ export function TronShell({
     : selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace");
   const activeWorkspaceCode = effectiveSecondarySpaceId || effectivePrimarySpaceId;
   useLayoutEffect(() => { setApiWorkspaceCode(activeWorkspaceCode || null); return () => setApiWorkspaceCode(null); }, [activeWorkspaceCode]);
+
+  useEffect(() => {
+    if (pathname !== "/chats") return;
+
+    const params = new URLSearchParams(search);
+    const requestedWorkspaceCode = params.get("workspaceCode");
+    if (!requestedWorkspaceCode || (dataSource === "api" && !workspaceSwitcherValidated)) return;
+
+    const secondarySpace = workspaceSwitcher.secondarySpaces.find(
+      (space) => space.workspaceCode === requestedWorkspaceCode,
+    );
+    const primarySpace = workspaceSwitcher.primarySpaces.find(
+      (space) => space.workspaceCode === requestedWorkspaceCode,
+    );
+    const targetPrimarySpaceId = secondarySpace?.primaryWorkspaceCode ?? primarySpace?.workspaceCode;
+    if (targetPrimarySpaceId) {
+      const targetSecondarySpaceId = secondarySpace?.depth && secondarySpace.depth > 1
+        ? secondarySpace.workspaceCode
+        : "";
+      if (targetPrimarySpaceId !== selectedPrimarySpaceId || targetSecondarySpaceId !== selectedSecondarySpaceId) {
+        selectPrimarySpaceInStore(targetPrimarySpaceId, targetSecondarySpaceId);
+      }
+    }
+
+    // The workspace is a one-time routing hint. Drop it after applying so the
+    // user's later workspace selection is not overridden by the old URL.
+    params.delete("workspaceCode");
+    const nextSearch = params.toString();
+    navigate({ pathname, search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
+  }, [
+    dataSource,
+    navigate,
+    pathname,
+    search,
+    selectPrimarySpaceInStore,
+    selectedPrimarySpaceId,
+    selectedSecondarySpaceId,
+    workspaceSwitcher.primarySpaces,
+    workspaceSwitcher.secondarySpaces,
+    workspaceSwitcherValidated,
+  ]);
+
   const { create: createChatTab } = useCreateChatTab(activeWorkspaceCode);
   const workspaceTree = useMemo(
     () => buildWorkspaceTree(workspaceSwitcher.secondarySpaces),
@@ -770,6 +812,7 @@ export function TronShell({
     newSession: () => {
       void createChatTab();
     },
+    openNotifications: () => { void navigate("/notifications"); },
     previousTab: () => activateAdjacentTab(-1),
     toggleAgentWindow: () => handleAgentLauncherClick(),
     toggleBottomPanel: () => toggleBottomPanel(),
@@ -1015,7 +1058,7 @@ export function TronShell({
               "fixed z-[70] w-[min(20rem,calc(100vw-1rem))] overflow-visible rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
             )}
             style={userPanelStyle ?? { visibility: "hidden" }}
-            role="dialog" data-theme-anchor="dialog"
+            role="dialog" data-theme-anchor="dialog" data-tron-sidebar-surface
             aria-label={t("shell:utilityPanel.user")}
           >
             <div className="flex min-w-0 items-center gap-2 px-3 py-2">
@@ -1041,7 +1084,7 @@ export function TronShell({
                 title={t("shell:aria.openSystemSettings")}
                 onClick={openSystemSettings}
               >
-                <Settings2 size={16} aria-hidden="true" />
+                <Settings size={16} aria-hidden="true" />
               </button>
               {userMenuContent ? <div className="shrink-0">{userMenuContent}</div> : null}
             </div>
@@ -1101,7 +1144,7 @@ export function TronShell({
               "absolute z-[70] w-[min(260px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
               compact && !mobile ? "left-[calc(100%+8px)] top-0" : "left-0 top-[calc(100%+8px)]",
             )}
-            role="dialog" data-theme-anchor="dialog"
+            role="dialog" data-theme-anchor="dialog" data-tron-sidebar-surface
             aria-label={t("shell:navigation.selectorTitle")}
           >
             {renderNavigationDomainSwitcherContent()}
@@ -1240,7 +1283,7 @@ export function TronShell({
 
           {agentOpen ? (
             <MainAgentChatWindow
-              currentUserDisplayName={authSession?.user.displayName ?? ""}
+              currentUserDisplayName={authSession?.user.displayName || authSession?.user.username || ""}
               pageContext={mainAgentPageContext}
               workspaceCode={activeWorkspaceCode}
               windowState={{ ...mainAgentWindowState, open: true }}

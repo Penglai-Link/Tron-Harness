@@ -1,8 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Field, SelectInput, TextInput } from "@/components/forms";
+import { Field, TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
-import { SelectItem } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -54,6 +53,7 @@ export function DudeEditorDialog({
   }));
   const createdCode = useRef<string | null>(null);
   const resources = useRef<DudeResourceFieldsHandle>(null);
+  const advancedResources = useRef<DudeResourceFieldsHandle>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const field = <K extends keyof DudeInput>(key: K, value: DudeInput[K]) =>
@@ -62,6 +62,7 @@ export function DudeEditorDialog({
     /^[a-z][a-z0-9_-]{0,63}$/.test(draft.dudeCode) &&
     Boolean(draft.name.trim()) &&
     Boolean(draft.loopCode) &&
+    Boolean(draft.rolePrompt.trim()) &&
     draft.heartbeatMinutes >= 1;
   async function save() {
     if (!valid || saving) return;
@@ -76,6 +77,7 @@ export function DudeEditorDialog({
         createdCode.current = created.dudeCode;
       }
       await resources.current?.save();
+      await advancedResources.current?.save();
       await onSaved();
       onClose();
     } catch (reason) {
@@ -94,11 +96,24 @@ export function DudeEditorDialog({
       }}
     >
       <DialogContent
-        className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-2xl"
+        className="flex h-[min(78dvh,48rem)] max-h-[90dvh] flex-col overflow-hidden sm:max-w-2xl"
         closeLabel={t("dude.close")}
       >
         <DialogHeader>
-          <DialogTitle>{t(dude ? "dude.edit" : "dude.create")}</DialogTitle>
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle>{t(dude ? "dude.edit" : "dude.create")}</DialogTitle>
+            {dude ? (
+              <div className="flex items-center gap-2 pr-8 text-sm">
+                <span>{t(draft.enabled ? "dude.activated" : "dude.paused")}</span>
+                <Switch
+                  aria-label={t(draft.enabled ? "dude.pause" : "dude.resume")}
+                  checked={draft.enabled}
+                  disabled={saving}
+                  onCheckedChange={(value) => field("enabled", value)}
+                />
+              </div>
+            ) : null}
+          </div>
           <DialogDescription>{t("dude.costWarning")}</DialogDescription>
         </DialogHeader>
         <Tabs
@@ -112,7 +127,7 @@ export function DudeEditorDialog({
             variant="line"
             className="w-full justify-start border-b border-[var(--color-outline-variant)]"
           >
-            {["profile", "background", ...(dude ? ["resources"] : [])].map(
+            {["profile", "background", ...(dude ? ["resources", "advanced"] : [])].map(
               (value) => (
                 <TabsTrigger
                   key={value}
@@ -125,13 +140,13 @@ export function DudeEditorDialog({
             )}
           </TabsList>
           <form
-            className="flex min-h-0 flex-col gap-4"
+            className="flex min-h-0 flex-1 flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault();
               void save();
             }}
           >
-            <div className="min-h-0 overflow-y-auto px-1">
+            <div className="min-h-0 flex-1 overflow-y-auto px-1">
               <TabsContent
                 value="profile"
                 keepMounted
@@ -167,24 +182,9 @@ export function DudeEditorDialog({
                     onChange={(event) => field("name", event.target.value)}
                   />
                 </Field>
-                {!dude ? (
-                  <Field label={t("dude.kind")}>
-                    <SelectInput
-                      aria-label={t("dude.kind")}
-                      value={draft.kind}
-                      disabled={saving || Boolean(createdCode.current)}
-                      onValueChange={(value) => {
-                        if (value === "Custom" || value === "Memory")
-                          field("kind", value);
-                      }}
-                    >
-                      <SelectItem value="Custom">{t("dude.custom")}</SelectItem>
-                      <SelectItem value="Memory">{t("dude.memory")}</SelectItem>
-                    </SelectInput>
-                  </Field>
-                ) : null}
                 <AgentLoopField
                   value={draft.loopCode}
+                  defaultKind={!dude ? "React" : undefined}
                   disabled={saving}
                   onChange={(value) => field("loopCode", value)}
                 />
@@ -196,16 +196,28 @@ export function DudeEditorDialog({
                 />
                 <AgentRolePromptField
                   rows={8}
+                  required
                   value={draft.rolePrompt}
                   disabled={saving}
                   onChange={(value) => field("rolePrompt", value)}
                 />
               </TabsContent>
               {dude ? (
-                <TabsContent value="resources" keepMounted>
+                <TabsContent value="resources" keepMounted className="space-y-4 py-2">
                   <DudeResourceFields
                     ref={resources}
                     dudeCode={dude.dudeCode}
+                    panel="resources"
+                    disabled={saving}
+                  />
+                </TabsContent>
+              ) : null}
+              {dude ? (
+                <TabsContent value="advanced" keepMounted className="space-y-4 py-2">
+                  <DudeResourceFields
+                    ref={advancedResources}
+                    dudeCode={dude.dudeCode}
+                    panel="advanced"
                     disabled={saving}
                   />
                 </TabsContent>

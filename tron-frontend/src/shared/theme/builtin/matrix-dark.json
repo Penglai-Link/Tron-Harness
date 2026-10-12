@@ -4,6 +4,7 @@
   "version": 1,
   "mode": "Dark",
   "colors": {
+    "--tron-background-image-overlay-color": "#000000",
     "--auth-page-glow": "rgba(92, 255, 133, 0.16)",
     "--auth-page-start": "#020a05",
     "--auth-page-end": "#06110a",

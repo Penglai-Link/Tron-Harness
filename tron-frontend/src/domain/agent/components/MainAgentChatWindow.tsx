@@ -29,6 +29,7 @@ import { useTheme } from "@/shared";
 import { applyCurrentLocaleHeader } from "@/i18n";
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
 import { resolveMainDudeSession } from "@/domain/dude/api/dudeApi";
+import { useDudes } from "@/domain/dude/hooks/useDudes";
 import { Button } from "@/components/ui/button";
 
 interface MainAgentChatWindowProps {
@@ -64,6 +65,9 @@ export function MainAgentChatWindow({
   const toast = useToast();
   const feedback = useChatFeedback();
   const { t } = useTranslation("pages");
+  const dudes = useDudes();
+  const mainDudeName = dudes.data?.find((dude) => dude.isMain)?.name;
+  const chatTitle = floatingTitle ?? mainDudeName ?? t("dude.mainConversation");
   const { agentReplyEffect, agentReplySpeed } = useTheme();
   const workRailLabels = useChatWorkRailLabels();
   const historyLabels = useChatHistoryLabels();
@@ -138,11 +142,11 @@ export function MainAgentChatWindow({
     showNewSession: false,
     inputPlaceholder: t("dude.messagePlaceholder"),
     storageKey: MAIN_AGENT_WINDOW_STORAGE_KEY,
-    title: t("dude.mainConversation"),
+    title: chatTitle,
     workRailLabels,
     historyLabels,
     workspaceCode: undefined,
-  }), [workRailLabels, historyLabels, persistedSession?.agentCode, t]);
+  }), [workRailLabels, historyLabels, persistedSession?.agentCode, chatTitle, t]);
   const createSendInput = useCallback((
     session: ChatSession,
     content: string,
@@ -179,7 +183,7 @@ export function MainAgentChatWindow({
     return () => { active = false; };
   }, [resolvedWindowState.open, retry]);
 
-  if (!persistedSession) return resolvedWindowState.open ? <div role="dialog" aria-label={t("dude.mainConversation")} className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-4 shadow-lg">
+  if (!persistedSession) return resolvedWindowState.open ? <div role="dialog" aria-label={chatTitle} className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-4 shadow-lg">
     {resolutionError ? <><p role="alert">{resolutionError}</p><Button className="mt-3" onClick={() => setRetry(value => value + 1)}>{t("dude.retry")}</Button></> : <p role="status">{t("dude.loading")}</p>}
     <Button className="ml-2" variant="ghost" onClick={() => handleWindowStateChange({ ...resolvedWindowState, open: false })}>{t("dude.close")}</Button>
   </div> : null;
@@ -194,7 +198,7 @@ export function MainAgentChatWindow({
         createSendInput={createSendInput}
         currentUserDisplayName={currentUserDisplayName}
         floatingSubtitle={floatingSubtitle ?? t("dude.platform")}
-        floatingTitle={floatingTitle ?? t("dude.mainConversation")}
+        floatingTitle={chatTitle}
         footerAddon={footerAddon}
         initialSession={persistedSession}
         onError={handleError}

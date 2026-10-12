@@ -1,6 +1,7 @@
 export const shellShortcutActions = [
   "newSession",
   "toggleAgentWindow",
+  "openNotifications",
   "closeCurrentTab",
   "previousTab",
   "nextTab",
@@ -112,6 +113,7 @@ export function createDefaultShellShortcutBindings(): ShellShortcutBindings {
   return {
     newSession: { ...modAlt("N"), altKey: false },
     toggleAgentWindow: modAlt("N"),
+    openNotifications: null,
     closeCurrentTab: modAlt("W"),
     previousTab: modAlt("H"),
     nextTab: modAlt("L"),

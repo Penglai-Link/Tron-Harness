@@ -1,7 +1,6 @@
 import { reconcileResourceDraft } from "../model/ResourceAssignmentDraft";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown } from "lucide-react";
 
 import {
   fetchToolDomains,
@@ -90,6 +89,7 @@ import {
 } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import { SelectItem } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
   AgentAvatar,
@@ -297,6 +297,7 @@ export function WorkspaceAgentsPage({
 
   const queryClient = useQueryClient();
   const [editingAgentCode, setEditingAgentCode] = useState<string | null>(null);
+  const [editingAgentTab, setEditingAgentTab] = useState("profile");
   const [restoreBaselines, setRestoreBaselines] = useState<
     Record<string, WorkspaceInternalAgentRecord>
   >({});
@@ -1299,6 +1300,7 @@ export function WorkspaceAgentsPage({
               </div>
             ) : null}
           </div>
+          <SurfaceCard className="min-h-40 p-4">
           {groupInternalAgents(
             internalAgents,
             internalSearch,
@@ -1312,7 +1314,6 @@ export function WorkspaceAgentsPage({
               )}
             </p>
           ) : null}
-
           <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
           {groupInternalAgents(
             internalAgents,
@@ -1398,6 +1399,7 @@ export function WorkspaceAgentsPage({
                           setKnowledgeDrafts({});
                           setWorkspaceDrafts({});
                           setRestoreBaselines({});
+                          setEditingAgentTab("profile");
                           setEditingAgentCode(agent.agentCode);
                         }}
                       />
@@ -1420,7 +1422,7 @@ export function WorkspaceAgentsPage({
                           }}
                         >
                           <DialogContent
-                            className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl"
+                            className="flex h-[min(78dvh,48rem)] max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl"
                             showCloseButton={!internalBusy}
                             closeLabel={internalPageT(
                               "definition.close",
@@ -1439,7 +1441,7 @@ export function WorkspaceAgentsPage({
                                 })}
                               </DialogDescription>
                             </DialogHeader>
-                            <div className="tron-scrollbar min-h-0 overflow-y-auto px-1 pb-1">
+                            <div className="flex min-h-0 flex-1 flex-col px-1 pb-1">
                               {scope !== "platform" || statusLabel ? (
                                 <div className="text-right text-xs">
                                   {scope !== "platform" ? (
@@ -1491,7 +1493,32 @@ export function WorkspaceAgentsPage({
                                 </div>
                               ) : null}
 
-                              <div className="mt-3 space-y-3">
+                              <Tabs
+                                className="min-h-0 flex-1"
+                                value={editingAgentTab}
+                                onValueChange={(value) => {
+                                  if (typeof value === "string") setEditingAgentTab(value);
+                                }}
+                              >
+                                <TabsList variant="line" className="w-full shrink-0 justify-start border-b border-[var(--color-outline-variant)]">
+                                  {[
+                                    ["profile", "Basic information"],
+                                    ["runtime", "Runtime behavior"],
+                                    ["resources", "Capabilities and resources"],
+                                    ["advanced", "Advanced configuration"],
+                                  ].map(([value, label]) => (
+                                    <TabsTrigger key={value} value={value} className="flex-none px-3">
+                                      {internalPageT(`definition.tabs.${value}`, label)}
+                                    </TabsTrigger>
+                                  ))}
+                                  {scope === "platform" ? (
+                                    <TabsTrigger value="workspace" className="flex-none px-3">
+                                      {internalPageT("definition.tabs.workspace", "Workspace access")}
+                                    </TabsTrigger>
+                                  ) : null}
+                                </TabsList>
+                                <TabsContent value="profile" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
+                              <div className="space-y-3">
                                 {agent.builtIn && scope !== "platform" ? (
                                   <AgentAvatar
                                     avatarId={draft.avatarId}
@@ -1508,17 +1535,6 @@ export function WorkspaceAgentsPage({
                                     }
                                   />
                                 )}
-                                <AgentCandidateModelsField workspaceCode={activeWorkspaceCode} value={draft.candidateModelCodes} disabled={editingDisabled}
-                                  onChange={(candidateModelCodes) => setInternalDraft(agent.agentCode, { candidateModelCodes })} />
-                                <AgentLoopField
-                                  value={draft.loopCode}
-                                  disabled={editingDisabled}
-                                  onChange={(loopCode) =>
-                                    setInternalDraft(agent.agentCode, {
-                                      loopCode,
-                                    })
-                                  }
-                                />
                                 <Field
                                   label={internalPageT(
                                     "definition.name",
@@ -1540,22 +1556,6 @@ export function WorkspaceAgentsPage({
                                     }
                                   />
                                 </Field>
-                                {scope === "platform" ? (
-                                  <AgentWorkspaceField
-                                    code={agent.agentCode}
-                                    name={draft.name}
-                                    disabled={internalBusy}
-                                    selectedCodes={
-                                      workspaceDrafts[agent.agentCode]
-                                    }
-                                    onSelectionChange={(codes) =>
-                                      setWorkspaceDrafts((current) => ({
-                                        ...current,
-                                        [agent.agentCode]: codes,
-                                      }))
-                                    }
-                                  />
-                                ) : null}
                                 <InternalAgentGroupField
                                   workspaceCode={activeWorkspaceCode}
                                   value={draft.groupName}
@@ -1566,17 +1566,29 @@ export function WorkspaceAgentsPage({
                                     })
                                   }
                                 />
-                                <AgentRolePromptField
-                                  key={`${activeWorkspaceCode}:${agent.agentCode}`}
-                                  disabled={editingDisabled}
-                                  value={draft.rolePrompt}
-                                  onChange={(value) =>
-                                    setInternalDraft(agent.agentCode, {
-                                      rolePrompt: value,
-                                    })
-                                  }
-                                />
                               </div>
+
+                                </TabsContent>
+                                <TabsContent value="runtime" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
+                                  <AgentLoopField
+                                    value={draft.loopCode}
+                                    disabled={editingDisabled}
+                                    onChange={(loopCode) => setInternalDraft(agent.agentCode, { loopCode })}
+                                  />
+                                  <AgentCandidateModelsField
+                                    workspaceCode={activeWorkspaceCode}
+                                    value={draft.candidateModelCodes}
+                                    disabled={editingDisabled}
+                                    onChange={(candidateModelCodes) => setInternalDraft(agent.agentCode, { candidateModelCodes })}
+                                  />
+                                  <AgentRolePromptField
+                                    key={`${activeWorkspaceCode}:${agent.agentCode}`}
+                                    disabled={editingDisabled}
+                                    value={draft.rolePrompt}
+                                    onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })}
+                                  />
+                                </TabsContent>
+                                <TabsContent value="resources" keepMounted className="tron-scrollbar min-h-0 flex-1 overflow-y-auto px-1 py-3">
 
                               <div className="mt-3 grid gap-3 lg:grid-cols-2">
                                 <Field
@@ -1740,18 +1752,8 @@ export function WorkspaceAgentsPage({
                                 />
                               </div>
 
-                              <details className="group mt-3 border-t border-[var(--color-outline-variant)]">
-                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-medium marker:hidden [&::-webkit-details-marker]:hidden">
-                                  {internalPageT(
-                                    "advancedSettings",
-                                    "Advanced settings"
-                                  )}
-                                  <ChevronDown
-                                    aria-hidden="true"
-                                    size={16}
-                                    className="shrink-0 transition-transform group-open:rotate-180"
-                                  />
-                                </summary>
+                              </TabsContent>
+                              <TabsContent value="advanced" keepMounted className="tron-scrollbar min-h-0 flex-1 overflow-y-auto px-1 py-3">
                                 <div className="grid gap-3 lg:grid-cols-2">
                                   <Field
                                     label={fieldLabel(
@@ -1890,7 +1892,6 @@ export function WorkspaceAgentsPage({
                                     />
                                   </Field>
                                 </div>
-                              </details>
 
                               {assignmentDialog?.workspaceCode ===
                                 activeWorkspaceCode &&
@@ -1930,6 +1931,24 @@ export function WorkspaceAgentsPage({
                                   }}
                                 />
                               ) : null}
+                                </TabsContent>
+                                {scope === "platform" ? (
+                                  <TabsContent value="workspace" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
+                                    <AgentWorkspaceField
+                                      code={agent.agentCode}
+                                      name={draft.name}
+                                      disabled={internalBusy}
+                                      selectedCodes={workspaceDrafts[agent.agentCode]}
+                                      onSelectionChange={(codes) =>
+                                        setWorkspaceDrafts((current) => ({
+                                          ...current,
+                                          [agent.agentCode]: codes,
+                                        }))
+                                      }
+                                    />
+                                  </TabsContent>
+                                ) : null}
+                              </Tabs>
                             </div>
                             <DialogFooter>
                               <Button
@@ -1977,6 +1996,7 @@ export function WorkspaceAgentsPage({
             </Fragment>
           ))}
           </div>
+          </SurfaceCard>
         </div>
       ) : null}
 

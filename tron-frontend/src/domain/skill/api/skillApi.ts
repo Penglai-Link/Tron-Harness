@@ -37,7 +37,8 @@ export async function searchMarketplaceSkills(
 export async function fetchRegistrySkills(
   options: {
     search?: string;
-  } = {}
+  } = {},
+  signal?: AbortSignal
 ) {
   return requestApi<RegistrySkillRecord[]>(
     skillApiEndpoints.listRegistrySkills,
@@ -45,6 +46,7 @@ export async function fetchRegistrySkills(
       queryParams: {
         search: options.search,
       },
+      signal,
     }
   );
 }

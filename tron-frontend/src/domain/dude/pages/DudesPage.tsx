@@ -81,26 +81,14 @@ function SessionChat({
   });
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 justify-end">
-        <Link
-          className={buttonVariants({ size: "sm", variant: "ghost" })}
-          to={`/settings/observability/traces?sessionCode=${encodeURIComponent(
-            session.sessionCode
-          )}`}
-        >
-          {t("dude.viewTraces")}
-        </Link>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <AgentChatWindow
-          showHeader={false}
-          adapter={adapter}
-          config={config}
-          initialSession={session}
-          currentUserDisplayName={auth.session?.user.displayName ?? ""}
-          createSendInput={createSendInput}
-        />
-      </div>
+      <AgentChatWindow
+        showHeader={false}
+        adapter={adapter}
+        config={config}
+        initialSession={session}
+        currentUserDisplayName={auth.session?.user.displayName || auth.session?.user.username || ""}
+        createSendInput={createSendInput}
+      />
     </div>
   );
 }
@@ -175,8 +163,11 @@ export function DudesPage() {
       timeStyle: "short",
     }).format(new Date(value));
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col lg:flex-row">
-      <aside className="shrink-0 border-b border-[var(--color-outline-variant)] p-3 lg:w-56 lg:overflow-y-auto lg:border-r lg:border-b-0 lg:p-4">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 lg:flex-row">
+      <aside
+        data-theme-anchor="card"
+        className="min-w-0 shrink-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-3 shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))] lg:w-56 lg:overflow-y-auto lg:p-4"
+      >
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">{t("dude.title")}</span>
           <Button
@@ -217,13 +208,13 @@ export function DudesPage() {
                 avatarId={item.avatarId}
                 className="size-9 shrink-0 rounded-md"
               />
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">
-                  {item.name}
-                </span>
-                <span className="block text-xs text-[var(--color-on-surface-variant)]">
-                  {t(item.enabled ? "dude.running" : "dude.paused")}
-                  {item.isMain ? ` · ${t("dude.main")}` : ""}
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-medium">{item.name}</span>
+                  <Badge variant={item.enabled ? "success" : "outline"}>
+                    {t(item.enabled ? "dude.activated" : "dude.paused")}
+                  </Badge>
+                  {item.isMain ? <Badge variant="secondary">{t("dude.main")}</Badge> : null}
                 </span>
               </span>
             </button>
@@ -251,7 +242,8 @@ export function DudesPage() {
       {dude ? (
         <section
           aria-label={dude.name}
-          className="flex min-h-0 min-w-0 flex-1 flex-col px-3 pt-3 lg:px-5 lg:pt-4"
+          data-theme-anchor="card"
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-3 shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))] lg:p-4"
         >
           <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
             <h1 className="text-base font-medium">{dude.name}</h1>
@@ -395,8 +387,7 @@ export function DudesPage() {
             >
               {selectedHistory ? (
                 <div className="flex h-full min-h-0 flex-col">
-                  <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
-                    <span>{selectedHistory.title}</span>
+                  <div className="mb-2 flex shrink-0 items-center justify-end gap-2">
                     <Button
                       size="sm"
                       variant="outline"
@@ -409,6 +400,14 @@ export function DudesPage() {
                       }}
                     >
                       {t("dude.backToHistory")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      nativeButton={false}
+                      render={<Link to={`/settings/observability/traces?sessionCode=${encodeURIComponent(selectedHistory.sessionCode)}`} />}
+                    >
+                      {t("dude.viewTraces")}
                     </Button>
                   </div>
                   <SessionChat

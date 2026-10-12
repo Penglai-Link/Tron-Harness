@@ -105,17 +105,27 @@ export function BackgroundAppearanceSettings() {
         <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
           <div className="relative grid h-24 place-items-center overflow-hidden rounded-md border border-[var(--color-outline-variant)]/60 bg-[var(--color-surface-container)]">
             {backgroundImageUrl ? (
-              <img
-                alt=""
-                className="size-full"
-                src={backgroundImageUrl}
-                style={{
-                  filter: backgroundImageSettings.blur ? `blur(${backgroundImageSettings.blur / 2}px)` : undefined,
-                  objectFit: backgroundImageSettings.fit === "fill" ? "fill" : backgroundImageSettings.fit,
-                  objectPosition: backgroundImageSettings.position,
-                  opacity: backgroundImageSettings.opacity,
-                }}
-              />
+              <>
+                <img
+                  alt=""
+                  className="absolute inset-0 size-full"
+                  src={backgroundImageUrl}
+                  style={{
+                    filter: backgroundImageSettings.blur ? `blur(${backgroundImageSettings.blur / 2}px)` : undefined,
+                    objectFit: backgroundImageSettings.fit === "fill" ? "fill" : backgroundImageSettings.fit,
+                    objectPosition: backgroundImageSettings.position,
+                    opacity: backgroundImageSettings.opacity,
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-0"
+                  style={{
+                    backgroundColor: "var(--tron-background-image-overlay-color, #ffffff)",
+                    opacity: backgroundImageSettings.overlayOpacity,
+                  }}
+                />
+              </>
             ) : (
               <ImageIcon aria-hidden="true" className="size-6 text-[var(--color-on-surface-variant)]" />
             )}
@@ -161,6 +171,16 @@ export function BackgroundAppearanceSettings() {
                 value={Math.round(backgroundImageSettings.opacity * 100)}
                 format={(value) => `${value}%`}
                 onChange={(value) => setBackgroundImageSettings({ ...backgroundImageSettings, opacity: value / 100 })}
+              />
+              <RangeControl
+                disabled={!backgroundImageUrl}
+                label={t("settingsAppearance.backgroundImageOverlay")}
+                max={60}
+                min={0}
+                step={5}
+                value={Math.round(backgroundImageSettings.overlayOpacity * 100)}
+                format={(value) => `${value}%`}
+                onChange={(value) => setBackgroundImageSettings({ ...backgroundImageSettings, overlayOpacity: value / 100 })}
               />
               <RangeControl
                 disabled={!backgroundImageUrl}

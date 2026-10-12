@@ -7,6 +7,8 @@ export interface PlatformNotification {
 export const notificationQueryKey = ["platform-notifications"] as const;
 export const listNotifications = (signal?: AbortSignal) => requestApi<PlatformNotification[]>("GET /api/v1/notifications", { signal });
 export const updateNotification = (id: string, body: { read: boolean; archived: boolean }) => requestApi<unknown>("PATCH /api/v1/notifications/{id}", { pathParams: { id }, body });
+export const deleteNotification = (id: string) => requestApi<unknown>("DELETE /api/v1/notifications/{id}", { pathParams: { id } });
+export const deleteArchivedNotifications = () => requestApi<number>("DELETE /api/v1/notifications");
 export function notificationTarget(notification: PlatformNotification): string | null {
   const target = notification.target ?? {};
   if (typeof target.href === "string" && target.href.startsWith("/") && !target.href.startsWith("//")) return target.href;

@@ -46,8 +46,14 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/dudes/{code}/threads/{session}/history/query",
             post(thread_history),
         )
-        .route("/api/v1/notifications", get(notifications))
-        .route("/api/v1/notifications/{id}", patch(update_notification))
+        .route(
+            "/api/v1/notifications",
+            get(notifications).delete(delete_archived_notifications),
+        )
+        .route(
+            "/api/v1/notifications/{id}",
+            patch(update_notification).delete(delete_notification),
+        )
 }
 #[derive(Debug)]
 pub struct DudeApiError(pub DudeError);
@@ -472,6 +478,20 @@ async fn update_notification(
 ) -> Result<Json<ApiResponse<EmptyData>>, DudeApiError> {
     s.dudes.update_notification(&id, r.read, r.archived)?;
     Ok(Json(ApiResponse::protocol_success(EmptyData {})))
+}
+async fn delete_notification(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<EmptyData>>, DudeApiError> {
+    s.dudes.delete_archived_notification(&id)?;
+    Ok(Json(ApiResponse::protocol_success(EmptyData {})))
+}
+async fn delete_archived_notifications(
+    State(s): State<AppState>,
+) -> Result<Json<ApiResponse<usize>>, DudeApiError> {
+    Ok(Json(ApiResponse::protocol_success(
+        s.dudes.delete_archived_notifications()?,
+    )))
 }
 
 #[derive(Serialize)]

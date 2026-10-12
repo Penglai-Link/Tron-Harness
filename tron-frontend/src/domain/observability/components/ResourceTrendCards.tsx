@@ -1,5 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { fetchPlatformSystemAgents, fetchWorkspaceInternalAgents, listTools } from "@/domain/agent/api/agentManagementApi";
+import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
+import { listDudes } from "@/domain/dude/api/dudeApi";
+import { fetchRegistrySkills } from "@/domain/skill/api";
 import { SurfaceCard, useLocaleFormatters } from "@/shared";
 import { listCapabilityPacks } from "@/domain/settings/api/capabilityApi";
 import { queryMetricPoints } from "../api/observabilityApi";
@@ -14,7 +18,7 @@ function samples(records: MetricPoint[]) {
     .filter(p => Number.isFinite(p.value)).sort((a, b) => a.time - b.time);
 }
 
-function Trend({ name, title, factor, unit }: { name: string; title: string; factor: number; unit: string }) {
+function Trend({ name, title, factor, unit, color }: { name: string; title: string; factor: number; unit: string; color: string }) {
   const { t } = useTranslation("observability");
   const { formatNumber, formatDateTime } = useLocaleFormatters();
   const query = useQuery({ queryKey: ["observability-resource-history", name], queryFn: ({ signal }) => queryMetricPoints(name, 1, 100, signal), refetchInterval: 10000 });
@@ -30,9 +34,9 @@ function Trend({ name, title, factor, unit }: { name: string; title: string; fac
     {points.length ? <>
       <svg viewBox="0 0 600 156" className="h-40 w-full" role="img" aria-label={title} preserveAspectRatio="none">
         {[14, 78, 142].map(y => <line key={y} x1="8" x2="592" y1={y} y2={y} stroke="var(--color-outline-variant)" strokeWidth="1" />)}
-        <path d={`${path} L${8 + ((last?.time ?? firstTime) - firstTime) / duration * 584},142 L8,142 Z`} fill="var(--color-primary)" opacity="0.08" />
-        <path d={path} fill="none" stroke="var(--color-primary)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-        {points.map((p, i) => <circle key={`${p.time}-${i}`} cx={8 + (p.time - firstTime) / duration * 584} cy={142 - p.value / max * 128} r="2" fill="var(--color-primary)"><title>{formatDateTime(p.time, { timeStyle: "medium" })} · {formatNumber(p.value, { maximumFractionDigits: 1 })} {unit}</title></circle>)}
+        <path d={`${path} L${8 + ((last?.time ?? firstTime) - firstTime) / duration * 584},142 L8,142 Z`} fill={color} opacity="0.1" />
+        <path d={path} fill="none" stroke={color} strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+        {points.map((p, i) => <circle key={`${p.time}-${i}`} cx={8 + (p.time - firstTime) / duration * 584} cy={142 - p.value / max * 128} r="2.5" fill={color}><title>{formatDateTime(p.time, { timeStyle: "medium" })} · {formatNumber(p.value, { maximumFractionDigits: 1 })} {unit}</title></circle>)}
       </svg>
       <div className="mt-2 flex justify-between text-xs text-[var(--color-on-surface-variant)]"><span>{formatDateTime(firstTime, { timeStyle: "short" })}</span><span>{formatDateTime(last!.time, { timeStyle: "short" })}</span></div>
     </> : <div className="flex h-40 items-center justify-center text-sm text-[var(--color-on-surface-variant)]">{t("noResourceSamples")}</div>}
@@ -41,9 +45,38 @@ function Trend({ name, title, factor, unit }: { name: string; title: string; fac
 
 export function ResourceTrendCards() {
   const { t } = useTranslation("observability");
+  return <div className="grid gap-6 lg:grid-cols-2">
+    <Trend name="process.cpu.utilization" title={t("cpuTrend")} factor={100} unit="%" color="var(--chart-1)" />
+    <Trend name="process.memory.usage" title={t("memoryTrend")} factor={1 / 1048576} unit="MiB" color="var(--chart-2)" />
+  </div>;
+}
+
+export function PluginCountCard() {
+  const { t } = useTranslation("observability");
   const { formatNumber } = useLocaleFormatters();
   const plugins = useQuery({ queryKey: ["capability-packs"], queryFn: ({ signal }) => listCapabilityPacks(signal), refetchInterval: 10000 });
+  const inventory = useQuery({
+    queryKey: ["observability-inventory-counts"],
+    queryFn: async ({ signal }) => {
+      const [tools, skills, internalAgents, systemAgents, dudes] = await Promise.all([
+        listTools({}, signal),
+        fetchRegistrySkills({}, signal),
+        fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE, signal),
+        fetchPlatformSystemAgents(signal),
+        listDudes(signal),
+      ]);
+      return {
+        tools: tools.length,
+        skills: skills.length,
+        agents: internalAgents.length + systemAgents.length,
+        dudes: dudes.length,
+      };
+    },
+    retry: false,
+    refetchInterval: 60000,
+  });
   useQueryErrorToast(plugins.error);
+  useQueryErrorToast(inventory.error);
   const names = new Set<string>();
   const enabled = new Set<string>();
   for (const pack of plugins.data ?? []) {
@@ -52,11 +85,23 @@ export function ResourceTrendCards() {
       if (pack.effective) enabled.add(item.name);
     }
   }
-  return <>
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Trend name="process.cpu.utilization" title={t("cpuTrend")} factor={100} unit="%" />
-      <Trend name="process.memory.usage" title={t("memoryTrend")} factor={1 / 1048576} unit="MiB" />
+  const counts = [
+    ["toolCount", inventory.data?.tools],
+    ["skillCount", inventory.data?.skills],
+    ["agentCount", inventory.data?.agents],
+    ["dudeCount", inventory.data?.dudes],
+  ] as const;
+  return <SurfaceCard className="!shadow-none lg:col-span-2">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div>
+        <h2 className="text-sm text-[var(--color-on-surface-variant)]">{t("pluginCount")}</h2>
+        <p className="mt-3 text-3xl font-semibold tabular-nums">{plugins.data ? formatNumber(names.size) : "—"}</p>
+        <p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">{plugins.data ? t("enabledPluginCount", { count: enabled.size }) : "—"}</p>
+      </div>
+      {counts.map(([key, count]) => <div key={key}>
+        <h2 className="text-sm text-[var(--color-on-surface-variant)]">{t(key)}</h2>
+        <p className="mt-3 text-3xl font-semibold tabular-nums">{count == null ? "—" : formatNumber(count)}</p>
+      </div>)}
     </div>
-    <SurfaceCard className="!shadow-none"><h2 className="text-sm text-[var(--color-on-surface-variant)]">{t("pluginCount")}</h2><p className="mt-3 text-3xl font-semibold tabular-nums">{plugins.data ? formatNumber(names.size) : "—"}</p><p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">{plugins.data ? t("enabledPluginCount", { count: enabled.size }) : "—"}</p></SurfaceCard>
-  </>;
+  </SurfaceCard>;
 }

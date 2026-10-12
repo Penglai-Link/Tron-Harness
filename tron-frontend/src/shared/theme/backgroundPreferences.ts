@@ -16,6 +16,7 @@ export interface BackgroundImageSettings {
   fit: BackgroundImageFit;
   position: BackgroundImagePosition;
   opacity: number;
+  overlayOpacity: number;
   blur: number;
 }
 
@@ -39,6 +40,7 @@ export const defaultBackgroundImageSettings: BackgroundImageSettings = {
   fit: "cover",
   position: "center",
   opacity: 0.8,
+  overlayOpacity: 0.18,
   blur: 0,
 };
 
@@ -111,6 +113,7 @@ export function normalizeBackgroundImageSettings(value: unknown): BackgroundImag
       ? stored.position as BackgroundImagePosition
       : defaultBackgroundImageSettings.position,
     opacity: clamp(stored.opacity, 0.1, 1, defaultBackgroundImageSettings.opacity),
+    overlayOpacity: clamp(stored.overlayOpacity, 0, 0.6, defaultBackgroundImageSettings.overlayOpacity),
     blur: clamp(stored.blur, 0, 24, defaultBackgroundImageSettings.blur),
   };
 }

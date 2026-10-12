@@ -16,6 +16,7 @@ import { SystemConfigTable } from "@/domain/settings/components/SystemConfigTabl
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { UpdateSettingsCard } from "@/domain/update/UpdateSettingsCard";
 import { WebVersionCard } from "@/domain/update/WebVersionCard";
+import { BrowserNotificationSettingsCard } from "@/domain/notification/components/BrowserNotificationSettingsCard";
 
 export function SettingsGeneralPage() {
   const { t: shellT } = useTranslation("shell");
@@ -34,6 +35,8 @@ export function SettingsGeneralPage() {
         {desktopBridge.isDesktop() ? <UpdateSettingsCard /> : <WebVersionCard />}
 
         <SystemConfigTable />
+
+        <BrowserNotificationSettingsCard />
 
         <SurfaceCard className="space-y-4 xl:col-span-2">
           <div className="flex items-center gap-1.5">

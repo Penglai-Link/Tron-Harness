@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SearchField } from "@/components/search-field";
 import { TablePagination } from "@/components/table-pagination";
@@ -57,7 +58,12 @@ function RolePromptTemplatePickerContent({ value, disabled, onApply, onClose }: 
   return (
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-4xl" closeLabel={pt("actions.close", "Close")}>
       <DialogHeader>
-        <DialogTitle>{pt("roleTemplates.title", "Choose a role template")}</DialogTitle>
+        <DialogTitle className="flex items-center gap-1">
+          {pt("roleTemplates.title", "Choose a role template")}
+          <InfoTooltip ariaLabel={pt("roleTemplates.managementHelpAria", "Role template management help")}>
+            {pt("roleTemplates.managementHelp", "You can add agent role templates in Prompt Management.")}
+          </InfoTooltip>
+        </DialogTitle>
         <DialogDescription className="sr-only">{pt("roleTemplates.description", "Preview a role template and copy it into the role prompt. You can edit it after applying.")}</DialogDescription>
       </DialogHeader>
       <SearchField ariaLabel={pt("roleTemplates.search", "Search role templates")} placeholder={pt("roleTemplates.searchPlaceholder", "Search names, codes, or descriptions...")} value={search} onChange={handleSearchChange} />

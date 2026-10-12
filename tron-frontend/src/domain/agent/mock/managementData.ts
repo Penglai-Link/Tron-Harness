@@ -256,9 +256,9 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     toolExposureMode: "domain_discovery",
   },
   ...[
-    { agentCode: "explore", name: "探索智能体", promptCode: "ROLE_EXPLORER", groupName: "探索", avatarId: "fox" },
-    { agentCode: "full-stack", name: "全栈工程师", promptCode: "ROLE_FULL_STACK_DEVELOPER", groupName: "开发", avatarId: "panda" },
-    { agentCode: "product", name: "杨布斯", promptCode: "ROLE_PRODUCT_MANAGER", groupName: "设计", avatarId: "astronaut" },
+    { agentCode: "explore-agent", name: "探索智能体", promptCode: "ROLE_EXPLORER", groupName: "探索", avatarId: "fox" },
+    { agentCode: "fullstack-agent", name: "全栈工程师", promptCode: "ROLE_FULL_STACK_DEVELOPER", groupName: "开发", avatarId: "panda" },
+    { agentCode: "prd-agent", name: "杨布斯", promptCode: "ROLE_PRODUCT_MANAGER", groupName: "设计", avatarId: "astronaut" },
   ].map(({ agentCode, name, promptCode, groupName, avatarId }) => ({
     agentCode,
     name,

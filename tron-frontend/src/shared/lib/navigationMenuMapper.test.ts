@@ -96,4 +96,27 @@ describe("mapNavigationTree", () => {
     expect(section.items[1].external).toBe(true);
     expect(section.items[1].href).toBe("https://example.com/docs");
   });
+
+  it.each([
+    ["zh-CN", "好兄弟"],
+    ["en-US", "Dude"],
+  ])("shows the Dude navigation label in %s without the legacy bilingual suffix", (locale, expectedLabel) => {
+    const [section] = mapNavigationTree({
+      domainCode: "ADVANCED",
+      locale,
+      maxDepth: 1,
+      menus: [{
+        children: [],
+        icon: "Bot",
+        label: "Dude（好兄弟）",
+        menuCode: "DUDES",
+        menuType: "Internal",
+        pageCode: "dudes.index",
+        url: null,
+        childDisplay: "Inline",
+      }],
+    });
+
+    expect(section.items[0].label).toBe(expectedLabel);
+  });
 });

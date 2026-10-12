@@ -15,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
+import { SurfaceCard } from "@/shared";
 import { useLoopDesignList } from "../hooks/useLoopDesignList";
 import { useLoopDesignActions } from "../hooks/useLoopDesignActions";
 import {
@@ -39,7 +40,7 @@ import {
   isBuiltinLoop,
   loopName,
   loopDescription,
-  copyLoopDesign,
+  loopProvider,
 } from "../model/builtinLoops";
 import { BranchEditor } from "./BranchEditor";
 
@@ -234,34 +235,16 @@ export function LoopDesigner() {
   }
   return (
     <section className="space-y-4" aria-label={t("agentLoops.title")}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div
-          role="group"
-          aria-label={t("agentLoops.sourceFilter")}
-          className="flex gap-1"
-        >
-          {(["all", "builtin", "custom"] as const).map((value) => (
-            <Button
-              key={value}
-              variant={source === value ? "secondary" : "ghost"}
-              aria-pressed={source === value}
-              disabled={busy}
-              onClick={() => filter(value)}
-            >
-              {t(`agentLoops.sources.${value}`)}
-            </Button>
-          ))}
-        </div>
+      <div className="flex justify-end">
         <Button
           disabled={busy || loading || Boolean(error)}
           onClick={() => select(newLoopDesign())}
         >
-
           {t("agentLoops.new")}
         </Button>
       </div>
       {error ? (
-        <div
+        <SurfaceCard
           role="alert"
           className="flex items-center gap-3 text-sm text-[var(--color-error)]"
         >
@@ -269,78 +252,88 @@ export function LoopDesigner() {
           <Button variant="outline" onClick={() => void refresh()}>
             {t("agentLoops.refresh")}
           </Button>
-        </div>
+        </SurfaceCard>
       ) : null}
       {loading ? (
-        <p role="status" className="text-sm">
+        <SurfaceCard role="status" className="text-sm">
           {t("agentLoops.loading")}
-        </p>
+        </SurfaceCard>
       ) : null}
       <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label={t("agentLoops.catalog")} className="space-y-1">
-          {!loading && !error && filteredDesigns.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-[var(--color-on-surface-variant)]">
-              {t("agentLoops.emptyCatalog")}
-            </p>
-          ) : null}
-          {filteredDesigns.map((d) => (
-            <button
-              key={d.loopCode}
-              type="button"
-              disabled={busy}
-              onClick={() => select(d)}
-              aria-current={draft?.loopCode === d.loopCode ? "true" : undefined}
-              className="w-full rounded-lg px-3 py-3 text-left transition-colors hover:bg-[var(--color-hover-surface)] aria-[current=true]:bg-[var(--color-accent-container)]"
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="min-w-0 break-words text-sm font-medium">
-                  {loopName(d, t)}
+        <SurfaceCard className="min-w-0 space-y-3 p-3">
+          <div
+            role="group"
+            aria-label={t("agentLoops.sourceFilter")}
+            className="flex flex-wrap gap-1"
+          >
+            {(["all", "builtin", "custom"] as const).map((value) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={source === value ? "secondary" : "ghost"}
+                aria-pressed={source === value}
+                disabled={busy}
+                onClick={() => filter(value)}
+              >
+                {t(`agentLoops.sources.${value}`)}
+              </Button>
+            ))}
+          </div>
+          <nav aria-label={t("agentLoops.catalog")} className="space-y-1">
+            {!loading && !error && filteredDesigns.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-[var(--color-on-surface-variant)]">
+                {t("agentLoops.emptyCatalog")}
+              </p>
+            ) : null}
+            {filteredDesigns.map((d) => (
+              <button
+                key={d.loopCode}
+                type="button"
+                disabled={busy}
+                onClick={() => select(d)}
+                aria-current={draft?.loopCode === d.loopCode ? "true" : undefined}
+                className="w-full rounded-md border border-transparent px-3 py-3 text-left transition-colors hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-hover-surface)] aria-[current=true]:border-[var(--color-card-border)] aria-[current=true]:bg-[var(--color-accent-container)]"
+              >
+                <span className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 break-words text-sm font-medium">
+                    {loopName(d, t)}
+                  </span>
+                  <Badge variant="outline">
+                    {t(
+                      `agentLoops.sources.${
+                        isBuiltinLoop(d.loopCode) ? "builtin" : "custom"
+                      }`,
+                    )}
+                  </Badge>
                 </span>
-                <Badge variant="outline">
-                  {t(
-                    `agentLoops.sources.${
-                      isBuiltinLoop(d.loopCode) ? "builtin" : "custom"
-                    }`,
-                  )}
-                </Badge>
-              </span>
-              <span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">
-                {t(`agentLoops.kinds.${d.kind}`)} · v{d.version}
-              </span>
-            </button>
-          ))}
-        </nav>
+                <span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">
+                  {t(`agentLoops.kinds.${d.kind}`)} · v{d.version}
+                </span>
+                {loopProvider(d) ? (
+                  <span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">
+                    {t("agentLoops.providedBy", loopProvider(d)!)}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </nav>
+        </SurfaceCard>
         {draft ? (
           <form
-            className="min-w-0 space-y-4"
+            data-theme-anchor="card"
+            className="min-w-0 space-y-4 rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-[var(--tron-card-padding,1.25rem)] shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))]"
             onSubmit={(e) => {
               e.preventDefault();
               void save();
             }}
           >
             {builtin ? (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-[var(--color-on-surface-variant)]">
-                  {loopDescription(draft, t)}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    select(
-                      copyLoopDesign(
-                        draft,
-                        t("agentLoops.copyName", { name: loopName(draft, t) }),
-                      ),
-                    )
-                  }
-                >
-                  {t("agentLoops.copy")}
-                </Button>
-              </div>
+              <p className="text-sm text-[var(--color-on-surface-variant)]">
+                {loopDescription(draft, t)}
+              </p>
             ) : null}
             <fieldset
-              disabled={busy}
+              disabled={busy || builtin}
               className="min-w-0 space-y-4 disabled:opacity-80"
             >
               <div className="grid gap-3 sm:grid-cols-2">
@@ -390,7 +383,10 @@ export function LoopDesigner() {
                       setJsonInvalid(false);
                     }}
                   >
-                    {(["React", "Workflow", "Dag"] as const).map((k) => (
+                    {(draft.kind === "React"
+                      ? (["React", "Workflow", "Dag"] as const)
+                      : (["Workflow", "Dag"] as const)
+                    ).map((k) => (
                       <SelectItem key={k} value={k}>
                         {t(`agentLoops.kinds.${k}`)}
                       </SelectItem>

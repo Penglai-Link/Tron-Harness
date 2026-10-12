@@ -45,18 +45,19 @@ describe("keyboard shortcuts", () => {
     expect(shortcutMatchesKeyboardEvent(binding, keyboardEvent({ ctrlKey: true }))).toBe(false);
   });
 
-  it.each(["metaKey", "ctrlKey"] as const)("matches all defaults with %s", (modifier) => {
+  it.each(["metaKey", "ctrlKey"] as const)("matches assigned defaults with %s", (modifier) => {
     const bindings = createDefaultShellShortcutBindings();
     const expected = {
       newSession: "N", toggleAgentWindow: "N", closeCurrentTab: "W",
       previousTab: "H", nextTab: "L", closeAllTabs: "X", closeOtherTabs: "O",
       toggleLeftSidebar: "ArrowLeft", toggleRightSidebar: "ArrowRight", toggleBottomPanel: "ArrowDown",
     };
-    for (const action of shellShortcutActions) {
+    for (const action of shellShortcutActions.filter((item) => item !== "openNotifications")) {
       expect(findMatchingShellShortcutAction(bindings, keyboardEvent({
         [modifier]: true, altKey: action !== "newSession", key: expected[action],
       }))).toBe(action);
     }
+    expect(bindings.openNotifications).toBeNull();
     expect(formatShortcut(bindings.toggleBottomPanel)).toBe("Ctrl + Alt + ↓");
     expect(formatShortcutKeys(bindings.toggleBottomPanel, true)).toEqual(["⌘", "⌥", "↓"]);
   });

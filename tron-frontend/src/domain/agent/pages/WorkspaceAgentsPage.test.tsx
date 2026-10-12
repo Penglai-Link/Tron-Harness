@@ -390,6 +390,7 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "Model B" }));
     expect(within(dialog).queryByRole("checkbox", { name: "Embedding" })).toBeNull();
     expect(within(dialog).queryByRole("checkbox", { name: "Auto" })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Workspace access" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
     await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", rolePrompt: "", loopCode: "review-flow", avatarId: "owl", groupName: "", candidateModelCodes: ["model-a", "model-b"] }));
@@ -401,6 +402,7 @@ describe("internal agent cards and manual editing", () => {
   it("saves workspace-only changes including clearing every grant", async () => {
     fixture.record.agentCode = "reviewer";
     await openEditor("platform");
+    fireEvent.click(screen.getByRole("tab", { name: "Workspace access" }));
     fireEvent.click(screen.getByRole("button", { name: "Clear workspaces" }));
     expect(fixture.workspaceGrants).not.toHaveBeenCalled();
     save();
@@ -412,6 +414,7 @@ describe("internal agent cards and manual editing", () => {
   it("drops workspace drafts on Cancel and keeps workspace-scope editing isolated", async () => {
     fixture.record.agentCode = "reviewer";
     await openEditor("platform");
+    fireEvent.click(screen.getByRole("tab", { name: "Workspace access" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose workspace" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit Main Agent" }));
@@ -426,6 +429,7 @@ describe("internal agent cards and manual editing", () => {
     fixture.record.agentCode = "reviewer";
     fixture.workspaceGrants.mockRejectedValueOnce(new Error("Assignment failed"));
     await openEditor("platform");
+    fireEvent.click(screen.getByRole("tab", { name: "Workspace access" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose workspace" }));
     save();
     await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("Assignment failed"));
@@ -516,6 +520,9 @@ describe("internal agent groups and built-in platform editing", () => {
     const dialog = await screen.findByRole("dialog");
     expect((within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement).disabled).toBe(false);
     expect((within(dialog).getByRole("combobox", { name: "Group" }) as HTMLSelectElement).disabled).toBe(false);
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Advanced configuration" }));
+    expect(within(dialog).getByRole("spinbutton", { name: "Max steps" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Basic information" }));
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Edited Main Agent" } });
     save();
     await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledWith("$platform", "main-agent", { name: "Edited Main Agent" }));
@@ -529,6 +536,8 @@ describe("internal agent groups and built-in platform editing", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole<HTMLInputElement>("textbox", { name: "Name" }).disabled).toBe(false);
     expect(within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Group" }).disabled).toBe(false);
+    expect(within(dialog).queryByRole("button", { name: "Choose workspace" })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Workspace access" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     save();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -543,10 +552,12 @@ describe("internal agent groups and built-in platform editing", () => {
     fixture.workspaceGrants.mockRejectedValueOnce(new Error("Assignment unavailable"));
     const dialog = await openEditor("platform");
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Group" }), { target: { value: "group:Engineering" } });
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Workspace access" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     save();
     await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("Assignment unavailable"));
     expect(screen.getByRole("dialog")).toBe(dialog);
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Basic information" }));
     expect(within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Group" }).value).toBe("group:Engineering");
     expect(within(dialog).getByText(/Save failed.*Assignment unavailable/)).toBeTruthy();
     save();
@@ -561,6 +572,7 @@ describe("internal agent groups and built-in platform editing", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "New group" }));
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Group name" }), { target: { value: "Draft group" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Workspace access" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(fixture.createGroup).not.toHaveBeenCalled();
@@ -575,6 +587,7 @@ describe("internal agent groups and built-in platform editing", () => {
     const dialog = await openEditor("platform");
     const api = await import("@/domain/agent/api");
     vi.mocked(api.fetchWorkspaceInternalAgents).mockRejectedValueOnce(new Error("Refresh failed"));
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Workspace access" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     save();
     await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("Refresh failed"));

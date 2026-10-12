@@ -31,6 +31,12 @@ import {
   type BackgroundEffectSettings,
   type BackgroundImageSettings,
 } from "./backgroundPreferences";
+import {
+  normalizeSidebarAppearanceSettings,
+  readSidebarAppearanceSettings,
+  writeSidebarAppearanceSettings,
+  type SidebarAppearanceSettings,
+} from "./sidebarAppearancePreferences";
 
 export type AppTheme = "light" | "matrix-dark";
 export type TypingEffect = "off" | "particles" | "glow" | "ripple";
@@ -88,6 +94,8 @@ interface ThemeContextValue {
   setBackgroundEffectSettings: (settings: BackgroundEffectSettings) => void;
   backgroundImageSettings: BackgroundImageSettings;
   setBackgroundImageSettings: (settings: BackgroundImageSettings) => void;
+  sidebarAppearanceSettings: SidebarAppearanceSettings;
+  setSidebarAppearanceSettings: (settings: SidebarAppearanceSettings) => void;
   backgroundImageUrl: string | null;
   setBackgroundImage: (image: File) => Promise<void>;
   clearBackgroundImage: () => Promise<void>;
@@ -125,6 +133,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [backgroundImageSettings, setBackgroundImageSettings] = useState<BackgroundImageSettings>(
     () => readBackgroundImageSettings(localStorage),
   );
+  const [sidebarAppearanceSettings, setSidebarAppearanceSettingsState] = useState<SidebarAppearanceSettings>(
+    () => readSidebarAppearanceSettings(localStorage),
+  );
   const [backgroundImage, setBackgroundImageBlob] = useState<Blob | null>(null);
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
   const hasExplicitBackgroundEffectSettings = useRef(hasStoredBackgroundEffectSettings(localStorage));
@@ -141,6 +152,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       delete document.body.dataset.tronApp;
     };
   }, []);
+
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty("--tron-sidebar-bg-opacity", `${sidebarAppearanceSettings.opacity}%`);
+    document.documentElement.style.setProperty("--tron-sidebar-bg-blur", `${sidebarAppearanceSettings.blur}px`);
+  }, [sidebarAppearanceSettings]);
 
   const stopPreviewSkin = useCallback(() => {
     previewGeneration.current++;
@@ -374,6 +390,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setBackgroundEffectSettings(normalizeBackgroundEffectSettings(settings));
   }, []);
 
+  const updateSidebarAppearanceSettings = useCallback((settings: SidebarAppearanceSettings) => {
+    try {
+      setSidebarAppearanceSettingsState(writeSidebarAppearanceSettings(localStorage, settings));
+    } catch {
+      setSidebarAppearanceSettingsState(normalizeSidebarAppearanceSettings(settings));
+    }
+  }, []);
+
   const setBackgroundImage = useCallback(async (image: File) => {
     await saveBackgroundImage(image);
     setBackgroundImageBlob(image);
@@ -409,6 +433,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setBackgroundEffectSettings: updateBackgroundEffectSettings,
     backgroundImageSettings: normalizedBackgroundImageSettings,
     setBackgroundImageSettings: (settings) => setBackgroundImageSettings(normalizeBackgroundImageSettings(settings)),
+    sidebarAppearanceSettings,
+    setSidebarAppearanceSettings: updateSidebarAppearanceSettings,
     backgroundImageUrl,
     setBackgroundImage,
     clearBackgroundImage,

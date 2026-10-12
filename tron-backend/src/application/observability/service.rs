@@ -19,6 +19,8 @@ pub struct TraceSummary {
     pub model_count: usize,
     pub tool_count: usize,
     pub input_tokens: u64,
+    #[serde(default)]
+    pub cached_input_tokens: u64,
     pub output_tokens: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]

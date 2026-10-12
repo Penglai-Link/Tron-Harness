@@ -46,7 +46,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         avatar_id: "robot".into(),
         candidate_model_codes: Vec::new(),
         group_name: Some("主智能体".into()),
-        loop_code: None,
+        loop_code: Some(crate::domain::agent::loop_design::DEFAULT_REACT_LOOP_CODE.into()),
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
         mcp_access_mode: McpAccessMode::AllEnabledServers,
         tool_exposure_mode: ToolExposureMode::DomainDiscovery,
@@ -61,7 +61,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
     }];
     for (agent_code, name, description, catalog_key, group_name, avatar_id) in [
         (
-            "explore",
+            "explore-agent",
             "探索智能体",
             "只读探索任务使用的内置智能体。",
             "agent.role.explorer",
@@ -69,7 +69,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             "fox",
         ),
         (
-            "full-stack",
+            "fullstack-agent",
             "全栈工程师",
             "用于全栈开发任务的内置智能体。",
             "agent.role.full-stack-developer",
@@ -77,7 +77,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             "panda",
         ),
         (
-            "product",
+            "prd-agent",
             "杨布斯",
             "用于产品分析与设计任务的内置智能体。",
             "agent.role.product-manager",
@@ -93,7 +93,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             avatar_id: avatar_id.into(),
             candidate_model_codes: Vec::new(),
             group_name: Some(group_name.to_owned()),
-            loop_code: None,
+            loop_code: Some(crate::domain::agent::loop_design::DEFAULT_REACT_LOOP_CODE.into()),
             tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
             mcp_access_mode: McpAccessMode::AllEnabledServers,
             tool_exposure_mode: ToolExposureMode::DomainDiscovery,

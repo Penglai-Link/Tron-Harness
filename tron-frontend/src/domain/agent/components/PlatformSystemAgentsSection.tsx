@@ -20,9 +20,7 @@ import type {
   PlatformSystemAgentRecord,
 } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import {
-  useLocaleFormatters,
-} from "@/shared";
+import { SurfaceCard, useLocaleFormatters } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { AgentWorkspaceAssignment } from "./AgentWorkspaceAssignment";
@@ -129,21 +127,22 @@ export function PlatformSystemAgentsSection() {
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-base font-semibold">{pageT("table.title", "System Agents")}</h2>
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="secondary" disabled={scanning || Boolean(rowBusyCode)} aria-busy={scanning} onClick={() => void handleScan()}>
+        <Button disabled={scanning || Boolean(rowBusyCode)} aria-busy={scanning} onClick={() => void handleScan()}>
 
           {scanning ? pageT("actions.scanning", "Scanning...") : pageT("actions.scan", "Scan")}
         </Button>
       </div>
     </div>
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
-      {systemAgents.map((agent) => <Button key={agent.agentCode} variant="ghost" aria-label={pageT("table.manageLabel", "Manage {{name}}", { name: agent.name })}
-        className="group h-auto min-w-0 flex-col gap-2 rounded-xl px-2 py-4 text-center whitespace-normal" onClick={() => setSelectedCode(agent.agentCode)}>
-        <span className="transition-transform duration-150 motion-reduce:transition-none group-hover:scale-105"><SystemAgentAvatar code={agent.agentCode} name={agent.name} /></span>
-        <span className="block w-full truncate text-sm font-medium">{agent.name}</span>
-        <span className="block w-full truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{agent.agentCode}</span>
-      </Button>)}
-    </div>
-    {!systemAgents.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("table.empty", "No system agents available.")}</p> : null}
+    <SurfaceCard className="min-h-40 p-4">
+      {systemAgents.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
+        {systemAgents.map((agent) => <Button key={agent.agentCode} variant="ghost" aria-label={pageT("table.manageLabel", "Manage {{name}}", { name: agent.name })}
+          className="group h-auto min-w-0 flex-col gap-2 rounded-xl px-2 py-4 text-center whitespace-normal" onClick={() => setSelectedCode(agent.agentCode)}>
+          <span className="transition-transform duration-150 motion-reduce:transition-none group-hover:scale-105"><SystemAgentAvatar code={agent.agentCode} name={agent.name} /></span>
+          <span className="block w-full truncate text-sm font-medium">{agent.name}</span>
+          <span className="block w-full truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{agent.agentCode}</span>
+        </Button>)}
+      </div> : <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("table.empty", "No system agents available.")}</p>}
+    </SurfaceCard>
     {selectedAgent ? <Dialog disablePointerDismissal open onOpenChange={(open, details) => {
       if (details.reason === "outside-press" || rowBusyCode === selectedAgent.agentCode) { details.cancel(); return; }
       if (!open) setSelectedCode(null);
@@ -161,7 +160,7 @@ export function PlatformSystemAgentsSection() {
           <Field label={pageT("table.columns.status", "Status")}><AgentStatusBadge status={selectedAgent.status} /></Field>
           <Field label={pageT("table.columns.source", "Source")}><p className="text-sm">{translateSystemAgentSource(t, selectedAgent.source)}</p></Field>
           <Field label={pageT("table.columns.lastScanned", "Last Scanned")}><p className="text-sm">{selectedAgent.lastScannedAt ? formatDateTime(selectedAgent.lastScannedAt) : pageT("table.notScanned", "Not scanned")}</p></Field>
-          <Field label={pageT("table.columns.actions", "Actions")}>
+          <Field label={pageT("table.columns.status", "Status")}>
             <AgentPolicySwitch checked={selectedAgent.enabled} disabled={!selectedAgent.available || Boolean(rowBusyCode) || scanning} loading={rowBusyCode === selectedAgent.agentCode}
               label={!selectedAgent.available ? pageT("table.unavailableLabel", "{{name}} unavailable", { name: selectedAgent.name }) : selectedAgent.enabled ? pageT("table.disableLabel", "Disable {{name}}", { name: selectedAgent.name }) : pageT("table.enableLabel", "Enable {{name}}", { name: selectedAgent.name })}
               onToggle={() => void handleToggleAgent(selectedAgent)} />

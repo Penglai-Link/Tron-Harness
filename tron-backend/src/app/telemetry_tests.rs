@@ -24,7 +24,10 @@ impl ChatModel for Model {
             input_tokens: 17,
             output_tokens: 3,
         };
-        Ok(response)
+        Ok(response.with_provider_metrics(ProviderMetrics {
+            cached_input_tokens: Some(4),
+            reasoning_tokens: None,
+        }))
     }
 }
 struct Lookup;
@@ -89,6 +92,7 @@ async fn observability_real_plugin_exports_parentage_links_metrics_and_survives_
     assert_eq!(detail.trace.model_count, 2);
     assert_eq!(detail.trace.tool_count, 1);
     assert_eq!(detail.trace.input_tokens, 34);
+    assert_eq!(detail.trace.cached_input_tokens, 8);
     assert_eq!(detail.trace.output_tokens, 6);
     assert_eq!(detail.trace.status, "Completed");
     assert_eq!(detail.trace.error_count, 1);
@@ -447,6 +451,17 @@ async fn observability_platform_queries_include_all_workspaces_and_optional_filt
     assert_eq!(service.query(sort_query).unwrap().total, 1);
 
     assert_eq!(service.0.dashboard("").unwrap().trace_count, 2);
+    let alpha_dashboard = service.0.dashboard("alpha").unwrap();
+    assert_eq!(alpha_dashboard.trace_count, 1);
+    assert_eq!(alpha_dashboard.running_trace_count, 0);
+    assert_eq!(
+        alpha_dashboard
+            .recent_requests
+            .iter()
+            .map(|bucket| bucket.requests)
+            .sum::<usize>(),
+        1
+    );
     for (workspace, id) in ["alpha", "beta"].iter().zip(ids.iter()) {
         let page = service.query(query(workspace)).unwrap();
         assert_eq!(page.total, 1);

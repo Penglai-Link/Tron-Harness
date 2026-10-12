@@ -1,4 +1,4 @@
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Pencil } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -150,10 +150,14 @@ export function PromptManagementPage() {
     }
   }
 
-  function actionItems(record: PromptRecord) {
-    const actions = record.builtIn
+  function actionTypes(record: PromptRecord) {
+    return record.builtIn
       ? (record.runtimeRequired ? ["EDIT"] : ["EDIT", "SET_ENABLED"])
       : ["EDIT", "DUPLICATE", "SET_ENABLED", "DELETE"];
+  }
+
+  function actionItems(record: PromptRecord) {
+    const actions = actionTypes(record);
     return actions.map((action) => {
       if (action === "EDIT") return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); navigate(editHref(record), { state: getReturnLocationState() }); }}>{pt("actions.edit", "Edit")}</DropdownMenuItem>;
       if (action === "DUPLICATE") return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); void duplicatePrompt(record); }}>{pt("actions.duplicate", "Duplicate")}</DropdownMenuItem>;
@@ -203,7 +207,7 @@ export function PromptManagementPage() {
             { id: "variables", header: pt("fields.variables", "Variables"), render: (record) => <Badge variant="info">{record.variables.length}</Badge> },
             { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge variant={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
             { id: "updated", header: pt("fields.updated", "Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
-            { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
+            { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => actionTypes(record).length === 1 ? <Button size="icon" variant="ghost" aria-label={pt("aria.editPrompt", "Edit {{name}}", { name: localizedPromptName(record, currentLocale) })} title={pt("actions.edit", "Edit")} disabled={busyCode === record.promptCode} onClick={(event) => { event.stopPropagation(); navigate(editHref(record), { state: getReturnLocationState() }); }} onKeyDown={(event) => event.stopPropagation()}><Pencil size={16} aria-hidden="true" /></Button> : <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
           ]}
         />
       </SurfaceCard>

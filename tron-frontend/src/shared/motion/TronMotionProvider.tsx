@@ -1,10 +1,17 @@
 import { useLayoutEffect, useMemo, type ReactNode } from "react";
-import { MotionProvider, useMotion } from "@eliteforge/agent-ui-motion-react";
+import { MotionProvider, useMotion, type MotionEffectProps } from "@eliteforge/agent-ui-motion-react";
 import { AnimatedContent, FadeContent } from "./BitsContent";
 import { useMotionPreference } from "./motionPreferences";
 import "./motion.css";
 
-const effects = { enter: AnimatedContent, fade: FadeContent };
+function reducedEffect(Component: typeof AnimatedContent) {
+  return function ReducedMotionEffect(props: MotionEffectProps) {
+    const motion = props.motion.enabled
+      ? props.motion
+      : { ...props.motion, enabled: true, duration: 90, distance: 2, intensity: 0.35 };
+    return <Component {...props} motion={motion} />;
+  };
+}
 
 /** Portaled primitives are outside the provider's DOM, but share its policy. */
 function PortalMotionPolicy() {
@@ -24,6 +31,9 @@ function PortalMotionPolicy() {
 export function TronMotionProvider({ children }: { children: ReactNode }) {
   const mode = useMotionPreference();
   const config = useMemo(() => ({ mode, duration: 180, distance: 8, transitionDuration: 120 }), [mode]);
+  const effects = useMemo(() => mode === "reduced"
+    ? { enter: reducedEffect(AnimatedContent), fade: reducedEffect(FadeContent) }
+    : { enter: AnimatedContent, fade: FadeContent }, [mode]);
   return <MotionProvider config={config} effects={effects}>
     <PortalMotionPolicy />
     {children}

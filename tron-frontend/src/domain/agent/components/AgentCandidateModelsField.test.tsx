@@ -25,3 +25,12 @@ it("loads and deduplicates platform candidates across workspaces without a selec
   expect(fetchWorkspaceSelectOptions).toHaveBeenCalledWith("one", expect.any(AbortSignal));
   expect(fetchWorkspaceSelectOptions).toHaveBeenCalledWith("two", expect.any(AbortSignal));
 });
+
+it("keeps candidate model guidance out of the form body and exposes it from the label help tooltip", async () => {
+  render(<AgentCandidateModelsField workspaceCode="one" value={[]} onChange={vi.fn()} />);
+  const help = "workspaceAgents.internal.candidateModels.help";
+  const helpButton = screen.getByRole("button", { name: "workspaceAgents.internal.candidateModels.label" });
+  expect(screen.queryByText(help)).toBeNull();
+  expect(helpButton.getAttribute("data-slot")).toBe("tooltip-trigger");
+  expect(document.querySelector(".overscroll-y-contain")).not.toBeNull();
+});

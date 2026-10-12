@@ -134,7 +134,16 @@ export function SpanVisualization({
           },
           edge: {
             type: "polyline",
-            style: { endArrow: true, stroke: "#8b9492" },
+            style: {
+              stroke: "#71878b",
+              lineWidth: 1.5,
+              endArrow: true,
+              endArrowType: "triangle",
+              endArrowSize: [8, 8],
+              endArrowFill: "#71878b",
+              endArrowStroke: "#71878b",
+              endArrowOffset: 6,
+            },
           },
           behaviors: ["drag-canvas", "zoom-canvas"],
           padding: 32,

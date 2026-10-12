@@ -33,13 +33,19 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
     detail.spans.find((s) => s.name === "agent.run") ??
     detail.spans[0];
   const trace = detail.trace;
+  const isDudeExecution = detail.spans.some((item) => item.name === "tron.dude.execute");
+  const sessionHref = isDudeExecution
+    ? `/dudes?${new URLSearchParams({ dude: trace.agentCode, tab: "history", session: trace.sessionCode })}`
+    : `/chats?${new URLSearchParams({ sessionCode: trace.sessionCode, workspaceCode: trace.workspaceCode })}`;
   const duration = (value: number) => formatTraceDuration(value, currentLocale);
   const metrics = [
     ["duration", duration(trace.durationMs)],
     ["modelCalls", formatNumber(trace.modelCount)],
     ["toolCalls", formatNumber(trace.toolCount)],
     ["inputTokens", formatTraceTokens(trace.inputTokens, currentLocale)],
+    ["cachedInputTokens", formatTraceTokens(trace.cachedInputTokens, currentLocale)],
     ["outputTokens", formatTraceTokens(trace.outputTokens, currentLocale)],
+    ["traceTotalTokens", formatTraceTokens(trace.inputTokens + trace.outputTokens, currentLocale)],
     ["errors", formatNumber(trace.errorCount)],
   ];
   const copy = async () => {
@@ -59,9 +65,6 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h2 className="font-semibold">{t("detail")}</h2>
           <code className="break-all text-xs">{trace.traceId}</code>
-          <TraceStatus status={trace.status} />
-        </div>
-        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="icon"
@@ -70,16 +73,13 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
           >
             <Copy />
           </Button>
+          <TraceStatus status={trace.status} />
+        </div>
+        <div className="flex items-center gap-2">
           <Button
             variant="secondary"
             nativeButton={false}
-            render={
-              <Link
-                to={`/chats?sessionCode=${encodeURIComponent(
-                  trace.sessionCode
-                )}`}
-              />
-            }
+            render={<Link to={sessionHref} />}
           >
 
             {t("openSession")}
@@ -87,7 +87,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
           <InfoTooltip ariaLabel={t("help")}>{t("metricsHelp")}</InfoTooltip>
         </div>
       </header>
-      <dl className="grid grid-cols-2 gap-5 border-b border-[var(--color-outline-variant)] p-5 sm:grid-cols-3 xl:grid-cols-6">
+      <dl className="grid grid-cols-2 gap-5 border-b border-[var(--color-outline-variant)] p-5 sm:grid-cols-4 xl:grid-cols-8">
         {metrics.map(([key, value]) => (
           <div key={key}>
             <dt className="text-xs text-[var(--color-on-surface-variant)]">

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 import { PageHeader, SurfaceCard } from "@/shared";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export function SettingsShortcutsPage() {
   const { t } = useTranslation("pages");
@@ -108,12 +109,12 @@ export function SettingsShortcutsPage() {
 
       <SurfaceCard className="overflow-hidden p-0">
         <div className="border-b border-[var(--color-outline-variant)] px-2 py-4">
-          <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">
-            {pageT("supportedTitle")}
-          </h2>
-          <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            {pageT("configureHint")}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">
+              {pageT("supportedTitle")}
+            </h2>
+            <InfoTooltip ariaLabel={pageT("configureHint")}>{pageT("configureHint")}</InfoTooltip>
+          </div>
           {captureError ? (
             <p
               aria-live="polite"
@@ -140,10 +141,10 @@ export function SettingsShortcutsPage() {
                         {pageT(`shortcuts.${action}.description`)}
                       </ItemDescription>
                     </ItemContent>
-                    <ItemActions>
+                    <ItemActions className="w-[196px] shrink-0 flex-nowrap justify-end gap-2">
                       <Button
                         aria-label={pageT("actions.configure", { label })}
-                        className="min-w-[156px] justify-start font-mono"
+                        className="min-w-0 flex-1 justify-start font-mono"
                         size="sm"
                         type="button"
                         variant={isCapturing ? "secondary" : "outline"}
@@ -155,22 +156,23 @@ export function SettingsShortcutsPage() {
                           ? formatShortcut(binding, useMacSymbols)
                           : pageT("unassigned")}
                       </Button>
-                      {binding ? (
-                        <Button
-                          aria-label={pageT("actions.clear", { label })}
-                          size="icon-sm"
-                          type="button"
-                          variant="ghost"
-                          onClick={() => {
-                            setShortcutBinding(action, null);
-                            if (capturingAction === action) {
-                              setCapturingAction(null);
-                            }
-                          }}
-                        >
-                          <X aria-hidden="true" size={15} />
-                        </Button>
-                      ) : null}
+                      <Button
+                        aria-label={pageT("actions.clear", { label })}
+                        className={binding ? "" : "invisible"}
+                        disabled={!binding}
+                        size="icon-sm"
+                        tabIndex={binding ? undefined : -1}
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setShortcutBinding(action, null);
+                          if (capturingAction === action) {
+                            setCapturingAction(null);
+                          }
+                        }}
+                      >
+                        <X aria-hidden="true" size={15} />
+                      </Button>
                     </ItemActions>
                   </Item>
                   {index < shellShortcutActions.length - 1 ? (

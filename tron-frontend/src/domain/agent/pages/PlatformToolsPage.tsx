@@ -80,8 +80,6 @@ export function PlatformToolsPage() {
         <Button disabled={!dirty || !loaded || loading || saving} onClick={() => void savePermissions()}>{pageT(saving ? "permissions.saving" : "permissions.save", saving ? "Saving…" : "Save")}</Button>
       </div>} />
 
-      <div className="space-y-4">
-        <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("permissions.hint", "Platform permissions apply together with the tools assigned to an Agent.")}</p>
         <DataTable<ToolCatalogDomainRecord>
           rowKey={(row) => row.domainCode}
           rows={domainPagination.visibleItems}
@@ -184,8 +182,6 @@ export function PlatformToolsPage() {
             },
           ]}
         />
-
-      </div>
     </div>
   );
 }

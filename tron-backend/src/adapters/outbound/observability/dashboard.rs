@@ -11,50 +11,111 @@ impl DashboardRepository for TelemetryProjection {
             current: 1,
             size: 1,
         };
-        let metrics = self.metrics(&q)?;
         let runtime = self.runtime_metrics()?;
         let sampled_at = now();
-        let (running_trace_count, recent_requests) = blocking(async {
+        let (
+            trace_count,
+            failed_trace_count,
+            running_trace_count,
+            input_tokens,
+            output_tokens,
+            average_duration_ms,
+            p95_duration_ms,
+            recent_requests,
+        ) = blocking(async {
+            let trace_filter = filter(&q);
             let mut buckets = request_buckets(sampled_at);
             let mut running = 0;
+            let mut failed = 0;
+            let mut durations = Vec::new();
             let mut offset = 0;
-            loop {
+            let total = loop {
                 let page = self
                     .store
-                    .query_traces(filter(&q), offset, 5000)
+                    .query_traces(trace_filter.clone(), offset, 5000)
                     .await
                     .map_err(failure)?;
+                let total = page.total;
                 let count = page.records.len();
                 for trace in page.records {
-                    running += usize::from(trace_status(&trace) == "Running");
+                    let status = trace_status(&trace);
+                    running += usize::from(status == "Running");
+                    failed += usize::from(status == "Error");
                     record_request(
                         &mut buckets,
                         trace.started_at,
-                        trace_status(&trace) == "Error",
+                        status == "Error",
                         sampled_at,
                     );
+                    if let Some(ended_at) = trace.ended_at {
+                        durations.push((ended_at - trace.started_at).max(0) as f64);
+                    }
                 }
                 offset += count;
-                if offset >= page.total || count == 0 {
-                    break;
+                if offset >= total || count == 0 {
+                    break total;
                 }
-            }
-            Ok::<_, ObservabilityError>((running, buckets))
+            };
+            let sums = self
+                .store
+                .sum_span_attributes(
+                    trace_filter,
+                    "agent.model".into(),
+                    vec![
+                        "gen_ai.usage.input_tokens".into(),
+                        "gen_ai.usage.output_tokens".into(),
+                    ],
+                )
+                .await
+                .map_err(failure)?;
+            durations.sort_by(f64::total_cmp);
+            let average = if durations.is_empty() {
+                0.
+            } else {
+                durations.iter().sum::<f64>() / durations.len() as f64
+            };
+            let p95 = durations
+                .get((durations.len() * 95).div_ceil(100).saturating_sub(1))
+                .copied()
+                .unwrap_or(0.);
+            Ok::<_, ObservabilityError>((
+                total,
+                failed,
+                running,
+                *sums.get("gen_ai.usage.input_tokens").unwrap_or(&0),
+                *sums.get("gen_ai.usage.output_tokens").unwrap_or(&0),
+                average,
+                p95,
+                buckets,
+            ))
         })?;
+        let metric_point_count = if workspace.is_empty() {
+            runtime.metric_point_count
+        } else {
+            blocking(async {
+                self.store
+                    .count_metric_points_by_attribute(
+                        "tron.workspace.code".into(),
+                        workspace.into(),
+                    )
+                    .await
+                    .map_err(failure)
+            })?
+        };
         Ok(ObservabilityDashboard {
             sampled_at,
-            trace_count: metrics.trace_count,
-            failed_trace_count: metrics.failed_trace_count,
+            trace_count,
+            failed_trace_count,
             running_trace_count,
-            input_tokens: metrics.input_tokens,
-            output_tokens: metrics.output_tokens,
-            average_duration_ms: metrics.average_duration_ms,
-            p95_duration_ms: metrics.p95_duration_ms,
+            input_tokens,
+            output_tokens,
+            average_duration_ms,
+            p95_duration_ms,
             recent_requests,
             cpu_percent: runtime.cpu_percent,
             memory_bytes: runtime.memory_bytes,
             resource_sampled_at: runtime.sampled_at,
-            metric_point_count: if workspace.is_empty() { runtime.metric_point_count } else { self.scoped_metric_points(Some(workspace.into()), None, 1, 1)?.total },
+            metric_point_count,
             processes: service_processes(),
         })
     }

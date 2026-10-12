@@ -4,11 +4,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/shared";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { DudeDefinitions } from "@/domain/dude/components/DudeDefinitions";
 import { LoopDesigner } from "../components/LoopDesigner";
 import { WorkspaceAgentsPage } from "./WorkspaceAgentsPage";
 import { PlatformSystemAgentsSection } from "../components/PlatformSystemAgentsSection";
 import { INTERNAL_AGENT_REGISTRY_CHANGED_EVENT } from "../model";
+import { DudeDefinitions } from "@/domain/dude/components/DudeDefinitions";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export function PlatformAgentsPage() {
   const { t } = useTranslation("pages");
@@ -25,16 +26,20 @@ export function PlatformAgentsPage() {
     <Tabs value={tab} onValueChange={value => { if (typeof value === "string") setSearch({ tab: value }); }}>
       <TabsList>
         <TabsTrigger value="agents">{t("settingsAgents.title")}</TabsTrigger>
-        <TabsTrigger value="dudes">{t("dude.category")}</TabsTrigger>
         <TabsTrigger value="loops">{t("agentLoops.title")}</TabsTrigger>
       </TabsList>
       <TabsContent keepMounted value="agents" className="mt-4 space-y-6">
+        <DudeDefinitions
+          embedded
+          title={t("dude.category")}
+          titleHelp={t("dude.categoryHelp")}
+          titleHelpAriaLabel={t("dude.categoryHelpAria")}
+        />
         <section aria-label={t("platformData.agentDefinitions")}>
           <WorkspaceAgentsPage category="internal" scope="platform" />
         </section>
         <PlatformSystemAgentsSection />
       </TabsContent>
-      <TabsContent value="dudes" className="mt-4"><DudeDefinitions /></TabsContent>
       <TabsContent keepMounted value="loops" className="mt-5"><LoopDesigner /></TabsContent>
     </Tabs>
   </div>;

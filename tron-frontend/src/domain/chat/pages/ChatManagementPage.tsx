@@ -4759,7 +4759,7 @@ export function ChatManagementPage() {
   const modelEmptyLabel = isMainChatAgent(effectiveAgentCode)
     ? t("chat.management.modelEmpty.noTextModel")
     : t("chat.management.modelEmpty.noneForAgent", { name: selectedAgent?.name ?? effectiveAgentCode });
-  const currentUserDisplayName = authSession?.user.displayName ?? "";
+  const currentUserDisplayName = authSession?.user.displayName || authSession?.user.username || "";
   const { createInspectionAttachmentUpload } = useInspection();
 
   useEffect(() => {

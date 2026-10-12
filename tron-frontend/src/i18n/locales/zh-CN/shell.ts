@@ -75,7 +75,7 @@ export const shell = {
   },
   nav: {
     items: {
-      dudes: "Dude（好兄弟）",
+      dudes: "好兄弟",
       notifications: "通知",
       agents: "智能体",
       apps: "应用",
