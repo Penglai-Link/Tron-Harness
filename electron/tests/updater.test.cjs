@@ -202,7 +202,7 @@ test("Windows apply starts an isolated helper and waits before launching NSIS", 
   await updater.apply();
 
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0][1], ["--_tron-apply-update", installerPath]);
+  assert.deepEqual(calls[0][1], ["--_tron-apply-update", installerPath, path.join(root, "logs", "tron-updater.log")]);
   assert.equal(updater.getStatus().type, "installing");
 
   await fsp.rm(root, { recursive: true, force: true });

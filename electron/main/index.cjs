@@ -7,12 +7,27 @@ const applyUpdateArgIndex = process.argv.indexOf("--_tron-apply-update");
 if (applyUpdateArgIndex >= 0) {
   const { runApplyUpdate } = require("./updater.cjs");
   const installerPath = process.argv[applyUpdateArgIndex + 1] || "";
-  void runApplyUpdate(installerPath).then((code) => process.exit(code));
+  void runApplyUpdate(installerPath, { logPath: process.argv[applyUpdateArgIndex + 2] }).then((code) => process.exit(code));
 } else {
 const { app, BrowserWindow, clipboard, ipcMain, Menu, shell, Tray } = require("electron");
 const { STARTUP_ARG, ICON_PATH } = require("./desktop-constants.cjs");
 const { createWindowsDesktop } = require("./windows-desktop.cjs");
 const { createLinuxDesktop } = require("./linux-desktop.cjs");
+const { resolveDesktopDataDir } = require("./helpers.cjs");
+const desktopDataDir = resolveDesktopDataDir({ isPackaged: app.isPackaged });
+
+// Chromium must receive these paths before readiness and the single-instance lock.
+if (process.platform === "win32" && app.isPackaged) {
+  for (const [name, directory] of Object.entries({
+    userData: path.join(desktopDataDir, "electron"),
+    sessionData: path.join(desktopDataDir, "electron"),
+    logs: path.join(desktopDataDir, "logs"),
+    crashDumps: path.join(desktopDataDir, "crash-dumps")
+  })) {
+    fs.mkdirSync(directory, { recursive: true });
+    app.setPath(name, directory);
+  }
+}
 
 if (["win32", "linux"].includes(process.platform) && !app.requestSingleInstanceLock()) {
   app.quit();
@@ -29,7 +44,6 @@ const {
   resolveBackendConfigPath,
   resolveBackendLogPath,
   resolveControlDatabasePath,
-  resolveDesktopDataDir,
   resolveFrontendDistDir,
   resolveResourcesDir,
   resolveSharedDatabasePath,
@@ -404,8 +418,8 @@ function startupPageHtml(message) {
       <div class="status-message">${safeMessage}</div>
       <div class="progress" aria-hidden="true"></div>
       <div class="meta">
-        <div class="meta-row"><span>Data directory</span><code>~/.tron</code></div>
-        <div class="meta-row"><span>Backend logs</span><code>~/.tron/logs/</code></div>
+        <div class="meta-row"><span>Data directory</span><code>${escapeHtml(state.appDataDir)}</code></div>
+        <div class="meta-row"><span>Backend logs</span><code>${escapeHtml(state.backendLogPath)}</code></div>
       </div>
     </section>
   </body>
@@ -422,7 +436,7 @@ function escapeHtml(value) {
 function startBackend(resourcesDir) {
   const sidecarPath = resolveSidecarPath(resourcesDir);
   const appDataDir = state.appDataDir;
-  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir);
+  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir, { relocateStorage: process.platform === "win32" && app.isPackaged });
   const logPath = resolveBackendLogPath(appDataDir);
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
@@ -495,7 +509,7 @@ function shouldOpenMainDevTools() {
 
 async function bootstrap() {
   const resourcesDir = resolveResourcesDir(app);
-  const appDataDir = resolveDesktopDataDir();
+  const appDataDir = desktopDataDir;
   state.appDataDir = appDataDir;
   fs.mkdirSync(appDataDir, { recursive: true });
 

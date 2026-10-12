@@ -13,6 +13,7 @@ const {
   resolveBackendLogPath,
   resolveControlDatabasePath,
   resolveControlDataDir,
+  resolveDesktopDataDir,
   resolveSharedDatabasePath,
   resolveSharedGraphStoragePath,
   resolveUpdateServerUrl,
@@ -29,23 +30,52 @@ test("isHttpUrl accepts only http and https URLs", () => {
   assert.equal(isHttpUrl("file:///tmp/index.html"), false);
 });
 
+test("Windows packaged data follows the executable's custom installation directory", () => {
+  assert.equal(resolveDesktopDataDir({ isPackaged: true, platformName: "win32", execPath: "E:\\应用 程序\\Tron\\Tron.exe" }), "E:\\应用 程序\\Tron\\data");
+  assert.equal(resolveDesktopDataDir({ isPackaged: false, platformName: "win32", execPath: "E:\\Tron\\electron.exe", homeDir: os.homedir() }), path.join(os.homedir(), ".tron"));
+  for (const platformName of ["darwin", "linux"]) {
+    assert.equal(resolveDesktopDataDir({ isPackaged: true, platformName, homeDir: os.homedir() }), path.join(os.homedir(), ".tron"));
+  }
+});
+
+test("install-local configuration keeps attachments and skills alongside the databases", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tron-local-config-"));
+  const dataDir = path.join(root, "自定义 Tron", "data");
+  const resourcesDir = path.join(root, "resources");
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.mkdirSync(resourcesDir);
+    fs.copyFileSync(path.resolve(__dirname, "../../tron-backend/application.yaml"), path.join(resourcesDir, "application.yaml"));
+    const configPath = resolveBackendConfigPath(dataDir, resourcesDir, { relocateStorage: true });
+    const config = fs.readFileSync(configPath, "utf8");
+    assert.ok(config.includes(`root: ${JSON.stringify(path.join(dataDir, "resources"))}`));
+    assert.ok(config.includes(`skillsRegistryRoot: ${JSON.stringify(path.join(dataDir, "skills-registry"))}`));
+    assert.ok(!config.includes("~/.tron"));
+    fs.writeFileSync(configPath, "port: 9090\n");
+    resolveBackendConfigPath(dataDir, resourcesDir, { relocateStorage: true });
+    assert.equal(fs.readFileSync(configPath, "utf8"), "port: 9090\n", "existing user configuration must be preserved");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("resolveBackendLogPath stores sidecar logs below the desktop data directory", () => {
   assert.equal(
     resolveBackendLogPath("/tmp/tron-data"),
-    "/tmp/tron-data/logs/tron-backend.log"
+    path.join("/tmp/tron-data", "logs", "tron-backend.log")
   );
   assert.equal(
     resolveBackendLogPath("/tmp/tron-data/profiles/profile-a"),
-    "/tmp/tron-data/profiles/profile-a/logs/tron-backend.log"
+    path.join("/tmp/tron-data/profiles/profile-a", "logs", "tron-backend.log")
   );
 });
 
 test("shared data paths keep control metadata separate from shared profile data", () => {
   const root = "/tmp/tron-data";
-  assert.equal(resolveControlDataDir(root), "/tmp/tron-data/control");
-  assert.equal(resolveControlDatabasePath(root), "/tmp/tron-data/control/profiles.sqlite");
-  assert.equal(resolveSharedDatabasePath(root), "/tmp/tron-data/tron.sqlite3");
-  assert.equal(resolveSharedGraphStoragePath(root), "/tmp/tron-data/tron.graph.grafeo");
+  assert.equal(resolveControlDataDir(root), path.join(root, "control"));
+  assert.equal(resolveControlDatabasePath(root), path.join(root, "control", "profiles.sqlite"));
+  assert.equal(resolveSharedDatabasePath(root), path.join(root, "tron.sqlite3"));
+  assert.equal(resolveSharedGraphStoragePath(root), path.join(root, "tron.graph.grafeo"));
 });
 
 test("LAN binding is opt-in and never enabled for packaged builds", () => {

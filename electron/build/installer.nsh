@@ -18,6 +18,29 @@
   ${EndIf}
 !macroend
 
+# Keep install-local user data on both upgrades and uninstall. The default
+# electron-builder uninstaller recursively removes the entire installation.
+!macro customRemoveFiles
+  SetOutPath "$TEMP"
+  FindFirst $0 $1 "$INSTDIR\*"
+  tron_remove_next:
+    StrCmp $1 "" tron_remove_done
+    StrCmp $1 "." tron_remove_continue
+    StrCmp $1 ".." tron_remove_continue
+    StrCmp $1 "data" tron_remove_continue
+    IfFileExists "$INSTDIR\$1\*.*" 0 tron_remove_file
+    RMDir /r "$INSTDIR\$1"
+    Goto tron_remove_continue
+  tron_remove_file:
+    Delete "$INSTDIR\$1"
+  tron_remove_continue:
+    FindNext $0 $1
+    Goto tron_remove_next
+  tron_remove_done:
+    FindClose $0
+    RMDir "$INSTDIR"
+!macroend
+
 !macro customUnInstall
   # electron-builder invokes the old uninstaller with --updated during upgrades.
   ${IfNot} ${isUpdated}

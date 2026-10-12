@@ -30,6 +30,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
   fs.mkdirSync(path.join(resourcesDir, "binaries"), { recursive: true });
   fs.writeFileSync(path.join(resourcesDir, "binaries", process.platform === "win32" ? "tron-backend.exe" : "tron-backend"), "fixture only");
   const spawnCalls = [], logCalls = [], streams = [], windows = [], trays = [], loginCalls = [];
+  const electronPaths = new Map(), startupEvents = [], configOptions = [];
   let quitCalls = 0, killCalls = 0;
   let loginEnabled = true;
   const handlers = new Map();
@@ -76,7 +77,8 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       if (name === "electron") return {
         app: {
           isPackaged: scenario.packaged,
-          requestSingleInstanceLock: () => true,
+          requestSingleInstanceLock: () => { startupEvents.push("lock"); return true; },
+          setPath(name, directory) { electronPaths.set(name, directory); startupEvents.push(name); },
           setAppUserModelId() {},
           getLoginItemSettings: () => ({ openAtLogin: loginEnabled, executableWillLaunchAtLogin: loginEnabled }),
           setLoginItemSettings(settings) { loginCalls.push(settings); loginEnabled = settings.openAtLogin; },
@@ -99,7 +101,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       };
       if (name === "./helpers.cjs") return { ...helpers,
         resolveDesktopDataDir: () => dataDir, resolveResourcesDir: () => resourcesDir,
-        resolveBackendConfigPath: directory => path.join(directory, "application.yaml"),
+        resolveBackendConfigPath: (directory, _resources, options) => { configOptions.push(options); return path.join(directory, "application.yaml"); },
         findFreePort: async () => 8999, waitBackendReady: async () => true
       };
       if (name === "./updater.cjs") return { createUpdater: () => ({}), UPDATE_STATUS_EVENT: "updater-status" };
@@ -126,6 +128,19 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
     assert.equal(launch.options.env.TRON_BACKEND_APPLICATION_CONFIG_PATH, path.join(dataDir, "application.yaml"));
     assert.equal(logCalls[0], path.join(dataDir, "logs/tron-backend.log"));
     assert.equal(launch.options.env.TRON_BACKEND_DATABASE_URL, path.join(dataDir, "tron.sqlite3"));
+    assert.equal(launch.options.env.TRON_BACKEND_CONTROL_DATABASE_URL, path.join(dataDir, "control/profiles.sqlite"));
+    assert.equal(launch.options.env.TRON_BACKEND_GRAPH_STORAGE_PATH, path.join(dataDir, "tron.graph.grafeo"));
+    const installLocal = scenario.platform === "win32" && scenario.packaged;
+    assert.equal(configOptions[0].relocateStorage, installLocal);
+    if (installLocal) {
+      assert.equal(electronPaths.get("userData"), path.join(dataDir, "electron"));
+      assert.equal(electronPaths.get("sessionData"), path.join(dataDir, "electron"));
+      assert.equal(electronPaths.get("logs"), path.join(dataDir, "logs"));
+      assert.equal(electronPaths.get("crashDumps"), path.join(dataDir, "crash-dumps"));
+      assert.ok(startupEvents.indexOf("sessionData") < startupEvents.indexOf("lock"));
+    } else {
+      assert.equal(electronPaths.size, 0);
+    }
     assert.equal(windows[0].urls.at(-1), "http://127.0.0.1:8999");
     const background = scenario.startup && !scenario.trayFailure && !scenario.earlyRestore && !scenario.noTrayHost;
     assert.equal(Boolean(windows[0].shown), !background);

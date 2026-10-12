@@ -93,8 +93,11 @@ async function waitBackendReady(url, attempts = 120, intervalMs = 150) {
   return false;
 }
 
-function resolveDesktopDataDir() {
-  return path.join(os.homedir(), ".tron");
+function resolveDesktopDataDir({ isPackaged = false, platformName = process.platform, execPath = process.execPath, homeDir = os.homedir() } = {}) {
+  if (platformName === "win32" && isPackaged) {
+    return path.win32.join(path.win32.dirname(execPath), "data");
+  }
+  return path.join(homeDir, ".tron");
 }
 
 function resolveControlDataDir(appDataDir) {
@@ -146,15 +149,23 @@ function resolveBackendConfigPath(appDataDir, resourcesDir, options = {}) {
   }
 
   try {
-    fs.copyFileSync(bundledConfigPath, userConfigPath, fs.constants.COPYFILE_EXCL);
+    let config = fs.readFileSync(bundledConfigPath, "utf8");
+    if (options.relocateStorage) {
+      config = config.replace(
+        /^([ \t]*root:)[ \t]*~\/\.tron\/resources[ \t]*$/m,
+        (_match, key) => `${key} ${JSON.stringify(path.join(appDataDir, "resources"))}`,
+      );
+      if (!/^skillsRegistryRoot:/m.test(config)) {
+        config = `skillsRegistryRoot: ${JSON.stringify(path.join(appDataDir, "skills-registry"))}\n${config}`;
+      }
+    }
     if (options.profileConfig) {
-      const profileConfig = fs.readFileSync(userConfigPath, "utf8");
-      const withoutBundledKey = profileConfig.replace(
+      config = config.replace(
         /^([ \t]*keyBase64:)[ \t]*.*$/m,
         "$1 \"\"",
       );
-      fs.writeFileSync(userConfigPath, withoutBundledKey, "utf8");
     }
+    fs.writeFileSync(userConfigPath, config, { encoding: "utf8", flag: "wx" });
     if (process.platform !== "win32") {
       fs.chmodSync(userConfigPath, 0o600);
     }

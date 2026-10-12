@@ -488,7 +488,7 @@ class Updater {
 
       if (this.platformName !== "win32") throw new Error(`automatic installation is not supported on ${this.platformName}`);
 
-      const child = this.spawnImpl(process.execPath, ["--_tron-apply-update", filePath], {
+      const child = this.spawnImpl(process.execPath, ["--_tron-apply-update", filePath, this.logPath], {
         detached: true,
         stdio: ["pipe", "ignore", "ignore"]
       });
