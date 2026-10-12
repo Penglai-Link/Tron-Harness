@@ -489,12 +489,12 @@ desktop-dev: install
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
-	cp -- "$(BACKEND_DIR)/application.yaml" "$(ELECTRON_DIR)/resources/application.yaml"
+	$(call COPY_FILE,$(BACKEND_DIR)/application.yaml,$(ELECTRON_DIR)/resources/application.yaml)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
 	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --bin tron-backend
-	test -f "$(BACKEND_DEBUG_PATH)"
-	cp -- "$(BACKEND_DEBUG_PATH)" "$(DESKTOP_SIDECAR_PATH)"
+	$(call ASSERT_FILE,$(BACKEND_DEBUG_PATH))
+	$(call COPY_FILE,$(BACKEND_DEBUG_PATH),$(DESKTOP_SIDECAR_PATH))
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(ELECTRON_NPM) install))
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(ELECTRON_NPM) run -s ensure-electron))
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_DEV_ENV),$(NPM) run -s dev))
