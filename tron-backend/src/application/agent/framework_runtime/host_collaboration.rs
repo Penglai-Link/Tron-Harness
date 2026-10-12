@@ -6,6 +6,9 @@ use eliteforge_agent_core::{AgentCollaborationRuntime, AgentCollaborationService
 use eliteforge_agent_official_plugin_tools_agents as official;
 use std::sync::Weak;
 
+#[path = "host_collaboration_external.rs"]
+mod external;
+
 #[path = "host_collaboration_threads.rs"]
 mod threads;
 pub(super) use threads::Threads;
@@ -15,6 +18,15 @@ pub use threads::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
 enum ExecutionLimits {
     AgentDefinition,
     Request,
+}
+
+pub(in crate::application::agent::framework_runtime) struct DirectoryAgent {
+    pub agent_code: String,
+    pub name: String,
+    pub description: String,
+    pub role_prompt: String,
+    pub avatar_id: String,
+    pub model_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -105,11 +117,9 @@ impl Runtime {
         host.ensure_open().map_err(failure)?;
         Ok(host)
     }
-    pub fn directory(
-        &self,
-    ) -> Result<Vec<crate::domain::agent::InternalAgentToolPolicy>, fw::AgentError> {
+    pub fn directory(&self) -> Result<Vec<DirectoryAgent>, fw::AgentError> {
         let management = self.builder.agent_management();
-        if self.context.workspace_code.is_empty() {
+        let internal = if self.context.workspace_code.is_empty() {
             management
                 .list_platform_internal_agents()
                 .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))?
@@ -119,12 +129,43 @@ impl Runtime {
                         .platform_internal_agent_policy(&agent.agent_code)
                         .map_err(|error| failure(format!("Agent policy load failed: {error:?}")))
                 })
-                .collect()
+                .collect::<Result<Vec<_>, _>>()
         } else {
             management
                 .list_workspace_internal_agents(&self.context.workspace_code)
                 .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))
+        }?;
+        let mut directory = internal
+            .into_iter()
+            .map(|agent| DirectoryAgent {
+                agent_code: agent.agent_code,
+                name: agent.name,
+                description: agent.description,
+                role_prompt: agent.role_prompt,
+                avatar_id: agent.avatar_id,
+                model_id: None,
+            })
+            .collect::<Vec<_>>();
+        let system = if self.context.workspace_code.is_empty() {
+            management.list_platform_system_agents()
+        } else {
+            management.list_workspace_system_agents(&self.context.workspace_code)
         }
+        .map_err(|error| failure(format!("System Agent directory load failed: {error:?}")))?;
+        directory.extend(
+            system
+                .into_iter()
+                .filter(|agent| agent.enabled && agent.available && agent.model_id.is_some())
+                .map(|agent| DirectoryAgent {
+                    agent_code: agent.agent_code,
+                    name: agent.name,
+                    description: agent.description,
+                    role_prompt: String::new(),
+                    avatar_id: "robot".into(),
+                    model_id: agent.model_id,
+                }),
+        );
+        Ok(directory)
     }
     fn authorize(&self, code: &str) -> Result<String, fw::AgentError> {
         self.directory()?
@@ -194,17 +235,34 @@ impl Runtime {
         } else {
             text
         };
-        let router = self
-            .builder
-            .model_router()
-            .ok_or_else(|| failure("Agent Auto model router is unavailable"))?;
-        let (model, route) = router
-            .resolve_initial(&base.workspace_code, &session, &code, None)
-            .map_err(failure)?;
-        let harness = harness.framework_with_model_router(router);
+        let system_model = self
+            .directory()?
+            .into_iter()
+            .find(|entry| entry.agent_code == code)
+            .and_then(|entry| entry.model_id);
+        let (model, route, harness) = if let Some(model) = &system_model {
+            (
+                crate::application::agent::build_system_runtime_model_config(model, None),
+                None,
+                harness,
+            )
+        } else {
+            let router = self
+                .builder
+                .model_router()
+                .ok_or_else(|| failure("Agent Auto model router is unavailable"))?;
+            let (model, route) = router
+                .resolve_initial(&base.workspace_code, &session, &code, None)
+                .map_err(failure)?;
+            (
+                model,
+                Some(route),
+                harness.framework_with_model_router(router),
+            )
+        };
         let mut command: AgentInvocationCommand = serde_json::from_value(serde_json::json!({
             "prompt": preparation_prompt, "workspaceCode": base.workspace_code, "conversationCode": session,
-            "agentCode": code, "model": model,
+            "agentCode": code, "model": model, "systemModelId": system_model,
         }))
         .map_err(failure)?;
         command.supports_user_input_requests = caller_context
@@ -236,7 +294,7 @@ impl Runtime {
             &session,
             Some(&context.run_code),
         );
-        context.auto_model_route = Some(route);
+        context.auto_model_route = route;
         let current_input =
             super::super::messages::decode(&fw::Message::user(request.input.clone()))
                 .map_err(failure)?;
@@ -248,14 +306,24 @@ impl Runtime {
             context.messages.push(current_input);
         }
         authorize_tools(&host, context);
-        let agent = host.internal_agent(&context.workspace_code, &code).await?;
+        let agent = host
+            .collaboration_agent(
+                &context.workspace_code,
+                &code,
+                self.builder.agent_management(),
+            )
+            .await?;
         request.session_id = session.clone();
         request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(failure)?);
         request.model = None;
         request.extensions = fw::Extensions::default();
         // Capture the active caller tool span before SDK-owned tasks are started.
         let trace_parent = opentelemetry::Context::current();
-        request.extensions.insert(eliteforge_agent_official_plugin_otel::TraceParent(trace_parent));
+        request
+            .extensions
+            .insert(eliteforge_agent_official_plugin_otel::TraceParent(
+                trace_parent,
+            ));
         // Ownership is derived from the trusted caller, never tool arguments.
         let mut host_context = parent
             .and_then(fw::RunContext::host_context)
@@ -386,10 +454,19 @@ impl Runtime {
                 ))));
         }
         attach(&host, context, &mut request);
-        harness
-            .framework_model_scope(context)
-            .map_err(failure)?
-            .attach(&mut request);
+        if system_model.is_some() {
+            host.prepare_collaboration_external(
+                prepared.runtime_selection.clone(),
+                context,
+                &mut request,
+            )
+            .await?;
+        } else {
+            harness
+                .framework_model_scope(context)
+                .map_err(failure)?
+                .attach(&mut request);
+        }
         let context = context.clone();
         // The native run owns MCP leases even if the caller drops its child waiter.
         request.extensions.insert(prepared.leases);

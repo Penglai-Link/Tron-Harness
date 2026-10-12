@@ -32,7 +32,16 @@ impl AgentManagementService {
         Ok(entries
             .into_iter()
             .map(|entry| {
-                managed_system_record(&entry, None, self.system_agent_models(&entry.agent_code))
+                managed_system_record(
+                    &entry,
+                    None,
+                    self.system_agent_models(
+                        entry
+                            .base_agent_code
+                            .as_deref()
+                            .unwrap_or(&entry.agent_code),
+                    ),
+                )
             })
             .collect())
     }
@@ -85,6 +94,8 @@ impl AgentManagementService {
             discovered_agent_codes.insert(supported.agent_code.clone());
             let entry = SystemAgentRegistryEntry {
                 agent_code: supported.agent_code.clone(),
+                base_agent_code: None,
+                model_id: None,
                 name: supported.name.clone(),
                 description: supported.description.clone(),
                 runtime_type: supported.runtime_type,
@@ -99,7 +110,33 @@ impl AgentManagementService {
             self.repository().upsert_system_agent(&entry)?;
         }
 
-        for agent_code in existing.keys() {
+        for (agent_code, old_entry) in &existing {
+            if let Some(base) = old_entry.base_agent_code.as_deref() {
+                let mut entry = old_entry.clone();
+                let supported = self
+                    .supported_agents
+                    .iter()
+                    .find(|agent| agent.agent_code == base);
+                let refreshed = self
+                    .repository()
+                    .list_system_agents()?
+                    .into_iter()
+                    .find(|agent| agent.agent_code == base);
+                entry.available = refreshed.as_ref().is_some_and(|agent| agent.available);
+                entry.last_scanned_at = Some(now.clone());
+                entry.last_error = refreshed
+                    .as_ref()
+                    .and_then(|agent| agent.last_error.clone());
+                if let Some(supported) = supported {
+                    entry.command_name = supported.command_name.clone();
+                    entry.runtime_type = supported.runtime_type;
+                }
+                if entry.available {
+                    entry.last_seen_at = Some(now.clone());
+                }
+                self.repository().upsert_system_agent(&entry)?;
+                continue;
+            }
             if !discovered_agent_codes.contains(agent_code) {
                 self.set_system_agent_models(agent_code, Vec::new());
                 self.repository().delete_system_agent(agent_code)?;
@@ -143,7 +180,12 @@ impl AgentManagementService {
         Ok(managed_system_record(
             &entry,
             None,
-            self.system_agent_models(&entry.agent_code),
+            self.system_agent_models(
+                entry
+                    .base_agent_code
+                    .as_deref()
+                    .unwrap_or(&entry.agent_code),
+            ),
         ))
     }
 
@@ -160,7 +202,12 @@ impl AgentManagementService {
         Ok(managed_system_record(
             &entry,
             None,
-            self.system_agent_models(&entry.agent_code),
+            self.system_agent_models(
+                entry
+                    .base_agent_code
+                    .as_deref()
+                    .unwrap_or(&entry.agent_code),
+            ),
         ))
     }
 
@@ -193,7 +240,12 @@ impl AgentManagementService {
                 managed_system_record(
                     &entry,
                     Some(disabled),
-                    self.system_agent_models(&entry.agent_code),
+                    self.system_agent_models(
+                        entry
+                            .base_agent_code
+                            .as_deref()
+                            .unwrap_or(&entry.agent_code),
+                    ),
                 )
             })
             .collect())
@@ -217,6 +269,7 @@ impl AgentManagementService {
         {
             return Ok(ResolvedAgentRuntime {
                 agent_code: definition.agent_code,
+                system_model_id: None,
                 runtime_type: AgentRuntimeType::React,
                 command_name: None,
                 name: definition.name,
@@ -240,6 +293,7 @@ impl AgentManagementService {
         }
         Ok(ResolvedAgentRuntime {
             agent_code: entry.agent_code,
+            system_model_id: entry.model_id,
             runtime_type: entry.runtime_type,
             command_name: Some(entry.command_name),
             name: entry.name,
@@ -302,11 +356,16 @@ impl AgentManagementService {
         managed_system_record(
             entry,
             Some(disabled),
-            self.system_agent_models(&entry.agent_code),
+            self.system_agent_models(
+                entry
+                    .base_agent_code
+                    .as_deref()
+                    .unwrap_or(&entry.agent_code),
+            ),
         )
     }
 
-    fn required_system_agent(
+    pub(super) fn required_system_agent(
         &self,
         agent_code: &str,
     ) -> Result<SystemAgentRegistryEntry, AgentManagementError> {
@@ -321,12 +380,24 @@ impl AgentManagementService {
 fn managed_system_record(
     entry: &SystemAgentRegistryEntry,
     workspace_disabled_override: Option<bool>,
-    models: Vec<SystemAgentModelRecord>,
+    mut models: Vec<SystemAgentModelRecord>,
 ) -> ManagedSystemAgentRecord {
+    if let Some(model_id) = entry.model_id.as_deref() {
+        models.retain(|model| model.model_id == model_id);
+        if models.is_empty() {
+            models.push(SystemAgentModelRecord {
+                model_id: model_id.into(),
+                display_name: model_id.into(),
+                context_window_tokens: None,
+            });
+        }
+    }
     let effective_enabled =
         entry.available && entry.enabled && !workspace_disabled_override.unwrap_or(false);
     ManagedSystemAgentRecord {
         agent_code: entry.agent_code.clone(),
+        base_agent_code: entry.base_agent_code.clone(),
+        model_id: entry.model_id.clone(),
         name: entry.name.clone(),
         description: entry.description.clone(),
         agent_type: ManagedAgentType::System,

@@ -206,9 +206,12 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    scrollbar-gutter: stable;
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
+  }
+  /* Hidden-overflow avatar/image masks must not reserve classic scrollbar space. */
+  :where(.overflow-auto, .overflow-y-auto, .overflow-scroll, .overflow-y-scroll) {
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-background text-foreground;

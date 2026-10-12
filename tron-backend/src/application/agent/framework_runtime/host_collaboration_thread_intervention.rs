@@ -25,12 +25,27 @@ impl FrameworkHost {
         let builder = service
             .run_context_builder()
             .with_execution_identity(record.workspace_code.is_empty(), Some(record.owner.clone()));
-        let router = builder
-            .model_router()
-            .ok_or_else(|| failure("Agent Auto model router is unavailable"))?;
-        let (model, _) = router
-            .resolve_initial(&record.workspace_code, id, &record.agent_code, None)
-            .map_err(failure)?;
+        let resolved = if record.workspace_code.is_empty() {
+            builder
+                .agent_management()
+                .resolve_platform_agent_runtime(Some(&record.agent_code))
+        } else {
+            builder
+                .agent_management()
+                .resolve_workspace_agent_runtime(&record.workspace_code, Some(&record.agent_code))
+        }
+        .map_err(|error| failure(format!("Agent unavailable: {error:?}")))?;
+        let model = if let Some(model) = &resolved.system_model_id {
+            crate::application::agent::build_system_runtime_model_config(model, None)
+        } else {
+            let router = builder
+                .model_router()
+                .ok_or_else(|| failure("Agent Auto model router is unavailable"))?;
+            let (model, _) = router
+                .resolve_initial(&record.workspace_code, id, &record.agent_code, None)
+                .map_err(failure)?;
+            model
+        };
         let mut command: AgentInvocationCommand = serde_json::from_value(serde_json::json!({"prompt":"Prepare human Thread intervention","workspaceCode":record.workspace_code,"agentCode":record.agent_code,"model":model})).map_err(failure)?;
         command.execution_scope_override = Some(record.execution_scope.clone());
         let prepared = builder

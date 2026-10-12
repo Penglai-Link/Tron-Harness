@@ -58,7 +58,7 @@ export const observability = {
   cpuTrend: "CPU trend",
   memoryTrend: "Memory trend",
   pluginCount: "Plugins",
-  enabledPluginCount: "{{count}} enabled",
+  enabledPluginCount: "Enabled plugins",
   toolCount: "Tools",
   skillCount: "Skills",
   agentCount: "Agents",

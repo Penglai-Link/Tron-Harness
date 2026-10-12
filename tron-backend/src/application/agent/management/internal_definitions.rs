@@ -131,6 +131,11 @@ impl AgentManagementService {
         }
         if is_builtin_agent(code)
             || self
+                .repository()
+                .list_system_agents()?
+                .iter()
+                .any(|agent| agent.agent_code == code)
+            || self
                 .supported_agents
                 .iter()
                 .any(|agent| agent.agent_code.eq_ignore_ascii_case(code))

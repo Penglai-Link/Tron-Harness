@@ -5,6 +5,7 @@ mod internal_groups;
 pub(crate) mod loop_designs;
 mod platform_internal_agents;
 mod platform_runtime;
+mod system_agent_profiles;
 mod system_agents;
 mod tool_permissions;
 mod workspace_grants;
@@ -82,6 +83,7 @@ pub struct UpdateWorkspaceInternalAgentMcpPolicyCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedAgentRuntime {
     pub agent_code: String,
+    pub system_model_id: Option<String>,
     pub runtime_type: AgentRuntimeType,
     pub command_name: Option<String>,
     pub name: String,
@@ -220,6 +222,19 @@ pub trait AgentManagementRepository: Send {
         &mut self,
         agent: &SystemAgentRegistryEntry,
     ) -> Result<(), AgentManagementError>;
+    fn insert_system_agent(
+        &mut self,
+        agent: &SystemAgentRegistryEntry,
+    ) -> Result<(), AgentManagementError> {
+        if self
+            .list_system_agents()?
+            .iter()
+            .any(|record| record.agent_code == agent.agent_code)
+        {
+            return Err(AgentManagementError::InternalAgentCodeConflict);
+        }
+        self.upsert_system_agent(agent)
+    }
     fn delete_system_agent(&mut self, agent_code: &str) -> Result<bool, AgentManagementError>;
     fn list_workspace_system_policies(
         &mut self,

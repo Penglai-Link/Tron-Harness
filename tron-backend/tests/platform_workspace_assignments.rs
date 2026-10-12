@@ -5,6 +5,7 @@ use fixture::*;
 use tron_backend::application::{
     agent::CreateWorkspaceInternalAgentCommand, knowledge_base::KnowledgeBaseError,
 };
+use tron_backend::domain::agent::loop_design::DEFAULT_REACT_LOOP_CODE;
 
 #[tokio::test]
 async fn knowledge_authorization_follows_agent_assignments_without_library_space_grants() {
@@ -21,7 +22,7 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
             candidate_model_codes: Vec::new(),
             avatar_id: None,
-            loop_code: None,
+            loop_code: Some(DEFAULT_REACT_LOOP_CODE.into()),
             agent_code: "knowledge-expert".into(),
             name: "Expert".into(),
             role_prompt: "Help".into(),
@@ -185,7 +186,7 @@ async fn platform_agent_assignment_controls_catalog_and_runtime() {
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
             candidate_model_codes: Vec::new(),
             avatar_id: None,
-            loop_code: None,
+            loop_code: Some(DEFAULT_REACT_LOOP_CODE.into()),
             agent_code: "shared-expert".into(),
             name: "Expert".into(),
             role_prompt: "Help".into(),
@@ -338,6 +339,8 @@ fn system_agent_assignment_controls_runtime_and_preserves_global_enablement() {
         SqliteAgentManagementRepository::connect(&f.state.config.database_url).unwrap();
     repository
         .upsert_system_agent(&SystemAgentRegistryEntry {
+            base_agent_code: None,
+            model_id: None,
             agent_code: "system-expert".into(),
             name: "System Expert".into(),
             description: "".into(),

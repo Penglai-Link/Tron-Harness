@@ -54,8 +54,8 @@ export function translateInternalAgentDescription(t: TFunction, agent: Workspace
     : agent.description;
 }
 
-export function translateSystemAgentDescription(t: TFunction, agent: Pick<WorkspaceSystemAgentRecord, "agentCode" | "description">) {
-  const key = systemAgentCatalogKeyByCode[agent.agentCode];
+export function translateSystemAgentDescription(t: TFunction, agent: Pick<WorkspaceSystemAgentRecord, "agentCode" | "baseAgentCode" | "description">) {
+  const key = systemAgentCatalogKeyByCode[agent.baseAgentCode || agent.agentCode];
   return key
     ? t(`pages:workspaceAgents.table.catalog.${key}.description`, { defaultValue: agent.description })
     : agent.description;

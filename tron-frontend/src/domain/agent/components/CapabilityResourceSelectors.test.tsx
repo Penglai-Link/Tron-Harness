@@ -27,13 +27,12 @@ import { InternalAgentToolSelector } from "./InternalAgentToolSelector";
 import { InternalAgentMcpServerSelector } from "./InternalAgentMcpServerSelector";
 afterEach(cleanup);
 const reason = "Capability pack fixture is disabled";
-it("tool selection discards stale checks and all skips disabled pack tools", async () => {
-  const all = vi.fn();
+it("tool selection discards stale checks and disables blocked pack tools", async () => {
+  const toggle = vi.fn();
   render(
     <InternalAgentToolSelector
       selectedToolCodes={["blocked"]}
-      onToggleTool={vi.fn()}
-      onSetToolsChecked={all}
+      onToggleTool={toggle}
       toolDomains={[
         {
           domainCode: "fixture",
@@ -74,8 +73,9 @@ it("tool selection discards stale checks and all skips disabled pack tools", asy
   ) as HTMLInputElement;
   expect(blocked.checked).toBe(false);
   expect(screen.getByRole("button", { name: reason }).tabIndex).toBe(0);
-  fireEvent.click(screen.getByRole("button", { name: "Select all" }));
-  expect(all).toHaveBeenCalledWith(["active"], true);
+  fireEvent.click(screen.getByRole("checkbox", { name: /^Active/ }));
+  expect(toggle).toHaveBeenCalledWith("active", true);
+  expect(screen.queryByRole("button", { name: "Select all" })).toBeNull();
 });
 it("MCP selection discards stale checks and visible selection skips disabled servers", () => {
   const all = vi.fn();
@@ -133,6 +133,7 @@ const domains = [
 const tools = [
   {
     toolCode: "files.read",
+    toolName: "files_read",
     domainCode: "files",
     name: "Read file",
     description: "Read contents",
@@ -141,6 +142,7 @@ const tools = [
   },
   {
     toolCode: "files.write",
+    toolName: "files_write",
     domainCode: "files",
     name: "Write file",
     description: "Write contents",
@@ -149,6 +151,7 @@ const tools = [
   },
   {
     toolCode: "search.code",
+    toolName: "search_code",
     domainCode: "search",
     name: "Find code",
     description: "Find code matches",
@@ -167,13 +170,6 @@ function ToolSelectionFixture() {
       onToggleTool={(code, checked) =>
         setSelected((current) =>
           checked ? [...current, code] : current.filter((item) => item !== code)
-        )
-      }
-      onSetToolsChecked={(codes, checked) =>
-        setSelected((current) =>
-          checked
-            ? [...new Set([...current, ...codes])]
-            : current.filter((item) => !codes.includes(item))
         )
       }
     />
@@ -205,11 +201,13 @@ it("starts with every domain collapsed and preserves selected tools across indep
     (screen.getByRole("checkbox", { name: /^Write file/ }) as HTMLInputElement)
       .checked
   ).toBe(true);
-  fireEvent.click(
-    within(screen.getByRole("region", { name: /^Files/ })).getByRole("button", {
-      name: "Clear",
-    })
-  );
+  const filesPanel = within(screen.getByRole("region", { name: /^Files/ }));
+  expect(filesPanel.queryByText("File access")).toBeNull();
+  expect(filesPanel.queryByRole("button", { name: "Clear" })).toBeNull();
+  expect(filesPanel.getByText("files_read")).toBeTruthy();
+  expect(filesPanel.queryByText("files.read")).toBeNull();
+  fireEvent.click(filesPanel.getByRole("checkbox", { name: /^Read file/ }));
+  fireEvent.click(filesPanel.getByRole("checkbox", { name: /^Write file/ }));
   expect(files.textContent).toContain("0 selected");
 
   view.unmount();
@@ -217,19 +215,18 @@ it("starts with every domain collapsed and preserves selected tools across indep
   expect(screen.queryByRole("checkbox")).toBeNull();
 });
 
-it("searches inside collapsed domains and selects only matching tools", async () => {
-  const all = vi.fn();
+it("searches callable tool names inside collapsed domains and selects by tool code", async () => {
+  const toggle = vi.fn();
   render(
     <InternalAgentToolSelector
       tools={tools}
       toolDomains={domains}
       selectedToolCodes={[]}
-      onToggleTool={vi.fn()}
-      onSetToolsChecked={all}
+      onToggleTool={toggle}
     />
   );
   fireEvent.change(screen.getByRole("searchbox"), {
-    target: { value: "Read contents" },
+    target: { value: "files_read" },
   });
   const files = await screen.findByRole("button", {
     name: "Files 1 tools 0 selected",
@@ -238,8 +235,8 @@ it("searches inside collapsed domains and selects only matching tools", async ()
   expect(screen.queryByRole("checkbox")).toBeNull();
   fireEvent.click(files);
   expect(screen.getAllByRole("checkbox")).toHaveLength(1);
-  fireEvent.click(screen.getByRole("button", { name: "Select all" }));
-  expect(all).toHaveBeenCalledWith(["files.read"], true);
+  fireEvent.click(screen.getByRole("checkbox", { name: /^Read file/ }));
+  expect(toggle).toHaveBeenCalledWith("files.read", true);
   fireEvent.change(screen.getByRole("searchbox"), {
     target: { value: "No matching tool" },
   });
@@ -256,7 +253,6 @@ it("disables tool changes while saving without preventing domain inspection", ()
       toolDomains={domains}
       selectedToolCodes={["files.read"]}
       onToggleTool={vi.fn()}
-      onSetToolsChecked={vi.fn()}
     />
   );
   fireEvent.click(screen.getByRole("button", { name: /^Files/ }));
@@ -265,12 +261,6 @@ it("disables tool changes while saving without preventing domain inspection", ()
       .getAllByRole("checkbox")
       .every((input) => (input as HTMLInputElement).disabled)
   ).toBe(true);
-  expect(
-    (screen.getByRole("button", { name: "Select all" }) as HTMLButtonElement)
-      .disabled
-  ).toBe(true);
-  expect(
-    (screen.getByRole("button", { name: "Clear" }) as HTMLButtonElement)
-      .disabled
-  ).toBe(true);
+  expect(screen.queryByRole("button", { name: "Select all" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
 });

@@ -13,6 +13,7 @@ import type {
   ListToolsQuery,
   CreateInternalAgentPayload,
   UpdateInternalAgentDefinitionPayload,
+  SystemAgentProfilePayload,
 } from "@/domain/agent/model";
 
 import { agentApiEndpoints } from "./agentApi";
@@ -61,6 +62,8 @@ type McpAccessModeApi =
 
 interface ManagedSystemAgentRecordApi {
   agentCode: string;
+  baseAgentCode?: string | null;
+  modelId?: string | null;
   name: string;
   description: string;
   source: AgentSourceApi;
@@ -335,6 +338,8 @@ function normalizePlatformSystemAgentRecord(
 ): PlatformSystemAgentRecord {
   return {
     agentCode: record.agentCode,
+    baseAgentCode: record.baseAgentCode,
+    modelId: record.modelId,
     available: record.available,
     description: record.description,
     enabled: record.enabled,
@@ -351,6 +356,8 @@ function normalizeWorkspaceSystemAgentRecord(
 ): WorkspaceSystemAgentRecord {
   return {
     agentCode: record.agentCode,
+    baseAgentCode: record.baseAgentCode,
+    modelId: record.modelId,
     available: record.available,
     description: record.description,
     enabled: record.enabled,
@@ -371,6 +378,16 @@ export function fetchPlatformSystemAgents(signal?: AbortSignal) {
     agentApiEndpoints.listPlatformSystemAgents,
     { signal }
   ).then((records) => records.map(normalizePlatformSystemAgentRecord));
+}
+
+export function createPlatformSystemAgent(payload: SystemAgentProfilePayload) {
+  return requestApi<{ agentCode: string }>(agentApiEndpoints.createPlatformSystemAgent, { body: payload });
+}
+export function updatePlatformSystemAgent(agentCode: string, payload: Pick<SystemAgentProfilePayload, "name" | "modelId">) {
+  return requestApi<{ agentCode: string }>(agentApiEndpoints.updatePlatformSystemAgent, { pathParams: { agentCode }, body: payload });
+}
+export function deletePlatformSystemAgent(agentCode: string) {
+  return requestApi<{ deleted: boolean }>(agentApiEndpoints.deletePlatformSystemAgent, { pathParams: { agentCode } });
 }
 
 export function rescanPlatformSystemAgents() {

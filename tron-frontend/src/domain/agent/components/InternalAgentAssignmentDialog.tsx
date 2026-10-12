@@ -49,7 +49,7 @@ export function InternalAgentAssignmentDialog({
               onToggleServer={(code, checked) => setChecked([code], checked)} onSetServersChecked={setChecked} />
           ) : (
             <InternalAgentToolSelector className="mt-0" busy={busy} tools={tools} toolDomains={toolDomains} selectedToolCodes={selectedCodes}
-              onToggleTool={(code, checked) => setChecked([code], checked)} onSetToolsChecked={setChecked} />
+              onToggleTool={(code, checked) => setChecked([code], checked)} />
           )}
         </div>
         <DialogFooter>

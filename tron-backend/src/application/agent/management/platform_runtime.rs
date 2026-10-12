@@ -20,9 +20,16 @@ impl AgentManagementService {
             .map(str::trim)
             .filter(|code| !code.is_empty())
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
-        let policy = self.platform_internal_agent_policy(code)?;
+        let policy = match self.platform_internal_agent_policy(code) {
+            Ok(policy) => policy,
+            Err(AgentManagementError::InternalAgentNotFound) => {
+                return self.resolve_platform_system_runtime(code);
+            }
+            Err(error) => return Err(error),
+        };
         Ok(ResolvedAgentRuntime {
             agent_code: policy.agent_code,
+            system_model_id: None,
             runtime_type: AgentRuntimeType::React,
             command_name: None,
             name: policy.name,

@@ -58,7 +58,7 @@ export const observability = {
   cpuTrend: "CPU 趋势",
   memoryTrend: "内存趋势",
   pluginCount: "插件数量",
-  enabledPluginCount: "已启用 {{count}} 个",
+  enabledPluginCount: "已启用插件",
   toolCount: "工具数量",
   skillCount: "技能数量",
   agentCount: "智能体数量",

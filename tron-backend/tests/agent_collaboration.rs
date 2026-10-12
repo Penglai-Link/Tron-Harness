@@ -3,6 +3,8 @@ mod common;
 mod fixture;
 #[path = "support/candidate_model_fixture.rs"]
 mod models;
+#[path = "support/system_agent_collaboration.rs"]
+mod system_agents;
 use eliteforge_agent_core as fw;
 use fixture::*;
 use serde_json::{Value, json};
@@ -102,6 +104,12 @@ impl ModelClient for Script {
                     "agent_spawn",
                     json!({"agentCode":"reviewer", "task":"child:slow"}),
                 ),
+                Some("root:system-fast" | "root:system-deep") if results.is_empty() => {
+                    ModelResponse::tool_call(
+                        "agent_spawn",
+                        json!({"agentCode": if root.as_deref() == Some("root:system-fast") { "codex-fast" } else { "codex-deep" }, "task":"child:external"}),
+                    )
+                }
                 Some("root:spawn") if results.is_empty() => ModelResponse::tool_call(
                     "agent_spawn",
                     json!({"agentCode":"reviewer", "task":"child:review"}),
@@ -118,11 +126,13 @@ impl ModelClient for Script {
                     "agent_spawn",
                     json!({"agentCode":"reviewer", "task":"child:review"}),
                 ),
-                Some("root:thread") if results.is_empty() => ModelResponse::tool_call(
-                    "thread_create",
-                    json!({"agentCode":"reviewer", "task":"child:first", "title":"Review"}),
-                ),
-                Some("root:thread") => {
+                Some("root:thread" | "root:system-thread") if results.is_empty() => {
+                    ModelResponse::tool_call(
+                        "thread_create",
+                        json!({"agentCode": if root.as_deref() == Some("root:system-thread") { "codex-fast" } else { "reviewer" }, "task":"child:first", "title":"Review"}),
+                    )
+                }
+                Some("root:thread" | "root:system-thread") => {
                     let created: Value = serde_json::from_str(&results[0])
                         .map_err(|e| format!("thread result: {e}: {}", results[0]))?;
                     let id = created["session_id"].as_str().ok_or("missing thread ID")?;
@@ -192,7 +202,7 @@ impl ModelClient for Script {
         Box::pin(async { Ok(Default::default()) })
     }
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn delegated_child_uses_its_definition_limits_and_stops_at_them() {
     let f = Fixture::new();
     reviewer(&f);
@@ -278,7 +288,7 @@ fn reviewer(f: &Fixture) {
         )
         .unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn collaboration_directory_named_child_and_revocation() {
     let f = Fixture::new();
     reviewer(&f);
@@ -395,7 +405,7 @@ async fn collaboration_directory_named_child_and_revocation() {
     drop(requests);
     assert!(host.close().await.is_success());
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn collaboration_thread_keeps_target_across_messages() {
     let f = Fixture::new();
     reviewer(&f);
@@ -434,7 +444,7 @@ async fn collaboration_thread_keeps_target_across_messages() {
     assert!(host.close().await.is_success());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn collaboration_checks_authorization_after_directory_was_read() {
     let f = Fixture::new();
     reviewer(&f);
@@ -464,7 +474,7 @@ async fn collaboration_checks_authorization_after_directory_was_read() {
     );
     assert!(host.close().await.is_success());
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn collaboration_threads_recheck_access_and_hide_other_users() {
     let f = Fixture::new();
     reviewer(&f);
@@ -499,7 +509,7 @@ async fn collaboration_threads_recheck_access_and_hide_other_users() {
     assert!(host.close().await.is_success());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn collaboration_child_stops_with_parent_cancellation() {
     let f = Fixture::new();
     reviewer(&f);
@@ -537,7 +547,7 @@ async fn collaboration_child_stops_with_parent_cancellation() {
     assert!(host.close().await.is_success());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn collaboration_child_does_not_inherit_parent_fixed_provider_model() {
     let f = Fixture::new();
     reviewer(&f);
@@ -590,7 +600,7 @@ async fn collaboration_child_does_not_inherit_parent_fixed_provider_model() {
     assert!(host.close().await.is_success());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn subagents_and_threads_use_target_auto_pool_instead_of_parent_auto_pool() {
     for prompt in ["root:spawn", "root:thread"] {
         let f = Fixture::new();

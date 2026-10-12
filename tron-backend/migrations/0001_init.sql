@@ -786,6 +786,8 @@ CREATE TABLE skill_rag_index_states (
 
 CREATE TABLE system_agent_registries (
     agent_code TEXT PRIMARY KEY,
+    base_agent_code TEXT,
+    model_id TEXT,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     runtime_type TEXT NOT NULL,

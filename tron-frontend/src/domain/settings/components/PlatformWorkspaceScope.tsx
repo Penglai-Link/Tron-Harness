@@ -1,5 +1,5 @@
 import { useToast } from "@/components/ui/toast";
-import { createContext, useContext, useEffect, useRef, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useMemo, useCallback, type ReactNode } from "react";
 import { useNavigate, useSearchParams, type NavigateOptions } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -9,10 +9,14 @@ import { WorkspaceSpacesContext, useWorkspaceSpaces } from "@/shared/hooks/useWo
 import { InfoTooltip } from "@/components/info-tooltip/InfoTooltip";
 import { SelectInput } from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
+import { localizeWorkspaceOptions } from "../constants/workspacePresentation";
+import type { WorkspaceOption } from "@/shared/types/WorkspaceSpace";
 
 export function usePlatformWorkspaces() {
+  const { t } = useTranslation("pages");
   const user = useAuthStore((state) => state.session?.user.userCode ?? "");
-  return useQuery({ queryKey: ["platform-data-workspaces", user], queryFn: ({ signal }) => fetchWorkspaceOptions({}, signal) });
+  const select = useCallback((options: WorkspaceOption[]) => localizeWorkspaceOptions(options, t("platformData.defaultWorkspace")), [t]);
+  return useQuery({ queryKey: ["platform-data-workspaces", user], queryFn: ({ signal }) => fetchWorkspaceOptions({}, signal), select });
 }
 
 const WorkspaceFilterContext = createContext<ReactNode>(null);

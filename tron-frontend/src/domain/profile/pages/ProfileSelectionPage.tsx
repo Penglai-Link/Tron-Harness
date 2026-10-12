@@ -246,7 +246,7 @@ export function ProfileSelectionPage() {
     }
   }
 
-  const agreementRules = [1, 2, 3, 4, 5].map((index) => t(`personAiProfiles.agreement.rules.rule${index}`));
+  const agreementRules = [1, 2, 3, 4, 5, 6].map((index) => t(`personAiProfiles.agreement.rules.rule${index}`));
   const availableProfiles = profiles.filter((profile) => profile.status !== "PENDING");
 
   return (

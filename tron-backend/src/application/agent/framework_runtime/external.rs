@@ -28,6 +28,7 @@ impl ExternalExecution {
             self.transport.session_scope()?,
             &context.user_code,
             &context.workspace_code,
+            &context.agent_code,
             &context.execution_scope,
             &context.model.base_url,
             &context.model.api_key,
@@ -123,6 +124,16 @@ impl fw::ExternalAgent for HostExternalAgent {
                     sink.emit(event).await;
                 }
             }
+        }
+        if let Some(binding) = request
+            .extensions
+            .get::<super::native_sessions::CollaborationBinding>()
+        {
+            match &result {
+                Ok(result) => binding.0.save(result).await,
+                Err(_) => binding.0.failed().await,
+            }
+            .map_err(|error| fw::AgentError::Run(error.message()))?;
         }
         let response = match &result {
             Ok(result) => Ok(fw::ExternalAgentResult {

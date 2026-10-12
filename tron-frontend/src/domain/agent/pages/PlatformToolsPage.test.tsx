@@ -65,7 +65,7 @@ describe("platform tool permissions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("storage unavailable"));
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(screen.getByRole("combobox", { name: "Confirmation threshold for Shell" }).textContent).toContain("High");
     expect(screen.queryByText("Unsaved changes")).toBeNull();
   });

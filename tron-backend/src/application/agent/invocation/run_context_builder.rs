@@ -586,7 +586,10 @@ fn resolve_invocation_model(
         | AgentRuntimeType::OpenCodeRun
         | AgentRuntimeType::OpenCodeServe
         | AgentRuntimeType::OpenCodeAcp => {
-            let model_name = normalize_optional(requested_system_model_id)
+            let model_name = resolved_agent
+                .system_model_id
+                .clone()
+                .or_else(|| normalize_optional(requested_system_model_id))
                 .ok_or(AgentInvocationError::ModelRequired)?;
             Ok(build_system_runtime_model_config(&model_name, None))
         }
@@ -621,6 +624,37 @@ fn runtime_selection_for_agent(
 mod tests {
     use super::*;
     use crate::domain::agent::AgentMessagePart;
+
+    #[test]
+    fn configured_system_model_wins_over_caller_model_and_needs_no_model_argument() {
+        let runtime = ResolvedAgentRuntime {
+            agent_code: "codex-fast".into(),
+            system_model_id: Some("fast-model".into()),
+            runtime_type: AgentRuntimeType::CodexExec,
+            command_name: Some("codex".into()),
+            name: "Fast".into(),
+        };
+        assert_eq!(
+            resolve_invocation_model(&runtime, None, None)
+                .unwrap()
+                .model_name,
+            "fast-model"
+        );
+        assert_eq!(
+            resolve_invocation_model(&runtime, None, Some("other-model".into()))
+                .unwrap()
+                .model_name,
+            "fast-model"
+        );
+        let unconfigured = ResolvedAgentRuntime {
+            system_model_id: None,
+            ..runtime
+        };
+        assert!(matches!(
+            resolve_invocation_model(&unconfigured, None, None),
+            Err(AgentInvocationError::ModelRequired)
+        ));
+    }
 
     #[test]
     fn page_context_is_compact_json_metadata_and_bounded() {

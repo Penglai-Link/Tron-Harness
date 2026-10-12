@@ -16,9 +16,9 @@ const api = vi.hoisted(() => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: Record<string, unknown>) =>
-      key === "enabledPluginCount" ? `${values?.count} enabled` : ({
+    t: (key: string) => ({
         pluginCount: "Plugins",
+        enabledPluginCount: "Enabled plugins",
         toolCount: "Tools",
         skillCount: "Skills",
         agentCount: "Agents",
@@ -41,7 +41,10 @@ vi.mock("@/domain/dude/api/dudeApi", () => ({ listDudes: api.dudes }));
 vi.mock("../api/observabilityApi", () => ({ queryMetricPoints: vi.fn().mockResolvedValue({ records: [] }) }));
 
 beforeEach(() => {
-  api.plugins.mockResolvedValue([{ effective: true, contents: [{ kind: "Plugin", name: "plugin-a" }] }]);
+  api.plugins.mockResolvedValue([
+    { effective: true, contents: [{ kind: "Plugin", name: "plugin-a" }] },
+    { effective: false, contents: [{ kind: "Plugin", name: "plugin-a" }, { kind: "Plugin", name: "plugin-b" }] },
+  ]);
   api.tools.mockResolvedValue([{}, {}, {}]);
   api.skills.mockResolvedValue([{}, {}]);
   api.internalAgents.mockResolvedValue([{}, {}]);
@@ -62,7 +65,8 @@ it("shows platform inventory counts alongside plugin count", async () => {
     expect(screen.getByText("4")).toBeTruthy();
   });
   expect(screen.getAllByText("3")).toHaveLength(2);
-  expect(screen.getByText("1 enabled")).toBeTruthy();
+  expect(screen.getByText("Plugins").nextElementSibling?.textContent).toBe("2");
+  expect(screen.getByText("Enabled plugins").nextElementSibling?.textContent).toBe("1");
   expect(screen.getByText("4")).toBeTruthy();
   expect(document.querySelectorAll("section")).toHaveLength(1);
 });

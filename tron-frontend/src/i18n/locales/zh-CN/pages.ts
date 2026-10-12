@@ -583,7 +583,8 @@ export const pages = {
     },
   },
   platformData: {
-    chooseWorkspaces: "选择空间（{{count}}）",
+    chooseWorkspaces: "已选空间（{{count}}）",
+    defaultWorkspace: "默认工作空间",
     confirm: "确认",
     retry: "重试",
     loadingWorkspaces: "正在加载空间…",
@@ -2247,7 +2248,7 @@ export const pages = {
       },
       save: "保存",
       saving: "保存中…",
-      discard: "放弃改动",
+      discard: "放弃",
       refresh: "刷新",
       dirty: "有未保存的改动",
       saved: "权限已保存",
@@ -2364,6 +2365,27 @@ export const pages = {
     },
   },
   settingsAgents: {
+    profile: {
+      new: "新建",
+      createTitle: "新建系统 Agent",
+      save: "保存",
+      saving: "保存中…",
+      cancel: "取消",
+      editTitle: "编辑系统 Agent",
+      base: "基础 Agent",
+      name: "名称",
+      code: "标识",
+      model: "模型",
+      modelPlaceholder: "选择或输入模型 ID",
+      openCodeModelHelp: "OpenCode 的模型 ID 须使用 provider/model 格式。",
+      codeHelp: "使用 1–64 位小写字母、数字、连字符或下划线，并以字母开头。",
+      help: "使用基础 Agent 已有的登录和订阅。派发到此 Agent 的任务将使用所选模型。",
+      scanFirst: "请先扫描已安装的 Agent。",
+      saveFailed: "无法保存系统 Agent 配置",
+      edit: "编辑",
+      delete: "删除",
+      deleteTitle: "删除系统 Agent 配置？",
+    },
     actions: {
       scan: "扫描",
       scanning: "扫描中...",
@@ -5011,7 +5033,9 @@ export const pages = {
           "如向公众提供生成式人工智能服务，你将依法履行备案、安全评估、内容安全、投诉举报、日志留存和个人信息保护等义务。",
         rule4:
           "你不会利用本系统实施违反法律法规、监管要求、平台规则、社会公共利益或第三方合法权益的行为。",
-        rule5: "本声明仅用于风险提示，不构成法律意见或合规审查结论。",
+        rule5:
+          "本系统不会收集任何数据用于模型训练，但无法保证你所使用的模型供应商不会将请求中包含的数据用于模型训练。模型供应商的数据使用方式以其服务条款和隐私政策为准。",
+        rule6: "本声明仅用于风险提示，不构成法律意见或合规审查结论。",
       },
     },
     remove: {

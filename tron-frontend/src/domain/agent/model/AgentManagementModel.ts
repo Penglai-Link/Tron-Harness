@@ -23,6 +23,8 @@ export interface SystemAgentModelRecord {
 
 interface SystemAgentBaseRecord {
   agentCode: string;
+  baseAgentCode?: string | null;
+  modelId?: string | null;
   name: string;
   description: string;
   source: string;
@@ -34,6 +36,13 @@ interface SystemAgentBaseRecord {
 }
 
 export interface PlatformSystemAgentRecord extends SystemAgentBaseRecord {}
+
+export interface SystemAgentProfilePayload {
+  agentCode: string;
+  name: string;
+  baseAgentCode: string;
+  modelId: string;
+}
 
 export interface PlatformSystemAgentRescanResult {
   scannedCount: number;

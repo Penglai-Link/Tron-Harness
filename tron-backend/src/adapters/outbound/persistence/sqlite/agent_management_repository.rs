@@ -613,13 +613,31 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         ).map_err(storage_error)?;
         Ok(())
     }
+    fn insert_system_agent(
+        &mut self,
+        agent: &SystemAgentRegistryEntry,
+    ) -> Result<(), AgentManagementError> {
+        let inserted = self.connection.execute(
+            "INSERT INTO system_agent_registries (agent_code,name,description,runtime_type,command_name,source,enabled,available,last_scanned_at,last_seen_at,last_error,base_agent_code,model_id)
+             SELECT ?1,?2,?3,?4,?5,'SYSTEM',?6,?7,?8,?9,?10,?11,?12
+             WHERE NOT EXISTS(SELECT 1 FROM system_agent_registries WHERE agent_code=?1)
+               AND NOT EXISTS(SELECT 1 FROM platform_internal_agent_configs WHERE agent_code=?1)
+               AND NOT EXISTS(SELECT 1 FROM workspace_internal_agent_definitions WHERE agent_code=?1)",
+            params![agent.agent_code, agent.name, agent.description, runtime_type_to_storage(agent.runtime_type), agent.command_name, i64::from(agent.enabled), i64::from(agent.available), option_timestamp_to_millis(agent.last_scanned_at.as_deref()), option_timestamp_to_millis(agent.last_seen_at.as_deref()), agent.last_error, agent.base_agent_code, agent.model_id]
+        ).map_err(storage_error)?;
+        if inserted == 0 {
+            return Err(AgentManagementError::InternalAgentCodeConflict);
+        }
+        Ok(())
+    }
+
     fn list_system_agents(
         &mut self,
     ) -> Result<Vec<SystemAgentRegistryEntry>, AgentManagementError> {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT agent_code, name, description, runtime_type, command_name, source, enabled, available, last_scanned_at, last_seen_at, last_error
+                "SELECT agent_code, name, description, runtime_type, command_name, source, enabled, available, last_scanned_at, last_seen_at, last_error, base_agent_code, model_id
                  FROM system_agent_registries
                  ORDER BY agent_code ASC",
             )
@@ -628,6 +646,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
             .query_map([], |row| {
                 Ok(SystemAgentRegistryEntry {
                     agent_code: row.get(0)?,
+                    base_agent_code: row.get(11)?,
+                    model_id: row.get(12)?,
                     name: row.get(1)?,
                     description: row.get(2)?,
                     runtime_type: runtime_type_from_storage(&row.get::<_, String>(3)?),
@@ -665,8 +685,10 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     available,
                     last_scanned_at,
                     last_seen_at,
-                    last_error
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                    last_error,
+                    base_agent_code,
+                    model_id
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  ON CONFLICT(agent_code) DO UPDATE SET
                     name = excluded.name,
                     description = excluded.description,
@@ -677,7 +699,9 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     available = excluded.available,
                     last_scanned_at = excluded.last_scanned_at,
                     last_seen_at = excluded.last_seen_at,
-                    last_error = excluded.last_error",
+                    last_error = excluded.last_error,
+                    base_agent_code = excluded.base_agent_code,
+                    model_id = excluded.model_id",
                 params![
                     agent.agent_code,
                     agent.name,
@@ -690,6 +714,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     option_timestamp_to_millis(agent.last_scanned_at.as_deref()),
                     option_timestamp_to_millis(agent.last_seen_at.as_deref()),
                     agent.last_error,
+                    agent.base_agent_code,
+                    agent.model_id,
                 ],
             )
             .map_err(storage_error)?;
@@ -698,6 +724,18 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
 
     fn delete_system_agent(&mut self, agent_code: &str) -> Result<bool, AgentManagementError> {
         let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM agent_workspace_grants WHERE agent_code = ?1 AND EXISTS (SELECT 1 FROM system_agent_registries WHERE agent_code = ?1 AND base_agent_code IS NOT NULL)",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM agent_workspace_grant_policies WHERE agent_code = ?1 AND EXISTS (SELECT 1 FROM system_agent_registries WHERE agent_code = ?1 AND base_agent_code IS NOT NULL)",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
         transaction
             .execute(
                 "DELETE FROM workspace_system_agent_policies WHERE agent_code = ?1",
@@ -1432,6 +1470,18 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
         self.connection.call(
             move |connection| {
                 SqliteAgentManagementRepositorySql { connection }.upsert_system_agent(&agent)
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn insert_system_agent(
+        &mut self,
+        agent: &SystemAgentRegistryEntry,
+    ) -> Result<(), AgentManagementError> {
+        let agent = agent.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }.insert_system_agent(&agent)
             },
             || storage_error(rusqlite::Error::InvalidQuery),
         )

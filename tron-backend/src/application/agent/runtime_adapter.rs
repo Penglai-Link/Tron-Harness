@@ -14,7 +14,7 @@ mod system_cli_runtime;
 
 use react_runtime::ReactRuntime;
 use service_mode_runtime::ServiceModeRuntime;
-use system_cli_runtime::SystemCliRuntime;
+pub(crate) use system_cli_runtime::SystemCliRuntime;
 
 pub(crate) use system_cli_runtime::SystemAgentCliKind;
 
@@ -153,7 +153,7 @@ impl RuntimeCapabilities {
         }
     }
 
-    fn system_cli() -> Self {
+    pub(crate) fn system_cli() -> Self {
         Self {
             supports_resume: true,
             supports_cancel: false,

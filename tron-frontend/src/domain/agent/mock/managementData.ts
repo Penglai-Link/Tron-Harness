@@ -13,6 +13,7 @@ import type {
   WorkspaceInternalAgentPolicyPayload,
   WorkspaceInternalAgentRecord,
   WorkspaceSystemAgentRecord,
+  SystemAgentProfilePayload,
 } from "@/domain/agent/model";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
 import { agentRolePromptSeeds } from "@/domain/prompt/mock/agentRolePromptSeeds";
@@ -23,6 +24,8 @@ let scanSequence = 0;
 
 type SystemAgentSeed = {
   agentCode: string;
+  baseAgentCode?: string | null;
+  modelId?: string | null;
   available: boolean;
   description: string;
   models: Array<{ modelId: string; displayName: string }>;
@@ -314,6 +317,8 @@ function buildPlatformRecord(record: SystemAgentSeed): PlatformSystemAgentRecord
   const status = buildPlatformStatus(record);
   return {
     agentCode: record.agentCode,
+    baseAgentCode: record.baseAgentCode,
+    modelId: record.modelId,
     available: record.available,
     description: record.description,
     enabled: status === "Enabled",
@@ -337,6 +342,8 @@ function buildWorkspaceSystemRecord(workspaceCode: string, record: SystemAgentSe
 
   return {
     agentCode: record.agentCode,
+    baseAgentCode: record.baseAgentCode,
+    modelId: record.modelId,
     available: record.available,
     description: record.description,
     enabled,
@@ -683,23 +690,42 @@ export function listPlatformSystemAgentsMock() {
   return systemAgentRegistry.map((record) => cloneSystemAgentRecord(buildPlatformRecord(record)));
 }
 
+export function createPlatformSystemAgentMock(payload: SystemAgentProfilePayload) {
+  const base = systemAgentRegistry.find((agent) => agent.agentCode === payload.baseAgentCode && !agent.baseAgentCode);
+  if (!base || systemAgentRegistry.some((agent) => agent.agentCode === payload.agentCode)) throw new Error("System Agent is unavailable or its code is already in use");
+  const record = { ...base, ...payload, platformEnabled: true, models: [{ modelId: payload.modelId, displayName: payload.modelId }] };
+  systemAgentRegistry.push(record);
+  return buildPlatformRecord(record);
+}
+export function updatePlatformSystemAgentMock(code: string, payload: Pick<SystemAgentProfilePayload, "name" | "modelId">) {
+  const record = systemAgentRegistry.find((agent) => agent.agentCode === code && agent.baseAgentCode);
+  if (!record) throw new Error("System Agent configuration was not found");
+  Object.assign(record, payload, { models: [{ modelId: payload.modelId, displayName: payload.modelId }] });
+  return buildPlatformRecord(record);
+}
+export function deletePlatformSystemAgentMock(code: string) {
+  systemAgentRegistry = systemAgentRegistry.filter((agent) => agent.agentCode !== code || !agent.baseAgentCode);
+}
+
 export function rescanPlatformSystemAgentsMock() {
   const scannedAt = nextScanTimestamp();
-  const scannedCount = systemAgentRegistry.length;
+  const bases = systemAgentRegistry.filter((record) => !record.baseAgentCode);
+  const scannedCount = bases.length;
+  const availableCount = bases.filter((record) => record.agentCode !== "opencode").length;
   systemAgentRegistry = systemAgentRegistry
     .map((record) => ({
       ...record,
-      available: record.agentCode !== "opencode",
+      available: (record.baseAgentCode || record.agentCode) !== "opencode",
       lastScannedAt: scannedAt,
     }))
-    .filter((record) => record.available);
+    .filter((record) => record.available || record.baseAgentCode);
 
-  const records = listWorkspaceSystemAgentsMock("TRON_CORE");
+  const records = listPlatformSystemAgentsMock();
   return {
-    availableCount: records.length,
+    availableCount,
     records,
     scannedCount,
-    unavailableCount: scannedCount - records.length,
+    unavailableCount: scannedCount - availableCount,
   } satisfies PlatformSystemAgentRescanResult;
 }
 

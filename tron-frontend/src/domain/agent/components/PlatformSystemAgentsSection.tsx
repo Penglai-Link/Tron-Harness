@@ -6,6 +6,9 @@ import {
   enablePlatformSystemAgent,
   fetchPlatformSystemAgents,
   rescanPlatformSystemAgents,
+  createPlatformSystemAgent,
+  updatePlatformSystemAgent,
+  deletePlatformSystemAgent,
 } from "@/domain/agent/api";
 import {
   AgentPolicySwitch,
@@ -15,6 +18,9 @@ import {
   listPlatformSystemAgentsMock,
   rescanPlatformSystemAgentsMock,
   setPlatformSystemAgentEnabledMock,
+  createPlatformSystemAgentMock,
+  updatePlatformSystemAgentMock,
+  deletePlatformSystemAgentMock,
 } from "@/domain/agent/mock";
 import type {
   PlatformSystemAgentRecord,
@@ -27,6 +33,7 @@ import { AgentWorkspaceAssignment } from "./AgentWorkspaceAssignment";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/forms";
 import { translateSystemAgentDescription, translateSystemAgentSource } from "../constants/agentPresentation";
+import { SystemAgentProfileDialog } from "./SystemAgentProfileDialog";
 
 const brandImages: Record<string, string> = {
   codex: "/agent-brands/codex-pixel.png",
@@ -53,6 +60,8 @@ export function PlatformSystemAgentsSection() {
   );
 
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [profileDialog, setProfileDialog] = useState<"new" | PlatformSystemAgentRecord | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const selectedAgent = systemAgents.find((agent) => agent.agentCode === selectedCode);
   async function loadPage() {
     try {
@@ -123,10 +132,22 @@ export function PlatformSystemAgentsSection() {
     }
   }
 
+  async function removeProfile(record: PlatformSystemAgentRecord) {
+    setRowBusyCode(record.agentCode);
+    try {
+      if (dataSource === "api") await deletePlatformSystemAgent(record.agentCode);
+      else deletePlatformSystemAgentMock(record.agentCode);
+      setConfirmDelete(false); setSelectedCode(null);
+      await refreshSystemAgents();
+    } catch (error) { toast.error(error instanceof Error ? error.message : pageT("profile.saveFailed", "Could not save system Agent")); }
+    finally { setRowBusyCode(""); }
+  }
+
   return <section aria-label={pageT("table.title", "System Agents")} className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-base font-semibold">{pageT("table.title", "System Agents")}</h2>
       <div className="flex flex-wrap items-center gap-3">
+        <Button disabled={scanning || Boolean(rowBusyCode)} onClick={() => setProfileDialog("new")}>{pageT("profile.new", "New")}</Button>
         <Button disabled={scanning || Boolean(rowBusyCode)} aria-busy={scanning} onClick={() => void handleScan()}>
 
           {scanning ? pageT("actions.scanning", "Scanning...") : pageT("actions.scan", "Scan")}
@@ -137,9 +158,10 @@ export function PlatformSystemAgentsSection() {
       {systemAgents.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
         {systemAgents.map((agent) => <Button key={agent.agentCode} variant="ghost" aria-label={pageT("table.manageLabel", "Manage {{name}}", { name: agent.name })}
           className="group h-auto min-w-0 flex-col gap-2 rounded-xl px-2 py-4 text-center whitespace-normal" onClick={() => setSelectedCode(agent.agentCode)}>
-          <span className="transition-transform duration-150 motion-reduce:transition-none group-hover:scale-105"><SystemAgentAvatar code={agent.agentCode} name={agent.name} /></span>
+          <span className="transition-transform duration-150 motion-reduce:transition-none group-hover:scale-105"><SystemAgentAvatar code={agent.baseAgentCode || agent.agentCode} name={agent.name} /></span>
           <span className="block w-full truncate text-sm font-medium">{agent.name}</span>
           <span className="block w-full truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{agent.agentCode}</span>
+          {agent.modelId ? <span className="block w-full truncate text-xs text-[var(--color-on-surface-variant)]" title={agent.modelId}>{agent.modelId}</span> : null}
         </Button>)}
       </div> : <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("table.empty", "No system agents available.")}</p>}
     </SurfaceCard>
@@ -153,9 +175,14 @@ export function PlatformSystemAgentsSection() {
           <DialogDescription>{selectedAgent.agentCode}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-4">
-          <SystemAgentAvatar code={selectedAgent.agentCode} name={selectedAgent.name} />
+          <SystemAgentAvatar code={selectedAgent.baseAgentCode || selectedAgent.agentCode} name={selectedAgent.name} />
           <p className="text-sm text-[var(--color-on-surface-variant)]">{translateSystemAgentDescription(t, selectedAgent)}</p>
         </div>
+        {selectedAgent.modelId ? <Field label={pageT("profile.model", "Model")}><p className="break-all text-sm">{selectedAgent.modelId}</p></Field> : null}
+        {selectedAgent.baseAgentCode ? <div className="flex justify-end gap-2">
+          <Button variant="outline" disabled={Boolean(rowBusyCode)} onClick={() => { setSelectedCode(null); setProfileDialog(selectedAgent); }}>{pageT("profile.edit", "Edit")}</Button>
+          <Button variant="outline" disabled={Boolean(rowBusyCode)} onClick={() => setConfirmDelete(true)}>{pageT("profile.delete", "Delete")}</Button>
+        </div> : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={pageT("table.columns.status", "Status")}><AgentStatusBadge status={selectedAgent.status} /></Field>
           <Field label={pageT("table.columns.source", "Source")}><p className="text-sm">{translateSystemAgentSource(t, selectedAgent.source)}</p></Field>
@@ -170,6 +197,22 @@ export function PlatformSystemAgentsSection() {
           <span className="text-sm font-medium">{t("pages:platformData.agentAuthorization")}</span>
           <AgentWorkspaceAssignment code={selectedAgent.agentCode} name={selectedAgent.name} />
         </div>
+      </DialogContent>
+    </Dialog> : null}
+    {profileDialog ? <SystemAgentProfileDialog agents={systemAgents} record={profileDialog === "new" ? undefined : profileDialog} onClose={() => setProfileDialog(null)} onSave={async (payload) => {
+      if (profileDialog === "new") {
+        if (dataSource === "api") await createPlatformSystemAgent(payload);
+        else createPlatformSystemAgentMock(payload);
+      } else {
+        if (dataSource === "api") await updatePlatformSystemAgent(payload.agentCode, { name: payload.name, modelId: payload.modelId });
+        else updatePlatformSystemAgentMock(payload.agentCode, payload);
+      }
+      await refreshSystemAgents();
+    }} /> : null}
+    {confirmDelete && selectedAgent ? <Dialog open onOpenChange={(open) => { if (!rowBusyCode) setConfirmDelete(open); }}>
+      <DialogContent showCloseButton={!rowBusyCode}>
+        <DialogHeader><DialogTitle>{pageT("profile.deleteTitle", "Delete system Agent?")}</DialogTitle><DialogDescription>{selectedAgent.name}</DialogDescription></DialogHeader>
+        <div className="flex justify-end gap-2"><Button variant="outline" disabled={Boolean(rowBusyCode)} onClick={() => setConfirmDelete(false)}>{pageT("profile.cancel", "Cancel")}</Button><Button disabled={Boolean(rowBusyCode)} onClick={() => void removeProfile(selectedAgent)}>{pageT("profile.delete", "Delete")}</Button></div>
       </DialogContent>
     </Dialog> : null}
   </section>;

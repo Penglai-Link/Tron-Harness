@@ -10,12 +10,10 @@ import type {
 import { cn } from "@/shared/lib/utils";
 import { Field } from "@/components/forms";
 import { SearchField } from "@/components/search-field";
-import { Button } from "@/components/ui/button";
 
 interface InternalAgentToolSelectorProps {
   className?: string;
   busy?: boolean;
-  onSetToolsChecked: (toolCodes: string[], checked: boolean) => void;
   onToggleTool: (toolCode: string, checked: boolean) => void;
   selectedToolCodes: string[];
   toolDomains: ToolCatalogDomainRecord[];
@@ -35,7 +33,6 @@ function normalizeSearchText(value: string) {
 export function InternalAgentToolSelector({
   className,
   busy = false,
-  onSetToolsChecked,
   onToggleTool,
   selectedToolCodes,
   toolDomains,
@@ -112,6 +109,7 @@ export function InternalAgentToolSelector({
         : domainTools.filter((tool) =>
             [
               tool.toolCode,
+              tool.toolName,
               tool.domainCode,
               tool.name,
               tool.description,
@@ -176,17 +174,6 @@ export function InternalAgentToolSelector({
             const expanded = expandedDomainCodes.has(domain.domainCode);
             const headingId = `${domainIdPrefix}-${domain.domainCode}-heading`;
             const panelId = `${domainIdPrefix}-${domain.domainCode}-tools`;
-            const assignableTools = visibleTools.filter(
-              (tool) => tool.assignable !== false
-            );
-            const allSelected =
-              assignableTools.length > 0 &&
-              assignableTools.every((tool) =>
-                selectedToolSet.has(tool.toolCode)
-              );
-            const hasSelection = visibleTools.some((tool) =>
-              selectedToolSet.has(tool.toolCode)
-            );
 
             return (
               <li key={domain.domainCode}>
@@ -245,50 +232,6 @@ export function InternalAgentToolSelector({
                     aria-labelledby={headingId}
                     className="space-y-3 bg-[var(--color-surface-container-low)] p-3 sm:pl-11"
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <p className="min-w-0 flex-1 text-xs text-[var(--color-on-surface-variant)]">
-                        {domain.description ||
-                          internalPageT(
-                            "toolSelection.noDescription",
-                            "No description available."
-                          )}
-                      </p>
-                      <div className="flex shrink-0 gap-2">
-                        <Button
-                          type="button"
-                          disabled={
-                            busy || assignableTools.length === 0 || allSelected
-                          }
-                          size="sm"
-                          variant="secondary"
-                          onClick={() =>
-                            onSetToolsChecked(
-                              assignableTools.map((tool) => tool.toolCode),
-                              true
-                            )
-                          }
-                        >
-                          {internalPageT(
-                            "toolSelection.selectVisible",
-                            "Select all"
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          disabled={busy || !hasSelection}
-                          size="sm"
-                          variant="secondary"
-                          onClick={() =>
-                            onSetToolsChecked(
-                              visibleTools.map((tool) => tool.toolCode),
-                              false
-                            )
-                          }
-                        >
-                          {internalPageT("toolSelection.clearVisible", "Clear")}
-                        </Button>
-                      </div>
-                    </div>
                     <ul className="divide-y divide-[var(--color-outline-variant)] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
                       {visibleTools.map((tool) => (
                         <li key={tool.toolCode} className="p-3">
@@ -329,7 +272,7 @@ export function InternalAgentToolSelector({
                                 </span>
                               </div>
                               <p className="mt-1 break-all font-mono text-[11px] text-[var(--color-on-surface-variant)]">
-                                {tool.toolCode}
+                                {tool.toolName}
                               </p>
                               <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
                                 {tool.description ||

@@ -40,8 +40,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/agents/runs/{run_code}", get(get_agent_run))
         .route(
             "/api/v1/agents/registry/system",
-            get(list_platform_system_agents),
+            get(list_platform_system_agents).post(super::system_agent_profiles::create),
         )
+        .route("/api/v1/agents/registry/system/{agent_code}", put(super::system_agent_profiles::update).delete(super::system_agent_profiles::delete))
         .route(
             "/api/v1/agents/registry/system/rescan",
             post(rescan_platform_system_agents),

@@ -58,6 +58,8 @@ mod tests {
         connection.execute_batch("PRAGMA foreign_keys=ON").unwrap();
         initialize_business(&connection).unwrap();
         for (table, column) in [
+            ("system_agent_registries", "base_agent_code"),
+            ("system_agent_registries", "model_id"),
             ("tasks", "flow_code"),
             ("models", "default_reasoning_effort"),
             ("workspace_internal_agent_definitions", "group_name"),

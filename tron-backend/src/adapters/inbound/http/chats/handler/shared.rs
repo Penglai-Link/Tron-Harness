@@ -363,9 +363,10 @@ pub(crate) fn prepare_send_model(
         return Ok(PreparedChatModel::fixed(config));
     }
 
-    let model_name = request
+    let model_name = runtime
         .system_model_id
         .as_deref()
+        .or(request.system_model_id.as_deref())
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)

@@ -24,6 +24,7 @@ impl fw::ContextContributor for AgentDirectoryContributor {
             let entry = fw::Message::user(serde_json::json!({
                 "agentCode": agent.agent_code, "name": agent.name, "description": agent.description,
                 "responsibilities": agent.role_prompt.chars().take(512).collect::<String>(),
+                "modelId": agent.model_id,
             }).to_string());
             let cost = input.estimator.message(input.model, &entry).await?;
             if used.saturating_add(cost).saturating_add(100) > input.budget.max_tokens {

@@ -86,22 +86,19 @@ export function PluginCountCard() {
     }
   }
   const counts = [
+    ["pluginCount", plugins.data ? names.size : undefined],
+    ["enabledPluginCount", plugins.data ? enabled.size : undefined],
     ["toolCount", inventory.data?.tools],
     ["skillCount", inventory.data?.skills],
     ["agentCount", inventory.data?.agents],
     ["dudeCount", inventory.data?.dudes],
   ] as const;
-  return <SurfaceCard className="!shadow-none lg:col-span-2">
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-      <div>
-        <h2 className="text-sm text-[var(--color-on-surface-variant)]">{t("pluginCount")}</h2>
-        <p className="mt-3 text-3xl font-semibold tabular-nums">{plugins.data ? formatNumber(names.size) : "—"}</p>
-        <p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">{plugins.data ? t("enabledPluginCount", { count: enabled.size }) : "—"}</p>
-      </div>
+  return <SurfaceCard className="!shadow-none">
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
       {counts.map(([key, count]) => <div key={key}>
-        <h2 className="text-sm text-[var(--color-on-surface-variant)]">{t(key)}</h2>
-        <p className="mt-3 text-3xl font-semibold tabular-nums">{count == null ? "—" : formatNumber(count)}</p>
+        <dt className="text-sm text-[var(--color-on-surface-variant)]">{t(key)}</dt>
+        <dd className="mt-2 text-3xl font-semibold tabular-nums">{count == null ? "—" : formatNumber(count)}</dd>
       </div>)}
-    </div>
+    </dl>
   </SurfaceCard>;
 }

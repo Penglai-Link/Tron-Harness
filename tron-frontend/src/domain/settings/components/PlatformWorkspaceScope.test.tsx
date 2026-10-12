@@ -5,6 +5,8 @@ import { Link, MemoryRouter, useLocation } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { PlatformWorkspaceScope, usePlatformDataHref, usePlatformDataNavigate } from "./PlatformWorkspaceScope";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
+import { localizeWorkspaceOptions } from "../constants/workspacePresentation";
+import type { WorkspaceOption } from "@/shared/types/WorkspaceSpace";
 
 vi.mock("@/domain/admin/api", () => ({ fetchWorkspaceOptions: vi.fn(async () => [
   { workspaceCode: "alpha", name: "Alpha", label: "Alpha" },
@@ -31,6 +33,23 @@ function mount(path: string, renderWithoutWorkspace = false, allowAll = false) {
   </QueryClientProvider>);
 }
 afterEach(cleanup);
+it("localizes the seeded workspace and its paths while preserving custom names and cached records", () => {
+  const defaults: WorkspaceOption = { workspaceCode: "default", name: "默认工作空间", label: "默认工作空间", description: "PersonAI 档案的默认工作空间", parentWorkspaceCode: null, depth: 0, status: "Active" };
+  const child = { ...defaults, workspaceCode: "child", name: "研发", label: "默认工作空间 / 研发", parentWorkspaceCode: "default", depth: 1 };
+  const custom = { ...defaults, workspaceCode: "custom", description: null };
+  const renamed = { ...defaults, workspaceCode: "renamed", name: "我的空间", label: "我的空间" };
+  const options = [defaults, child, custom, renamed];
+  const english = localizeWorkspaceOptions(options, "Default workspace");
+  expect(english.map(({ name, label }) => ({ name, label }))).toEqual([
+    { name: "Default workspace", label: "Default workspace" },
+    { name: "研发", label: "Default workspace / 研发" },
+    { name: "默认工作空间", label: "默认工作空间" },
+    { name: "我的空间", label: "我的空间" },
+  ]);
+  expect(defaults.name).toBe("默认工作空间");
+  expect(child.label).toBe("默认工作空间 / 研发");
+  expect(localizeWorkspaceOptions(options, "默认工作空间")).toEqual(options);
+});
 it("preserves the explicit space across both breadcrumbs and workbench navigation", async () => {
   mount("/settings/memory/item?workspaceCode=beta");
   await screen.findByText("scope:beta");

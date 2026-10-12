@@ -1436,11 +1436,6 @@ export function WorkspaceAgentsPage({
                                   name: translateInternalAgentName(t, agent),
                                 })}
                               </DialogTitle>
-                              <DialogDescription>
-                                {internalPageT("agentCode", "{{code}}", {
-                                  code: agent.agentCode,
-                                })}
-                              </DialogDescription>
                             </DialogHeader>
                             <div className="flex min-h-0 flex-1 flex-col px-1 pb-1">
                               {scope !== "platform" || statusLabel ? (
@@ -1503,10 +1498,10 @@ export function WorkspaceAgentsPage({
                               >
                                 <TabsList variant="line" className="w-full shrink-0 justify-start border-b border-[var(--color-outline-variant)]">
                                   {[
-                                    ["profile", "Basic information"],
-                                    ["runtime", "Runtime behavior"],
-                                    ["resources", "Capabilities and resources"],
-                                    ["advanced", "Advanced configuration"],
+                                    ["profile", "Basic"],
+                                    ["runtime", "Runtime"],
+                                    ["resources", "Capabilities"],
+                                    ["advanced", "Advanced"],
                                   ].map(([value, label]) => (
                                     <TabsTrigger key={value} value={value} className="flex-none px-3">
                                       {internalPageT(`definition.tabs.${value}`, label)}
@@ -1514,7 +1509,7 @@ export function WorkspaceAgentsPage({
                                   ))}
                                   {scope === "platform" ? (
                                     <TabsTrigger value="workspace" className="flex-none px-3">
-                                      {internalPageT("definition.tabs.workspace", "Workspace access")}
+                                      {internalPageT("definition.tabs.workspace", "Workspace")}
                                     </TabsTrigger>
                                   ) : null}
                                 </TabsList>
@@ -1741,7 +1736,7 @@ export function WorkspaceAgentsPage({
                                 <InternalAgentKnowledgeField
                                   key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`}
                                   agentCode={agent.agentCode}
-                                  agentName={draft.name}
+                                  agentName={translateInternalAgentName(t, { ...agent, name: draft.name })}
                                   disabled={editingDisabled}
                                   selectedIds={knowledgeDrafts[agent.agentCode]}
                                   onSelectionChange={
@@ -1903,7 +1898,7 @@ export function WorkspaceAgentsPage({
                                 <InternalAgentAssignmentDialog
                                   key={`${activeWorkspaceCode}:${agent.agentCode}:${assignmentDialog.kind}`}
                                   kind={assignmentDialog.kind}
-                                  agentName={draft.name}
+                                  agentName={translateInternalAgentName(t, { ...agent, name: draft.name })}
                                   busy={editingDisabled}
                                   initialSelectedCodes={
                                     assignmentDialog.kind === "mcp"

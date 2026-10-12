@@ -189,6 +189,8 @@ pub enum SystemAgentStatus {
 #[serde(rename_all = "camelCase")]
 pub struct SystemAgentRegistryEntry {
     pub agent_code: String,
+    pub base_agent_code: Option<String>,
+    pub model_id: Option<String>,
     pub name: String,
     pub description: String,
     pub runtime_type: AgentRuntimeType,
@@ -205,6 +207,8 @@ pub struct SystemAgentRegistryEntry {
 #[serde(rename_all = "camelCase")]
 pub struct ManagedSystemAgentRecord {
     pub agent_code: String,
+    pub base_agent_code: Option<String>,
+    pub model_id: Option<String>,
     pub name: String,
     pub description: String,
     pub agent_type: ManagedAgentType,

@@ -68,7 +68,11 @@ impl Runtime {
         context.execution_scope = record.execution_scope.clone();
         context.collaboration_owner = Some(record.owner.clone());
         let agent = host
-            .internal_agent(&record.workspace_code, &record.agent_code)
+            .collaboration_agent(
+                &record.workspace_code,
+                &record.agent_code,
+                self.builder.agent_management(),
+            )
             .await?;
         let (_, completion) = watch::channel(record.completion.clone());
         let thread = Arc::new(Thread {

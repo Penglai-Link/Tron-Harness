@@ -90,9 +90,9 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
         <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={(event) => { event.preventDefault(); void create(); }}>
           <Tabs className="min-h-0 flex-1" value={section} onValueChange={(value) => { if (typeof value === "string") setSection(value); }}>
             <TabsList variant="line" className="w-full shrink-0 justify-start border-b border-[var(--color-outline-variant)]">
-              <TabsTrigger value="profile" className="flex-none px-3">{text("tabs.profile", "Basic information")}</TabsTrigger>
-              <TabsTrigger value="runtime" className="flex-none px-3">{text("tabs.runtime", "Runtime behavior")}</TabsTrigger>
-              {allowWorkspaceAssignment ? <TabsTrigger value="workspace" className="flex-none px-3">{text("tabs.workspace", "Workspace access")}</TabsTrigger> : null}
+              <TabsTrigger value="profile" className="flex-none px-3">{text("tabs.profile", "Basic")}</TabsTrigger>
+              <TabsTrigger value="runtime" className="flex-none px-3">{text("tabs.runtime", "Runtime")}</TabsTrigger>
+              {allowWorkspaceAssignment ? <TabsTrigger value="workspace" className="flex-none px-3">{text("tabs.workspace", "Workspace")}</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="profile" keepMounted className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-3">
               <AgentAvatarPicker value={avatarId} disabled={definitionDisabled} onChange={setAvatarId} />

@@ -71,6 +71,10 @@ vi.mock("../hooks/useObservability", () => ({
 vi.mock("../components/CollectorConfigButton", () => ({
   CollectorConfigButton: () => null,
 }));
+vi.mock("../components/ResourceTrendCards", () => ({
+  ResourceTrendCards: () => null,
+  PluginCountCard: () => null,
+}));
 afterEach(cleanup);
 it("shows scoped request error rate, readable latency, resources and actual child process relationships", () => {
   render(

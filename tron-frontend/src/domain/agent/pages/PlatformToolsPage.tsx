@@ -76,7 +76,7 @@ export function PlatformToolsPage() {
       <PageHeader title={pageT("title", "Platform Tools")} actions={<div className="flex flex-wrap items-center gap-2">
         <span role="status" className="text-xs text-[var(--color-on-surface-variant)]">{loading ? pageT("permissions.loading", "Loading tool permissions…") : dirty ? pageT("permissions.dirty", "Unsaved changes") : ""}</span>
         <Button variant="outline" disabled={loading || saving || dirty} onClick={() => void refreshTools()}>{pageT("permissions.refresh", "Refresh")}</Button>
-        <Button variant="outline" disabled={!dirty || saving || loading} onClick={discard}>{pageT("permissions.discard", "Discard changes")}</Button>
+        <Button variant="outline" disabled={!dirty || saving || loading} onClick={discard}>{pageT("permissions.discard", "Discard")}</Button>
         <Button disabled={!dirty || !loaded || loading || saving} onClick={() => void savePermissions()}>{pageT(saving ? "permissions.saving" : "permissions.save", saving ? "Saving…" : "Save")}</Button>
       </div>} />
 
@@ -101,14 +101,14 @@ export function PlatformToolsPage() {
                   <colgroup>
                     <col className="w-[190px]" />
                     <col />
-                    <col className="w-[64px]" />
+                    <col className="w-[120px]" />
                     <col className="w-[290px]" />
                   </colgroup>
                   <thead className="border-b border-[var(--color-card-border)] text-xs font-medium text-[var(--color-on-surface-variant)]">
                     <tr>
                       <th className="px-4 py-2.5">{pageT("domains.tools.columns.name", "工具")}</th>
                       <th className="px-4 py-2.5">{pageT("domains.tools.columns.description", "描述")}</th>
-                      <th className="px-4 py-2.5">{pageT("domains.tools.columns.type", "类型")}</th>
+                      <th className="whitespace-nowrap px-4 py-2.5">{pageT("domains.tools.columns.type", "类型")}</th>
                       <th className="px-4 py-2.5">{pageT("permissions.title", "Execution permission")}</th>
                     </tr>
                   </thead>
@@ -120,7 +120,7 @@ export function PlatformToolsPage() {
                           <p className="mt-1 font-mono text-xs text-[var(--color-on-surface-variant)]">{tool.toolName}</p>
                         </td>
                         <td className="px-4 py-2.5 text-[13px] text-[var(--color-on-surface-variant)]">{tool.description}</td>
-                        <td className="px-4 py-2.5">{t(`common:toolOperationKind.${tool.operationKind}`, { defaultValue: tool.operationKind })}</td>
+                        <td className="whitespace-nowrap px-4 py-2.5">{t(`common:toolOperationKind.${tool.operationKind}`, { defaultValue: tool.operationKind })}</td>
                         <td className="px-4 py-2.5"><ToolPermissionControl name={tool.name} disabled={loading || saving || !loaded}
                           value={permissions.find((item) => item.toolCode === tool.toolCode) ?? { toolCode: tool.toolCode, permission: "run", confirmLevel: "low" }}
                           onChange={setPermission} /></td>
@@ -148,7 +148,7 @@ export function PlatformToolsPage() {
               id: "domain",
               header: pageT("domains.columns.domainCode", "Domain"),
               width: "18%",
-              render: (row) => <Button variant="ghost" aria-expanded={expandedDomainCodes.has(row.domainCode)} aria-label={`${row.domainCode}: ${row.name}`} onClick={(event) => { event.stopPropagation(); toggleDomain(row.domainCode); }} className="flex items-center gap-2 font-medium text-[var(--color-on-surface)]">{row.domainCode}</Button>,
+              render: (row) => <Button variant="link" aria-expanded={expandedDomainCodes.has(row.domainCode)} aria-label={`${row.domainCode}: ${row.name}`} onClick={(event) => { event.stopPropagation(); toggleDomain(row.domainCode); }} className="h-auto justify-start px-0 font-medium text-[var(--color-on-surface)]">{row.domainCode}</Button>,
             },
             {
               id: "description",

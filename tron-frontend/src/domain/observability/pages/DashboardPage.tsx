@@ -174,7 +174,7 @@ export function DashboardPage() {
           </SurfaceCard>
         <div className="mt-4 flex flex-col gap-6 border-t-2 border-[var(--color-outline)] pt-10">
           <ResourceTrendCards />
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid gap-6 lg:grid-cols-2">
           <PluginCountCard />
           <SurfaceCard className="flex flex-col">
             <div className="mb-4 flex items-center justify-between gap-3">

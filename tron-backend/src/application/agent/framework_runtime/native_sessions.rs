@@ -11,6 +11,7 @@ pub(super) struct BindingGuard {
     binding: Arc<tokio::sync::Mutex<Binding>>,
     pub session: Option<fw::ExternalSessionRef>,
 }
+pub(super) struct CollaborationBinding(pub Arc<BindingGuard>);
 impl Bindings {
     pub fn track(&self, binding: Binding) -> BindingGuard {
         let session = binding.session.clone();

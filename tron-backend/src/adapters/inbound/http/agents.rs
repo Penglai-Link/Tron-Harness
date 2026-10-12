@@ -10,4 +10,5 @@ mod workspace_grants;
 
 mod loop_designs;
 
+mod system_agent_profiles;
 mod tool_permissions;
