@@ -130,11 +130,11 @@ impl AgentManagementService {
     pub fn all_platform_internal_agents(
         &self,
     ) -> Result<Vec<InternalAgentToolPolicy>, AgentManagementError> {
-        let tool_codes = self.tool_codes();
+        let tools = self.list_tools(None, None, "en-US");
         Ok(self
             .platform_internal_agent_configs()?
             .into_iter()
-            .map(|config| platform_view(config, &tool_codes))
+            .map(|config| platform_view(config, &tools))
             .collect())
     }
 
@@ -163,7 +163,7 @@ impl AgentManagementService {
         let config = self.prepare_platform_internal_agent(command)?;
         self.repository()
             .insert_platform_internal_agent_config(&config)?;
-        Ok(platform_view(config, &self.tool_codes()))
+        Ok(platform_view(config, &self.list_tools(None, None, "en-US")))
     }
 
     pub fn delete_platform_internal_agent(&self, code: &str) -> Result<(), AgentManagementError> {
@@ -216,7 +216,7 @@ impl AgentManagementService {
         change(&mut config)?;
         repository.upsert_platform_internal_agent_config(&config)?;
         drop(repository);
-        Ok(platform_view(config, &self.tool_codes()))
+        Ok(platform_view(config, &self.list_tools(None, None, "en-US")))
     }
 
     pub fn update_platform_internal_agent_definition(
@@ -358,13 +358,18 @@ impl AgentManagementService {
 
 fn platform_view(
     config: PlatformInternalAgentConfig,
-    tool_codes: &[String],
+    catalog: &[ToolCatalogRecord],
 ) -> InternalAgentToolPolicy {
-    let tools = if config.tool_assignment_mode == ToolAssignmentMode::AllPlatformTools {
-        tool_codes.to_vec()
-    } else {
-        config.selected_tool_codes
-    };
+    let tools = catalog
+        .iter()
+        .filter(|tool| {
+            config
+                .tool_assignment_mode
+                .strategy()
+                .includes(tool, &config.selected_tool_codes)
+        })
+        .map(|tool| tool.tool_code.clone())
+        .collect::<Vec<_>>();
     let count = tools.len();
     InternalAgentToolPolicy {
         workspace_code: String::new(),

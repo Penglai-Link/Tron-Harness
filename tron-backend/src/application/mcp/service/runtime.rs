@@ -18,6 +18,7 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeToolMaterialization {
     pub tools: Vec<EffectiveTool>,
+    pub descriptors: Vec<fw::ToolDescriptor>,
     pub warnings: Vec<RuntimeMcpWarning>,
 }
 
@@ -68,6 +69,7 @@ impl McpService {
         registry: &ToolRegistry,
     ) -> Result<RuntimeToolMaterialization, McpError> {
         let mut tools = Vec::new();
+        let mut descriptors = Vec::new();
         let mut warnings = Vec::new();
         for server in
             self.resolve_runtime_servers(workspace_code, access_mode, selected_server_codes)?
@@ -140,6 +142,7 @@ impl McpService {
                     service: self.clone(),
                     server: server.server_code.clone(),
                 });
+                descriptors.push(binding.descriptor.clone());
                 public_bindings.push(binding);
             }
             let close = client.clone();
@@ -154,7 +157,11 @@ impl McpService {
                     }),
             );
         }
-        Ok(RuntimeToolMaterialization { tools, warnings })
+        Ok(RuntimeToolMaterialization {
+            tools,
+            descriptors,
+            warnings,
+        })
     }
 }
 fn mcp_error(error: impl ToString) -> McpError {

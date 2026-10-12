@@ -181,6 +181,9 @@ pub struct AgentRunContext {
     /// `authorized_tools` falls back to the exposed tool set.
     #[serde(default)]
     pub effective_tools: Vec<EffectiveTool>,
+    /// Server-resolved selection rule and optional request narrowing for this run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_assignment: Option<AgentToolAssignment>,
     #[serde(default)]
     pub tool_exposure: AgentToolExposureState,
     pub execution_scope: AgentExecutionScope,
@@ -190,6 +193,23 @@ pub struct AgentRunContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_term_memory: Option<AgentShortTermMemoryRunContext>,
     pub started_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentToolAssignment {
+    pub mode: super::ToolAssignmentMode,
+    pub selected_tool_codes: Vec<String>,
+    /// Empty means no additional request restriction, never an empty grant.
+    pub requested_tool_names: Vec<String>,
+}
+
+impl AgentToolAssignment {
+    pub fn selects(&self, tool: &super::ToolCatalogRecord) -> bool {
+        self.mode.selects(tool, &self.selected_tool_codes)
+            && (self.requested_tool_names.is_empty()
+                || self.requested_tool_names.contains(&tool.tool_name))
+    }
 }
 
 impl AgentRunContext {
@@ -296,6 +316,7 @@ mod tests {
             skills: Vec::new(),
             tools: vec![tool("discovery_expand_tool_domain", "discovery")],
             effective_tools: Vec::new(),
+            tool_assignment: None,
             tool_exposure: AgentToolExposureState {
                 tool_exposure_mode: Some(ToolExposureMode::DomainDiscovery),
                 hidden_tools: vec![tool("bash_exec", "bash")],

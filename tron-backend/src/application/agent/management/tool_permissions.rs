@@ -61,40 +61,51 @@ impl AgentManagementService {
         }))
     }
 }
-impl ToolPermissionSource for AgentManagementService {
-    fn setting(&self, descriptor: &ToolDescriptor) -> Result<ToolPermissionSetting, String> {
+impl AgentManagementService {
+    pub(crate) fn register_tool_descriptor(
+        &self,
+        descriptor: &ToolDescriptor,
+    ) -> Result<ToolCatalogRecord, String> {
         let fixed = BusinessToolCatalog::list_tools(None, None, "en-US")
             .into_iter()
             .find(|r| r.tool_name == descriptor.call_name);
-        let code = if let Some(record) = fixed {
-            record.tool_code
-        } else {
-            if BusinessToolCatalog::tool(&descriptor.id, "en-US").is_some() {
-                return Err("Native descriptor conflicts with a platform tool code".into());
+        if let Some(record) = fixed {
+            return Ok(record);
+        }
+        if BusinessToolCatalog::tool(&descriptor.id, "en-US").is_some() {
+            return Err("Native descriptor conflicts with a platform tool code".into());
+        }
+        // Only a real provider lease can register this native descriptor.
+        let record = ToolCatalogRecord {
+            tool_code: descriptor.id.clone(),
+            tool_name: descriptor.call_name.clone(),
+            domain_code: if descriptor.id.starts_with("mcp/") {
+                "mcp"
+            } else {
+                "native"
             }
-            // Only a real provider lease can register this native descriptor.
-            let record = ToolCatalogRecord {
-                tool_code: descriptor.id.clone(),
-                tool_name: descriptor.call_name.clone(),
-                domain_code: if descriptor.id.starts_with("mcp/") {
-                    "mcp"
-                } else {
-                    "native"
-                }
-                .into(),
-                name: descriptor.call_name.clone(),
-                description: descriptor.description.clone(),
-                operation_kind: ToolOperationKind::Command,
-                input_schema: descriptor.input_schema.clone(),
-                module_owner: "Framework".into(),
-                availability_state: ToolAvailabilityState::Available,
-                sample_result_summary: String::new(),
-            };
-            self.repository()
-                .remember_discovered_tool(&record)
-                .map_err(|_| "Could not read platform tool permission".to_string())?;
-            descriptor.id.clone()
+            .into(),
+            name: descriptor.call_name.clone(),
+            description: descriptor.description.clone(),
+            operation_kind: match descriptor.operation_kind {
+                eliteforge_agent_core::ToolOperationKind::Query => ToolOperationKind::Query,
+                eliteforge_agent_core::ToolOperationKind::Command => ToolOperationKind::Command,
+                eliteforge_agent_core::ToolOperationKind::Unknown => ToolOperationKind::Unknown,
+            },
+            input_schema: descriptor.input_schema.clone(),
+            module_owner: "Framework".into(),
+            availability_state: ToolAvailabilityState::Available,
+            sample_result_summary: String::new(),
         };
+        self.repository()
+            .remember_discovered_tool(&record)
+            .map_err(|_| "Could not read platform tool permission".to_string())?;
+        Ok(record)
+    }
+}
+impl ToolPermissionSource for AgentManagementService {
+    fn setting(&self, descriptor: &ToolDescriptor) -> Result<ToolPermissionSetting, String> {
+        let code = self.register_tool_descriptor(descriptor)?.tool_code;
         let settings = self
             .repository()
             .list_tool_permissions()
@@ -105,9 +116,18 @@ impl ToolPermissionSource for AgentManagementService {
             .unwrap_or_else(|| ToolPermissionSetting::default_for(code)))
     }
     fn operation(&self, descriptor: &ToolDescriptor) -> Option<bool> {
-        BusinessToolCatalog::list_tools(None, None, "en-US")
+        let kind = BusinessToolCatalog::list_tools(None, None, "en-US")
             .into_iter()
             .find(|r| r.tool_name == descriptor.call_name)
-            .map(|r| r.operation_kind == ToolOperationKind::Command)
+            .map(|r| r.operation_kind);
+        match kind {
+            Some(ToolOperationKind::Query) => Some(false),
+            Some(ToolOperationKind::Command) => Some(true),
+            _ => match descriptor.operation_kind {
+                eliteforge_agent_core::ToolOperationKind::Query => Some(false),
+                eliteforge_agent_core::ToolOperationKind::Command => Some(true),
+                eliteforge_agent_core::ToolOperationKind::Unknown => None,
+            },
+        }
     }
 }

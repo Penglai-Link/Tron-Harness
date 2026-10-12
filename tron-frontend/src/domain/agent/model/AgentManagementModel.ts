@@ -1,6 +1,6 @@
 export type AgentStatus = "Enabled" | "Disabled" | "Unavailable";
 
-export type ToolAssignmentMode = "all_platform_tools" | "selected_tools";
+export type ToolAssignmentMode = "all_platform_tools" | "selected_tools" | "all_read_only_tools";
 export type ToolExposureMode = "direct_list" | "domain_discovery";
 export type ExpandedDomainPersistenceMode =
   | "sticky_expanded"
@@ -66,7 +66,7 @@ export interface PlatformToolRecord {
   domainCode: string;
   name: string;
   description: string;
-  operationKind: "query" | "command";
+  operationKind: "query" | "command" | "unknown";
 }
 
 export interface WorkspaceInternalAgentRecord {

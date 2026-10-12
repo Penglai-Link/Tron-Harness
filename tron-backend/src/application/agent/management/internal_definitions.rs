@@ -94,7 +94,11 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             candidate_model_codes: Vec::new(),
             group_name: Some(group_name.to_owned()),
             loop_code: Some(crate::domain::agent::loop_design::DEFAULT_REACT_LOOP_CODE.into()),
-            tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
+            tool_assignment_mode: if agent_code == "explore-agent" {
+                ToolAssignmentMode::AllReadOnlyTools
+            } else {
+                ToolAssignmentMode::AllPlatformTools
+            },
             mcp_access_mode: McpAccessMode::AllEnabledServers,
             tool_exposure_mode: ToolExposureMode::DomainDiscovery,
             expanded_domain_persistence_mode: ExpandedDomainPersistenceMode::StickyExpanded,

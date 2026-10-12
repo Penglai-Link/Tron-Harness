@@ -235,6 +235,7 @@ export const common = {
     clear: "Clear search",
   },
   toolOperationKind: {
+    unknown: "Unknown",
     command: "command",
     query: "query",
   },

@@ -140,14 +140,18 @@ impl fw::ToolProvider for HarnessTools {
                 if !state
                     .context
                     .is_tool_authorized(&binding.descriptor.call_name)
+                    && state.context.tool_assignment.is_none()
                 {
                     continue;
                 }
-                binding.exposed &= state
-                    .context
-                    .tools
-                    .iter()
-                    .any(|tool| tool.tool_name == binding.descriptor.call_name);
+                binding.exposed &= (state.context.tool_assignment.is_some()
+                    && state.context.tool_exposure.tool_exposure_mode
+                        != Some(crate::domain::agent::ToolExposureMode::DomainDiscovery))
+                    || state
+                        .context
+                        .tools
+                        .iter()
+                        .any(|tool| tool.tool_name == binding.descriptor.call_name);
                 // This witness comes from the original owned lease, never a
                 // same-name EffectiveTool projection or synthetic executor.
                 state.tool_catalog.insert(

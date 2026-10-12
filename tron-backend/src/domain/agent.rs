@@ -13,6 +13,8 @@ mod model_config;
 mod model_exchange;
 mod run;
 mod tool;
+mod tool_assignment;
+pub use tool_assignment::ToolAssignmentStrategy;
 mod tool_schema;
 
 pub use agui::{
@@ -28,8 +30,8 @@ pub use collaboration::{
 };
 pub use context::{
     AgentCollaborationOwner, AgentExecutionScope, AgentPromptPrefixSource, AgentRunContext,
-    AgentRunLimits, AgentShortTermMemoryRunContext, AgentToolExposureState, AutoModelCandidate,
-    AutoModelRouteContext, EffectiveSkill, EffectiveTool, EffectiveVariable,
+    AgentRunLimits, AgentShortTermMemoryRunContext, AgentToolAssignment, AgentToolExposureState,
+    AutoModelCandidate, AutoModelRouteContext, EffectiveSkill, EffectiveTool, EffectiveVariable,
 };
 pub use error::AgentError;
 pub use history::{

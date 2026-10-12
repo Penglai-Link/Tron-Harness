@@ -488,6 +488,7 @@ fn parse_tool_assignment_mode(
     match normalize_mode_token(raw).as_str() {
         "all_platform_tools" => Ok(ToolAssignmentMode::AllPlatformTools),
         "selected_tools" => Ok(ToolAssignmentMode::SelectedTools),
+        "all_read_only_tools" | "allreadonlytools" => Ok(ToolAssignmentMode::AllReadOnlyTools),
         _ => Err((
             "AGENT_TOOL_ASSIGNMENT_MODE_INVALID",
             "invalid tool assignment mode",

@@ -405,6 +405,7 @@ export function WorkspaceAgentsPage({
             </p>
             <p>{internalPageT(`help.${key}.optionOne`, "")}</p>
             <p>{internalPageT(`help.${key}.optionTwo`, "")}</p>
+            {key === "toolAssignmentMode" ? <p>{internalPageT("help.toolAssignmentMode.optionThree", "Select declared read-only tools automatically each run.")}</p> : null}
           </div>
         </InfoTooltip>
       </span>
@@ -1714,6 +1715,9 @@ export function WorkspaceAgentsPage({
                                         "modes.allTools",
                                         "All platform tools"
                                       )}
+                                    </SelectItem>
+                                    <SelectItem value="all_read_only_tools">
+                                      {internalPageT("modes.allReadOnlyTools", "All read-only tools")}
                                     </SelectItem>
                                     <SelectItem value="selected_tools">
                                       {internalPageT(

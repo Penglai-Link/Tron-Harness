@@ -317,6 +317,7 @@ impl AgentRunContextBuilder {
 
         self.materialize_mcp_tools(
             &mut tool_access,
+            &locale,
             &variable_values,
             &McpWarningPublishContext {
                 run_code: &run_code,
@@ -330,6 +331,19 @@ impl AgentRunContextBuilder {
             },
         )
         .await?;
+        let tool_assignment =
+            tool_access
+                .policy
+                .as_ref()
+                .map(|policy| crate::domain::agent::AgentToolAssignment {
+                    mode: policy.tool_assignment_mode,
+                    selected_tool_codes: policy.selected_tool_codes.clone(),
+                    requested_tool_names: tool_access
+                        .requested_tool_names
+                        .iter()
+                        .cloned()
+                        .collect(),
+                });
         let PreparedToolAccess {
             mut tools,
             mut effective_tools,
@@ -464,6 +478,7 @@ impl AgentRunContextBuilder {
             skills,
             tools,
             effective_tools,
+            tool_assignment,
             tool_exposure,
             execution_scope: execution_scope_override.unwrap_or(AgentExecutionScope {
                 applications: Vec::new(),

@@ -135,7 +135,7 @@ export const DudeResourceFields = forwardRef<DudeResourceFieldsHandle, DudeResou
     } finally { savingRef.current = false; setSaving(false); }
   } }), [record, draft, loading, error, dudeCode, skillDraft, knowledgeDraft, client, t]);
 
-  const label = (key: string) => <span className="inline-flex items-center gap-1.5"><span>{text(`labels.${key}`)}</span><InfoTooltip ariaLabel={text(`help.${key}.ariaLabel`)}><p>{text(`help.${key}.summary`)}</p><p>{text(`help.${key}.optionOne`)}</p><p>{text(`help.${key}.optionTwo`)}</p></InfoTooltip></span>;
+  const label = (key: string) => <span className="inline-flex items-center gap-1.5"><span>{text(`labels.${key}`)}</span><InfoTooltip ariaLabel={text(`help.${key}.ariaLabel`)}><p>{text(`help.${key}.summary`)}</p><p>{text(`help.${key}.optionOne`)}</p><p>{text(`help.${key}.optionTwo`)}</p>{key === "toolAssignmentMode" ? <p>{text("help.toolAssignmentMode.optionThree")}</p> : null}</InfoTooltip></span>;
   if (loading) return <p role="status">{t("agentSkills.loading")}</p>;
   if (!record || !draft) return <div role="alert" className="space-y-2"><p>{error}</p><Button type="button" variant="outline" disabled={disabled} onClick={() => setLoadAttempt((value) => value + 1)}>{t("agentSkills.retry")}</Button></div>;
   if (panel === "advanced") return <div className="grid gap-3 lg:grid-cols-2">
@@ -154,7 +154,7 @@ export const DudeResourceFields = forwardRef<DudeResourceFieldsHandle, DudeResou
       </Field>
       <Field label={label("toolAssignmentMode")} actions={draft.toolAssignmentMode === "selected_tools" ? <Button type="button" size="sm" variant="outline" disabled={blocked} onClick={() => setAssignment("tools")}>{text("assignmentDialog.editTools", { count: draft.selectedToolCodes.length })}</Button> : undefined}>
         <SelectInput disabled={blocked} value={draft.toolAssignmentMode} onValueChange={(value) => value === "selected_tools" ? setAssignment("tools") : patch({ toolAssignmentMode: value as PolicyDraft["toolAssignmentMode"] })}>
-          <SelectItem value="all_platform_tools">{text("modes.allTools")}</SelectItem><SelectItem value="selected_tools">{text("modes.selectedTools")}</SelectItem>
+          <SelectItem value="all_platform_tools">{text("modes.allTools")}</SelectItem><SelectItem value="all_read_only_tools">{text("modes.allReadOnlyTools")}</SelectItem><SelectItem value="selected_tools">{text("modes.selectedTools")}</SelectItem>
         </SelectInput>
       </Field>
       <InternalAgentSkillField agentCode={dudeCode} disabled={blocked} selectedNames={skillDraft} onSelectionChange={setSkillDraft} />

@@ -322,6 +322,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
             required_variable_keys: vec![],
         }],
         effective_tools: Vec::new(),
+        tool_assignment: None,
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
             applications: Vec::new(),

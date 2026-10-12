@@ -34,12 +34,14 @@ pub(super) fn tool_assignment_mode_to_storage(value: ToolAssignmentMode) -> &'st
     match value {
         ToolAssignmentMode::AllPlatformTools => "ALL_PLATFORM_TOOLS",
         ToolAssignmentMode::SelectedTools => "SELECTED_TOOLS",
+        ToolAssignmentMode::AllReadOnlyTools => "ALL_READ_ONLY_TOOLS",
     }
 }
 
 pub(super) fn tool_assignment_mode_from_storage(value: String) -> ToolAssignmentMode {
     match value.trim().to_ascii_uppercase().as_str() {
         "SELECTED_TOOLS" => ToolAssignmentMode::SelectedTools,
+        "ALL_READ_ONLY_TOOLS" => ToolAssignmentMode::AllReadOnlyTools,
         _ => ToolAssignmentMode::AllPlatformTools,
     }
 }

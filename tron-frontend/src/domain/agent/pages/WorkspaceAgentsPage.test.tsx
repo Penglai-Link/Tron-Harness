@@ -178,6 +178,21 @@ async function openEditor(scope: "workspace" | "platform" = "workspace") {
 function save() { fireEvent.click(screen.getByRole("button", { name: "Save" })); }
 
 describe("internal agent cards and manual editing", () => {
+  it.each(["workspace", "platform"] as const)("saves the dynamic read-only rule without rewriting tool assignments in %s", async (scope) => {
+    await openEditor(scope);
+    fireEvent.click(screen.getByRole("tab", {name: "Capabilities and resources"}));
+    fireEvent.change(screen.getByRole("combobox", { name: /tool assignment mode/i }), { target: { value: "all_read_only_tools" } });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(fixture.patch).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patch).toHaveBeenCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", expect.objectContaining({toolAssignmentMode: "all_read_only_tools"}));
+    expect(fixture.assign).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", {name: "Edit Main Agent"}));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("tab", {name: "Capabilities and resources"}));
+    expect(screen.getByRole<HTMLSelectElement>("combobox", {name: /tool assignment mode/i}).value).toBe("all_read_only_tools");
+  });
   it.each(["workspace", "platform"] as const)("saves candidate models, restores them and allows clearing in %s", async (scope) => {
     fixture.record.candidateModelCodes = ["model-a"];
     let dialog = await openEditor(scope);

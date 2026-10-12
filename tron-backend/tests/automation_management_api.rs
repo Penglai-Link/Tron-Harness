@@ -1117,6 +1117,7 @@ fn automation_tool_context(tools: Vec<EffectiveTool>) -> AgentRunContext {
         }],
         tools,
         effective_tools: Vec::new(),
+        tool_assignment: None,
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits {

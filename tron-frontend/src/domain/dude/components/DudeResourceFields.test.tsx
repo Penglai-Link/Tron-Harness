@@ -44,6 +44,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Dude resource drafts", () => {
+  it("saves the dynamic read-only rule without writing a fixed tool list", async () => {
+    const ref = mount(); await screen.findByText("Choose skill");
+    fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "all_read_only_tools" } });
+    expect(api.policy).not.toHaveBeenCalled();
+    expect(screen.queryByText("Confirm tools")).toBeNull();
+    await act(() => ref.current!.save());
+    expect(api.policy).toHaveBeenCalledWith("$platform", "dude-a", { toolAssignmentMode: "all_read_only_tools" });
+    expect(api.assignTools).not.toHaveBeenCalled();
+  });
   it("uses platform definition and makes no writes until the parent explicitly saves", async () => {
     const ref = mount();
     await screen.findByText("Choose skill");

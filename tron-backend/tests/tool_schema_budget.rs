@@ -72,6 +72,7 @@ fn context() -> AgentRunContext {
         skills: Vec::new(),
         tools: vec![tool("echo", "base", 20)],
         effective_tools: Vec::new(),
+        tool_assignment: None,
         tool_exposure: AgentToolExposureState::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits {

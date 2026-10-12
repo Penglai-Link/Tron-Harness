@@ -274,7 +274,7 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     mcpAccessMode: "all_enabled_servers" as const,
     selectedServerCodes: [],
     selectedToolCodes: [],
-    toolAssignmentMode: "all_platform_tools" as const,
+    toolAssignmentMode: agentCode === "explore-agent" ? "all_read_only_tools" as const : "all_platform_tools" as const,
     toolExposureMode: "domain_discovery" as const,
   })),
 ];
@@ -427,9 +427,11 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     ? listPlatformMcpServersMock().filter((server) => server.enabled).map((server) => server.serverCode)
     : listEffectiveEnabledWorkspaceMcpServerCodesMock(workspaceCode));
 
-  const selectedToolCodes = effective.toolAssignmentMode === "all_platform_tools"
-    ? []
-    : normalizeWorkspaceInternalAgentSelectedTools(effective.selectedToolCodes);
+  const selectedToolCodes = effective.toolAssignmentMode === "selected_tools"
+    ? normalizeWorkspaceInternalAgentSelectedTools(effective.selectedToolCodes)
+    : effective.toolAssignmentMode === "all_read_only_tools"
+      ? toolSeed.filter((tool) => tool.operationKind === "query").map((tool) => tool.toolCode)
+      : [];
   const selectedServerCodes = effective.mcpAccessMode === "selected_servers"
     ? [...new Set(effective.selectedServerCodes)].filter((serverCode) => effectiveEnabledServerCodeSet.has(serverCode))
     : [];

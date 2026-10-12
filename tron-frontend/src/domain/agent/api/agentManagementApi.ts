@@ -38,10 +38,13 @@ type AgentSourceApi = "SYSTEM" | PlatformSystemAgentRecord["source"];
 type ToolOperationKindApi =
   | PlatformToolRecord["operationKind"]
   | "QUERY"
-  | "COMMAND";
+  | "COMMAND"
+  | "Unknown"
+  | "UNKNOWN";
 type ToolAssignmentModeApi =
   | WorkspaceInternalAgentRecord["toolAssignmentMode"]
-  | Uppercase<WorkspaceInternalAgentRecord["toolAssignmentMode"]>;
+  | Uppercase<WorkspaceInternalAgentRecord["toolAssignmentMode"]>
+  | "AllReadOnlyTools";
 type ToolExposureModeApi =
   | WorkspaceInternalAgentRecord["toolExposureMode"]
   | Uppercase<WorkspaceInternalAgentRecord["toolExposureMode"]>;
@@ -149,7 +152,7 @@ function normalizeToolOperationKind(
     case "query":
       return kind;
     default:
-      return "query";
+      return "unknown";
   }
 }
 
@@ -160,6 +163,10 @@ function normalizeToolAssignmentMode(
     case "ALL_PLATFORM_TOOLS":
     case "all_platform_tools":
       return "all_platform_tools";
+    case "AllReadOnlyTools":
+    case "ALL_READ_ONLY_TOOLS":
+    case "all_read_only_tools":
+      return "all_read_only_tools";
     case "SELECTED_TOOLS":
     case "selected_tools":
       return "selected_tools";

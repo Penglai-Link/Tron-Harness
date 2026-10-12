@@ -260,10 +260,10 @@ fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
                 domain_code: domain.into(),
                 name: label,
                 description: tool.description,
-                operation_kind: if tool.call_name == "personai_generate_image" {
-                    ToolOperationKind::Command
-                } else {
-                    ToolOperationKind::Query
+                operation_kind: match tool.operation_kind {
+                    eliteforge_agent_core::ToolOperationKind::Query => ToolOperationKind::Query,
+                    eliteforge_agent_core::ToolOperationKind::Command => ToolOperationKind::Command,
+                    eliteforge_agent_core::ToolOperationKind::Unknown => ToolOperationKind::Unknown,
                 },
                 input_schema: tool.input_schema,
                 module_owner: "Framework".into(),

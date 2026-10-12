@@ -119,6 +119,7 @@ fn base_context() -> AgentRunContext {
             required_variable_keys: Vec::new(),
         }],
         effective_tools: Vec::new(),
+        tool_assignment: None,
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits::default(),

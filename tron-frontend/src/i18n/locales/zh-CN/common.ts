@@ -235,6 +235,7 @@ export const common = {
     clear: "清空搜索",
   },
   toolOperationKind: {
+    unknown: "未知",
     command: "命令",
     query: "查询",
   },

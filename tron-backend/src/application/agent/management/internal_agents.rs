@@ -378,31 +378,29 @@ impl AgentManagementService {
         );
         let mode = policy.tool_assignment_mode;
 
-        let registered = self.tool_codes();
-        let selected = match mode {
-            ToolAssignmentMode::AllPlatformTools => registered.clone(),
-            ToolAssignmentMode::SelectedTools
-                if policy
-                    .overridden_fields
-                    .iter()
-                    .any(|field| field == "selectedToolCodes") =>
-            {
-                self.repository()
-                    .list_workspace_internal_agent_tool_assignments(
-                        Some(workspace_code),
-                        Some(agent_code),
-                    )?
-                    .into_iter()
-                    .map(|assignment| assignment.tool_code)
-                    .collect()
-            }
-            ToolAssignmentMode::SelectedTools => definition.selected_tool_codes,
+        let selected = if policy
+            .overridden_fields
+            .iter()
+            .any(|field| field == "selectedToolCodes")
+        {
+            self.repository()
+                .list_workspace_internal_agent_tool_assignments(
+                    Some(workspace_code),
+                    Some(agent_code),
+                )?
+                .into_iter()
+                .map(|assignment| assignment.tool_code)
+                .collect()
+        } else {
+            definition.selected_tool_codes
         };
-        let mut filtered = selected
+        let mut filtered = self
+            .list_tools(None, None, "en-US")
             .into_iter()
-            .map(|code| code.trim().to_string())
-            .filter(|code| !code.is_empty())
-            .filter(|code| registered.iter().any(|registered| registered == code))
+            // Keep saved assignments visible while a capability is disabled;
+            // availability is enforced when constructing runtime bindings.
+            .filter(|tool| mode.strategy().includes(tool, &selected))
+            .map(|tool| tool.tool_code)
             .collect::<Vec<_>>();
         filtered.sort_unstable();
         filtered.dedup();

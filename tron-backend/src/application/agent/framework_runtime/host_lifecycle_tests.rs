@@ -461,6 +461,7 @@ fn test_context(max_retries: u32) -> AgentRunContext {
             required_variable_keys: Vec::new(),
         }],
         effective_tools: Vec::new(),
+        tool_assignment: None,
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits::default(),
@@ -610,7 +611,19 @@ async fn real_host_persists_native_history_and_summary_on_the_shared_database() 
     host.close().await;
 }
 
-struct RemoteCatalogModel(Arc<std::sync::Mutex<Vec<Vec<String>>>>);
+struct RemoteCatalogModel(Arc<std::sync::Mutex<Vec<ModelRequest>>>);
+
+fn observed_tool_names(observed: &Arc<std::sync::Mutex<Vec<ModelRequest>>>) -> Vec<String> {
+    observed
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .tools
+        .iter()
+        .map(|tool| tool.tool_name.clone())
+        .collect()
+}
 impl ModelClient for RemoteCatalogModel {
     fn generate<'a>(
         &'a self,
@@ -624,13 +637,7 @@ impl ModelClient for RemoteCatalogModel {
         config: &'a AgentModelConfig,
         request: &'a ModelRequest,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
-        self.0.lock().unwrap().push(
-            request
-                .tools
-                .iter()
-                .map(|tool| tool.tool_name.clone())
-                .collect(),
-        );
+        self.0.lock().unwrap().push(request.clone());
         StorageAcceptanceModel.generate_once(config, request)
     }
     fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
@@ -682,7 +689,7 @@ async fn framework_remote_tools_reach_model_only_with_agent_authorization() {
     host.run(harness.clone(), context.clone(), None, None)
         .await
         .unwrap();
-    let first = observed.lock().unwrap().last().unwrap().clone();
+    let first = observed_tool_names(&observed);
     for tool in &descriptors {
         assert!(
             first.contains(&tool.call_name),
@@ -697,7 +704,7 @@ async fn framework_remote_tools_reach_model_only_with_agent_authorization() {
     host.run(harness.clone(), context.clone(), None, None)
         .await
         .unwrap();
-    let second = observed.lock().unwrap().last().unwrap().clone();
+    let second = observed_tool_names(&observed);
     assert!(second.contains(&"personai_search".into()));
     for tool in descriptors
         .iter()
@@ -714,13 +721,160 @@ async fn framework_remote_tools_reach_model_only_with_agent_authorization() {
     context.run_code = fw::RunId::new_v4().to_string();
     host.run(harness, context, None, None).await.unwrap();
     assert!(
-        !observed
-            .lock()
-            .unwrap()
-            .last()
-            .unwrap()
-            .contains(&"personai_search".into()),
+        !observed_tool_names(&observed).contains(&"personai_search".into()),
         "disabled pack leaked a binding"
     );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test]
+async fn read_only_assignment_admits_fresh_native_bindings_and_preserves_request_and_platform_limits()
+ {
+    use crate::adapters::outbound::persistence::{
+        SqliteAgentManagementRepository, SqliteWorkspaceRepository,
+    };
+    use crate::application::{
+        agent::{
+            AgentManagementService, ReactAgentBuilder, tool_framework::FrameworkToolRegistryExt,
+        },
+        workspace::{WorkspaceRepository, WorkspaceService},
+    };
+    use tron_harness_capability::{ToolPermission, ToolPermissionSetting};
+    struct QueryTool;
+    #[async_trait::async_trait]
+    impl fw::Tool for QueryTool {
+        async fn call(
+            &self,
+            _: serde_json::Value,
+            _: &fw::RunContext,
+        ) -> Result<fw::ToolOutput, fw::ToolError> {
+            Ok(fw::ToolOutput::text("queried"))
+        }
+    }
+    let host = FrameworkHost::temporary(None).unwrap();
+    let path = host.0.path.to_str().unwrap();
+    let mut workspaces = SqliteWorkspaceRepository::connect(path).unwrap();
+    workspaces
+        .create_workspace(&crate::domain::workspace::Workspace {
+            id: crate::shared::id::SnowflakeId::new(1),
+            workspace_code: "TRON_CORE".into(),
+            name: "Runtime fixture".into(),
+            description: None,
+            parent_workspace_code: None,
+            status: crate::domain::workspace::WorkspaceStatus::Active,
+            created_at: "2026-10-12T00:00:00Z".into(),
+            updated_at: "2026-10-12T00:00:00Z".into(),
+            archived_at: None,
+        })
+        .unwrap();
+    let management = AgentManagementService::new(
+        SqliteAgentManagementRepository::connect(path).unwrap(),
+        WorkspaceService::new(workspaces),
+        &crate::config::AppConfig::default().system_agents,
+    );
+    management.initialize_default_main_loop().unwrap();
+    host.bind_agent_management(management.clone());
+    let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let model = Arc::new(RemoteCatalogModel(observed.clone()));
+    host.bind_model_client(model.clone()).unwrap();
+    let registry = Arc::new(ToolRegistry::default());
+    let harness = ReactAgentBuilder::new(
+        model,
+        registry.clone(),
+        crate::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let mut context = test_context(0);
+    context.conversation_code = None;
+    context.skills.clear();
+    context.tools.clear();
+    context.effective_tools.clear();
+    context.tool_assignment = Some(AgentToolAssignment {
+        mode: ToolAssignmentMode::AllReadOnlyTools,
+        selected_tool_codes: vec![],
+        requested_tool_names: vec![],
+    });
+    for iteration in 0..4 {
+        context.run_code = fw::RunId::new_v4().to_string();
+        registry.register_framework_lease(
+            &context.run_code,
+            fw::ToolLease::new(
+                [
+                    ("fresh_query", fw::ToolOperationKind::Query),
+                    ("fresh_write", fw::ToolOperationKind::Command),
+                    ("fresh_unknown", fw::ToolOperationKind::Unknown),
+                ]
+                .into_iter()
+                .map(|(name, kind)| {
+                    fw::ToolBinding::new(
+                        fw::ToolDescriptor::new(
+                            format!("fixture.{name}"),
+                            name,
+                            "Native tool",
+                            json!({"type":"object"}),
+                        )
+                        .with_operation_kind(kind),
+                        QueryTool,
+                    )
+                })
+                .collect(),
+            ),
+        );
+        if iteration == 1 {
+            context
+                .tool_assignment
+                .as_mut()
+                .unwrap()
+                .requested_tool_names = vec!["fresh_write".into()];
+        }
+        if iteration == 2 {
+            context
+                .tool_assignment
+                .as_mut()
+                .unwrap()
+                .requested_tool_names
+                .clear();
+            let mut denied = ToolPermissionSetting::default_for("fixture.fresh_query");
+            denied.permission = ToolPermission::No;
+            management.replace_tool_permissions(vec![denied]).unwrap();
+        }
+        if iteration == 3 {
+            management.replace_tool_permissions(vec![]).unwrap();
+            context.tool_exposure.tool_exposure_mode = Some(ToolExposureMode::DomainDiscovery);
+        }
+        host.run(harness.clone(), context.clone(), None, None)
+            .await
+            .unwrap();
+        let names = observed_tool_names(&observed);
+        assert_eq!(
+            names.contains(&"fresh_query".into()),
+            iteration == 0,
+            "{names:?}"
+        );
+        assert!(!names.contains(&"fresh_write".into()), "{names:?}");
+        assert!(!names.contains(&"fresh_unknown".into()), "{names:?}");
+        if iteration == 3 {
+            let request = observed.lock().unwrap().last().unwrap().clone();
+            let directory = request
+                .messages
+                .iter()
+                .find_map(|message| {
+                    message.parts.iter().find_map(|part| match part {
+                        AgentMessagePart::Text { text }
+                            if text.starts_with("Current authorized tool domains") =>
+                        {
+                            Some(text)
+                        }
+                        _ => None,
+                    })
+                })
+                .expect("live domain directory must reach the budgeted model context");
+            assert!(directory.contains("fresh_query"), "{directory}");
+            assert!(!directory.contains("fresh_write"), "{directory}");
+            assert!(!directory.contains("fresh_unknown"), "{directory}");
+        }
+    }
     assert!(host.close().await.is_success());
 }

@@ -1,6 +1,7 @@
 import { DisabledResourceReason } from "./InternalAgentSkillField";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronRight } from "lucide-react";
 
 import type {
   PlatformToolRecord,
@@ -43,7 +44,10 @@ export function InternalAgentToolSelector({
   const { t } = useTranslation(["pages", "common"]);
   const [toolSearch, setToolSearch] = useState("");
   const [debouncedToolSearch, setDebouncedToolSearch] = useState("");
-  const [activeDomainCode, setActiveDomainCode] = useState("");
+  const domainIdPrefix = useId();
+  const [expandedDomainCodes, setExpandedDomainCodes] = useState<Set<string>>(
+    () => new Set()
+  );
   const selectedToolSet = useMemo(
     () => new Set(selectedToolCodes),
     [selectedToolCodes]
@@ -138,64 +142,26 @@ export function InternalAgentToolSelector({
     }, []);
   }, [allToolsByDomain, debouncedToolSearch, selectedToolSet, t, toolDomains]);
 
-  useEffect(() => {
-    if (domainEntries.length === 0) {
-      if (activeDomainCode) {
-        setActiveDomainCode("");
-      }
-      return;
-    }
-
-    const activeStillVisible = domainEntries.some(
-      (entry) => entry.domain.domainCode === activeDomainCode
-    );
-    if (!activeStillVisible) {
-      setActiveDomainCode(domainEntries[0].domain.domainCode);
-    }
-  }, [activeDomainCode, domainEntries]);
-
-  const activeEntry = useMemo(
-    () =>
-      domainEntries.find(
-        (entry) => entry.domain.domainCode === activeDomainCode
-      ) ?? null,
-    [activeDomainCode, domainEntries]
-  );
-
-  const activeDomainTools = activeEntry?.visibleTools ?? [];
-  const assignableTools = activeDomainTools.filter(
-    (tool) => tool.assignable !== false
-  );
-  const allActiveToolsSelected =
-    assignableTools.length > 0 &&
-    assignableTools.every((tool) => selectedToolSet.has(tool.toolCode));
-  const hasAnyActiveToolSelected = activeDomainTools.some((tool) =>
-    selectedToolSet.has(tool.toolCode)
-  );
-
   return (
     <div className={cn("mt-5 space-y-3", className)}>
-      <div className="grid gap-4 md:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
-        <Field
-          className="w-full min-w-0 pr-1"
-          label={internalPageT("toolSelection.title", "Selected tools")}
-        >
-          <SearchField
-            className="w-full"
-            ariaLabel={internalPageT(
-              "toolSelection.searchAria",
-              "Search tools"
-            )}
-            placeholder={internalPageT(
-              "toolSelection.searchPlaceholder",
-              "Search tools..."
-            )}
-            value={toolSearch}
-            onChange={setToolSearch}
-          />
-        </Field>
-      </div>
-
+      <Field label={internalPageT("toolSelection.domainsTitle", "Domains")}>
+        <SearchField
+          className="w-full"
+          ariaLabel={internalPageT("toolSelection.searchAria", "Search tools")}
+          placeholder={internalPageT(
+            "toolSelection.searchPlaceholder",
+            "Search tools..."
+          )}
+          value={toolSearch}
+          onChange={setToolSearch}
+        />
+      </Field>
+      <p className="text-xs text-[var(--color-on-surface-variant)]">
+        {internalPageT(
+          "toolSelection.expandHint",
+          "Expand a domain to choose its tools."
+        )}
+      </p>
       {domainEntries.length === 0 ? (
         <p className="text-sm text-[var(--color-on-surface-variant)]">
           {internalPageT(
@@ -204,160 +170,154 @@ export function InternalAgentToolSelector({
           )}
         </p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
-          <div>
-            <div className="tron-scrollbar max-h-[36rem] space-y-2 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1">
-              {domainEntries.map((entry) => {
-                const isActive = entry.domain.domainCode === activeDomainCode;
+        <ul className="tron-scrollbar max-h-[min(32rem,55dvh)] divide-y divide-[var(--color-outline-variant)] overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-xl border border-[var(--color-outline-variant)]">
+          {domainEntries.map((entry) => {
+            const { domain, visibleTools, selectedCount } = entry;
+            const expanded = expandedDomainCodes.has(domain.domainCode);
+            const headingId = `${domainIdPrefix}-${domain.domainCode}-heading`;
+            const panelId = `${domainIdPrefix}-${domain.domainCode}-tools`;
+            const assignableTools = visibleTools.filter(
+              (tool) => tool.assignable !== false
+            );
+            const allSelected =
+              assignableTools.length > 0 &&
+              assignableTools.every((tool) =>
+                selectedToolSet.has(tool.toolCode)
+              );
+            const hasSelection = visibleTools.some((tool) =>
+              selectedToolSet.has(tool.toolCode)
+            );
 
-                return (
-                  <button
-                    key={entry.domain.domainCode}
+            return (
+              <li key={domain.domainCode}>
+                <button
+                  id={headingId}
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={expanded ? panelId : undefined}
+                  className="flex w-full items-center gap-3 bg-[var(--color-surface-container-lowest)] px-4 py-3 text-left transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+                  onClick={() =>
+                    setExpandedDomainCodes((current) => {
+                      const next = new Set(current);
+                      if (next.has(domain.domainCode))
+                        next.delete(domain.domainCode);
+                      else next.add(domain.domainCode);
+                      return next;
+                    })
+                  }
+                >
+                  <ChevronRight
+                    aria-hidden="true"
                     className={cn(
-                      "w-full rounded-[18px] border p-3 text-left shadow-[0_8px_18px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow]",
-                      isActive
-                        ? "border-[var(--color-primary)] bg-[var(--color-primary)]/8 shadow-[0_12px_24px_rgba(15,23,42,0.06)]"
-                        : "border-[var(--color-card-border)] bg-[var(--color-surface-container-lowest)] hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-hover-surface)]"
+                      "size-4 shrink-0 text-[var(--color-on-surface-variant)] transition-transform",
+                      expanded && "rotate-90"
                     )}
-                    type="button"
-                    onClick={() => {
-                      setActiveDomainCode(entry.domain.domainCode);
-                    }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-on-surface)]">
+                    {domain.name}
+                  </span>
+                  <span className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">
+                    {internalPageT(
+                      "toolSelection.toolsCount",
+                      "{{count}} tools",
+                      { count: visibleTools.length }
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2 py-0.5 text-xs",
+                      selectedCount > 0
+                        ? "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+                        : "bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)]"
+                    )}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[var(--color-on-surface)]">
-                          {entry.domain.name}
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">
-                        {internalPageT(
-                          "toolSelection.selectedCount",
-                          "{{count}} selected",
-                          {
-                            count: entry.selectedCount,
-                          }
-                        )}
-                      </span>
-                    </div>
-                    <p className="mt-2 line-clamp-2 text-[12px] text-[var(--color-on-surface-variant)]">
-                      {entry.domain.description ||
-                        internalPageT(
-                          "toolSelection.noDescription",
-                          "No description available."
-                        )}
-                    </p>
-                    <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-[var(--color-on-surface-variant)]">
-                      <span>
-                        {entry.domain.hasMutationTools
-                          ? internalPageT(
-                              "toolSelection.hasMutation",
-                              "Contains mutation tools"
-                            )
-                          : internalPageT(
-                              "toolSelection.noMutation",
-                              "Read-only only"
-                            )}
-                      </span>
-                      <span>
-                        {internalPageT(
-                          "toolSelection.toolsCount",
-                          "{{count}} tools",
-                          {
-                            count: entry.visibleTools.length,
-                          }
-                        )}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="self-start md:sticky md:top-0">
-            <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
-              {activeEntry ? (
-                <>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-base font-semibold text-[var(--color-on-surface)]">
-                        {activeEntry.domain.name}
-                      </p>
-                      <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-                        {activeEntry.domain.description ||
+                    {internalPageT(
+                      "toolSelection.selectedCount",
+                      "{{count}} selected",
+                      { count: selectedCount }
+                    )}
+                  </span>
+                </button>
+                {expanded && (
+                  <div
+                    id={panelId}
+                    role="region"
+                    aria-labelledby={headingId}
+                    className="space-y-3 bg-[var(--color-surface-container-low)] p-3 sm:pl-11"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <p className="min-w-0 flex-1 text-xs text-[var(--color-on-surface-variant)]">
+                        {domain.description ||
                           internalPageT(
                             "toolSelection.noDescription",
                             "No description available."
                           )}
                       </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-[12px]">
-                      <Button
-                        disabled={busy || allActiveToolsSelected}
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          onSetToolsChecked(
-                            assignableTools.map((tool) => tool.toolCode),
-                            true
-                          );
-                        }}
-                      >
-                        {internalPageT(
-                          "toolSelection.selectVisible",
-                          "Select all"
-                        )}
-                      </Button>
-                      <Button
-                        disabled={busy || !hasAnyActiveToolSelected}
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          onSetToolsChecked(
-                            activeDomainTools.map((tool) => tool.toolCode),
-                            false
-                          );
-                        }}
-                      >
-                        {internalPageT("toolSelection.clearVisible", "Clear")}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <ul className="tron-scrollbar mt-4 max-h-[36rem] space-y-2 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1">
-                    {activeDomainTools.map((tool) => {
-                      const checked =
-                        tool.assignable !== false &&
-                        selectedToolSet.has(tool.toolCode);
-                      return (
-                        <li
-                          className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3"
-                          key={tool.toolCode}
+                      <div className="flex shrink-0 gap-2">
+                        <Button
+                          type="button"
+                          disabled={
+                            busy || assignableTools.length === 0 || allSelected
+                          }
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            onSetToolsChecked(
+                              assignableTools.map((tool) => tool.toolCode),
+                              true
+                            )
+                          }
                         >
+                          {internalPageT(
+                            "toolSelection.selectVisible",
+                            "Select all"
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={busy || !hasSelection}
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            onSetToolsChecked(
+                              visibleTools.map((tool) => tool.toolCode),
+                              false
+                            )
+                          }
+                        >
+                          {internalPageT("toolSelection.clearVisible", "Clear")}
+                        </Button>
+                      </div>
+                    </div>
+                    <ul className="divide-y divide-[var(--color-outline-variant)] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
+                      {visibleTools.map((tool) => (
+                        <li key={tool.toolCode} className="p-3">
                           <DisabledResourceReason
                             reason={tool.disabledReason}
                           />
                           <label
-                            className={`flex items-start gap-3 ${
-                              tool.assignable === false ? "opacity-60" : ""
-                            }`}
+                            className={cn(
+                              "flex items-start gap-3",
+                              tool.assignable === false && "opacity-60"
+                            )}
                           >
                             <input
-                              checked={checked}
+                              checked={
+                                tool.assignable !== false &&
+                                selectedToolSet.has(tool.toolCode)
+                              }
                               className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-primary)]"
                               disabled={busy || tool.assignable === false}
                               type="checkbox"
-                              onChange={(event) => {
+                              onChange={(event) =>
                                 onToggleTool(
                                   tool.toolCode,
                                   event.target.checked
-                                );
-                              }}
+                                )
+                              }
                             />
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-[12px]">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-sm font-medium text-[var(--color-on-surface)]">
                                   {tool.name}
                                 </span>
@@ -368,10 +328,10 @@ export function InternalAgentToolSelector({
                                   )}
                                 </span>
                               </div>
-                              <p className="mt-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">
+                              <p className="mt-1 break-all font-mono text-[11px] text-[var(--color-on-surface-variant)]">
                                 {tool.toolCode}
                               </p>
-                              <p className="mt-2 text-[13px] text-[var(--color-on-surface-variant)]">
+                              <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
                                 {tool.description ||
                                   internalPageT(
                                     "toolSelection.noDescription",
@@ -381,21 +341,14 @@ export function InternalAgentToolSelector({
                             </div>
                           </label>
                         </li>
-                      );
-                    })}
-                  </ul>
-                </>
-              ) : (
-                <p className="text-sm text-[var(--color-on-surface-variant)]">
-                  {internalPageT(
-                    "toolSelection.emptyPanel",
-                    "Select a domain to review its tools."
-                  )}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

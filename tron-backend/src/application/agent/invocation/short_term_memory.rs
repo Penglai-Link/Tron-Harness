@@ -216,6 +216,7 @@ mod tests {
             skills: Vec::<EffectiveSkill>::new(),
             tools,
             effective_tools: Vec::new(),
+            tool_assignment: None,
             tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),

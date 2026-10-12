@@ -2723,6 +2723,7 @@ export const pages = {
             "All platform tools: assign every platform tool in the registry to this agent.",
           optionTwo:
             "Selected tools: assign only the specific tools you choose below.",
+          optionThree: "All read-only tools: automatically select tools declared as queries each run. Mutating and unknown tools are excluded. Declarations do not enforce execution isolation.",
         },
         toolExposureMode: {
           ariaLabel: "Explain tool exposure mode",
@@ -2781,6 +2782,7 @@ export const pages = {
         domainDiscovery: "Domain discovery",
         ephemeralExpanded: "Ephemeral expanded",
         mcpDisabled: "Disabled",
+        allReadOnlyTools: "All read-only tools",
         selectedTools: "Selected tools",
         selectedServers: "Selected servers",
         stickyExpanded: "Sticky expanded",
@@ -2842,6 +2844,7 @@ export const pages = {
         domainsSummary: "{{visible}} of {{total}} domains visible",
         domainsTitle: "Domains",
         empty: "No tools match the search query.",
+        expandHint: "Expand a domain to choose its tools.",
         emptyPanel: "Select a domain to review its tools.",
         hasMutation: "Contains mutation tools",
         noMutation: "Read-only only",

@@ -675,6 +675,7 @@ fn resource_tool_context(
         }],
         tools,
         effective_tools: Vec::new(),
+        tool_assignment: None,
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits::default(),

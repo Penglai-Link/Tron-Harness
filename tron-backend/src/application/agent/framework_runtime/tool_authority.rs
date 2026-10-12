@@ -133,8 +133,46 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             return Ok(fw::ToolBindingAdmission::Exclude);
         }
         let host = HostExecution::from_extensions(&run.extensions)?;
-        let state = host.state.lock().await;
+        let mut state = host.state.lock().await;
         let name = &binding.descriptor.call_name;
+        let control_tool = name == crate::application::agent::DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL
+            && binding.descriptor.id == format!("tron.{name}");
+        if let (Some(management), Some(selection)) =
+            (&self.management, state.context.tool_assignment.as_ref())
+        {
+            let record = management
+                .register_tool_descriptor(&binding.descriptor)
+                .map_err(fw::AgentError::ToolSetup)?;
+            let selected = selection.selects(&record);
+            let read_only =
+                selection.mode == crate::domain::agent::ToolAssignmentMode::AllReadOnlyTools;
+            if !control_tool && read_only && !selected {
+                state.product_tool_authority.remove(name);
+                return Ok(fw::ToolBindingAdmission::Exclude);
+            }
+            if !management.platform_tool_allowed(name).map_err(|_| {
+                fw::AgentError::ToolSetup("Could not read platform tool permission".into())
+            })? {
+                return Ok(fw::ToolBindingAdmission::Exclude);
+            }
+            // Only leased native bindings can extend a dynamic rule; request schemas
+            // and the persisted discovery cache never create executable authority.
+            if selected
+                && !native_skill_descriptor(&binding.descriptor)
+                && !state.product_tool_authority.contains(name)
+            {
+                let tool = crate::application::agent::tool_record_to_effective_tool(record);
+                state.product_tool_authority.insert(name.clone());
+                state.context.effective_tools.push(tool.clone());
+                if state.context.tool_exposure.tool_exposure_mode
+                    == Some(crate::domain::agent::ToolExposureMode::DomainDiscovery)
+                {
+                    state.context.tool_exposure.hidden_tools.push(tool);
+                } else {
+                    state.context.tools.push(tool);
+                }
+            }
+        }
         if (!state.product_tool_authority.contains(name)
             && !framework_a2ui_binding(&run.extensions, &binding.descriptor)
             && !(self.skills.is_some() && native_skill_descriptor(&binding.descriptor)))
@@ -176,6 +214,33 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         if state.context.effective_tools.is_empty() {
             state.context.effective_tools = state.context.tools.clone();
         }
+        if state
+            .context
+            .tool_assignment
+            .as_ref()
+            .is_some_and(|s| s.mode == crate::domain::agent::ToolAssignmentMode::AllReadOnlyTools)
+        {
+            let admitted = bindings
+                .iter()
+                .map(|b| b.descriptor.call_name.as_str())
+                .collect::<std::collections::HashSet<_>>();
+            state
+                .context
+                .effective_tools
+                .retain(|t| admitted.contains(t.tool_name.as_str()));
+            state
+                .context
+                .tools
+                .retain(|t| admitted.contains(t.tool_name.as_str()));
+            state
+                .context
+                .tool_exposure
+                .hidden_tools
+                .retain(|t| admitted.contains(t.tool_name.as_str()));
+            state
+                .product_tool_authority
+                .retain(|name| admitted.contains(name.as_str()));
+        }
         // Remove globally denied tools from discovery while preserving the
         // existing distinction between authorized and registered executors.
         if let Some(management) = &self.management {
@@ -190,6 +255,13 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                     denied.insert(tool.tool_name.clone());
                 }
             }
+            state
+                .context
+                .effective_tools
+                .retain(|t| !denied.contains(&t.tool_name));
+            state
+                .product_tool_authority
+                .retain(|name| !denied.contains(name));
             state
                 .context
                 .tools
@@ -215,6 +287,25 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                         .retain(|name| tools.iter().any(|t| &t.tool_name == name));
                     !tools.is_empty()
                 });
+        }
+        if let Some(management) = &self.management {
+            let hidden = &state.context.tool_exposure.hidden_tools;
+            let records = management
+                .list_tools(None, None, &state.context.locale)
+                .into_iter()
+                .filter_map(|mut record| {
+                    let tool = hidden.iter().find(|t| t.tool_name == record.tool_name)?;
+                    if let Some(domain) = &tool.domain_code {
+                        record.domain_code = domain.clone();
+                    }
+                    Some(record)
+                })
+                .collect::<Vec<_>>();
+            state.context.tool_exposure.visible_domains =
+                crate::application::agent::BusinessToolCatalog::domains_for_records(
+                    &records,
+                    &state.context.locale,
+                );
         }
         state.tool_catalog = bindings
             .iter()

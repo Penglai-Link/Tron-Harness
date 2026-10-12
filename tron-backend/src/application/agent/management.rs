@@ -420,20 +420,6 @@ impl AgentManagementService {
             .collect()
     }
 
-    fn tool_codes(&self) -> Vec<String> {
-        let mut codes = self
-            .list_tools(None, None, "en-US")
-            .into_iter()
-            .filter(|tool| {
-                tool.availability_state == crate::domain::agent::ToolAvailabilityState::Available
-            })
-            .map(|tool| tool.tool_code)
-            .collect::<Vec<_>>();
-        codes.sort_unstable();
-        codes.dedup();
-        codes
-    }
-
     fn active_workspace_detail(
         &self,
         workspace_code: &str,

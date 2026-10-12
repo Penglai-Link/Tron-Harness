@@ -309,6 +309,7 @@ fn memory_context(_run_code: &str) -> tron_backend::domain::agent::AgentRunConte
             required_variable_keys: vec![],
         }],
         effective_tools: Vec::new(),
+        tool_assignment: None,
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
             applications: Vec::new(),

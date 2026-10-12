@@ -140,7 +140,7 @@ async fn discovered_tool_selection_round_trips_through_platform_and_workspace_po
 
 #[tokio::test]
 async fn discovered_tool_is_in_effective_definitions() {
-    common::app_with_state_setup(common::prepared_config(Default::default()), |state| {
+    let _app = common::app_with_state_setup(common::prepared_config(Default::default()), |state| {
         state.knowledge_bases.stop_ingestion_workers();
         state
             .agent_management
@@ -175,4 +175,86 @@ async fn discovered_tool_is_in_effective_definitions() {
         assert_eq!(tools[0].tool_code, TOOL);
         assert_eq!(tools[0].tool_name, "fixture_query");
     });
+}
+
+#[tokio::test]
+async fn read_only_policy_tracks_new_declarations_and_excludes_unknown_and_mutating_tools() {
+    use eliteforge_agent_core::{ToolDescriptor, ToolOperationKind as Operation};
+    use tron_backend::domain::agent::{ToolAssignmentMode, ToolOperationKind};
+    let app = common::app_with_state_setup(common::prepared_config(Default::default()), |state| {
+        state.knowledge_bases.stop_ingestion_workers();
+        let management = &state.agent_management;
+        for (id, name, operation) in [
+            ("fixture.read", "fixture_read", Operation::Query),
+            ("fixture.write", "fixture_write", Operation::Command),
+            ("fixture.unknown", "fixture_unknown", Operation::Unknown),
+        ] {
+            management
+                .setting(
+                    &ToolDescriptor::new(id, name, name, json!({"type":"object"}))
+                        .with_operation_kind(operation),
+                )
+                .unwrap();
+        }
+        let snapshot = || {
+            management
+                .resolve_platform_agent_effective_tool_definitions("explore-agent", "en-US")
+                .unwrap()
+        };
+        assert_eq!(
+            management
+                .platform_internal_agent_policy("explore-agent")
+                .unwrap()
+                .tool_assignment_mode,
+            ToolAssignmentMode::AllReadOnlyTools
+        );
+        let tools = snapshot();
+        assert!(tools.iter().any(|t| t.tool_code == "fixture.read"));
+        assert!(
+            tools
+                .iter()
+                .all(|t| t.operation_kind == ToolOperationKind::Query)
+        );
+        management
+            .setting(
+                &ToolDescriptor::new(
+                    "fixture.new",
+                    "fixture_new",
+                    "New read tool",
+                    json!({"type":"object"}),
+                )
+                .with_operation_kind(Operation::Query),
+            )
+            .unwrap();
+        assert!(snapshot().iter().any(|t| t.tool_code == "fixture.new"));
+        // Refreshing a descriptor to unknown must revoke automatic selection.
+        management
+            .setting(&ToolDescriptor::new(
+                "fixture.new",
+                "fixture_new",
+                "Unknown",
+                json!({"type":"object"}),
+            ))
+            .unwrap();
+        assert!(!snapshot().iter().any(|t| t.tool_code == "fixture.new"));
+    });
+    let auth = format!("Bearer {}", authenticated_bearer_token(&app).await);
+    for prefix in [PLATFORM, WORKSPACE] {
+        let response = request_with_headers(
+            &app,
+            Method::PATCH,
+            &format!("{prefix}/policy"),
+            Some(json!({"toolAssignmentMode":"all_read_only_tools"})),
+            Some("en-US"),
+            Some(&auth),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(body["data"]["toolAssignmentMode"], "AllReadOnlyTools");
+        let codes = body["data"]["selectedToolCodes"].as_array().unwrap();
+        assert!(codes.contains(&json!("fixture.read")));
+        assert!(!codes.contains(&json!("fixture.write")));
+        assert!(!codes.contains(&json!("fixture.unknown")));
+    }
 }

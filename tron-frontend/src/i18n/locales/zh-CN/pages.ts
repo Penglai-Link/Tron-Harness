@@ -2621,6 +2621,7 @@ export const pages = {
           optionOne:
             "全部平台工具：把当前注册表里的全部平台工具都分配给该智能体。",
           optionTwo: "指定工具：只分配你在下方明确勾选的工具。",
+          optionThree: "所有只读工具：每次运行自动选择明确声明为查询的工具；修改和未知工具不加入。此声明不代表执行隔离。",
         },
         toolExposureMode: {
           ariaLabel: "解释工具暴露模式",
@@ -2671,6 +2672,7 @@ export const pages = {
         domainDiscovery: "领域发现",
         ephemeralExpanded: "临时展开",
         mcpDisabled: "禁用",
+        allReadOnlyTools: "所有只读工具",
         selectedTools: "指定工具",
         selectedServers: "指定服务",
         stickyExpanded: "持续展开",
@@ -2731,6 +2733,7 @@ export const pages = {
         domainsSummary: "共 {{total}} 个领域，当前显示 {{visible}} 个",
         domainsTitle: "领域",
         empty: "没有工具匹配当前搜索条件。",
+        expandHint: "展开领域后选择具体工具。",
         emptyPanel: "请选择一个领域查看其工具详情。",
         hasMutation: "包含变更工具",
         noMutation: "仅只读工具",

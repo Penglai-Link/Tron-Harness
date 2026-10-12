@@ -448,6 +448,7 @@ mod tests {
             skills: vec![],
             tools: vec![],
             effective_tools: vec![],
+            tool_assignment: None,
             tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),

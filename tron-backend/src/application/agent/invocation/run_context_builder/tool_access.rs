@@ -20,7 +20,7 @@ pub(super) struct PreparedToolAccess {
     pub(super) tools: Vec<EffectiveTool>,
     pub(super) effective_tools: Vec<EffectiveTool>,
     pub(super) tool_exposure: AgentToolExposureState,
-    requested_tool_names: HashSet<String>,
+    pub(super) requested_tool_names: HashSet<String>,
 }
 impl AgentRunContextBuilder {
     pub(super) fn resolve_tool_access(
@@ -128,6 +128,7 @@ impl AgentRunContextBuilder {
     pub(super) async fn materialize_mcp_tools(
         &self,
         access: &mut PreparedToolAccess,
+        locale: &str,
         variable_values: &HashMap<String, String>,
         warning_context: &McpWarningPublishContext<'_>,
     ) -> Result<(), AgentInvocationError> {
@@ -151,14 +152,65 @@ impl AgentRunContextBuilder {
             );
             // Only discovered bindings from policy-selected enabled servers can
             // add MCP authority. A same-name request projection creates no tool.
+            let mut permitted = HashSet::new();
+            let mut records = HashMap::new();
+            for descriptor in &materialization.descriptors {
+                let record = self
+                    .management
+                    .register_tool_descriptor(descriptor)
+                    .map_err(AgentInvocationError::RuntimeFailed)?;
+                if self
+                    .management
+                    .platform_tool_allowed(&descriptor.call_name)
+                    .map_err(|error| map_agent_error(&policy.agent_code, error))?
+                {
+                    permitted.insert(descriptor.call_name.clone());
+                }
+                records.insert(descriptor.call_name.clone(), record);
+            }
+            // SelectedTools keeps the existing MCP server assignment semantics;
+            // the selected enabled servers above already grant these tool codes.
+            let server_tool_codes = records
+                .values()
+                .map(|record| record.tool_code.clone())
+                .collect::<Vec<_>>();
             materialization.tools.retain(|tool| {
-                access.requested_tool_names.is_empty()
-                    || access.requested_tool_names.contains(&tool.tool_name)
+                records.get(&tool.tool_name).is_some_and(|record| {
+                    policy
+                        .tool_assignment_mode
+                        .selects(record, &server_tool_codes)
+                }) && permitted.contains(&tool.tool_name)
+                    && (access.requested_tool_names.is_empty()
+                        || access.requested_tool_names.contains(&tool.tool_name))
             });
             access
                 .effective_tools
                 .extend(materialization.tools.iter().cloned());
-            access.tools.extend(materialization.tools);
+            if policy.tool_exposure_mode == ToolExposureMode::DomainDiscovery {
+                access
+                    .tool_exposure
+                    .hidden_tools
+                    .extend(materialization.tools);
+                let hidden = &access.tool_exposure.hidden_tools;
+                let records = self
+                    .management
+                    .list_tools(None, None, locale)
+                    .into_iter()
+                    .filter_map(|mut record| {
+                        let tool = hidden
+                            .iter()
+                            .find(|tool| tool.tool_name == record.tool_name)?;
+                        if let Some(domain) = &tool.domain_code {
+                            record.domain_code = domain.clone();
+                        }
+                        Some(record)
+                    })
+                    .collect::<Vec<_>>();
+                access.tool_exposure.visible_domains =
+                    BusinessToolCatalog::domains_for_records(&records, locale);
+            } else {
+                access.tools.extend(materialization.tools);
+            }
         }
 
         Ok(())

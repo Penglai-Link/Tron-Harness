@@ -13,6 +13,8 @@ pub enum ManagedAgentType {
 pub enum ToolAssignmentMode {
     AllPlatformTools,
     SelectedTools,
+    #[serde(rename = "AllReadOnlyTools", alias = "ALL_READ_ONLY_TOOLS")]
+    AllReadOnlyTools,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -306,6 +308,8 @@ pub struct ToolDomainRecord {
 pub enum ToolOperationKind {
     Query,
     Command,
+    #[serde(rename = "Unknown", alias = "UNKNOWN")]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
