@@ -16,6 +16,24 @@ Generated with the built-in `image_gen` tool on 2026-10-10. These PNGs are bundl
 | raccoon | Grey raccoon engineer with goggles |
 | rabbit | White rabbit with pink ears |
 | dragon | Small turquoise dragon |
+| sun | Friendly golden Sun with pixel rays |
+| moon | Serene crescent Moon with craters |
+| earth | Friendly blue-green Earth globe |
+| mars | Rust-red Mars with craters |
+| mercury | Grey rocky Mercury with craters |
+| jupiter | Cream-and-rust Jupiter with Great Red Spot |
+| pig | Pink pig farmer |
+| dog | Golden-brown dog with red bandana |
+| cow | Black-and-white cow with bell |
+| sheep | Fluffy sheep with teal neckerchief |
+| horse | Chestnut horse with blue scarf |
+| snake | Emerald snake with tiny crown |
+| rat | Grey mouse with yellow scarf |
+| chinese-dragon | Vermilion Chinese dragon with golden whiskers |
+| kucha | Grey-and-white fluffy dog with blue star harness |
+| black-hole | Black hole with glowing pixel-art accretion ring |
+| neo | Neo with black sunglasses against green digital code rain |
+| red-blue-pills | Red and blue capsules against green digital code rain |
 
 ## Prompt set
 

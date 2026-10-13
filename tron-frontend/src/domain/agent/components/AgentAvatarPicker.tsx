@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
-export const BUILTIN_AGENT_AVATAR_IDS = ["robot", "fox", "cat", "owl", "astronaut", "wizard", "panda", "frog", "penguin", "raccoon", "rabbit", "dragon"] as const;
+export const BUILTIN_AGENT_AVATAR_IDS = ["robot", "fox", "cat", "owl", "astronaut", "wizard", "panda", "frog", "penguin", "raccoon", "rabbit", "dragon", "sun", "moon", "earth", "mars", "mercury", "jupiter", "pig", "dog", "cow", "sheep", "horse", "snake", "rat", "chinese-dragon", "kucha", "black-hole", "neo", "red-blue-pills"] as const;
 const assets = import.meta.glob<string>("../assets/avatars/*.png", { eager: true, query: "?url", import: "default" });
 
 export function AgentAvatar({ avatarId, alt = "", className }: { avatarId?: string; alt?: string; className?: string }) {
