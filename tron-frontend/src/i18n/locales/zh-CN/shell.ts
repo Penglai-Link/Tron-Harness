@@ -75,6 +75,7 @@ export const shell = {
   },
   nav: {
     items: {
+      projects: "项目",
       dudes: "好兄弟",
       notifications: "通知",
       agents: "智能体",
@@ -105,6 +106,8 @@ export const shell = {
       archivedChats: "已归档会话",
     },
     sections: {
+      exploreMore: "探索更多",
+      chat: "会话",
       administration: "管理",
       agentOperations: "智能体操作",
       core: "核心",
@@ -182,6 +185,7 @@ export const shell = {
     workspace: "工作区",
   },
   navigation: {
+    emptyGroup: "暂无菜单，可在菜单编排中加入。",
     defaultDescription: "高级模式",
     defaultName: "高级模式",
     noDomains: "没有可用的领域。",

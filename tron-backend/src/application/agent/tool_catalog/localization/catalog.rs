@@ -6,12 +6,13 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.domains.dude.description" => {
             "Dude-owned background work and platform notifications."
         }
+        "agent.toolCatalog.tools.dude.work_change.name" => "Assess work changes",
+        "agent.toolCatalog.tools.dude.work_change.description" => "Dude-owned business changes, independent of Thread runs and notifications. list reads durable changes; recordResult saves a result without closing the task; record stores a concrete Progress/Completed/NeedsDecision/Blocked change with stable changeKey and traceable evidence references; resolve explicitly closes a pending question/blocker with resolution evidence and resolves its notification without sending another. Completed requires an explicitly closed task, a recorded result, closed subtasks and no unresolved changes. Create a Dude-owned task first if none exists. No automatic notifications: decide whether to call dude_notify with the returned changeId. Reuse stable keys/references across retries and runs.",
+        "agent.toolCatalog.tools.dude.work_change.sampleResultSummary" => "Returns durable work changes and their resolution/delivery receipts.",
         "agent.toolCatalog.tools.dude.notify.name" => "Notify the user",
-        "agent.toolCatalog.tools.dude.notify.description" => {
-            "Publish a durable platform notification when a Dude needs a human decision, encounters a blocker, or has a meaningful result. Stay quiet on idle checks. Dude identity and session are server-owned; optional task and Thread targets must belong to this Dude."
-        }
+        "agent.toolCatalog.tools.dude.notify.description" => "Publish a platform notification for a persisted changeId from dude_work_change. Dude decides whether, when and how to notify; provide a concrete title and body. Delivery is deduplicated by business change across calls, retries, archive and deletion. Resolved unpublished items and stale task snapshots cannot be published. Routine execution completion is not a business change.",
         "agent.toolCatalog.tools.dude.notify.sampleResultSummary" => {
-            "Returns the persisted notification, deduplicated by runtime invocation identity."
+            "Returns the durable notification receipt, deduplicated by business change."
         }
         "agent.toolCatalog.domains.rag.name" => "RAG",
         "agent.toolCatalog.domains.rag.description" => {
@@ -316,12 +317,13 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
     match key {
         "agent.toolCatalog.domains.dude.name" => "Dude",
         "agent.toolCatalog.domains.dude.description" => "Dude 的后台工作与平台通知。",
+        "agent.toolCatalog.tools.dude.work_change.name" => "评估事项变化",
+        "agent.toolCatalog.tools.dude.work_change.description" => "记录由当前 Dude 负责的事项变化，与 Thread 执行及通知独立。list 查询历史及未解决项；recordResult 保存结果但不关闭任务；record 记录 Progress/Completed/NeedsDecision/Blocked，须提供稳定 changeKey、具体摘要和可追溯 evidence 引用；resolve 用解决说明和证据关闭待确认/阻碍，同时解决原通知，不新增通知。Completed 要求 Dude 已显式关闭任务、有结果、子任务均关闭且无未解决项。没有 task 时先创建由自己负责的 task。记录不自动通知，由 Dude 决定是否调用 dude_notify(changeId,title,body)。跨轮次沿用相同 key 和证据。",
+        "agent.toolCatalog.tools.dude.work_change.sampleResultSummary" => "返回持久化事项变化及解决、通知投递记录。",
         "agent.toolCatalog.tools.dude.notify.name" => "通知用户",
-        "agent.toolCatalog.tools.dude.notify.description" => {
-            "Dude 需要用户决策、遇到阻碍或取得实际结果时，发布持久化平台通知。无变化的检查保持安静。Dude 身份和会话由服务端确定；任务和 Thread 必须属于当前 Dude。"
-        }
+        "agent.toolCatalog.tools.dude.notify.description" => "针对 dude_work_change 返回的 changeId 发布平台通知。是否通知、何时通知、标题和正文由 Dude 判断。平台按事项变化跨调用、重试去重，归档或删除后也不重复投递。已解决且未投递的事项、任务快照已过期的变化不能发布。执行结束本身不构成事项变化。",
         "agent.toolCatalog.tools.dude.notify.sampleResultSummary" => {
-            "返回按运行时调用标识去重的持久化通知。"
+            "返回按事项变化去重的持久化通知投递记录。"
         }
         "agent.toolCatalog.domains.rag.name" => "RAG",
         "agent.toolCatalog.domains.rag.description" => "检索已授权知识库、记忆和技能的原文证据。",

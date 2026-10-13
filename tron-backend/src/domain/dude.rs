@@ -96,6 +96,7 @@ pub enum DudeError {
     NotFound,
     Invalid,
     Conflict,
+    ExecutionBusy,
     Storage,
     Runtime(String),
 }
@@ -105,6 +106,7 @@ impl std::fmt::Display for DudeError {
             Self::NotFound => "Dude not found",
             Self::Invalid => "Dude configuration is invalid",
             Self::Conflict => "Dude state changed; refresh and retry",
+            Self::ExecutionBusy => "Dude session is still executing; feedback remains queued",
             Self::Storage => "Dude storage unavailable",
             Self::Runtime(message) => message,
         })
@@ -112,30 +114,35 @@ impl std::fmt::Display for DudeError {
 }
 impl std::error::Error for DudeError {}
 
-impl DudeEvent {
-    pub fn completion_notification(
-        &self,
-        status: DudeEventStatus,
-        summary: &str,
-        now: i64,
-    ) -> Option<PlatformNotification> {
-        Some(PlatformNotification {
-            id: format!("notification:{}:{status:?}", self.event_id),
-            dedup_key: format!("event:{}:{status:?}", self.event_id),
-            dude_code: Some(self.dude_code.clone()),
-            title: match status {
-                DudeEventStatus::Failed => "Dude 工作需要处理",
-                DudeEventStatus::AwaitingInput => "Dude 需要你的回答",
-                _ => "Dude 已完成工作",
-            }
-            .into(),
-            body: summary.into(),
-            category: format!("{status:?}"),
-            target: serde_json::json!({"sessionCode":self.session_code,"taskCode":self.task_code,"eventId":self.event_id}),
-            read_at: None,
-            resolved_at: None,
-            archived_at: None,
-            created_at: now,
-        })
+/// A Dude-assessed business change, independent of execution lifecycle and delivery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WorkChangeKind {
+    Progress,
+    Completed,
+    NeedsDecision,
+    Blocked,
+}
+impl WorkChangeKind {
+    pub fn actionable(self) -> bool {
+        matches!(self, Self::NeedsDecision | Self::Blocked)
     }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DudeWorkChange {
+    pub change_id: String,
+    pub dude_code: String,
+    pub task_code: String,
+    pub change_key: String,
+    pub kind: WorkChangeKind,
+    pub summary: String,
+    pub evidence: Vec<String>,
+    pub requested_action: Option<String>,
+    pub session_code: Option<String>,
+    pub task_snapshot: Value,
+    pub created_at: i64,
+    pub resolved_at: Option<i64>,
+    pub resolution: Option<String>,
+    pub resolution_evidence: Vec<String>,
+    pub notification: Option<PlatformNotification>,
 }

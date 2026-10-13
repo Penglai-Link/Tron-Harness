@@ -83,7 +83,6 @@ fn persisted_event_deduplicates_and_expired_claim_is_fenced_after_reopen() {
                 DudeEventStatus::Completed,
                 "stale result",
                 1102,
-                true,
             )
             .is_err(),
         "expired worker must not overwrite the recovered claim"
@@ -95,7 +94,6 @@ fn persisted_event_deduplicates_and_expired_claim_is_fenced_after_reopen() {
             DudeEventStatus::Completed,
             "recovered result",
             1102,
-            true,
         )
         .unwrap();
     assert!(restarted.claim(1103, 1000).unwrap().is_none());
@@ -139,7 +137,6 @@ fn another_session_can_claim_while_foreground_session_remains_busy() {
             DudeEventStatus::Completed,
             "foreground done",
             101,
-            true,
         )
         .unwrap();
     let next = background.claim(102, 1000).unwrap().unwrap();
@@ -189,7 +186,7 @@ fn notification_delivery_is_idempotent_and_read_does_not_resolve_action() {
 }
 
 #[test]
-fn completing_event_and_creating_notification_commit_or_retry_together() {
+fn execution_completion_is_independent_of_notification_delivery() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("completion.sqlite3");
     let mut queue = repository(&path);
@@ -200,44 +197,19 @@ fn completing_event_and_creating_notification_commit_or_retry_together() {
     let claim = queue.claim(100, 1000).unwrap().unwrap();
     let injector = rusqlite::Connection::open(&path).unwrap();
     injector.execute_batch("CREATE TRIGGER fail_notice BEFORE INSERT ON platform_notifications BEGIN SELECT RAISE(ABORT, 'simulated notification persistence outage'); END;").unwrap();
-    assert!(
-        queue
-            .finish(
-                &claim.event_id,
-                claim.lease_token.as_deref().unwrap(),
-                DudeEventStatus::Completed,
-                "completed work",
-                101,
-                true,
-            )
-            .is_err()
-    );
-    let not_committed = queue.events("queue-dude").unwrap();
-    assert_eq!(
-        not_committed[0].status,
-        DudeEventStatus::Running,
-        "notification failure must not strand an unreported completed event"
-    );
+    queue.finish(
+        &claim.event_id,
+        claim.lease_token.as_deref().unwrap(),
+        DudeEventStatus::Completed,
+        "execution ended",
+        101,
+    ).unwrap();
     assert!(queue.notifications().unwrap().is_empty());
-    injector.execute_batch("DROP TRIGGER fail_notice;").unwrap();
-    queue
-        .finish(
-            &claim.event_id,
-            claim.lease_token.as_deref().unwrap(),
-            DudeEventStatus::Completed,
-            "completed work",
-            102,
-            true,
-        )
-        .unwrap();
     drop(queue);
     let mut restarted = repository(&path);
     assert_eq!(
         restarted.events("queue-dude").unwrap()[0].status,
         DudeEventStatus::Completed
     );
-    let notices = restarted.notifications().unwrap();
-    assert_eq!(notices.len(), 1);
-    assert_eq!(notices[0].body, "completed work");
-    assert_eq!(notices[0].target["eventId"], "completion");
+    assert!(restarted.notifications().unwrap().is_empty());
 }

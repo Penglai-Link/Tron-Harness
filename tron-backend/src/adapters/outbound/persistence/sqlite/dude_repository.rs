@@ -20,6 +20,37 @@ impl SqliteDudeRepository {
         self.database.call(f, || DudeError::Storage)
     }
 }
+// Validate against the same transaction that stores the assessment or delivery.
+fn validate_work_snapshot(
+    connection: &rusqlite::Connection,
+    change: &DudeWorkChange,
+) -> Result<(), DudeError> {
+    let state: Option<(String, u8, Option<String>)> = connection.query_row(
+        "SELECT status,progress_value,execution_result FROM tasks WHERE task_code=?1 AND owner_dude_code=?2 AND archived_at IS NULL",
+        params![change.task_code, change.dude_code],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    ).optional().map_err(storage)?;
+    let (status, progress, result) = state.ok_or(DudeError::NotFound)?;
+    if change.kind.actionable() {
+        if status == crate::domain::task::CLOSED_STATUS_CODE {
+            return Err(DudeError::Conflict);
+        }
+    } else if serde_json::json!({"status":status,"progress":progress,"executionResult":result})
+        != change.task_snapshot
+    {
+        return Err(DudeError::Conflict);
+    }
+    if change.kind == WorkChangeKind::Completed {
+        let unfinished: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks WHERE parent_task_code=?1 AND status!=?2 AND archived_at IS NULL)",
+            params![change.task_code, crate::domain::task::CLOSED_STATUS_CODE], |row| row.get(0),
+        ).map_err(storage)?;
+        if unfinished {
+            return Err(DudeError::Conflict);
+        }
+    }
+    Ok(())
+}
 fn storage(e: rusqlite::Error) -> DudeError {
     tracing::error!("Dude SQLite: {e}");
     DudeError::Storage
@@ -162,11 +193,9 @@ impl DudeRepository for SqliteDudeRepository {
         status: DudeEventStatus,
         result: &str,
         now: i64,
-        notify: bool,
     ) -> Result<(), DudeError> {
         let (id, token, result) = (id.to_owned(), token.to_owned(), result.to_owned());
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![id,token,now],|r|r.get(0)).optional().map_err(storage)?;let mut e:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;e.status=status;e.result=Some(result);e.lease_until=None;e.lease_token=None;if tx.execute("UPDATE dude_events SET status=?3,lease_until=NULL,lease_token=NULL,record_json=?4 WHERE event_id=?1 AND lease_token=?2",params![id,token,format!("{status:?}"),encode(&e)?]).map_err(storage)?!=1{return Err(DudeError::Conflict)}
-if notify {if let Some(n)=e.completion_notification(status,e.result.as_deref().unwrap_or(""),now){tx.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4) ON CONFLICT(dedup_key) DO NOTHING",params![n.id,n.dedup_key,encode(&n)?,n.created_at]).map_err(storage)?;}}
 tx.commit().map_err(storage)})
     }
     fn attach_session(&mut self, id: &str, token: &str, session: &str) -> Result<(), DudeError> {
@@ -206,7 +235,7 @@ tx.commit().map_err(storage)})
         &mut self,
         session: &str,
         summary: &str,
-        now: i64,
+        _now: i64,
     ) -> Result<(), DudeError> {
         let session = session.to_owned();
         let summary = summary.to_owned();
@@ -216,9 +245,7 @@ tx.commit().map_err(storage)})
             for json in rows {
                 let mut event:DudeEvent=decode(json)?;event.status=DudeEventStatus::Completed;event.result=Some(summary.clone());
                 tx.execute("UPDATE dude_events SET status='Completed',record_json=?2 WHERE event_id=?1",params![event.event_id,encode(&event)?]).map_err(storage)?;
-                let key=format!("event:{}:AwaitingInput",event.event_id);
-                let notification:Option<String>=tx.query_row("SELECT record_json FROM platform_notifications WHERE dedup_key=?1",[&key],|r|r.get(0)).optional().map_err(storage)?;
-                if let Some(json)=notification {let mut n:PlatformNotification=decode(json)?;n.resolved_at=Some(now);tx.execute("UPDATE platform_notifications SET record_json=?2 WHERE dedup_key=?1",params![key,encode(&n)?]).map_err(storage)?;}
+
             }
             tx.commit().map_err(storage)
         })
@@ -262,6 +289,166 @@ tx.commit().map_err(storage)})
             let result = decode(tx.query_row("SELECT record_json FROM platform_notifications WHERE dedup_key=?1",[&notification.dedup_key],|row|row.get(0)).map_err(storage)?)?;
             tx.commit().map_err(storage)?;
             Ok(result)
+        })
+    }
+
+    fn record_work_change(
+        &mut self,
+        change: &DudeWorkChange,
+        fingerprint: &str,
+    ) -> Result<DudeWorkChange, DudeError> {
+        let change = change.clone();
+        let fingerprint = fingerprint.to_owned();
+        self.call(move |c| {
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let previous: Option<(String, String)> = tx.query_row(
+                "SELECT fingerprint,record_json FROM dude_work_changes WHERE dude_code=?1 AND task_code=?2 AND change_key=?3",
+                params![change.dude_code,change.task_code,change.change_key], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(storage)?;
+            if let Some((old_fingerprint, json)) = previous {
+                if old_fingerprint != fingerprint { return Err(DudeError::Conflict); }
+                return decode(json);
+            }
+            let identical: Option<String> = tx.query_row("SELECT record_json FROM dude_work_changes WHERE dude_code=?1 AND task_code=?2 AND fingerprint=?3",
+                params![change.dude_code,change.task_code,fingerprint], |r| r.get(0)).optional().map_err(storage)?;
+            if let Some(json) = identical { return decode(json); }
+            validate_work_snapshot(&tx, &change)?;
+            if change.kind == WorkChangeKind::Completed {
+                let unresolved: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM dude_work_changes WHERE dude_code=?1 AND task_code=?2 AND json_extract(record_json,'$.kind') IN ('NeedsDecision','Blocked') AND json_extract(record_json,'$.resolvedAt') IS NULL)", params![change.dude_code,change.task_code], |r| r.get(0)).map_err(storage)?;
+                if unresolved { return Err(DudeError::Conflict); }
+            }
+            tx.execute("INSERT INTO dude_work_changes(change_id,dude_code,task_code,change_key,fingerprint,record_json,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
+                params![change.change_id,change.dude_code,change.task_code,change.change_key,fingerprint,encode(&change)?,change.created_at]).map_err(storage)?;
+            tx.commit().map_err(storage)?; Ok(change)
+        })
+    }
+    fn pending_work_changes(&mut self, dude: &str) -> Result<Vec<DudeWorkChange>, DudeError> {
+        let dude = dude.to_owned();
+        self.call(move |c| {
+            let mut query = c.prepare("SELECT record_json FROM dude_work_changes WHERE dude_code=?1 AND json_extract(record_json,'$.kind') IN ('NeedsDecision','Blocked') AND json_extract(record_json,'$.resolvedAt') IS NULL ORDER BY created_at,change_id").map_err(storage)?;
+            query.query_map([dude], |r| r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect()
+        })
+    }
+    fn work_changes(&mut self, dude: &str, task: &str) -> Result<Vec<DudeWorkChange>, DudeError> {
+        let (dude, task) = (dude.to_owned(), task.to_owned());
+        self.call(move |c| {
+            let mut q = c.prepare("SELECT record_json FROM dude_work_changes WHERE dude_code=?1 AND task_code=?2 ORDER BY created_at,change_id").map_err(storage)?;
+            q.query_map(params![dude,task], |r| r.get::<_,String>(0)).map_err(storage)?.map(|r| decode(r.map_err(storage)?)).collect()
+        })
+    }
+    fn work_change(&mut self, dude: &str, id: &str) -> Result<DudeWorkChange, DudeError> {
+        let (dude, id) = (dude.to_owned(), id.to_owned());
+        self.call(move |c| {
+            let json = c
+                .query_row(
+                    "SELECT record_json FROM dude_work_changes WHERE dude_code=?1 AND change_id=?2",
+                    params![dude, id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(storage)?;
+            decode(json.ok_or(DudeError::NotFound)?)
+        })
+    }
+    fn resolve_work_change(
+        &mut self,
+        dude: &str,
+        id: &str,
+        resolution: &str,
+        evidence: &[String],
+        now: i64,
+    ) -> Result<DudeWorkChange, DudeError> {
+        let (dude, id, resolution, evidence) = (
+            dude.to_owned(),
+            id.to_owned(),
+            resolution.to_owned(),
+            evidence.to_vec(),
+        );
+        self.call(move |c| {
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate)
+                .map_err(storage)?;
+            let json = tx
+                .query_row(
+                    "SELECT record_json FROM dude_work_changes WHERE dude_code=?1 AND change_id=?2",
+                    params![dude, id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(storage)?;
+            let mut change: DudeWorkChange = decode(json.ok_or(DudeError::NotFound)?)?;
+            if !change.kind.actionable() {
+                return Err(DudeError::Invalid);
+            }
+            if change.resolved_at.is_some() {
+                return Ok(change);
+            }
+            change.resolved_at = Some(now);
+            change.resolution = Some(resolution.clone());
+            change.resolution_evidence = evidence.clone();
+            if let Some(notice) = &mut change.notification {
+                notice.resolved_at = Some(now);
+                notice.target["resolution"] = resolution.clone().into();
+                notice.target["resolutionEvidence"] = serde_json::json!(evidence);
+                // Preserve read/archive state; resolving is independent of reading.
+                let persisted: Option<String> = tx
+                    .query_row(
+                        "SELECT record_json FROM platform_notifications WHERE notification_id=?1",
+                        [&notice.id],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .map_err(storage)?;
+                if let Some(json) = persisted {
+                    let mut current: PlatformNotification = decode(json)?;
+                    current.resolved_at = notice.resolved_at;
+                    current.target = notice.target.clone();
+                    tx.execute(
+                        "UPDATE platform_notifications SET record_json=?2 WHERE notification_id=?1",
+                        params![current.id, encode(&current)?],
+                    )
+                    .map_err(storage)?;
+                }
+            }
+            tx.execute(
+                "UPDATE dude_work_changes SET record_json=?2 WHERE change_id=?1",
+                params![id, encode(&change)?],
+            )
+            .map_err(storage)?;
+            tx.commit().map_err(storage)?;
+            Ok(change)
+        })
+    }
+    fn notify_work_change(
+        &mut self,
+        dude: &str,
+        id: &str,
+        title: &str,
+        body: &str,
+        now: i64,
+    ) -> Result<PlatformNotification, DudeError> {
+        let (dude, id, title, body) = (
+            dude.to_owned(),
+            id.to_owned(),
+            title.to_owned(),
+            body.to_owned(),
+        );
+        self.call(move |c| {
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let json = tx.query_row("SELECT record_json FROM dude_work_changes WHERE dude_code=?1 AND change_id=?2", params![dude,id], |r| r.get(0)).optional().map_err(storage)?;
+            let mut change: DudeWorkChange = decode(json.ok_or(DudeError::NotFound)?)?;
+            // Receipt survives archive/deletion: replay never recreates a dismissed notice.
+            if let Some(notice) = change.notification { return Ok(notice); }
+            if change.resolved_at.is_some() { return Err(DudeError::Conflict); }
+            validate_work_snapshot(&tx, &change)?;
+            let notice = PlatformNotification {
+                id: format!("work-change:{}",change.change_id), dedup_key: format!("work-change:{}",change.change_id),
+                dude_code: Some(dude), title, body, category: format!("Work{:?}",change.kind),
+                target: serde_json::json!({"changeId":change.change_id,"taskCode":change.task_code,"sessionCode":change.session_code,"sessionKind":"Dude","changeKind":change.kind,"evidence":change.evidence,"requestedAction":change.requested_action}),
+                read_at:None,resolved_at:None,archived_at:None,created_at:now,
+            };
+            tx.execute("INSERT INTO platform_notifications(notification_id,dedup_key,record_json,created_at) VALUES(?1,?2,?3,?4)", params![notice.id,notice.dedup_key,encode(&notice)?,now]).map_err(storage)?;
+            change.notification = Some(notice.clone());
+            tx.execute("UPDATE dude_work_changes SET record_json=?2 WHERE change_id=?1", params![id,encode(&change)?]).map_err(storage)?;
+            tx.commit().map_err(storage)?; Ok(notice)
         })
     }
 

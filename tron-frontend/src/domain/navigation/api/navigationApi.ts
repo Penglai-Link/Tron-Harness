@@ -7,7 +7,6 @@ import type {
 const navigationApiEndpoints = {
   listDomains: "GET /api/v1/navigation/domains",
   getMenuTree: "GET /api/v1/navigation/domains/{domainCode}/menu-tree",
-  getChatPanelMenuTree: "GET /api/v1/navigation/chat-panel/menu-tree",
 } as const;
 
 export function fetchNavigationDomains(signal?: AbortSignal) {
@@ -19,8 +18,4 @@ export function fetchNavigationMenuTree(domainCode: string, signal?: AbortSignal
     pathParams: { domainCode },
     signal,
   });
-}
-
-export function fetchChatPanelMenuTree(signal?: AbortSignal) {
-  return requestApi<NavigationRuntimeTree>(navigationApiEndpoints.getChatPanelMenuTree, { signal });
 }

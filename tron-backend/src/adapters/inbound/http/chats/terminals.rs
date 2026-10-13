@@ -141,7 +141,7 @@ pub async fn stop(
 ) -> Result<Json<ApiResponse<EmptyData>>, Response> {
     let owner = owner(&state, &auth, &session)?;
     let locale = auth.locale;
-    tokio::task::spawn_blocking(move || state.agent_terminal.stop(&owner, &id))
+    crate::app::telemetry::spawn_blocking_traced(move || state.agent_terminal.stop(&owner, &id))
         .await
         .map_err(|_| unavailable(&locale))?
         .map_err(|_| unavailable(&locale))?;

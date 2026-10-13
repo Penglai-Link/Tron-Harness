@@ -41,6 +41,7 @@ pub struct AgentInvocationService {
     platform_scope: bool,
     collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
     runtime_input: Option<(String, serde_json::Value)>,
+    dude_work_context: Option<crate::application::dude::DudeService>,
     workspaces: WorkspaceService,
     apps: AppService,
     variables: VariableService,
@@ -80,6 +81,7 @@ impl AgentInvocationService {
             platform_scope: false,
             collaboration_owner: None,
             runtime_input: None,
+            dude_work_context: None,
             workspaces,
             apps,
             variables,
@@ -129,6 +131,14 @@ impl AgentInvocationService {
         self.runtime_input
             .as_ref()
             .and_then(|(_, metadata)| metadata.get("source").and_then(serde_json::Value::as_str))
+    }
+
+    pub(crate) fn with_dude_work_context(
+        mut self,
+        dudes: crate::application::dude::DudeService,
+    ) -> Self {
+        self.dude_work_context = Some(dudes);
+        self
     }
 
     pub fn with_framework_host(mut self, host: super::FrameworkHost) -> Self {
@@ -203,7 +213,8 @@ impl AgentInvocationService {
             self.auto_model_route.clone(),
             self.directory_inspector.clone(),
         )
-        .with_execution_identity(self.platform_scope, self.collaboration_owner.clone());
+        .with_execution_identity(self.platform_scope, self.collaboration_owner.clone())
+        .with_dude_work_context(self.dude_work_context.clone());
         match &self.auto_model_router {
             Some(router) => builder.with_model_router(router.clone()),
             None => builder,

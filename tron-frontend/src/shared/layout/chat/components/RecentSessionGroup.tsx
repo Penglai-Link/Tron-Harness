@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 const recentSessionListPageSize = 5;
 
 export default function RecentSessionGroup({
+  label,
   runningSessionCode,
   activeSessionCode,
   onNavigate,
   sessions,
 }: {
+  label?: string;
   runningSessionCode: string;
   activeSessionCode: string;
   onNavigate: (path: string) => void;
@@ -37,7 +39,7 @@ export default function RecentSessionGroup({
             type="button"
             onClick={() => setOpen((value) => !value)}
           >
-            <span>{t("shell:chatSidebar.recent")}</span>
+            <span>{label ?? t("shell:chatSidebar.recent")}</span>
           </button>
         }
         right={

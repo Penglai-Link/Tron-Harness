@@ -104,7 +104,7 @@ pub async fn create_resource(
         Err(UploadParseError::Internal) => return internal_error_response(&locale),
     };
     let service = resources.clone();
-    match tokio::task::spawn_blocking(move || {
+    match crate::app::telemetry::spawn_blocking_traced(move || {
         let ResourceCommitForm {
             command,
             mut binary,
@@ -206,7 +206,7 @@ pub async fn upload_binary(
         Err(UploadParseError::Internal) => return internal_error_response(&locale),
     };
     let service = resources.clone();
-    match tokio::task::spawn_blocking(move || {
+    match crate::app::telemetry::spawn_blocking_traced(move || {
         let mut file = form.file;
         std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(0))
             .map_err(|_| ResourceError::StorageFailure)?;
@@ -256,7 +256,7 @@ pub async fn download_binary(
         Ok(file) => file,
         Err(_) => return internal_error_response(&locale),
     };
-    let download_result = tokio::task::spawn_blocking(move || {
+    let download_result = crate::app::telemetry::spawn_blocking_traced(move || {
         let mut file = file;
         service.download_binary_storage(&record, &mut file)?;
         std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(0))

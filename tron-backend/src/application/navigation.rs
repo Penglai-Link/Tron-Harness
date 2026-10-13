@@ -9,9 +9,9 @@ use std::{
 
 use crate::{
     domain::navigation::{
-        CHAT_PANEL_MENU_TREE_CODE, MenuQuery, MenuSource, MenuType, NavigationDomain,
+        LocalizedText, MenuQuery, MenuSource, MenuType, NavigationDomain,
         NavigationError, NavigationMenu, NavigationMenuChildDisplay, NavigationMenuTree,
-        NavigationPage, NavigationTreeItem, validate_domain_code, validate_menu_code,
+        NavigationPage, NavigationTreeItem, validate_menu_code,
         validate_menu_target, validate_translations,
     },
     shared::time::current_timestamp,

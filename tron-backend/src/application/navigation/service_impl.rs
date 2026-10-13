@@ -60,18 +60,13 @@ impl NavigationService {
         &self,
         command: CreateDomainCommand,
     ) -> Result<NavigationDomain, NavigationError> {
-        let domain_code = validate_domain_code(&command.domain_code)?;
-        if domain_code == CHAT_PANEL_MENU_TREE_CODE {
-            return Err(NavigationError::InvalidDomainCode);
-        }
+        let id = crate::shared::id::SnowflakeId::new(self.next_id()?);
+        let domain_code = format!("DOMAIN_{}", id.value());
         validate_translations(&command.name)?;
         validate_translations(&command.description)?;
-        if command.position < 0 {
-            return Err(NavigationError::InvalidHierarchy);
-        }
         let timestamp = current_timestamp();
         let domain = NavigationDomain {
-            id: crate::shared::id::SnowflakeId::new(self.next_id()?),
+            id,
             domain_code,
             name: command.name,
             description: command.description,
@@ -84,12 +79,13 @@ impl NavigationService {
         };
         let mut repository = self.lock_repository();
         let mut domains = repository.list_domains()?;
+        let position = domains.len() as i64;
         domains.push(domain);
         let inserted_code = domains
             .last()
             .map(|item| item.domain_code.clone())
             .expect("new domain was pushed");
-        let domains = reorder_domains(domains, &inserted_code, command.position);
+        let domains = reorder_domains(domains, &inserted_code, position);
         let created = domains
             .iter()
             .find(|item| item.domain_code == inserted_code)
@@ -192,6 +188,7 @@ impl NavigationService {
             source: MenuSource::Custom,
             menu_type: command.menu_type,
             translations: command.translations,
+            description: normalize_localized(command.description),
             page_code: command.page_code.map(|value| value.trim().to_string()),
             url: command.url.map(|value| value.trim().to_string()),
             icon: normalize_optional(command.icon),
@@ -234,6 +231,7 @@ impl NavigationService {
         let updated = NavigationMenu {
             menu_type: command.menu_type,
             translations: command.translations,
+            description: normalize_localized(command.description),
             page_code: command.page_code.map(|value| value.trim().to_string()),
             url: command.url.map(|value| value.trim().to_string()),
             icon: normalize_optional(command.icon),
@@ -297,29 +295,6 @@ impl NavigationService {
         })
     }
 
-    pub fn chat_panel_runtime_tree(
-        &self,
-        locale: &str,
-    ) -> Result<RuntimeNavigationTree, NavigationError> {
-        let mut repository = self.lock_repository();
-        let tree = repository.get_menu_tree(CHAT_PANEL_MENU_TREE_CODE)?;
-        if !tree.enabled {
-            return Err(NavigationError::DomainAccessDenied);
-        }
-        let items = repository.list_items(CHAT_PANEL_MENU_TREE_CODE)?;
-        validate_flat_tree(&items, self.max_depth())?;
-        let visible = build_tree(items)
-            .into_iter()
-            .filter_map(|item| visible_item(item, locale))
-            .collect();
-        Ok(RuntimeNavigationTree {
-            domain_code: tree.tree_code,
-            locale: locale.to_string(),
-            max_depth: self.max_depth(),
-            menus: visible,
-        })
-    }
-
     pub fn add_item(
         &self,
         domain_code: &str,
@@ -376,7 +351,7 @@ impl NavigationService {
             .find(|item| item.menu.menu_code == menu_code)
             .ok_or(NavigationError::ItemNotFound)?;
         if command.child_display == Some(NavigationMenuChildDisplay::Flyout)
-            && item.menu.menu_type != MenuType::Group
+            && !matches!(item.menu.menu_type, MenuType::Group | MenuType::Widget)
         {
             return Err(NavigationError::InvalidHierarchy);
         }
@@ -500,6 +475,13 @@ impl NavigationService {
         self.repository
             .lock()
             .expect("navigation repository mutex poisoned")
+    }
+}
+
+fn normalize_localized(value: LocalizedText) -> LocalizedText {
+    LocalizedText {
+        zh_cn: value.zh_cn.trim().to_string(),
+        en_us: value.en_us.trim().to_string(),
     }
 }
 

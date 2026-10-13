@@ -5,9 +5,11 @@ import { useCreateChatTab } from "../hooks/useCreateChatTab";
 import ActionButton from "./ActionButton";
 
 export function Create({
+  label,
   project,
   workspaceCode,
 }: {
+  label?: string;
   project?: ProjectRecord;
   workspaceCode: string;
 }) {
@@ -20,7 +22,7 @@ export function Create({
       className="w-full justify-start gap-3 pl-1"
     >
       <SquarePen size={17} className="shrink-0" aria-hidden="true" />
-      {t("shell:chatSidebar.newChat")}
+      {label ?? t("shell:chatSidebar.newChat")}
     </ActionButton>
   );
 }

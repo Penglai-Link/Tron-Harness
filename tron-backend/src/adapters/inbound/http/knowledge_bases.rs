@@ -359,7 +359,7 @@ async fn binary(
 ) -> Response {
     let user = auth.user().user_code.clone();
     let (file, length) =
-        match tokio::task::spawn_blocking(move || kb.download_resource(&user, &id, &code)).await {
+        match crate::app::telemetry::spawn_blocking_traced(move || kb.download_resource(&user, &id, &code)).await {
             Ok(Ok(value)) => value,
             Ok(Err(error)) => return response::<()>(Err(error)),
             Err(error) => {

@@ -1,11 +1,14 @@
 //! Tron projection of Framework telemetry records. No transport or physical storage.
 mod dashboard;
+mod triggers;
+mod query_filters;
 pub mod logs;
 use crate::adapters::outbound::persistence::sqlite::framework_storage::blocking;
 use crate::application::observability::*;
 use eliteforge_agent_core::{TelemetrySpan, TelemetryStore, TelemetryTrace, TelemetryTraceFilter};
 use std::{collections::BTreeMap, sync::Arc};
 pub struct TelemetryProjection {
+    pub database: eliteforge_agent_official_plugin_storage_local::SqliteDatabase,
     pub store: Arc<dyn TelemetryStore>,
     pub instance_id: String,
 }
@@ -14,6 +17,10 @@ fn failure(_: impl std::fmt::Display) -> ObservabilityError {
 }
 fn filter(q: &TraceQuery) -> TelemetryTraceFilter {
     let mut attributes = BTreeMap::new();
+    if let Some(category) = q.category {
+        let key = match category { TraceCategory::Page => "tron.trace.page", TraceCategory::Agent => "tron.trace.agent" };
+        attributes.insert(key.into(), "true".into());
+    }
     if !q.workspace_code.is_empty() { attributes.insert("tron.workspace.code".into(), q.workspace_code.clone()); }
     if let Some(session) = &q.session_code {
         attributes.insert("tron.session.code".into(), session.clone());
@@ -24,6 +31,7 @@ fn filter(q: &TraceQuery) -> TelemetryTraceFilter {
     }
 }
 fn status(attrs: &BTreeMap<String, String>, code: i32) -> String {
+    if attrs.get("tron.operation.active").is_some_and(|v| v == "true") { return "Running".into(); }
     match attrs.get("agent.operation.outcome").map(String::as_str) {
         Some("unknown") => "Unknown",
         Some("cancelled") => "Cancelled",
@@ -44,7 +52,13 @@ fn trace_status(t: &TelemetryTrace) -> String {
         status(&t.attributes, t.status_code)
     }
 }
-fn span(s: TelemetrySpan) -> TraceSpan {
+fn span(mut s: TelemetrySpan) -> TraceSpan {
+    if s.name == "db.sqlite.business" {
+        if let Some(file) = s.attributes.get("code.file.path") {
+            let module = file.split("/sqlite/").last().unwrap_or(file).trim_end_matches(".rs").trim_end_matches(".inc");
+            s.name = format!("db.sqlite.{module}:{}", s.attributes.get("code.line.number").map(String::as_str).unwrap_or("?"));
+        }
+    }
     TraceSpan {
         span_id: s.span_id,
         parent_span_id: s.parent_span_id,
@@ -78,7 +92,11 @@ fn span(s: TelemetrySpan) -> TraceSpan {
 }
 fn summary(t: TelemetryTrace, spans: &[TraceSpan]) -> TraceSummary {
     let attr = |key: &str| t.attributes.get(key).cloned().unwrap_or_default();
+    let root = spans.iter().find(|s| s.name.starts_with("page "))
+        .or_else(|| spans.iter().find(|s| s.parent_span_id.is_none()));
     let mut record = TraceSummary {
+        trigger: root.map(|s| s.attributes.get("url.path").cloned().unwrap_or_else(|| s.name.clone())).unwrap_or_default(),
+        root_span_id: root.map(|s| s.span_id.clone()),
         workspace_code: attr("tron.workspace.code"),
         trace_id: t.trace_id.clone(),
         session_code: attr("tron.session.code"),
@@ -150,7 +168,10 @@ fn sort_trace_summaries(records: &mut [TraceSummary], sorts: &[crate::applicatio
     });
 }
 impl TraceRepository for TelemetryProjection {
+    fn agent_options(&self, workspace: &str) -> Result<Vec<TraceAgentOption>, ObservabilityError> { self.trace_agent_options(workspace) }
     fn query(&self, q: &TraceQuery) -> Result<TracePage, ObservabilityError> {
+        if matches!(q.category, Some(TraceCategory::Agent)) { return self.agent_triggers(q); }
+        if matches!(q.category, Some(TraceCategory::Page)) { return self.page_triggers(q); }
         blocking(async {
             let sorts = if q.sorts.is_empty() { vec![crate::application::observability::TraceSort { field: q.sort_by, direction: q.sort_direction }] } else { q.sorts.clone() };
             let default_order = sorts.len() == 1 && sorts[0].field == TraceSortField::StartedAt && sorts[0].direction == TraceSortDirection::Desc;
@@ -174,6 +195,7 @@ impl TraceRepository for TelemetryProjection {
                 records = records.into_iter().skip((q.current - 1) * q.size).take(q.size).collect();
             }
             Ok(TracePage {
+                agent_options: Vec::new(),
                 current: q.current,
                 size: q.size,
                 total,
@@ -182,31 +204,32 @@ impl TraceRepository for TelemetryProjection {
         })
     }
     fn detail(&self, workspace: &str, id: &str) -> Result<TraceDetail, ObservabilityError> {
-        blocking(async {
-            let filter = TelemetryTraceFilter {
-                trace_id: Some(id.into()),
-                attributes: if workspace.is_empty() { BTreeMap::new() } else { BTreeMap::from([("tron.workspace.code".into(), workspace.into())]) },
-            };
-            let mut page = self
-                .store
-                .query_traces(filter, 0, 1)
-                .await
-                .map_err(failure)?;
-            let t = page.records.pop().ok_or(ObservabilityError::NotFound)?;
-            let spans = self
-                .store
-                .spans(id.into())
-                .await
-                .map_err(failure)?
-                .into_iter()
-                .map(span)
-                .collect::<Vec<_>>();
-            Ok(TraceDetail {
-                trace: summary(t, &spans),
-                spans,
-            })
-        })
+        // Keep inspection reads off the telemetry export connection. Decode large
+        // payloads after releasing the database worker so other queries can proceed.
+        let workspace = workspace.to_owned();
+        let id = id.to_owned();
+        let (trace, payloads) = blocking(self.database.call(move |c| -> rusqlite::Result<_> {
+            use rusqlite::OptionalExtension;
+            let trace = c.query_row(
+                "SELECT trace_id,started_at,ended_at,status_code,attributes,abandoned FROM ef_telemetry_traces WHERE trace_id=?1 AND (?2='' OR json_extract(attributes,'$.\"tron.workspace.code\"')=?2)",
+                rusqlite::params![id, workspace],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<i64>>(2)?, r.get::<_, i32>(3)?, r.get::<_, String>(4)?, r.get::<_, bool>(5)?)),
+            ).optional()?;
+            let payloads = if trace.is_some() {
+                let mut statement = c.prepare("SELECT data FROM ef_telemetry_spans WHERE trace_id=?1")?;
+                statement.query_map([id], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?
+            } else { Vec::new() };
+            Ok((trace, payloads))
+        })).map_err(failure)?;
+        let (trace_id, started_at, ended_at, status_code, attributes, abandoned) = trace.ok_or(ObservabilityError::NotFound)?;
+        let trace = TelemetryTrace { trace_id, started_at, ended_at, status_code, abandoned,
+            attributes: serde_json::from_str(&attributes).map_err(failure)?,
+        };
+        let mut spans = payloads.into_iter().map(|data| serde_json::from_str::<TelemetrySpan>(&data).map(span).map_err(failure)).collect::<Result<Vec<_>, _>>()?;
+        spans.sort_by(|a, b| a.started_at.cmp(&b.started_at).then_with(|| a.span_id.cmp(&b.span_id)));
+        Ok(TraceDetail { trace: summary(trace, &spans), spans })
     }
+
     fn metrics(&self, q: &TraceQuery) -> Result<TraceMetrics, ObservabilityError> {
         blocking(async {
             let f = filter(q);
@@ -387,7 +410,7 @@ impl ObservabilityRepository for TelemetryProjection {
 mod sorting_tests {
     use super::*;
     fn row(id: &str, start: i64, duration: f64, spans: usize, tokens: u64, errors: usize) -> TraceSummary {
-        TraceSummary { workspace_code: "w".into(), trace_id: id.into(), session_code: "s".into(), session_name: None,
+        TraceSummary { trigger: String::new(), root_span_id: None, workspace_code: "w".into(), trace_id: id.into(), session_code: "s".into(), session_name: None,
             run_code: "r".into(), agent_code: "a".into(), started_at: start, ended_at: Some(start + duration as i64),
             duration_ms: duration, status: "Completed".into(), span_count: spans, error_count: errors,
             model_count: 0, tool_count: 0, input_tokens: tokens, cached_input_tokens: 0, output_tokens: 1 }

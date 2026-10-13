@@ -120,7 +120,7 @@ async fn observability_real_plugin_exports_parentage_links_metrics_and_survives_
         service.detail("workspace-b", &id),
         Err(ObservabilityError::NotFound)
     ));
-    let query = |workspace: &str, session: Option<&str>, trace: Option<&str>, current| TraceQuery { sorts: Vec::new(), sort_by: Default::default(), sort_direction: Default::default(),
+    let query = |workspace: &str, session: Option<&str>, trace: Option<&str>, current| TraceQuery { filters: Default::default(), category: None, sorts: Vec::new(), sort_by: Default::default(), sort_direction: Default::default(),
         workspace_code: workspace.into(),
         session_code: session.map(str::to_owned),
         trace_id: trace.map(str::to_owned),
@@ -432,7 +432,7 @@ async fn observability_platform_queries_include_all_workspaces_and_optional_filt
     for workspace in ["alpha", "beta"] { gauge.record(1., &[KeyValue::new("tron.workspace.code", workspace)]); }
     telemetry.flush().await;
     let service = telemetry.service();
-    let query = |workspace: &str| TraceQuery { sorts: Vec::new(), sort_by: Default::default(), sort_direction: Default::default(), workspace_code: workspace.into(), session_code: None, trace_id: None, current: 1, size: 15 };
+    let query = |workspace: &str| TraceQuery { filters: Default::default(), category: None, sorts: Vec::new(), sort_by: Default::default(), sort_direction: Default::default(), workspace_code: workspace.into(), session_code: None, trace_id: None, current: 1, size: 15 };
     assert_eq!(service.query(query("")).unwrap().total, 2);
     assert_eq!(service.metrics(query("")).unwrap().trace_count, 2);
     // Sorting runs before pagination across the full platform result set.

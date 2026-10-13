@@ -71,7 +71,7 @@ pub async fn get_session_applications(
     _auth: RequestAuthContext,
     Query(request): Query<SessionApplicationsRequest>,
 ) -> Result<Json<ApiResponse<SessionApplicationsResponse>>, Response> {
-    let scope = tokio::task::spawn_blocking(move || {
+    let scope = crate::app::telemetry::spawn_blocking_traced(move || {
         state.chats.session_execution_scope(&request.session_code)
     })
     .await

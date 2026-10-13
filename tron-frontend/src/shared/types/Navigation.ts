@@ -46,7 +46,7 @@ export interface NavigationAdminDomain {
   updatedAt: number;
 }
 
-export type NavigationMenuTreeKind = "Domain" | "Panel";
+export type NavigationMenuTreeKind = "Domain";
 
 export interface NavigationAdminMenuTree {
   treeCode: string;
@@ -64,6 +64,7 @@ export interface NavigationAdminMenu {
   source: NavigationMenuSource;
   menuType: NavigationMenuType;
   translations: NavigationLocalizedText;
+  description: NavigationLocalizedText;
   pageCode: string | null;
   url: string | null;
   icon: string | null;

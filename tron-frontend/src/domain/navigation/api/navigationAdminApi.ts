@@ -60,6 +60,7 @@ export interface NavigationMenuPayload {
   menuCode?: string;
   menuType: NavigationMenuType;
   translations: NavigationLocalizedText;
+  description: NavigationLocalizedText;
   pageCode: string | null;
   url: string | null;
   icon: string | null;
@@ -114,7 +115,7 @@ export function fetchNavigationAdminMenuTrees(signal?: AbortSignal) {
   return requestApi<NavigationAdminMenuTree[]>(navigationAdminApiEndpoints.listMenuTrees, { signal });
 }
 
-export function createNavigationDomain(payload: Required<NavigationDomainPayload>) {
+export function createNavigationDomain(payload: Omit<Required<NavigationDomainPayload>, "position" | "domainCode">) {
   return requestApi<NavigationAdminDomain>(navigationAdminApiEndpoints.createDomain, { body: payload });
 }
 

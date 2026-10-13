@@ -4,7 +4,7 @@ use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
 
 impl DashboardRepository for TelemetryProjection {
     fn dashboard(&self, workspace: &str) -> Result<ObservabilityDashboard, ObservabilityError> {
-        let q = TraceQuery { sorts: Vec::new(), sort_by: Default::default(), sort_direction: Default::default(),
+        let q = TraceQuery { filters: Default::default(), category: None, sorts: Vec::new(), sort_by: Default::default(), sort_direction: Default::default(),
             workspace_code: workspace.into(),
             session_code: None,
             trace_id: None,

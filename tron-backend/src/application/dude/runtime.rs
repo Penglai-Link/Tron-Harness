@@ -27,7 +27,6 @@ pub trait DudeExecutor: Send + Sync {
 pub struct DudeExecutionOutcome {
     pub summary: String,
     pub awaiting_input: bool,
-    pub notify: bool,
 }
 #[derive(Clone)]
 pub struct DudeDispatcher {
@@ -162,6 +161,19 @@ impl DudeDispatcher {
             },
             Err(e) => Err(e),
         };
+        if matches!(&result, Err(DudeError::ExecutionBusy)) {
+            // Admission contention is not an execution failure and must not exhaust
+            // the retry budget while the user-facing run is still in progress.
+            if let Err(error) = self.service.retry(
+                &event,
+                chrono::Utc::now().timestamp_millis(),
+                5_000,
+                "Waiting for the current Dude run",
+            ) {
+                tracing::error!(%error, "Dude busy feedback could not be deferred");
+            }
+            return;
+        }
         if let Err(error) = &result {
             if event.attempts < 3 && matches!(self.executor.recover(&event).await, Ok(None)) {
                 let delay = 5_000 * i64::from(event.attempts.max(1)).pow(2);
@@ -186,7 +198,7 @@ impl DudeDispatcher {
         event: DudeEvent,
         result: Result<DudeExecutionOutcome, DudeError>,
     ) {
-        let (status, summary, notify) = match result {
+        let (status, summary) = match result {
             Ok(o) => (
                 if o.awaiting_input {
                     DudeEventStatus::AwaitingInput
@@ -194,16 +206,14 @@ impl DudeDispatcher {
                     DudeEventStatus::Completed
                 },
                 o.summary,
-                o.notify || o.awaiting_input,
             ),
-            Err(e) => (DudeEventStatus::Failed, e.to_string(), true),
+            Err(e) => (DudeEventStatus::Failed, e.to_string()),
         };
-        if let Err(e) = self.service.finish_with_notification(
+        if let Err(e) = self.service.finish(
             &event,
             status,
             &summary,
             chrono::Utc::now().timestamp_millis(),
-            notify,
         ) {
             tracing::error!("Dude completion fence: {e}");
             return;

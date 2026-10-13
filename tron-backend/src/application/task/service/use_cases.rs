@@ -298,13 +298,6 @@ impl TaskService {
             return Err(TaskError::ArchivedMutationDenied);
         }
         task.execution_result = optional_trimmed(Some(execution_result));
-        task.status = crate::domain::task::CLOSED_STATUS_CODE.to_string();
-        task.progress = 100;
-        if task.status == crate::domain::task::CLOSED_STATUS_CODE {
-            task.next_followup_at = None;
-        } else if task.owner_dude_code.is_some() && task.next_followup_at.is_none() {
-            task.next_followup_at = Some(chrono::Utc::now().timestamp_millis());
-        }
         task.updated_at = current_timestamp();
         self.repository
             .lock()

@@ -9,19 +9,24 @@ export function traceTree(spans: TraceSpan[]) {
       span.parentSpanId !== span.spanId
         ? span.parentSpanId
         : null;
-    children.set(parent, [...(children.get(parent) ?? []), span]);
+    const siblings = children.get(parent);
+    if (siblings) siblings.push(span);
+    else children.set(parent, [span]);
   });
   const result: { span: TraceSpan; depth: number }[] = [];
   const seen = new Set<string>();
-  const visit = (span: TraceSpan, depth: number) => {
-    if (seen.has(span.spanId)) return;
-    seen.add(span.spanId);
-    result.push({ span, depth });
-    (children.get(span.spanId) ?? []).forEach((child) =>
-      visit(child, depth + 1)
-    );
+  const visit = (root: TraceSpan) => {
+    const stack = [{ span: root, depth: 0 }];
+    while (stack.length) {
+      const row = stack.pop()!;
+      if (seen.has(row.span.spanId)) continue;
+      seen.add(row.span.spanId);
+      result.push(row);
+      const descendants = children.get(row.span.spanId) ?? [];
+      for (let i = descendants.length - 1; i >= 0; i--) stack.push({ span: descendants[i], depth: row.depth + 1 });
+    }
   };
-  (children.get(null) ?? []).forEach((span) => visit(span, 0));
-  spans.forEach((span) => visit(span, 0));
+  (children.get(null) ?? []).forEach(visit);
+  spans.forEach(visit);
   return result;
 }

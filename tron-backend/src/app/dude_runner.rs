@@ -50,7 +50,6 @@ impl DudeExecutor for PlatformDudeExecutor {
                             summary: result.output,
                             awaiting_input: result.status
                                 == eliteforge_agent_core::RunStatus::AwaitingInput,
-                            notify: event.source != DudeEventSource::Heartbeat,
                         }));
                     }
                 }
@@ -136,12 +135,12 @@ impl PlatformDudeExecutor {
     ) -> Result<DudeExecutionOutcome, DudeError> {
         let dude = self.state.dudes.get(&event.dude_code)?;
         if dude.kind == DudeKind::Memory
-            && matches!(
-                event.source,
-                DudeEventSource::Heartbeat
-                    | DudeEventSource::MemoryBatch
-                    | DudeEventSource::ThreadFeedback
-            )
+            && event.payload.get("businessNotice").is_none()
+            && (event.payload["resumeMemoryCandidates"] == true
+                || matches!(
+                    event.source,
+                    DudeEventSource::Heartbeat | DudeEventSource::MemoryBatch
+                ))
         {
             let profile = self
                 .state
@@ -177,7 +176,6 @@ impl PlatformDudeExecutor {
                 return Ok(DudeExecutionOutcome {
                     summary: String::new(),
                     awaiting_input: false,
-                    notify: false,
                 });
             };
             let batch_session = self.state.dudes.resolve_session(
@@ -205,7 +203,6 @@ impl PlatformDudeExecutor {
             return Ok(DudeExecutionOutcome {
                 summary: batch.summary.unwrap_or_default(),
                 awaiting_input: false,
-                notify: false,
             });
         }
         if event.source == DudeEventSource::TaskReminder {
@@ -220,7 +217,6 @@ impl PlatformDudeExecutor {
                     return Ok(DudeExecutionOutcome {
                         summary: "任务已调整，旧提醒已跳过".into(),
                         awaiting_input: false,
-                        notify: false,
                     });
                 }
                 self.state
@@ -253,11 +249,12 @@ impl PlatformDudeExecutor {
             )
             .map_err(DudeError::Runtime)?;
         let mut prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
+
         if event.source != DudeEventSource::UserMessage {
             prompt.push_str(&format!("\n事件数据：{}", event.payload));
         }
         if event.source == DudeEventSource::ThreadFeedback {
-            prompt.push_str("\n处理 Thread 反馈时，先读取 result.interactions。若已有上下文足以回答，调用 thread_answer，使用实际 session_id、interaction_id 和符合 response_schema 的 answer；不要给等待回答的 Thread 发送普通消息。若需要用户补充事实或作决定，调用 dude_notify 通知用户并指向此 Thread，保留等待状态。任务完成后更新对应 task 状态。没有实际进展时保持安静。");
+            prompt.push_str("\n处理 Thread 反馈时，先读取 result.interactions。若已有上下文足以回答，调用 thread_answer，使用实际 session_id、interaction_id 和符合 response_schema 的 answer；不要给等待回答的 Thread 发送普通消息。若需要用户补充事实或作决定，先记录 NeedsDecision 事项变化，再调用 dude_notify 通知用户，在证据中保留此 Thread 和 interaction ID，保留等待状态。任务完成后更新对应 task 状态。没有实际进展时保持安静。");
         }
         if event.source == DudeEventSource::Heartbeat {
             prompt.push_str("\n按你的角色检查需要主动推进的事项。已由任务调度触发的工作在对应 Task 会话运行；不要在心跳会话重复执行这些任务。仅在发现实际变化、需要决策或取得有用结果时通过 dude_notify 通知；无变化保持安静。");
@@ -307,12 +304,22 @@ impl PlatformDudeExecutor {
                 agent,
             )
             .await
-            .map_err(|e| DudeError::Runtime(format!("{e:?}")))?;
+            .map_err(|e| match e {
+                crate::application::chat::ChatSendError::RunAlreadyActive { .. } => {
+                    DudeError::ExecutionBusy
+                }
+                error => DudeError::Runtime(format!("{error:?}")),
+            })?;
         let result = result.run;
+        if !matches!(result.status, "COMPLETED" | "AWAITING_USER_INPUT") {
+            return Err(DudeError::Runtime(format!(
+                "Dude execution ended with {}: {}",
+                result.status, result.final_output
+            )));
+        }
         Ok(DudeExecutionOutcome {
             summary: result.final_output,
             awaiting_input: result.status == "AWAITING_USER_INPUT",
-            notify: event.source != DudeEventSource::Heartbeat,
         })
     }
 }
@@ -416,53 +423,26 @@ impl crate::application::dude_memory::DudeMemoryNotifications for MemoryNotifica
         &self,
         n: crate::application::dude_memory::MemoryNotice,
     ) -> Result<(), crate::domain::dude_memory::DudeMemoryError> {
-        let retire: &[&str] = match n.kind {
-            "SkillPendingApproval" | "SkillInstalled" | "SkillRejected" => &[
-                "SkillDependencyMissing",
-                "SkillValidationFailed",
-                "SkillPendingApproval",
-                "SkillRevisionRequested",
-                "SkillInstallFailed",
-            ],
-            "SkillValidationFailed" => &[
-                "SkillDependencyMissing",
-                "SkillPendingApproval",
-                "SkillRevisionRequested",
-                "SkillValidationFailed",
-            ],
-            "SkillRevisionRequested" => &[
-                "SkillPendingApproval",
-                "SkillValidationFailed",
-                "SkillDependencyMissing",
-            ],
-            "SkillInstallFailed" => &[
-                "SkillPendingApproval",
-                "SkillRevisionRequested",
-                "SkillInstallFailed",
-            ],
-            "SkillIndexRecovered" => &["SkillIndexFailed"],
-            _ => &[],
-        };
-        self.0
-            .notify_replacing(
-                crate::application::dude::NotificationInput {
-                    dedup_key: format!("{}:{}:{}", n.related_code, n.revision, n.kind),
-                    dude_code: Some(n.dude_code.clone()),
-                    title: n.kind.into(),
-                    body: n.message.clone(),
-                    category: "Skill".into(),
-                    target: serde_json::json!({"candidateCode":n.related_code}),
-                },
-                retire,
-            )
-            .map_err(|_| {
-                crate::domain::dude_memory::DudeMemoryError::Storage(
-                    "Dude notification persistence failed".into(),
-                )
-            })?;
+        // Keep revision execution separate from the assessment/notification decision.
         if n.kind == "SkillRevisionRequested" {
-            self.0.publish_event(crate::application::dude::DudeEventInput{dude_code:n.dude_code,source:DudeEventSource::ThreadFeedback,dedup_key:format!("skill-revision:{}:{}",n.related_code,n.revision),session_code:None,task_code:None,workspace_code:None,payload:serde_json::json!({"candidateCode":n.related_code,"content":n.message}),available_at:chrono::Utc::now().timestamp_millis()}).map_err(|_|crate::domain::dude_memory::DudeMemoryError::Storage("Dude notification persistence failed".into()))?;
+            self.0.publish_event(crate::application::dude::DudeEventInput {
+                dude_code: n.dude_code.clone(), source: DudeEventSource::ThreadFeedback,
+                dedup_key: format!("skill-revision:{}:{}", n.related_code, n.revision),
+                session_code: None, task_code: None, workspace_code: None,
+                payload: serde_json::json!({"resumeMemoryCandidates":true,"candidateCode":n.related_code,"content":n.message}),
+                available_at: chrono::Utc::now().timestamp_millis(),
+            }).map_err(|error| crate::domain::dude_memory::DudeMemoryError::Storage(error.to_string()))?;
         }
+        // Candidate lifecycle changes are inputs for the owning Dude's assessment,
+        // not a second path that bypasses the platform notification tool.
+        self.0.publish_event(crate::application::dude::DudeEventInput {
+            dude_code: n.dude_code,
+            source: DudeEventSource::ThreadFeedback,
+            dedup_key: format!("skill-assessment:{}:{}:{}", n.related_code, n.revision, n.kind),
+            session_code: None, task_code: None, workspace_code: None,
+            payload: serde_json::json!({"businessNotice":{"candidateCode":n.related_code,"revision":n.revision,"kind":n.kind},"content":format!("技能事项发生变化：{}。{}。请检查候选项实际状态，关联或创建你负责的事项，评估进展、是否需要用户处理，以及已有待确认项是否解决。按事项变化协议决定是否通知，不要将每次内部状态变化都通知用户。",n.kind,n.message)}),
+            available_at: chrono::Utc::now().timestamp_millis(),
+        }).map_err(|error| crate::domain::dude_memory::DudeMemoryError::Storage(error.to_string()))?;
         Ok(())
     }
 }

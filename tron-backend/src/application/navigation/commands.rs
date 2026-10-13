@@ -2,12 +2,10 @@ use crate::domain::navigation::{LocalizedText, MenuType, NavigationMenuChildDisp
 
 #[derive(Debug, Clone)]
 pub struct CreateDomainCommand {
-    pub domain_code: String,
     pub name: LocalizedText,
     pub description: LocalizedText,
     pub enabled: bool,
     pub is_default: bool,
-    pub position: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +22,7 @@ pub struct CreateMenuCommand {
     pub menu_code: String,
     pub menu_type: MenuType,
     pub translations: LocalizedText,
+    pub description: LocalizedText,
     pub page_code: Option<String>,
     pub url: Option<String>,
     pub icon: Option<String>,
@@ -34,6 +33,7 @@ pub struct CreateMenuCommand {
 pub struct UpdateMenuCommand {
     pub menu_type: MenuType,
     pub translations: LocalizedText,
+    pub description: LocalizedText,
     pub page_code: Option<String>,
     pub url: Option<String>,
     pub icon: Option<String>,

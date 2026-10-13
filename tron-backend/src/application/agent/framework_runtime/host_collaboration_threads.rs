@@ -304,7 +304,7 @@ impl AgentCollaborationRuntime for Runtime {
             &owner,
             super::super::SubagentRecord {
                 run_id,
-                session_id: session,
+                session_id: session.clone(),
                 parent_run_id: parent.run_id,
                 agent_code: code,
                 agent_name: name,
@@ -319,10 +319,54 @@ impl AgentCollaborationRuntime for Runtime {
             child.wait(),
             super::super::super::presentation::consume_native_agui(stream, &prepared, presentation)
         );
-        Ok(fw::ChildRunResult {
-            run_id,
-            result: result?,
-        })
+        let mut result = result?;
+        if result.status == fw::RunStatus::AwaitingInput
+            && prepared
+                .collaboration_owner
+                .as_ref()
+                .is_some_and(|owner| owner.kind == "DUDE")
+        {
+            // A native approval/interaction may pause even a bounded child. Promote
+            // that actual native session to a durable Thread, never fabricate a rerun.
+            let mut record = ThreadRecord {
+                summary: fw::ThreadSummary {
+                    session_id: session.clone(),
+                    title: None,
+                    status: fw::ThreadStatus::AwaitingInput,
+                    latest_run_id: Some(run_id),
+                },
+                workspace_code: prepared.workspace_code.clone(),
+                user_code: prepared.user_code.clone(),
+                agent_code: prepared
+                    .agent_code
+                    .clone()
+                    .ok_or_else(|| failure("child target missing"))?,
+                owner: store::owner(&prepared),
+                initiator_agent_code: self.context.agent_code.clone(),
+                origin_session_code: prepared
+                    .collaboration_owner
+                    .as_ref()
+                    .and_then(|owner| owner.origin_session_code.clone())
+                    .unwrap_or_else(|| parent.session_id.clone()),
+                execution_scope: prepared.execution_scope.clone(),
+                completion: Some((
+                    fw::ThreadStatus::AwaitingInput,
+                    Ok(fw::ThreadResult::from_run(run_id, &result)),
+                )),
+                closed: false,
+                feedback_pending: true,
+                revision: 0,
+                run_admitted_at_ms: fw::lifecycle_time_ms(),
+                execution_sequence: 1,
+                resumed_interaction_id: None,
+            };
+            host.persist_thread(&mut record, true).await?;
+            if let Err(error) = host.flush_thread_feedback().await {
+                tracing::warn!(%error, "Spawn interaction feedback remains pending");
+            }
+            result.output.push_str(&format!("\nThis child is awaiting input in durable Thread {session}. Use thread_read/thread_answer with this session_id and the actual interaction ID; do not start a replacement execution."));
+        }
+        Ok(fw::ChildRunResult { run_id, result })
     }
     async fn create_thread(
         &self,

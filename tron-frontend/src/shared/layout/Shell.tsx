@@ -83,7 +83,7 @@ import {
 import { Content } from "./content";
 import RightPanelContainer from "./content/RightPanelContainer";
 import { TronSidebar } from "./TronSidebar";
-import { ChatSidebarPanel } from "./chat";
+import { ChatNavigationProvider } from "./chat";
 import { useTabPanelRegistry } from "./content/TabPanelRegistry";
 
 interface TronShellProps {
@@ -210,6 +210,12 @@ export function TronShell({
   const openSections = useAppShellStore((state) => state.openSections);
   const selectedPrimarySpaceId = useAppShellStore((state) => state.selectedPrimarySpaceId);
   const selectedSecondarySpaceId = useAppShellStore((state) => state.selectedSecondarySpaceId);
+  const [navigationRevision, setNavigationRevision] = useState(0);
+  useEffect(() => {
+    const refresh = () => setNavigationRevision((value) => value + 1);
+    window.addEventListener("tron:navigation-updated", refresh);
+    return () => window.removeEventListener("tron:navigation-updated", refresh);
+  }, []);
   const navigationDomains = useNavigationStore((state) => state.domains);
   const navigationMenuTree = useNavigationStore((state) => state.menuTree);
   const selectedDomainCode = useNavigationStore((state) => state.selectedDomainCode);
@@ -620,7 +626,7 @@ export function TronShell({
       });
 
     return () => controller.abort();
-  }, [authSession?.user.userCode, currentLocale, dataSource, navigationDomains, selectedDomainCode, setNavigationMenuTree]);
+  }, [authSession?.user.userCode, currentLocale, dataSource, navigationDomains, navigationRevision, selectedDomainCode, setNavigationMenuTree]);
 
   useEffect(() => {
     const activeSection = visibleNavigation.find((section) => sectionHasActiveItem(section, activeItem, pathname));
@@ -1312,28 +1318,24 @@ export function TronShell({
             </>
           ) : null}
 
+          <ChatNavigationProvider
+            activeSessionCode={new URLSearchParams(search).get("sessionCode") ?? ""}
+            navigateToPath={navigateToPath}
+          >
           <TronSidebar
             activeItem={activeItem}
             activeHref={pathname}
-            activeSessionCode={new URLSearchParams(search).get("sessionCode") ?? ""}
-            navigateToPath={navigateToPath}
             navigation={visibleNavigation}
             openNavigationItems={openNavigationItems}
             openSections={openSections}
             renderDomainSelector={renderNavigationDomainSelector}
             renderFooter={renderSidebarUserSection}
-            renderChatPanel={(compact, activeSessionCode, navigateToPath) => (
-              <ChatSidebarPanel
-                activeSessionCode={activeSessionCode}
-                compact={compact}
-                navigateToPath={navigateToPath}
-              />
-            )}
             setOpenNavigationItems={setOpenNavigationItems}
             translate={(key, options) => t(key, options)}
             onNavigate={handleSidebarNavigationClick}
             onToggleSection={toggleSection}
           />
+          </ChatNavigationProvider>
 
           <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14" data-theme-part="app-content">
             <Content

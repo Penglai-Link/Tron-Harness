@@ -1,10 +1,13 @@
-//! Notifications are model-callable, but ownership and dedup are host authority.
-use super::{DudeService, NotificationInput};
+//! Dude decides business significance; platform persists changes and delivery receipts.
+use super::{
+    DudeService,
+    work_changes::{self, DudeWorkChangeTool},
+};
 use crate::{
     application::{agent::FrameworkHost, task::TaskService},
     domain::agent::{
-        AgentRunContext, Tool, ToolError, ToolExecutionControl, ToolExecutionFuture,
-        ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
+        AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolObservation, ToolRegistry,
+        ToolRequest,
     },
 };
 use serde::Deserialize;
@@ -14,111 +17,49 @@ pub fn register_dude_tools(
     registry: &ToolRegistry,
     dudes: DudeService,
     tasks: TaskService,
-    host: FrameworkHost,
+    _host: FrameworkHost,
 ) -> Result<(), ToolError> {
-    registry.register(Arc::new(DudeNotify { dudes, tasks, host }))
+    registry.register(Arc::new(DudeWorkChangeTool {
+        dudes: dudes.clone(),
+        tasks: tasks.clone(),
+    }))?;
+    registry.register(Arc::new(DudeNotify { dudes, tasks }))
 }
 struct DudeNotify {
     dudes: DudeService,
     tasks: TaskService,
-    host: FrameworkHost,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NotifyInput {
+    change_id: String,
     title: String,
     body: String,
-    session_code: Option<String>,
-    task_code: Option<String>,
 }
 impl Tool for DudeNotify {
     fn name(&self) -> &str {
         "dude_notify"
     }
-    fn exec(&self, _: ToolRequest, _: &AgentRunContext) -> Result<ToolExecutionResult, ToolError> {
-        Err(ToolError::ExecutionFailed(
-            "Dude notifications require the native asynchronous runtime".into(),
-        ))
-    }
-    fn exec_async<'a>(
-        &'a self,
+    fn exec(
+        &self,
         request: ToolRequest,
-        context: &'a AgentRunContext,
-        control: &'a dyn ToolExecutionControl,
-    ) -> Option<ToolExecutionFuture<'a>> {
-        Some(Box::pin(async move {
-            control.check_active()?;
-            let owner = context
-                .collaboration_owner
-                .as_ref()
-                .filter(|owner| owner.kind.eq_ignore_ascii_case("DUDE"))
-                .ok_or_else(|| ToolError::UnauthorizedTool(self.name().into()))?;
-            self.dudes
-                .get(&owner.code)
-                .map_err(|_| ToolError::UnauthorizedTool(self.name().into()))?;
-            let invocation = request
-                .invocation_id
-                .filter(|id| !id.is_empty())
-                .ok_or_else(|| {
-                    ToolError::ExecutionFailed("Native invocation identity is required".into())
-                })?;
-            let input: NotifyInput = serde_json::from_value(request.input)
-                .map_err(|e| ToolError::ExecutionFailed(format!("Invalid notification: {e}")))?;
-            if input.title.trim().is_empty()
-                || input.title.len() > 800
-                || input.body.trim().is_empty()
-                || input.body.len() > 32000
-            {
-                return Err(ToolError::ExecutionFailed(
-                    "Notification title/body is empty or too long".into(),
-                ));
-            }
-            if let Some(task) = input.task_code.as_deref() {
-                let task = self
-                    .tasks
-                    .get_task(task)
-                    .map_err(|_| ToolError::ExecutionFailed("Task is not accessible".into()))?;
-                if task.owner_dude_code.as_deref() != Some(&owner.code) {
-                    return Err(ToolError::ExecutionFailed(
-                        "Task is outside the current Dude".into(),
-                    ));
-                }
-            }
-            if let Some(thread) = input.session_code.as_deref() {
-                if !self
-                    .host
-                    .dude_thread_catalog(&owner.code)
-                    .await
-                    .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
-                    .iter()
-                    .any(|item| item.summary.session_id == thread)
-                {
-                    return Err(ToolError::ExecutionFailed(
-                        "Thread is outside the current Dude".into(),
-                    ));
-                }
-            }
-            let session = owner
-                .origin_session_code
-                .as_deref()
-                .map(|id| self.dudes.session(id))
-                .transpose()
-                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
-                .flatten()
-                .filter(|session| session.dude_code == owner.code)
-                .map(|session| session.session_code);
-            control.check_active()?;
-            let notice = self.dudes.notify(NotificationInput {
-                dedup_key: format!("dude-notify:{}:{invocation}", owner.code),
-                dude_code: Some(owner.code.clone()), title: input.title.trim().into(),
-                body: input.body.trim().into(), category: "Dude".into(),
-                target: serde_json::json!({"sessionCode":input.session_code.as_ref().or(session.as_ref()),"sessionKind":if input.session_code.is_some() { "Thread" } else { "Dude" },"originSessionCode":session,"taskCode":input.task_code}),
-            }).map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
-            Ok(ToolExecutionResult::observation(ToolObservation {
-                tool_name: self.name().into(),
-                output: serde_json::to_string(&notice)
-                    .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?,
-            }))
+        context: &AgentRunContext,
+    ) -> Result<ToolExecutionResult, ToolError> {
+        let dude = work_changes::owner(context)?;
+        let input: NotifyInput = serde_json::from_value(request.input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid notification: {e}")))?;
+        let notice = work_changes::publish(
+            &self.dudes,
+            &self.tasks,
+            dude,
+            &input.change_id,
+            &input.title,
+            &input.body,
+        )?;
+        Ok(ToolExecutionResult::observation(ToolObservation {
+            tool_name: self.name().into(),
+            output: serde_json::to_string(&notice)
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?,
         }))
     }
 }

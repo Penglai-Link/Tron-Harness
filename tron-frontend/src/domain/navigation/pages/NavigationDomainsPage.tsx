@@ -37,7 +37,6 @@ import { useNavigationAdminLocale, useNavigationAdminText } from "./navigationAd
 type EnabledFilter = "all" | "true" | "false";
 
 interface DomainFormState {
-  domainCode: string;
   nameZh: string;
   nameEn: string;
   descriptionZh: string;
@@ -49,7 +48,6 @@ interface DomainFormState {
 
 function emptyDomainForm(): DomainFormState {
   return {
-    domainCode: "",
     nameZh: "",
     nameEn: "",
     descriptionZh: "",
@@ -62,7 +60,6 @@ function emptyDomainForm(): DomainFormState {
 
 function formFromDomain(domain: NavigationAdminDomain): DomainFormState {
   return {
-    domainCode: domain.domainCode,
     nameZh: domain.name["zh-CN"],
     nameEn: domain.name["en-US"],
     descriptionZh: domain.description["zh-CN"],
@@ -75,7 +72,6 @@ function formFromDomain(domain: NavigationAdminDomain): DomainFormState {
 
 function domainPayload(form: DomainFormState): NavigationDomainPayload {
   return {
-    domainCode: form.domainCode.trim(),
     name: { "zh-CN": form.nameZh.trim(), "en-US": form.nameEn.trim() },
     description: { "zh-CN": form.descriptionZh.trim(), "en-US": form.descriptionEn.trim() },
     enabled: form.enabled,
@@ -161,8 +157,8 @@ export function NavigationDomainsPage() {
 
   async function saveDomain(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editor || !editor.domainCode.trim() || !editor.nameZh.trim() || !editor.nameEn.trim()) {
-      toast.error(text("errors.required", "请填写领域编码和中英文名称", "Domain code and both localized names are required"));
+    if (!editor || !editor.nameZh.trim() || !editor.nameEn.trim()) {
+      toast.error(text("errors.required", "请填写中英文名称", "Both localized names are required"));
       return;
     }
 
@@ -170,13 +166,14 @@ export function NavigationDomainsPage() {
     try {
       const payload = domainPayload(editor);
       if (editingCode) {
-        const { domainCode: _domainCode, ...updatePayload } = payload;
+        const updatePayload = payload;
         const updated = await updateNavigationDomain(editingCode, updatePayload as Required<Omit<NavigationDomainPayload, "domainCode">>);
         setRecords((items) => items.map((item) => item.domainCode === editingCode ? updated : item));
         toast.success(text("messages.domainUpdated", "领域已更新", "Domain updated"));
       } else {
-        const created = await createNavigationDomain(payload as Required<NavigationDomainPayload>);
-        setRecords((items) => [created, ...items]);
+        const { position: _position, ...createPayload } = payload;
+        const created = await createNavigationDomain(createPayload as Omit<Required<NavigationDomainPayload>, "position" | "domainCode">);
+        setRecords((items) => [...items, created]);
         setTotal((value) => value + 1);
         toast.success(text("messages.domainCreated", "领域已创建", "Domain created"));
       }
@@ -248,8 +245,6 @@ export function NavigationDomainsPage() {
       <ModalDialog open={Boolean(editor)} title={editor ? (editingDomain ? text("domains.edit", "编辑领域", "Edit domain") : text("domains.create", "新建领域", "New domain")) : ""} className="max-h-[88vh] max-w-2xl overflow-y-auto">
         {editor ? (
           <form className="grid gap-4 lg:grid-cols-2" onSubmit={(event) => void saveDomain(event)}>
-                <Field label={text("fields.domainCode", "领域编码", "Domain code")} required><TextInput value={editor.domainCode} disabled={Boolean(editingCode)} onChange={(event) => setEditor({ ...editor, domainCode: event.target.value })} /></Field>
-                <Field label={text("fields.position", "排序位置", "Position")}><TextInput type="number" min="0" value={editor.position} onChange={(event) => setEditor({ ...editor, position: event.target.value })} /></Field>
                 <Field label={text("fields.nameZh", "中文名称", "Chinese name")} required><TextInput value={editor.nameZh} onChange={(event) => setEditor({ ...editor, nameZh: event.target.value })} /></Field>
                 <Field label={text("fields.nameEn", "英文名称", "English name")} required><TextInput value={editor.nameEn} onChange={(event) => setEditor({ ...editor, nameEn: event.target.value })} /></Field>
                 <Field label={text("fields.descriptionZh", "中文描述", "Chinese description")}><TextArea value={editor.descriptionZh} onChange={(event) => setEditor({ ...editor, descriptionZh: event.target.value })} /></Field>
@@ -290,7 +285,6 @@ export function NavigationDomainsPage() {
         emptyState={loading ? text("loading", "正在加载领域…", "Loading domains…") : text("domains.empty", "暂无领域。", "No domains found.")}
         pagination={<TablePagination page={current} pageCount={pageCount} pageSize={pageSize} totalItems={total} startItem={startItem} endItem={endItem} itemLabel={text("domains.itemLabel", "个领域", "domains")} onPageChange={setCurrent} onPageSizeChange={(size) => { setPageSize(size); setCurrent(1); }} />}
         columns={[
-          { id: "position", header: text("columns.position", "排序", "Position"), render: (row) => row.position },
           { id: "domain", header: text("columns.domain", "领域", "Domain"), render: (row) => <div><div className="font-medium">{row.name[locale]}</div><div className="font-mono text-xs text-[var(--color-on-surface-variant)]">{row.domainCode}</div></div> },
           { id: "status", header: text("columns.status", "状态", "Status"), render: (row) => <div className="flex flex-wrap gap-1.5"><Badge variant={row.enabled ? "success" : "default"}>{row.enabled ? text("status.enabled", "启用", "Enabled") : text("status.disabled", "禁用", "Disabled")}</Badge>{row.builtIn ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}{row.isDefault ? <Badge variant="warning">{text("status.default", "默认", "Default")}</Badge> : null}</div> },
           {

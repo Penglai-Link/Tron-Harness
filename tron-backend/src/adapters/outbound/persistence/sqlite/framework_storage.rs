@@ -11,6 +11,8 @@ pub(crate) fn blocking<T: Send>(future: impl Future<Output = T> + Send) -> T {
             .build()
             .expect("storage runtime")
     });
+    use opentelemetry::trace::FutureExt;
+    let future = future.with_context(opentelemetry::Context::current());
     let execute = || {
         std::thread::scope(|scope| {
             scope
@@ -109,17 +111,38 @@ impl SharedDatabase {
     pub fn runtime(&self) -> eliteforge_agent_official_plugin_storage_local::SqliteDatabase {
         self.0.as_ref().clone()
     }
+    #[track_caller]
     pub fn call<T: Send + 'static, E: Send + 'static>(
         &self,
         operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T, E> + Send + 'static,
         failure: impl FnOnce() -> E,
     ) -> Result<T, E> {
-        self.0
-            .call_blocking(operation)
+        let caller = std::panic::Location::caller();
+        // Closure types retain the repository method, unlike a shared generic span name.
+        let operation_name = std::any::type_name_of_val(&operation).trim_end_matches("::{{closure}}");
+        let short_name = operation_name.split("::sqlite::").last().unwrap_or(operation_name);
+        let span_name = format!("db.sqlite.{short_name}");
+        let context = crate::app::telemetry::child_operation(&span_name, vec![
+            opentelemetry::KeyValue::new("code.function.name", operation_name.to_owned()),
+            opentelemetry::KeyValue::new("db.system.name", "sqlite"),
+            opentelemetry::KeyValue::new("code.file.path", caller.file()),
+            opentelemetry::KeyValue::new("code.line.number", i64::from(caller.line())),
+        ]);
+        let worker_context = context.clone();
+        let result = self.0
+            .call_blocking(move |connection| {
+                let _guard = worker_context.attach();
+                operation(connection)
+            })
             .map_err(|error| match error {
                 tokio_rusqlite::Error::Error(error) => error,
                 _ => failure(),
-            })
+            });
+        use opentelemetry::trace::TraceContextExt;
+        if result.is_err() { context.span().set_status(opentelemetry::trace::Status::error("Database operation failed")); }
+        // child_operation returns an empty context when tracing is disabled.
+        context.span().end();
+        result
     }
 }
 

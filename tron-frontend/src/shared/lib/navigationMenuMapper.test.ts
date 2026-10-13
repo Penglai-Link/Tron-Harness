@@ -23,6 +23,19 @@ describe("getNavigationIcon", () => {
 });
 
 describe("mapNavigationTree", () => {
+  it("keeps an empty explore entry and mixed widget/page order with their expansion settings", () => {
+    const base = { icon: "Ellipsis", label: "探索更多", menuCode: "EXPLORE_MORE", menuType: "Group" as const, pageCode: null, url: null, childDisplay: "Flyout" as const, children: [] };
+    const tree = { domainCode: "ADVANCED", locale: "zh-CN", maxDepth: 3, menus: [base] };
+    expect(mapNavigationTree(tree)[0]).toMatchObject({ id: "EXPLORE_MORE", flyout: true, items: [] });
+    const [section] = mapNavigationTree({ ...tree, menus: [{ ...base, children: [
+      { ...base, menuCode: "PROJECTS", menuType: "Widget", pageCode: "chat.projects" },
+      { ...base, menuCode: "TASKS", menuType: "Internal", pageCode: "tasks.index", childDisplay: "Inline" },
+    ] }] });
+    expect(section.items.map((item) => item.menuCode)).toEqual(["PROJECTS", "TASKS"]);
+    expect(section.items[0]).toMatchObject({ widgetCode: "chat.projects", childDisplay: "Flyout" });
+    expect(section.items[1]).toMatchObject({ href: "/tasks", childDisplay: "Inline" });
+  });
+
   it("excludes observability from persisted workspace parent menus", () => {
     const [section] = mapNavigationTree({ domainCode:"ADVANCED",locale:"zh-CN",maxDepth:3,
       menus:[{menuCode:"OBSERVABILITY",label:"可观测",menuType:"Group",pageCode:null,url:null,icon:"Activity",childDisplay:"Flyout",children:

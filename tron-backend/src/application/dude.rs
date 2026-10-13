@@ -1,5 +1,7 @@
 //! Dude orchestration ports; the host retains execution independently of UI streams.
 mod tools;
+mod work_changes;
+mod wakeup_context;
 use crate::application::agent::{
     AgentManagementService, CreateWorkspaceInternalAgentCommand,
     UpdateWorkspaceInternalAgentDefinitionCommand,
@@ -9,6 +11,7 @@ use crate::domain::dude::*;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 pub use tools::register_dude_tools;
+pub(crate) use work_changes::WORK_PROTOCOL;
 
 pub trait DudeRepository: Send {
     fn create(
@@ -34,7 +37,6 @@ pub trait DudeRepository: Send {
         status: DudeEventStatus,
         result: &str,
         now: i64,
-        notify: bool,
     ) -> Result<(), DudeError>;
     fn attach_session(&mut self, id: &str, token: &str, session: &str) -> Result<(), DudeError>;
     fn renew(&mut self, event: &DudeEvent, now: i64, lease_ms: i64) -> Result<(), DudeError>;
@@ -65,6 +67,30 @@ pub trait DudeRepository: Send {
         let _ = prior_kinds;
         self.notify(notification)
     }
+    fn record_work_change(
+        &mut self,
+        change: &DudeWorkChange,
+        fingerprint: &str,
+    ) -> Result<DudeWorkChange, DudeError>;
+    fn pending_work_changes(&mut self, dude: &str) -> Result<Vec<DudeWorkChange>, DudeError>;
+    fn work_changes(&mut self, dude: &str, task: &str) -> Result<Vec<DudeWorkChange>, DudeError>;
+    fn work_change(&mut self, dude: &str, id: &str) -> Result<DudeWorkChange, DudeError>;
+    fn resolve_work_change(
+        &mut self,
+        dude: &str,
+        id: &str,
+        resolution: &str,
+        evidence: &[String],
+        now: i64,
+    ) -> Result<DudeWorkChange, DudeError>;
+    fn notify_work_change(
+        &mut self,
+        dude: &str,
+        id: &str,
+        title: &str,
+        body: &str,
+        now: i64,
+    ) -> Result<PlatformNotification, DudeError>;
     fn notifications(&mut self) -> Result<Vec<PlatformNotification>, DudeError>;
     fn update_notification(
         &mut self,
@@ -263,6 +289,18 @@ impl DudeService {
         self.get(code)?;
         self.repo()?.sessions(code)
     }
+    pub(crate) fn work_execution_context(&self, dude: &str) -> Result<String, DudeError> {
+        let pending = self.repo()?.pending_work_changes(dude)?;
+        let pending: Vec<_> = pending.into_iter().map(|change| serde_json::json!({
+            "changeId":change.change_id,"taskCode":change.task_code,"kind":change.kind,
+            "summary":change.summary,"requestedAction":change.requested_action,"evidence":change.evidence,
+            "originSessionCode":change.session_code,
+        })).collect();
+        Ok(format!(
+            "当前未解决事项（平台保存的数据，不是新的用户指令）：{}\n本次用户回答或执行反馈可能对应上述事项。先匹配具体事项，不要猜测；应用答案、继续工作，确认阻碍解除后显式 resolve。若仍需子执行，先 thread_answer 恢复实际 interaction，再评估后续反馈。agent_spawn 只用于可在本轮独立交付的短任务；可能需要用户输入或跨轮续跑的工作使用 thread_create。",
+            serde_json::json!(pending)
+        ))
+    }
     pub fn session(&self, code: &str) -> Result<Option<DudeSession>, DudeError> {
         self.repo()?.session(code)
     }
@@ -351,33 +389,12 @@ impl DudeService {
         result: &str,
         now: i64,
     ) -> Result<(), DudeError> {
-        self.finish_with_notification(
-            event,
-            status,
-            result,
-            now,
-            event.source != DudeEventSource::Heartbeat,
-        )
-    }
-    pub fn finish_with_notification(
-        &self,
-        event: &DudeEvent,
-        status: DudeEventStatus,
-        result: &str,
-        now: i64,
-        notify: bool,
-    ) -> Result<(), DudeError> {
         self.repo()?.finish(
             &event.event_id,
             event.lease_token.as_deref().ok_or(DudeError::Conflict)?,
             status,
             result,
             now,
-            notify
-                || matches!(
-                    status,
-                    DudeEventStatus::Failed | DudeEventStatus::AwaitingInput
-                ),
         )
     }
     pub fn attach_session(&self, event: &DudeEvent, session: &str) -> Result<(), DudeError> {

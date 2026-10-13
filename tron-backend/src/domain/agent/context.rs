@@ -213,6 +213,15 @@ impl AgentToolAssignment {
 }
 
 impl AgentRunContext {
+    pub(crate) fn is_owning_dude(&self) -> bool {
+        self.collaboration_owner.as_ref().is_some_and(|owner| {
+            owner.kind == "DUDE"
+                && self.agent_code.as_deref() == Some(owner.code.as_str())
+                && owner.origin_session_code.is_some()
+                && self.conversation_code == owner.origin_session_code
+        })
+    }
+
     pub(crate) fn is_platform_dude(&self) -> bool {
         self.workspace_code.trim().is_empty()
             && self

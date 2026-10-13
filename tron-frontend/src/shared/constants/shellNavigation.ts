@@ -1,5 +1,10 @@
 import {
   Bot,
+  MessageSquareText,
+  SquarePen,
+  FolderKanban,
+  History,
+  Ellipsis,
   Bell,
   ScrollText,
   Activity,
@@ -23,6 +28,18 @@ import {
 import type { TronNavSection } from "@/shared/types/ShellNavigation";
 
 export const tronNavigation: TronNavSection[] = [
+  { id: "EXPLORE_MORE", label: "Explore more", translationKey: "shell:nav.sections.exploreMore", icon: Ellipsis, flyout: true, items: [] },
+  {
+    id: "CHAT_SESSIONS",
+    label: "Chat",
+    translationKey: "shell:nav.sections.chat",
+    icon: MessageSquareText,
+    items: [
+      { menuCode: "CHAT_NEW_SESSION", widgetCode: "chat.newSession", label: "New session", href: "", icon: SquarePen, translationKey: "shell:chatSidebar.newChat" },
+      { menuCode: "CHAT_PROJECTS", widgetCode: "chat.projects", label: "Projects", href: "", icon: FolderKanban, translationKey: "shell:nav.items.projects" },
+      { menuCode: "CHAT_RECENTS", widgetCode: "chat.recents", label: "Recents", href: "", icon: History, translationKey: "shell:chatSidebar.recent" },
+    ],
+  },
   {
     label: "Core",
     translationKey: "shell:nav.sections.core",

@@ -25,7 +25,7 @@ pub(super) async fn blocking<T: Send + 'static>(
     locale: String,
     run: impl FnOnce() -> Result<T, SkinError> + Send + 'static,
 ) -> Result<T, SkinApiError> {
-    tokio::task::spawn_blocking(run)
+    crate::app::telemetry::spawn_blocking_traced(run)
         .await
         .map_err(|_| SkinApiError(SkinError::Storage, locale.clone()))?
         .map_err(|error| SkinApiError(error, locale))

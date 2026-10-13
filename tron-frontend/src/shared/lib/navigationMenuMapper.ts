@@ -64,6 +64,9 @@ function mapMenu(menu: NavigationRuntimeMenu, locale: string): TronNavItem {
         : "";
 
   return {
+    menuCode: menu.menuCode,
+    isGroup: menu.menuType === "Group",
+    widgetCode: menu.menuType === "Widget" ? menu.pageCode ?? undefined : undefined,
     children: menu.children.length ? menu.children.map((child) => mapMenu(child, locale)) : undefined,
     external: menu.menuType === "ExternalLink",
     href,
@@ -94,9 +97,9 @@ export function mapNavigationTree(tree: NavigationRuntimeTree): TronNavSection[]
   return prune(tree.menus).map((menu) => ({
     id: menu.menuCode,
     standalone: menu.menuType !== "Group" && menu.children.length === 0,
-    flyout: menu.childDisplay === "Flyout" && menu.children.length > 0,
+    flyout: menu.menuType === "Group" && menu.childDisplay === "Flyout",
     icon: getNavigationIcon(menu.icon) ?? Folder,
-    items: menu.children.length
+    items: menu.menuType === "Group"
       ? menu.children.map((child) => mapMenu(child, tree.locale))
       : [mapMenu(menu, tree.locale)],
     label: menu.label,

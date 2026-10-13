@@ -59,6 +59,7 @@ pub async fn send_message(
         state.runtime_http_client.clone(),
     )
     .with_framework_host(state.agent_framework.clone())
+    .with_dude_work_context(state.dudes.clone())
     .with_directory_inspector(Some(std::sync::Arc::new(
         crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
     )))
@@ -81,7 +82,7 @@ pub async fn send_message(
     {
         Ok(result) => {
             if result.session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:"))
-                && result.run.status != "AWAITING_USER_INPUT"
+                && result.run.status == "COMPLETED"
             {
                 if let Err(error) = state.dudes.resolve_awaiting_input(&session_code, &result.run.final_output) {
                     tracing::error!("Dude human response resolution: {error}");
@@ -208,6 +209,7 @@ pub(crate) async fn stream_message_command(
         state.runtime_http_client.clone(),
     )
     .with_framework_host(state.agent_framework.clone())
+    .with_dude_work_context(state.dudes.clone())
     .with_directory_inspector(Some(std::sync::Arc::new(
         crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
     )))
@@ -238,7 +240,7 @@ pub(crate) async fn stream_message_command(
         let completion = match result {
             Ok(result) => {
                 if result.session.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:"))
-                    && result.run.status != "AWAITING_USER_INPUT"
+                    && result.run.status == "COMPLETED"
                 {
                     match dudes.resolve_awaiting_input(&session_code_for_task, &result.run.final_output) {
                         Ok(()) => ChatStreamCompletion::Success(result),

@@ -156,11 +156,12 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
     fn save_menu(&mut self, menu: &NavigationMenu) -> Result<(), NavigationError> {
         let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         tx.execute(
-            "INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, enabled, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            "INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, description_zh_cn, description_en_us, enabled, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
              ON CONFLICT(menu_code) DO UPDATE SET menu_type = excluded.menu_type, page_code = excluded.page_code,
-                 url = excluded.url, icon = excluded.icon, enabled = excluded.enabled, updated_at = excluded.updated_at",
-            params![menu.id.value(), menu.menu_code, menu.source.as_storage(), menu.menu_type.as_storage(), menu.page_code, menu.url, menu.icon, i64::from(menu.enabled), menu.created_at, menu.updated_at],
+                 url = excluded.url, icon = excluded.icon, description_zh_cn = excluded.description_zh_cn,
+                 description_en_us = excluded.description_en_us, enabled = excluded.enabled, updated_at = excluded.updated_at",
+            params![menu.id.value(), menu.menu_code, menu.source.as_storage(), menu.menu_type.as_storage(), menu.page_code, menu.url, menu.icon, menu.description.zh_cn, menu.description.en_us, i64::from(menu.enabled), menu.created_at, menu.updated_at],
         ).map_err(|error| if error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation) { NavigationError::DuplicateMenuCode } else { NavigationError::StorageFailure })?;
         let menu_id: i64 = tx
             .query_row(
@@ -492,7 +493,7 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
 
 fn default_child_display(menu_code: &str) -> NavigationMenuChildDisplay {
     match menu_code {
-        "CORE" | "AGENT_OPERATIONS" | "DATA" => NavigationMenuChildDisplay::Flyout,
+        "CORE" | "AGENT_OPERATIONS" | "DATA" | "EXPLORE_MORE" => NavigationMenuChildDisplay::Flyout,
         _ => NavigationMenuChildDisplay::Inline,
     }
 }

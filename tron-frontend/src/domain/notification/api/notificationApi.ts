@@ -16,7 +16,9 @@ export function notificationTarget(notification: PlatformNotification): string |
   const dude = typeof target.dudeCode === "string" ? target.dudeCode : notification.dudeCode;
   if (dude) {
     const query = new URLSearchParams({ dude });
-    if (typeof target.sessionCode === "string") { query.set("session", target.sessionCode); query.set("tab", target.sessionKind === "Thread" ? "work" : "history"); }
+    if ((target.changeKind === "NeedsDecision" || target.changeKind === "Blocked") && typeof target.sessionCode === "string") { query.set("session", target.sessionCode); query.set("tab", "history"); }
+    else if (typeof target.changeId === "string" && typeof target.taskCode === "string") { query.set("task", target.taskCode); query.set("tab", "tasks"); }
+    else if (typeof target.sessionCode === "string") { query.set("session", target.sessionCode); query.set("tab", target.sessionKind === "Thread" ? "work" : "history"); }
     else if (typeof target.taskCode === "string") { query.set("task", target.taskCode); query.set("tab", "tasks"); }
     return `/dudes?${query}`;
   }

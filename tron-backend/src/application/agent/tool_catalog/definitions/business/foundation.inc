@@ -27,6 +27,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         automation_restore_definition(),
         automation_execute_definition(),
         dude_notify_definition(),
+        dude_work_change_definition(),
         task_page_definition(),
         task_create_definition(),
         task_update_definition(),

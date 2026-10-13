@@ -261,24 +261,22 @@ fn task_restore_definition() -> ToolCatalogDefinition {
 }
 
 fn dude_notify_definition() -> ToolCatalogDefinition {
-    definition(
-        "dude.notify",
-        "dude",
-        ToolOperationKind::Command,
-        schema(
-            "agent.toolCatalog.tools.dude.notify.description",
-            json!([{ "title": "Need your decision", "body": "Choose the deployment window.", "sessionCode": "thread-id" }]),
-            json!({
-                "type": "object",
-                "required": ["title", "body"],
-                "properties": {
-                    "title": {"type":"string","minLength":1,"maxLength":200},
-                    "body": {"type":"string","minLength":1,"maxLength":8000},
-                    "sessionCode": {"type":"string","minLength":1},
-                    "taskCode": {"type":"string","minLength":1}
-                },
-                "additionalProperties": false
-            }),
-        ),
-    )
+    definition("dude.notify", "dude", ToolOperationKind::Command,
+        schema("agent.toolCatalog.tools.dude.notify.description", json!([{"changeId":"change-id","title":"Decision needed","body":"Choose the deployment window."}]),
+            json!({"type":"object","required":["changeId","title","body"],"properties":{
+                "changeId":{"type":"string","minLength":1},"title":{"type":"string","minLength":1,"maxLength":200},"body":{"type":"string","minLength":1,"maxLength":8000}},"additionalProperties":false})))
+}
+fn dude_work_change_definition() -> ToolCatalogDefinition {
+    definition("dude.work_change", "dude", ToolOperationKind::Command,
+        schema("agent.toolCatalog.tools.dude.work_change.description", json!([{"operation":"list","taskCode":"task-id"}]),
+            json!({"type":"object","oneOf":[
+                {"type":"object","required":["operation","taskCode"],"properties":{"operation":{"const":"list"},"taskCode":{"type":"string"}},"additionalProperties":false},
+                {"type":"object","required":["operation","taskCode","result"],"properties":{"operation":{"const":"recordResult"},"taskCode":{"type":"string"},"result":{"type":"string","minLength":1,"maxLength":32000}},"additionalProperties":false},
+                {"type":"object","required":["operation","taskCode","changeKey","kind","summary","evidence"],"properties":{
+                    "operation":{"const":"record"},"taskCode":{"type":"string"},"changeKey":{"type":"string","minLength":1,"maxLength":200},
+                    "kind":{"enum":["Progress","Completed","NeedsDecision","Blocked"]},"summary":{"type":"string","minLength":1,"maxLength":8000},
+                    "evidence":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":2000}},
+                    "requestedAction":{"type":"string","maxLength":8000}},"additionalProperties":false},
+                {"type":"object","required":["operation","changeId","resolution","evidence"],"properties":{"operation":{"const":"resolve"},"changeId":{"type":"string"},"resolution":{"type":"string","minLength":1,"maxLength":8000},"evidence":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":2000}}},"additionalProperties":false}
+            ]})))
 }

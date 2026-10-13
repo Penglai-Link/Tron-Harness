@@ -1,3 +1,5 @@
+import { installBrowserTracing } from "@tron/chat-core";
+import { buildApiUrl } from "@/shared/api/httpClient";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AnchoredToastProvider, ToastProvider } from "@/components/ui/toast"
@@ -8,6 +10,8 @@ import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import "@/i18n";
 import "@eliteforge/agent-ui-chat-theme";
 import "./styles/globals.css";
+
+installBrowserTracing(buildApiUrl("/api/v1/observability/browser-spans"));
 
 const root = document.getElementById("root");
 

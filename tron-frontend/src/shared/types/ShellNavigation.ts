@@ -1,6 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 
 export interface TronNavItem {
+  menuCode?: string;
+  isGroup?: boolean;
+  widgetCode?: string;
   children?: TronNavItem[];
   label: string;
   href: string;

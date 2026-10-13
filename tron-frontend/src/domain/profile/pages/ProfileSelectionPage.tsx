@@ -69,6 +69,7 @@ export function ProfileSelectionPage() {
   const [activating, setActivating] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [authorizing, setAuthorizing] = useState(false);
+  const [completingAuthorization, setCompletingAuthorization] = useState(false);
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [profileToRemove, setProfileToRemove] = useState<PersonAiProfile | null>(null);
@@ -128,16 +129,22 @@ export function ProfileSelectionPage() {
           }, 1_500);
           return;
         }
+        setCompletingAuthorization(true);
+        closeAuthorizationWindow();
         const [nextProfiles, nextBootstrap] = await Promise.all([
           fetchProfiles(),
           fetchBootstrapProfileStatus(undefined, false),
         ]);
         if (!active) return;
+        // Keep authorization pending until the session is usable. Clearing it
+        // earlier lets auto-entry mistake the old auth status for expired access.
+        const authenticated = await useAuthStore.getState().ensureSessionFresh();
+        if (!active) return;
         setProfiles(nextProfiles);
         setBootstrap(nextBootstrap);
         setAuthorization(null);
-        closeAuthorizationWindow();
-        if (await useAuthStore.getState().ensureSessionFresh()) {
+        setCompletingAuthorization(false);
+        if (authenticated) {
           navigate("/workspace", { replace: true });
         } else {
           setError(t("personAiProfiles.errors.activate"));
@@ -145,6 +152,7 @@ export function ProfileSelectionPage() {
       } catch (reason: unknown) {
         if (active) {
           setAuthorization(null);
+          setCompletingAuthorization(false);
           closeAuthorizationWindow();
           setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.authorize"));
         }
@@ -285,7 +293,7 @@ export function ProfileSelectionPage() {
             </button>
           </div>
         ) : null}
-        {!loading && (forceReauthorization || bootstrap?.activeProfile?.status === "PENDING") ? (
+        {!loading && (authorization || forceReauthorization || bootstrap?.activeProfile?.status === "PENDING") ? (
           <div className="mt-8">
             {forceReauthorization && !authorization ? (
               <p className="mb-4 text-sm text-[var(--color-on-surface-variant)]">{t("personAiProfiles.reauthorizationRequired")}</p>
@@ -293,11 +301,13 @@ export function ProfileSelectionPage() {
             {authorization ? (
               <div className="space-y-2">
                 <Button className="h-10 w-full" type="button" disabled>
-                  {t("personAiProfiles.authorizing")}
+                  {t(completingAuthorization ? "personAiProfiles.signingIn" : "personAiProfiles.authorizing")}
                 </Button>
-                <Button className="h-10 w-full" type="button" variant="secondary" onClick={cancelPersonAiAuthorization}>
-                  {t("personAiProfiles.cancelAuthorization")}
-                </Button>
+                {!completingAuthorization ? (
+                  <Button className="h-10 w-full" type="button" variant="secondary" onClick={cancelPersonAiAuthorization}>
+                    {t("personAiProfiles.cancelAuthorization")}
+                  </Button>
+                ) : null}
               </div>
             ) : (
               <Button className="h-10 w-full" type="button" disabled={authorizing} onClick={() => void beginPersonAiAuthorization()}>

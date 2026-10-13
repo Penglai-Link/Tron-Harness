@@ -45,12 +45,10 @@ mod request {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct CreateDomainRequest {
-        pub domain_code: String,
         pub name: LocalizedTextRequest,
         pub description: LocalizedTextRequest,
         pub enabled: bool,
         pub is_default: bool,
-        pub position: i64,
     }
 
     #[derive(Debug, Deserialize)]
@@ -80,6 +78,7 @@ mod request {
         pub menu_code: String,
         pub menu_type: MenuTypeRequest,
         pub translations: LocalizedTextRequest,
+        pub description: LocalizedTextRequest,
         pub page_code: Option<String>,
         pub url: Option<String>,
         pub icon: Option<String>,
@@ -91,6 +90,7 @@ mod request {
     pub struct UpdateMenuRequest {
         pub menu_type: MenuTypeRequest,
         pub translations: LocalizedTextRequest,
+        pub description: LocalizedTextRequest,
         pub page_code: Option<String>,
         pub url: Option<String>,
         pub icon: Option<String>,

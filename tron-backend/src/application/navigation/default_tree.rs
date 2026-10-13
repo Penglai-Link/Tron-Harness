@@ -6,7 +6,7 @@ pub struct DefaultNavigationMenuTreeItem {
     pub position: i64,
 }
 
-pub const DEFAULT_NAVIGATION_MENU_TREE_CODES: &[&str] = &["ADVANCED", "CHAT_PANEL"];
+pub const DEFAULT_NAVIGATION_MENU_TREE_CODES: &[&str] = &["ADVANCED"];
 
 // Keep this in the same parent-before-child order as the built-in navigation seed.
 // It provides a runtime recovery path when an administrator removes all assignments.
@@ -15,7 +15,7 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         domain_code: "ADVANCED",
         menu_code: "CORE",
         parent_menu_code: None,
-        position: 0,
+        position: 1,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
@@ -39,7 +39,7 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         domain_code: "ADVANCED",
         menu_code: "AGENT_OPERATIONS",
         parent_menu_code: None,
-        position: 1,
+        position: 2,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
@@ -57,7 +57,7 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         domain_code: "ADVANCED",
         menu_code: "DATA",
         parent_menu_code: None,
-        position: 2,
+        position: 3,
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
@@ -96,27 +96,45 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         position: 5,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "CHAT_PANEL",
+        domain_code: "ADVANCED",
         menu_code: "CHAT_SESSIONS",
         parent_menu_code: None,
         position: 0,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "CHAT_PANEL",
+        domain_code: "ADVANCED",
         menu_code: "CHAT_NEW_SESSION",
         parent_menu_code: Some("CHAT_SESSIONS"),
         position: 0,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "CHAT_PANEL",
+        domain_code: "ADVANCED",
         menu_code: "CHAT_PROJECTS",
         parent_menu_code: Some("CHAT_SESSIONS"),
         position: 1,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "CHAT_PANEL",
+        domain_code: "ADVANCED",
         menu_code: "CHAT_RECENTS",
         parent_menu_code: Some("CHAT_SESSIONS"),
         position: 2,
+    },
+    DefaultNavigationMenuTreeItem {
+        domain_code: "ADVANCED",
+        menu_code: "EXPLORE_MORE",
+        parent_menu_code: None,
+        position: 5,
+    },
+    DefaultNavigationMenuTreeItem {
+        domain_code: "ADVANCED",
+        menu_code: "DUDES",
+        parent_menu_code: Some("AGENT_OPERATIONS"),
+        position: 0,
+    },
+    DefaultNavigationMenuTreeItem {
+        domain_code: "ADVANCED",
+        menu_code: "NOTIFICATIONS",
+        parent_menu_code: None,
+        position: 4,
     },
 ];

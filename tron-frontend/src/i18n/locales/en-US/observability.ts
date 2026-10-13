@@ -1,4 +1,22 @@
 export const observability = {
+  keyword: "Keyword",
+  keywordPlaceholder: "Trigger, path or code",
+  allStates: "All statuses",
+  allAgents: "All agents / Dudes",
+  triggerHelpLabel: "About triggers",
+  triggerHelp: "A trigger is the business entry point of a call chain. Page traces start from a page such as Chat, App management or File resources. Agent traces start from an Agent or Dude execution. One trigger can produce multiple traces. Click its name to see its downstream calls; the detail view also provides the full Trace.",
+  sessionHelpLabel: "About sessions",
+  sessionHelp: "This is an Agent session, not a browser session. Chats and other Agent/Dude calls carrying session context have a session. Ordinary page and resource operations usually do not and show —.",
+
+  trigger: "Trigger",
+  chatTrigger: "Chat",
+  appsTrigger: "App management",
+  filesTrigger: "File resources",
+  showFullTrace: "View full trace",
+  showTriggerTrace: "Back to trigger",
+
+  pageTraces: "Page traces",
+  agentTraces: "Agent traces",
   logView: "Log view",
   continuousLogs: "Continuous logs",
   continuousLogsHelp: "Full logs in write order, oldest first. Scrolling up pauses following.",
@@ -97,6 +115,9 @@ export const observability = {
   detailView: "Trace detail view",
   backToTraces: "Back to traces",
   topology: "Call topology",
+  spanList: "Span list",
+  searchSpans: "Search operation, model, tool or Span ID",
+  spanPagingHelp: "Tables and charts render the current page; search covers all spans. The waterfall retains the full trace time scale. Topology connects parents on this page; inspect details for the full parent ID.",
   topologyHelp: "Arrows follow parent-to-child span calls. Spans with missing parents appear separately. Pan or zoom the canvas and select a node for details.",
 
   copy: "Copy",
@@ -165,6 +186,7 @@ export const observability = {
   empty: "No data",
   loadFailed: "Could not load traces",
   chooseWorkspace: "Choose a workspace",
+  invalidSpanId: "Span ID must contain 16 hexadecimal characters and cannot be all zeros",
   invalidTraceId: "Trace ID must contain 32 hexadecimal characters",
   pageHelp:
     "Filter by session or a full Trace ID. Select a trace to inspect its spans and metrics. New runs are collected locally; historical runs are not backfilled. Refreshes every 5 seconds. Traces and metrics arrive through the OTLP collector. Traces retain 15 days or up to 50,000 completed traces; either limit removes entire older traces. Active traces are protected. Metric points retain 5 days with no count limit.",

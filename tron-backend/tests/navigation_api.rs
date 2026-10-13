@@ -120,10 +120,10 @@ async fn runtime_navigation_requires_profile_and_is_localized_and_separate_from_
     let definitions = response_json(menu_definitions).await;
     assert!(!definitions["data"].to_string().contains("\"CHATS\""));
     assert_eq!(tree_payload["data"]["maxDepth"], 3);
-    assert_eq!(tree_payload["data"]["menus"][0]["menuCode"], "CORE");
-    assert_eq!(tree_payload["data"]["menus"][0]["label"], "核心");
+    assert_eq!(tree_payload["data"]["menus"][1]["menuCode"], "CORE");
+    assert_eq!(tree_payload["data"]["menus"][1]["label"], "核心");
     assert_eq!(
-        tree_payload["data"]["menus"][0]["children"][0]["pageCode"],
+        tree_payload["data"]["menus"][1]["children"][0]["pageCode"],
         "apps.index"
     );
 }
@@ -160,6 +160,7 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
             "menuCode": "COMPLIANCE_PORTAL",
             "menuType": "ExternalLink",
             "translations": { "zh-CN": "合规门户", "en-US": "Compliance Portal" },
+            "description": { "zh-CN": "合规信息入口", "en-US": "Entry point for compliance information" },
             "pageCode": null,
             "url": "https://example.com/compliance",
             "icon": "Globe",
@@ -360,6 +361,7 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
                 "menuCode": menu_code,
                 "menuType": menu_type,
                 "translations": translations,
+                "description": { "zh-CN": "编排测试菜单", "en-US": "Arrangement test menu" },
                 "pageCode": page_code,
                 "url": null,
                 "icon": "Folder",
@@ -437,6 +439,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     let token = authenticated_bearer_token(&router).await;
 
     for menu_code in [
+        "CHAT_NEW_SESSION", "CHAT_PROJECTS", "CHAT_RECENTS", "CHAT_SESSIONS", "EXPLORE_MORE", "DUDES", "NOTIFICATIONS",
         "APPS",
         "TASKS",
         "AUTOMATIONS",
@@ -489,9 +492,9 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     assert_eq!(restore_payload["code"], "0");
     assert_eq!(
         restore_payload["data"]["restoredDomainCodes"],
-        json!(["ADVANCED", "CHAT_PANEL"])
+        json!(["ADVANCED"])
     );
-    assert_eq!(restore_payload["data"]["restoredItemCount"], 14);
+    assert_eq!(restore_payload["data"]["restoredItemCount"], 21);
 
     let restored_tree = request_json(
         &router,
@@ -503,13 +506,13 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     )
     .await;
     let restored_payload = response_json(restored_tree).await;
-    assert_eq!(restored_payload["data"].as_array().map(Vec::len), Some(3));
-    assert_eq!(restored_payload["data"][0]["menuCode"], "CORE");
-    assert_eq!(restored_payload["data"][0]["childDisplay"], "Flyout");
-    assert_eq!(restored_payload["data"][1]["menuCode"], "AGENT_OPERATIONS");
+    assert_eq!(restored_payload["data"].as_array().map(Vec::len), Some(6));
+    assert_eq!(restored_payload["data"][1]["menuCode"], "CORE");
+    assert_eq!(restored_payload["data"][1]["childDisplay"], "Flyout");
+    assert_eq!(restored_payload["data"][2]["menuCode"], "AGENT_OPERATIONS");
     assert_eq!(
-        restored_payload["data"][1]["children"][0]["menuCode"],
-        "MCP_SERVERS"
+        restored_payload["data"][2]["children"][0]["menuCode"],
+        "DUDES"
     );
     assert!(!restored_payload["data"].as_array().unwrap().iter().any(|menu| menu["menuCode"] == "OBSERVABILITY"));
     let tree_json = restored_payload["data"].to_string();
@@ -544,7 +547,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
 }
 
 #[tokio::test]
-async fn chat_panel_is_a_menu_tree_not_a_navigation_domain() {
+async fn widgets_and_pages_share_the_domain_tree_and_explore_group() {
     let router = app();
     let token = authenticated_bearer_token(&router).await;
 
@@ -579,18 +582,14 @@ async fn chat_panel_is_a_menu_tree_not_a_navigation_domain() {
     )
     .await;
     let menu_trees_payload = response_json(menu_trees).await;
-    let chat_panel = menu_trees_payload["data"]
-        .as_array()
-        .expect("menu trees should be an array")
-        .iter()
-        .find(|tree| tree["treeCode"] == "CHAT_PANEL")
-        .expect("chat panel menu tree should be configurable");
-    assert_eq!(chat_panel["treeKind"], "Panel");
+    let trees = menu_trees_payload["data"].as_array().unwrap();
+    assert_eq!(trees.len(), 1);
+    assert_eq!(trees[0]["treeCode"], "ADVANCED");
 
     let tree = request_json(
         &router,
         Method::GET,
-        "/api/v1/navigation/chat-panel/menu-tree",
+        "/api/v1/navigation/domains/ADVANCED/menu-tree",
         None,
         Some(&token),
         None,
@@ -603,7 +602,7 @@ async fn chat_panel_is_a_menu_tree_not_a_navigation_domain() {
         StatusCode::OK,
         "chat panel tree response: {tree_payload}"
     );
-    assert_eq!(tree_payload["data"]["domainCode"], "CHAT_PANEL");
+    assert_eq!(tree_payload["data"]["domainCode"], "ADVANCED");
     let menus = tree_payload["data"]["menus"]
         .as_array()
         .expect("chat tree should have menus");
@@ -626,11 +625,25 @@ async fn chat_panel_is_a_menu_tree_not_a_navigation_domain() {
         assert!(child["url"].is_null());
     }
 
+    let explore = menus.iter().find(|item| item["menuCode"] == "EXPLORE_MORE").unwrap();
+    assert_eq!(explore["childDisplay"], "Flyout");
+    for (code, position) in [("CHAT_PROJECTS", 0), ("APPS", 1)] {
+        let moved = request_json(&router, Method::PUT,
+            &format!("/api/v1/admin/navigation/menu-trees/ADVANCED/menu-items/{code}"),
+            Some(json!({ "parentMenuCode": "EXPLORE_MORE", "position": position, "childDisplay": "Inline" })), Some(&token), None).await;
+        assert_eq!(moved.status(), StatusCode::OK);
+    }
+    let updated = request_json(&router, Method::GET, "/api/v1/navigation/domains/ADVANCED/menu-tree", None, Some(&token), None).await;
+    let updated = response_json(updated).await;
+    let explore = updated["data"]["menus"].as_array().unwrap().iter().find(|item| item["menuCode"] == "EXPLORE_MORE").unwrap();
+    assert_eq!(explore["children"][0]["menuType"], "Widget");
+    assert_eq!(explore["children"][1]["menuCode"], "APPS");
+
     // Widget menus stay leaves: static children are rejected.
     let add_child = request_json(
         &router,
         Method::POST,
-        "/api/v1/admin/navigation/menu-trees/CHAT_PANEL/menu-items",
+        "/api/v1/admin/navigation/menu-trees/ADVANCED/menu-items",
         Some(json!({
             "menuCode": "APPS",
             "parentMenuCode": "CHAT_PROJECTS",

@@ -404,3 +404,17 @@ pub(super) fn normalize_candidate_model_codes(
     codes.dedup();
     Ok(codes)
 }
+
+impl AgentManagementService {
+    /// Resolve saved display names without constructing tool policies or invoking agents.
+    pub fn trace_agent_name(&self, workspace: &str, code: &str) -> Option<String> {
+        let mut repository = self.repository();
+        if !workspace.is_empty() {
+            if let Some(agent) = repository.list_workspace_internal_agent_definitions(workspace).ok()?.into_iter().find(|a| a.agent_code == code) {
+                if let Some(name) = agent.name { return Some(name); }
+            }
+        }
+        if let Some(agent) = repository.list_platform_internal_agent_configs().ok()?.into_iter().find(|a| a.agent_code == code) { return Some(agent.name); }
+        repository.list_system_agents().ok()?.into_iter().find(|a| a.agent_code == code).map(|a| a.name)
+    }
+}

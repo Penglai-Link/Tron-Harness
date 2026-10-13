@@ -55,10 +55,6 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/navigation/domains/{domain_code}/menu-tree",
             get(menu_tree),
         )
-        .route(
-            "/api/v1/navigation/chat-panel/menu-tree",
-            get(chat_panel_menu_tree),
-        )
 }
 
 async fn list_domains(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
@@ -80,13 +76,6 @@ async fn menu_tree(
     Path(domain_code): Path<String>,
 ) -> Response {
     match state.navigation.runtime_tree(&domain_code, &auth.locale) {
-        Ok(tree) => Json(ApiResponse::protocol_success(runtime_tree_vo(tree))).into_response(),
-        Err(error) => navigation_error_response(error, &auth.locale),
-    }
-}
-
-async fn chat_panel_menu_tree(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
-    match state.navigation.chat_panel_runtime_tree(&auth.locale) {
         Ok(tree) => Json(ApiResponse::protocol_success(runtime_tree_vo(tree))).into_response(),
         Err(error) => navigation_error_response(error, &auth.locale),
     }

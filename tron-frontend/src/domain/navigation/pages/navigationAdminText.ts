@@ -12,10 +12,10 @@ export function useNavigationAdminText() {
   const { i18n, t } = useTranslation("pages");
   const english = i18n.resolvedLanguage?.toLowerCase().startsWith("en") ?? false;
 
-  return useCallback((key: string, chinese: string, englishText: string, options?: Record<string, unknown>): string => String(
-    t(`navigationAdmin.${key}`, {
-      ...options,
-      defaultValue: english ? englishText : chinese,
-    } as never),
-  ), [english, t]);
+  return useCallback((key: string, chinese: string, englishText: string, options?: Record<string, unknown>): string => {
+    const translationKey = `navigationAdmin.${key}`;
+    const defaultValue = english ? englishText : chinese;
+    if (!i18n.exists(translationKey, { ns: "pages" })) return defaultValue;
+    return String(t(translationKey, { ...options, defaultValue } as never));
+  }, [english, i18n, t]);
 }

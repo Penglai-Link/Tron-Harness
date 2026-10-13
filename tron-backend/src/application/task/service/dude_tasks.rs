@@ -175,6 +175,10 @@ mod tests {
         tasks
             .record_execution_result(&task.task_code, "Report prepared".into())
             .unwrap();
+        assert_eq!(tasks.due_dude_tasks(i64::MAX).unwrap().len(), 1);
+        tasks.update_status(&task.task_code, UpdateTaskStatusCommand {
+            status: crate::domain::task::CLOSED_STATUS_CODE.into(), progress: None,
+        }).unwrap();
         assert!(tasks.due_dude_tasks(i64::MAX).unwrap().is_empty());
     }
 

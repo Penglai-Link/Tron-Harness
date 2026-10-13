@@ -19,6 +19,13 @@ use serde::Deserialize;
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct QueryTracesRequest {
+    pub span_id: Option<String>,
+    pub keyword: Option<String>,
+    pub status: Option<String>,
+    pub agent_code: Option<String>,
+    #[serde(default)]
+    pub keyword_aliases: Vec<String>,
+    pub category: Option<crate::application::observability::TraceCategory>,
     #[serde(default)]
     pub sorts: Vec<TraceSort>,
     #[serde(default)]
@@ -80,7 +87,19 @@ pub async fn query_traces(
         let Json(q) = request.map_err(|_| ObservabilityError::InvalidQuery)?;
         validate_workspace(&state, q.workspace_code.as_deref())?;
         let service = state.agent_framework.observability().await?;
-        let query = TraceQuery {
+        let workspace = q.workspace_code.clone().unwrap_or_default();
+        let options_service = service.clone();
+        let mut agent_options = tokio::task::spawn_blocking(move || options_service.0.agent_options(&workspace))
+            .await.map_err(|_| ObservabilityError::Storage)??;
+        for option in &mut agent_options {
+            option.name = state.agent_management.trace_agent_name(q.workspace_code.as_deref().unwrap_or_default(), &option.code).unwrap_or_else(|| option.code.clone());
+        }
+        let keyword = q.keyword.unwrap_or_default().trim().to_lowercase();
+        let mut aliases = q.keyword_aliases;
+        if !keyword.is_empty() { aliases.extend(agent_options.iter().filter(|o| o.name.to_lowercase().contains(&keyword)).map(|o| o.code.clone())); }
+        let query = TraceQuery { filters: crate::application::observability::TraceFilters {
+            span_id: q.span_id, keyword, status:q.status.filter(|v| !v.is_empty()), agent_code:q.agent_code.filter(|v| !v.is_empty()), keyword_aliases:aliases,
+        }, category: q.category,
             sorts: q.sorts,
             sort_by: q.sort_by,
             sort_direction: q.sort_direction,
@@ -92,9 +111,15 @@ pub async fn query_traces(
         };
         let mut page = tokio::task::spawn_blocking(move || service.query(query))
             .await.map_err(|_| ObservabilityError::Storage)??;
+        let mut names = std::collections::BTreeMap::new();
         for trace in &mut page.records {
+            if matches!(q.category, Some(crate::application::observability::TraceCategory::Agent)) {
+                let key = (trace.workspace_code.clone(), trace.trigger.clone());
+                trace.trigger = names.entry(key).or_insert_with(|| state.agent_management.trace_agent_name(&trace.workspace_code, &trace.trigger).unwrap_or_else(|| trace.trigger.clone())).clone();
+            }
             attach_session_name(&state, trace);
         }
+        page.agent_options = agent_options;
         Ok(page)
     }
     .await;
@@ -120,6 +145,14 @@ pub async fn get_trace(
             .await?
             .detail(q.workspace_code.as_deref().unwrap_or_default(), &id)?;
         attach_session_name(&state, &mut detail.trace);
+        let mut names = std::collections::BTreeMap::new();
+        for span in &mut detail.spans {
+            if let Some(code) = span.attributes.get("tron.agent.code").cloned() {
+                let workspace = span.attributes.get("tron.workspace.code").cloned().unwrap_or_default();
+                let name = names.entry((workspace.clone(), code.clone())).or_insert_with(|| state.agent_management.trace_agent_name(&workspace, &code).unwrap_or(code));
+                span.attributes.insert("tron.agent.name".into(), name.clone());
+            }
+        }
         Ok(detail)
     }
     .await;
@@ -187,7 +220,7 @@ pub async fn get_metrics(
             .agent_framework
             .observability()
             .await?
-            .metrics(TraceQuery {
+            .metrics(TraceQuery { filters: Default::default(), category: None,
                 sorts: Vec::new(),
                 sort_by: TraceSortField::default(),
                 sort_direction: TraceSortDirection::default(),
@@ -352,10 +385,20 @@ pub async fn query_logs(
     .map_err(|e| ObservabilityApiError(e, auth.locale))
 }
 
+#[derive(Clone, Copy, Deserialize, utoipa::ToSchema)]
+enum BrowserSpanKind { Page, Resource, Request }
+
+fn ignored_trace_path(path: &str) -> bool {
+    path.starts_with("/api/v1/observability/")
+        || matches!(path, "/api/v1/health" | "/api/v1/ready" | "/api/v1/readiness" | "/health" | "/ready" | "/api/v1/profiles/events" | "/api/v1/system/skins/events")
+}
+
 /// Record completed application API requests without credentials, query strings or polling noise.
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserSpanRequest {
+    kind: BrowserSpanKind,
+    phase: Option<String>,
     trace_id: String,
     span_id: String,
     parent_span_id: Option<String>,
@@ -366,15 +409,24 @@ pub struct BrowserSpanRequest {
     status: u16,
 }
 
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserSpansRequest {
+    spans: Vec<BrowserSpanRequest>,
+}
+
 #[utoipa::path(post, path="/api/v1/observability/browser-spans", tag="Observability",
-    request_body=BrowserSpanRequest, responses((status=200,body=ApiResponse<EmptyData>),(status=400,body=ApiResponse<EmptyData>)))]
+    request_body=BrowserSpansRequest, responses((status=200,body=ApiResponse<EmptyData>),(status=400,body=ApiResponse<EmptyData>)))]
 pub async fn record_browser_span(
     State(state): State<AppState>,
     auth: RequestAuthContext,
-    request: Result<Json<BrowserSpanRequest>, axum::extract::rejection::JsonRejection>,
+    request: Result<Json<BrowserSpansRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Result<Json<ApiResponse<EmptyData>>, ObservabilityApiError> {
     let invalid = || ObservabilityApiError(ObservabilityError::InvalidQuery, auth.locale.clone());
-    let Json(q) = request.map_err(|_| invalid())?;
+    let Json(batch) = request.map_err(|_| invalid())?;
+    if batch.spans.is_empty() || batch.spans.len() > 100 { return Err(invalid()); }
+    let mut spans = Vec::with_capacity(batch.spans.len());
+    for q in batch.spans {
     let valid_id = |id: &str, len: usize| id.len() == len
         && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         && id.bytes().any(|b| b != b'0');
@@ -382,27 +434,39 @@ pub async fn record_browser_span(
         || q.parent_span_id.as_deref().is_some_and(|id| !valid_id(id, 16))
         || q.started_at <= 0 || q.ended_at < q.started_at
         || q.ended_at - q.started_at > 86_400_000
-        || q.path.len() > 2048 || !q.path.starts_with("/api/v1/")
+        || q.path.len() > 2048 || !q.path.starts_with('/') || q.path.starts_with("//")
+        || q.phase.as_ref().is_some_and(|phase| phase.len() > 64)
+        || (matches!(q.kind, BrowserSpanKind::Request) && !q.path.starts_with("/api/v1/"))
         || q.path.contains(['?', '#']) || q.method.len() > 16
         || q.method.parse::<axum::http::Method>().is_err() || q.status > 599 {
         return Err(invalid());
     }
-    let telemetry = state.agent_framework.telemetry().await
-        .map_err(|e| ObservabilityApiError(e, auth.locale.clone()))?;
-    let attributes = std::collections::BTreeMap::from([
+    if ignored_trace_path(&q.path) { continue; }
+    let (scope, name, span_kind) = match q.kind {
+        BrowserSpanKind::Page => ("tron.browser.page", format!("page {}", q.path), 1),
+        BrowserSpanKind::Resource => ("tron.browser.resource", format!("resource {}", q.path), 3),
+        BrowserSpanKind::Request => ("tron.browser.fetch", format!("{} {}", q.method, q.path), 3),
+    };
+    let mut attributes = std::collections::BTreeMap::from([
+        ("tron.trace.page".into(), "true".into()),
         ("service.name".into(), "tron-frontend".into()),
         ("http.request.method".into(), q.method.clone()),
         ("url.path".into(), q.path.clone()),
         ("http.response.status_code".into(), q.status.to_string()),
     ]);
-    telemetry.store.write_spans(vec![eliteforge_agent_core::TelemetrySpan {
+    if let Some(phase) = q.phase { attributes.insert("browser.phase".into(), phase); }
+    spans.push(eliteforge_agent_core::TelemetrySpan {
         trace_id: q.trace_id, span_id: q.span_id, parent_span_id: q.parent_span_id,
-        name: format!("{} {}", q.method, q.path), started_at: q.started_at, ended_at: q.ended_at,
-        status_code: if q.status == 0 || q.status >= 400 { 2 } else { 0 }, attributes,
-        data: serde_json::json!({"durationMs":q.ended_at-q.started_at,"span":{"kind":3},"scope":{"name":"tron.browser.fetch"}}),
+        name, started_at: q.started_at, ended_at: q.ended_at,
+        status_code: if (q.status == 0 && !matches!(q.kind, BrowserSpanKind::Resource)) || q.status >= 400 { 2 } else { 0 }, attributes,
+        data: serde_json::json!({"durationMs":q.ended_at-q.started_at,"span":{"kind":span_kind},"scope":{"name":scope}}),
         ..Default::default()
-    }]).await.map_err(|_| ObservabilityApiError(ObservabilityError::Storage, auth.locale))?;
-    Ok(Json(ApiResponse::success(EmptyData {})))
+    });
+    }
+    let telemetry = state.agent_framework.telemetry().await
+        .map_err(|e| ObservabilityApiError(e, auth.locale.clone()))?;
+    telemetry.store.write_spans(spans).await.map_err(|_| ObservabilityApiError(ObservabilityError::Storage, auth.locale))?;
+    Ok(Json(ApiResponse::protocol_success(EmptyData {})))
 }
 
 /// Accept W3C version 00 context only; malformed or zero IDs start a new trace.
@@ -438,8 +502,8 @@ pub async fn log_application_request(
     use opentelemetry::{KeyValue, trace::{FutureExt, TraceContextExt, Status}};
     use tracing::Instrument;
     let path = request.uri().path().to_owned();
-    if !path.starts_with("/api/v1/") || path == "/api/v1/observability/browser-spans" {
-        return next.run(request).await;
+    if !path.starts_with("/api/v1/") || ignored_trace_path(&path) {
+        return next.run(request).with_context(opentelemetry::Context::new()).await;
     }
     let method = request.method().to_string();
     let parent = request_trace_context(request.headers());
@@ -453,7 +517,16 @@ pub async fn log_application_request(
     let ids = context.span().span_context().clone();
     let log_span = tracing::info_span!("http.request", trace_id=%ids.trace_id(), span_id=%ids.span_id());
     let started = std::time::Instant::now();
-    let mut response = next.run(request).instrument(log_span).with_context(context.clone()).await;
+    let business = {
+        let _guard = context.clone().attach();
+        crate::app::telemetry::child_operation("tron.business.request", vec![
+            KeyValue::new("http.request.method", method.clone()),
+            KeyValue::new("url.path", path.clone()),
+        ])
+    };
+    let mut response = next.run(request).instrument(log_span).with_context(business.clone()).await;
+    if response.status().is_server_error() { business.span().set_status(Status::error("Business request failed")); }
+    business.span().end();
     let status = response.status().as_u16();
     context.span().set_attribute(KeyValue::new("http.response.status_code", i64::from(status)));
     if status >= 500 { context.span().set_status(Status::error("HTTP server error")); }

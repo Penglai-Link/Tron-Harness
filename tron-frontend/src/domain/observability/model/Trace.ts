@@ -1,4 +1,6 @@
 export interface TraceSummary {
+  trigger?: string;
+  rootSpanId?: string | null;
   workspaceCode: string;
   traceId: string;
   sessionCode: string;
@@ -33,6 +35,7 @@ export interface TraceSpan {
   links: { traceId: string; spanId: string }[];
 }
 export interface TracePage {
+  agentOptions?: { code: string; name: string }[];
   current: number;
   size: number;
   total: number;
@@ -44,6 +47,12 @@ export interface TraceDetail {
 }
 export type TraceSortField = "StartedAt" | "Duration" | "Spans" | "Tokens" | "Errors";
 export interface TraceQuery {
+  spanId?: string | null;
+  keyword?: string;
+  status?: string | null;
+  agentCode?: string | null;
+  keywordAliases?: string[];
+  category?: "Page" | "Agent";
   sorts?: { field: TraceSortField; direction: "Asc" | "Desc" }[];
   sortBy?: TraceSortField;
   sortDirection?: "Asc" | "Desc";

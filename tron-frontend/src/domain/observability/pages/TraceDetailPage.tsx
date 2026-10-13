@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { triggerDetail } from "../components/traceTrigger";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
@@ -10,6 +12,10 @@ export function TraceDetailPage() {
   const { t } = useTranslation("observability");
   const { traceId = "" } = useParams();
   const [params] = useSearchParams();
+  const [showFull, setShowFull] = useState(false);
+  const rootSpanId = params.get("rootSpanId");
+  const backParams = new URLSearchParams(params);
+  backParams.delete("rootSpanId");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const workspaceCode =
     (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
@@ -20,12 +26,15 @@ export function TraceDetailPage() {
         title={t("detail")}
         actions={
           <>
+            {rootSpanId && <Button variant="secondary" onClick={() => setShowFull((value) => !value)}>
+              {t(showFull ? "showTriggerTrace" : "showFullTrace")}
+            </Button>}
             <Button
               variant="secondary"
               nativeButton={false}
               render={
                 <Link
-                  to={`/settings/observability/traces${params.size ? `?${params}` : ""}`}
+                  to={`/settings/observability/traces${backParams.size ? `?${backParams}` : ""}`}
                 />
               }
             >
@@ -54,8 +63,8 @@ export function TraceDetailPage() {
         </div>
       ) : detail.data ? (
         <TraceInspector
-          key={`${workspaceCode}:${traceId}`}
-          detail={detail.data}
+          key={`${workspaceCode}:${traceId}:${showFull}:${rootSpanId}`}
+          detail={showFull ? detail.data : triggerDetail(detail.data, rootSpanId)}
         />
       ) : null}
     </>

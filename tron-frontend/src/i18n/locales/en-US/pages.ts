@@ -162,8 +162,14 @@ export const pages = {
   }
 },
   "notifications": {
+  "requestedAction": "Action needed", "resolution": "Resolution", "evidence": "Evidence",
+  "changes": {"Progress":"Progress","Completed":"Completed","NeedsDecision":"Decision needed","Blocked":"Blocked"},
   "title": "Notifications",
   "unreadCount": "Notifications, {{count}} unread",
+  "manage": "Message center",
+  "noUnread": "No unread notifications",
+  "loading": "Loading notifications…",
+  "openRelated": "Open related content",
   "filters": "Notification filters",
   "all": "All",
   "unread": "Unread",
@@ -5255,6 +5261,7 @@ export const pages = {
     authorizeNewAccount: "Authorize new account",
     authorizing: "Waiting for authorization…",
     cancelAuthorization: "Cancel authorization",
+    signingIn: "Signing in…",
     reauthorizationRequired:
       "This device authorization has expired. Sign in to PersonAI again.",
     reauthorize: "Sign in again",

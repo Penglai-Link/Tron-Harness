@@ -88,7 +88,7 @@ async fn set_pack_enabled(
     if !is_builtin {
         let root = state.agent_framework.pack_root().to_path_buf();
         let package = id.clone();
-        let installed = tokio::task::spawn_blocking(move || {
+        let installed = crate::app::telemetry::spawn_blocking_traced(move || {
             eliteforge_agent_capability_runtime::CapabilityPackManager::new(root).and_then(
                 |manager| {
                     manager

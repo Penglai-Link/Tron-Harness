@@ -1,8 +1,9 @@
+import { useSearchParams } from "react-router";
 import { Pencil, Trash2, ExternalLink, FilePlus2 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { DataTable } from "@/components/data-table";
-import { Field, SelectInput, TextInput, ToggleSwitch } from "@/components/forms";
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { ModalDialog } from "@/components/modal-dialog";
 import { SearchField } from "@/components/search-field";
@@ -36,6 +37,8 @@ interface MenuFormState {
   menuType: NavigationMenuType;
   nameZh: string;
   nameEn: string;
+  descriptionZh: string;
+  descriptionEn: string;
   pageCode: string;
   url: string;
   icon: string;
@@ -43,11 +46,11 @@ interface MenuFormState {
 }
 
 function emptyMenuForm(): MenuFormState {
-  return { menuCode: "", menuType: "Internal", nameZh: "", nameEn: "", pageCode: "", url: "", icon: "", enabled: true };
+  return { menuCode: "", menuType: "Internal", nameZh: "", nameEn: "", descriptionZh: "", descriptionEn: "", pageCode: "", url: "", icon: "", enabled: true };
 }
 
 function formFromMenu(menu: NavigationAdminMenu): MenuFormState {
-  return { menuCode: menu.menuCode, menuType: menu.menuType, nameZh: menu.translations["zh-CN"], nameEn: menu.translations["en-US"], pageCode: menu.pageCode ?? "", url: menu.url ?? "", icon: menu.icon ?? "", enabled: menu.enabled };
+  return { menuCode: menu.menuCode, menuType: menu.menuType, nameZh: menu.translations["zh-CN"], nameEn: menu.translations["en-US"], descriptionZh: menu.description["zh-CN"], descriptionEn: menu.description["en-US"], pageCode: menu.pageCode ?? "", url: menu.url ?? "", icon: menu.icon ?? "", enabled: menu.enabled };
 }
 
 function menuPayload(form: MenuFormState): NavigationMenuPayload {
@@ -55,7 +58,8 @@ function menuPayload(form: MenuFormState): NavigationMenuPayload {
     menuCode: form.menuCode.trim(),
     menuType: form.menuType,
     translations: { "zh-CN": form.nameZh.trim(), "en-US": form.nameEn.trim() },
-    pageCode: form.menuType === "Internal" ? form.pageCode.trim() || null : null,
+    description: { "zh-CN": form.descriptionZh.trim(), "en-US": form.descriptionEn.trim() },
+    pageCode: (form.menuType === "Internal" || form.menuType === "Widget") ? form.pageCode.trim() || null : null,
     url: form.menuType === "ExternalLink" ? form.url.trim() || null : null,
     icon: form.icon.trim() || null,
     enabled: form.enabled,
@@ -96,6 +100,9 @@ function IconPreview({ emptyLabel, iconName, invalidLabel, previewLabel }: IconP
 }
 
 export function NavigationMenusPage() {
+  const [searchParams] = useSearchParams();
+  const requestedMenuCode = searchParams.get("menuCode");
+  const openedMenuCode = useRef<string | null>(null);
   const text = useNavigationAdminText();
   const locale = useNavigationAdminLocale();
   const toast = useToast();
@@ -104,7 +111,7 @@ export function NavigationMenusPage() {
   const [total, setTotal] = useState(0);
   const [current, setCurrent] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(requestedMenuCode ?? "");
   const [source, setSource] = useState<MenuSourceFilter>("all");
   const [menuType, setMenuType] = useState<MenuTypeFilter>("all");
   const [enabled, setEnabled] = useState<EnabledFilter>("all");
@@ -116,6 +123,19 @@ export function NavigationMenusPage() {
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
   const [menuToDelete, setMenuToDelete] = useState<NavigationAdminMenu | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (requestedMenuCode) setKeyword(requestedMenuCode);
+  }, [requestedMenuCode]);
+  useEffect(() => {
+    if (!requestedMenuCode || openedMenuCode.current === requestedMenuCode) return;
+    const menu = records.find((item) => item.menuCode === requestedMenuCode);
+    if (menu) {
+      openedMenuCode.current = requestedMenuCode;
+      setEditingCode(menu.menuCode);
+      setEditor(formFromMenu(menu));
+    }
+  }, [records, requestedMenuCode]);
 
   useEffect(() => {
     if (!isApiMode) {
@@ -168,6 +188,10 @@ export function NavigationMenusPage() {
       toast.error(text("errors.pageCode", "内部页面必须填写 pageCode", "Internal pages require a pageCode"));
       return;
     }
+    if (editor.menuType === "Widget" && !editor.pageCode.trim()) {
+      toast.error(text("errors.widget", "请选择面板内容", "Select the widget content"));
+      return;
+    }
     if (editor.menuType === "ExternalLink" && !/^https?:\/\//i.test(editor.url.trim())) {
       toast.error(text("errors.url", "外部链接必须使用 http 或 https", "External links must use http or https"));
       return;
@@ -190,6 +214,7 @@ export function NavigationMenusPage() {
       setEditor(null);
       setEditingCode(null);
       setRefreshKey((value) => value + 1);
+      window.dispatchEvent(new Event("tron:navigation-updated"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : text("errors.saveMenu", "菜单保存失败", "Menu could not be saved"));
     } finally {
@@ -223,6 +248,7 @@ export function NavigationMenusPage() {
       const updated = await updateNavigationMenu(menu.menuCode, {
         menuType: menu.menuType,
         translations: menu.translations,
+        description: menu.description,
         pageCode: menu.pageCode,
         url: menu.url,
         icon: menu.icon,
@@ -231,6 +257,7 @@ export function NavigationMenusPage() {
       setRecords((items) => items.map((item) => item.menuCode === menu.menuCode ? updated : item));
       toast.success(text("messages.menuUpdated", "菜单已更新", "Menu updated"));
       setRefreshKey((value) => value + 1);
+      window.dispatchEvent(new Event("tron:navigation-updated"));
     } catch (error) {
       setRecords((items) => items.map((item) => item.menuCode === menu.menuCode ? menu : item));
       toast.error(error instanceof Error ? error.message : text("errors.updateMenu", "菜单状态更新失败", "Menu status could not be updated"));
@@ -247,10 +274,13 @@ export function NavigationMenusPage() {
         {editor ? (
           <form className="grid gap-4 lg:grid-cols-2" onSubmit={(event) => void saveMenu(event)}>
                 <Field label={text("fields.menuCode", "菜单编码", "Menu code")} required><TextInput value={editor.menuCode} disabled={Boolean(editingCode)} onChange={(event) => setEditor({ ...editor, menuCode: event.target.value })} /></Field>
-                <Field label={text("fields.menuType", "菜单类型", "Menu type")} required><SelectInput value={editor.menuType} disabled={editor.menuCode === "" ? false : records.find((menu) => menu.menuCode === editingCode)?.source === "BuiltIn"} onValueChange={(value) => setEditor({ ...editor, menuType: value as NavigationMenuType })}><SelectItem value="Group">{menuTypeLabel("Group", text)}</SelectItem><SelectItem value="Internal">{menuTypeLabel("Internal", text)}</SelectItem><SelectItem value="ExternalLink">{menuTypeLabel("ExternalLink", text)}</SelectItem></SelectInput></Field>
+                <Field label={text("fields.menuType", "菜单类型", "Menu type")} required><SelectInput value={editor.menuType} disabled={editor.menuCode === "" ? false : records.find((menu) => menu.menuCode === editingCode)?.source === "BuiltIn"} onValueChange={(value) => setEditor({ ...editor, menuType: value as NavigationMenuType, pageCode: "", url: "" })}><SelectItem value="Group">{menuTypeLabel("Group", text)}</SelectItem><SelectItem value="Internal">{menuTypeLabel("Internal", text)}</SelectItem><SelectItem value="ExternalLink">{menuTypeLabel("ExternalLink", text)}</SelectItem><SelectItem value="Widget">{menuTypeLabel("Widget", text)}</SelectItem></SelectInput></Field>
                 <Field label={text("fields.nameZh", "中文名称", "Chinese name")} required><TextInput value={editor.nameZh} onChange={(event) => setEditor({ ...editor, nameZh: event.target.value })} /></Field>
                 <Field label={text("fields.nameEn", "英文名称", "English name")} required><TextInput value={editor.nameEn} onChange={(event) => setEditor({ ...editor, nameEn: event.target.value })} /></Field>
+                <Field className="lg:col-span-2" label={text("fields.descriptionZh", "中文描述（选填）", "Chinese description (optional)")}><TextArea rows={3} value={editor.descriptionZh} onChange={(event) => setEditor({ ...editor, descriptionZh: event.target.value })} /></Field>
+                <Field className="lg:col-span-2" label={text("fields.descriptionEn", "英文描述（选填）", "English description (optional)")}><TextArea rows={3} value={editor.descriptionEn} onChange={(event) => setEditor({ ...editor, descriptionEn: event.target.value })} /></Field>
                 {editor.menuType === "Internal" ? <Field label={text("fields.pageCode", "页面编码", "Page code")} required><TextInput value={editor.pageCode} disabled={records.find((menu) => menu.menuCode === editingCode)?.source === "BuiltIn"} placeholder="agents.index" onChange={(event) => setEditor({ ...editor, pageCode: event.target.value })} /></Field> : null}
+                {editor.menuType === "Widget" ? <Field label={text("arrangement.widgetContent", "组件内容", "Widget content")} required><SelectInput value={editor.pageCode} disabled={records.find((menu) => menu.menuCode === editingCode)?.source === "BuiltIn"} onValueChange={(value) => { if (value) setEditor({ ...editor, pageCode: value }); }}><SelectItem value="chat.newSession">{text("arrangement.newSession", "新建会话", "New session")}</SelectItem><SelectItem value="chat.projects">{text("arrangement.projects", "项目列表", "Project list")}</SelectItem><SelectItem value="chat.recents">{text("arrangement.recents", "最近会话", "Recent sessions")}</SelectItem></SelectInput></Field> : null}
                 {editor.menuType === "ExternalLink" ? <Field label={text("fields.url", "外部 URL", "External URL")} required><TextInput type="url" value={editor.url} placeholder="https://example.com" onChange={(event) => setEditor({ ...editor, url: event.target.value })} /></Field> : null}
                 <Field className={editor.menuType === "Group" ? "lg:col-span-2" : undefined} label={<>{text("fields.icon", "图标", "Icon")}<InfoTooltip ariaLabel={text("aria.iconHint", "打开字段说明", "Open field description")}>{text("fields.iconHint", "支持 Lucide 全部图标名称，例如 Cat、cat 或 layout-dashboard。", "Use any Lucide icon name, for example Cat, cat, or layout-dashboard.")}</InfoTooltip><a aria-label={text("aria.iconWebsite", "打开 Lucide 图标官网", "Open Lucide Icons website")} className="inline-flex items-center text-[var(--color-on-surface-variant)] transition-colors hover:text-[var(--color-on-surface)]" href="https://lucide.dev/icons" rel="noreferrer" target="_blank" title={text("aria.iconWebsite", "打开 Lucide 图标官网", "Open Lucide Icons website")}><ExternalLink aria-hidden="true" size={14} /></a></>}>
                   <div className="flex items-center gap-2">
@@ -277,11 +307,11 @@ export function NavigationMenusPage() {
       <DataTable<NavigationAdminMenu>
         rows={records}
         rowKey={(row) => row.menuCode}
-        toolbar={<div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"><SearchField className="min-w-0" ariaLabel={text("aria.searchMenus", "搜索菜单", "Search menus")} placeholder={text("filters.searchMenus", "搜索编码或名称…", "Search code or name…")} value={keyword} onChange={(value) => { setKeyword(value); setCurrent(1); }} /><SelectInput className="h-9 w-full min-w-0" aria-label={text("aria.sourceFilter", "按来源筛选", "Filter by source")} value={source} onValueChange={(value) => { if (value) { setSource(value as MenuSourceFilter); setCurrent(1); } }}><SelectItem value="all">{text("filters.allSource", "全部来源", "All sources")}</SelectItem><SelectItem value="BuiltIn">{text("status.builtIn", "内置", "Built-in")}</SelectItem><SelectItem value="Custom">{text("status.custom", "自定义", "Custom")}</SelectItem></SelectInput><SelectInput className="h-9 w-full min-w-0" aria-label={text("aria.typeFilter", "按类型筛选", "Filter by type")} value={menuType} onValueChange={(value) => { if (value) { setMenuType(value as MenuTypeFilter); setCurrent(1); } }}><SelectItem value="all">{text("filters.allTypes", "全部类型", "All types")}</SelectItem><SelectItem value="Group">{menuTypeLabel("Group", text)}</SelectItem><SelectItem value="Internal">{menuTypeLabel("Internal", text)}</SelectItem><SelectItem value="ExternalLink">{menuTypeLabel("ExternalLink", text)}</SelectItem></SelectInput><SelectInput className="h-9 w-full min-w-0" aria-label={text("aria.enabledFilter", "按状态筛选", "Filter by status")} value={enabled} onValueChange={(value) => { if (value) { setEnabled(value as EnabledFilter); setCurrent(1); } }}><SelectItem value="all">{text("filters.all", "全部状态", "All statuses")}</SelectItem><SelectItem value="true">{text("status.enabled", "启用", "Enabled")}</SelectItem><SelectItem value="false">{text("status.disabled", "禁用", "Disabled")}</SelectItem></SelectInput></div>}
+        toolbar={<div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"><SearchField className="min-w-0" ariaLabel={text("aria.searchMenus", "搜索菜单", "Search menus")} placeholder={text("filters.searchMenus", "搜索编码或名称…", "Search code or name…")} value={keyword} onChange={(value) => { setKeyword(value); setCurrent(1); }} /><SelectInput className="h-9 w-full min-w-0" aria-label={text("aria.sourceFilter", "按来源筛选", "Filter by source")} value={source} onValueChange={(value) => { if (value) { setSource(value as MenuSourceFilter); setCurrent(1); } }}><SelectItem value="all">{text("filters.allSource", "全部来源", "All sources")}</SelectItem><SelectItem value="BuiltIn">{text("status.builtIn", "内置", "Built-in")}</SelectItem><SelectItem value="Custom">{text("status.custom", "自定义", "Custom")}</SelectItem></SelectInput><SelectInput className="h-9 w-full min-w-0" aria-label={text("aria.typeFilter", "按类型筛选", "Filter by type")} value={menuType} onValueChange={(value) => { if (value) { setMenuType(value as MenuTypeFilter); setCurrent(1); } }}><SelectItem value="all">{text("filters.allTypes", "全部类型", "All types")}</SelectItem><SelectItem value="Group">{menuTypeLabel("Group", text)}</SelectItem><SelectItem value="Internal">{menuTypeLabel("Internal", text)}</SelectItem><SelectItem value="ExternalLink">{menuTypeLabel("ExternalLink", text)}</SelectItem><SelectItem value="Widget">{menuTypeLabel("Widget", text)}</SelectItem></SelectInput><SelectInput className="h-9 w-full min-w-0" aria-label={text("aria.enabledFilter", "按状态筛选", "Filter by status")} value={enabled} onValueChange={(value) => { if (value) { setEnabled(value as EnabledFilter); setCurrent(1); } }}><SelectItem value="all">{text("filters.all", "全部状态", "All statuses")}</SelectItem><SelectItem value="true">{text("status.enabled", "启用", "Enabled")}</SelectItem><SelectItem value="false">{text("status.disabled", "禁用", "Disabled")}</SelectItem></SelectInput></div>}
         emptyState={loading ? text("loadingMenus", "正在加载菜单…", "Loading menus…") : text("menus.empty", "暂无菜单定义。", "No menu definitions found.")}
         pagination={<TablePagination page={current} pageCount={pageCount} pageSize={pageSize} totalItems={total} startItem={startItem} endItem={endItem} itemLabel={text("menus.itemLabel", "个菜单", "menus")} onPageChange={setCurrent} onPageSizeChange={(size) => { setPageSize(size); setCurrent(1); }} />}
         columns={[
-          { id: "menu", header: text("columns.menu", "菜单", "Menu"), render: (row) => <div><div className="flex items-center gap-2 font-medium">{row.menuType === "ExternalLink" ? <ExternalLink size={14} aria-hidden="true" /> : row.menuType === "Group" ? <FilePlus2 size={14} aria-hidden="true" /> : null}{row.translations[locale]}</div><div className="font-mono text-xs text-[var(--color-on-surface-variant)]">{row.menuCode}</div></div> },
+          { id: "menu", header: text("columns.menu", "菜单", "Menu"), render: (row) => <div><div className="flex items-center gap-2 font-medium">{row.menuType === "ExternalLink" ? <ExternalLink size={14} aria-hidden="true" /> : row.menuType === "Group" ? <FilePlus2 size={14} aria-hidden="true" /> : null}{row.translations[locale]}</div><div className="font-mono text-xs text-[var(--color-on-surface-variant)]">{row.menuCode}</div>{row.description[locale] ? <p className="mt-1 max-w-sm text-xs text-[var(--color-on-surface-variant)]">{row.description[locale]}</p> : null}</div> },
           { id: "type", header: text("columns.type", "类型", "Type"), render: (row) => menuTypeLabel(row.menuType, text) },
           { id: "source", header: text("columns.source", "来源", "Source"), render: (row) => <Badge variant={row.source === "BuiltIn" ? "info" : "default"}>{row.source === "BuiltIn" ? text("status.builtIn", "内置", "Built-in") : text("status.custom", "自定义", "Custom")}</Badge> },
           { id: "target", header: text("columns.target", "目标", "Target"), render: (row) => <span className="max-w-52 truncate font-mono text-xs">{row.pageCode ?? row.url ?? "—"}</span> },

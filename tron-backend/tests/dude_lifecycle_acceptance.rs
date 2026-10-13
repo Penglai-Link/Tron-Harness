@@ -45,7 +45,7 @@ fn finish(
     event: &DudeEvent,
     status: DudeEventStatus,
     now: i64,
-    notify: bool,
+    _notify: bool,
 ) {
     repo.finish(
         &event.event_id,
@@ -53,7 +53,6 @@ fn finish(
         status,
         "result",
         now,
-        notify,
     )
     .unwrap();
 }
@@ -151,17 +150,7 @@ fn awaiting_input_blocks_automatic_resume_but_allows_human_and_parallel_work() {
         .unwrap();
     let automatic = repo.claim(106, 1000).unwrap().unwrap();
     assert_eq!(automatic.event_id, "automatic");
-    let notice = repo
-        .notifications()
-        .unwrap()
-        .into_iter()
-        .find(|n| n.dedup_key == "event:question:AwaitingInput")
-        .unwrap();
-    assert_eq!(notice.resolved_at, Some(105));
-    assert_eq!(
-        notice.read_at, None,
-        "resolving work must not mark its notification read"
-    );
+    assert!(repo.notifications().unwrap().is_empty());
 }
 
 #[test]
@@ -189,8 +178,7 @@ fn quiet_success_and_stale_reminder_finish_without_notifications() {
     .unwrap();
     let failed = repo.claim(102, 1000).unwrap().unwrap();
     finish(&mut repo, &failed, DudeEventStatus::Failed, 103, true);
-    assert_eq!(repo.notifications().unwrap().len(), 1);
-    assert_eq!(repo.notifications().unwrap()[0].category, "Failed");
+    assert!(repo.notifications().unwrap().is_empty());
 }
 
 #[test]

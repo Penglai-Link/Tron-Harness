@@ -27,7 +27,7 @@ fn visible_item(item: NavigationTreeItem, locale: &str) -> Option<RuntimeMenu> {
         .into_iter()
         .filter_map(|child| visible_item(child, locale))
         .collect::<Vec<_>>();
-    if item.menu.menu_type == MenuType::Group && children.is_empty() {
+    if item.menu.menu_type == MenuType::Group && children.is_empty() && item.menu.menu_code != "EXPLORE_MORE" {
         return None;
     }
     Some(RuntimeMenu {

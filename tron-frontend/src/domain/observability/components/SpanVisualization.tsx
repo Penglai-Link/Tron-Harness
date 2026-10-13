@@ -3,17 +3,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
-import type { TraceDetail } from "../model/Trace";
+import type { TraceDetail, TraceSpan } from "../model/Trace";
 import { formatTraceDuration } from "./traceFormat";
-import { spanGraph } from "./spanGraph";
+
 
 export function SpanVisualization({
   detail,
+  rows,
   mode,
   selected,
   onSelect,
 }: {
   detail: TraceDetail;
+  rows: { span: TraceSpan; depth: number }[];
   mode: "waterfall" | "topology";
   selected: string;
   onSelect: (id: string) => void;
@@ -23,7 +25,11 @@ export function SpanVisualization({
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onSelect);
   callback.current = onSelect;
-  const data = useMemo(() => spanGraph(detail.spans), [detail.spans]);
+  const data = useMemo(() => {
+    const ids = new Set(rows.map(({ span }) => span.spanId));
+    return { rows, edges: rows.flatMap(({ span }) => span.parentSpanId && ids.has(span.parentSpanId)
+      ? [{ id: `parent:${span.spanId}`, source: span.parentSpanId, target: span.spanId }] : []) };
+  }, [rows]);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -50,6 +56,7 @@ export function SpanVisualization({
             Math.max(0, span.durationMs),
           duration: formatTraceDuration(span.durationMs, currentLocale),
         }));
+        const labels = new Map(rows.map((row) => [row.spanId, row.label]));
         chart.options({
           type: "interval",
           data: rows,
@@ -57,7 +64,7 @@ export function SpanVisualization({
           encode: { x: "spanId", y: "offset", y1: "end", color: "status" },
           scale: {
             x: { domain: rows.map((row) => row.spanId), padding: 0.4 },
-            y: { nice: true },
+            y: { domain: [0, Math.max(1, detail.trace.durationMs)], nice: true },
             color: {
               domain: ["Error", "Completed", "Running", "Unknown"],
               range: ["#d04444", "#16876b", "#3478ce", "#8b8492"],
@@ -67,7 +74,7 @@ export function SpanVisualization({
             x: {
               title: false,
               labelFormatter: (id: string) =>
-                rows.find((row) => row.spanId === id)?.label ?? id,
+                labels.get(id) ?? id,
               labelAutoEllipsis: true,
             },
             y: {
@@ -167,7 +174,7 @@ export function SpanVisualization({
       disposed = true;
       destroy?.();
     };
-  }, [data, detail.trace.startedAt, mode, currentLocale, t, attempt]);
+  }, [data, detail.trace.startedAt, detail.trace.durationMs, mode, currentLocale, t, attempt]);
   return (
     <div className="space-y-3">
       <p className="text-xs text-[var(--color-on-surface-variant)]">

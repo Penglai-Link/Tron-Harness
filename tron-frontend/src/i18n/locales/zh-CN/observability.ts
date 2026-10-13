@@ -1,4 +1,22 @@
 export const observability = {
+  keyword: "关键词",
+  keywordPlaceholder: "触发点、路径、编码",
+  allStates: "全部状态",
+  allAgents: "全部智能体 / Dude",
+  triggerHelpLabel: "触发点说明",
+  triggerHelp: "触发点是本次调用链的业务入口。页面链路以对话、应用管理、文件资源等页面为入口；Agent 链路以一次 Agent 或 Dude 运行为入口。同一触发点可以产生多次独立链路。点击名称查看该入口及其下游调用，在详情中可切换查看完整 Trace。",
+  sessionHelpLabel: "会话说明",
+  sessionHelp: "这里指 Agent 会话，不是浏览器会话。对话及其他携带会话上下文的 Agent/Dude 调用会显示会话；普通页面和资源操作通常没有会话，显示 —。",
+
+  trigger: "触发点",
+  chatTrigger: "对话",
+  appsTrigger: "应用管理",
+  filesTrigger: "文件资源",
+  showFullTrace: "查看完整链路",
+  showTriggerTrace: "回到当前触发点",
+
+  pageTraces: "页面链路",
+  agentTraces: "Agent 链路",
   logView: "日志视图",
   continuousLogs: "连续日志",
   continuousLogsHelp: "按写入顺序从早到晚展示完整日志，向上滚动时暂停跟随",
@@ -97,6 +115,9 @@ export const observability = {
   detailView: "链路详情展示方式",
   backToTraces: "返回链路列表",
   topology: "调用拓扑图",
+  spanList: "Span 列表",
+  searchSpans: "搜索操作、模型、工具或 Span ID",
+  spanPagingHelp: "表格和图形只渲染当前页；搜索覆盖全部 Span。瀑布图保持整条链路的时间刻度，拓扑图仅连接当前页内的父子节点，完整父节点 ID 可在详情中查看。",
   topologyHelp: "箭头表示 Span 的父子调用方向；缺失父节点的 Span 单独展示。拖动画布或滚轮缩放，点击节点查看详情。",
 
   copy: "复制",
@@ -165,6 +186,7 @@ export const observability = {
   empty: "暂无数据",
   loadFailed: "链路加载失败",
   chooseWorkspace: "请选择工作区",
+  invalidSpanId: "Span ID 必须是 16 位非全零的十六进制字符",
   invalidTraceId: "Trace ID 必须是 32 位十六进制字符",
   pageHelp:
     "按会话编码或完整 Trace ID 筛选，点击链路查看 Span 和指标。仅采集接入后的运行，不补造历史数据。列表每 5 秒刷新。链路和指标由 OTLP Collector 接收。链路保留 15 天或最多 50,000 条已结束链路，任一条件触发时整条清理；运行中的链路不清理。指标保留 5 天，不限制条数。",

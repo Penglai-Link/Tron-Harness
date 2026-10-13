@@ -39,3 +39,5 @@ perf.data.old
 
 # Integrated frontend build output
 tron-backend/resources/frontend/
+logs/
+skins/

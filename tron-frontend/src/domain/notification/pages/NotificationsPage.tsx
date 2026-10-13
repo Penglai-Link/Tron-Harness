@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
-import { Archive, LoaderCircle, MailCheck, MailOpen, RotateCw, Trash2 } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router";
+import { Archive, ExternalLink, LoaderCircle, MailCheck, MailOpen, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useTabVisibility } from "@/components/editable-tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   listNotifications,
   notificationQueryKey,
@@ -21,12 +22,14 @@ export function NotificationsPage() {
   const { t, i18n } = useTranslation("pages");
   const client = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const active = useTabVisibility();
   const [filter, setFilter] = useState<"all" | "unread" | "read" | "archived">("unread");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PlatformNotification | "all" | null>(null);
   const [deletePending, setDeletePending] = useState(false);
+  const [detailReadId, setDetailReadId] = useState<string | null>(null);
   const query = useQuery({
     queryKey: notificationQueryKey,
     queryFn: ({ signal }) => listNotifications(signal),
@@ -81,15 +84,25 @@ export function NotificationsPage() {
       setDeletePending(false);
     }
   }
-  async function openNotification(item: PlatformNotification, target: string) {
-    if (item.archivedAt === null && item.readAt === null) await change(item.id, true, false, `read:${item.id}`);
-    navigate(target);
-  }
   const records = (query.data ?? []).filter((item) =>
     filter === "archived"
       ? item.archivedAt !== null
       : item.archivedAt === null && (filter === "all" || (filter === "unread" ? item.readAt === null : item.readAt !== null))
   );
+  const selectedNotificationId = searchParams.get("notification");
+  const selectedNotification = selectedNotificationId
+    ? (query.data ?? []).find((item) => item.id === selectedNotificationId) ?? null
+    : null;
+  useEffect(() => {
+    if (!active || !selectedNotification || selectedNotification.archivedAt !== null || selectedNotification.readAt !== null || detailReadId === selectedNotification.id) return;
+    setDetailReadId(selectedNotification.id);
+    void change(selectedNotification.id, true, false, `read:${selectedNotification.id}`);
+  }, [active, detailReadId, selectedNotification]);
+  function closeDetails() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("notification");
+    setSearchParams(next, { replace: true });
+  }
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -152,20 +165,35 @@ export function NotificationsPage() {
       ) : null}
       <div className="divide-y divide-[var(--color-outline-variant)]">
         {records.map((item) => {
-          const target = notificationTarget(item);
+          const changeKind = typeof item.target.changeKind === "string" ? item.target.changeKind : "";
+          const requestedAction = typeof item.target.requestedAction === "string" ? item.target.requestedAction : "";
+          const resolution = typeof item.target.resolution === "string" ? item.target.resolution : "";
+          const evidence = Array.isArray(item.target.evidence) ? item.target.evidence.filter((value): value is string => typeof value === "string") : [];
           return (
             <article
               key={item.id}
-              className={`flex flex-wrap items-start gap-3 py-4 ${target ? "cursor-pointer" : ""}`}
-              onClick={target ? () => void openNotification(item, target) : undefined}
-              onKeyDown={target ? (event) => { if (event.target === event.currentTarget && event.key === "Enter") { event.preventDefault(); void openNotification(item, target); } } : undefined}
-              role={target ? "link" : undefined}
-              tabIndex={target ? 0 : undefined}
-              aria-label={target ? item.title : undefined}
+              className="flex cursor-pointer flex-wrap items-start gap-3 py-4"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.set("notification", item.id);
+                setSearchParams(next);
+              }}
+              onKeyDown={(event) => {
+                if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  const next = new URLSearchParams(searchParams);
+                  next.set("notification", item.id);
+                  setSearchParams(next);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={item.title}
             >
               <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="break-words font-medium">{item.title}</h2>
+                  {["Progress", "Completed", "NeedsDecision", "Blocked"].includes(changeKind) ? <Badge variant="outline">{t(`notifications.changes.${changeKind}`)}</Badge> : null}
                   {item.readAt === null ? (
                     <Badge variant="secondary">
                       {t("notifications.unread")}
@@ -180,6 +208,9 @@ export function NotificationsPage() {
                 <p className="mt-1 whitespace-pre-wrap break-words text-sm">
                   {item.body}
                 </p>
+                {requestedAction && item.resolvedAt === null ? <p className="mt-2 whitespace-pre-wrap break-words text-sm"><span className="font-medium">{t("notifications.requestedAction")}：</span>{requestedAction}</p> : null}
+                {resolution ? <p className="mt-2 whitespace-pre-wrap break-words text-sm text-[var(--color-on-surface-variant)]"><span className="font-medium">{t("notifications.resolution")}：</span>{resolution}</p> : null}
+                {evidence.length ? <details className="mt-2 text-xs text-[var(--color-on-surface-variant)]" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><summary className="cursor-pointer">{t("notifications.evidence")}</summary><ul className="mt-1 list-inside list-disc space-y-1">{evidence.map((entry) => <li key={entry} className="break-all">{entry}</li>)}</ul></details> : null}
                 <p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">
                   {item.dudeCode ?? t("notifications.platform")} ·{" "}
                   {new Intl.DateTimeFormat(i18n.language, {
@@ -255,6 +286,25 @@ export function NotificationsPage() {
           {t("notifications.empty")}
         </p>
       ) : null}
+      <Dialog open={Boolean(selectedNotificationId)} onOpenChange={(open) => { if (!open) closeDetails(); }}>
+        {selectedNotification ? <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl" closeLabel={t("dude.close")}>
+          <DialogHeader>
+            <DialogTitle>{selectedNotification.title}</DialogTitle>
+            <DialogDescription>{selectedNotification.dudeCode ?? t("notifications.platform")} · {new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }).format(selectedNotification.createdAt)}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="whitespace-pre-wrap break-words">{selectedNotification.body}</p>
+            {typeof selectedNotification.target.changeKind === "string" ? <p><Badge variant="outline">{t(`notifications.changes.${selectedNotification.target.changeKind}`)}</Badge></p> : null}
+            {typeof selectedNotification.target.requestedAction === "string" ? <p className="whitespace-pre-wrap break-words"><span className="font-medium">{t("notifications.requestedAction")}：</span>{selectedNotification.target.requestedAction}</p> : null}
+            {typeof selectedNotification.target.resolution === "string" ? <p className="whitespace-pre-wrap break-words"><span className="font-medium">{t("notifications.resolution")}：</span>{selectedNotification.target.resolution}</p> : null}
+            {Array.isArray(selectedNotification.target.evidence) && selectedNotification.target.evidence.some((value) => typeof value === "string") ? <div><p className="font-medium">{t("notifications.evidence")}</p><ul className="mt-1 list-inside list-disc space-y-1 text-[var(--color-on-surface-variant)]">{selectedNotification.target.evidence.filter((value): value is string => typeof value === "string").map((entry) => <li key={entry} className="break-all">{entry}</li>)}</ul></div> : null}
+          </div>
+          <DialogFooter>
+            {notificationTarget(selectedNotification) ? <Button variant="outline" onClick={() => navigate(notificationTarget(selectedNotification)!)}><ExternalLink aria-hidden="true" />{t("notifications.openRelated")}</Button> : null}
+            <Button onClick={closeDetails}>{t("dude.close")}</Button>
+          </DialogFooter>
+        </DialogContent> : null}
+      </Dialog>
       <ConfirmDialog
         open={deleteTarget !== null}
         title={t(deleteTarget === "all" ? "notifications.deleteAllTitle" : "notifications.deleteTitle")}

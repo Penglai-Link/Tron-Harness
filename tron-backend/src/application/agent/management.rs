@@ -8,6 +8,7 @@ mod platform_runtime;
 mod system_agent_profiles;
 mod system_agents;
 mod tool_permissions;
+mod tool_metadata;
 mod workspace_grants;
 
 use std::{
@@ -304,6 +305,7 @@ struct SupportedSystemAgentDefinition {
 #[derive(Clone)]
 pub struct AgentManagementService {
     repository: Arc<Mutex<Box<dyn AgentManagementRepository>>>,
+    tool_metadata: Arc<Mutex<tool_metadata::ToolMetadataCache>>,
     mcp: Arc<std::sync::OnceLock<crate::application::mcp::McpService>>,
     capabilities: Arc<std::sync::OnceLock<crate::application::capability::CapabilityResources>>,
     workspaces: WorkspaceService,
@@ -334,6 +336,7 @@ impl AgentManagementService {
     ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
+            tool_metadata: Default::default(),
             workspaces,
             supported_agents,
             probe,
@@ -358,7 +361,7 @@ impl AgentManagementService {
         locale: &str,
     ) -> Vec<ToolCatalogRecord> {
         let mut records = BusinessToolCatalog::list_tools(domain_code, search, locale);
-        if let Ok(dynamic) = self.repository().list_discovered_tools() {
+        if let Ok(dynamic) = self.cached_discovered_tools() {
             records.extend(dynamic.into_iter().filter(|tool| {
                 domain_code.is_none_or(|domain| tool.domain_code == domain)
                     && search.is_none_or(|query| {

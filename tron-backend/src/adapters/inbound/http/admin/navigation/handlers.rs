@@ -116,12 +116,10 @@ async fn create_domain(
         return response;
     }
     let command = CreateDomainCommand {
-        domain_code: request.domain_code,
         name: request_to_localized(request.name),
         description: request_to_localized(request.description),
         enabled: request.enabled,
         is_default: request.is_default,
-        position: request.position,
     };
     match state.navigation.create_domain(command) {
         Ok(item) => Json(ApiResponse::protocol_success(domain_vo(item))).into_response(),
@@ -210,6 +208,7 @@ async fn create_menu(
         menu_code: request.menu_code,
         menu_type: request.menu_type.into(),
         translations: request_to_localized(request.translations),
+        description: request_to_localized(request.description),
         page_code: request.page_code,
         url: request.url,
         icon: request.icon,
@@ -247,6 +246,7 @@ async fn update_menu(
     let command = UpdateMenuCommand {
         menu_type: request.menu_type.into(),
         translations: request_to_localized(request.translations),
+        description: request_to_localized(request.description),
         page_code: request.page_code,
         url: request.url,
         icon: request.icon,
@@ -445,6 +445,7 @@ fn menu_vo(menu: NavigationMenu) -> MenuVo {
         source: source_name(menu.source).into(),
         menu_type: menu_type_name(menu.menu_type).into(),
         translations: localized_vo(menu.translations),
+        description: localized_vo(menu.description),
         page_code: menu.page_code,
         url: menu.url,
         icon: menu.icon,
@@ -460,6 +461,7 @@ fn tree_item_vo(item: NavigationTreeItem) -> MenuTreeItemVo {
         source: source_name(item.menu.source).into(),
         menu_type: menu_type_name(item.menu.menu_type).into(),
         translations: localized_vo(item.menu.translations),
+        description: localized_vo(item.menu.description),
         page_code: item.menu.page_code,
         url: item.menu.url,
         icon: item.menu.icon,
@@ -488,7 +490,6 @@ fn source_name(source: MenuSource) -> &'static str {
 fn menu_tree_kind_name(kind: NavigationMenuTreeKind) -> &'static str {
     match kind {
         NavigationMenuTreeKind::Domain => "Domain",
-        NavigationMenuTreeKind::Panel => "Panel",
     }
 }
 

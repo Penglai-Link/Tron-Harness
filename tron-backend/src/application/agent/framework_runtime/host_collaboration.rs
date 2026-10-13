@@ -265,10 +265,14 @@ impl Runtime {
             "agentCode": code, "model": model, "systemModelId": system_model,
         }))
         .map_err(failure)?;
-        command.supports_user_input_requests = caller_context
-            .collaboration_owner
-            .as_ref()
-            .is_some_and(|owner| owner.kind == "DUDE");
+        // Synchronous agent_spawn has no durable interaction continuation. Escalate
+        // missing facts in its result; only independent Threads may await input.
+        command.supports_user_input_requests =
+            !(matches!(limits, ExecutionLimits::AgentDefinition) && sender.is_none())
+                && caller_context
+                    .collaboration_owner
+                    .as_ref()
+                    .is_some_and(|owner| owner.kind == "DUDE");
         command.run_code = request
             .resume
             .as_ref()
@@ -304,6 +308,16 @@ impl Runtime {
         } else {
             context.messages.pop();
             context.messages.push(current_input);
+        }
+        if matches!(limits, ExecutionLimits::AgentDefinition) && sender.is_none() {
+            let guidance = crate::domain::agent::AgentMessage::system(
+                "This is a synchronous delegated agent_spawn task. Return a bounded result or the precise missing facts to your caller. Do not ask the user directly, close the owning Dude's work, or publish notifications. Work needing user decisions or durable continuation belongs in thread_create.",
+            );
+            context.messages.push(guidance.clone());
+            if let Some(memory) = &mut context.short_term_memory {
+                memory.prompt_prefix.push(guidance);
+                memory.prompt_prefix_sources.push(None);
+            }
         }
         authorize_tools(&host, context);
         let agent = host

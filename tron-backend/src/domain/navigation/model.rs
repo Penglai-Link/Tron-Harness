@@ -6,9 +6,6 @@ pub const ADVANCED_DOMAIN_CODE: &str = "ADVANCED";
 pub const ZH_CN: &str = "zh-CN";
 pub const EN_US: &str = "en-US";
 
-/// A built-in menu tree rendered by the chat sidebar rather than the primary navigation.
-pub const CHAT_PANEL_MENU_TREE_CODE: &str = "CHAT_PANEL";
-
 /// Widget menu codes are stored in the `page_code` column of a `Widget` menu.
 pub const WIDGET_CHAT_NEW_SESSION: &str = "chat.newSession";
 pub const WIDGET_CHAT_PROJECTS: &str = "chat.projects";
@@ -124,21 +121,18 @@ pub struct NavigationDomain {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NavigationMenuTreeKind {
     Domain,
-    Panel,
 }
 
 impl NavigationMenuTreeKind {
     pub fn as_storage(self) -> &'static str {
         match self {
             Self::Domain => "Domain",
-            Self::Panel => "Panel",
         }
     }
 
     pub fn from_storage(value: &str) -> Result<Self, NavigationError> {
         match value {
             "Domain" => Ok(Self::Domain),
-            "Panel" => Ok(Self::Panel),
             _ => Err(NavigationError::StorageFailure),
         }
     }
@@ -164,6 +158,7 @@ pub struct NavigationMenu {
     pub source: MenuSource,
     pub menu_type: MenuType,
     pub translations: LocalizedText,
+    pub description: LocalizedText,
     pub page_code: Option<String>,
     pub url: Option<String>,
     pub icon: Option<String>,
@@ -313,7 +308,7 @@ pub fn validate_menu_target(
         MenuType::ExternalLink if page_code.is_none() && url.is_some_and(is_http_url) => Ok(()),
         MenuType::ExternalLink => Err(NavigationError::InvalidExternalUrl),
         MenuType::Widget
-            if page_code.is_some_and(|value| !value.trim().is_empty()) && url.is_none() =>
+            if page_code.is_some_and(|value| matches!(value, WIDGET_CHAT_NEW_SESSION | WIDGET_CHAT_PROJECTS | WIDGET_CHAT_RECENTS)) && url.is_none() =>
         {
             Ok(())
         }

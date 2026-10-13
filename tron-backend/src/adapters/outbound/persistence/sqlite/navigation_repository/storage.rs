@@ -65,7 +65,8 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
                         (SELECT description FROM navigation_menu_tree_translations WHERE tree_id = t.id AND locale = 'en-US')
                     )
              FROM navigation_menu_trees t
-             ORDER BY CASE t.tree_type WHEN 'Domain' THEN 0 ELSE 1 END, t.tree_code ASC",
+             JOIN navigation_domains d ON d.id = t.domain_id
+             ORDER BY d.position ASC, t.tree_code ASC",
         ).map_err(storage_error)?;
         statement
             .query_map([], |row| {
@@ -97,7 +98,8 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
         let mut statement = self.connection.prepare(
             "SELECT id, menu_code, source, menu_type, page_code, url, icon, enabled, created_at, updated_at,
                     (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'zh-CN'),
-                    (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'en-US')
+                    (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'en-US'),
+                    m.description_zh_cn, m.description_en_us
              FROM navigation_menus m
              ORDER BY menu_code ASC",
         ).map_err(storage_error)?;
@@ -120,6 +122,10 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
                         zh_cn: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
                         en_us: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
                     },
+                    description: LocalizedText {
+                        zh_cn: row.get(12)?,
+                        en_us: row.get(13)?,
+                    },
                 })
             })
             .map_err(storage_error)?
@@ -132,7 +138,8 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
             "SELECT i.id, i.position, i.child_display, pm.menu_code,
                     m.id, m.menu_code, m.source, m.menu_type, m.page_code, m.url, m.icon, m.enabled, m.created_at, m.updated_at,
                     (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'zh-CN'),
-                    (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'en-US')
+                    (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'en-US'),
+                    m.description_zh_cn, m.description_en_us
              FROM navigation_menu_tree_items i
              JOIN navigation_menu_trees t ON t.id = i.tree_id
              JOIN navigation_menus m ON m.id = i.menu_id
@@ -167,6 +174,10 @@ impl<'a> SqliteNavigationRepositorySql<'a> {
                         translations: LocalizedText {
                             zh_cn: row.get::<_, Option<String>>(14)?.unwrap_or_default(),
                             en_us: row.get::<_, Option<String>>(15)?.unwrap_or_default(),
+                        },
+                        description: LocalizedText {
+                            zh_cn: row.get(16)?,
+                            en_us: row.get(17)?,
                         },
                     },
                     children: Vec::new(),

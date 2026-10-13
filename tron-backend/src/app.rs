@@ -164,6 +164,7 @@ impl AppState {
         .with_short_term_memory(self.short_term_memory.clone())
         .with_prompt_service(self.prompts.clone())
         .with_platform_scope()
+        .with_dude_work_context(self.dudes.clone())
     }
     pub fn new(config: AppConfig) -> Result<Self, AppBootstrapError> {
         Self::new_with_id_provider(config, Arc::new(SnowflakedSnowflakeIdProvider::default()))

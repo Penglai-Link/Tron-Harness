@@ -4,6 +4,8 @@ use std::{collections::BTreeMap, sync::Arc};
 #[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceSummary {
+    pub trigger: String,
+    pub root_span_id: Option<String>,
     pub workspace_code: String,
     pub trace_id: String,
     pub session_code: String,
@@ -52,6 +54,7 @@ pub struct SpanLink {
 #[derive(Clone, Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TracePage {
+    pub agent_options: Vec<TraceAgentOption>,
     pub current: usize,
     pub size: usize,
     pub total: usize,
@@ -83,8 +86,24 @@ pub struct TraceSort {
     pub field: TraceSortField,
     pub direction: TraceSortDirection,
 }
+#[derive(Clone, Copy, Debug, Deserialize, utoipa::ToSchema)]
+pub enum TraceCategory { Page, Agent }
+
+#[derive(Clone, Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TraceAgentOption { pub code: String, pub name: String }
+#[derive(Clone, Debug, Default)]
+pub struct TraceFilters {
+    pub span_id: Option<String>,
+    pub keyword: String,
+    pub status: Option<String>,
+    pub agent_code: Option<String>,
+    pub keyword_aliases: Vec<String>,
+}
 #[derive(Clone, Debug)]
 pub struct TraceQuery {
+    pub filters: TraceFilters,
+    pub category: Option<TraceCategory>,
     pub sorts: Vec<TraceSort>,
     pub sort_by: TraceSortField,
     pub sort_direction: TraceSortDirection,
@@ -127,6 +146,7 @@ pub struct TraceMetrics {
     pub p95_duration_ms: f64,
 }
 pub trait TraceRepository: Send + Sync {
+    fn agent_options(&self, _workspace: &str) -> Result<Vec<TraceAgentOption>, ObservabilityError> { Ok(Vec::new()) }
     fn metrics(&self, query: &TraceQuery) -> Result<TraceMetrics, ObservabilityError>;
     fn query(&self, query: &TraceQuery) -> Result<TracePage, ObservabilityError>;
     fn detail(&self, workspace: &str, trace: &str) -> Result<TraceDetail, ObservabilityError>;
@@ -135,6 +155,16 @@ pub trait TraceRepository: Send + Sync {
 pub struct ObservabilityService(pub Arc<dyn super::ObservabilityRepository>);
 impl ObservabilityService {
     pub fn query(&self, mut query: TraceQuery) -> Result<TracePage, ObservabilityError> {
+        query.filters.span_id = query.filters.span_id.map(|id| id.trim().to_ascii_lowercase()).filter(|id| !id.is_empty());
+        if query.filters.span_id.as_ref().is_some_and(|id| id.len() != 16 || !id.bytes().all(|b| b.is_ascii_hexdigit()) || id.bytes().all(|b| b == b'0')) {
+            return Err(ObservabilityError::InvalidQuery);
+        }
+        query.filters.keyword = query.filters.keyword.trim().to_lowercase();
+        if query.filters.keyword.len() > 256 || query.filters.keyword_aliases.len() > 500
+            || query.filters.agent_code.as_ref().is_some_and(|v| v.len() > 256)
+            || query.filters.status.as_ref().is_some_and(|v| !["Running", "Completed", "Error", "Cancelled", "Unknown", "Waiting", "Interrupted"].contains(&v.as_str())) {
+            return Err(ObservabilityError::InvalidQuery);
+        }
         query.trace_id = query
             .trace_id
             .map(|id| id.trim().to_ascii_lowercase())

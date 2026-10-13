@@ -162,8 +162,14 @@ export const pages = {
   }
 },
   "notifications": {
+  "requestedAction": "需要你处理", "resolution": "解决说明", "evidence": "变化依据",
+  "changes": {"Progress":"工作进展","Completed":"工作完成","NeedsDecision":"待确认","Blocked":"受阻"},
   "title": "通知",
   "unreadCount": "通知，{{count}} 条未读",
+  "manage": "消息中心",
+  "noUnread": "暂无未读通知",
+  "loading": "正在加载通知…",
+  "openRelated": "查看关联内容",
   "filters": "通知筛选",
   "all": "全部",
   "unread": "未读",
@@ -5016,6 +5022,7 @@ export const pages = {
     switching: "切换中…",
     authorizeNewAccount: "授权新账号",
     authorizing: "等待授权完成…",
+    signingIn: "正在登录…",
     cancelAuthorization: "取消授权",
     reauthorizationRequired: "设备授权已失效，请重新登录 PersonAI 账号。",
     reauthorize: "重新登录",

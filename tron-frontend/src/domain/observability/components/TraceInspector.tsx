@@ -1,8 +1,11 @@
+import { triggerLabel } from "./traceTrigger";
 import { Copy } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 
+import { TablePagination } from "@/components/table-pagination";
+import { TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -23,9 +26,20 @@ import { SpanVisualization } from "./SpanVisualization";
 import { traceTree } from "./traceTree";
 
 export function TraceInspector({ detail }: { detail: TraceDetail }) {
-  const { t } = useTranslation("observability");
+  const { t, i18n } = useTranslation("observability");
   const { currentLocale, formatNumber, formatDateTime } = useLocaleFormatters();
   const toast = useToast();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [keyword, setKeyword] = useState("");
+  const rows = useMemo(() => traceTree(detail.spans), [detail.spans]);
+  const filteredRows = useMemo(() => {
+    const query = keyword.trim().toLowerCase();
+    return query ? rows.filter(({ span }) => `${span.name} ${span.spanId} ${span.attributes["gen_ai.tool.name"] ?? ""} ${span.attributes["gen_ai.request.model"] ?? ""}`.toLowerCase().includes(query)) : rows;
+  }, [rows, keyword]);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleRows = useMemo(() => filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize), [filteredRows, currentPage, pageSize]);
   const [selected, setSelected] = useState("");
   const [view, setView] = useState("waterfall");
   const span =
@@ -48,6 +62,9 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
     ["traceTotalTokens", formatTraceTokens(trace.inputTokens + trace.outputTokens, currentLocale)],
     ["errors", formatNumber(trace.errorCount)],
   ];
+  const pagination = (
+    <TablePagination totalItems={filteredRows.length} startItem={filteredRows.length ? (currentPage - 1) * pageSize + 1 : 0} endItem={Math.min(currentPage * pageSize, filteredRows.length)} page={currentPage} pageCount={pageCount} pageSize={pageSize} pageSizeOptions={[15, 25, 50]} itemLabel="Spans" onPageChange={(value) => setPage(Math.max(1, Math.min(value, pageCount)))} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} />
+  );
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(trace.traceId);
@@ -63,7 +80,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <h2 className="font-semibold">{t("detail")}</h2>
+          <h2 className="font-semibold">{triggerLabel(trace.trigger, i18n) === "—" ? t("detail") : triggerLabel(trace.trigger, i18n)}</h2>
           <code className="break-all text-xs">{trace.traceId}</code>
           <Button
             variant="ghost"
@@ -99,6 +116,12 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
       </dl>
       <div className="grid min-w-0 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
         <div className="min-w-0 p-5">
+          <div className="mb-3 space-y-3">
+            <h3 className="text-sm font-semibold">{t("spanList")}</h3>
+            <TextInput aria-label={t("searchSpans")} placeholder={t("searchSpans")} value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} />
+            {pagination}
+            <p className="text-xs text-[var(--color-on-surface-variant)]">{t("spanPagingHelp")}</p>
+          </div>
           <Tabs value={view} onValueChange={(value) => setView(String(value))}>
             <TabsList aria-label={t("detailView")}>
               <TabsTrigger value="table">{t("tableView")}</TabsTrigger>
@@ -117,7 +140,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {traceTree(detail.spans).map(({ span: item, depth }) => (
+                  {visibleRows.map(({ span: item, depth }) => (
                     <TableRow
                       key={item.spanId}
                       data-state={
@@ -154,9 +177,10 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
               </Table>
             </TabsContent>
             <TabsContent value="waterfall">
-              {detail.spans.length > 0 && (
+              {visibleRows.length > 0 && (
                 <SpanVisualization
                   detail={detail}
+                  rows={visibleRows}
                   mode="waterfall"
                   selected={span?.spanId ?? ""}
                   onSelect={setSelected}
@@ -164,9 +188,10 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
               )}
             </TabsContent>
             <TabsContent value="topology">
-              {detail.spans.length > 0 && (
+              {visibleRows.length > 0 && (
                 <SpanVisualization
                   detail={detail}
+                  rows={visibleRows}
                   mode="topology"
                   selected={span?.spanId ?? ""}
                   onSelect={setSelected}
@@ -174,7 +199,10 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
               )}
             </TabsContent>
           </Tabs>
-          {!detail.spans.length && (
+          <div className="mt-4 border-t border-[var(--color-outline-variant)] pt-4">
+            {pagination}
+          </div>
+          {!filteredRows.length && (
             <p role="status" className="py-10 text-center text-sm">
               {t("noSpans")}
             </p>

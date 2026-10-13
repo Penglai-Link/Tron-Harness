@@ -150,7 +150,9 @@ impl Tool for TaskCreateTool {
                 priority: parse_task_priority(input.priority.as_deref())?
                     .unwrap_or(TaskPriority::Medium),
                 task_type: parse_task_type(input.task_type.as_deref())?.unwrap_or(
-                    if context.workspace_code.trim().is_empty() || trusted_dude_owner(context)?.is_some() {
+                    if context.workspace_code.trim().is_empty()
+                        || trusted_dude_owner(context)?.is_some()
+                    {
                         TaskType::General
                     } else {
                         TaskType::Feature
@@ -217,6 +219,17 @@ impl Tool for TaskUpdateTool {
         let task_type = parse_task_type(input.task_type.as_deref())?;
         let source_type = parse_task_source_type(input.source_type.as_deref())?;
         let status = parse_task_status(input.status.as_deref())?;
+        if status.as_deref() == Some(crate::domain::task::CLOSED_STATUS_CODE)
+            && current
+                .owner_dude_code
+                .as_ref()
+                .is_some_and(|_| !context.is_owning_dude())
+        {
+            return Err(ToolError::ExecutionFailed(
+                "Thread workers report results to their Dude; only the owning Dude may decide that the task is complete".into(),
+            ));
+        }
+
         let output = self
             .tasks
             .update_task_with_status(

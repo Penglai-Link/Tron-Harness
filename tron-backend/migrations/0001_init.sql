@@ -255,16 +255,12 @@ CREATE TABLE navigation_menu_tree_translations (
 CREATE TABLE navigation_menu_trees (
     id INTEGER PRIMARY KEY CHECK (id > 0),
     tree_code TEXT NOT NULL UNIQUE,
-    tree_type TEXT NOT NULL CHECK (tree_type IN ('Domain', 'Panel')),
-    domain_id INTEGER UNIQUE REFERENCES navigation_domains(id) ON DELETE CASCADE,
+    tree_type TEXT NOT NULL CHECK (tree_type = 'Domain'),
+    domain_id INTEGER NOT NULL UNIQUE REFERENCES navigation_domains(id) ON DELETE CASCADE,
     built_in INTEGER NOT NULL DEFAULT 0 CHECK (built_in IN (0, 1)),
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    CHECK (
-        (tree_type = 'Domain' AND domain_id IS NOT NULL)
-        OR (tree_type = 'Panel' AND domain_id IS NULL)
-    )
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE "navigation_menus" (
@@ -275,6 +271,8 @@ CREATE TABLE "navigation_menus" (
     page_code TEXT,
     url TEXT,
     icon TEXT,
+    description_zh_cn TEXT NOT NULL DEFAULT '',
+    description_en_us TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -1330,34 +1328,78 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
 
 -- navigation_menu_trees
 INSERT INTO navigation_menu_trees (id, tree_code, tree_type, domain_id, built_in, enabled, created_at, updated_at) VALUES
-    (734500000000000001, 'ADVANCED', 'Domain', 734500000000000001, 1, 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734500000000000002, 'CHAT_PANEL', 'Panel', NULL, 1, 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z');
-
--- navigation_menu_tree_translations
-INSERT INTO navigation_menu_tree_translations (id, tree_id, locale, name, description) VALUES
-    (734500100000000003, 734500000000000002, 'zh-CN', '会话面板', '侧边栏会话区'),
-    (734500100000000004, 734500000000000002, 'en-US', 'Chat Panel', 'Sidebar chat panel');
+    (734500000000000001, 'ADVANCED', 'Domain', 734500000000000001, 1, 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z');
 
 -- navigation_menu_tree_items
 INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) VALUES
-    (734520000000000001, 734500000000000001, 734510000000000001, NULL, 0, 'Flyout'),
+    (734520000000000001, 734500000000000001, 734510000000000001, NULL, 1, 'Flyout'),
     (734520000000000002, 734500000000000001, 734510000000000002, 734520000000000001, 0, 'Inline'),
     (734520000000000003, 734500000000000001, 734510000000000003, 734520000000000001, 1, 'Inline'),
     (734520000000000004, 734500000000000001, 734510000000000004, 734520000000000001, 2, 'Inline'),
-    (734520000000000005, 734500000000000001, 734510000000000005, NULL, 1, 'Flyout'),
+    (734520000000000005, 734500000000000001, 734510000000000005, NULL, 2, 'Flyout'),
     (734520000000000008, 734500000000000001, 734510000000000008, 734520000000000005, 1, 'Inline'),
     (734520000000000010, 734500000000000001, 734510000000000010, 734520000000000005, 3, 'Inline'),
-    (734520000000000012, 734500000000000001, 734510000000000012, NULL, 2, 'Flyout'),
+    (734520000000000012, 734500000000000001, 734510000000000012, NULL, 3, 'Flyout'),
     (734520000000000017, 734500000000000001, 734510000000000017, 734520000000000012, 4, 'Inline'),
     (734520000000000018, 734500000000000001, 734510000000000018, 734520000000000017, 0, 'Inline'),
     (734520000000000019, 734500000000000001, 734510000000000019, 734520000000000017, 1, 'Inline'),
     (734520000000000020, 734500000000000001, 734510000000000020, 734520000000000017, 2, 'Inline'),
     (734520000000000021, 734500000000000001, 734510000000000021, 734520000000000017, 3, 'Inline'),
     (734520000000000022, 734500000000000001, 734510000000000022, 734520000000000012, 5, 'Inline'),
-    (734550200000000001, 734500000000000002, 734550000000000001, NULL, 0, 'Inline'),
-    (734550200000000002, 734500000000000002, 734550000000000002, 734550200000000001, 0, 'Inline'),
-    (734550200000000003, 734500000000000002, 734550000000000003, 734550200000000001, 1, 'Inline'),
-    (734550200000000004, 734500000000000002, 734550000000000004, 734550200000000001, 2, 'Inline');
+    (734550200000000001, 734500000000000001, 734550000000000001, NULL, 0, 'Inline'),
+    (734550200000000002, 734500000000000001, 734550000000000002, 734550200000000001, 0, 'Inline'),
+    (734550200000000003, 734500000000000001, 734550000000000003, 734550200000000001, 1, 'Inline'),
+    (734550200000000004, 734500000000000001, 734550000000000004, 734550200000000001, 2, 'Inline');
+
+UPDATE navigation_menus SET
+    description_zh_cn = CASE menu_code
+        WHEN 'CORE' THEN '常用工作入口，包括应用、任务和自动化。'
+        WHEN 'APPS' THEN '查看和管理工作区中的应用。'
+        WHEN 'TASKS' THEN '创建、查看和跟踪工作任务。'
+        WHEN 'AUTOMATIONS' THEN '配置自动化规则并查看执行情况。'
+        WHEN 'AGENT_OPERATIONS' THEN '智能体相关入口，包括 Dude、MCP 服务和模型。'
+        WHEN 'MCP_SERVERS' THEN '配置和管理可供智能体使用的 MCP 服务。'
+        WHEN 'MODELS' THEN '管理模型服务商、模型及其配置。'
+        WHEN 'DATA' THEN '数据与资源管理相关入口。'
+        WHEN 'RESOURCE_MANAGEMENT' THEN '管理文件、数据源、服务器及服务器账号。'
+        WHEN 'FILE_MANAGEMENT' THEN '浏览和管理工作区文件与已上传资源。'
+        WHEN 'DATA_SOURCE_MANAGEMENT' THEN '配置可供应用和智能体访问的数据源。'
+        WHEN 'SERVER_MANAGEMENT' THEN '管理外部服务器连接及其配置。'
+        WHEN 'SERVER_ACCOUNT_MANAGEMENT' THEN '维护服务器连接可复用的账号和凭据。'
+        WHEN 'VARIABLES' THEN '管理平台或工作区可复用的变量。'
+        WHEN 'CHAT_SESSIONS' THEN '会话区域的分组入口，包含新建会话、项目和最近会话。'
+        WHEN 'CHAT_NEW_SESSION' THEN '开始一个新的会话。'
+        WHEN 'CHAT_PROJECTS' THEN '查看项目及其关联的会话。'
+        WHEN 'CHAT_RECENTS' THEN '查看并继续最近访问的会话。'
+        WHEN 'DUDES' THEN '与 Dude 助手交互，并查看其工作和历史记录。'
+        WHEN 'NOTIFICATIONS' THEN '查看消息通知并处理需要关注的事项。'
+        WHEN 'EXPLORE_MORE' THEN '收纳不常用或可选的菜单入口。'
+        ELSE description_zh_cn
+    END,
+    description_en_us = CASE menu_code
+        WHEN 'CORE' THEN 'Primary workspace shortcuts for apps, tasks, and automations.'
+        WHEN 'APPS' THEN 'Browse and manage applications in the workspace.'
+        WHEN 'TASKS' THEN 'Create, review, and track work tasks.'
+        WHEN 'AUTOMATIONS' THEN 'Configure automation rules and review their executions.'
+        WHEN 'AGENT_OPERATIONS' THEN 'Agent-related entry points, including Dude, MCP servers, and models.'
+        WHEN 'MCP_SERVERS' THEN 'Configure MCP servers available to agents.'
+        WHEN 'MODELS' THEN 'Manage model providers, models, and their configuration.'
+        WHEN 'DATA' THEN 'Entry points for data and resource management.'
+        WHEN 'RESOURCE_MANAGEMENT' THEN 'Manage files, data sources, servers, and server accounts.'
+        WHEN 'FILE_MANAGEMENT' THEN 'Browse and manage workspace files and uploaded resources.'
+        WHEN 'DATA_SOURCE_MANAGEMENT' THEN 'Configure data sources available to apps and agents.'
+        WHEN 'SERVER_MANAGEMENT' THEN 'Manage external server connections and their configuration.'
+        WHEN 'SERVER_ACCOUNT_MANAGEMENT' THEN 'Maintain reusable accounts and credentials for server connections.'
+        WHEN 'VARIABLES' THEN 'Manage reusable platform or workspace variables.'
+        WHEN 'CHAT_SESSIONS' THEN 'The chat section, containing new chat, projects, and recent sessions.'
+        WHEN 'CHAT_NEW_SESSION' THEN 'Start a new conversation.'
+        WHEN 'CHAT_PROJECTS' THEN 'Browse projects and their associated conversations.'
+        WHEN 'CHAT_RECENTS' THEN 'View and continue recently accessed conversations.'
+        WHEN 'DUDES' THEN 'Interact with Dude assistants and review their work and history.'
+        WHEN 'NOTIFICATIONS' THEN 'Review notifications and handle items that need attention.'
+        WHEN 'EXPLORE_MORE' THEN 'Collect optional or less frequently used menu entries.'
+        ELSE description_en_us
+    END;
 
 -- Always-on workspace navigation.
 INSERT INTO navigation_menus (id,menu_code,source,menu_type,page_code,url,icon,enabled,created_at,updated_at) VALUES
@@ -1368,7 +1410,30 @@ INSERT INTO navigation_menu_translations(id,menu_id,locale,label) VALUES
 (734560100000000003,734560000000000002,'zh-CN','通知'),(734560100000000004,734560000000000002,'en-US','Notifications');
 INSERT INTO navigation_menu_tree_items(id,tree_id,menu_id,parent_item_id,position,child_display) VALUES
 (734560200000000001,734500000000000001,734560000000000001,734520000000000005,0,'Inline'),
-(734560200000000002,734500000000000001,734560000000000002,NULL,3,'Inline');
+(734560200000000002,734500000000000001,734560000000000002,NULL,4,'Inline');
+
+-- Configurable overflow entry; contents are arranged in the same domain tree.
+INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, enabled, created_at, updated_at) VALUES
+    (734570000000000001, 'EXPLORE_MORE', 'BuiltIn', 'Group', NULL, NULL, 'Ellipsis', 1, '2026-10-13T00:00:00Z', '2026-10-13T00:00:00Z');
+INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
+    (734570100000000001, 734570000000000001, 'zh-CN', '探索更多'),
+    (734570100000000002, 734570000000000001, 'en-US', 'Explore more');
+INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) VALUES
+    (734570200000000001, 734500000000000001, 734570000000000001, NULL, 5, 'Flyout');
+
+UPDATE navigation_menus SET
+    description_zh_cn = CASE menu_code
+        WHEN 'DUDES' THEN '与 Dude 助手交互，并查看其工作和历史记录。'
+        WHEN 'NOTIFICATIONS' THEN '查看消息通知并处理需要关注的事项。'
+        WHEN 'EXPLORE_MORE' THEN '收纳不常用或可选的菜单入口。'
+        ELSE description_zh_cn
+    END,
+    description_en_us = CASE menu_code
+        WHEN 'DUDES' THEN 'Interact with Dude assistants and review their work and history.'
+        WHEN 'NOTIFICATIONS' THEN 'Review notifications and handle items that need attention.'
+        WHEN 'EXPLORE_MORE' THEN 'Collect optional or less frequently used menu entries.'
+        ELSE description_en_us
+    END;
 
 -- task_flows
 INSERT INTO task_flows (flow_code, name, created_at, updated_at) VALUES
@@ -1427,6 +1492,20 @@ CREATE UNIQUE INDEX dude_memory_one_active ON dude_memory_batches(user_code,dude
 CREATE TABLE dude_memory_cursors(user_code TEXT NOT NULL,dude_code TEXT NOT NULL,source_key TEXT NOT NULL,source_version TEXT NOT NULL,PRIMARY KEY(user_code,dude_code,source_key));
 CREATE TABLE dude_skill_candidates(candidate_code TEXT PRIMARY KEY,user_code TEXT NOT NULL,dude_code TEXT NOT NULL,batch_code TEXT NOT NULL,skill_name TEXT NOT NULL,record_json TEXT NOT NULL,created_at INTEGER NOT NULL,UNIQUE(batch_code,skill_name));
 CREATE INDEX dude_skill_candidates_user ON dude_skill_candidates(user_code,created_at);
+-- Durable business changes and notification delivery receipts.
+CREATE TABLE dude_work_changes (
+    change_id TEXT PRIMARY KEY,
+    dude_code TEXT NOT NULL,
+    task_code TEXT NOT NULL,
+    change_key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(dude_code, task_code, change_key),
+    UNIQUE(dude_code, task_code, fingerprint)
+);
+CREATE INDEX idx_dude_work_changes_task ON dude_work_changes(dude_code, task_code, created_at);
+
 -- tron:profiles
 
 CREATE TABLE profile_avatar_cache (

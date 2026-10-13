@@ -4,17 +4,22 @@ use eliteforge_agent_core::ToolDescriptor;
 use std::collections::{BTreeMap, HashSet};
 use tron_harness_capability::{ToolPermission, ToolPermissionSetting, ToolPermissionSource};
 
+// Built-in descriptors are immutable; constructing their schemas for every
+// admission is as unnecessary as querying all persisted tools for each binding.
+fn fixed_tool(name: &str) -> Option<ToolCatalogRecord> {
+    static TOOLS: std::sync::OnceLock<BTreeMap<String, ToolCatalogRecord>> = std::sync::OnceLock::new();
+    TOOLS.get_or_init(|| BusinessToolCatalog::list_tools(None, None, "en-US").into_iter().map(|tool| (tool.tool_name.clone(), tool)).collect()).get(name).cloned()
+}
+
 impl AgentManagementService {
     pub fn tool_permissions(&self) -> Result<Vec<ToolPermissionSetting>, AgentManagementError> {
         let mut saved: BTreeMap<_, _> = self
-            .repository()
-            .list_tool_permissions()?
+            .cached_tool_permissions()?
             .into_iter()
             .map(|s| (s.tool_code.clone(), s))
             .collect();
         for code in BusinessToolCatalog::tool_codes().into_iter().chain(
-            self.repository()
-                .list_discovered_tools()?
+            self.cached_discovered_tools()?
                 .into_iter()
                 .map(|t| t.tool_code),
         ) {
@@ -42,23 +47,17 @@ impl AgentManagementService {
                 return Err(AgentManagementError::ToolPermissionInvalid);
             }
         }
-        self.repository().replace_tool_permissions(&settings)?;
+        self.save_tool_permissions(&settings)?;
         self.tool_permissions()
     }
     pub(crate) fn platform_tool_allowed(&self, name: &str) -> Result<bool, AgentManagementError> {
-        let records = self.repository().list_discovered_tools()?;
-        let code = BusinessToolCatalog::list_tools(None, None, "en-US")
-            .into_iter()
-            .chain(records)
-            .find(|r| r.tool_name == name)
-            .map(|r| r.tool_code);
-        let settings = self.repository().list_tool_permissions()?;
-        Ok(code.is_none_or(|code| {
-            self.capability_available("tool", &code)
-                && !settings
-                    .iter()
-                    .any(|s| s.tool_code == code && s.permission == ToolPermission::No)
-        }))
+        let tool = match fixed_tool(name) {
+            Some(tool) => Some(tool),
+            None => self.cached_tool_by_name(name)?,
+        };
+        let Some(tool) = tool else { return Ok(true); };
+        Ok(self.capability_available("tool", &tool.tool_code)
+            && self.cached_tool_permission(&tool.tool_code)?.permission != ToolPermission::No)
     }
 }
 impl AgentManagementService {
@@ -66,9 +65,7 @@ impl AgentManagementService {
         &self,
         descriptor: &ToolDescriptor,
     ) -> Result<ToolCatalogRecord, String> {
-        let fixed = BusinessToolCatalog::list_tools(None, None, "en-US")
-            .into_iter()
-            .find(|r| r.tool_name == descriptor.call_name);
+        let fixed = fixed_tool(&descriptor.call_name);
         if let Some(record) = fixed {
             return Ok(record);
         }
@@ -97,8 +94,7 @@ impl AgentManagementService {
             availability_state: ToolAvailabilityState::Available,
             sample_result_summary: String::new(),
         };
-        self.repository()
-            .remember_discovered_tool(&record)
+        self.remember_tool(&record)
             .map_err(|_| "Could not read platform tool permission".to_string())?;
         Ok(record)
     }
@@ -106,20 +102,11 @@ impl AgentManagementService {
 impl ToolPermissionSource for AgentManagementService {
     fn setting(&self, descriptor: &ToolDescriptor) -> Result<ToolPermissionSetting, String> {
         let code = self.register_tool_descriptor(descriptor)?.tool_code;
-        let settings = self
-            .repository()
-            .list_tool_permissions()
-            .map_err(|_| "Could not read platform tool permission".to_string())?;
-        Ok(settings
-            .into_iter()
-            .find(|s| s.tool_code == code)
-            .unwrap_or_else(|| ToolPermissionSetting::default_for(code)))
+        self.cached_tool_permission(&code)
+            .map_err(|_| "Could not read platform tool permission".to_string())
     }
     fn operation(&self, descriptor: &ToolDescriptor) -> Option<bool> {
-        let kind = BusinessToolCatalog::list_tools(None, None, "en-US")
-            .into_iter()
-            .find(|r| r.tool_name == descriptor.call_name)
-            .map(|r| r.operation_kind);
+        let kind = fixed_tool(&descriptor.call_name).map(|r| r.operation_kind);
         match kind {
             Some(ToolOperationKind::Query) => Some(false),
             Some(ToolOperationKind::Command) => Some(true),

@@ -75,6 +75,7 @@ export const shell = {
   },
   nav: {
     items: {
+      projects: "Projects",
       dudes: "Dude",
       notifications: "Notifications",
       agents: "Agents",
@@ -105,6 +106,8 @@ export const shell = {
       archivedChats: "Archived chats",
     },
     sections: {
+      exploreMore: "Explore more",
+      chat: "Chat",
       administration: "Administration",
       agentOperations: "Agent Operations",
       core: "Core",
@@ -182,6 +185,7 @@ export const shell = {
     workspace: "Workspace",
   },
   navigation: {
+    emptyGroup: "No menus yet. Add items in menu arrangement.",
     defaultDescription: "Advanced mode",
     defaultName: "Advanced",
     noDomains: "No domains available.",
