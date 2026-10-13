@@ -1,4 +1,4 @@
-import { toolCommandLinePreview, type ChatWorkRailLabels } from "@tron/chat-core";
+import { toolCommandLinePreview, toolDisplayName, type ChatWorkRailLabels } from "@tron/chat-core";
 import { fetchToolDomains, listTools } from "@/domain/agent/api";
 import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -41,9 +41,9 @@ export function useChatWorkRailLabels() {
           ? (() => { try { return JSON.parse(args) as { domainCode?: unknown }; } catch { return {}; } })()
           : args as { domainCode?: unknown } | null;
         const domainCode = typeof payload?.domainCode === "string" ? payload.domainCode : "";
-        return catalog.domains.get(domainCode) ?? (domainCode || runtimeName);
+        return catalog.domains.get(domainCode) ?? (domainCode ? toolDisplayName(domainCode) : toolDisplayName(runtimeName));
       }
-      const name = catalog.tools.get(runtimeName) ?? runtimeName;
+      const name = catalog.tools.get(runtimeName) ?? toolDisplayName(runtimeName, args);
       if (runtimeName === "rag_search") {
         const payload = typeof args === "string"
           ? (() => { try { return JSON.parse(args) as { query?: unknown }; } catch { return {}; } })()

@@ -445,7 +445,7 @@ export function toolCommandLinePreview(toolName: string, args: unknown, maxLengt
   return truncateLabel(parts.join(" "), maxLength);
 }
 
-function toolDisplayName(toolName: string, args: unknown) {
+export function toolDisplayName(toolName: string, args: unknown = undefined) {
   const normalizedName = toolName.trim();
   const domainCode = domainCodeFromToolPayload(normalizedName) || domainCodeFromToolPayload(args);
 
