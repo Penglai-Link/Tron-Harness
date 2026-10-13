@@ -2665,6 +2665,7 @@ export const pages = {
         "black-hole": "Black Hole",
         neo: "Neo",
         "red-blue-pills": "Red and Blue Pills",
+        tibo: "Tibo",
       },
       editAgent: "Edit {{name}}",
 

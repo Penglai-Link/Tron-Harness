@@ -34,6 +34,7 @@ Generated with the built-in `image_gen` tool on 2026-10-10. These PNGs are bundl
 | black-hole | Black hole with glowing pixel-art accretion ring |
 | neo | Neo with black sunglasses against green digital code rain |
 | red-blue-pills | Red and blue capsules against green digital code rain |
+| tibo | Smiling man with short dark hair and a dark shirt |
 
 ## Prompt set
 

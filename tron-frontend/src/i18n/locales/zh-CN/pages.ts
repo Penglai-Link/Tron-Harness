@@ -2570,6 +2570,7 @@ export const pages = {
         "black-hole": "黑洞",
         neo: "尼奥",
         "red-blue-pills": "红蓝药丸",
+        tibo: "Tibo",
       },
       editAgent: "编辑 {{name}}",
 
