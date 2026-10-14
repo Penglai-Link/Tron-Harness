@@ -14,7 +14,7 @@ export const systemConfigDescriptions = {
   "modelInvocation_embedding_maxBatchInputs": "Maximum chunks in one embedding request. A batch ends at either this count or the token budget. Keep within provider limits.",
   "modelInvocation_embedding_maxBatchTokens": "Maximum estimated input tokens per embedding batch, using the Framework UTF-8 byte estimate. An oversized single chunk fails explicitly; reduce chunk size or raise the limit within provider limits.",
   "modelInvocation_agentModelTimeoutSeconds": "Per-call timeout in seconds for native agents. New runs use this value; existing runs retain their budget.",
-  "modelInvocation_agentStepTimeoutSeconds": "Native agent run budget in seconds per maximum step. Must be at least the model-call timeout. Applies to new runs.",
+  "modelInvocation_agentRunTimeoutSeconds": "Maximum duration of one native agent run in seconds. Defaults to 259200 seconds (3 days). Must be at least the model-call timeout. Applies to new runs.",
   "bindAddress": "IP address the backend HTTP server listens on. 127.0.0.1 allows local connections; 0.0.0.0 listens on all IPv4 interfaces.",
   "port": "TCP port for the backend HTTP server. The frontend API address must use this port.",
   "databaseUrl": "SQLite database address shared by Tron and Framework. Changing it switches the data being read; existing data must be migrated separately.",

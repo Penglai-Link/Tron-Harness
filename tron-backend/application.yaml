@@ -57,7 +57,7 @@ modelInvocation:
     callTimeoutSeconds: 60
     operationTimeoutSeconds: 180
   agentModelTimeoutSeconds: 300
-  agentStepTimeoutSeconds: 300
+  agentRunTimeoutSeconds: 259200
   externalAgent:
     callTimeoutSeconds: 3600
     operationTimeoutSeconds: 3600

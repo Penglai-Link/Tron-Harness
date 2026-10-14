@@ -59,7 +59,7 @@ pub struct ModelInvocationConfig {
     pub rerank: ModelInvocationTimeouts,
     pub verification: ModelInvocationTimeouts,
     pub agent_model_timeout_seconds: u64,
-    pub agent_step_timeout_seconds: u64,
+    pub agent_run_timeout_seconds: u64,
     pub external_agent: ModelInvocationTimeouts,
 }
 
@@ -81,7 +81,7 @@ impl Default for ModelInvocationConfig {
                 operation_timeout_seconds: 180,
             },
             agent_model_timeout_seconds: 300,
-            agent_step_timeout_seconds: 300,
+            agent_run_timeout_seconds: 3 * 24 * 60 * 60,
             external_agent: ModelInvocationTimeouts {
                 call_timeout_seconds: 3600,
                 operation_timeout_seconds: 3600,
@@ -108,12 +108,18 @@ impl ModelInvocationConfig {
             return Err("embedding: maxBatchInputs和maxBatchTokens必须大于零".into());
         }
         if self.agent_model_timeout_seconds == 0
-            || self.agent_step_timeout_seconds < self.agent_model_timeout_seconds
+            || self.agent_run_timeout_seconds < self.agent_model_timeout_seconds
         {
             return Err(
-                "agentModelTimeoutSeconds必须大于零，agentStepTimeoutSeconds不能小于单次调用超时"
+                "agentModelTimeoutSeconds必须大于零，agentRunTimeoutSeconds不能小于单次调用超时"
                     .into(),
             );
+        }
+        if tokio::time::Instant::now()
+            .checked_add(std::time::Duration::from_secs(self.agent_run_timeout_seconds))
+            .is_none()
+        {
+            return Err("agentRunTimeoutSeconds超出支持范围".into());
         }
         Ok(())
     }
@@ -128,6 +134,9 @@ pub(super) struct ModelInvocationFileConfig {
     rerank: Option<TimeoutFileConfig>,
     verification: Option<TimeoutFileConfig>,
     agent_model_timeout_seconds: Option<u64>,
+    agent_run_timeout_seconds: Option<u64>,
+    // Existing local application.yaml files may still contain the old derived
+    // budget. Ignore it so the new three-day default takes effect.
     agent_step_timeout_seconds: Option<u64>,
     external_agent: Option<TimeoutFileConfig>,
 }
@@ -160,6 +169,7 @@ struct EmbeddingFileConfig {
 
 impl ModelInvocationConfig {
     pub(super) fn apply_overrides(&mut self, file: ModelInvocationFileConfig) {
+        let _ = file.agent_step_timeout_seconds;
         if let Some(value) = file.default_output_tokens {
             self.default_output_tokens = value;
         }
@@ -176,8 +186,8 @@ impl ModelInvocationConfig {
         if let Some(value) = file.agent_model_timeout_seconds {
             self.agent_model_timeout_seconds = value;
         }
-        if let Some(value) = file.agent_step_timeout_seconds {
-            self.agent_step_timeout_seconds = value;
+        if let Some(value) = file.agent_run_timeout_seconds {
+            self.agent_run_timeout_seconds = value;
         }
         if let Some(value) = file.embedding {
             if let Some(v) = value.call_timeout_seconds {

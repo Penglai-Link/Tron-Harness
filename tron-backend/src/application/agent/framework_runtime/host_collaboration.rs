@@ -467,11 +467,7 @@ impl Runtime {
             .min(parent.map_or(u64::MAX, |parent| parent.token_ceiling));
         let invocation = host.invocation_config();
         request.limits.model_timeout = Duration::from_secs(invocation.agent_model_timeout_seconds);
-        request.limits.run_timeout = Duration::from_secs(
-            invocation
-                .agent_step_timeout_seconds
-                .saturating_mul(request.limits.max_steps as u64),
-        );
+        request.limits.run_timeout = Duration::from_secs(invocation.agent_run_timeout_seconds);
         request.limits.max_model_retries = if context.auto_model_route.is_some() {
             2
         } else {

@@ -14,7 +14,7 @@ export const systemConfigDescriptions = {
   "modelInvocation_embedding_maxBatchInputs": "每次向量请求最多包含的分块条数；与总 token 上限共同决定批次，先达到哪个上限就切批。应不超过模型服务支持的输入条数。",
   "modelInvocation_embedding_maxBatchTokens": "每次向量请求的估算输入 token 总上限，按 Framework 的 UTF-8 字节估算法计算。单个分块超限时明确失败，需要缩小分块或调高上限；应不超过模型服务限制。",
   "modelInvocation_agentModelTimeoutSeconds": "内置智能体每次模型调用的最长等待时间，单位秒。新运行读取该值，已有运行保留原预算。",
-  "modelInvocation_agentStepTimeoutSeconds": "内置智能体总运行预算按此秒数乘以最大步数计算；不能小于单次模型调用超时。新运行读取该值。",
+  "modelInvocation_agentRunTimeoutSeconds": "内置智能体一次运行的最长时间，单位秒；默认 259200 秒（3 天）。不能小于单次模型调用超时，修改后对新运行生效。",
   "bindAddress": "后端 HTTP 服务监听的 IP 地址。127.0.0.1 仅允许本机连接；0.0.0.0 监听所有 IPv4 网卡。",
   "port": "后端 HTTP 服务监听的 TCP 端口。前端 API 地址需使用同一端口。",
   "databaseUrl": "Tron 与 Framework 共用的 SQLite 数据库地址。切换地址会切换所读取的数据，已有数据需另行迁移。",
