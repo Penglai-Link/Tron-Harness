@@ -125,7 +125,12 @@ async fn generate_title(
     prompt: &str,
 ) -> Result<String, (&'static str, String)> {
     let mut failure = ("LLM_MODEL_UNAVAILABLE", "标题生成模型不可用".into());
-    for config in candidates {
+    for mut config in candidates {
+        // Titles are a non-reasoning task, including when using the chat fallback.
+        config.thinking_enabled = false;
+        config.reasoning_effort = (config.protocol
+            == crate::domain::model::ModelProtocol::Responses)
+            .then_some(crate::domain::reasoning::ReasoningEffort::None);
         match tokio::time::timeout(
             TITLE_GENERATION_TIMEOUT,
             runtime.text_generation_call_with_config(config, prompt.into()),
@@ -194,6 +199,7 @@ fn manual_session_title_prompt(
 }
 
 fn normalize_generated_session_title(value: &str) -> Option<String> {
+    let value = strip_title_reasoning(value)?;
     let first_line = value.lines().map(str::trim).find(|line| !line.is_empty())?;
     let mut title = first_line
         .trim_matches(|character: char| {
@@ -229,6 +235,46 @@ fn normalize_generated_session_title(value: &str) -> Option<String> {
         title = title.trim().to_string();
     }
     (!title.is_empty()).then_some(title)
+}
+
+fn strip_title_reasoning(mut remaining: &str) -> Option<String> {
+    let mut output = String::new();
+    let mut blocks = Vec::new();
+    while let Some(start) = remaining.find('<') {
+        if blocks.is_empty() {
+            output.push_str(&remaining[..start]);
+        }
+        remaining = &remaining[start..];
+        let Some(end) = remaining.find('>') else {
+            // A truncated tag must not become a title either.
+            return None;
+        };
+        let tag = remaining[1..end].trim().to_ascii_lowercase();
+        let (closing, name) = match tag.strip_prefix('/') {
+            Some(name) => (true, name),
+            None => (false, tag.as_str()),
+        };
+        if matches!(name, "think" | "thinking" | "analysis" | "reasoning") {
+            if closing {
+                if blocks.pop().as_deref() != Some(name) {
+                    return None;
+                }
+                if blocks.is_empty() {
+                    output.push(' ');
+                }
+            } else {
+                blocks.push(name.to_owned());
+            }
+        } else if blocks.is_empty() {
+            output.push_str(&remaining[..=end]);
+        }
+        remaining = &remaining[end + 1..];
+    }
+    if !blocks.is_empty() {
+        return None;
+    }
+    output.push_str(remaining);
+    Some(output)
 }
 
 #[cfg(test)]

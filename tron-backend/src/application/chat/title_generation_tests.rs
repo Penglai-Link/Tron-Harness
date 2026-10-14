@@ -36,6 +36,8 @@ impl LlmRuntimeClient for TitleModels {
         _: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(async move {
+            assert!(!config.thinking_enabled);
+            assert!(config.reasoning_effort.is_none());
             self.calls.lock().unwrap().push(config.model_code.clone());
             if config.model_code == "auxiliary" {
                 self.primary.clone()
@@ -70,8 +72,8 @@ fn config(code: &str) -> RuntimeModelConfig {
         api_path: None,
         api_key: "test".into(),
         model_name: code.into(),
-        thinking_enabled: false,
-        reasoning_effort: None,
+        thinking_enabled: true,
+        reasoning_effort: Some(crate::domain::reasoning::ReasoningEffort::High),
         responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
@@ -85,6 +87,8 @@ async fn unavailable_auxiliary_key_and_invalid_title_fall_back_to_the_selected_c
     for primary in [
         Err("No active provider key configured".into()),
         Ok("New chat".into()),
+        Ok("<think>The user message is in Chinese".into()),
+        Ok("<think>Only reasoning</think>".into()),
     ] {
         let models = Arc::new(TitleModels {
             primary,
@@ -101,6 +105,135 @@ async fn unavailable_auxiliary_key_and_invalid_title_fall_back_to_the_selected_c
         .unwrap();
         assert_eq!(title, "文档会诊");
         assert_eq!(*models.calls.lock().unwrap(), vec!["auxiliary", "selected"]);
+    }
+}
+
+#[test]
+fn title_reasoning_blocks_are_removed_before_selecting_the_first_line() {
+    for output in [
+        "<think>The user message is in Chinese\nChoose a short title.</think>\nTron 架构分析",
+        "<think>Analysis</think>Tron 架构分析",
+        "\n<THINK>分析 <think>嵌套思考</think></THINK>\nTron 架构分析",
+        "<analysis>Analysis</analysis><reasoning>More</reasoning>Tron 架构分析",
+        "<thinking>Analysis</thinking>\nTron 架构分析",
+        "Tron <think>private reasoning</think>架构分析",
+    ] {
+        assert_eq!(
+            normalize_generated_session_title(output).as_deref(),
+            Some("Tron 架构分析"),
+            "{output}"
+        );
+    }
+}
+
+#[test]
+fn title_reasoning_only_or_malformed_output_is_rejected() {
+    for output in [
+        "<think>The user message is in Chinese",
+        "<think>Reasoning only</think>",
+        "<think>Outer<think>Inner</think>",
+        "Reasoning without opening tag</think>Title",
+        "<think>Analysis</analysis>Title",
+        "Title<think>truncated",
+        "<think",
+    ] {
+        assert_eq!(normalize_generated_session_title(output), None, "{output}");
+    }
+}
+
+#[test]
+fn plain_titles_keep_existing_formatting_and_length_rules() {
+    assert_eq!(
+        normalize_generated_session_title("\nTitle: Tron 架构分析\nextra line").as_deref(),
+        Some("Tron 架构分析")
+    );
+    assert_eq!(
+        normalize_generated_session_title(&"架".repeat(80)).unwrap(),
+        "架".repeat(64)
+    );
+}
+
+#[tokio::test]
+async fn reasoning_only_from_both_models_is_a_title_format_error() {
+    let models = Arc::new(TitleModels {
+        primary: Ok("<think>Only reasoning</think>".into()),
+        fallback: Ok("<think>Truncated reasoning".into()),
+        calls: Mutex::new(vec![]),
+    });
+    let runtime = LlmRuntimeService::new(models.clone(), models.clone());
+    let error = generate_title(
+        &runtime,
+        title_model_candidates(Some(config("auxiliary")), config("selected")),
+        "Generate a title",
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.0, "TITLE_FORMAT_INVALID");
+    assert_eq!(*models.calls.lock().unwrap(), vec!["auxiliary", "selected"]);
+}
+
+#[tokio::test]
+async fn title_generation_explicitly_disables_thinking_on_the_http_wire() {
+    for protocol in [ModelProtocol::OpenAiCompatible, ModelProtocol::Responses] {
+        assert_title_generation_http_request(protocol).await;
+    }
+}
+
+async fn assert_title_generation_http_request(protocol: ModelProtocol) {
+    use crate::adapters::outbound::model::HttpLlmRuntimeClient;
+    use axum::{Json, Router, routing::post};
+    use eliteforge_agent_official_plugin_model_http::ModelHttpClient;
+    use serde_json::json;
+
+    let (path, reply) = if protocol == ModelProtocol::Responses {
+        (
+            "/responses",
+            json!({"id":"title-response", "status":"completed", "output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"<think>Private analysis</think>Tron 架构分析"}]}]}),
+        )
+    } else {
+        (
+            "/chat/completions",
+            json!({"choices":[{"message":{"role":"assistant","content":"<think>The user message is in Chinese.</think>Tron 架构分析"},"finish_reason":"stop"}]}),
+        )
+    };
+    let (sent, received) = tokio::sync::oneshot::channel();
+    let sent = Arc::new(Mutex::new(Some(sent)));
+    let app = Router::new().route(
+        path,
+        post(move |Json(body): Json<Value>| {
+            let sent = sent.clone();
+            let reply = reply.clone();
+            async move {
+                sent.lock().unwrap().take().unwrap().send(body).unwrap();
+                Json(reply)
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut model = config("selected");
+    model.protocol = protocol;
+    model.base_url = format!("http://{}", listener.local_addr().unwrap());
+    model.api_path = Some(path.into());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let resolver = Arc::new(TitleModels {
+        primary: Err("unused".into()),
+        fallback: Err("unused".into()),
+        calls: Mutex::new(vec![]),
+    });
+    let runtime = LlmRuntimeService::new(
+        resolver,
+        Arc::new(HttpLlmRuntimeClient::new(ModelHttpClient::new())),
+    );
+    let result = generate_title(&runtime, vec![model], "Generate a title").await;
+    server.abort();
+    assert_eq!(result.unwrap(), "Tron 架构分析");
+    let body = received.await.unwrap();
+    if protocol == ModelProtocol::Responses {
+        assert_eq!(body["reasoning"], json!({"effort":"none"}));
+    } else {
+        assert_eq!(body["enable_thinking"], json!(false));
+        assert_eq!(body["thinking"], json!({"type":"disabled"}));
+        assert!(body.get("reasoning_effort").is_none());
     }
 }
 #[tokio::test]
