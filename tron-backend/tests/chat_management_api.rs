@@ -3885,3 +3885,56 @@ fn assert_decimal_code_has_snowflake_shape(prefix: &str, code: &str) {
 
 #[path = "support/chat_resume_lease_tests.rs"]
 mod resume_lease_tests;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_annotations_are_separate_from_text_and_restored_after_reopening_tron() {
+    let database_url = temp_database_url("native-annotations");
+    let config = AppConfig { database_url: database_url.to_string_lossy().into_owned(), ..AppConfig::default() };
+    let router = app_with_config(config.clone());
+    let server = recording_agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&router).await;
+    let authorization = format!("Bearer {token}");
+    let model = create_platform_text_model(&router, &authorization, &server.base_url).await;
+    let created = request_with_headers(&router, Method::POST, "/api/v1/chats/sessions", Some(json!({"workspaceCode":"TRON_CORE","title":"Native annotations"})), None, Some(&authorization)).await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let session = response_json(created).await["data"]["sessionCode"].as_str().unwrap().to_owned();
+    let path = format!("/api/v1/chats/sessions/{session}/messages");
+    let history_path = format!("/api/v1/chats/sessions/{session}/history/query");
+    let original = request_with_headers(&router, Method::POST, &path, Some(json!({"content":"Original message","workspaceCode":"TRON_CORE","modelCode":model})), None, Some(&authorization)).await;
+    assert_eq!(original.status(), StatusCode::OK);
+    let _ = response_json(original).await;
+    let history = request_with_headers(&router, Method::POST, &history_path, Some(json!({"size":20,"cursor":null})), None, Some(&authorization)).await;
+    assert_eq!(history.status(), StatusCode::OK);
+    let history = response_json(history).await;
+    let source = history["data"]["records"]["messages"].as_array().unwrap().iter().find(|m| m["role"] == "Assistant").unwrap()["id"].as_str().unwrap().to_owned();
+    let invalid = request_with_headers(&router, Method::POST, &path, Some(json!({"content":"Rejected", "annotations":[{"id":"a-invalid","messageId":"missing-source","selectedText":"quote","comment":"comment"}],"workspaceCode":"TRON_CORE","modelCode":model})), None, Some(&authorization)).await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response_json(invalid).await["code"], "101032006");
+    let annotations = json!([{"id":"a-native-test","messageId":source,"selectedText":"Original message","comment":"Why was this chosen?"}]);
+    let annotated = request_with_headers(&router, Method::POST, &path, Some(json!({"content":"Explain","annotations":annotations,"workspaceCode":"TRON_CORE","modelCode":model})), None, Some(&authorization)).await;
+    assert_eq!(annotated.status(), StatusCode::OK);
+    let sent = response_json(annotated).await;
+    assert_eq!(sent["data"]["messages"][0]["content"], "Explain");
+    assert_eq!(sent["data"]["messages"][0]["annotations"], annotations);
+    assert!(server.requests.lock().unwrap().iter().any(|request| request["messages"].to_string().contains("conversationAnnotations") && request["messages"].to_string().contains("Why was this chosen?")));
+    // A comment can be submitted without a synthetic text prompt.
+    let only_comment = request_with_headers(&router, Method::POST, &path, Some(json!({"content":"","annotations":annotations,"workspaceCode":"TRON_CORE","modelCode":model})), None, Some(&authorization)).await;
+    assert_eq!(only_comment.status(), StatusCode::OK);
+    let only_comment = response_json(only_comment).await;
+    assert_eq!(only_comment["data"]["messages"][0]["content"], "");
+    common::wait_native_summary(database_url.to_str().unwrap(), &session).await;
+    drop(router);
+    let reopened = app_with_config(config);
+    let authorization = format!("Bearer {}", authenticated_bearer_token(&reopened).await);
+    let restored = request_with_headers(&reopened, Method::POST, &history_path, Some(json!({"size":20,"cursor":null})), None, Some(&authorization)).await;
+    assert_eq!(restored.status(), StatusCode::OK);
+    let restored = response_json(restored).await;
+    let comments = restored["data"]["records"]["messages"].as_array().unwrap().iter().filter(|m| m["annotations"].as_array().is_some_and(|items| !items.is_empty())).collect::<Vec<_>>();
+    assert_eq!(comments.len(), 2);
+    for message in comments {
+        assert_eq!(message["annotations"], annotations);
+        assert!(message["content"].as_array().unwrap().iter().all(|block| block["type"] == "Text"));
+        assert!(!message["content"].to_string().contains("conversationAnnotations"));
+        assert!(!message["content"].to_string().contains("Why was this chosen?"));
+    }
+}

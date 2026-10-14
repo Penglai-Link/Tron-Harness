@@ -430,6 +430,7 @@ impl ChatService {
     ) -> Result<SendChatMessageCommand, ChatError> {
         let session = self.repository().get_session(session_code)?;
         Ok(SendChatMessageCommand {
+            annotations: Vec::new(),
             requested_skills: Vec::new(),
             a2ui_action_id: None, a2ui_metadata: None,
             run_code: None,
@@ -475,10 +476,12 @@ impl ChatService {
             normalized_required(command.session_code).ok_or(ChatSteerError::SessionCodeRequired)?;
         let expected_run_code = normalized_required(command.expected_run_code)
             .ok_or(ChatSteerError::ExpectedRunCodeRequired)?;
+        eliteforge_agent_core::validate_annotations(&command.annotations).map_err(|_| ChatSteerError::Chat(ChatError::AnnotationsInvalid))?;
+        let annotations = command.annotations;
         let content = normalized_optional(command.content).unwrap_or_default();
         let attachments =
             normalize_chat_attachments(command.attachments).map_err(ChatSteerError::Chat)?;
-        if content.is_empty() && attachments.is_empty() {
+        if content.is_empty() && attachments.is_empty() && annotations.is_empty() {
             return Err(ChatSteerError::Chat(ChatError::MessageRequired));
         }
         let session = self
@@ -486,6 +489,7 @@ impl ChatService {
             .get_session(&session_code)
             .map_err(ChatSteerError::Chat)?;
         if session.status != ChatSessionStatus::Active { return Err(ChatSteerError::Chat(ChatError::SessionArchived)); }
+        self.repository().validate_annotation_sources(&session_code, &annotations).map_err(ChatSteerError::Chat)?;
         let agent_code = session.agent_code.as_deref().unwrap_or(MAIN_AGENT_CODE);
         let requested_skills = self.authorize_requested_skills(agent_code, &command.requested_skills).map_err(ChatSteerError::Chat)?;
         let goal = super::composer_input::goal_objective(&content).map_err(ChatSteerError::Chat)?;
@@ -493,7 +497,7 @@ impl ChatService {
         let (attachments, invocation_attachments) = self
             .prepare_session_attachments(&session, attachments)
             .map_err(ChatSteerError::Chat)?;
-        let prompt = agent_prompt_for_content(&content);
+        let prompt = if !annotations.is_empty() { content.clone() } else { agent_prompt_for_content(&content) };
         let channel = if session.task_code.is_some() {
             ChatMessageChannel::TaskAgent
         } else {
@@ -515,8 +519,10 @@ impl ChatService {
                     attachments.clone(),
                     None,
                     requested_skills.clone(),
+                    annotations.clone(),
                 )?;
                 let input = AgentSteerInput {
+                    annotations: annotations.clone(),
                     steer_code: message.message_code.clone(),
                     requested_skills: requested_skills.clone(),
                     content: prompt.clone(),

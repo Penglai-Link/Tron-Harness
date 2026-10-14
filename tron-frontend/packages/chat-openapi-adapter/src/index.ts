@@ -251,6 +251,7 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
           attachments: input.attachments ?? [],
           content: input.content,
           requestedSkills: input.requestedSkills ?? [],
+          annotations: input.annotations ?? [],
           expectedRunCode: context.expectedRunCode,
           sessionCode: session.sessionCode,
         },
@@ -286,6 +287,7 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
       return transport.streamSse<ChatSendResult>({
         body: {
           ...input,
+          annotations: input.annotations ?? [],
           clientCapabilities: {
             ...input.clientCapabilities,
             userInputRequests: true,

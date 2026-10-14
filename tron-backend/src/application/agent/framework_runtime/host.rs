@@ -794,13 +794,13 @@ impl fw::LiveInputSource for HostSteering {
     async fn drain_inputs(&self, run: &fw::RunContext, seal: bool) -> Result<Vec<fw::LiveInput>, fw::AgentError> {
         let inputs = if seal { self.control.take_pending_or_begin_finishing() } else { self.control.take_pending() }
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-        let selected = inputs.iter().map(|input| input.requested_skills.clone()).collect::<Vec<_>>();
+        let selected = inputs.iter().map(|input| (input.requested_skills.clone(), input.annotations.clone())).collect::<Vec<_>>();
         let host = HostExecution::from_extensions(&run.extensions)?;
         let state = host.state.lock().await;
         let messages = host.harness.framework_steering(&state.context, inputs)
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-        messages.iter().zip(selected).map(|(message, requested_skills)| {
-            super::messages::encode(message).map(|message| fw::LiveInput { content: message.content, requested_skills })
+        messages.iter().zip(selected).map(|(message, (requested_skills, annotations))| {
+            super::messages::encode(message).map(|message| fw::LiveInput { content: message.content, requested_skills, annotations })
                 .map_err(fw::AgentError::InvalidConfiguration)
         }).collect()
     }

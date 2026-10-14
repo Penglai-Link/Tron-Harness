@@ -57,10 +57,12 @@ impl ChatService {
         agent: AgentInvocationService,
         sink: Option<ModelStreamSink>,
     ) -> Result<ChatSendResult, ChatSendError> {
+        eliteforge_agent_core::validate_annotations(&command.annotations).map_err(|_| ChatSendError::Chat(ChatError::AnnotationsInvalid))?;
+        let annotations = command.annotations;
         let content = normalized_optional(command.content).unwrap_or_default();
         let attachments =
             normalize_chat_attachments(command.attachments).map_err(ChatSendError::Chat)?;
-        if content.is_empty() && attachments.is_empty() && command.resume.is_empty() {
+        if content.is_empty() && attachments.is_empty() && annotations.is_empty() && command.resume.is_empty() {
             return Err(ChatSendError::Chat(ChatError::MessageRequired));
         }
         let session = self
@@ -70,6 +72,7 @@ impl ChatService {
         if session.status != crate::domain::chat::ChatSessionStatus::Active {
             return Err(ChatSendError::Chat(ChatError::SessionArchived));
         }
+        self.repository().validate_annotation_sources(session_code, &annotations).map_err(ChatSendError::Chat)?;
         // Session ownership comes from persisted server state, not the caller's requested agent.
         let dude_code = session.source_code.as_deref().and_then(|source| source.strip_prefix("__dude:"));
         let agent = if let Some(dude_code) = dude_code {
@@ -82,7 +85,7 @@ impl ChatService {
             .prepare_session_attachments(&session, attachments)
             .map_err(ChatSendError::Chat)?;
         let prompt = if command.resume.is_empty() {
-            agent_prompt_for_content(&content)
+            if !annotations.is_empty() { content.clone() } else { agent_prompt_for_content(&content) }
         } else {
             resume_prompt(&command.resume)
         };
@@ -126,7 +129,7 @@ impl ChatService {
         if let Some(objective) = goal {
             self.apply_goal_command(session_code, objective, user_code.clone()).map_err(ChatSendError::Chat)?;
         }
-        let user_message = if transcript_user_content.is_empty() && attachments.is_empty() {
+        let user_message = if transcript_user_content.is_empty() && attachments.is_empty() && annotations.is_empty() {
             None
         } else {
             Some(self.create_message_with_skills(
@@ -139,6 +142,7 @@ impl ChatService {
                 attachments.clone(),
                 None,
                 requested_skills.clone(),
+                annotations.clone(),
             )?)
         };
         if should_generate_title
@@ -198,7 +202,7 @@ impl ChatService {
             page_context: command.page_context,
             supports_user_input_requests,
             transcript_input_kind: None,
-            transcript_input_metadata: Some(json!({"requestedSkills": requested_skills, "resume": command.resume, "a2uiClientCapabilities":command.client_capabilities.and_then(|c|c.a2ui),"a2uiMetadata":command.a2ui_metadata})),
+            transcript_input_metadata: Some(json!({"annotations": annotations, "requestedSkills": requested_skills, "resume": command.resume, "a2uiClientCapabilities":command.client_capabilities.and_then(|c|c.a2ui),"a2uiMetadata":command.a2ui_metadata})),
         };
         let mut run = if let Some(sink) = sink {
             agent
@@ -407,7 +411,7 @@ impl ChatService {
         attachments: Vec<ChatMessageAttachment>,
         token_usage: Option<ModelTokenUsage>,
     ) -> Result<ChatMessage, ChatSendError> {
-        self.create_message_with_skills(session_code, run_code, role, channel, actor, content, attachments, token_usage, Vec::new())
+        self.create_message_with_skills(session_code, run_code, role, channel, actor, content, attachments, token_usage, Vec::new(), Vec::new())
     }
 
     pub(super) fn create_message_with_skills(
@@ -415,6 +419,7 @@ impl ChatService {
         channel: ChatMessageChannel, actor: &str, content: &str,
         attachments: Vec<ChatMessageAttachment>, token_usage: Option<ModelTokenUsage>,
         requested_skills: Vec<String>,
+        annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     ) -> Result<ChatMessage, ChatSendError> {
         let id = self
             .id_provider
@@ -422,6 +427,7 @@ impl ChatService {
             .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?
             .value();
         let message = ChatMessage {
+            annotations,
             id,
             message_code: format!("MSG-{id}"),
             session_code: session_code.to_string(),

@@ -95,6 +95,7 @@ impl FrameworkHost {
                 None,
                 ExecutionLimits::AgentDefinition,
                 Some(human(user)),
+                SessionPreparation::Existing,
             )
             .await?;
         runtime
@@ -136,6 +137,7 @@ impl FrameworkHost {
                 None,
                 ExecutionLimits::AgentDefinition,
                 Some(human(user)),
+                SessionPreparation::Existing,
             )
             .await?;
         runtime

@@ -116,7 +116,7 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
     match error {
         ChatSendError::Chat(ChatError::AttachmentInvalid(_)) => "CHAT_ATTACHMENT_INVALID",
         ChatSendError::Chat(ChatError::AttachmentNotFound) => "CHAT_ATTACHMENT_NOT_FOUND",
-        ChatSendError::Chat(error @ (ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict)) => crate::application::chat::composer_input::descriptor(error).unwrap().code,
+        ChatSendError::Chat(error @ (ChatError::AnnotationsInvalid | ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict)) => crate::application::chat::composer_input::descriptor(error).unwrap().code,
         ChatSendError::Chat(ChatError::MessageRequired) => "CHAT_MESSAGE_REQUIRED",
         ChatSendError::Chat(ChatError::SessionNotFound) => "CHAT_SESSION_NOT_FOUND",
         ChatSendError::Chat(ChatError::SessionMustBeArchived) => "CHAT_SESSION_MUST_BE_ARCHIVED",
@@ -149,7 +149,7 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
         ChatSendError::Chat(ChatError::AttachmentNotFound) => {
             "chat attachment was not found".into()
         }
-        ChatSendError::Chat(error @ (ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict)) => super::super::error_mapper::composer_error_message(&error),
+        ChatSendError::Chat(error @ (ChatError::AnnotationsInvalid | ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict)) => super::super::error_mapper::composer_error_message(&error),
         ChatSendError::Chat(ChatError::MessageRequired) => "message content is required".into(),
         ChatSendError::Chat(ChatError::SessionNotFound) => "chat session was not found".into(),
         ChatSendError::Chat(ChatError::SessionMustBeArchived) => {

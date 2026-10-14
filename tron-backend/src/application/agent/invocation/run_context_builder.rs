@@ -220,6 +220,7 @@ impl AgentRunContextBuilder {
         let prompt = requested_prompt
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
+            .or_else(|| transcript_input_metadata.as_ref().and_then(|metadata| metadata.get("annotations")).and_then(|value| value.as_array()).filter(|items| !items.is_empty()).map(|_| String::new()))
             .ok_or(AgentInvocationError::PromptRequired)?;
         let workspace_code = requested_workspace_code
             .map(|value| value.trim().to_string())

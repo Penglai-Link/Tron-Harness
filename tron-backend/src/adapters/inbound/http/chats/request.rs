@@ -22,6 +22,8 @@ pub struct StopChatRunRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SteerChatMessageRequest {
+    #[serde(default)]
+    pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     pub session_code: Option<String>,
     pub expected_run_code: Option<String>,
     pub content: Option<String>,

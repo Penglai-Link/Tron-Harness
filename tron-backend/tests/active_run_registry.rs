@@ -11,6 +11,7 @@ use tron_backend::{
 
 fn steer(code: &str, content: &str) -> AgentSteerInput {
     AgentSteerInput {
+            annotations: Vec::new(),
         requested_skills: Vec::new(),
         steer_code: code.to_string(),
         content: content.to_string(),
@@ -276,6 +277,7 @@ fn chat_service_persists_server_message_before_enqueuing_steer() {
 
     let result = chats
         .steer_message(SteerChatMessageCommand {
+            annotations: Vec::new(),
             requested_skills: Vec::new(),
             session_code: Some(session.session_code.clone()),
             expected_run_code: Some("RUN-1".into()),

@@ -3,6 +3,7 @@ use crate::domain::chat::ChatError;
 
 pub fn descriptor(error: &ChatError) -> Option<ApplicationErrorDescriptor> {
     let (code, message_key) = match error {
+        ChatError::AnnotationsInvalid => ("101032006", "tron.chat.annotations_invalid"),
         ChatError::RequestedSkillsInvalid => ("101032001", "tron.chat.requested_skills_invalid"),
         ChatError::RequestedSkillForbidden => ("101032002", "tron.chat.requested_skill_forbidden"),
         ChatError::GoalCommandInvalid => ("101032003", "tron.chat.goal_command_invalid"),

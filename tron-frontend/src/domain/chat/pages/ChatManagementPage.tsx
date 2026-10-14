@@ -2870,14 +2870,26 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     : typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue, null, 2) ?? String(rawValue);
   const contents = (
     <>
-      <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-1">
-          {block.order ? <span className="shrink-0 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{block.order}.</span> : null}
-          <div className="min-w-0 break-words text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]" title={block.code}>{block.name}</div>
-          {block.stat ? (
-            <div className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</div>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1">
+          <button type="button" disabled={!block.detailCode} onClick={() => setDialogOpen(true)} title={block.limitDescription} className="group flex min-w-0 flex-wrap items-baseline gap-1 rounded text-left outline-none enabled:cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]">
+            {block.order ? <span className="shrink-0 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{block.order}.</span> : null}
+            <span className="min-w-0 break-words text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]" title={block.code}>{block.name}</span>
+            {block.stat ? <span className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</span> : null}
+            {block.status ? <span className={cn("text-[10px] font-medium", block.statusTone === "error" ? "text-[var(--color-error)]" : "text-[var(--color-warning)]")}>{block.status}</span> : null}
+          </button>
+          {block.sources?.length ? (
+            <InfoTooltip ariaLabel={block.name} align="start">
+              <div className="max-w-[18rem] whitespace-normal text-xs leading-5">
+                <p className="mb-1">{t("chat.shortTermMemory.contextPanel.mergedSourcesNote")}</p>
+                <ol className="space-y-1">
+                  {block.sources.map((source, index) => <li className="break-words" key={`${source.id}:${index}`}>
+                    <span className="mr-1 font-mono">{block.order}.{index + 1}</span>{source.name}
+                  </li>)}
+                </ol>
+              </div>
+            </InfoTooltip>
           ) : null}
-          {block.status ? <span className={cn("text-[10px] font-medium", block.statusTone === "error" ? "text-[var(--color-error)]" : "text-[var(--color-warning)]")}>{block.status}</span> : null}
         </div>
         <div className="shrink-0 font-mono text-[11px] text-[var(--color-on-surface)]">
           {formatTokenLimit(block.tokens, block.limitTokens)}
@@ -2886,25 +2898,11 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
         <div className={cn("h-full rounded-full", colors.fill)} style={{ width: `${fallbackPercent}%` }} />
       </div>
-      {block.sources?.length ? (
-        <div className="mt-2 border-l border-[var(--color-outline-variant)] pl-2 text-[10px] text-[var(--color-on-surface-variant)]">
-          <p className="mb-1">{t("chat.shortTermMemory.contextPanel.mergedSourcesNote")}</p>
-          <ol className="space-y-1">
-            {block.sources.map((source, index) => <li className="break-words" key={`${source.id}:${index}`} title={source.id}>
-              <span className="mr-1 font-mono">{block.order}.{index + 1}</span>{source.name}
-            </li>)}
-          </ol>
-        </div>
-      ) : null}
     </>
   );
   return (
     <div className="py-2 first:pt-0 last:pb-0">
-      {block.detailCode ? (
-        <button className="group w-full cursor-pointer rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" title={block.limitDescription} onClick={() => setDialogOpen(true)}>
-          {contents}
-        </button>
-      ) : contents}
+      {contents}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         setDialogOpen(open);
         if (open) setDetailViewMode("preview");

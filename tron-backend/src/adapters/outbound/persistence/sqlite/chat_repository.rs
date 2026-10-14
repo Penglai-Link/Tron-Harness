@@ -249,6 +249,15 @@ impl SqliteChatRepository {
     }
 }
 impl ChatRepository for SqliteChatRepository {
+    fn validate_annotation_sources(&mut self, session: &str, annotations: &[fw::MessageAnnotation]) -> Result<(), ChatError> {
+        if annotations.is_empty() { return Ok(()); }
+        blocking(async {
+            self.framework().await?.history().map_err(|_| ChatError::StorageFailure)?
+                .validate_annotation_sources(session, annotations).await
+                .map_err(|error| match error { fw::StateError::Invalid(_) => ChatError::AnnotationsInvalid, other => chat_error(other) })
+        })
+    }
+
     fn session_titles(&mut self, codes: &[String]) -> Result<Vec<crate::application::chat::ChatSessionTitle>, ChatError> {
         if codes.is_empty() { return Ok(Vec::new()); }
         let codes = codes.to_vec();

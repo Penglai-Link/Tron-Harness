@@ -64,7 +64,7 @@ describe("awakening conversation locale", () => {
       return new Response(JSON.stringify({ code: "SUCCESS", data, message: "ok" }));
     }));
     const adapter = createInternalChatAdapter({ workspaceCode: "WORKSPACE" });
-    render(<AgentChatWindow adapter={adapter} showHeader={false} config={{ floating: false }} initialSession={{ id: 1, sessionCode: "SESSION", workspaceCode: "WORKSPACE", title: "Awakening", status: "ACTIVE", createdAt: "2026-10-14T00:00:00Z", updatedAt: "2026-10-14T00:00:00Z" }} />);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AgentChatWindow adapter={adapter} showHeader={false} config={{ floating: false }} initialSession={{ id: 1, sessionCode: "SESSION", workspaceCode: "WORKSPACE", title: "Awakening", status: "ACTIVE", createdAt: "2026-10-14T00:00:00Z", updatedAt: "2026-10-14T00:00:00Z" }} /></QueryClientProvider>);
     await screen.findByText(wakeup, { selector: ".ef-chat__message-body" });
     expect(screen.getByText(actor)).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("textbox").getAttribute("placeholder")).toContain(placeholder));

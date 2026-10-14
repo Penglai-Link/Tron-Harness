@@ -7,6 +7,7 @@ pub struct ChatSessionTitle {
 }
 
 pub trait ChatRepository: Send {
+    fn validate_annotation_sources(&mut self, session: &str, annotations: &[eliteforge_agent_core::MessageAnnotation]) -> Result<(), ChatError>;
     fn session_titles(&mut self, codes: &[String]) -> Result<Vec<ChatSessionTitle>, ChatError> {
         Ok(codes.iter().filter_map(|code| self.get_session(code).ok()).map(|session| ChatSessionTitle {
             session_code: session.session_code, workspace_code: session.workspace_code, title: session.title,

@@ -20,6 +20,12 @@ enum ExecutionLimits {
     Request,
 }
 
+#[derive(Clone, Copy)]
+enum SessionPreparation {
+    New,
+    Existing,
+}
+
 pub(in crate::application::agent::framework_runtime) struct DirectoryAgent {
     pub agent_code: String,
     pub name: String,
@@ -197,7 +203,28 @@ impl Runtime {
             .map(|entry| entry.agent_code)
             .ok_or_else(|| failure(format!("Agent `{code}` is unavailable in this workspace")))
     }
-    async fn prepare(
+    async fn prepare_new(
+        &self,
+        request: fw::RunRequest,
+        session: String,
+        parent: &fw::RunContext,
+        limits: ExecutionLimits,
+    ) -> Result<(Agent, fw::RunRequest, AgentRunContext), fw::AgentError> {
+        self.prepare_for_caller(request, session, None, parent, limits).await
+    }
+
+    async fn prepare_existing(
+        &self,
+        request: fw::RunRequest,
+        session: String,
+        bound: &AgentRunContext,
+        parent: &fw::RunContext,
+        limits: ExecutionLimits,
+    ) -> Result<(Agent, fw::RunRequest, AgentRunContext), fw::AgentError> {
+        self.prepare_for_caller(request, session, Some(bound), parent, limits).await
+    }
+
+    async fn prepare_for_caller(
         &self,
         request: fw::RunRequest,
         session: String,
@@ -231,6 +258,7 @@ impl Runtime {
             Some(parent),
             limits,
             None,
+            if bound.is_some() { SessionPreparation::Existing } else { SessionPreparation::New },
         )
         .await
     }
@@ -244,6 +272,7 @@ impl Runtime {
         parent: Option<&fw::RunContext>,
         limits: ExecutionLimits,
         sender: Option<fw::MessageSender>,
+        session_preparation: SessionPreparation,
     ) -> Result<(Agent, fw::RunRequest, AgentRunContext), fw::AgentError> {
         let host = self.host()?;
         let code = request
@@ -343,13 +372,13 @@ impl Runtime {
             }
         }
         authorize_tools(&host, context);
-        host.bind_collaboration_session(
-            context,
-            parent
-                .map(|parent| parent.session_id.as_str())
-                .unwrap_or(session.as_str()),
-        )
-        .await?;
+        match session_preparation {
+            SessionPreparation::New => host.create_collaboration_session(
+                context,
+                parent.map(|parent| parent.session_id.as_str()).unwrap_or(session.as_str()),
+            ).await?,
+            SessionPreparation::Existing => host.validate_collaboration_session(context).await?,
+        }
         let agent = host
             .collaboration_agent(
                 &context.workspace_code,
@@ -465,6 +494,7 @@ impl Runtime {
         request
             .extensions
             .insert(fw::ToolResultProcessorService(Arc::new(ToolAudit)));
+        host.attach_skill_access(context, &mut request)?;
         request.extensions.insert(HostExecution {
             harness: harness.clone(),
             state: Arc::new(Mutex::new(HostRunState::new(context.clone()))),

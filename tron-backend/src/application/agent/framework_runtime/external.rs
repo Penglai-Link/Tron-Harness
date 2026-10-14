@@ -53,6 +53,12 @@ impl fw::ExternalAgent for HostExternalAgent {
             .get::<ExternalExecution>()
             .ok_or_else(|| fw::AgentError::Run("external execution is missing".into()))?;
         let mut context = execution.context.clone();
+        if let Some(value) = fw::annotation_model_context(&request.annotations)
+            && let Some(message) = context.messages.iter_mut().rfind(|message| message.role == "user") {
+            message.parts.push(crate::domain::agent::AgentMessagePart::Context {
+                kind: "conversation_annotations".into(), text: value.to_string(), metadata: Some(value),
+            });
+        }
         let session = request.session.map(|session| session.session_id);
         context.system_agent_session_id = session.clone();
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);

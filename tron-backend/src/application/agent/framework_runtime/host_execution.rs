@@ -1,6 +1,28 @@
 //! Native preparation and execution use one SDK owner through product completion.
 use super::*;
 impl FrameworkHost {
+    pub(super) fn attach_skill_access(
+        &self,
+        context: &AgentRunContext,
+        request: &mut fw::RunRequest,
+    ) -> Result<(), fw::AgentError> {
+        if let Some(skills) = self.0.skill_registry.get() {
+            let agent = context.agent_code.as_deref().unwrap_or("main-agent");
+            let names = skills
+                .effective_agent_skills(agent)
+                .map_err(|e| fw::AgentError::InvalidConfiguration(e.to_string()))?
+                .into_iter()
+                .filter(|s| s.assigned && s.available)
+                .map(|s| s.skill_name);
+            request.extensions.insert(fw::SkillAccess {
+                names: names.collect(),
+            });
+            request
+                .extensions
+                .insert(crate::application::skill::SkillAgentIdentity(agent.into()));
+        }
+        Ok(())
+    }
     pub(super) async fn run_inner(
         &self,
         harness: ReactAgent,
@@ -124,6 +146,11 @@ impl FrameworkHost {
         }
         let mut request = fw::RunRequest::new(&session, input);
         let memory = context.short_term_memory.as_ref();
+        request.annotations = memory.and_then(|input| input.input_metadata.as_ref())
+            .and_then(|metadata| metadata.get("annotations"))
+            .map(|value| serde_json::from_value(value.clone()))
+            .transpose().map_err(|_| AgentError::InvalidConfiguration("invalid annotations".into()))?
+            .unwrap_or_default();
         request.requested_skills = memory.and_then(|input| input.input_metadata.as_ref())
             .and_then(|metadata| metadata.get("requestedSkills"))
             .map(|value| serde_json::from_value(value.clone()))
@@ -308,21 +335,8 @@ impl FrameworkHost {
                 },
             )),
         );
-        if let Some(skills) = self.0.skill_registry.get() {
-            let agent = context.agent_code.as_deref().unwrap_or("main-agent");
-            let names = skills
-                .effective_agent_skills(agent)
-                .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?
-                .into_iter()
-                .filter(|s| s.assigned && s.available)
-                .map(|s| s.skill_name);
-            request.extensions.insert(fw::SkillAccess {
-                names: names.collect(),
-            });
-            request
-                .extensions
-                .insert(crate::application::skill::SkillAgentIdentity(agent.into()));
-        }
+        self.attach_skill_access(&context, &mut request)
+            .map_err(map_error)?;
         request.extensions.insert(HostExecution {
             harness: harness.clone(),
             state: state.clone(),

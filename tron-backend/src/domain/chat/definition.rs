@@ -61,6 +61,8 @@ pub struct ChatSession {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatMessage {
+    #[serde(default)]
+    pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     pub id: i64,
     pub message_code: String,
     pub session_code: String,
@@ -188,6 +190,7 @@ pub struct ChatUserInputRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatError {
+    AnnotationsInvalid,
     RequestedSkillsInvalid,
     RequestedSkillForbidden,
     GoalCommandInvalid,
@@ -217,6 +220,7 @@ impl Display for ChatError {
         match self {
             Self::AttachmentInvalid(message) => write!(f, "chat attachment is invalid: {message}"),
             Self::AttachmentNotFound => f.write_str("chat attachment was not found"),
+            Self::AnnotationsInvalid => f.write_str("invalid conversation annotations"),
             Self::RequestedSkillsInvalid => f.write_str("invalid explicit skill selection"),
             Self::RequestedSkillForbidden => f.write_str("selected skill is not granted to the execution Agent"),
             Self::GoalCommandInvalid => f.write_str("goal objective is required"),

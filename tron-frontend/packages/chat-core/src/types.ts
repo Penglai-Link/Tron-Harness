@@ -1,3 +1,4 @@
+import type { ChatAnnotation } from "@eliteforge/agent-ui-chat-core";
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
 export type ChatSessionSourceType = "MANUAL" | "TASK" | "AUTOMATION" | "TERMINAL";
 export type ChatMessageRole = "USER" | "ASSISTANT";
@@ -65,6 +66,7 @@ export interface UpdateChatSessionInput {
 }
 
 export interface ChatMessage {
+  annotations?: ChatAnnotation[];
   id: number | string;
   messageCode: string;
   sessionCode: string;
@@ -253,6 +255,7 @@ export interface ChatWorkRailLabels {
 }
 
 export interface SendChatMessageInput {
+  annotations?: ChatAnnotation[];
   content: string;
   workspaceCode: string | null;
   pageContext?: {

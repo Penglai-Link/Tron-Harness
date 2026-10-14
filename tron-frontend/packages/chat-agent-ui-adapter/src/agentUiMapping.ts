@@ -75,7 +75,7 @@ export function toUiResult(value: ChatSendResult): Ui.ChatSendResult {
 }
 export function toUiInput(input: SendChatMessageInput): MappedInput {
   const model = input.modelSelection;
-  return { content: input.content, requestedSkills: input.requestedSkills ?? [], pageContext: input.pageContext, modelId: input.modelCode,
+  return { content: input.content, annotations: input.annotations ?? [], requestedSkills: input.requestedSkills ?? [], pageContext: input.pageContext, modelId: input.modelCode,
     reasoningEffort: input.reasoningEffort, clientCapabilities: input.clientCapabilities, a2uiMetadata: input.a2uiMetadata,
     attachments: input.attachments?.map(toUiAttachment),
     modelSelection: model ? {
@@ -91,7 +91,7 @@ function isMappedInput(input: Ui.SendChatMessageInput): input is MappedInput {
 }
 export function fromUiInput(input: Ui.SendChatMessageInput): SendChatMessageInput {
   if (!isMappedInput(input)) throw new Error("Chat input is missing its Tron host context");
-  return { ...input.metadata.tron, content: input.content, requestedSkills: input.requestedSkills ?? [], clientCapabilities: input.clientCapabilities, a2uiMetadata: input.a2uiMetadata,
+  return { ...input.metadata.tron, content: input.content, annotations: input.annotations ?? [], requestedSkills: input.requestedSkills ?? [], clientCapabilities: input.clientCapabilities, a2uiMetadata: input.a2uiMetadata,
     attachments: input.attachments?.map(fromUiAttachment) };
 }
 
@@ -160,7 +160,7 @@ export async function uiRequest<T>(request: Promise<T>): Promise<T> {
         details: error.data, status: error.status,
         // These composer errors are emitted before a user message is persisted.
         // Never infer safe restoration from an arbitrary HTTP 4xx alone.
-        rejectedBeforeAdmission: ["101032001", "101032002", "101032003", "101032004"].includes(error.code ?? ""),
+        rejectedBeforeAdmission: ["101032001", "101032002", "101032003", "101032004", "101032006"].includes(error.code ?? ""),
       });
     }
     throw error;

@@ -1,3 +1,4 @@
+import { defaultChatAnnotationLabels, zhChatAnnotationLabels } from "@eliteforge/agent-ui-chat-core";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useChatWorkRailLabels, useChatHistoryLabels } from "../hooks/useChatWorkRailLabels";
@@ -26,7 +27,7 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
   onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
   const inputSuggestions = useChatInputSuggestions(config.agentCode, initialSession?.sessionCode, initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined, config.workspaceCode);
-  const { t } = useTranslation("pages");
+  const { t, i18n } = useTranslation("pages");
   const workRailLabels = useChatWorkRailLabels();
   const historyLabels = useChatHistoryLabels();
   const userInputLabels = useMemo(() => ({
@@ -66,6 +67,7 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
   return <ChatRuntimeWindow {...props} adapter={uiAdapter}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
+      annotationLabels: i18n.language.startsWith("zh") ? zhChatAnnotationLabels : defaultChatAnnotationLabels,
       workRailLabels: config.workRailLabels ?? workRailLabels,
       historyLabels: config.historyLabels ?? historyLabels,
       userInputLabels: config.userInputLabels ?? userInputLabels,

@@ -91,6 +91,8 @@ pub struct ChatResumeEntry {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendChatMessageCommand {
+    #[serde(default)]
+    pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     #[serde(skip)]
     pub run_code: Option<String>,
     #[serde(skip)]
@@ -126,6 +128,8 @@ pub struct SendChatMessageCommand {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SteerChatMessageCommand {
+    #[serde(default)]
+    pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     pub session_code: Option<String>,
     pub expected_run_code: Option<String>,
     pub content: Option<String>,

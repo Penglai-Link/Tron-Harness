@@ -330,6 +330,7 @@ describe("createInternalChatAdapter", () => {
       "Bearer internal-token",
     );
     expect(JSON.parse(String(init?.body))).toEqual({
+      annotations: [],
       attachments: [],
       content: "Steer the active response",
       requestedSkills: ["review"],

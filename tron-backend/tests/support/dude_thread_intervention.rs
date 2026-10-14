@@ -197,7 +197,7 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         .ensure_dude_session(
             &tron_backend::domain::dude::DudeSession {
                 session_code: "original-dude-work-session".into(),
-                dude_code: "main-agent".into(),
+                dude_code: "main-dude".into(),
                 purpose: tron_backend::domain::dude::DudeSessionPurpose::Task,
                 correlation_key: "dude-task".into(),
                 title: "Dude work".into(),
@@ -222,10 +222,11 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         .await
         .unwrap();
     let mut parent = context("root:dude-native");
+    parent.agent_code = Some("main-dude".into());
     parent.conversation_code = Some("original-dude-work-session".into());
     parent.collaboration_owner = Some(AgentCollaborationOwner {
         kind: "DUDE".into(),
-        code: "main-agent".into(),
+        code: "main-dude".into(),
         origin_session_code: Some("original-dude-work-session".into()),
         task_code: Some("dude-task".into()),
     });
@@ -260,7 +261,7 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         native.id, id,
         "delegation feedback addresses the same native session"
     );
-    assert_eq!(first.owner.code, "main-agent");
+    assert_eq!(first.owner.code, "main-dude");
     assert_eq!(first.owner.task_code.as_deref(), Some("dude-task"));
     assert_eq!(first.origin_session_code, "original-dude-work-session");
     let interaction = &first.result.as_ref().unwrap().interactions[0];
@@ -289,7 +290,7 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
     );
     assert!(
         host.dude_thread_answer(
-            "main-agent",
+            "main-dude",
             &id,
             interaction.id,
             answer.clone(),
@@ -302,7 +303,7 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
     );
     let resumed = host
         .dude_thread_answer(
-            "main-agent",
+            "main-dude",
             &id,
             interaction.id,
             answer,
@@ -329,7 +330,7 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
     );
     assert!(
         host.dude_thread_send(
-            "main-agent",
+            "main-dude",
             &id,
             "human:followup",
             "OTHER-USER",
@@ -340,7 +341,7 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         .is_err()
     );
     let sent = host
-        .dude_thread_send("main-agent", &id, "human:followup", USER, "en-US", &service)
+        .dude_thread_send("main-dude", &id, "human:followup", USER, "en-US", &service)
         .await
         .unwrap();
     assert_ne!(
@@ -357,10 +358,10 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         3,
         "AwaitingInput and Completed on the same Run each deliver exactly once"
     );
-    assert!(events.iter().all(|event| event.owner.code == "main-agent"
+    assert!(events.iter().all(|event| event.owner.code == "main-dude"
         && event.owner.task_code.as_deref() == Some("dude-task")));
     let history = host
-        .dude_thread_history("main-agent", &id, Default::default())
+        .dude_thread_history("main-dude", &id, Default::default())
         .await
         .unwrap();
     let response = serde_json::to_value(&history.records.interactions[0]).unwrap();
@@ -419,7 +420,7 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
                 && session.session_code != "original-dude-work-session"),
         "neither Dude parent nor native Thread appears in ordinary user Chats"
     );
-    let catalog = host.dude_thread_catalog("main-agent").await.unwrap();
+    let catalog = host.dude_thread_catalog("main-dude").await.unwrap();
     assert_eq!(catalog.len(), 1);
     assert_eq!(catalog[0].task_code.as_deref(), Some("dude-task"));
     assert_eq!(catalog[0].agent_code, "reviewer");

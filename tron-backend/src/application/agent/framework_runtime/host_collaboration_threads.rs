@@ -258,10 +258,9 @@ impl AgentCollaborationRuntime for Runtime {
     ) -> Result<fw::ChildRunResult, fw::AgentError> {
         let session = format!("tool-child-{}", fw::RunId::new_v4());
         let (agent, mut request, prepared) = self
-            .prepare(
+            .prepare_new(
                 request,
                 session.clone(),
-                None,
                 parent,
                 ExecutionLimits::AgentDefinition,
             )
@@ -386,7 +385,7 @@ impl AgentCollaborationRuntime for Runtime {
         }
         let id = fw::RunId::new_v4().to_string();
         let (agent, request, prepared) = self
-            .prepare(request, id.clone(), None, parent, ExecutionLimits::Request)
+            .prepare_new(request, id.clone(), parent, ExecutionLimits::Request)
             .await?;
         let (_, completion) = watch::channel(None);
         let mut record = ThreadRecord {
@@ -495,10 +494,10 @@ impl AgentCollaborationRuntime for Runtime {
             return Err(failure("thread target cannot be changed"));
         }
         let (_, request, _) = self
-            .prepare(
+            .prepare_existing(
                 request,
                 id.into(),
-                Some(&thread.context),
+                &thread.context,
                 parent,
                 ExecutionLimits::Request,
             )
@@ -527,10 +526,10 @@ impl AgentCollaborationRuntime for Runtime {
         }
         let request = thread.agent.answer(id, interaction, value).await?;
         let (_, request, _) = self
-            .prepare(
+            .prepare_existing(
                 request,
                 id.into(),
-                Some(&thread.context),
+                &thread.context,
                 parent,
                 ExecutionLimits::Request,
             )

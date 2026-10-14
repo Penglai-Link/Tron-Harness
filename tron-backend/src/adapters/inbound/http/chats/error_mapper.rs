@@ -104,7 +104,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_USER_INPUT_REQUEST_NOT_FOUND",
             "chat user input request was not found".to_string(),
         ),
-        ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict => unreachable!("composer errors have descriptors"),
+        ChatError::AnnotationsInvalid | ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict => unreachable!("composer errors have descriptors"),
         ChatError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "CHAT_STORAGE_FAILED",
@@ -122,6 +122,7 @@ pub(super) fn composer_error_message(error: &ChatError) -> String {
         .expect("composer error descriptor").message_key;
     let (zh, en) = match key {
         "tron.chat.requested_skill_forbidden" => ("所选技能未授权给当前 Agent，或已被禁用", "Selected skills are not granted to this Agent or have been disabled"),
+        "tron.chat.annotations_invalid" => ("评论无效，最多支持 32 条评论", "Invalid annotations; at most 32 comments are allowed"),
         "tron.chat.requested_skills_invalid" => ("技能选择无效，最多选择 32 个技能", "Invalid skill selection; select at most 32 skills"),
         "tron.chat.goal_command_invalid" => ("请在 /goal 后输入目标", "Enter an objective after /goal"),
         "tron.chat.goal_command_conflict" => ("目标已发生变化，请重试", "The goal changed; please try again"),

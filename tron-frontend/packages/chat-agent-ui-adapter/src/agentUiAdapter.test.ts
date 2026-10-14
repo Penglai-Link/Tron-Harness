@@ -23,7 +23,7 @@ describe("Tron / Agent UI boundary", () => {
 
   it("keeps routing, source page, attachments and external model IDs when a send is queued", () => {
     const input: SendChatMessageInput = {
-      content: "Continue", requestedSkills: ["review"], workspaceCode: "WORKSPACE", appCode: "APP", taskCode: "TASK", agentCode: "codex",
+      content: "Continue", annotations: [{id:"a-1",messageId:"source",selectedText:"original",comment:"Explain"}], requestedSkills: ["review"], workspaceCode: "WORKSPACE", appCode: "APP", taskCode: "TASK", agentCode: "codex",
       modelSelection: { kind: "ProviderRoute", providerCode: "PersonAi", qualityType: "High", routeCode: "ChatAuto" },
       modelCode: "kuaishou/deepseek", systemModelId: "codex/model", reasoningEffort: "XHigh",
       pageContext: { title: "Application", path: "/apps/APP" },
@@ -233,4 +233,10 @@ describe("native protocol result boundary", () => {
     expect(mapped.presentationIncomplete).toBe(true);
     expect(mapped.productCompletionError).toEqual(failed.productCompletionError);
   });
+});
+
+it("marks invalid native annotations as rejected before admission", async () => {
+  const { uiRequest } = await import('./agentUiMapping');
+  const { FetchTransportError } = await import('@tron/chat-core');
+  await expect(uiRequest(Promise.reject(new FetchTransportError('Invalid annotations', {code: '101032006', status: 400})))).rejects.toMatchObject({rejectedBeforeAdmission: true, code: '101032006'});
 });

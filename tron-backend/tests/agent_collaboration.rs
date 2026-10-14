@@ -30,6 +30,7 @@ struct Script {
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
     child_tool_goal: usize,
+    skill_scope: Option<(String, String)>,
 }
 impl ModelClient for Script {
     fn generate<'a>(
@@ -110,6 +111,12 @@ impl ModelClient for Script {
                         json!({"agentCode": if root.as_deref() == Some("root:system-fast") { "codex-fast" } else { "codex-deep" }, "task":"child:external"}),
                     )
                 }
+                Some("root:skill-scope") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn", json!({"agentCode":"reviewer", "task":"child:skill-scope"}),
+                ),
+                Some("root:spawn-default") if results.is_empty() => {
+                    ModelResponse::tool_call("agent_spawn", json!({"task":"child:review"}))
+                }
                 Some("root:spawn") if results.is_empty() => ModelResponse::tool_call(
                     "agent_spawn",
                     json!({"agentCode":"reviewer", "task":"child:review"}),
@@ -150,6 +157,19 @@ impl ModelClient for Script {
                 }
                 Some(_) => ModelResponse::final_output(results.join("\n")),
                 None => {
+                    if request.messages.iter().any(|message| message.content.text() == "child:skill-scope") {
+                        let (parent_skill, child_skill) = self.skill_scope.as_ref().unwrap();
+                        return Ok(match results.len() {
+                            0 => ModelResponse::tool_call("skill_load", json!({"name":parent_skill})),
+                            1 => ModelResponse::tool_call("skill_load", json!({"name":child_skill})),
+                            _ => {
+                                let results = request.messages.iter().filter_map(|message| message.tool_result.as_ref()).collect::<Vec<_>>();
+                                assert!(results[0].is_error, "child loaded parent-only skill");
+                                assert!(!results[1].is_error, "child could not load its own skill");
+                                ModelResponse::final_output("target skill loaded; parent skill denied")
+                            }
+                        });
+                    }
                     if request
                         .messages
                         .iter()
@@ -175,12 +195,11 @@ impl ModelClient for Script {
                         "target role was not loaded"
                     );
                     assert!(
-                        request
-                            .tools
-                            .iter()
-                            .all(|t| t.call_name == "agent_spawn"
-                                || t.call_name.starts_with("thread_")),
-                        "target inherited unauthorized tools"
+                        request.tools.iter().all(|t| t.call_name == "agent_get"
+                            || t.call_name == "agent_spawn"
+                            || matches!(t.call_name.as_str(), "skill_load" | "skill_read_resource" | "skill_diagnostics")
+                            || t.call_name.starts_with("thread_")),
+                        "target inherited unauthorized tools: {:?}", request.tools.iter().map(|tool| &tool.call_name).collect::<Vec<_>>()
                     );
                     ModelResponse::final_output("reviewed by target")
                 }
@@ -301,6 +320,7 @@ async fn collaboration_directory_named_child_and_revocation() {
         EventBusHandle::disabled(),
     )
     .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(f.state.short_term_memory.clone()))
     .build()
     .unwrap();
     let root = context("root:spawn");
@@ -666,3 +686,65 @@ async fn subagents_and_threads_use_target_auto_pool_instead_of_parent_auto_pool(
 
 #[path = "support/dude_thread_intervention.rs"]
 mod dude_intervention;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn default_child_runs_with_production_short_term_memory_and_distinct_history() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(f.state.short_term_memory.clone()))
+    .build()
+    .unwrap();
+    let mut root = context("root:spawn-default");
+    root.agent_code = Some("reviewer".into());
+    let session = root.run_code.clone();
+    let result = agent.run(root).await.unwrap();
+    assert!(
+        result.final_output.contains("reviewed by target"),
+        "{}",
+        result.final_output
+    );
+    let children = host.subagents(&session, USER).await.unwrap();
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].record.agent_code, "reviewer");
+    assert_ne!(children[0].record.session_id, session);
+    assert_eq!(children[0].run.status, fw::HistoryStatus::Completed);
+    let requests = script.requests.lock().unwrap();
+    assert!(requests.iter().any(|request| {
+        request
+            .messages
+            .iter()
+            .any(|message| message.content.text() == "child:review")
+    }));
+    drop(requests);
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spawned_child_loads_only_its_own_configured_skills() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let available = f.state.skills.list_registry(tron_backend::domain::skill::RegistrySkillListQuery { search: None }).unwrap()
+        .into_iter().filter(|skill| skill.available && skill.provider_pack_id.is_some()).map(|skill| skill.skill_name).collect::<Vec<_>>();
+    assert!(available.len() >= 2, "fixture requires two installed built-in skills");
+    let parent_skill = available[0].clone();
+    let child_skill = available[1].clone();
+    f.state.skills.replace_agent_skills("main-agent", std::slice::from_ref(&parent_skill)).unwrap();
+    f.state.skills.replace_agent_skills("reviewer", std::slice::from_ref(&child_skill)).unwrap();
+    let script = Arc::new(Script { skill_scope: Some((parent_skill, child_skill)), ..Default::default() });
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(script, f.state.agent_tool_registry.clone(), EventBusHandle::disabled())
+        .with_framework_host(Some(host.clone()))
+        .with_short_term_memory(Some(f.state.short_term_memory.clone()))
+        .build().unwrap();
+    let result = agent.run(context("root:skill-scope")).await.unwrap();
+    assert!(result.final_output.contains("target skill loaded; parent skill denied"), "{}", result.final_output);
+    assert!(host.close().await.is_success());
+}

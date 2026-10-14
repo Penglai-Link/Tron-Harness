@@ -120,6 +120,7 @@ pub async fn steer_message(
         Err(error) => return steer_chat_message_request_rejection_response(error),
     };
     match state.chats.steer_message(SteerChatMessageCommand {
+        annotations: request.annotations,
         session_code: request.session_code,
         expected_run_code: request.expected_run_code,
         content: request.content,

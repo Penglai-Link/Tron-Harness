@@ -128,6 +128,12 @@ impl FrameworkHost {
             .map_err(AgentInvocationError::RuntimeFailed)?
             .content;
         let mut request = fw::RunRequest::new(&session, input);
+        request.annotations = context.short_term_memory.as_ref()
+            .and_then(|input| input.input_metadata.as_ref())
+            .and_then(|metadata| metadata.get("annotations"))
+            .map(|value| serde_json::from_value(value.clone())).transpose()
+            .map_err(|_| AgentInvocationError::RuntimeFailed("invalid annotations".into()))?
+            .unwrap_or_default();
         request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(|e| {
             AgentInvocationError::RuntimeFailed(format!("invalid native run identity: {e}"))
         })?);

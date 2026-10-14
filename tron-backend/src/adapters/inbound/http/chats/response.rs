@@ -75,6 +75,7 @@ pub struct ChatSteerResultResponse {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SteeredChatMessageResponse {
+    pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     pub id: String,
     pub message_code: String,
     pub session_code: String,
@@ -98,6 +99,7 @@ impl From<ChatSteerResult> for ChatSteerResultResponse {
             session_code: value.session_code,
             run_code: value.run_code,
             message: SteeredChatMessageResponse {
+                annotations: message.annotations,
                 id: message.id.to_string(),
                 message_code: message.message_code,
                 session_code: message.session_code,
@@ -188,6 +190,7 @@ pub struct ArchivedSessionPageResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArchivedMessageResponse {
+    pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     pub message_code: String,
     pub run_code: Option<String>,
     pub role: String,
@@ -200,6 +203,7 @@ pub struct ArchivedMessageResponse {
 impl From<crate::domain::chat::ChatMessage> for ArchivedMessageResponse {
     fn from(m: crate::domain::chat::ChatMessage) -> Self {
         Self {
+            annotations: m.annotations,
             message_code: m.message_code,
             run_code: m.run_code,
             role: format!("{:?}", m.role),
