@@ -365,8 +365,7 @@ fn platform_view(
         .filter(|tool| {
             config
                 .tool_assignment_mode
-                .strategy()
-                .includes(tool, &config.selected_tool_codes)
+                .selects(tool, &config.selected_tool_codes)
         })
         .map(|tool| tool.tool_code.clone())
         .collect::<Vec<_>>();
