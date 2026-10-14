@@ -27,8 +27,8 @@ mod capability_state;
 pub(super) mod collaboration;
 #[path = "host_subagents.rs"]
 mod subagents;
-pub use subagents::{SubagentRecord, SubagentView};
 pub use collaboration::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
+pub use subagents::{SubagentRecord, SubagentView};
 #[path = "host_continuation.rs"]
 mod host_continuation;
 #[path = "host_control.rs"]
@@ -101,6 +101,7 @@ struct Host {
     collaboration_builder:
         OnceCell<std::sync::Weak<crate::application::agent::AgentRunContextBuilder>>,
     collaboration_threads: collaboration::Threads,
+    collaboration_children: collaboration::Children,
     thread_feedback: OnceCell<Arc<dyn ThreadFeedbackSink>>,
     _temporary: Option<tempfile::TempDir>,
 }
@@ -204,10 +205,12 @@ impl FrameworkHost {
         self.0.pty.clone()
     }
 
-    pub(crate) fn bind_dudes(&self, service:crate::application::dude::DudeService) {
+    pub(crate) fn bind_dudes(&self, service: crate::application::dude::DudeService) {
         let _ = self.0.dudes.set(service);
     }
-    pub(crate) fn dudes(&self)->Option<crate::application::dude::DudeService> {self.0.dudes.get().cloned()}
+    pub(crate) fn dudes(&self) -> Option<crate::application::dude::DudeService> {
+        self.0.dudes.get().cloned()
+    }
     pub fn bind_knowledge_bases(
         &self,
         service: crate::application::knowledge_base::KnowledgeBaseService,
@@ -663,6 +666,7 @@ impl FrameworkHost {
             agent_management: OnceCell::new(),
             collaboration_builder: OnceCell::new(),
             collaboration_threads: Default::default(),
+            collaboration_children: Default::default(),
             thread_feedback: OnceCell::new(),
             _temporary: None,
         }))
@@ -710,6 +714,7 @@ impl FrameworkHost {
             agent_management: OnceCell::new(),
             collaboration_builder: OnceCell::new(),
             collaboration_threads: Default::default(),
+            collaboration_children: Default::default(),
             thread_feedback: OnceCell::new(),
             _temporary: Some(directory),
         })))
@@ -788,21 +793,52 @@ struct HostSteering {
 }
 #[async_trait::async_trait]
 impl fw::LiveInputSource for HostSteering {
-    async fn drain(&self, run: &fw::RunContext, seal: bool) -> Result<Vec<fw::Content>, fw::AgentError> {
-        Ok(self.drain_inputs(run, seal).await?.into_iter().map(|input| input.content).collect())
+    async fn drain(
+        &self,
+        run: &fw::RunContext,
+        seal: bool,
+    ) -> Result<Vec<fw::Content>, fw::AgentError> {
+        Ok(self
+            .drain_inputs(run, seal)
+            .await?
+            .into_iter()
+            .map(|input| input.content)
+            .collect())
     }
-    async fn drain_inputs(&self, run: &fw::RunContext, seal: bool) -> Result<Vec<fw::LiveInput>, fw::AgentError> {
-        let inputs = if seal { self.control.take_pending_or_begin_finishing() } else { self.control.take_pending() }
-            .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-        let selected = inputs.iter().map(|input| (input.requested_skills.clone(), input.annotations.clone())).collect::<Vec<_>>();
+    async fn drain_inputs(
+        &self,
+        run: &fw::RunContext,
+        seal: bool,
+    ) -> Result<Vec<fw::LiveInput>, fw::AgentError> {
+        let inputs = if seal {
+            self.control.take_pending_or_begin_finishing()
+        } else {
+            self.control.take_pending()
+        }
+        .map_err(|error| fw::AgentError::Run(error.to_string()))?;
+        let selected = inputs
+            .iter()
+            .map(|input| (input.requested_skills.clone(), input.annotations.clone()))
+            .collect::<Vec<_>>();
         let host = HostExecution::from_extensions(&run.extensions)?;
         let state = host.state.lock().await;
-        let messages = host.harness.framework_steering(&state.context, inputs)
+        let messages = host
+            .harness
+            .framework_steering(&state.context, inputs)
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-        messages.iter().zip(selected).map(|(message, (requested_skills, annotations))| {
-            super::messages::encode(message).map(|message| fw::LiveInput { content: message.content, requested_skills, annotations })
-                .map_err(fw::AgentError::InvalidConfiguration)
-        }).collect()
+        messages
+            .iter()
+            .zip(selected)
+            .map(|(message, (requested_skills, annotations))| {
+                super::messages::encode(message)
+                    .map(|message| fw::LiveInput {
+                        content: message.content,
+                        requested_skills,
+                        annotations,
+                    })
+                    .map_err(fw::AgentError::InvalidConfiguration)
+            })
+            .collect()
     }
 }
 fn map_error(error: fw::AgentError) -> AgentError {

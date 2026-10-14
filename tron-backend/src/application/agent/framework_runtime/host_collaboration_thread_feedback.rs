@@ -13,6 +13,10 @@ pub struct ThreadFeedback {
     pub status: fw::ThreadStatus,
     pub result: Option<fw::ThreadResult>,
     pub error: Option<String>,
+    /// Present when the feedback reports a detached child run completion
+    /// instead of an independent thread; Dude prompts name it accordingly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_run_id: Option<fw::RunId>,
 }
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

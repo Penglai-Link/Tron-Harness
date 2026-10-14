@@ -4,7 +4,8 @@ use std::sync::RwLock;
 use tokio::sync::watch;
 #[path = "host_collaboration_thread_store.rs"]
 mod store;
-use store::{ThreadRecord, owner};
+use store::ThreadRecord;
+pub(super) use store::owner;
 
 #[path = "host_collaboration_thread_feedback.rs"]
 mod feedback;
@@ -247,7 +248,11 @@ impl Runtime {
 
 #[async_trait::async_trait]
 impl AgentCollaborationRuntime for Runtime {
-    async fn agent_details(&self, code: &str, parent: &fw::RunContext) -> Result<serde_json::Value, fw::AgentError> {
+    async fn agent_details(
+        &self,
+        code: &str,
+        parent: &fw::RunContext,
+    ) -> Result<serde_json::Value, fw::AgentError> {
         self.read_agent_details(code, parent).await
     }
 
@@ -370,6 +375,60 @@ impl AgentCollaborationRuntime for Runtime {
             result.output.push_str(&format!("\nThis child is awaiting input in durable Thread {session}. Use thread_read/thread_answer with this session_id and the actual interaction ID; do not start a replacement execution."));
         }
         Ok(fw::ChildRunResult { run_id, result })
+    }
+    async fn spawn_child_detached(
+        &self,
+        request: fw::RunRequest,
+        parent: &fw::RunContext,
+    ) -> Result<fw::DetachedChildSummary, fw::AgentError> {
+        self.spawn_detached_child(request, parent).await
+    }
+    async fn wait_child(
+        &self,
+        child_run_id: fw::RunId,
+        _parent: &fw::RunContext,
+    ) -> Result<fw::ChildRunResult, fw::AgentError> {
+        self.wait_detached_child(&child_run_id.to_string()).await
+    }
+    async fn send_child(
+        &self,
+        child_run_id: fw::RunId,
+        message: String,
+        _parent: &fw::RunContext,
+    ) -> Result<fw::DetachedChildSummary, fw::AgentError> {
+        self.send_detached_child(&child_run_id.to_string(), &message)
+            .await
+    }
+    async fn answer_child(
+        &self,
+        child_run_id: fw::RunId,
+        interaction: fw::RunId,
+        value: serde_json::Value,
+        parent: &fw::RunContext,
+    ) -> Result<fw::DetachedChildSummary, fw::AgentError> {
+        self.answer_detached_child(&child_run_id.to_string(), interaction, value, parent)
+            .await
+    }
+    async fn cancel_child(
+        &self,
+        child_run_id: fw::RunId,
+        _parent: &fw::RunContext,
+    ) -> Result<fw::DetachedChildSummary, fw::AgentError> {
+        self.cancel_detached_child(&child_run_id.to_string()).await
+    }
+    async fn read_child(
+        &self,
+        child_run_id: fw::RunId,
+        limit: usize,
+    ) -> Result<fw::ChildRunView, fw::AgentError> {
+        self.read_detached_child(&child_run_id.to_string(), limit)
+            .await
+    }
+    async fn list_children(
+        &self,
+        _parent: &fw::RunContext,
+    ) -> Result<Vec<fw::DetachedChildSummary>, fw::AgentError> {
+        self.list_detached_children().await
     }
     async fn create_thread(
         &self,

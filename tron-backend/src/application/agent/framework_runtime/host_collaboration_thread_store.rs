@@ -45,7 +45,9 @@ impl ThreadRecord {
             && self.owner.code == owner.code
     }
 }
-pub(super) fn owner(context: &AgentRunContext) -> AgentCollaborationOwner {
+pub(in crate::application::agent::framework_runtime::host) fn owner(
+    context: &AgentRunContext,
+) -> AgentCollaborationOwner {
     context
         .collaboration_owner
         .clone()
@@ -137,6 +139,7 @@ impl FrameworkHost {
                     status: status.clone(),
                     result: result.as_ref().ok().cloned(),
                     error: result.as_ref().err().cloned(),
+                    child_run_id: None,
                 })
             })
         } else {

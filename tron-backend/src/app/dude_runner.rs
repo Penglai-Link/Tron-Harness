@@ -231,9 +231,20 @@ impl PlatformDudeExecutor {
             .current_context()
             .map_err(|e| DudeError::Runtime(e.to_string()))?
             .person_ai_user_id;
-        let owner = self.state.chats.get_session(&session.session_code).ok().and_then(|s|s.user_code)
-            .or_else(||event.payload.get("userCode").and_then(|v|v.as_str()).map(str::to_owned));
-        if owner.as_ref().is_some_and(|owner|owner!=&run_user) {
+        let owner = self
+            .state
+            .chats
+            .get_session(&session.session_code)
+            .ok()
+            .and_then(|s| s.user_code)
+            .or_else(|| {
+                event
+                    .payload
+                    .get("userCode")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            });
+        if owner.as_ref().is_some_and(|owner| owner != &run_user) {
             return Err(DudeError::ExecutionBusy);
         }
         self.state
@@ -246,12 +257,7 @@ impl PlatformDudeExecutor {
         )
         .with_agent_management(self.state.agent_management.clone());
         let (model, route) = router
-            .resolve_initial(
-                "",
-                &session.session_code,
-                &event.dude_code,
-                None,
-            )
+            .resolve_initial("", &session.session_code, &event.dude_code, None)
             .map_err(DudeError::Runtime)?;
         let mut prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
 
@@ -280,7 +286,7 @@ impl PlatformDudeExecutor {
             .send_message(
                 &session.session_code,
                 crate::application::chat::SendChatMessageCommand {
-            annotations: Vec::new(),
+                    annotations: Vec::new(),
                     requested_skills: Vec::new(),
                     a2ui_action_id: None,
                     a2ui_metadata: None,
@@ -306,7 +312,13 @@ impl PlatformDudeExecutor {
                 },
                 model,
                 Some(run_user),
-                Some(crate::shared::locale::SupportedLocale::from_raw(event.payload["locale"].as_str().unwrap_or("zh-CN")).as_str().into()),
+                Some(
+                    crate::shared::locale::SupportedLocale::from_raw(
+                        event.payload["locale"].as_str().unwrap_or("zh-CN"),
+                    )
+                    .as_str()
+                    .into(),
+                ),
                 None,
                 agent,
             )
@@ -356,7 +368,7 @@ impl crate::application::agent::ThreadFeedbackSink for ThreadFeedbackBridge {
                 .map(|s| s.session_code),
             task_code: feedback.owner.task_code.clone(),
             workspace_code: None,
-            payload: serde_json::json!({"sessionCode":feedback.session_id,"originSessionCode":feedback.origin_session_code,"status":feedback.status,"result":feedback.result,"error":feedback.error,"content":format!("处理 Thread {} 的反馈。基于结果继续所属工作，必要时提出需要用户处理的决定。",feedback.session_id)}),
+            payload: serde_json::json!({"sessionCode":feedback.session_id,"originSessionCode":feedback.origin_session_code,"status":feedback.status,"result":feedback.result,"error":feedback.error,"childRunId":feedback.child_run_id,"content":if feedback.child_run_id.is_some(){format!("后台子执行 {} 已完成（会话 {}）。基于结果继续所属工作，必要时提出需要用户处理的决定。",feedback.child_run_id.unwrap(),feedback.session_id)}else{format!("处理 Thread {} 的反馈。基于结果继续所属工作，必要时提出需要用户处理的决定。",feedback.session_id)}}),
             available_at: chrono::Utc::now().timestamp_millis(),
         };
         self.0.publish_event(input).map_err(|e| e.to_string())?;

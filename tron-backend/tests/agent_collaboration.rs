@@ -27,6 +27,7 @@ struct Script {
     configs: Mutex<Vec<AgentModelConfig>>,
     management: Option<tron_backend::application::agent::AgentManagementService>,
     session_id: Mutex<Option<String>>,
+    child_run: Mutex<Option<String>>,
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
     child_tool_goal: usize,
@@ -112,10 +113,126 @@ impl ModelClient for Script {
                     )
                 }
                 Some("root:skill-scope") if results.is_empty() => ModelResponse::tool_call(
-                    "agent_spawn", json!({"agentCode":"reviewer", "task":"child:skill-scope"}),
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer", "task":"child:skill-scope"}),
                 ),
                 Some("root:spawn-default") if results.is_empty() => {
                     ModelResponse::tool_call("agent_spawn", json!({"task":"child:review"}))
+                }
+                Some("root:detached" | "root:detached-leave") if results.is_empty() => {
+                    ModelResponse::tool_call(
+                        "agent_spawn",
+                        json!({"agentCode":"reviewer", "task":"child:review", "background":true}),
+                    )
+                }
+                Some("root:detached") => {
+                    let spawned: Value = serde_json::from_str(&results[0])
+                        .map_err(|e| format!("detached spawn result: {e}: {}", results[0]))?;
+                    let child_run_id = spawned["child_run_id"]
+                        .as_str()
+                        .ok_or("detached spawn returns a child run ID")?;
+                    assert_eq!(spawned["status"], "Running", "{spawned}");
+                    if results.len() == 1 {
+                        ModelResponse::tool_call("child_wait", json!({"child_run_id":child_run_id}))
+                    } else {
+                        ModelResponse::final_output(results.join("\n"))
+                    }
+                }
+                Some("root:detached-leave") => {
+                    let spawned: Value = serde_json::from_str(&results[0]).unwrap();
+                    *self.child_run.lock().unwrap() =
+                        Some(spawned["child_run_id"].as_str().unwrap().into());
+                    ModelResponse::final_output("left detached child in background")
+                }
+                Some("root:detached-collect") => {
+                    let child_run_id = self
+                        .child_run
+                        .lock()
+                        .unwrap()
+                        .clone()
+                        .expect("detached child was left in background");
+                    if results.is_empty() {
+                        ModelResponse::tool_call("child_wait", json!({"child_run_id":child_run_id}))
+                    } else {
+                        ModelResponse::final_output(results.join("\n"))
+                    }
+                }
+                Some("root:detached-inspect") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer", "task":"child:review", "background":true}),
+                ),
+                Some("root:detached-inspect") => {
+                    let spawned: Value = serde_json::from_str(&results[0]).unwrap();
+                    let child_run_id = spawned["child_run_id"].as_str().unwrap();
+                    match results.len() {
+                        1 => ModelResponse::tool_call("child_list", json!({})),
+                        2 => {
+                            let listed: Value = serde_json::from_str(&results[1]).unwrap();
+                            assert!(
+                                listed["children"]
+                                    .as_array()
+                                    .unwrap()
+                                    .iter()
+                                    .any(|child| child["child_run_id"].as_str()
+                                        == Some(child_run_id)),
+                                "{listed}"
+                            );
+                            ModelResponse::tool_call(
+                                "child_wait",
+                                json!({"child_run_id":child_run_id}),
+                            )
+                        }
+                        3 => ModelResponse::tool_call(
+                            "child_read",
+                            json!({"child_run_id":child_run_id, "limit": 20}),
+                        ),
+                        _ => {
+                            let read: Value =
+                                serde_json::from_str(&results[3]).unwrap_or_else(|e| {
+                                    panic!("child_read result: {e}: {}", results[3])
+                                });
+                            assert!(read.get("conversation").is_some(), "{read}");
+                            ModelResponse::final_output("inspected detached child")
+                        }
+                    }
+                }
+                Some("root:detached-cancel") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer", "task":"child:slow", "background":true}),
+                ),
+                Some("root:detached-cancel") => {
+                    let spawned: Value = serde_json::from_str(&results[0]).unwrap();
+                    let child_run_id: String = spawned["child_run_id"].as_str().unwrap().into();
+                    match results.len() {
+                        1 => ModelResponse::tool_call(
+                            "child_cancel",
+                            json!({"child_run_id":child_run_id}),
+                        ),
+                        2 => ModelResponse::tool_call(
+                            "child_wait",
+                            json!({"child_run_id":child_run_id}),
+                        ),
+                        _ => ModelResponse::final_output(results.join("\n")),
+                    }
+                }
+                Some("root:detached-steer") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer", "task":"child:review", "background":true}),
+                ),
+                Some("root:detached-steer") => {
+                    let spawned: Value = serde_json::from_str(&results[0]).unwrap();
+                    let child_run_id: String = spawned["child_run_id"].as_str().unwrap().into();
+                    match results.len() {
+                        1 => ModelResponse::tool_call(
+                            "child_wait",
+                            json!({"child_run_id":child_run_id}),
+                        ),
+                        2 => ModelResponse::tool_call(
+                            "child_send",
+                            json!({"child_run_id":child_run_id, "message":"child:reconsider"}),
+                        ),
+                        _ => ModelResponse::final_output(results.join("\n")),
+                    }
                 }
                 Some("root:spawn") if results.is_empty() => ModelResponse::tool_call(
                     "agent_spawn",
@@ -157,16 +274,30 @@ impl ModelClient for Script {
                 }
                 Some(_) => ModelResponse::final_output(results.join("\n")),
                 None => {
-                    if request.messages.iter().any(|message| message.content.text() == "child:skill-scope") {
+                    if request
+                        .messages
+                        .iter()
+                        .any(|message| message.content.text() == "child:skill-scope")
+                    {
                         let (parent_skill, child_skill) = self.skill_scope.as_ref().unwrap();
                         return Ok(match results.len() {
-                            0 => ModelResponse::tool_call("skill_load", json!({"name":parent_skill})),
-                            1 => ModelResponse::tool_call("skill_load", json!({"name":child_skill})),
+                            0 => {
+                                ModelResponse::tool_call("skill_load", json!({"name":parent_skill}))
+                            }
+                            1 => {
+                                ModelResponse::tool_call("skill_load", json!({"name":child_skill}))
+                            }
                             _ => {
-                                let results = request.messages.iter().filter_map(|message| message.tool_result.as_ref()).collect::<Vec<_>>();
+                                let results = request
+                                    .messages
+                                    .iter()
+                                    .filter_map(|message| message.tool_result.as_ref())
+                                    .collect::<Vec<_>>();
                                 assert!(results[0].is_error, "child loaded parent-only skill");
                                 assert!(!results[1].is_error, "child could not load its own skill");
-                                ModelResponse::final_output("target skill loaded; parent skill denied")
+                                ModelResponse::final_output(
+                                    "target skill loaded; parent skill denied",
+                                )
                             }
                         });
                     }
@@ -197,9 +328,18 @@ impl ModelClient for Script {
                     assert!(
                         request.tools.iter().all(|t| t.call_name == "agent_get"
                             || t.call_name == "agent_spawn"
-                            || matches!(t.call_name.as_str(), "skill_load" | "skill_read_resource" | "skill_diagnostics")
-                            || t.call_name.starts_with("thread_")),
-                        "target inherited unauthorized tools: {:?}", request.tools.iter().map(|tool| &tool.call_name).collect::<Vec<_>>()
+                            || matches!(
+                                t.call_name.as_str(),
+                                "skill_load" | "skill_read_resource" | "skill_diagnostics"
+                            )
+                            || t.call_name.starts_with("thread_")
+                            || t.call_name.starts_with("child_")),
+                        "target inherited unauthorized tools: {:?}",
+                        request
+                            .tools
+                            .iter()
+                            .map(|tool| &tool.call_name)
+                            .collect::<Vec<_>>()
                     );
                     ModelResponse::final_output("reviewed by target")
                 }
@@ -569,6 +709,181 @@ async fn collaboration_child_stops_with_parent_cancellation() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn collaboration_detached_child_runs_and_waits_inline() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script,
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        agent.run(context("root:detached")),
+    )
+    .await
+    .expect("detached child conversation should finish within 60 seconds")
+    .unwrap();
+    assert!(
+        result.final_output.contains("reviewed by target"),
+        "{}",
+        result.final_output
+    );
+    assert!(
+        result.final_output.contains("\"status\":\"Completed\""),
+        "{}",
+        result.final_output
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn collaboration_detached_child_survives_parent_run_end() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script,
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    // The first run leaves the child in the background and ends its turn;
+    // the parent run completing must not cancel the detached child.
+    let first = agent.run(context("root:detached-leave")).await.unwrap();
+    assert!(
+        first
+            .final_output
+            .contains("left detached child in background"),
+        "{}",
+        first.final_output
+    );
+    let second = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        agent.run(context("root:detached-collect")),
+    )
+    .await
+    .expect("orphan detached child should be collectable within 60 seconds")
+    .unwrap();
+    assert!(
+        second.final_output.contains("reviewed by target"),
+        "{}",
+        second.final_output
+    );
+    // Delivered results stay addressable: a later run can still wait again.
+    let third = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        agent.run(context("root:detached-collect")),
+    )
+    .await
+    .expect("delivered detached child should remain addressable")
+    .unwrap();
+    assert!(
+        third.final_output.contains("reviewed by target"),
+        "{}",
+        third.final_output
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn collaboration_detached_child_cancel_stops_it() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script,
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        agent.run(context("root:detached-cancel")),
+    )
+    .await
+    .expect("cancelled detached child should settle within 60 seconds")
+    .unwrap();
+    assert!(
+        result.final_output.to_lowercase().contains("cancel"),
+        "{}",
+        result.final_output
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn collaboration_detached_child_list_and_read() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script,
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        agent.run(context("root:detached-inspect")),
+    )
+    .await
+    .expect("detached child inspection should finish within 60 seconds")
+    .unwrap();
+    assert!(
+        result.final_output.contains("inspected detached child"),
+        "{}",
+        result.final_output
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn collaboration_detached_child_rejects_steering_when_finished() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script,
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    // child_wait delivers the result but keeps the child addressable; the
+    // following child_send must be rejected because the run already finished.
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        agent.run(context("root:detached-steer")),
+    )
+    .await
+    .expect("detached child steering should finish within 60 seconds")
+    .unwrap();
+    assert!(
+        result.final_output.contains("is not running"),
+        "{}",
+        result.final_output
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn collaboration_child_does_not_inherit_parent_fixed_provider_model() {
     let f = Fixture::new();
     reviewer(&f);
@@ -731,20 +1046,50 @@ async fn default_child_runs_with_production_short_term_memory_and_distinct_histo
 async fn spawned_child_loads_only_its_own_configured_skills() {
     let f = Fixture::new();
     reviewer(&f);
-    let available = f.state.skills.list_registry(tron_backend::domain::skill::RegistrySkillListQuery { search: None }).unwrap()
-        .into_iter().filter(|skill| skill.available && skill.provider_pack_id.is_some()).map(|skill| skill.skill_name).collect::<Vec<_>>();
-    assert!(available.len() >= 2, "fixture requires two installed built-in skills");
+    let available = f
+        .state
+        .skills
+        .list_registry(tron_backend::domain::skill::RegistrySkillListQuery { search: None })
+        .unwrap()
+        .into_iter()
+        .filter(|skill| skill.available && skill.provider_pack_id.is_some())
+        .map(|skill| skill.skill_name)
+        .collect::<Vec<_>>();
+    assert!(
+        available.len() >= 2,
+        "fixture requires two installed built-in skills"
+    );
     let parent_skill = available[0].clone();
     let child_skill = available[1].clone();
-    f.state.skills.replace_agent_skills("main-agent", std::slice::from_ref(&parent_skill)).unwrap();
-    f.state.skills.replace_agent_skills("reviewer", std::slice::from_ref(&child_skill)).unwrap();
-    let script = Arc::new(Script { skill_scope: Some((parent_skill, child_skill)), ..Default::default() });
+    f.state
+        .skills
+        .replace_agent_skills("main-agent", std::slice::from_ref(&parent_skill))
+        .unwrap();
+    f.state
+        .skills
+        .replace_agent_skills("reviewer", std::slice::from_ref(&child_skill))
+        .unwrap();
+    let script = Arc::new(Script {
+        skill_scope: Some((parent_skill, child_skill)),
+        ..Default::default()
+    });
     let host = f.state.agent_framework.clone();
-    let agent = ReactAgentBuilder::new(script, f.state.agent_tool_registry.clone(), EventBusHandle::disabled())
-        .with_framework_host(Some(host.clone()))
-        .with_short_term_memory(Some(f.state.short_term_memory.clone()))
-        .build().unwrap();
+    let agent = ReactAgentBuilder::new(
+        script,
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(f.state.short_term_memory.clone()))
+    .build()
+    .unwrap();
     let result = agent.run(context("root:skill-scope")).await.unwrap();
-    assert!(result.final_output.contains("target skill loaded; parent skill denied"), "{}", result.final_output);
+    assert!(
+        result
+            .final_output
+            .contains("target skill loaded; parent skill denied"),
+        "{}",
+        result.final_output
+    );
     assert!(host.close().await.is_success());
 }

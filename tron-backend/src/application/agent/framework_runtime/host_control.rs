@@ -141,6 +141,26 @@ impl FrameworkHost {
             control,
         })))
     }
+    /// Queue one steering message into a still-executing native run keyed by
+    /// its run code. Best-effort push used for detached child completion
+    /// notifications; returns whether the run admitted the message.
+    pub fn steer_native_run(&self, key: &str, message: &str) -> bool {
+        let control = self
+            .0
+            .control
+            .entries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .cloned();
+        if let Some(control) = control {
+            let state = control.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((_, sdk)) = &state.sdk {
+                return sdk.steer(message.to_owned()).is_ok();
+            }
+        }
+        false
+    }
     /// Cancel without releasing the SDK owner or the product reservation.
     pub fn cancel_run(&self, key: &str) -> Result<(), AgentError> {
         let control = self

@@ -9,14 +9,20 @@ use std::sync::Weak;
 #[path = "host_collaboration_external.rs"]
 mod external;
 
+#[path = "host_collaboration_children.rs"]
+mod children;
 #[path = "host_collaboration_threads.rs"]
 mod threads;
+pub(super) use children::Children;
 pub(super) use threads::Threads;
 pub use threads::{DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
 
 #[derive(Clone, Copy)]
 enum ExecutionLimits {
+    /// Synchronous delegation: the caller waits inline for the result.
     AgentDefinition,
+    /// Detached delegation: the child outlives the caller's run.
+    AgentDefinitionDetached,
     Request,
 }
 
@@ -70,6 +76,12 @@ pub(super) fn authorize_tools(host: &FrameworkHost, context: &mut AgentRunContex
     for descriptor in [
         official::AgentGetTool::descriptor(),
         official::AgentSpawnTool::descriptor(),
+        official::ChildWaitTool::descriptor(),
+        official::ChildSendTool::descriptor(),
+        official::ChildAnswerTool::descriptor(),
+        official::ChildCancelTool::descriptor(),
+        official::ChildReadTool::descriptor(),
+        official::ChildListTool::descriptor(),
         official::ThreadCreateTool::descriptor(),
         official::ThreadSendTool::descriptor(),
         official::ThreadAnswerTool::descriptor(),
@@ -125,15 +137,19 @@ impl Runtime {
     }
     pub fn directory(&self) -> Result<Vec<DirectoryAgent>, fw::AgentError> {
         let management = self.builder.agent_management();
-        let internal = management.internal_agent_directory(&self.context.workspace_code)
+        let internal = management
+            .internal_agent_directory(&self.context.workspace_code)
             .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))?;
-        let mut directory = internal.into_iter().map(|agent| DirectoryAgent {
-            agent_code: agent.agent_code,
-            name: agent.name,
-            description: agent.responsibility,
-            avatar_id: agent.avatar_id,
-            model_id: None,
-        }).collect::<Vec<_>>();
+        let mut directory = internal
+            .into_iter()
+            .map(|agent| DirectoryAgent {
+                agent_code: agent.agent_code,
+                name: agent.name,
+                description: agent.responsibility,
+                avatar_id: agent.avatar_id,
+                model_id: None,
+            })
+            .collect::<Vec<_>>();
         let system = if self.context.workspace_code.is_empty() {
             management.list_platform_system_agents()
         } else {
@@ -154,7 +170,11 @@ impl Runtime {
         );
         Ok(directory)
     }
-    async fn read_agent_details(&self, code: &str, parent: &fw::RunContext) -> Result<serde_json::Value, fw::AgentError> {
+    async fn read_agent_details(
+        &self,
+        code: &str,
+        parent: &fw::RunContext,
+    ) -> Result<serde_json::Value, fw::AgentError> {
         parent.check_cancelled()?;
         self.host()?;
         let caller = HostExecution::from_extensions(&parent.extensions)?;
@@ -163,13 +183,23 @@ impl Runtime {
             let caller_context = &state.context;
             if caller_context.workspace_code != self.context.workspace_code
                 || caller_context.user_code != self.context.user_code
-                || caller_context.collaboration_owner.as_ref().map(|owner| (&owner.kind, &owner.code))
-                    != self.context.collaboration_owner.as_ref().map(|owner| (&owner.kind, &owner.code))
+                || caller_context
+                    .collaboration_owner
+                    .as_ref()
+                    .map(|owner| (&owner.kind, &owner.code))
+                    != self
+                        .context
+                        .collaboration_owner
+                        .as_ref()
+                        .map(|owner| (&owner.kind, &owner.code))
             {
                 return Err(failure("Agent details caller scope changed"));
             }
         }
-        let entry = self.directory()?.into_iter().find(|entry| entry.agent_code == code)
+        let entry = self
+            .directory()?
+            .into_iter()
+            .find(|entry| entry.agent_code == code)
             .ok_or_else(|| failure(format!("Agent `{code}` is unavailable in this workspace")))?;
         let management = self.builder.agent_management();
         if entry.model_id.is_some() {
@@ -177,7 +207,8 @@ impl Runtime {
                 management.resolve_platform_agent_runtime(Some(code))
             } else {
                 management.resolve_workspace_agent_runtime(&self.context.workspace_code, Some(code))
-            }.map_err(|error| failure(format!("Agent configuration lookup failed: {error:?}")))?;
+            }
+            .map_err(|error| failure(format!("Agent configuration lookup failed: {error:?}")))?;
             return Ok(serde_json::json!({
                 "agentCode": entry.agent_code, "name": entry.name, "description": entry.description,
                 "runtimeType": runtime.runtime_type, "modelId": runtime.system_model_id,
@@ -188,7 +219,8 @@ impl Runtime {
             management.platform_internal_agent_policy(code)
         } else {
             management.workspace_internal_agent_policy(&self.context.workspace_code, code)
-        }.map_err(|error| failure(format!("Agent configuration lookup failed: {error:?}")))?;
+        }
+        .map_err(|error| failure(format!("Agent configuration lookup failed: {error:?}")))?;
         if !policy.enabled {
             return Err(failure(format!("Agent `{code}` is disabled")));
         }
@@ -210,7 +242,8 @@ impl Runtime {
         parent: &fw::RunContext,
         limits: ExecutionLimits,
     ) -> Result<(Agent, fw::RunRequest, AgentRunContext), fw::AgentError> {
-        self.prepare_for_caller(request, session, None, parent, limits).await
+        self.prepare_for_caller(request, session, None, parent, limits)
+            .await
     }
 
     async fn prepare_existing(
@@ -221,7 +254,8 @@ impl Runtime {
         parent: &fw::RunContext,
         limits: ExecutionLimits,
     ) -> Result<(Agent, fw::RunRequest, AgentRunContext), fw::AgentError> {
-        self.prepare_for_caller(request, session, Some(bound), parent, limits).await
+        self.prepare_for_caller(request, session, Some(bound), parent, limits)
+            .await
     }
 
     async fn prepare_for_caller(
@@ -258,7 +292,11 @@ impl Runtime {
             Some(parent),
             limits,
             None,
-            if bound.is_some() { SessionPreparation::Existing } else { SessionPreparation::New },
+            if bound.is_some() {
+                SessionPreparation::Existing
+            } else {
+                SessionPreparation::New
+            },
         )
         .await
     }
@@ -318,13 +356,16 @@ impl Runtime {
         }))
         .map_err(failure)?;
         // Synchronous agent_spawn has no durable interaction continuation. Escalate
-        // missing facts in its result; only independent Threads may await input.
-        command.supports_user_input_requests =
-            !(matches!(limits, ExecutionLimits::AgentDefinition) && sender.is_none())
-                && caller_context
-                    .collaboration_owner
-                    .as_ref()
-                    .is_some_and(|owner| owner.kind == "DUDE");
+        // missing facts in its result; detached children expose interactions to
+        // their caller, and only independent Threads may await user input.
+        command.supports_user_input_requests = !(matches!(
+            limits,
+            ExecutionLimits::AgentDefinition | ExecutionLimits::AgentDefinitionDetached
+        ) && sender.is_none())
+            && caller_context
+                .collaboration_owner
+                .as_ref()
+                .is_some_and(|owner| owner.kind == "DUDE");
         command.run_code = request
             .resume
             .as_ref()
@@ -361,10 +402,20 @@ impl Runtime {
             context.messages.pop();
             context.messages.push(current_input);
         }
-        if matches!(limits, ExecutionLimits::AgentDefinition) && sender.is_none() {
-            let guidance = crate::domain::agent::AgentMessage::system(
-                "This is a synchronous delegated agent_spawn task. Return a bounded result or the precise missing facts to your caller. Do not ask the user directly, close the owning Dude's work, or publish notifications. Work needing user decisions or durable continuation belongs in thread_create.",
-            );
+        if sender.is_none()
+            && matches!(
+                limits,
+                ExecutionLimits::AgentDefinition | ExecutionLimits::AgentDefinitionDetached
+            )
+        {
+            let guidance = crate::domain::agent::AgentMessage::system(match limits {
+                ExecutionLimits::AgentDefinitionDetached => {
+                    "This is a background delegated agent_spawn task running independently of the caller's turn. Return a bounded result or the precise missing facts to your caller. Do not ask the user directly, close the owning Dude's work, or publish notifications. Parallel sub-work can use agent_spawn with background=true; work needing user decisions or durable continuation belongs in thread_create."
+                }
+                _ => {
+                    "This is a synchronous delegated agent_spawn task. Return a bounded result or the precise missing facts to your caller. Do not ask the user directly, close the owning Dude's work, or publish notifications. Parallel sub-work can use agent_spawn with background=true; work needing user decisions or durable continuation belongs in thread_create."
+                }
+            });
             context.messages.push(guidance.clone());
             if let Some(memory) = &mut context.short_term_memory {
                 memory.prompt_prefix.push(guidance);
@@ -373,10 +424,15 @@ impl Runtime {
         }
         authorize_tools(&host, context);
         match session_preparation {
-            SessionPreparation::New => host.create_collaboration_session(
-                context,
-                parent.map(|parent| parent.session_id.as_str()).unwrap_or(session.as_str()),
-            ).await?,
+            SessionPreparation::New => {
+                host.create_collaboration_session(
+                    context,
+                    parent
+                        .map(|parent| parent.session_id.as_str())
+                        .unwrap_or(session.as_str()),
+                )
+                .await?
+            }
             SessionPreparation::Existing => host.validate_collaboration_session(context).await?,
         }
         let agent = host
@@ -444,7 +500,7 @@ impl Runtime {
             correlation: None,
         });
         match limits {
-            ExecutionLimits::AgentDefinition => {
+            ExecutionLimits::AgentDefinition | ExecutionLimits::AgentDefinitionDetached => {
                 request.limits.max_steps = context.limits.max_steps as usize;
                 request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
             }

@@ -81,6 +81,9 @@ impl FrameworkHost {
         &self,
         finished: watch::Sender<Option<ShutdownReport>>,
     ) -> ShutdownReport {
+        // Detached children are in-memory executions owned by this host; stop
+        // them before native runs so their handles settle inside the drain.
+        self.cancel_detached_children();
         self.0.collaboration_threads.write().unwrap().clear();
         let mut report = ShutdownReport::default();
         let mut pending = Vec::new();
