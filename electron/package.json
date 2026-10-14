@@ -38,7 +38,7 @@
     ],
     "mac": {
       "target": ["dmg"],
-      "identity": null,
+      "identity": "-",
       "icon": "assets/tron.png"
     },
     "win": {
