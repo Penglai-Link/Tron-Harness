@@ -126,7 +126,9 @@ async fn generate_title(
 ) -> Result<String, (&'static str, String)> {
     let mut failure = ("LLM_MODEL_UNAVAILABLE", "标题生成模型不可用".into());
     for mut config in candidates {
-        // Titles are a non-reasoning task, including when using the chat fallback.
+        // Keep the no-reasoning preference local to this title-generation call.
+        // Providers that require reasoning may apply their own default; title parsing
+        // removes any returned reasoning before persisting the result.
         config.thinking_enabled = false;
         config.reasoning_effort = (config.protocol
             == crate::domain::model::ModelProtocol::Responses)

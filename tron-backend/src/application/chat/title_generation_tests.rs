@@ -173,7 +173,7 @@ async fn reasoning_only_from_both_models_is_a_title_format_error() {
 }
 
 #[tokio::test]
-async fn title_generation_explicitly_disables_thinking_on_the_http_wire() {
+async fn title_generation_does_not_force_provider_thinking_flags_on_the_http_wire() {
     for protocol in [ModelProtocol::OpenAiCompatible, ModelProtocol::Responses] {
         assert_title_generation_http_request(protocol).await;
     }
@@ -229,10 +229,10 @@ async fn assert_title_generation_http_request(protocol: ModelProtocol) {
     assert_eq!(result.unwrap(), "Tron 架构分析");
     let body = received.await.unwrap();
     if protocol == ModelProtocol::Responses {
-        assert_eq!(body["reasoning"], json!({"effort":"none"}));
+        assert!(body.get("reasoning").is_none());
     } else {
-        assert_eq!(body["enable_thinking"], json!(false));
-        assert_eq!(body["thinking"], json!({"type":"disabled"}));
+        assert!(body.get("enable_thinking").is_none());
+        assert!(body.get("thinking").is_none());
         assert!(body.get("reasoning_effort").is_none());
     }
 }
