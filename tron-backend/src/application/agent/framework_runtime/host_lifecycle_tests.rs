@@ -412,6 +412,7 @@ fn native_result_preserves_generic_input_approval_schema_and_full_prompt() {
 
 fn test_context(max_retries: u32) -> AgentRunContext {
     AgentRunContext {
+        system_agent_fast_mode: false,
         collaboration_owner: None,
         agent_code: None,
         auto_model_route: None,

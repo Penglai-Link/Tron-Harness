@@ -20,8 +20,8 @@ import { createAutomation } from "@/domain/automation/api";
 import { editableAutomationStatuses } from "@/domain/automation/constants";
 import { createMockAutomation } from "@/domain/automation/mock/data";
 import type { AutomationOperationalStatus } from "@/domain/automation/model";
-import { fetchWorkspaceSystemAgents } from "@/domain/agent/api/agentManagementApi";
-import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api/agentManagementApi";
+import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
 import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -102,7 +102,7 @@ export function CreateAutomationPage() {
 
   useEffect(() => {
     if (!activeWorkspaceCode) {
-      setAgentOptions([mainAutomationAgentOption]);
+      setAgentOptions([]);
       setWorkspaceModelOptions([]);
       setSelectedAgentCode(mainAutomationAgentOption.agentCode);
       setSelectedModelOptionCode("");
@@ -115,19 +115,22 @@ export function CreateAutomationPage() {
     const agentsPromise = dataSource === "api"
       ? fetchWorkspaceSystemAgents(activeWorkspaceCode, controller.signal)
       : Promise.resolve(listWorkspaceSystemAgentsMock(activeWorkspaceCode));
+    const internalAgentsPromise = dataSource === "api"
+      ? fetchWorkspaceInternalAgents(activeWorkspaceCode, controller.signal)
+      : Promise.resolve(listWorkspaceInternalAgentsMock(activeWorkspaceCode));
     const modelsPromise = dataSource === "api"
       ? fetchWorkspaceSelectOptions(activeWorkspaceCode, controller.signal)
       : Promise.resolve(getWorkspaceSelectOptions(activeWorkspaceCode));
 
-    Promise.all([agentsPromise, modelsPromise])
-      .then(([systemAgents, workspaceModels]) => {
+    Promise.all([agentsPromise, modelsPromise, internalAgentsPromise])
+      .then(([systemAgents, workspaceModels, internalAgents]) => {
         if (controller.signal.aborted) return;
-        setAgentOptions(availableAutomationAgents(systemAgents));
+        setAgentOptions(availableAutomationAgents(systemAgents, internalAgents));
         setWorkspaceModelOptions(workspaceModels);
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        setAgentOptions([mainAutomationAgentOption]);
+        setAgentOptions([]);
         setWorkspaceModelOptions([]);
         toast.error(error instanceof Error ? error.message : pageT("errors.executionOptions", "Execution options could not be loaded"));
       })

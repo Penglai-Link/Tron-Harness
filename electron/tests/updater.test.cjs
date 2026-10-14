@@ -102,17 +102,18 @@ test("finds a platform-specific update and sends product authentication headers"
   assert.equal(requests[0].init.headers["X-Product-Code"], "tron");
 });
 
-test("rejects a release without the current platform package", async () => {
-  const updater = makeUpdater({
-    fetchImpl: async () => jsonResponse({
-      id: "version-2",
-      packages: [{ os_type: OS_TYPES.MACOS_ARM64 }],
-      version_number: "2.0.0"
-    })
-  });
-
-  await assert.rejects(() => updater.check("token-1"), /no update package is available/);
-  assert.equal(updater.getStatus().type, "error");
+test("treats missing current-platform packages as no applicable update", async () => {
+  for (const packages of [[], [{ os_type: OS_TYPES.MACOS_ARM64 }]]) {
+    const logs = [];
+    const updater = makeUpdater({ onLog: (...entry) => logs.push(entry), fetchImpl: async () => jsonResponse({
+      id: "version-2", version_number: "2.0.0", packages
+    }) });
+    updater.update = { version: "stale" };
+    assert.deepEqual(await updater.check("token-1"), { type: "upToDate" });
+    assert.equal(updater.update, null);
+    assert.ok(logs.some(([level, message]) => level === "INFO" && message.includes("No update package")));
+    assert.ok(logs.every(([level]) => level !== "ERROR"));
+  }
 });
 
 test("downloads the signed package with streaming progress and removes partial files", async () => {
@@ -278,4 +279,20 @@ test("Windows helper launches silent installer after launcher stdin closes", asy
   });
   assert.equal(await result, 0);
   assert.deepEqual(calls[0][1], ["/S", "/R"]);
+});
+
+
+test("persists real update failures as searchable application JSON logs", async (t) => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), "tron-update-logs-"));
+  t.after(() => fsp.rm(directory, { recursive: true, force: true }));
+  const { createApplicationLogger } = require("../main/application-log.cjs");
+  const updater = makeUpdater({ onLog: createApplicationLogger(directory), fetchImpl: async () => jsonResponse({ message: "service unavailable" }, 503) });
+  await assert.rejects(() => updater.check("private-access-token"));
+  const files = await fsp.readdir(directory);
+  assert.equal(files.length, 1);
+  assert.match(files[0], /^tron-backend\.\d{4}-\d{2}-\d{2}\.jsonl$/);
+  const contents = await fsp.readFile(path.join(directory, files[0]), "utf8");
+  const records = contents.trim().split("\n").map(JSON.parse);
+  assert.ok(records.some(record => record.level === "ERROR" && record.target === "tron.desktop.updater" && record.message.includes("service unavailable")));
+  assert.ok(!contents.includes("private-access-token"));
 });

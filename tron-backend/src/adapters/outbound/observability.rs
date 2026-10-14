@@ -2,6 +2,7 @@
 mod dashboard;
 mod triggers;
 mod query_filters;
+mod list_query;
 pub mod logs;
 use crate::adapters::outbound::persistence::sqlite::framework_storage::blocking;
 use crate::application::observability::*;
@@ -150,6 +151,7 @@ pub(crate) fn now() -> i64 {
         .as_millis()
         .min(i64::MAX as u128) as i64
 }
+#[cfg(test)]
 fn sort_trace_summaries(records: &mut [TraceSummary], sorts: &[crate::application::observability::TraceSort]) {
     records.sort_by(|a, b| {
         for sort in sorts {
@@ -170,38 +172,7 @@ fn sort_trace_summaries(records: &mut [TraceSummary], sorts: &[crate::applicatio
 impl TraceRepository for TelemetryProjection {
     fn agent_options(&self, workspace: &str) -> Result<Vec<TraceAgentOption>, ObservabilityError> { self.trace_agent_options(workspace) }
     fn query(&self, q: &TraceQuery) -> Result<TracePage, ObservabilityError> {
-        if matches!(q.category, Some(TraceCategory::Agent)) { return self.agent_triggers(q); }
-        if matches!(q.category, Some(TraceCategory::Page)) { return self.page_triggers(q); }
-        blocking(async {
-            let sorts = if q.sorts.is_empty() { vec![crate::application::observability::TraceSort { field: q.sort_by, direction: q.sort_direction }] } else { q.sorts.clone() };
-            let default_order = sorts.len() == 1 && sorts[0].field == TraceSortField::StartedAt && sorts[0].direction == TraceSortDirection::Desc;
-            let mut offset = if default_order { (q.current - 1) * q.size } else { 0 };
-            let mut records = Vec::new();
-            let total = loop {
-                let page = self.store.query_traces(filter(q), offset, if default_order { q.size } else { 5000 })
-                    .await.map_err(failure)?;
-                let total = page.total;
-                let count = page.records.len();
-                for t in page.records {
-                    let spans = self.store.spans(t.trace_id.clone()).await.map_err(failure)?
-                        .into_iter().map(span).collect::<Vec<_>>();
-                    records.push(summary(t, &spans));
-                }
-                offset += count;
-                if default_order || offset >= total || count == 0 { break total; }
-            };
-            if !default_order {
-                sort_trace_summaries(&mut records, &sorts);
-                records = records.into_iter().skip((q.current - 1) * q.size).take(q.size).collect();
-            }
-            Ok(TracePage {
-                agent_options: Vec::new(),
-                current: q.current,
-                size: q.size,
-                total,
-                records,
-            })
-        })
+        if matches!(q.category,Some(TraceCategory::Agent)) { self.agent_triggers(q) } else { self.page_triggers(q) }
     }
     fn detail(&self, workspace: &str, id: &str) -> Result<TraceDetail, ObservabilityError> {
         // Keep inspection reads off the telemetry export connection. Decode large

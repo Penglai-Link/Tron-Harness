@@ -1,6 +1,63 @@
 use super::*;
 
 impl ModelProviderService {
+    /// Resolve the Auto catalog in one database operation, not one lookup per model.
+    pub fn auto_chat_candidates(
+        &self,
+        allowed: &[String],
+        reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    ) -> Result<Vec<(String, ModelSelection, AgentModelConfig)>, ModelProviderError> {
+        let allowed = allowed.to_vec();
+        self.connection.call(
+            move |connection| {
+                let Some(provider) = read_connection(connection, ModelProviderCode::PersonAi)?
+                else {
+                    return Ok(vec![]);
+                };
+                if !matches!(
+                    provider.status,
+                    ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
+                ) {
+                    return Ok(vec![]);
+                }
+                Ok(
+                    read_chat_catalog_models(connection, ModelProviderCode::PersonAi)?
+                        .into_iter()
+                        .filter(|m| {
+                            m.status == ProviderCatalogModelStatus::Available
+                                && m.context_window_tokens.is_some_and(|n| n > 0)
+                        })
+                        .filter_map(|model| {
+                            let quality = model.quality_type?;
+                            let code = model.selection_model_code();
+                            let option = format!(
+                                "provider:PersonAi:model:{}:{}",
+                                quality.storage_value(),
+                                code
+                            );
+                            if !allowed.is_empty() && !allowed.contains(&option) {
+                                return None;
+                            }
+                            let config = person_ai_agent_config(
+                                person_ai_fixed_runtime_code(quality, &code),
+                                &code,
+                                model.context_window_tokens,
+                                reasoning_effort,
+                                preferred_protocol(&model.protocols),
+                            );
+                            Some((
+                                option,
+                                ModelSelection::person_ai_fixed(code, quality),
+                                config,
+                            ))
+                        })
+                        .collect(),
+                )
+            },
+            || ModelProviderError::Storage,
+        )
+    }
+
     pub fn list_text_select_options(
         &self,
         workspace_code: &str,

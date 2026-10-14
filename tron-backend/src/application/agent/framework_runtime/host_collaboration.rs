@@ -24,7 +24,6 @@ pub(in crate::application::agent::framework_runtime) struct DirectoryAgent {
     pub agent_code: String,
     pub name: String,
     pub description: String,
-    pub role_prompt: String,
     pub avatar_id: String,
     pub model_id: Option<String>,
 }
@@ -63,6 +62,7 @@ pub(super) fn authorize_tools(host: &FrameworkHost, context: &mut AgentRunContex
         context.effective_tools = context.tools.clone();
     }
     for descriptor in [
+        official::AgentGetTool::descriptor(),
         official::AgentSpawnTool::descriptor(),
         official::ThreadCreateTool::descriptor(),
         official::ThreadSendTool::descriptor(),
@@ -119,33 +119,15 @@ impl Runtime {
     }
     pub fn directory(&self) -> Result<Vec<DirectoryAgent>, fw::AgentError> {
         let management = self.builder.agent_management();
-        let internal = if self.context.workspace_code.is_empty() {
-            management
-                .list_platform_internal_agents()
-                .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))?
-                .into_iter()
-                .map(|agent| {
-                    management
-                        .platform_internal_agent_policy(&agent.agent_code)
-                        .map_err(|error| failure(format!("Agent policy load failed: {error:?}")))
-                })
-                .collect::<Result<Vec<_>, _>>()
-        } else {
-            management
-                .list_workspace_internal_agents(&self.context.workspace_code)
-                .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))
-        }?;
-        let mut directory = internal
-            .into_iter()
-            .map(|agent| DirectoryAgent {
-                agent_code: agent.agent_code,
-                name: agent.name,
-                description: agent.description,
-                role_prompt: agent.role_prompt,
-                avatar_id: agent.avatar_id,
-                model_id: None,
-            })
-            .collect::<Vec<_>>();
+        let internal = management.internal_agent_directory(&self.context.workspace_code)
+            .map_err(|error| failure(format!("Agent directory load failed: {error:?}")))?;
+        let mut directory = internal.into_iter().map(|agent| DirectoryAgent {
+            agent_code: agent.agent_code,
+            name: agent.name,
+            description: agent.responsibility,
+            avatar_id: agent.avatar_id,
+            model_id: None,
+        }).collect::<Vec<_>>();
         let system = if self.context.workspace_code.is_empty() {
             management.list_platform_system_agents()
         } else {
@@ -160,13 +142,54 @@ impl Runtime {
                     agent_code: agent.agent_code,
                     name: agent.name,
                     description: agent.description,
-                    role_prompt: String::new(),
-                    avatar_id: "robot".into(),
+                    avatar_id: agent.avatar_id.unwrap_or_else(|| "robot".into()),
                     model_id: agent.model_id,
                 }),
         );
         Ok(directory)
     }
+    async fn read_agent_details(&self, code: &str, parent: &fw::RunContext) -> Result<serde_json::Value, fw::AgentError> {
+        parent.check_cancelled()?;
+        self.host()?;
+        let caller = HostExecution::from_extensions(&parent.extensions)?;
+        {
+            let state = caller.state.lock().await;
+            let caller_context = &state.context;
+            if caller_context.workspace_code != self.context.workspace_code
+                || caller_context.user_code != self.context.user_code
+                || caller_context.collaboration_owner.as_ref().map(|owner| (&owner.kind, &owner.code))
+                    != self.context.collaboration_owner.as_ref().map(|owner| (&owner.kind, &owner.code))
+            {
+                return Err(failure("Agent details caller scope changed"));
+            }
+        }
+        let entry = self.directory()?.into_iter().find(|entry| entry.agent_code == code)
+            .ok_or_else(|| failure(format!("Agent `{code}` is unavailable in this workspace")))?;
+        let management = self.builder.agent_management();
+        if entry.model_id.is_some() {
+            let runtime = if self.context.workspace_code.is_empty() {
+                management.resolve_platform_agent_runtime(Some(code))
+            } else {
+                management.resolve_workspace_agent_runtime(&self.context.workspace_code, Some(code))
+            }.map_err(|error| failure(format!("Agent configuration lookup failed: {error:?}")))?;
+            return Ok(serde_json::json!({
+                "agentCode": entry.agent_code, "name": entry.name, "description": entry.description,
+                "runtimeType": runtime.runtime_type, "modelId": runtime.system_model_id,
+                "reasoningEffort": runtime.system_reasoning_effort, "fastMode": runtime.system_fast_mode,
+            }));
+        }
+        let policy = if self.context.workspace_code.is_empty() {
+            management.platform_internal_agent_policy(code)
+        } else {
+            management.workspace_internal_agent_policy(&self.context.workspace_code, code)
+        }.map_err(|error| failure(format!("Agent configuration lookup failed: {error:?}")))?;
+        if !policy.enabled {
+            return Err(failure(format!("Agent `{code}` is disabled")));
+        }
+        // Query returns data for this one target only; never model credentials.
+        serde_json::to_value(policy).map_err(failure)
+    }
+
     fn authorize(&self, code: &str) -> Result<String, fw::AgentError> {
         self.directory()?
             .into_iter()
@@ -320,6 +343,13 @@ impl Runtime {
             }
         }
         authorize_tools(&host, context);
+        host.bind_collaboration_session(
+            context,
+            parent
+                .map(|parent| parent.session_id.as_str())
+                .unwrap_or(session.as_str()),
+        )
+        .await?;
         let agent = host
             .collaboration_agent(
                 &context.workspace_code,

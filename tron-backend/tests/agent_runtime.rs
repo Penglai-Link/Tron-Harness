@@ -274,6 +274,7 @@ impl Tool for ProgressTool {
 
 fn base_context(run_code: &str) -> AgentRunContext {
     AgentRunContext {
+        system_agent_fast_mode: false,
         collaboration_owner: None,
         agent_code: None,
         conversation_code: Some("CONV-1".into()),

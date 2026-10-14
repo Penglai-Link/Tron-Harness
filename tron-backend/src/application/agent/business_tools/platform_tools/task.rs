@@ -424,6 +424,7 @@ mod tests {
 
     fn context(owner: Option<&str>, workspace: &str) -> AgentRunContext {
         AgentRunContext {
+            system_agent_fast_mode: false,
             collaboration_owner: owner.map(|code| AgentCollaborationOwner {
                 kind: "DUDE".into(),
                 code: code.into(),

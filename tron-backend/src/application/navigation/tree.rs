@@ -75,6 +75,7 @@ fn validate_flat_tree(
     if codes.len() != items.len() {
         return Err(NavigationError::DuplicateDomainItem);
     }
+    let mut depth = 0;
     for item in items {
         if let Some(parent) = item.parent_menu_code.as_deref() {
             if parent == item.menu.menu_code || !codes.contains(parent) {
@@ -91,10 +92,10 @@ fn validate_flat_tree(
         if item.position < 0 {
             return Err(NavigationError::InvalidHierarchy);
         }
-        let _ = depth_of(items, &item.menu.menu_code)?;
-        if depth_of(items, &item.menu.menu_code)? > max_depth {
-            return Err(NavigationError::MaxDepthExceeded);
-        }
+        depth = depth.max(depth_of(items, &item.menu.menu_code)?);
+    }
+    if depth > max_depth {
+        return Err(NavigationError::MaxDepthExceeded { depth, max_depth });
     }
     Ok(())
 }

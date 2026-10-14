@@ -40,8 +40,9 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
   };
   const keywordAliases = keyword.trim() ? [...new Set(appRoutes
     .filter((route) => triggerLabel(route.route, i18n).toLowerCase().includes(keyword.trim().toLowerCase()))
-    .map((route) => route.route.split("/:")[0]))] : [];
+    .flatMap((route) => [route.route.split("/:")[0], route.title]))] : [];
   const navigate = useNavigate();
+  const [sessionInput, setSessionInput] = useState(sessionCode);
   const [spanInput, setSpanInput] = useState(spanId);
   const [traceInput, setTraceInput] = useState(traceId);
   const [current, setCurrent] = useState(1);
@@ -61,6 +62,7 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
     size,
   });
   useEffect(() => {
+    setSessionInput(sessionCode);
     setKeywordInput(keyword);
     setSpanInput(spanId);
     setTraceInput(traceId);
@@ -75,6 +77,11 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
   }, [list.error, list.isSuccess, toast]);
   const page = list.data;
   const total = page?.total ?? 0;
+  useEffect(() => {
+    if (list.isSuccess && !list.isPlaceholderData) {
+      setCurrent((value) => Math.min(value, Math.max(1, Math.ceil(total / size))));
+    }
+  }, [list.isSuccess, list.isPlaceholderData, total, size]);
   const select = (row: TraceSummary) => {
     const next = new URLSearchParams(params);
     if (row.rootSpanId) next.set("rootSpanId", row.rootSpanId);
@@ -99,11 +106,12 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
       return;
     }
     const next = new URLSearchParams(params);
-    next.delete("spanId"); next.delete("traceId"); next.delete("keyword");
+    next.delete("sessionCode"); next.delete("spanId"); next.delete("traceId"); next.delete("keyword");
+    if (sessionInput.trim()) next.set("sessionCode", sessionInput.trim());
     if (keywordInput.trim()) next.set("keyword", keywordInput.trim());
     if (span) next.set("spanId", span);
     if (id) next.set("traceId", id);
-    if (current === 1 && spanId === span && traceId === id && keyword === keywordInput.trim()) void list.refetch();
+    if (current === 1 && sessionCode === sessionInput.trim() && spanId === span && traceId === id && keyword === keywordInput.trim()) void list.refetch();
     setParams(next);
     setCurrent(1);
   };
@@ -134,6 +142,13 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
     >
       <PlatformWorkspaceFilter />
       <TextInput aria-label={t("keyword")} placeholder={t("keywordPlaceholder")} className="w-48 max-w-full" value={keywordInput} maxLength={256} onChange={(event) => setKeywordInput(event.target.value)} />
+      <TextInput
+        aria-label={t("sessionId")}
+        placeholder={t("sessionId")}
+        className="w-48 max-w-full font-mono"
+        value={sessionInput}
+        onChange={(event) => setSessionInput(event.target.value)}
+      />
       <TextInput
         aria-label="Trace ID"
         placeholder="Trace ID"
@@ -218,7 +233,7 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
         <TabsTrigger value="Page">{t("pageTraces")}</TabsTrigger>
         <TabsTrigger value="Agent">{t("agentTraces")}</TabsTrigger>
       </TabsList>
-      <TabsContent value={category}>
+      <TabsContent value={category} aria-busy={list.isFetching}>
       <DataTable<TraceSummary>
         title={t("traces")}
         toolbar={toolbar}
@@ -229,7 +244,7 @@ export function TraceExplorer({ workspaceCode }: { workspaceCode: string }) {
         columns={[
           { id: "trigger", header: <span className="inline-flex items-center gap-1">{t("trigger")}<InfoTooltip ariaLabel={t("triggerHelpLabel")}>{t("triggerHelp")}</InfoTooltip></span>, width: "200px", render: (row) => (
             <Button variant="link" className="h-auto max-w-48 justify-start truncate p-0" onClick={() => select(row)}>
-              {triggerLabel(row.trigger || row.agentCode, i18n)}
+              {triggerLabel(row.trigger || row.agentCode, i18n, category)}
             </Button>
           ) },
           { id: "workspace", header: t("workspace"), width: "160px", render: (row) => <span className="block max-w-36 truncate" title={row.workspaceCode}>{row.workspaceCode || "—"}</span> },

@@ -64,6 +64,9 @@ interface ManagedSystemAgentRecordApi {
   agentCode: string;
   baseAgentCode?: string | null;
   modelId?: string | null;
+  fastMode?: boolean;
+  reasoningEffort?: PlatformSystemAgentRecord["reasoningEffort"];
+  avatarId?: string | null;
   name: string;
   description: string;
   source: AgentSourceApi;
@@ -99,6 +102,7 @@ interface ToolRecordApi {
 }
 
 export interface WorkspaceInternalAgentRecordApi {
+  enabled?: boolean;
   agentCode: string;
   name: string;
   description: string;
@@ -125,11 +129,13 @@ function normalizeAgentModels(models: ManagedSystemAgentRecordApi["models"]) {
   if (!Array.isArray(models)) return [];
   return models
     .map((model) => ({
+      supportedReasoningEfforts: model.supportedReasoningEfforts,
       displayName: model.displayName,
       modelId: model.modelId,
     }))
     .filter((model) => model.modelId?.trim().length > 0)
     .map((model) => ({
+      supportedReasoningEfforts: model.supportedReasoningEfforts,
       displayName: model.displayName?.trim() || model.modelId.trim(),
       modelId: model.modelId.trim(),
     }));
@@ -269,6 +275,7 @@ export function normalizeWorkspaceInternalAgentRecord(
   record: WorkspaceInternalAgentRecordApi
 ): WorkspaceInternalAgentRecord {
   return {
+    enabled: record.enabled ?? true,
     agentCode: record.agentCode,
     description: record.description,
     rolePrompt: record.rolePrompt ?? "",
@@ -340,6 +347,9 @@ function normalizePlatformSystemAgentRecord(
     agentCode: record.agentCode,
     baseAgentCode: record.baseAgentCode,
     modelId: record.modelId,
+    fastMode: record.fastMode ?? false,
+    reasoningEffort: record.reasoningEffort ?? null,
+    avatarId: record.avatarId ?? null,
     available: record.available,
     description: record.description,
     enabled: record.enabled,
@@ -358,6 +368,9 @@ function normalizeWorkspaceSystemAgentRecord(
     agentCode: record.agentCode,
     baseAgentCode: record.baseAgentCode,
     modelId: record.modelId,
+    fastMode: record.fastMode ?? false,
+    reasoningEffort: record.reasoningEffort ?? null,
+    avatarId: record.avatarId ?? null,
     available: record.available,
     description: record.description,
     enabled: record.enabled,
@@ -383,7 +396,7 @@ export function fetchPlatformSystemAgents(signal?: AbortSignal) {
 export function createPlatformSystemAgent(payload: SystemAgentProfilePayload) {
   return requestApi<{ agentCode: string }>(agentApiEndpoints.createPlatformSystemAgent, { body: payload });
 }
-export function updatePlatformSystemAgent(agentCode: string, payload: Pick<SystemAgentProfilePayload, "name" | "modelId">) {
+export function updatePlatformSystemAgent(agentCode: string, payload: Pick<SystemAgentProfilePayload, "name" | "description" | "modelId" | "reasoningEffort" | "avatarId" | "fastMode">) {
   return requestApi<{ agentCode: string }>(agentApiEndpoints.updatePlatformSystemAgent, { pathParams: { agentCode }, body: payload });
 }
 export function deletePlatformSystemAgent(agentCode: string) {
@@ -424,7 +437,8 @@ export function disablePlatformSystemAgent(agentCode: string) {
 
 export function fetchWorkspaceSystemAgents(
   workspaceCode: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  includeDisabled = false
 ) {
   return requestApi<ManagedSystemAgentRecordApi[]>(
     agentApiEndpoints.listWorkspaceSystemAgents,
@@ -432,7 +446,7 @@ export function fetchWorkspaceSystemAgents(
       pathParams: { workspaceCode },
       signal,
     }
-  ).then((records) => records.map(normalizeWorkspaceSystemAgentRecord));
+  ).then((records) => records.map(normalizeWorkspaceSystemAgentRecord).filter((agent) => includeDisabled || (agent.enabled && agent.available)));
 }
 
 export function enableWorkspaceSystemAgent(
@@ -478,7 +492,8 @@ export function listTools(payload: ListToolsQuery = {}, signal?: AbortSignal) {
 
 export function fetchWorkspaceInternalAgents(
   workspaceCode: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  includeDisabled = false
 ) {
   return requestApi<WorkspaceInternalAgentRecordApi[]>(
     internalAgentEndpoint(
@@ -489,7 +504,7 @@ export function fetchWorkspaceInternalAgents(
       pathParams: { workspaceCode },
       signal,
     }
-  ).then((records) => records.map(normalizeWorkspaceInternalAgentRecord));
+  ).then((records) => records.map(normalizeWorkspaceInternalAgentRecord).filter((agent) => includeDisabled || agent.enabled !== false));
 }
 
 export function createWorkspaceInternalAgent(
@@ -499,6 +514,7 @@ export function createWorkspaceInternalAgent(
   return requestApi<{
     agentCode: string;
     name: string;
+    description: string;
     rolePrompt: string;
     loopCode?: string | null;
     avatarId: string;
@@ -533,6 +549,7 @@ export function patchWorkspaceInternalAgentDefinition(
   return requestApi<{
     agentCode: string;
     name: string;
+    description: string;
     rolePrompt: string;
     loopCode?: string | null;
     avatarId: string;

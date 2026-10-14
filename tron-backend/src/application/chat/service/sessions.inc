@@ -2,7 +2,7 @@ impl ChatService {
     /// Trusted host entrypoint. Platform Dude ownership is persisted by DudeService;
     /// public user session creation continues to require an actual workspace.
     pub fn ensure_dude_session(&self, dude: &crate::domain::dude::DudeSession, user_code: Option<String>) -> Result<ChatSession, ChatError> {
-        if let Ok(existing)=self.repository().get_session(&dude.session_code) { return Ok(existing); }
+        if let Ok(existing)=self.repository().get_session(&dude.session_code) { if existing.user_code!=user_code {return Err(ChatError::WorkspaceForbidden);} return Ok(existing); }
         let now=current_timestamp();
         let session=ChatSession {
             id:self.id_provider.next_id().map_err(|_|ChatError::StorageFailure)?.value(),
@@ -13,7 +13,7 @@ impl ChatService {
             last_run_code:None,last_run_status:None,created_at:now.clone(),updated_at:now,
         };
         let mut repository=self.repository();
-        if let Ok(existing)=repository.get_session(&dude.session_code){return Ok(existing)}
+        if let Ok(existing)=repository.get_session(&dude.session_code){if existing.user_code!=session.user_code {return Err(ChatError::WorkspaceForbidden);}return Ok(existing)}
         repository.create_session(&session)?;Ok(session)
     }
 
@@ -157,6 +157,12 @@ impl ChatService {
 
     pub fn get_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
         self.repository().get_session(session_code)
+    }
+
+    pub fn session_titles(&self, codes: &[String]) -> Result<Vec<crate::application::chat::ChatSessionTitle>, ChatError> {
+        let codes = codes.iter().filter(|code| !code.is_empty()).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>();
+        if codes.is_empty() { return Ok(Vec::new()); }
+        self.repository().session_titles(&codes)
     }
 
     pub fn ensure_session_writable(&self, session_code: &str) -> Result<(), ChatError> {

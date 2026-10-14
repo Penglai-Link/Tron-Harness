@@ -15,6 +15,7 @@ fn builtin_role_prompt(catalog_key: &str) -> String {
 
 #[derive(Debug, Clone)]
 pub(super) struct InternalAgentDefinition {
+    pub(super) enabled: bool,
     pub(super) agent_code: String,
     pub(super) name: String,
     pub(super) description: String,
@@ -38,12 +39,13 @@ pub(super) struct InternalAgentDefinition {
 
 pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
     let mut definitions = vec![InternalAgentDefinition {
+        enabled: true,
         agent_code: MAIN_AGENT_CODE.to_string(),
         name: "Main Agent".to_string(),
         description: "Primary workspace internal agent with access to platform business tools."
             .to_string(),
         role_prompt: default_main_agent_role_prompt(),
-        avatar_id: "robot".into(),
+        avatar_id: "red-blue-pills".into(),
         candidate_model_codes: Vec::new(),
         group_name: Some("主智能体".into()),
         loop_code: Some(crate::domain::agent::loop_design::DEFAULT_REACT_LOOP_CODE.into()),
@@ -86,6 +88,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         ),
     ] {
         definitions.push(InternalAgentDefinition {
+            enabled: true,
             agent_code: agent_code.to_owned(),
             name: name.to_owned(),
             description: description.to_owned(),
@@ -152,14 +155,20 @@ impl AgentManagementService {
         let saved = self
             .repository()
             .list_workspace_internal_agent_definitions(workspace_code)?;
-        let definitions = self
-            .platform_internal_agent_configs()?
+        let platform = self.platform_internal_agent_configs()?;
+        let platform_codes = platform
+            .iter()
+            .map(|config| config.agent_code.clone())
+            .collect::<Vec<_>>();
+        let allowed = self.assigned_agent_codes(workspace_code, &platform_codes)?;
+        let definitions = platform
             .into_iter()
             .map(|config| InternalAgentDefinition {
+                enabled: config.enabled,
                 built_in: is_builtin_agent(&config.agent_code),
                 agent_code: config.agent_code,
                 name: config.name,
-                description: "Platform internal agent.".into(),
+                description: config.description,
                 role_prompt: config.role_prompt,
                 loop_code: config.loop_code,
                 avatar_id: config.avatar_id,
@@ -179,17 +188,13 @@ impl AgentManagementService {
             .collect::<Vec<_>>();
         let mut assigned = Vec::new();
         for definition in definitions {
-            if self.agent_assigned(&definition.agent_code, workspace_code)? {
+            if allowed.contains(&definition.agent_code) {
                 assigned.push(definition);
             }
         }
         let mut definitions = assigned;
         for record in saved {
-            if self
-                .platform_internal_agent_configs()?
-                .iter()
-                .any(|config| config.agent_code == record.agent_code)
-                && !self.agent_assigned(&record.agent_code, workspace_code)?
+            if platform_codes.contains(&record.agent_code) && !allowed.contains(&record.agent_code)
             {
                 continue;
             }
@@ -209,6 +214,9 @@ impl AgentManagementService {
                 if let Some(name) = record.name {
                     definition.name = name;
                 }
+                if let Some(description) = record.description {
+                    definition.description = description;
+                }
                 if let Some(code) = record.loop_code {
                     definition.loop_code = Some(code);
                 }
@@ -219,7 +227,7 @@ impl AgentManagementService {
                 let mut definition = internal_agents().remove(0);
                 definition.agent_code = record.agent_code;
                 definition.name = record.name.unwrap_or_default();
-                definition.description = "Workspace internal agent.".into();
+                definition.description = record.description.unwrap_or_default();
                 definition.role_prompt = record.role_prompt.unwrap_or_default();
                 definition.loop_code = record.loop_code;
                 definition.avatar_id = record.avatar_id.unwrap_or_else(|| "robot".into());
@@ -248,6 +256,7 @@ impl AgentManagementService {
             workspace_code: workspace_code.to_owned(),
             agent_code,
             name: Some(command.name.trim().to_owned()),
+            description: Some(validate_description(&command.description)?),
             role_prompt: Some(command.role_prompt),
             loop_code: Some(loop_code),
             avatar_id: Some(validate_avatar_id(command.avatar_id.as_deref())?),
@@ -295,6 +304,9 @@ impl AgentManagementService {
             .upsert_workspace_internal_agent_definition(&WorkspaceInternalAgentDefinition {
                 workspace_code: workspace_code.to_owned(),
                 agent_code: current.agent_code.clone(),
+                description: command.description
+                    .as_deref().map(validate_description).transpose()?
+                    .or_else(|| saved.as_ref().and_then(|record| record.description.clone())),
                 name: command
                     .name
                     .map(|name| name.trim().to_owned())
@@ -338,6 +350,14 @@ impl AgentManagementService {
     }
 }
 
+pub(super) fn validate_description(value: &str) -> Result<String, AgentManagementError> {
+    let value = value.trim();
+    if value.chars().count() > 200 {
+        return Err(AgentManagementError::InternalAgentDefinitionInvalid);
+    }
+    Ok(value.to_owned())
+}
+
 pub(super) fn validate_definition(
     name: &str,
     role_prompt: &str,
@@ -365,6 +385,25 @@ pub(super) fn validate_avatar_id(id: Option<&str>) -> Result<String, AgentManage
             | "raccoon"
             | "rabbit"
             | "dragon"
+            | "neo"
+            | "kucha"
+            | "sun"
+            | "moon"
+            | "earth"
+            | "mars"
+            | "mercury"
+            | "jupiter"
+            | "pig"
+            | "dog"
+            | "cow"
+            | "sheep"
+            | "horse"
+            | "snake"
+            | "rat"
+            | "chinese-dragon"
+            | "black-hole"
+            | "red-blue-pills"
+            | "tibo"
     ) {
         Ok(id.to_owned())
     } else {
@@ -406,15 +445,52 @@ pub(super) fn normalize_candidate_model_codes(
 }
 
 impl AgentManagementService {
+    /// One metadata snapshot per request instead of reloading registries for every row.
+    pub fn trace_agent_names(&self, workspaces: &[String]) -> std::collections::BTreeMap<(String,String),String> {
+        let mut repository=self.repository();
+        let mut platform=std::collections::BTreeMap::new();
+        for agent in repository.list_system_agents().unwrap_or_default() {platform.insert(agent.agent_code,agent.name);}
+        for agent in repository.list_platform_internal_agent_configs().unwrap_or_default() {platform.insert(agent.agent_code,agent.name);}
+        let mut names=std::collections::BTreeMap::new();
+        for workspace in workspaces.iter().collect::<std::collections::BTreeSet<_>>() {
+            for (code,name) in &platform {names.insert((workspace.clone(),code.clone()),name.clone());}
+            if !workspace.is_empty() {
+                for agent in repository.list_workspace_internal_agent_definitions(workspace).unwrap_or_default() {
+                    if let Some(name)=agent.name {names.insert((workspace.clone(),agent.agent_code),name);}
+                }
+            }
+        }
+        names
+    }
+
     /// Resolve saved display names without constructing tool policies or invoking agents.
     pub fn trace_agent_name(&self, workspace: &str, code: &str) -> Option<String> {
         let mut repository = self.repository();
         if !workspace.is_empty() {
-            if let Some(agent) = repository.list_workspace_internal_agent_definitions(workspace).ok()?.into_iter().find(|a| a.agent_code == code) {
-                if let Some(name) = agent.name { return Some(name); }
+            if let Some(agent) = repository
+                .list_workspace_internal_agent_definitions(workspace)
+                .ok()?
+                .into_iter()
+                .find(|a| a.agent_code == code)
+            {
+                if let Some(name) = agent.name {
+                    return Some(name);
+                }
             }
         }
-        if let Some(agent) = repository.list_platform_internal_agent_configs().ok()?.into_iter().find(|a| a.agent_code == code) { return Some(agent.name); }
-        repository.list_system_agents().ok()?.into_iter().find(|a| a.agent_code == code).map(|a| a.name)
+        if let Some(agent) = repository
+            .list_platform_internal_agent_configs()
+            .ok()?
+            .into_iter()
+            .find(|a| a.agent_code == code)
+        {
+            return Some(agent.name);
+        }
+        repository
+            .list_system_agents()
+            .ok()?
+            .into_iter()
+            .find(|a| a.agent_code == code)
+            .map(|a| a.name)
     }
 }

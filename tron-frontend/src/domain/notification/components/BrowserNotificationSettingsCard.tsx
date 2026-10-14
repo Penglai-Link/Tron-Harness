@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { SurfaceCard } from "@/shared";
 
 import {
@@ -14,6 +15,7 @@ import {
 
 export function BrowserNotificationSettingsCard() {
   const { t } = useTranslation("pages");
+  const toast = useToast();
   const [permission, setPermission] = useState<BrowserNotificationPermission>(() => getBrowserNotificationPermission());
   const [enabled, setEnabled] = useState(() => areBrowserNotificationsEnabled());
   const [pending, setPending] = useState(false);
@@ -51,6 +53,26 @@ export function BrowserNotificationSettingsCard() {
     }
   }
 
+  function sendTestNotification() {
+    if (!areBrowserNotificationsEnabled()) {
+      setPermission(getBrowserNotificationPermission());
+      setEnabled(false);
+      toast.error(t("settingsGeneral.browserNotifications.test.requireEnabled"));
+      return;
+    }
+    try {
+      // Manual testing also works in the foreground, unlike automatic alerts.
+      const notification = new Notification(t("settingsGeneral.browserNotifications.test.title"), {
+        body: t("settingsGeneral.browserNotifications.test.body"),
+        tag: "tron-test-notification",
+      });
+      notification.onclick = () => { window.focus(); notification.close(); };
+      notification.onerror = () => toast.error(t("settingsGeneral.browserNotifications.test.failed"));
+    } catch {
+      toast.error(t("settingsGeneral.browserNotifications.test.failed"));
+    }
+  }
+
   const statusKey = permission === "unsupported"
     ? "unsupported"
     : permission === "denied"
@@ -76,11 +98,22 @@ export function BrowserNotificationSettingsCard() {
           {t(`settingsGeneral.browserNotifications.status.${requestFailed ? "requestFailed" : statusKey}`)}
         </p>
       </div>
-      {actionKey ? (
-        <Button type="button" variant={enabled ? "outline" : "default"} disabled={pending} onClick={() => void toggle()}>
-          {t(`settingsGeneral.browserNotifications.actions.${actionKey}`)}
+      <div className="flex flex-wrap items-center gap-3">
+        {actionKey ? (
+          <Button type="button" variant={enabled ? "outline" : "default"} disabled={pending} onClick={() => void toggle()}>
+            {t(`settingsGeneral.browserNotifications.actions.${actionKey}`)}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending || !enabled || permission !== "granted"}
+          title={!enabled || permission !== "granted" ? t("settingsGeneral.browserNotifications.test.requireEnabled") : undefined}
+          onClick={sendTestNotification}
+        >
+          {t("settingsGeneral.browserNotifications.actions.test")}
         </Button>
-      ) : null}
+      </div>
     </SurfaceCard>
   );
 }

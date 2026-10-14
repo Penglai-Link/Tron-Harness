@@ -141,18 +141,24 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             (&self.management, state.context.tool_assignment.as_ref())
         {
             let record = management
-                .register_tool_descriptor(&binding.descriptor)
+                .describe_tool_descriptor(&binding.descriptor)
                 .map_err(fw::AgentError::ToolSetup)?;
             let selected = selection.selects(&record);
             let read_only =
                 selection.mode == crate::domain::agent::ToolAssignmentMode::AllReadOnlyTools;
+            state
+                .pending_tool_descriptors
+                .push(binding.descriptor.clone());
             if !control_tool && read_only && !selected {
                 state.product_tool_authority.remove(name);
                 return Ok(fw::ToolBindingAdmission::Exclude);
             }
-            if !management.platform_tool_allowed(name).map_err(|_| {
-                fw::AgentError::ToolSetup("Could not read platform tool permission".into())
-            })? {
+            if !management
+                .platform_tool_record_allowed(&record)
+                .map_err(|_| {
+                    fw::AgentError::ToolSetup("Could not read platform tool permission".into())
+                })?
+            {
                 return Ok(fw::ToolBindingAdmission::Exclude);
             }
             // Only leased native bindings can extend a dynamic rule; request schemas
@@ -206,6 +212,12 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
     ) -> Result<(), fw::AgentError> {
         let host = HostExecution::from_extensions(&run.extensions)?;
         let mut state = host.state.lock().await;
+        if let Some(management) = &self.management {
+            management
+                .register_tool_descriptors(&state.pending_tool_descriptors)
+                .map_err(fw::AgentError::ToolSetup)?;
+            state.pending_tool_descriptors.clear();
+        }
         // Legacy contexts use `tools` for both ACL and model exposure until an
         // effective catalog is supplied. Materialize that original ACL before
         // context/model preparation narrows `tools` to actual native bindings.

@@ -133,6 +133,7 @@ fn parse_system_agent_models_output(output: &str) -> Vec<SystemAgentModelRecord>
             continue;
         }
         records.push(SystemAgentModelRecord {
+            supported_reasoning_efforts: Vec::new(),
             model_id: line.to_string(),
             display_name: line.to_string(),
             context_window_tokens: None,
@@ -183,6 +184,7 @@ fn parse_models_from_json_value(value: &Value) -> Vec<SystemAgentModelRecord> {
 
             match model_id {
                 Some(model_id) => vec![SystemAgentModelRecord {
+                    supported_reasoning_efforts: parse_reasoning_efforts(object),
                     model_id: model_id.to_string(),
                     display_name: display_name.unwrap_or(model_id).to_string(),
                     context_window_tokens,
@@ -196,6 +198,7 @@ fn parse_models_from_json_value(value: &Value) -> Vec<SystemAgentModelRecord> {
                 Vec::new()
             } else {
                 vec![SystemAgentModelRecord {
+                    supported_reasoning_efforts: Vec::new(),
                     model_id: model_id.to_string(),
                     display_name: model_id.to_string(),
                     context_window_tokens: None,
@@ -306,4 +309,19 @@ mod tests {
         assert_eq!(models[1].model_id, "gpt-5.1");
         assert_eq!(models[1].context_window_tokens, Some(128000));
     }
+}
+
+fn parse_reasoning_efforts(object: &serde_json::Map<String, Value>) -> Vec<crate::domain::reasoning::ReasoningEffort> {
+    let values = object.get("supportedReasoningEfforts")
+        .or_else(|| object.get("supportedReasoningEffort"))
+        .or_else(|| object.get("supported_reasoning_levels"))
+        .or_else(|| object.get("variants"));
+    let names: Vec<&str> = match values {
+        Some(Value::Array(items)) => items.iter().filter_map(|item| item.as_str().or_else(|| item.get("effort").and_then(Value::as_str))).collect(),
+        Some(Value::Object(items)) => items.keys().map(String::as_str).collect(),
+        _ => Vec::new(),
+    };
+    crate::domain::reasoning::ReasoningEffort::ALL.into_iter()
+        .filter(|effort| names.iter().any(|name| name.eq_ignore_ascii_case(effort.provider_value())))
+        .collect()
 }

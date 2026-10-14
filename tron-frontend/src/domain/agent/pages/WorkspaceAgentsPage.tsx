@@ -1,3 +1,4 @@
+import { AgentActivationSwitch } from "../components/AgentActivationSwitch";
 import { reconcileResourceDraft } from "../model/ResourceAssignmentDraft";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -69,6 +70,7 @@ import { InternalAgentKnowledgeField } from "../components/InternalAgentKnowledg
 import { AgentWorkspaceField } from "../components/AgentWorkspaceField";
 import { persistAgentWorkspaceGrants } from "../hooks/agentWorkspaceGrants";
 import { AgentRolePromptField } from "../components/AgentRolePromptField";
+import { AgentDescriptionField } from "../components/AgentDescriptionField";
 import {
   InternalAgentAssignmentDialog,
   type InternalAgentAssignmentKind,
@@ -116,6 +118,8 @@ import { AgentCandidateModelsField } from "../components/AgentCandidateModelsFie
 import { AgentLoopField } from "../components/AgentLoopField";
 
 interface InternalAgentDraft {
+  description: string;
+  enabled: boolean;
   groupName: string;
   avatarId: string;
   candidateModelCodes: string[];
@@ -179,10 +183,12 @@ function draftFromRecord(
   record: WorkspaceInternalAgentRecord
 ): InternalAgentDraft {
   return {
+    enabled: record.enabled !== false,
     avatarId: record.avatarId || "robot",
     candidateModelCodes: normalizeToolCodes(record.candidateModelCodes ?? []),
     groupName: record.groupName || "",
     name: record.name,
+    description: record.description,
     rolePrompt: record.rolePrompt,
     loopCode: record.loopCode || "",
     expandedDomainPersistenceMode: record.expandedDomainPersistenceMode,
@@ -220,10 +226,12 @@ function hasDraftChanges(
   draft: InternalAgentDraft
 ) {
   return (
+    (record.enabled !== false) !== draft.enabled ||
     (record.groupName || "") !== draft.groupName ||
     (record.avatarId || "robot") !== draft.avatarId ||
     !hasSameToolCodes(normalizeToolCodes(record.candidateModelCodes ?? []), normalizeToolCodes(draft.candidateModelCodes)) ||
     record.name !== draft.name ||
+    record.description !== draft.description ||
     (record.loopCode || "") !== draft.loopCode ||
     record.rolePrompt !== draft.rolePrompt ||
     record.toolAssignmentMode !== draft.toolAssignmentMode ||
@@ -639,7 +647,7 @@ export function WorkspaceAgentsPage({
           nextWorkspaceMcpServers,
         ] = await Promise.all([
           dataSource === "api"
-            ? fetchWorkspaceInternalAgents(activeWorkspaceCode)
+            ? fetchWorkspaceInternalAgents(activeWorkspaceCode, undefined, true)
             : Promise.resolve(
                 listWorkspaceInternalAgentsMock(activeWorkspaceCode)
               ),
@@ -714,7 +722,7 @@ export function WorkspaceAgentsPage({
       } else {
         const nextSystemAgents =
           dataSource === "api"
-            ? await fetchWorkspaceSystemAgents(activeWorkspaceCode)
+            ? await fetchWorkspaceSystemAgents(activeWorkspaceCode, undefined, true)
             : await Promise.resolve(
                 listWorkspaceSystemAgentsMock(activeWorkspaceCode)
               );
@@ -734,7 +742,7 @@ export function WorkspaceAgentsPage({
   async function refreshCreatedAgent() {
     const records =
       dataSource === "api"
-        ? await fetchWorkspaceInternalAgents(activeWorkspaceCode)
+        ? await fetchWorkspaceInternalAgents(activeWorkspaceCode, undefined, true)
         : listWorkspaceInternalAgentsMock(activeWorkspaceCode);
     setInternalAgents(records);
     setInternalDrafts((current) =>
@@ -817,7 +825,7 @@ export function WorkspaceAgentsPage({
 
     const nextInternalAgents =
       dataSource === "api"
-        ? await fetchWorkspaceInternalAgents(activeWorkspaceCode)
+        ? await fetchWorkspaceInternalAgents(activeWorkspaceCode, undefined, true)
         : listWorkspaceInternalAgentsMock(activeWorkspaceCode);
     const savedAgent = nextInternalAgents.find(
       (agent) => agent.agentCode === agentCode
@@ -930,14 +938,17 @@ export function WorkspaceAgentsPage({
             );
         }
         if (
+          (row.enabled !== false) !== draft.enabled ||
           (row.groupName || "") !== draft.groupName ||
           row.name !== draft.name ||
+          row.description !== draft.description ||
           row.rolePrompt !== draft.rolePrompt ||
           (row.loopCode || "") !== draft.loopCode ||
           (row.avatarId || "robot") !== draft.avatarId ||
           !hasSameToolCodes(normalizeToolCodes(row.candidateModelCodes ?? []), normalizeToolCodes(draft.candidateModelCodes))
         ) {
           const definition = {
+            ...((row.enabled !== false) !== draft.enabled ? { enabled: draft.enabled } : {}),
             ...(!hasSameToolCodes(normalizeToolCodes(row.candidateModelCodes ?? []), normalizeToolCodes(draft.candidateModelCodes)) ? { candidateModelCodes: draft.candidateModelCodes } : {}),
             ...((row.groupName || "") !== draft.groupName
               ? { groupName: draft.groupName }
@@ -949,6 +960,7 @@ export function WorkspaceAgentsPage({
               ? { loopCode: draft.loopCode }
               : {}),
             ...(row.name !== draft.name ? { name: draft.name } : {}),
+            ...(row.description !== draft.description ? { description: draft.description } : {}),
             ...(row.rolePrompt !== draft.rolePrompt
               ? { rolePrompt: draft.rolePrompt }
               : {}),
@@ -1105,7 +1117,7 @@ export function WorkspaceAgentsPage({
     try {
       const platformRecords =
         dataSource === "api"
-          ? await fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE)
+          ? await fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE, undefined, true)
           : listWorkspaceInternalAgentsMock(PLATFORM_INTERNAL_AGENT_SCOPE);
       const baseline = platformRecords.find(
         (record) => record.agentCode === agentCode
@@ -1431,11 +1443,13 @@ export function WorkspaceAgentsPage({
                             )}
                           >
                             <DialogHeader>
-                              <DialogTitle>
+                              <div className="flex items-center justify-between gap-4 pr-8"><DialogTitle>
                                 {internalPageT("editAgent", "Edit {{name}}", {
                                   name: translateInternalAgentName(t, agent),
                                 })}
                               </DialogTitle>
+                              {scope === "platform" && <AgentActivationSwitch checked={draft.enabled} disabled={internalBusy} onChange={(enabled) => setInternalDraft(agent.agentCode, { enabled })} />}
+                              </div>
                             </DialogHeader>
                             <div className="flex min-h-0 flex-1 flex-col px-1 pb-1">
                               {scope !== "platform" || statusLabel ? (
@@ -1552,6 +1566,7 @@ export function WorkspaceAgentsPage({
                                     }
                                   />
                                 </Field>
+                                <AgentDescriptionField value={draft.description} disabled={editingDisabled} onChange={(description) => setInternalDraft(agent.agentCode, { description })} />
                                 <InternalAgentGroupField
                                   workspaceCode={activeWorkspaceCode}
                                   value={draft.groupName}

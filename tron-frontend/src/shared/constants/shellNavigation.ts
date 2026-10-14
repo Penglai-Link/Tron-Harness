@@ -1,132 +1,40 @@
-import {
-  Bot,
-  MessageSquareText,
-  SquarePen,
-  FolderKanban,
-  History,
-  Ellipsis,
-  Bell,
-  ScrollText,
-  Activity,
-  LayoutDashboard,
-  ChartNoAxesCombined,
-  AlarmClock,
-  Archive,
-  Database,
-  DatabaseZap,
-  Folder,
-  FolderGit2,
-  KeyRound,
-  ListTodo,
-  PlugZap,
-  Server,
-  Sparkles,
-  UserRound,
-  Wrench,
-} from "lucide-react";
-
+import { Folder } from "lucide-react";
+import { getNavigationIcon } from "@/shared/lib/navigationMenuMapper";
 import type { TronNavSection } from "@/shared/types/ShellNavigation";
 
+// Mirrors the built-in navigation seed; API trees remain authoritative.
 export const tronNavigation: TronNavSection[] = [
-  { id: "EXPLORE_MORE", label: "Explore more", translationKey: "shell:nav.sections.exploreMore", icon: Ellipsis, flyout: true, items: [] },
-  {
-    id: "CHAT_SESSIONS",
-    label: "Chat",
-    translationKey: "shell:nav.sections.chat",
-    icon: MessageSquareText,
-    items: [
-      { menuCode: "CHAT_NEW_SESSION", widgetCode: "chat.newSession", label: "New session", href: "", icon: SquarePen, translationKey: "shell:chatSidebar.newChat" },
-      { menuCode: "CHAT_PROJECTS", widgetCode: "chat.projects", label: "Projects", href: "", icon: FolderKanban, translationKey: "shell:nav.items.projects" },
-      { menuCode: "CHAT_RECENTS", widgetCode: "chat.recents", label: "Recents", href: "", icon: History, translationKey: "shell:chatSidebar.recent" },
-    ],
-  },
-  {
-    label: "Core",
-    translationKey: "shell:nav.sections.core",
-    items: [
-      { label: "Dude", href: "/dudes", icon: Bot, translationKey: "shell:nav.items.dudes" },
-      { label: "Notifications", href: "/notifications", icon: Bell, translationKey: "shell:nav.items.notifications" },
-      {
-        label: "Apps",
-        href: "/apps",
-        icon: FolderGit2,
-        translationKey: "shell:nav.items.apps",
-      },
-      {
-        label: "Tasks",
-        href: "/tasks",
-        icon: ListTodo,
-        translationKey: "shell:nav.items.tasks",
-      },
-      {
-        label: "Automations",
-        href: "/automations",
-        icon: AlarmClock,
-        translationKey: "shell:nav.items.automations",
-      },
-    ],
-  },
-  {
-    label: "Agent Operations",
-    translationKey: "shell:nav.sections.agentOperations",
-    items: [
-      {
-        label: "MCP Servers",
-        href: "/mcp-servers",
-        icon: PlugZap,
-        translationKey: "shell:nav.items.mcpServers",
-      },
-      {
-        label: "Models",
-        href: "/models",
-        icon: Sparkles,
-        translationKey: "shell:nav.items.models",
-      },
-    ],
-  },
-  {
-    label: "Data",
-    translationKey: "shell:nav.sections.data",
-    items: [
-      {
-        label: "Resource Management",
-        href: "/resource-management/files",
-        icon: Archive,
-        translationKey: "shell:nav.items.resourceManagement",
-        children: [
-          {
-            label: "File Management",
-            href: "/resource-management/files",
-            icon: Folder,
-            translationKey: "shell:nav.items.fileManagement",
-          },
-          {
-            label: "Data Source Management",
-            href: "/resource-management/data-sources",
-            icon: DatabaseZap,
-            translationKey: "shell:nav.items.dataSourceManagement",
-          },
-          {
-            label: "Server Management",
-            href: "/resource-management/servers",
-            icon: Server,
-            translationKey: "shell:nav.items.serverManagement",
-          },
-          {
-            label: "Server Account Management",
-            href: "/resource-management/server-accounts",
-            icon: UserRound,
-            translationKey: "shell:nav.items.serverAccountManagement",
-          },
-        ],
-      },
-      {
-        label: "Variables",
-        href: "/variables",
-        icon: KeyRound,
-        translationKey: "shell:nav.items.variables",
-      },
-    ],
-  },
-
+  { id: "DUDES", label: "Dude", translationKey: "shell:nav.items.dudes", icon: getNavigationIcon("Bot") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "DUDES", label: "Dude", translationKey: "shell:nav.items.dudes", href: "/dudes", icon: getNavigationIcon("Bot") ?? Folder, childDisplay: "Inline" }
+] },
+  { id: "CHAT_NEW_SESSION", label: "New Chat", translationKey: "shell:chatSidebar.newChat", icon: getNavigationIcon("SquarePen") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "CHAT_NEW_SESSION", label: "New Chat", translationKey: "shell:chatSidebar.newChat", href: "", icon: getNavigationIcon("SquarePen") ?? Folder, childDisplay: "Inline", widgetCode: "chat.newSession" }
+] },
+  { id: "EXPLORE_MORE", label: "Explore more", translationKey: "shell:nav.sections.exploreMore", icon: getNavigationIcon("Ellipsis") ?? Folder, standalone: false, flyout: true, items: [
+{ menuCode: "NOTIFICATIONS", label: "Notifications", translationKey: "shell:nav.items.notifications", href: "/notifications", icon: getNavigationIcon("Bell") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "CORE", label: "Core", translationKey: "shell:nav.sections.core", href: "", icon: getNavigationIcon("LayoutDashboard") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
+{ menuCode: "APPS", label: "Apps", translationKey: "shell:nav.items.apps", href: "/apps", icon: getNavigationIcon("FolderGit2") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "TASKS", label: "Tasks", translationKey: "shell:nav.items.tasks", href: "/tasks", icon: getNavigationIcon("ListTodo") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "AUTOMATIONS", label: "Automations", translationKey: "shell:nav.items.automations", href: "/automations", icon: getNavigationIcon("AlarmClock") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "VARIABLES", label: "Variables", translationKey: "shell:nav.items.variables", href: "/variables", icon: getNavigationIcon("KeyRound") ?? Folder, childDisplay: "Inline" }
+] },
+{ menuCode: "AGENT_OPERATIONS", label: "Agent Operations", translationKey: "shell:nav.sections.agentOperations", href: "", icon: getNavigationIcon("Bot") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
+{ menuCode: "MCP_SERVERS", label: "MCP Servers", translationKey: "shell:nav.items.mcpServers", href: "/mcp-servers", icon: getNavigationIcon("PlugZap") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "MODELS", label: "Models", translationKey: "shell:nav.items.models", href: "/models", icon: getNavigationIcon("Sparkles") ?? Folder, childDisplay: "Inline" }
+] },
+{ menuCode: "DATA", label: "Data", translationKey: "shell:nav.sections.data", href: "", icon: getNavigationIcon("Database") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
+{ menuCode: "RESOURCE_MANAGEMENT", label: "Resource Management", translationKey: "shell:nav.items.resourceManagement", href: "", icon: getNavigationIcon("Archive") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
+{ menuCode: "FILE_MANAGEMENT", label: "File Management", translationKey: "shell:nav.items.fileManagement", href: "/resource-management/files", icon: getNavigationIcon("Folder") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "DATA_SOURCE_MANAGEMENT", label: "Data Source Management", translationKey: "shell:nav.items.dataSourceManagement", href: "/resource-management/data-sources", icon: getNavigationIcon("DatabaseZap") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "SERVER_MANAGEMENT", label: "Server Management", translationKey: "shell:nav.items.serverManagement", href: "/resource-management/servers", icon: getNavigationIcon("Server") ?? Folder, childDisplay: "Inline" },
+{ menuCode: "SERVER_ACCOUNT_MANAGEMENT", label: "Server Account Management", translationKey: "shell:nav.items.serverAccountManagement", href: "/resource-management/server-accounts", icon: getNavigationIcon("UserRound") ?? Folder, childDisplay: "Inline" }
+] }
+] }
+] },
+  { id: "CHAT_PROJECTS", label: "Projects", translationKey: "shell:nav.items.projects", icon: getNavigationIcon("FolderKanban") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "CHAT_PROJECTS", label: "Projects", translationKey: "shell:nav.items.projects", href: "", icon: getNavigationIcon("FolderKanban") ?? Folder, childDisplay: "Inline", widgetCode: "chat.projects" }
+] },
+  { id: "CHAT_RECENTS", label: "Recents", translationKey: "shell:chatSidebar.recent", icon: getNavigationIcon("History") ?? Folder, standalone: true, flyout: false, items: [
+{ menuCode: "CHAT_RECENTS", label: "Recents", translationKey: "shell:chatSidebar.recent", href: "", icon: getNavigationIcon("History") ?? Folder, childDisplay: "Inline", widgetCode: "chat.recents" }
+] },
 ];

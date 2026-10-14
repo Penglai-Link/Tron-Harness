@@ -187,6 +187,7 @@ async fn platform_agent_knowledge_configuration_precedes_space_authorization() {
         .state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            description: String::new(),
             candidate_model_codes: Vec::new(),
             avatar_id: None,
             loop_code: Some("knowledge-grant-react".into()),

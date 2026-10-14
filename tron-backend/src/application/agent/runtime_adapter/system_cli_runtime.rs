@@ -80,6 +80,8 @@ impl SystemCliRuntime {
             &self.command_name,
             self.working_directory.clone(),
         )
+        .with_reasoning_effort(context.model.reasoning_effort.map(|effort| effort.provider_value().to_owned()))
+        .with_fast_mode(context.system_agent_fast_mode)
         .invoke(request, sink)
         .await
         .map_err(|error| match error {

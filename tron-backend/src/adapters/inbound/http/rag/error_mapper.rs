@@ -7,6 +7,12 @@ use axum::{
 use crate::{domain::rag::RagError, response::ApiResponse};
 
 pub fn rag_error_response(error: RagError) -> Response {
+    if let RagError::EmbeddingFailure(_) = &error {
+        return (
+            StatusCode::BAD_GATEWAY,
+            Json(ApiResponse::error("RAG_EMBEDDING_FAILED", error.to_string())),
+        ).into_response();
+    }
     let (status, code, message) = match error {
         RagError::SchemaIncompatible => (
             StatusCode::CONFLICT,
@@ -23,7 +29,7 @@ pub fn rag_error_response(error: RagError) -> Response {
             "RAG_INGEST_SCOPE_INVALID",
             "rag ingest target scope is invalid",
         ),
-        RagError::EmbeddingFailed => (
+        RagError::EmbeddingFailed | RagError::EmbeddingFailure(_) => (
             StatusCode::BAD_GATEWAY,
             "RAG_EMBEDDING_FAILED",
             "rag embedding failed",

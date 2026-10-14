@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-export type ContextDetailBlock = "systemPrompt" | "toolSchema" | "familyContext" | "applicationContext" | "history";
+// Contributor IDs are extensible; the familiar aliases keep their richer previews.
+export type ContextDetailBlock = "systemPrompt" | "toolSchema" | "familyContext" | "applicationContext" | "history" | (string & {});
 type RecordValue = Record<string, unknown>;
 const keyPrefix = "chat.shortTermMemory.contextPanel.";
 
@@ -102,10 +103,10 @@ function MessagePart({ part }: { part: RecordValue }) {
   return null;
 }
 
-function MessagesPreview({ value, history = false, onOpenPrompt }: { value: unknown; history?: boolean; onOpenPrompt?: (code: string) => void }) {
+function MessagesPreview({ value, history = false, systemPrompt = false, onOpenPrompt }: { value: unknown; history?: boolean; systemPrompt?: boolean; onOpenPrompt?: (code: string) => void }) {
   const { t } = useTranslation("pages");
   const messages = record(value) ? records(value.messages) : [];
-  if (!messages.length) return <Empty label={t(`${keyPrefix}${history ? "historyEmpty" : "detailPromptEmpty"}`)} />;
+  if (!messages.length) return <Empty label={t(`${keyPrefix}${history ? "historyEmpty" : systemPrompt ? "detailPromptEmpty" : "contributorEmpty"}`)} />;
   return <div className="divide-y divide-[var(--color-outline-variant)]">
     {history ? <p className="pb-3 text-xs text-[var(--color-on-surface-variant)]">{t(`${keyPrefix}historyNote`)}</p> : null}
     {messages.map((message, index) => <section className="space-y-3 py-4 first:pt-0 last:pb-0" key={index}>
@@ -185,5 +186,5 @@ export function ContextDetailPreview({ block, value, onOpenPrompt }: { block: Co
   if (block === "toolSchema") return <ToolPreview value={value} />;
   if (block === "familyContext") return <FamilyPreview value={value} />;
   if (block === "applicationContext") return <ApplicationPreview value={value} />;
-  return <MessagesPreview value={value} history={block === "history"} onOpenPrompt={onOpenPrompt} />;
+  return <MessagesPreview value={value} history={block === "history"} systemPrompt={block === "systemPrompt"} onOpenPrompt={onOpenPrompt} />;
 }

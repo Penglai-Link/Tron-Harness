@@ -168,6 +168,8 @@ pub struct AgentRunContext {
     pub stream_key: Option<String>,
     pub agent_kind: AgentKind,
     pub system_agent_session_id: Option<String>,
+    #[serde(default)]
+    pub system_agent_fast_mode: bool,
     pub model: AgentModelConfig,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_model_route: Option<AutoModelRouteContext>,
@@ -293,6 +295,7 @@ mod tests {
     #[test]
     fn domain_discovery_hidden_tools_remain_policy_authorized_without_effective_snapshot() {
         let context = AgentRunContext {
+            system_agent_fast_mode: false,
             collaboration_owner: None,
             agent_code: None,
             conversation_code: None,

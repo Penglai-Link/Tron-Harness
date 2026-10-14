@@ -9,6 +9,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::{Method, StatusCode},
+    response::IntoResponse,
     routing::post,
 };
 use serde_json::{Value, json};
@@ -40,15 +41,37 @@ async fn model_server(calls: Vec<(&str, Value)>) -> Server {
     async fn completion(
         State((requests, replies)): State<(Arc<Mutex<Vec<Value>>>, Arc<Mutex<VecDeque<Value>>>)>,
         Json(payload): Json<Value>,
-    ) -> Json<Value> {
+    ) -> axum::response::Response {
+        let streaming = payload["stream"].as_bool().unwrap_or(false);
         requests.lock().unwrap().push(payload);
-        Json(
-            replies
-                .lock()
-                .unwrap()
-                .pop_front()
-                .expect("unexpected extra model request"),
+        let reply = replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("unexpected extra model request");
+        if !streaming {
+            return Json(reply).into_response();
+        }
+        let mut delta = reply["choices"][0]["message"].clone();
+        if let Some(calls) = delta["tool_calls"].as_array_mut() {
+            for (index, call) in calls.iter_mut().enumerate() {
+                call["index"] = json!(index);
+            }
+        }
+        let finish = if delta["tool_calls"].is_array() {
+            "tool_calls"
+        } else {
+            "stop"
+        };
+        let chunk = json!({"id":"fixture","object":"chat.completion.chunk","model":"fixture",
+            "choices":[{"index":0,"delta":delta,"finish_reason":null}]});
+        let done = json!({"id":"fixture","object":"chat.completion.chunk","model":"fixture",
+            "choices":[{"index":0,"delta":{},"finish_reason":finish}]});
+        (
+            [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+            format!("data: {chunk}\n\ndata: {done}\n\ndata: [DONE]\n\n"),
         )
+            .into_response()
     }
     let router = Router::new()
         .route("/v1/chat/completions", post(completion))

@@ -27,6 +27,7 @@ import { ShinyText } from "@/shared/motion";
 import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
 import { historyMessages } from "@eliteforge/agent-ui-chat-core";
 import { ChatSubagentsPanel } from "../components/ChatSubagentsPanel";
+import { useChatSubagents } from "../hooks/useChatSubagents";
 import { useTabPanelScopeId } from "@/shared/layout/content/TabPanelRegistry";
 import { AgentTerminalToolCard, AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
 import { openAgentTerminalFromLiveResult } from "../terminal/store";
@@ -99,6 +100,7 @@ import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
 import { ChatDraftResources } from "../model/chatDraftResources";
 import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
 import { ContextDetailPreview, contextDetailRawValue, type ContextDetailBlock } from "@/domain/chat/components/ContextDetailPreview";
+import { contextAssemblySnapshot, type ContextAssemblySnapshot } from "../model/contextAssemblyReport";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
   enqueueChatSubmission,
@@ -743,7 +745,10 @@ function sessionProviderUsageFromEvents(events: TranscriptAguiEvent[]): ChatToke
   };
 }
 
+const contextEventPayloadCache = new WeakMap<TranscriptAguiEvent, Record<string, unknown> | null>();
+
 function shortTermMemoryEventPayload(event: TranscriptAguiEvent): Record<string, unknown> | null {
+  if (contextEventPayloadCache.has(event)) return contextEventPayloadCache.get(event) ?? null;
   if ("value" in event && typeof event.value === "object" && event.value !== null) {
     return event.value as Record<string, unknown>;
   }
@@ -751,9 +756,11 @@ function shortTermMemoryEventPayload(event: TranscriptAguiEvent): Record<string,
   if (!encoded) return null;
   try {
     const parsed = JSON.parse(encoded) as unknown;
-    return typeof parsed === "object" && parsed !== null
+    const payload = typeof parsed === "object" && parsed !== null
       ? parsed as Record<string, unknown>
       : null;
+    contextEventPayloadCache.set(event, payload);
+    return payload;
   } catch {
     return null;
   }
@@ -775,6 +782,23 @@ export function latestContextBudgetBreakdownFromEvents(events: TranscriptAguiEve
     if (normalized) return normalized;
   }
   return null;
+}
+
+function latestContextAssemblyFromEvents(events: TranscriptAguiEvent[]) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    const payload = shortTermMemoryEventPayload(event);
+    const snapshot = contextAssemblySnapshot(payload);
+    if (snapshot) return {
+      snapshot,
+      breakdown: normalizeContextBudgetBreakdown(payload?.budgetBreakdown as Partial<ChatContextBudgetBreakdown> | undefined),
+    };
+    // A following model-requested event also carries budgetBreakdown; it must
+    // not hide the full report emitted immediately before that request.
+    if (payload?.budgetBreakdown && "name" in event
+      && event.name === "tron.short_term_memory.context.assembled") break;
+  }
+  return { snapshot: null, breakdown: latestContextBudgetBreakdownFromEvents(events) };
 }
 
 function chatTokenUsage(messages: ChatMessage[]) {
@@ -1936,16 +1960,13 @@ const mainChatAgentOption: ChatAgentOption = {
 };
 
 function availableChatAgents(internalRecords: WorkspaceInternalAgentRecord[], systemRecords: WorkspaceSystemAgentRecord[]) {
-  const internalAgents: ChatAgentOption[] = internalRecords.map((record) => ({
+  const internalAgents: ChatAgentOption[] = internalRecords.filter((record) => record.enabled !== false).map((record) => ({
     agentCode: record.agentCode,
     description: record.description,
     models: [] as SystemAgentModelRecord[],
     name: record.name,
     kind: "internal" as const,
   }));
-  if (!internalAgents.some((agent) => agent.agentCode === mainChatAgentOption.agentCode)) {
-    internalAgents.unshift(mainChatAgentOption);
-  }
   const systemAgents = systemRecords
     .filter((record) => record.available && record.enabled)
     .map((record) => ({
@@ -2433,11 +2454,78 @@ interface ContextMemoryBlockItem {
   code: string;
   color: ContextBlockColor;
   detailCode?: ContextDetailBlock;
+  detailValue?: unknown;
+  snapshotSequence?: string;
+  order?: number;
+  sources?: { id: string; name: string }[];
+  status?: string;
+  statusTone?: "warning" | "error";
   limitDescription?: string;
   limitTokens: number | null;
   name: string;
   stat: string;
   tokens: number;
+}
+
+const contributorLabelKeys: Record<string, string> = {
+  "framework.instructions": "systemPromptName",
+  seed_prompt_prefix: "systemPromptName",
+  application_context: "applicationContextName",
+  current_session_checkpoint: "checkpointName",
+  current_session_working_state: "workingStateName",
+  session_family_context: "familyContextName",
+  "framework.history": "sessionHistoryName",
+  runtime_identity: "runtimeIdentityName",
+  "skills.catalog": "skillsCatalogName",
+  "a2ui.guidance": "a2uiGuidanceName",
+  knowledge_base: "knowledgeBaseName",
+  agent_directory: "agentDirectoryName",
+  dude_onboarding: "dudeOnboardingName",
+  dude_environment: "dudeEnvironmentName",
+  dude_wakeup: "dudeWakeupName",
+};
+
+function buildReportedContextMemoryBlocks(
+  snapshot: ContextAssemblySnapshot,
+  translate: (key: string, options?: Record<string, unknown>) => string,
+): ContextMemoryBlockItem[] {
+  const prefix = "chat.shortTermMemory.contextPanel.";
+  const label = (id: string) => contributorLabelKeys[id] ? translate(prefix + contributorLabelKeys[id]) : id;
+  const detailAliases: Record<string, ContextDetailBlock> = {
+    "framework.instructions": "systemPrompt", seed_prompt_prefix: "systemPrompt",
+    application_context: "applicationContext", session_family_context: "familyContext", "framework.history": "history",
+  };
+  const blocks: ContextMemoryBlockItem[] = snapshot.blocks.map((block, index) => ({
+    code: block.id,
+    color: block.id === "framework.history" ? "history" : "seed",
+    detailCode: block.detailValue !== undefined || snapshot.snapshotSequence ? detailAliases[block.id] ?? block.id : undefined,
+    detailValue: block.detailValue,
+    snapshotSequence: snapshot.snapshotSequence,
+    order: index + 1,
+    sources: block.sources.length > 1 || block.sources.some((id) => id !== block.id)
+      ? block.sources.map((id) => ({ id, name: id === "framework.instructions" ? translate(prefix + "baseInstructionsName") : label(id) })) : undefined,
+    limitTokens: block.allocatedTokens,
+    name: label(block.id),
+    tokens: block.finalTokens,
+    stat: translate(prefix + "messageCount", { count: block.messageCount }),
+    status: block.outcome !== "Kept" ? translate(prefix + "outcomes." + block.outcome, { defaultValue: block.outcome }) : undefined,
+    statusTone: block.outcome === "Failed" ? "error" : "warning",
+    limitDescription: block.reason || (block.originalTokens !== null && block.originalTokens !== block.finalTokens
+      ? translate(prefix + "reductionStat", { original: formatCompactTokenCount(block.originalTokens), final: formatCompactTokenCount(block.finalTokens) }) : undefined),
+  }));
+  if (snapshot.protocolTokens !== null) blocks.push({
+    code: "protocol",
+    color: "tool",
+    detailCode: snapshot.toolsDetail !== undefined || snapshot.snapshotSequence ? "toolSchema" : undefined,
+    detailValue: snapshot.toolsDetail,
+    snapshotSequence: snapshot.snapshotSequence,
+    name: translate(prefix + "protocolName"),
+    stat: "",
+    limitTokens: snapshot.inputCapacity,
+    tokens: snapshot.protocolTokens,
+    limitDescription: translate(prefix + "protocolNote"),
+  });
+  return blocks;
 }
 
 const mutedContextBlockColor = {
@@ -2737,13 +2825,19 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
   const fallbackPercent = block.limitTokens == null && block.tokens > 0 ? 40 : percent;
   useEffect(() => {
     if (!dialogOpen || !block.detailCode) return;
+    if (block.detailValue !== undefined) {
+      setDetail(block.detailValue);
+      setLoading(false);
+      setLoadError(false);
+      return;
+    }
     const controller = new AbortController();
     setLoading(true);
     setLoadError(false);
     setDetail(null);
     let refreshing = true;
     void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
-      queryParams: { sessionCode, blockCode: block.detailCode },
+      queryParams: { sessionCode, blockCode: block.detailCode, ...(block.snapshotSequence ? { snapshotSequence: block.snapshotSequence } : {}) },
       signal: controller.signal,
     }).then((value) => { if (!controller.signal.aborted) setDetail(value); }).catch(() => {
       if (!controller.signal.aborted) setLoadError(true);
@@ -2751,7 +2845,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
       refreshing = false;
       if (!controller.signal.aborted) setLoading(false);
     });
-    const timer = block.detailCode === "applicationContext" ? window.setInterval(() => {
+    const timer = block.detailCode === "applicationContext" && !block.snapshotSequence ? window.setInterval(() => {
       if (refreshing) return;
       refreshing = true;
       void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
@@ -2761,7 +2855,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
       }).finally(() => { refreshing = false; });
     }, 3000) : undefined;
     return () => { controller.abort(); if (timer !== undefined) window.clearInterval(timer); };
-  }, [block.detailCode, dialogOpen, sessionCode]);
+  }, [block.detailCode, block.detailValue, block.snapshotSequence, dialogOpen, sessionCode]);
   let parsedDetail = detail;
   if (typeof detail === "string") {
     try {
@@ -2777,11 +2871,13 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
   const contents = (
     <>
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
-        <div className="flex min-w-0 items-baseline gap-1">
-          <div className="truncate text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]">{block.name}</div>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-1">
+          {block.order ? <span className="shrink-0 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{block.order}.</span> : null}
+          <div className="min-w-0 break-words text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]" title={block.code}>{block.name}</div>
           {block.stat ? (
             <div className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</div>
           ) : null}
+          {block.status ? <span className={cn("text-[10px] font-medium", block.statusTone === "error" ? "text-[var(--color-error)]" : "text-[var(--color-warning)]")}>{block.status}</span> : null}
         </div>
         <div className="shrink-0 font-mono text-[11px] text-[var(--color-on-surface)]">
           {formatTokenLimit(block.tokens, block.limitTokens)}
@@ -2790,6 +2886,16 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
         <div className={cn("h-full rounded-full", colors.fill)} style={{ width: `${fallbackPercent}%` }} />
       </div>
+      {block.sources?.length ? (
+        <div className="mt-2 border-l border-[var(--color-outline-variant)] pl-2 text-[10px] text-[var(--color-on-surface-variant)]">
+          <p className="mb-1">{t("chat.shortTermMemory.contextPanel.mergedSourcesNote")}</p>
+          <ol className="space-y-1">
+            {block.sources.map((source, index) => <li className="break-words" key={`${source.id}:${index}`} title={source.id}>
+              <span className="mr-1 font-mono">{block.order}.{index + 1}</span>{source.name}
+            </li>)}
+          </ol>
+        </div>
+      ) : null}
     </>
   );
   return (
@@ -3334,10 +3440,14 @@ function RightContextSidebar({
   const usage = chatTokenUsage(messages);
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
   const requestEstimate = latestRequestEstimate ?? usageAudit?.requestEstimate ?? latestUsageEstimateFromEvents(events);
-  const budgetBreakdown = latestContextBudgetBreakdownFromEvents(events);
+  const contextAssembly = useMemo(() => latestContextAssemblyFromEvents(events), [events]);
+  const budgetBreakdown = contextAssembly.breakdown;
   const runtimeNotice = latestShortTermMemoryRuntimeNotice(events);
   const fallbackWindowLimit = contextWindowLimitFromSources(model, selectedModel, events);
-  const contextBlocks = buildContextMemoryBlocks({
+  const reportedBlocks = useMemo(() => contextAssembly.snapshot
+    ? buildReportedContextMemoryBlocks(contextAssembly.snapshot, (key, options) => t(key, options)) : null,
+  [contextAssembly.snapshot, t]);
+  const contextBlocks = reportedBlocks ?? buildContextMemoryBlocks({
     breakdown: budgetBreakdown,
     goal,
     latestCompaction,
@@ -4613,7 +4723,7 @@ export function ChatManagementPage() {
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<ReasoningEffort | null>(null);
   const [sessionModelSelections, setSessionModelSelections] = useState<Record<string, string>>(() => readChatSessionModelSelections());
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [chatAgents, setChatAgents] = useState<ChatAgentOption[]>(() => [mainChatAgentOption]);
+  const [chatAgents, setChatAgents] = useState<ChatAgentOption[]>([]);
   const [selectedAgentCode, setSelectedAgentCode] = useState(mainChatAgentOption.agentCode);
   const agentSelectionSessionRef = useRef("");
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -5159,7 +5269,7 @@ export function ChatManagementPage() {
 
     async function loadAgents() {
       if (!activeWorkspaceCode) {
-        setChatAgents([mainChatAgentOption]);
+        setChatAgents([]);
         setSelectedAgentCode(mainChatAgentOption.agentCode);
         return;
       }
@@ -5185,7 +5295,7 @@ export function ChatManagementPage() {
         ));
       } catch (error) {
         if (active) {
-          setChatAgents([mainChatAgentOption]);
+          setChatAgents([]);
           setSelectedAgentCode(mainChatAgentOption.agentCode);
           toast.error(error instanceof Error ? error.message : t("chat.management.toasts.agentLoadFailed"), { title: t("chat.management.toasts.agentLoadFailedTitle") });
         }
@@ -5605,15 +5715,25 @@ export function ChatManagementPage() {
     hasActiveSession,
     rightPanelSnapshots,
   ]);
+  // Discover summaries while the sidebar is open, including before its tab exists.
+  // The panel consumes this same result instead of starting a second polling loop.
+  const subagents = useChatSubagents(
+    activeSession?.sessionCode ?? "",
+    activeSession?.workspaceCode ?? "",
+    contextPanelOpen && Boolean(activeSession?.workspaceCode),
+  );
   const rightPanelTabs = useMemo<EditableTab[]>(() => {
     const snapshot = rightPanelSnapshots[activeSession?.sessionCode ?? ""];
     if (!snapshot) return [];
-    return [
+    const tabs: EditableTab[] = [
       { key: "workspace", label: <><WorkspaceTabState goal={snapshot.goal} running={snapshot.workspaceGoalRunning} /><span>{t("chat.shortTermMemory.workspaceTab")}</span></>, closable: false, children: rightPanel },
       { key: "context", label: t("chat.shortTermMemory.shortTermMemoryTab"), closable: false, children: <ChatSessionContextPanel snapshot={snapshot} onCreateCompaction={handleCreateCompactionForRightPanel} /> },
-      { key: "subagents", label: t("chat.subagents.title"), closable: false, children: snapshot.session.workspaceCode ? <ChatSubagentsPanel key={snapshot.session.sessionCode} sessionCode={snapshot.session.sessionCode} workspaceCode={snapshot.session.workspaceCode} /> : null },
     ];
-  }, [activeSession?.sessionCode, handleCreateCompactionForRightPanel, rightPanel, rightPanelSnapshots, t]);
+    if (snapshot.session.workspaceCode && subagents.items.length > 0) {
+      tabs.push({ key: "subagents", label: t("chat.subagents.title"), closable: false, children: <ChatSubagentsPanel key={snapshot.session.sessionCode} sessionCode={snapshot.session.sessionCode} workspaceCode={snapshot.session.workspaceCode} data={subagents} /> });
+    }
+    return tabs;
+  }, [activeSession?.sessionCode, handleCreateCompactionForRightPanel, rightPanel, rightPanelSnapshots, subagents, t]);
   const downloadPendingAttachment = useCallback(
     (attachment: ChatMessageAttachment) => {
       const file = draftResources.file(attachment);

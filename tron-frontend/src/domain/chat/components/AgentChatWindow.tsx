@@ -1,4 +1,6 @@
 import { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { useChatWorkRailLabels, useChatHistoryLabels } from "../hooks/useChatWorkRailLabels";
 import { ChatRuntimeWindow, type ChatRuntimeWindowProps } from "@eliteforge/agent-ui-chat-react";
 import type * as Ui from "@eliteforge/agent-ui-chat-core";
 import type { ChatAdapter, ChatClientConfig, ChatMessageAttachment, ChatRuntimeRunState, ChatSession, SendChatMessageInput } from "@tron/chat-core";
@@ -24,6 +26,22 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
   onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
   const inputSuggestions = useChatInputSuggestions(config.agentCode, initialSession?.sessionCode, initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined, config.workspaceCode);
+  const { t } = useTranslation("pages");
+  const workRailLabels = useChatWorkRailLabels();
+  const historyLabels = useChatHistoryLabels();
+  const userInputLabels = useMemo(() => ({
+    ariaLabel: t("chat.userInput.ariaLabel"),
+    progress: (current: number, total: number) => t("chat.userInput.progress", { current, total }),
+    back: t("chat.userInput.back"), next: t("chat.userInput.next"),
+    continue: t("chat.userInput.continue"), approve: t("chat.userInput.approve"),
+    reject: t("chat.userInput.reject"), continuing: t("chat.userInput.continuing"),
+    otherOptionLabel: t("chat.userInput.otherOptionLabel"),
+    otherOptionDescription: t("chat.userInput.otherOptionDescription"),
+    skipOptionLabel: t("chat.userInput.skipOptionLabel"),
+    skipOptionDescription: t("chat.userInput.skipOptionDescription"),
+    otherAnswerPlaceholder: t("chat.userInput.otherAnswerPlaceholder"),
+    otherAnswerAriaLabel: (index: number) => t("chat.userInput.otherAnswerAriaLabel", { index }),
+  }), [t]);
   const uiAdapter = useMemo(() => createAgentUiAdapter(adapter, config),
     [adapter, config.workspaceCode, config.appCode, config.taskCode, config.agentCode]);
   const session = useMemo(() => initialSession ? toUiSession(initialSession) : initialSession, [initialSession]);
@@ -33,7 +51,7 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
   const handleAttachments = useCallback((value: Ui.ChatMessageAttachment[]) =>
     onPendingAttachmentsChange?.(value.map(fromUiAttachment)), [onPendingAttachmentsChange]);
   const handleRun = useCallback((value: Ui.ChatRuntimeRunState) => onRunStateChange?.({
-    active: value.active, runCode: value.runId, sessionCode: value.sessionId, supportsSteer: value.supportsSteer,
+    loading: value.loading, active: value.active, runCode: value.runId, sessionCode: value.sessionId, supportsSteer: value.supportsSteer,
   }), [onRunStateChange]);
   const createInput = useCallback((value: Ui.ChatSession, content: string, files: Ui.ChatMessageAttachment[]) => {
     const hostSession = fromUiSession(value);
@@ -47,7 +65,13 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
   return <ChatRuntimeWindow {...props} adapter={uiAdapter}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
-    config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode }}
+    config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
+      workRailLabels: config.workRailLabels ?? workRailLabels,
+      historyLabels: config.historyLabels ?? historyLabels,
+      userInputLabels: config.userInputLabels ?? userInputLabels,
+      queuedInputPlaceholder: config.queuedInputPlaceholder ?? t("awakening.queuePlaceholder"),
+      steeringInputPlaceholder: config.steeringInputPlaceholder ?? t("awakening.steerPlaceholder"),
+    }}
     initialSession={session} pendingAttachments={attachments} createSendInput={createInput}
     onSessionChange={handleSession} onPendingAttachmentsChange={handleAttachments} onRunStateChange={handleRun} />;
 }

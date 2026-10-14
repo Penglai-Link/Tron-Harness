@@ -200,7 +200,16 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const defaultActiveKey =
     configuredTabs[0]?.key ?? pageAttributesTab?.key ?? dynamicItems[0]?.key ?? filesTabs[0]?.key ?? "";
   const routeActiveKey = getRightPanelActiveKey(tab.tabId);
-  const activeKey = activeFileTabKey ?? routeActiveKey ?? defaultActiveKey;
+  const requestedActiveKey = activeFileTabKey ?? routeActiveKey ?? defaultActiveKey;
+  const activeKey = items.some((item) => item.key === requestedActiveKey && !item.hidden)
+    ? requestedActiveKey
+    : defaultActiveKey;
+
+  useEffect(() => {
+    if (!activeFileTabKey && routeActiveKey && routeActiveKey !== activeKey) {
+      setRightPanelActiveKey(tab.tabId, activeKey);
+    }
+  }, [activeFileTabKey, activeKey, routeActiveKey, setRightPanelActiveKey, tab.tabId]);
 
   const handleEdit = useCallback(
     (action: OperateType, info: EditableTabEditInfo) => {

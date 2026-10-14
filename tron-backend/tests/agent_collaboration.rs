@@ -260,6 +260,7 @@ fn reviewer(f: &Fixture) {
     f.state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            description: String::new(),
             candidate_model_codes: vec![candidate],
             avatar_id: Some("fox".into()),
             loop_code: Some("test-react".into()),

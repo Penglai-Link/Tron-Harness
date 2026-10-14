@@ -93,11 +93,14 @@ impl AgentManagementService {
             available_count += 1;
             discovered_agent_codes.insert(supported.agent_code.clone());
             let entry = SystemAgentRegistryEntry {
+                fast_mode: existing_entry.is_some_and(|entry| entry.fast_mode),
+                reasoning_effort: existing_entry.and_then(|entry| entry.reasoning_effort),
+                avatar_id: existing_entry.and_then(|entry| entry.avatar_id.clone()),
                 agent_code: supported.agent_code.clone(),
                 base_agent_code: None,
                 model_id: None,
                 name: supported.name.clone(),
-                description: supported.description.clone(),
+                description: existing_entry.map(|entry| entry.description.clone()).unwrap_or_else(|| supported.description.clone()),
                 runtime_type: supported.runtime_type,
                 command_name: supported.command_name.clone(),
                 source: ManagedAgentSource::System,
@@ -223,9 +226,14 @@ impl AgentManagementService {
             .map(|policy| (policy.agent_code.clone(), policy))
             .collect::<HashMap<_, _>>();
         let entries = self.repository().list_system_agents()?;
+        let codes = entries
+            .iter()
+            .map(|entry| entry.agent_code.clone())
+            .collect::<Vec<_>>();
+        let allowed = self.assigned_agent_codes(workspace_code, &codes)?;
         let mut assigned = Vec::new();
         for entry in entries {
-            if self.agent_assigned(&entry.agent_code, workspace_code)? {
+            if allowed.contains(&entry.agent_code) {
                 assigned.push(entry);
             }
         }
@@ -267,7 +275,12 @@ impl AgentManagementService {
         if let Some(definition) =
             self.resolve_internal_agent_default(workspace_code, normalized_agent_code)?
         {
+            if !definition.enabled {
+                return Err(AgentManagementError::SystemAgentUnavailable);
+            }
             return Ok(ResolvedAgentRuntime {
+                system_fast_mode: false,
+                system_reasoning_effort: None,
                 agent_code: definition.agent_code,
                 system_model_id: None,
                 runtime_type: AgentRuntimeType::React,
@@ -292,6 +305,8 @@ impl AgentManagementService {
             return Err(AgentManagementError::SystemAgentUnavailable);
         }
         Ok(ResolvedAgentRuntime {
+            system_fast_mode: entry.fast_mode,
+            system_reasoning_effort: entry.reasoning_effort,
             agent_code: entry.agent_code,
             system_model_id: entry.model_id,
             runtime_type: entry.runtime_type,
@@ -386,6 +401,7 @@ fn managed_system_record(
         models.retain(|model| model.model_id == model_id);
         if models.is_empty() {
             models.push(SystemAgentModelRecord {
+                supported_reasoning_efforts: Vec::new(),
                 model_id: model_id.into(),
                 display_name: model_id.into(),
                 context_window_tokens: None,
@@ -398,6 +414,9 @@ fn managed_system_record(
         agent_code: entry.agent_code.clone(),
         base_agent_code: entry.base_agent_code.clone(),
         model_id: entry.model_id.clone(),
+        fast_mode: entry.fast_mode,
+        reasoning_effort: entry.reasoning_effort,
+        avatar_id: entry.avatar_id.clone(),
         name: entry.name.clone(),
         description: entry.description.clone(),
         agent_type: ManagedAgentType::System,

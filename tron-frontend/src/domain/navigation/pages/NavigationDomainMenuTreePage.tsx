@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Trash2, FolderTree, Settings2 } from "lucide-react";
+import { GripVertical, Trash2, FolderTree, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -31,6 +31,7 @@ import type {
   NavigationMenuType,
 } from "@/shared/types/Navigation";
 import { getNavigationIcon } from "@/shared/lib/navigationMenuMapper";
+import { menuDropPlacement } from "./menuDropPlacement";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useNavigationAdminLocale, useNavigationAdminText, type NavigationAdminLocale } from "./navigationAdminText";
 
@@ -51,7 +52,10 @@ function menuTypeLabel(type: NavigationMenuType, text: ReturnType<typeof useNavi
   return text("types.internal", "内部页面", "Internal page");
 }
 
-function TreeNode({ item, level, siblingIndex, siblingCount, onMove, onSelect, selectedCode, busy, locale, text }: {
+function TreeNode({ item, level, siblingIndex, siblingCount, onMove, onSelect, selectedCode, busy, locale, text, draggedCode, onDragChange, treeItems }: {
+  treeItems: NavigationAdminTreeItem[];
+  draggedCode: string | null;
+  onDragChange: (code: string | null) => void;
   item: NavigationAdminTreeItem;
   level: number;
   siblingIndex: number;
@@ -64,20 +68,76 @@ function TreeNode({ item, level, siblingIndex, siblingCount, onMove, onSelect, s
   text: ReturnType<typeof useNavigationAdminText>;
 }) {
   const Icon = getNavigationIcon(item.icon) ?? FolderTree;
+  const [dropEdge, setDropEdge] = useState<"before" | "after" | "inside" | null>(null);
+  const activeDropEdge = draggedCode ? dropEdge : null;
+  const parentName = item.parentMenuCode
+    ? flattenTree(treeItems).find((node) => node.menuCode === item.parentMenuCode)?.translations[locale]
+    : locale === "zh-CN" ? "顶层" : "Top level";
+  const placementLabel = locale === "zh-CN"
+    ? `${parentName} · 放在「${item.translations[locale]}」${activeDropEdge === "before" ? "之前" : "之后"}`
+    : `${parentName} · ${activeDropEdge === "before" ? "Before" : "After"} ${item.translations[locale]}`;
   return (
     <li className="list-none">
-      <div data-menu-code={item.menuCode} className={`group flex items-center gap-1 rounded-lg pr-1 transition-colors ${selectedCode === item.menuCode ? "bg-[var(--color-hover-surface)]" : "hover:bg-[var(--color-hover-surface)]"}`} style={{ marginLeft: `${level * 18}px` }}>
+      <div
+        draggable={!busy}
+        onDragStart={(event) => {
+          event.stopPropagation();
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("application/x-tron-menu", JSON.stringify({ code: item.menuCode, parent: item.parentMenuCode, index: siblingIndex }));
+          onDragChange(item.menuCode);
+          onSelect(item.menuCode);
+        }}
+        onDragEnd={() => { onDragChange(null); setDropEdge(null); }}
+        onDragOver={(event) => {
+          if (busy || !draggedCode) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          const placement = menuDropPlacement(treeItems, draggedCode, item.menuCode, (event.clientY - rect.top) / rect.height);
+          if (!placement) { setDropEdge(null); return; }
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setDropEdge(placement.edge);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropEdge(null);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDropEdge(null);
+          onDragChange(null);
+          if (busy || !draggedCode) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          const placement = menuDropPlacement(treeItems, draggedCode, item.menuCode, (event.clientY - rect.top) / rect.height);
+          if (placement) onMove(placement.item, placement.parent, placement.position);
+        }}
+        data-menu-code={item.menuCode} className={`group relative flex items-center gap-1 rounded-lg pr-1 transition-colors ${selectedCode === item.menuCode ? "bg-[var(--color-hover-surface)]" : "hover:bg-[var(--color-hover-surface)]"}`} style={{ marginLeft: `${level * 18}px`, opacity: draggedCode === item.menuCode ? 0.4 : undefined, boxShadow: activeDropEdge === "inside" ? "inset 0 0 0 2px var(--color-primary), 0 0 16px color-mix(in srgb, var(--color-primary) 18%, transparent)" : undefined, backgroundColor: activeDropEdge === "inside" ? "color-mix(in srgb, var(--color-primary) 16%, var(--color-surface))" : undefined }}>
+        {activeDropEdge && activeDropEdge !== "inside" && (
+          <div aria-hidden="true" className={`pointer-events-none absolute inset-x-2 z-20 h-[3px] rounded-full bg-[var(--color-primary)] shadow-[0_0_10px_var(--color-primary)] ${activeDropEdge === "before" ? "-top-px" : "-bottom-px"}`}>
+            <span className="absolute -left-1 -top-[3px] size-[9px] rounded-full border-2 border-[var(--color-primary)] bg-[var(--color-surface)]" />
+            <span className="absolute right-3 top-1/2 max-w-[85%] -translate-y-1/2 truncate rounded-md border border-[var(--color-primary)] bg-[var(--color-surface)] px-2 py-1 text-xs font-semibold text-[var(--color-primary)] shadow-sm">{placementLabel}</span>
+          </div>
+        )}
         <button type="button" disabled={busy} aria-pressed={selectedCode === item.menuCode} onClick={() => onSelect(item.menuCode)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]">
           <Icon size={17} className="shrink-0 text-[var(--color-on-surface-variant)]" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.translations[locale]}</span>
+          {activeDropEdge === "inside" && <span className="shrink-0 rounded-md bg-[var(--color-primary)] px-2 py-1 text-xs font-semibold text-[var(--color-on-primary)]">{locale === "zh-CN" ? "移入此分组" : "Move into group"}</span>}
           <span className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">{menuTypeLabel(item.menuType, text)}</span>
         </button>
-        <div className="flex shrink-0 opacity-50 group-hover:opacity-100 group-focus-within:opacity-100">
-          <Button size="icon" variant="ghost" className="size-7" disabled={busy || siblingIndex === 0} aria-label={text("arrangement.moveUp", `上移 ${item.translations[locale]}`, `Move ${item.translations[locale]} up`)} onClick={() => onMove(item, item.parentMenuCode, siblingIndex - 1)}><ArrowUp size={14} /></Button>
-          <Button size="icon" variant="ghost" className="size-7" disabled={busy || siblingIndex === siblingCount - 1} aria-label={text("arrangement.moveDown", `下移 ${item.translations[locale]}`, `Move ${item.translations[locale]} down`)} onClick={() => onMove(item, item.parentMenuCode, siblingIndex + 1)}><ArrowDown size={14} /></Button>
-        </div>
+        <button
+          type="button"
+          disabled={busy}
+          draggable={!busy}
+          aria-label={locale === "zh-CN" ? `拖动排序 ${item.translations[locale]}` : `Drag to reorder ${item.translations[locale]}`}
+          title={locale === "zh-CN" ? "拖动排序；键盘使用 Alt + 上下方向键" : "Drag to reorder; use Alt + arrow keys with a keyboard"}
+          className="cursor-grab select-none px-2 py-3 text-[var(--color-on-surface-variant)] active:cursor-grabbing"
+          onKeyDown={(event) => {
+            if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+            event.preventDefault();
+            const position = siblingIndex + (event.key === "ArrowUp" ? -1 : 1);
+            if (position >= 0 && position < siblingCount) onMove(item, item.parentMenuCode, position);
+          }}
+        ><GripVertical size={16} className="pointer-events-none" aria-hidden="true" /></button>
       </div>
-      {item.children.length > 0 ? <ul>{item.children.map((child, index) => <TreeNode key={child.menuCode} item={child} level={level + 1} siblingIndex={index} siblingCount={item.children.length} onMove={onMove} onSelect={onSelect} selectedCode={selectedCode} busy={busy} locale={locale} text={text} />)}</ul> : null}
+      {item.children.length > 0 ? <ul>{item.children.map((child, index) => <TreeNode key={child.menuCode} item={child} level={level + 1} siblingIndex={index} siblingCount={item.children.length} treeItems={treeItems} draggedCode={draggedCode} onDragChange={onDragChange} onMove={onMove} onSelect={onSelect} selectedCode={selectedCode} busy={busy} locale={locale} text={text} />)}</ul> : null}
     </li>
   );
 }
@@ -109,6 +169,10 @@ export function NavigationDomainMenuTreePage() {
   const [copyPosition, setCopyPosition] = useState("0");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [draggedCode, setDraggedCode] = useState<string | null>(null);
+  const [rootDropActive, setRootDropActive] = useState(false);
+
+  useEffect(() => { if (!draggedCode) setRootDropActive(false); }, [draggedCode]);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [restoreDefaultTreesOpen, setRestoreDefaultTreesOpen] = useState(false);
@@ -288,7 +352,7 @@ export function NavigationDomainMenuTreePage() {
     if (!selectedTreeCode || saving) return;
     setSaving(true);
     try {
-      const nextTree = await updateNavigationMenuItem(selectedTreeCode, item.menuCode, { parentMenuCode: parent, position: nextPosition, childDisplay: item.childDisplay });
+      const nextTree = await updateNavigationMenuItem(selectedTreeCode, item.menuCode, { parentMenuCode: parent, position: nextPosition, childDisplay: flattenTree(tree).find((node) => node.menuCode === item.menuCode)?.childDisplay ?? item.childDisplay });
       setTree(nextTree);
       window.dispatchEvent(new Event("tron:navigation-updated"));
     } catch (error) {
@@ -351,28 +415,54 @@ export function NavigationDomainMenuTreePage() {
   }
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader title={text("tree.title", "菜单编排", "Menu arrangement")} actions={<>
         <Button disabled={loading || saving} onClick={() => setRefreshKey((value) => value + 1)}>{text("actions.refresh", "刷新", "Refresh")}</Button>
         <Button disabled={!isApiMode || saving} onClick={() => setRestoreDefaultTreesOpen(true)}>{text("arrangement.restore", "补齐默认菜单", "Add missing defaults")}</Button>
         <Button disabled={!selectedTreeCode || saving || loading || menuTrees.length < 2} onClick={openCopyMenu}>{text("arrangement.copy", "从其他领域复制", "Copy from another domain")}</Button>
         <Button disabled={!selectedTreeCode || saving || loading} onClick={openAddMenu}>{text("arrangement.add", "添加", "Add")}</Button>
       </>} />
-      <SurfaceCard className="!p-0 overflow-hidden">
-        <div className="grid min-h-[32rem] lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <section className="min-w-0 border-b border-[var(--color-outline-variant)] lg:border-b-0 lg:border-r" aria-label={text("arrangement.structure", "菜单结构", "Menu structure")}>
-            <div className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-2">
+      <SurfaceCard className="min-h-0 flex-1 !p-0 overflow-hidden">
+        <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <section className="relative flex min-h-0 min-w-0 flex-col border-b border-[var(--color-outline-variant)] lg:border-b-0 lg:border-r" aria-label={text("arrangement.structure", "菜单结构", "Menu structure")}>
+            <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-2">
               <div className="flex min-w-0 items-center gap-3">
                 <h2 className="shrink-0 text-sm font-semibold">{text("arrangement.structure", "菜单结构", "Menu structure")}</h2>
                 <SelectInput className="w-56" aria-label={text("arrangement.domain", "菜单领域", "Menu domain")} disabled={saving} value={selectedTreeCode} onValueChange={(value) => { if (value) changeTree(value); }}>{menuTrees.map((menuTree) => <SelectItem key={menuTree.treeCode} value={menuTree.treeCode}>{menuTree.name[locale]}</SelectItem>)}</SelectInput>
               </div>
               <span className="text-xs text-[var(--color-on-surface-variant)]">{text("arrangement.total", `${existingCodes.size} 个节点`, `${existingCodes.size} items`)}</span>
             </div>
-            <div className="max-h-[calc(100vh-18rem)] min-h-64 overflow-y-auto p-3">
-              {loading ? <p className="p-6 text-sm text-[var(--color-on-surface-variant)]">{text("loadingTree", "正在加载菜单树…", "Loading menu tree…")}</p> : tree.length ? <ul className="space-y-0.5">{tree.map((item, index) => <TreeNode key={item.menuCode} item={item} level={0} siblingIndex={index} siblingCount={tree.length} onMove={moveMenu} onSelect={setSelectedMenuCode} selectedCode={selectedMenuCode} busy={saving} locale={locale} text={text} />)}</ul> : <p className="p-6 text-sm text-[var(--color-on-surface-variant)]">{text("arrangement.empty", "加入菜单，开始编排这个领域。", "Add a menu to arrange this domain.")}</p>}
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {loading ? <p className="p-6 text-sm text-[var(--color-on-surface-variant)]">{text("loadingTree", "正在加载菜单树…", "Loading menu tree…")}</p> : tree.length ? <ul className="space-y-0.5">{tree.map((item, index) => <TreeNode key={item.menuCode} item={item} level={0} siblingIndex={index} siblingCount={tree.length} treeItems={tree} draggedCode={draggedCode} onDragChange={setDraggedCode} onMove={moveMenu} onSelect={setSelectedMenuCode} selectedCode={selectedMenuCode} busy={saving} locale={locale} text={text} />)}</ul> : <p className="p-6 text-sm text-[var(--color-on-surface-variant)]">{text("arrangement.empty", "加入菜单，开始编排这个领域。", "Add a menu to arrange this domain.")}</p>}
             </div>
+            {draggedCode && !saving && (
+              <div
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setRootDropActive(true);
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setRootDropActive(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const source = flattenTree(tree).find((item) => item.menuCode === draggedCode);
+                  setDraggedCode(null);
+                  setRootDropActive(false);
+                  if (!source) return;
+                  const position = tree.filter((item) => item.menuCode !== source.menuCode).length;
+                  if (source.parentMenuCode === null && tree[tree.length - 1]?.menuCode === source.menuCode) return;
+                  void moveMenu(source, null, position);
+                }}
+                className={`absolute inset-x-3 bottom-3 z-30 flex min-h-14 items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm font-semibold shadow-lg transition-colors ${rootDropActive ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "border-[var(--color-primary)] bg-[var(--color-elevated-surface)] text-[var(--color-primary)]"}`}
+              >
+                <FolderTree size={18} aria-hidden="true" />
+                {locale === "zh-CN" ? "放在这里，移到顶层末尾" : "Drop here to move to the end of the top level"}
+              </div>
+            )}
           </section>
-          <aside className="min-w-0" aria-label={text("arrangement.settings", "节点设置", "Item settings")}>
+          <aside className="min-h-0 min-w-0 overflow-y-auto" aria-label={text("arrangement.settings", "节点设置", "Item settings")}>
             <div className="flex h-14 items-center gap-2 border-b border-[var(--color-outline-variant)] px-5 text-sm font-semibold"><Settings2 size={15} />{text("arrangement.settings", "节点设置", "Item settings")}</div>
             {selectedItem && !loading ? <form className="space-y-5 p-5" onSubmit={(event) => void saveItem(event)}>
               <div className="space-y-2">
@@ -414,6 +504,6 @@ export function NavigationDomainMenuTreePage() {
       </ModalDialog>
       <ConfirmDialog open={restoreDefaultTreesOpen} title={text("tree.restoreDefaultTrees", "生成所有默认菜单树", "Generate all default menu trees")} description={text("tree.restoreDefaultTreesDescription", "会补齐所有缺失的内置默认菜单节点；已有菜单及自定义编排不会被删除或覆盖。", "This adds every missing built-in default menu node. Existing menus and custom arrangements are not deleted or overwritten.")} cancelText={text("actions.cancel", "取消", "Cancel")} confirmText={text("actions.generate", "生成", "Generate")} pending={saving} onCancel={() => setRestoreDefaultTreesOpen(false)} onConfirm={() => void confirmRestoreDefaultMenuTrees()} />
       <ConfirmDialog open={Boolean(itemToRemove)} title={text("tree.removeTitle", "从编排移除菜单", "Remove menu from arrangement")} description={text("tree.removeDescription", `确定移除 ${itemToRemove?.menuCode ?? ""}？这只会删除当前菜单树的编排关系，不会删除菜单定义。`, `Remove ${itemToRemove?.menuCode ?? ""}? This deletes only the current menu-tree arrangement; the menu definition remains.`)} cancelText={text("actions.cancel", "取消", "Cancel")} confirmText={text("actions.remove", "移除", "Remove")} pending={saving} onCancel={() => setItemToRemove(null)} onConfirm={() => void confirmRemoveMenu()} />
-    </>
+    </div>
   );
 }

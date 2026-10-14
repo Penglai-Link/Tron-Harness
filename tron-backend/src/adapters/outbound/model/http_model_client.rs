@@ -75,6 +75,7 @@ pub struct HttpModelClient {
     pub(crate) factory: Arc<dyn sdk::ModelTransportFactory>,
     pub(crate) executor: Arc<eliteforge_agent_framework::ModelClient>,
     runtime_config: Option<crate::application::system_config::BackendRuntimeConfig>,
+    authorization_bound: bool,
 }
 impl HttpModelClient {
     pub fn new(factory: Arc<dyn sdk::ModelTransportFactory>) -> Self {
@@ -82,6 +83,7 @@ impl HttpModelClient {
             factory,
             executor: Arc::default(),
             runtime_config: None,
+            authorization_bound: false,
         }
     }
     pub fn with_runtime_config(
@@ -108,6 +110,9 @@ impl HttpModelClient {
         &self,
         config: &AgentModelConfig,
     ) -> Result<Arc<dyn sdk::ModelTransportFactory>, fw::AgentError> {
+        if self.authorization_bound {
+            return Ok(self.factory.clone());
+        }
         Ok(Arc::new(sdk::ScopedModelTransportFactory::new(
             self.factory.clone(),
             &convert(config).map_err(fw::AgentError::InvalidConfiguration)?,
@@ -264,7 +269,38 @@ impl ModelClient for HttpModelClient {
             ),
             executor: self.executor.clone(),
             runtime_config: self.runtime_config.clone(),
+            authorization_bound: true,
         })))
+    }
+    fn bind_models_for_run(
+        &self,
+        configs: &[AgentModelConfig],
+    ) -> Result<Vec<(Option<String>, Option<Arc<dyn ModelClient>>)>, String> {
+        let mut person_ai: Option<(Option<String>, Option<Arc<dyn ModelClient>>)> = None;
+        configs
+            .iter()
+            .map(|config| {
+                let is_person_ai = config.model_code.starts_with("PERSON_AI:");
+                if is_person_ai && let Some(binding) = &person_ai {
+                    return Ok(binding.clone());
+                }
+                let factory = self.scoped_factory(config).map_err(error)?;
+                let scope = factory
+                    .authorization_scope(&convert(config)?)
+                    .map_err(|e| sdk::encode_model_error(&e))?;
+                let client: Arc<dyn ModelClient> = Arc::new(Self {
+                    factory,
+                    executor: self.executor.clone(),
+                    runtime_config: self.runtime_config.clone(),
+                    authorization_bound: true,
+                });
+                let binding = (scope, Some(client));
+                if is_person_ai {
+                    person_ai = Some(binding.clone());
+                }
+                Ok(binding)
+            })
+            .collect()
     }
     fn authorization_scope(&self, config: &AgentModelConfig) -> Result<Option<String>, String> {
         self.factory
@@ -538,5 +574,66 @@ mod controlled_native_tests {
         assert_eq!(response.output_text(), "ok");
         client.close().await;
         server.await.unwrap();
+    }
+}
+
+#[cfg(test)]
+mod binding_query_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    struct Factory {
+        reads: AtomicUsize,
+        account: AtomicUsize,
+    }
+    #[async_trait]
+    impl sdk::ModelTransportFactory for Factory {
+        fn authorization_scope(
+            &self,
+            _: &sdk::AgentModelConfig,
+        ) -> Result<Option<String>, fw::ModelError> {
+            self.reads.fetch_add(1, Ordering::SeqCst);
+            Ok(Some(self.account.load(Ordering::SeqCst).to_string()))
+        }
+        async fn create(
+            &self,
+            _: &sdk::AgentModelConfig,
+        ) -> Result<Arc<dyn sdk::ModelTransport>, fw::ModelError> {
+            panic!("changed account must be rejected before transport creation")
+        }
+    }
+    #[tokio::test]
+    async fn query_amplification_binding_catalog_reads_one_scope_and_rejects_account_change() {
+        let factory = Arc::new(Factory {
+            reads: AtomicUsize::new(0),
+            account: AtomicUsize::new(1),
+        });
+        let client = HttpModelClient::new(factory.clone());
+        let configs = (0..32)
+            .map(|i| {
+                serde_json::from_value(serde_json::json!({
+            "modelCode":format!("PERSON_AI:FIXED:High:model-{i}"), "protocol":"CHAT_COMPLETIONS",
+            "baseUrl":"https://unused.invalid", "apiKey":"", "modelName":format!("model-{i}")
+        })).unwrap()
+            })
+            .collect::<Vec<AgentModelConfig>>();
+        let bindings = client.bind_models_for_run(&configs).unwrap();
+        assert_eq!(factory.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(bindings.len(), 32);
+        assert!(
+            bindings
+                .iter()
+                .all(|(scope, _)| scope.as_deref() == Some("1"))
+        );
+        factory.account.store(2, Ordering::SeqCst);
+        let request: ModelRequest =
+            serde_json::from_value(serde_json::json!({"messages":[],"tools":[]})).unwrap();
+        let error = bindings[31]
+            .1
+            .as_ref()
+            .unwrap()
+            .generate_once(&configs[31], &request)
+            .await
+            .unwrap_err();
+        assert!(error.contains("authorization changed"), "{error}");
     }
 }

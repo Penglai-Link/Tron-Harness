@@ -64,6 +64,18 @@ impl ReactAgent {
             Ok(vec![context.model.clone()])
         }
     }
+    pub(crate) fn framework_bind_models(
+        &self,
+        configs: &[AgentModelConfig],
+    ) -> Result<Vec<(Option<String>, Arc<dyn ModelClient>)>, AgentError> {
+        Ok(self
+            .model_client
+            .bind_models_for_run(configs)
+            .map_err(AgentError::InvalidConfiguration)?
+            .into_iter()
+            .map(|(scope, client)| (scope, client.unwrap_or_else(|| self.model_client.clone())))
+            .collect())
+    }
     pub(crate) fn framework_bound_model_client(
         &self,
         config: &AgentModelConfig,

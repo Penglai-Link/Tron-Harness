@@ -73,6 +73,22 @@ fn load_events(
         .collect()
 }
 impl DudeRepository for SqliteDudeRepository {
+    fn soul(&mut self, code: &str) -> Result<DudeSoul, DudeError> {
+        let code=code.to_owned();
+        self.call(move |c| {
+            let json: Option<String> = c.query_row("SELECT s.record_json FROM dude_souls s JOIN dudes d USING(dude_code) WHERE s.dude_code=?1", [code], |r| r.get(0)).optional().map_err(storage)?;
+            decode(json.ok_or(DudeError::NotFound)?)
+        })
+    }
+    fn save_soul(&mut self, soul: &DudeSoul) -> Result<(), DudeError> {
+        let soul=soul.clone();
+        self.call(move |c| {
+            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            tx.execute("UPDATE dude_souls SET record_json=?2 WHERE dude_code=?1",params![soul.dude_code,encode(&soul)?]).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
+    }
+
     fn create(
         &mut self,
         d: &Dude,
@@ -81,6 +97,7 @@ impl DudeRepository for SqliteDudeRepository {
         let (d, definition) = (d.clone(), definition.clone());
         self.call(move|c|{
             let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            tx.execute("INSERT INTO dude_souls(dude_code,record_json) VALUES(?1,?2)",params![d.dude_code,encode(&DudeSoul::new(&d.dude_code,&definition.name))?]).map_err(storage)?;
             tx.execute("INSERT INTO platform_internal_agent_configs(agent_code,config_json) VALUES(?1,?2)",params![definition.agent_code,encode(&definition)?]).map_err(storage)?;
             tx.execute("INSERT INTO agent_workspace_grant_policies(agent_code) VALUES(?1)",[&d.dude_code]).map_err(storage)?;
             tx.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at,is_main) VALUES(?1,?2,?3,?4,?5,0)",params![d.dude_code,encode(&d)?,d.enabled,d.heartbeat_minutes,d.created_at+i64::from(d.heartbeat_minutes)*60000]).map_err(storage)?;
@@ -110,7 +127,7 @@ impl DudeRepository for SqliteDudeRepository {
     }
     fn delete(&mut self, code: &str) -> Result<(), DudeError> {
         let code = code.to_owned();
-        self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let busy:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM dude_events WHERE dude_code=?1 AND status IN ('Queued','Running','AwaitingInput'))",[&code],|r|r.get(0)).map_err(storage)?;if busy{return Err(DudeError::Conflict)}tx.execute("DELETE FROM dude_events WHERE dude_code=?1",[&code]).map_err(storage)?;tx.execute("DELETE FROM dude_sessions WHERE dude_code=?1",[&code]).map_err(storage)?;tx.execute("DELETE FROM dudes WHERE dude_code=?1 AND is_main=0",[&code]).map_err(storage)?;tx.commit().map_err(storage)})
+        self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let busy:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM dude_events WHERE dude_code=?1 AND status IN ('Queued','Running','AwaitingInput'))",[&code],|r|r.get(0)).map_err(storage)?;if busy{return Err(DudeError::Conflict)}tx.execute("DELETE FROM dude_events WHERE dude_code=?1",[&code]).map_err(storage)?;tx.execute("DELETE FROM dude_sessions WHERE dude_code=?1",[&code]).map_err(storage)?;tx.execute("DELETE FROM dude_souls WHERE dude_code=?1",[&code]).map_err(storage)?;tx.execute("DELETE FROM dudes WHERE dude_code=?1 AND is_main=0",[&code]).map_err(storage)?;tx.commit().map_err(storage)})
     }
     fn designate_main(&mut self, code: &str) -> Result<(), DudeError> {
         let code = code.to_owned();
@@ -319,6 +336,13 @@ tx.commit().map_err(storage)})
             tx.execute("INSERT INTO dude_work_changes(change_id,dude_code,task_code,change_key,fingerprint,record_json,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
                 params![change.change_id,change.dude_code,change.task_code,change.change_key,fingerprint,encode(&change)?,change.created_at]).map_err(storage)?;
             tx.commit().map_err(storage)?; Ok(change)
+        })
+    }
+    fn scoped_pending_work_changes(&mut self, dude: &str, user: &str) -> Result<Vec<DudeWorkChange>, DudeError> {
+        let (dude,user)=(dude.to_owned(),user.to_owned());
+        self.call(move |c| {
+            let mut q=c.prepare("SELECT w.record_json FROM dude_work_changes w JOIN workspace_session_links s ON s.session_id=json_extract(w.record_json,'$.sessionCode') WHERE w.dude_code=?1 AND json_extract(s.business_json,'$.user_code')=?2 AND json_extract(w.record_json,'$.kind') IN ('NeedsDecision','Blocked') AND json_extract(w.record_json,'$.resolvedAt') IS NULL ORDER BY w.created_at,w.change_id LIMIT 32").map_err(storage)?;
+            q.query_map(params![dude,user],|r|r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect()
         })
     }
     fn pending_work_changes(&mut self, dude: &str) -> Result<Vec<DudeWorkChange>, DudeError> {

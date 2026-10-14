@@ -26,26 +26,17 @@ impl ModelProviderService {
                 )
             };
         let quality_type = person_ai_runtime_quality(config);
-        let actual_model_code = response
-            .get("model")
-            .or_else(|| response.get("model_code"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        let actual_model_name = response
-            .get("model_name")
-            .or_else(|| response.pointer("/model/name"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        let actual_vendor_code = response
-            .get("provider_code")
-            .or_else(|| response.pointer("/provider/code"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        let actual_vendor_name = response
-            .get("provider_name")
-            .or_else(|| response.pointer("/provider/name"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
+        let mut metadata = RuntimeSnapshotMetadata::default();
+        metadata.merge(response);
+        if metadata == RuntimeSnapshotMetadata::default() {
+            return Ok(());
+        }
+        let RuntimeSnapshotMetadata {
+            model: actual_model_code,
+            model_name: actual_model_name,
+            provider_code: actual_vendor_code,
+            provider_name: actual_vendor_name,
+        } = metadata;
         let now = now_millis();
 
         let this = self.clone();
@@ -188,5 +179,61 @@ impl ModelProviderService {
             .map_err(|_| ModelProviderError::Storage)?;
         Ok(())
      },||ModelProviderError::Storage)
+    }
+}
+
+/// Only model lineage belongs in this row, never token deltas. Missing fields
+/// preserve metadata learned earlier in the same stream (including partial failures).
+#[derive(Clone, Default, PartialEq, Eq)]
+pub(super) struct RuntimeSnapshotMetadata {
+    model: Option<String>,
+    model_name: Option<String>,
+    provider_code: Option<String>,
+    provider_name: Option<String>,
+}
+impl RuntimeSnapshotMetadata {
+    pub(super) fn merge(&mut self, event: &Value) {
+        let value = event
+            .get("response")
+            .filter(|v| v.is_object())
+            .unwrap_or(event);
+        for (target, candidate) in [
+            (
+                &mut self.model,
+                value
+                    .get("model")
+                    .filter(|v| v.is_string())
+                    .or_else(|| value.get("model_code")),
+            ),
+            (
+                &mut self.model_name,
+                value
+                    .get("model_name")
+                    .or_else(|| value.pointer("/model/name")),
+            ),
+            (
+                &mut self.provider_code,
+                value
+                    .get("provider_code")
+                    .or_else(|| value.pointer("/provider/code")),
+            ),
+            (
+                &mut self.provider_name,
+                value
+                    .get("provider_name")
+                    .or_else(|| value.pointer("/provider/name")),
+            ),
+        ] {
+            if let Some(text) = candidate
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+            {
+                *target = Some(text.to_owned());
+            }
+        }
+    }
+    pub(super) fn value(&self) -> Value {
+        serde_json::json!({"model":self.model,"model_name":self.model_name,
+            "provider_code":self.provider_code,"provider_name":self.provider_name})
     }
 }

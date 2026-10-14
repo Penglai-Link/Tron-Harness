@@ -20,8 +20,7 @@ impl SkillRegistryService {
         self.agents
             .get()
             .ok_or(SkillError::StorageFailure)?
-            .all_platform_internal_agents()
-            .map(|a| a.into_iter().map(|a| a.agent_code).collect())
+            .platform_internal_agent_codes()
             .map_err(|_| SkillError::StorageFailure)
     }
     pub(super) fn initialize_assignments(&self) -> Result<(), SkillError> {
@@ -30,10 +29,7 @@ impl SkillRegistryService {
         }
         let agents = self.internal_agent_codes()?;
         let mut repo = self.repository.lock().unwrap();
-        for agent in agents {
-            repo.initialize_agent_skills(&agent)?;
-        }
-        Ok(())
+        repo.initialize_agents_skills(&agents)
     }
     fn validate_agent(&self, agent: &str) -> Result<(), SkillError> {
         if self.internal_agent_codes()?.iter().any(|a| a == agent) {
@@ -44,16 +40,9 @@ impl SkillRegistryService {
     }
     pub fn agent_skills(&self, agent: &str) -> Result<Vec<RegistrySkillListItem>, SkillError> {
         self.validate_agent(agent)?;
-        let mut items = self.list_registry(RegistrySkillListQuery { search: None })?;
-        let assignments = self.repository.lock().unwrap().list_assignments()?;
-        for item in &mut items {
-            item.assigned = item.available
-                && assignments
-                    .iter()
-                    .any(|a| a.agent_code == agent && a.skill_name == item.skill_name && a.enabled);
-        }
-        Ok(items)
+        self.registry_items(RegistrySkillListQuery { search: None }, Some(agent))
     }
+
     /// Platform Agents and Dudes receive grants. Legacy workspace-local Agents keep
     /// running with an empty skill set; management APIs still reject unknown IDs.
     pub fn effective_agent_skills(

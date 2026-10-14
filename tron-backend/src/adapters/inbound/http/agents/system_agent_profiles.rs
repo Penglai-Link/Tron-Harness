@@ -15,10 +15,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreateSystemAgentRequest {
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    fast_mode: bool,
     agent_code: String,
     name: String,
     base_agent_code: String,
     model_id: String,
+    reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    avatar_id: Option<String>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,8 +34,13 @@ pub struct CreateSystemAgentResponse {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateSystemAgentRequest {
+    description: Option<String>,
+    #[serde(default)]
+    fast_mode: bool,
     name: String,
     model_id: String,
+    reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    avatar_id: Option<String>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,11 +57,15 @@ pub async fn create(
     auth: RequestAuthContext,
     Json(request): Json<CreateSystemAgentRequest>,
 ) -> Response {
-    match state.agent_management.create_system_agent_profile(
+    match state.agent_management.create_system_agent_profile_with_settings(
         &request.agent_code,
         &request.name,
         &request.base_agent_code,
         &request.model_id,
+        request.reasoning_effort,
+        request.avatar_id,
+        request.fast_mode,
+        Some(request.description),
     ) {
         Ok(record) => (
             StatusCode::CREATED,
@@ -68,10 +83,14 @@ pub async fn update(
     Path(code): Path<String>,
     Json(request): Json<UpdateSystemAgentRequest>,
 ) -> Response {
-    match state.agent_management.update_system_agent_profile(
+    match state.agent_management.update_system_agent_profile_with_settings(
         &code,
         &request.name,
         &request.model_id,
+        request.reasoning_effort,
+        request.avatar_id,
+        request.fast_mode,
+        request.description,
     ) {
         Ok(record) => Json(ApiResponse::success(UpdateSystemAgentResponse {
             agent_code: record.agent_code,
@@ -118,9 +137,9 @@ fn error_response(error: AgentManagementError, locale: &str) -> Response {
             StatusCode::BAD_REQUEST,
             "SYSTEM_AGENT_CONFIG_INVALID",
             if zh {
-                "请提供有效的名称、基础 Agent 和模型 ID"
+                "请检查名称、基础 Agent、模型 ID、思考强度和头像配置；Fast 模式仅支持 Codex"
             } else {
-                "Provide a valid name, base Agent and model ID"
+                "Check the name, base Agent, model ID, reasoning effort and avatar; Fast mode is only available for Codex"
             },
         ),
         AgentManagementError::BuiltinAgentReadOnly => (

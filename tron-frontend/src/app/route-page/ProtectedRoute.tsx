@@ -1,7 +1,6 @@
 import { useAuthSession } from "@/domain/auth";
 import { ReactNode } from "react";
 import { Navigate } from "react-router";
-import { UpdateNotification } from "@/domain/update/UpdateNotification";
 import RouteLoadingFallback from "./RouteLoadingFallback";
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -24,10 +23,5 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
     return <Navigate replace to="/profiles" />;
   }
 
-  return (
-    <>
-      {children}
-      <UpdateNotification />
-    </>
-  );
+  return <>{children}</>;
 }

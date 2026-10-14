@@ -117,7 +117,7 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const status = useAuthStore((state) => state.status);
-  const [activeSkin, setActiveSkin] = useState<Skin>(() => localStorage.getItem("tron.theme") === "matrix-dark" ? builtins[1] : builtins[0]);
+  const [activeSkin, setActiveSkin] = useState<Skin>(() => localStorage.getItem("tron.theme") === "light" ? builtins[0] : builtins[1]);
   const [skins, setSkins] = useState<Skin[]>(builtins);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

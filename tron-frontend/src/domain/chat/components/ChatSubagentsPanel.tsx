@@ -11,10 +11,15 @@ import { useChatSubagentDetail, useChatSubagents } from "../hooks/useChatSubagen
 import type { ChatSubagent, ChatSubagentDetail } from "../model/ChatSubagent";
 import { SubagentAvatar } from "./SubagentAvatar";
 
-export function ChatSubagentsPanel({ sessionCode, workspaceCode }: { sessionCode: string; workspaceCode: string }) {
+export function ChatSubagentsPanel({ sessionCode, workspaceCode, data }: {
+  sessionCode: string;
+  workspaceCode: string;
+  data?: ReturnType<typeof useChatSubagents>;
+}) {
   const { t } = useTranslation("pages");
   const visible = useTabVisibility();
-  const { items, loading, error } = useChatSubagents(sessionCode, workspaceCode, visible);
+  const queried = useChatSubagents(sessionCode, workspaceCode, visible && !data);
+  const { items, loading, error } = data ?? queried;
   const [selected, setSelected] = useState("");
   const item = items.find((item) => item.runId === selected);
   if (item) return <SubagentSession key={`${sessionCode}:${selected}`} parent={sessionCode} workspace={workspaceCode} item={item} onBack={() => setSelected("")} />;

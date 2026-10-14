@@ -1,7 +1,7 @@
 //! Dude orchestration ports; the host retains execution independently of UI streams.
 mod tools;
+pub(crate) mod soul;
 mod work_changes;
-mod wakeup_context;
 use crate::application::agent::{
     AgentManagementService, CreateWorkspaceInternalAgentCommand,
     UpdateWorkspaceInternalAgentDefinitionCommand,
@@ -14,6 +14,9 @@ pub use tools::register_dude_tools;
 pub(crate) use work_changes::WORK_PROTOCOL;
 
 pub trait DudeRepository: Send {
+    fn soul(&mut self, _code: &str) -> Result<DudeSoul, DudeError> { Err(DudeError::Storage) }
+    fn save_soul(&mut self, _soul: &DudeSoul) -> Result<(), DudeError> { Err(DudeError::Storage) }
+
     fn create(
         &mut self,
         dude: &Dude,
@@ -72,6 +75,7 @@ pub trait DudeRepository: Send {
         change: &DudeWorkChange,
         fingerprint: &str,
     ) -> Result<DudeWorkChange, DudeError>;
+    fn scoped_pending_work_changes(&mut self, _dude: &str, _user: &str) -> Result<Vec<DudeWorkChange>, DudeError> { Err(DudeError::Storage) }
     fn pending_work_changes(&mut self, dude: &str) -> Result<Vec<DudeWorkChange>, DudeError>;
     fn work_changes(&mut self, dude: &str, task: &str) -> Result<Vec<DudeWorkChange>, DudeError>;
     fn work_change(&mut self, dude: &str, id: &str) -> Result<DudeWorkChange, DudeError>;
@@ -220,6 +224,7 @@ impl DudeService {
     }
     pub fn update(&self, code: &str, command: UpdateDudeCommand) -> Result<Dude, DudeError> {
         let mut dude = self.get(code)?;
+        if command.definition.name.is_some() { return Err(DudeError::Invalid); }
         if command
             .heartbeat_minutes
             .is_some_and(|v| v == 0 || v > 10080)
@@ -289,8 +294,8 @@ impl DudeService {
         self.get(code)?;
         self.repo()?.sessions(code)
     }
-    pub(crate) fn work_execution_context(&self, dude: &str) -> Result<String, DudeError> {
-        let pending = self.repo()?.pending_work_changes(dude)?;
+    pub(crate) fn work_execution_context(&self, dude: &str, user: &str) -> Result<String, DudeError> {
+        let pending = self.repo()?.scoped_pending_work_changes(dude, user)?;
         let pending: Vec<_> = pending.into_iter().map(|change| serde_json::json!({
             "changeId":change.change_id,"taskCode":change.task_code,"kind":change.kind,
             "summary":change.summary,"requestedAction":change.requested_action,"evidence":change.evidence,

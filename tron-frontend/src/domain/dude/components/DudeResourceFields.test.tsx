@@ -85,7 +85,7 @@ describe("Dude resource drafts", () => {
     const ref = mount(); await screen.findByText("Choose skill");
     fireEvent.click(screen.getByText("Choose skill")); fireEvent.click(screen.getByText("Choose knowledge"));
     await act(async () => { await expect(ref.current!.save()).rejects.toThrow("Grant unavailable"); });
-    expect(screen.getByRole("alert").textContent).toBe("Grant unavailable");
+    expect(screen.queryByRole("alert")).toBeNull(); // The enclosing editor owns the error toast.
     await act(() => ref.current!.save());
     expect(api.skills).toHaveBeenCalledTimes(1); expect(api.knowledge).toHaveBeenCalledTimes(2);
   });
@@ -100,4 +100,12 @@ describe("Dude resource drafts", () => {
     expect(api.skills).not.toHaveBeenCalled();
     expect(api.knowledge).not.toHaveBeenCalled();
   });
+});
+
+it("does not let an untouched resource panel block an avatar save while still loading", async () => {
+  api.record.mockReturnValueOnce(new Promise(() => {}));
+  const ref = mount();
+  await act(() => ref.current!.save());
+  expect(api.policy).not.toHaveBeenCalled();
+  expect(api.mcp).not.toHaveBeenCalled();
 });

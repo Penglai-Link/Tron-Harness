@@ -40,6 +40,22 @@ impl AgentManagementService {
             .replace_agent_workspace_grants(agent, &workspaces)
     }
 
+    pub(super) fn assigned_agent_codes(
+        &self,
+        workspace: &str,
+        agents: &[String],
+    ) -> Result<std::collections::HashSet<String>, AgentManagementError> {
+        let mut assigned = self
+            .repository()
+            .assigned_agent_codes(workspace, agents)?
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
+        if agents.iter().any(|agent| agent == MAIN_AGENT_CODE) {
+            assigned.insert(MAIN_AGENT_CODE.to_owned());
+        }
+        Ok(assigned)
+    }
+
     pub(super) fn agent_assigned(
         &self,
         agent: &str,

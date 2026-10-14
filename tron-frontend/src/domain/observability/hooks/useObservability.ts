@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/ui/toast";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   getDashboard,
   queryLogs,
@@ -14,11 +14,15 @@ import {
 } from "../api/observabilityApi";
 import type { TraceQuery } from "../model/Trace";
 export function useTraceList(query: TraceQuery) {
+  const { current, size, ...filters } = query;
   return useQuery({
-    queryKey: ["observability", query],
+    queryKey: ["observability-traces", filters, current, size],
     queryFn: ({ signal }) => queryTraces(query, signal),
+    placeholderData: (previous, previousQuery) =>
+      hashKey([previousQuery?.queryKey[1]]) === hashKey([filters]) ? previous : undefined,
+    staleTime: 5000,
     retry: false,
-    refetchInterval: 5000,
+    refetchInterval: current === 1 ? 5000 : false,
   });
 }
 export function useTraceDetail(workspaceCode: string, traceId: string) {

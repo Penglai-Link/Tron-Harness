@@ -354,6 +354,9 @@ impl ChatService {
         self.repository()
             .create_user_input_request(&request)
             .map_err(ChatSendError::Chat)?;
+        if let Some(dudes)=self.dudes.get() {
+            dudes.record_soul_question(session_code,&request.request_code).map_err(|_|ChatSendError::Chat(ChatError::StorageFailure))?;
+        }
         Ok(request)
     }
 

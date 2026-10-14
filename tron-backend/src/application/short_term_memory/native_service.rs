@@ -1,7 +1,7 @@
 use super::*;
 use crate::adapters::outbound::persistence::sqlite::framework_storage::blocking;
 use crate::{
-    application::agent::FrameworkHost,
+    application::agent::{FrameworkHost, framework_runtime::NativeCollaborationScope},
     domain::{
         agent::{AgentMessage, AgentModelConfig, AgentRunContext},
         short_term_memory::*,
@@ -60,13 +60,25 @@ impl ShortTermMemoryService {
         blocking(self.ensure_session_async(id))
     }
     async fn ensure_session_async(&self, id: &str) -> Result<String, ShortTermMemoryError> {
-        self.framework()
+        self.session_scope_async(id)
+            .await
+            .map(|(workspace, _)| workspace)
+    }
+    async fn session_scope_async(
+        &self,
+        id: &str,
+    ) -> Result<(String, Option<NativeCollaborationScope>), ShortTermMemoryError> {
+        let session = self
+            .framework()
             .await?
             .sessions()
             .map_err(|_| ShortTermMemoryError::StorageFailure)?
             .get(id)
             .await
             .map_err(error)?;
+        if let Some(scope) = NativeCollaborationScope::from_session(&session).map_err(error)? {
+            return Ok((scope.workspace_code.clone(), Some(scope)));
+        }
         let id = id.to_owned();
         self.host
             .shared_database()
@@ -83,17 +95,25 @@ impl ShortTermMemoryService {
             .await
             .map_err(|_| ShortTermMemoryError::StorageFailure)?
             .ok_or(ShortTermMemoryError::SessionNotFound)
+            .map(|workspace| (workspace, None))
     }
-    /// Native Thread bindings are authoritative; caller context can only match them.
+    /// Native collaboration bindings are authoritative; callers must match them.
     fn ensure_context_session(
         &self,
         context: &AgentRunContext,
         id: &str,
     ) -> Result<String, ShortTermMemoryError> {
         blocking(async {
-            let workspace = self.ensure_session_async(id).await?;
+            let (workspace, native_scope) = self.session_scope_async(id).await?;
             if workspace != context.workspace_code {
                 return Err(ShortTermMemoryError::SessionNotFound);
+            }
+            if let Some(scope) = native_scope {
+                return if scope.matches(context) {
+                    Ok(workspace)
+                } else {
+                    Err(ShortTermMemoryError::SessionNotFound)
+                };
             }
             let id = id.to_owned();
             let binding = self.host.shared_database().await.map_err(error)?.call(move |c| {
@@ -170,10 +190,21 @@ impl ShortTermMemoryService {
         kind: &str,
         payload: Value,
     ) -> Result<(), ShortTermMemoryError> {
+        self.append_display_event_with_sequence(session, run, kind, payload)
+            .map(|_| ())
+    }
+    fn append_display_event_with_sequence(
+        &self,
+        session: &str,
+        run: Option<&str>,
+        kind: &str,
+        payload: Value,
+    ) -> Result<u64, ShortTermMemoryError> {
         blocking(async {
             let mut event = fw::SessionEvent::new(session, kind, payload);
             event.run_id = run.and_then(|s| fw::RunId::parse_str(s).ok());
-            self.framework()
+            let stored = self
+                .framework()
                 .await?
                 .sessions()
                 .map_err(|_| ShortTermMemoryError::StorageFailure)?
@@ -181,7 +212,7 @@ impl ShortTermMemoryService {
                 .append_event(event)
                 .await
                 .map_err(error)?;
-            Ok(())
+            Ok(stored.sequence)
         })
     }
     fn read_context(&self, id: &str, key: &str) -> Result<Option<Value>, ShortTermMemoryError> {
@@ -677,11 +708,23 @@ impl ShortTermMemoryService {
         context: &AgentRunContext,
         prepared: &PreparedModelContext,
         report: &fw::ContextAssemblyReport,
-    ) -> Result<(), ShortTermMemoryError> {
+    ) -> Result<Option<u64>, ShortTermMemoryError> {
         let Some(session) = &context.conversation_code else {
-            return Ok(());
+            return Ok(None);
         };
-        self.append_display_event(session,Some(&context.run_code),"tron.context-view",json!({"messages":prepared.messages,"budgetBreakdown":prepared.budget_breakdown,"contextReport":report,"tools":context.tools,"executionScope":context.execution_scope}))
+        self.append_display_event_with_sequence(
+            session,
+            Some(&context.run_code),
+            "tron.context-view",
+            json!({
+                "messages": prepared.messages,
+                "budgetBreakdown": prepared.budget_breakdown,
+                "contextReport": report,
+                "tools": context.tools,
+                "executionScope": context.execution_scope,
+            }),
+        )
+        .map(Some)
     }
     pub(crate) fn record_framework_memory_reduction(
         &self,
@@ -705,6 +748,14 @@ impl ShortTermMemoryService {
         id: &str,
         block: &str,
     ) -> Result<Option<Value>, ShortTermMemoryError> {
+        self.context_detail_at(id, block, None)
+    }
+    pub fn context_detail_at(
+        &self,
+        id: &str,
+        block: &str,
+        snapshot_sequence: Option<u64>,
+    ) -> Result<Option<Value>, ShortTermMemoryError> {
         self.ensure_session(id)?;
         blocking(async {
             let events = self
@@ -712,20 +763,36 @@ impl ShortTermMemoryService {
                 .await?
                 .events()
                 .map_err(|_| ShortTermMemoryError::StorageFailure)?;
-            let mut after = 0;
-            let mut last = None;
-            loop {
-                let page = events.list(id, after, 1000).await.map_err(error)?;
-                if page.is_empty() {
-                    break;
+            let last = if let Some(sequence) = snapshot_sequence {
+                if sequence == 0 {
+                    return Err(ShortTermMemoryError::GoalInvalid);
                 }
-                after = page.last().unwrap().sequence;
-                for event in page {
-                    if event.kind == "tron.context-view" {
-                        last = Some(event.payload);
+                // Session and sequence use the Framework event index. Fetch only
+                // this request's snapshot, never a newer request or full history.
+                events
+                    .list(id, sequence - 1, 1)
+                    .await
+                    .map_err(error)?
+                    .into_iter()
+                    .find(|event| event.sequence == sequence && event.kind == "tron.context-view")
+                    .map(|event| event.payload)
+            } else {
+                let mut after = 0;
+                let mut last = None;
+                loop {
+                    let page = events.list(id, after, 1000).await.map_err(error)?;
+                    if page.is_empty() {
+                        break;
+                    }
+                    after = page.last().unwrap().sequence;
+                    for event in page {
+                        if event.kind == "tron.context-view" {
+                            last = Some(event.payload);
+                        }
                     }
                 }
-            }
+                last
+            };
             let Some(view) = last else { return Ok(None) };
             if block == "toolSchema" {
                 return Ok(Some(json!({"blockCode":block,"tools":view["tools"]})));
@@ -735,10 +802,11 @@ impl ShortTermMemoryService {
                 "applicationContext" => &["application_context"],
                 "familyContext" => &["session_family_context"],
                 "history" => &[fw::HISTORY_BLOCK],
-                _ => return Err(ShortTermMemoryError::GoalInvalid),
+                _ => std::slice::from_ref(&block),
             };
-            let messages = view["messages"].as_array().cloned().unwrap_or_default();
+            let messages = view["messages"].as_array().map(Vec::as_slice).unwrap_or(&[]);
             let mut selected = Vec::new();
+            let mut found = false;
             let mut offset = 0;
             if let Some(reports) = view["contextReport"]["blocks"].as_array() {
                 let mut reports = reports.iter().collect::<Vec<_>>();
@@ -746,10 +814,16 @@ impl ShortTermMemoryService {
                 for report in reports {
                     let count = report["final_message_count"].as_u64().unwrap_or(0) as usize;
                     if report["id"].as_str().is_some_and(|id| ids.contains(&id)) {
+                        found = true;
                         selected.extend(messages.iter().skip(offset).take(count).cloned());
                     }
                     offset = offset.saturating_add(count);
                 }
+            }
+            if !found
+                && !matches!(block, "systemPrompt" | "applicationContext" | "familyContext" | "history")
+            {
+                return Ok(None);
             }
             let mut detail = json!({"blockCode":block,"messages":selected});
             if block == "applicationContext" {

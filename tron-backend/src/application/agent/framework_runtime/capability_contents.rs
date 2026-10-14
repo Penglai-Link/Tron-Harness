@@ -69,6 +69,7 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
         }
         "framework.tool-pack.agent-collaboration" => vec![
+            AgentGetTool::descriptor(),
             AgentSpawnTool::descriptor(),
             ThreadCreateTool::descriptor(),
             ThreadSendTool::descriptor(),

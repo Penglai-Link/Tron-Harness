@@ -294,7 +294,7 @@ export default function AppRoutePage() {
         <MotionReveal preset="fade" replayKey={pathname} className="h-full">
         <Routes>
           <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute>{ /^(memory|knowledgeGraph|observability)\./.test(route.pageId)
-            ? <PlatformWorkspaceScope inlineFilter={["observability.dashboard", "observability.logs", "observability.metrics", "observability.traces"].includes(route.pageId)} showScopeHelp={!["observability.dashboard", "observability.logs", "observability.traces", "observability.metrics"].includes(route.pageId)} allowAll={route.pageId.startsWith("observability.")} renderWithoutWorkspace={route.pageId === "memory.index" || route.pageId === "knowledgeGraph.index"}><resolved.Component key={routeRenderKey} /></PlatformWorkspaceScope>
+            ? <PlatformWorkspaceScope inlineFilter={["observability.dashboard", "observability.logs", "observability.metrics", "observability.traces", "observability.traceDetail"].includes(route.pageId)} showScopeHelp={!["observability.dashboard", "observability.logs", "observability.traces", "observability.metrics"].includes(route.pageId)} allowAll={route.pageId.startsWith("observability.")} renderWithoutWorkspace={route.pageId === "memory.index" || route.pageId === "knowledgeGraph.index"}><resolved.Component key={routeRenderKey} /></PlatformWorkspaceScope>
             : <resolved.Component key={routeRenderKey} /> }</SuspendedRoute>} />
         </Routes>
         </MotionReveal>

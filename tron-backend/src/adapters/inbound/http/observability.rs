@@ -89,10 +89,18 @@ pub async fn query_traces(
         let service = state.agent_framework.observability().await?;
         let workspace = q.workspace_code.clone().unwrap_or_default();
         let options_service = service.clone();
-        let mut agent_options = tokio::task::spawn_blocking(move || options_service.0.agent_options(&workspace))
-            .await.map_err(|_| ObservabilityError::Storage)??;
-        for option in &mut agent_options {
-            option.name = state.agent_management.trace_agent_name(q.workspace_code.as_deref().unwrap_or_default(), &option.code).unwrap_or_else(|| option.code.clone());
+        let options_workspace=workspace.clone();
+        let mut agent_options = if matches!(q.category,Some(crate::application::observability::TraceCategory::Agent)) {
+            tokio::task::spawn_blocking(move || options_service.0.agent_options(&options_workspace)).await.map_err(|_| ObservabilityError::Storage)??
+        } else {Vec::new()};
+        let mut names=std::collections::BTreeMap::new();
+        if !agent_options.is_empty() {
+            let name_service=state.agent_management.clone();
+            let name_workspace=workspace.clone();
+            names=tokio::task::spawn_blocking(move || name_service.trace_agent_names(&[name_workspace])).await.map_err(|_| ObservabilityError::Storage)?;
+            for option in &mut agent_options {
+                option.name=names.get(&(workspace.clone(),option.code.clone())).cloned().unwrap_or_else(||option.code.clone());
+            }
         }
         let keyword = q.keyword.unwrap_or_default().trim().to_lowercase();
         let mut aliases = q.keyword_aliases;
@@ -111,13 +119,19 @@ pub async fn query_traces(
         };
         let mut page = tokio::task::spawn_blocking(move || service.query(query))
             .await.map_err(|_| ObservabilityError::Storage)??;
-        let mut names = std::collections::BTreeMap::new();
+        let extra_workspaces=page.records.iter().map(|row|row.workspace_code.clone()).filter(|code|code!=&workspace).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>();
+        if matches!(q.category,Some(crate::application::observability::TraceCategory::Agent)) && !extra_workspaces.is_empty() {
+            let name_service=state.agent_management.clone();
+            names.extend(tokio::task::spawn_blocking(move || name_service.trace_agent_names(&extra_workspaces)).await.map_err(|_| ObservabilityError::Storage)?);
+        }
+        let session_codes=page.records.iter().map(|row|row.session_code.clone()).collect::<Vec<_>>();
+        let chats=state.chats.clone();
+        let titles=tokio::task::spawn_blocking(move || chats.session_titles(&session_codes)).await.map_err(|_| ObservabilityError::Storage)?.unwrap_or_default().into_iter().map(|session|((session.workspace_code,session.session_code),session.title)).collect::<std::collections::BTreeMap<_,_>>();
         for trace in &mut page.records {
-            if matches!(q.category, Some(crate::application::observability::TraceCategory::Agent)) {
-                let key = (trace.workspace_code.clone(), trace.trigger.clone());
-                trace.trigger = names.entry(key).or_insert_with(|| state.agent_management.trace_agent_name(&trace.workspace_code, &trace.trigger).unwrap_or_else(|| trace.trigger.clone())).clone();
+            if matches!(q.category,Some(crate::application::observability::TraceCategory::Agent)) {
+                if let Some(name)=names.get(&(trace.workspace_code.clone(),trace.trigger.clone())) {trace.trigger=name.clone();}
             }
-            attach_session_name(&state, trace);
+            trace.session_name=titles.get(&(trace.workspace_code.clone(),trace.session_code.clone())).cloned();
         }
         page.agent_options = agent_options;
         Ok(page)
@@ -161,12 +175,9 @@ pub async fn get_trace(
         .map_err(|error| ObservabilityApiError(error, auth.locale))
 }
 fn attach_session_name(state: &AppState, trace: &mut TraceSummary) {
-    trace.session_name = state
-        .chats
-        .get_session(&trace.session_code)
-        .ok()
-        .filter(|session| session.workspace_code == trace.workspace_code)
-        .map(|session| session.title);
+    trace.session_name = state.chats.session_titles(std::slice::from_ref(&trace.session_code)).ok()
+        .and_then(|sessions|sessions.into_iter().find(|session|session.workspace_code==trace.workspace_code))
+        .map(|session|session.title);
 }
 
 pub struct ObservabilityApiError(ObservabilityError, String);

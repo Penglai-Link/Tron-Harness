@@ -476,7 +476,7 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
                     menu_id,
                     parent_item_id,
                     item.position,
-                    default_child_display(item.menu_code).as_storage(),
+                    item.child_display.as_storage(),
                 ],
             )
             .map_err(storage_error)?;
@@ -488,13 +488,6 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
         }
         tx.commit().map_err(storage_error)?;
         Ok(restored_item_count)
-    }
-}
-
-fn default_child_display(menu_code: &str) -> NavigationMenuChildDisplay {
-    match menu_code {
-        "CORE" | "AGENT_OPERATIONS" | "DATA" | "EXPLORE_MORE" => NavigationMenuChildDisplay::Flyout,
-        _ => NavigationMenuChildDisplay::Inline,
     }
 }
 

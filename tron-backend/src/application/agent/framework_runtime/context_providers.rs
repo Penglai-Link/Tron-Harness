@@ -161,6 +161,7 @@ pub(super) async fn assemble(
             limit: config.context.providers.max_auxiliary_calls_per_step,
         },
     }));
+    contributors.push(Arc::new(super::dude_context::DudeContributor { service:host.harness.framework_dudes(),context:context.clone(),id:"runtime_identity" }));
     let mut configs = std::collections::HashMap::new();
     let directory = input
         .run
@@ -297,10 +298,16 @@ pub(super) async fn assemble(
     if directory.is_some() {
         let mut block =
             fw::ContextBlockConfig::new("agent_directory", fw::BlockBudget::tokens(2048));
-        block.reducer = Arc::new(memory::BoundMemoryData::new(|_, _| {
-            fw::Message::user("Agent directory entry omitted due to context budget.")
-        }));
+        block.reducer = Arc::new(agent_directory_context::AgentDirectoryReducer);
         layout.insert(layout.len().saturating_sub(1), block);
+    }
+    if context.is_owning_dude() {
+        for (id,cap) in [("dude_onboarding",1024),("dude_environment",1536),("dude_wakeup",2048)] {
+            contributors.push(Arc::new(super::dude_context::DudeContributor {service:host.harness.framework_dudes(),context:context.clone(),id}));
+            let mut block=fw::ContextBlockConfig::new(id,fw::BlockBudget::tokens(cap));
+            block.reducer=Arc::new(memory::BoundMemoryData::new(|_,_|fw::Message::user("Context data omitted to respect budget.")));
+            layout.insert(layout.len().saturating_sub(1),block);
+        }
     }
     let base_policy: Arc<dyn fw::ContextBudgetPolicy> = Arc::new(SharedSeedBudget {
         max_tokens: seed_cap,

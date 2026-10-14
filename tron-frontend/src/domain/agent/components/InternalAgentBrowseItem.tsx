@@ -1,3 +1,4 @@
+import { AgentAvailabilityAvatar } from "./AgentAvailabilityAvatar";
 import { ShieldCheck, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -15,7 +16,7 @@ export function InternalAgentBrowseItem({ agent, name, groupLabel, disabled, can
   return <div className="relative min-w-0">
     <Button variant="ghost" disabled={disabled} aria-label={agent.builtIn ? `${action} · ${builtInLabel}` : action}
       className="h-auto w-full min-w-0 flex-col gap-2 rounded-xl px-2 py-4 text-center whitespace-normal" onClick={onOpen}>
-      <AgentAvatar avatarId={agent.avatarId} className="size-20 shrink-0 rounded-full" />
+      <AgentAvailabilityAvatar enabled={agent.enabled !== false}><AgentAvatar avatarId={agent.avatarId} className="size-20 shrink-0 rounded-full" /></AgentAvailabilityAvatar>
       <span className="block w-full min-w-0">
         <span className="block truncate text-sm font-medium" title={name}>{name}</span>
         <span className="mt-1 block truncate font-mono text-xs text-[var(--color-on-surface-variant)]" title={agent.agentCode}>{agent.agentCode}</span>

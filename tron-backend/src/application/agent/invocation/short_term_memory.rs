@@ -184,6 +184,7 @@ mod tests {
 
     fn context_with_tools(tools: Vec<EffectiveTool>) -> AgentRunContext {
         AgentRunContext {
+            system_agent_fast_mode: false,
             collaboration_owner: None,
             agent_code: None,
             auto_model_route: None,

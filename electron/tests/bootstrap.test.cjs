@@ -77,6 +77,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       if (name === "electron") return {
         app: {
           isPackaged: scenario.packaged,
+          getLocale: () => "en-US",
           requestSingleInstanceLock: () => { startupEvents.push("lock"); return true; },
           setPath(name, directory) { electronPaths.set(name, directory); startupEvents.push(name); },
           setAppUserModelId() {},

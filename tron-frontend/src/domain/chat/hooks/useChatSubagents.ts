@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { requestApi } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import type { ChatSubagent, ChatSubagentDetail } from "../model/ChatSubagent";
@@ -29,8 +29,11 @@ export function useChatSubagents(session: string, workspace: string, active: boo
     void refresh();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [session, workspace, active]);
-  if (!session || getServiceDataSource("chat") !== "api") return { session, items: [], error: false, loading: false };
-  return state.session === session ? state : { session, items: [], error: false, loading: true };
+  const api = getServiceDataSource("chat") === "api";
+  return useMemo(() => {
+    if (!session || !api) return { session, items: [], error: false, loading: false };
+    return state.session === session ? state : { session, items: [], error: false, loading: true };
+  }, [api, session, state]);
 }
 
 export function useChatSubagentDetail(session: string, workspace: string, runId: string, active: boolean) {

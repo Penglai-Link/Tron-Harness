@@ -75,7 +75,7 @@ async fn observability_real_plugin_exports_parentage_links_metrics_and_survives_
         .unwrap();
     let mut request = RunRequest::new("session", "private prompt");
     request.extensions.insert(TraceParent(root.clone()));
-    let guard = TraceGuard::tracked(root, telemetry.store.clone(), BTreeMap::new());
+    let guard = TraceGuard::tracked(root, telemetry.store.clone(), "tron.session.run", &http, BTreeMap::new());
     let result = agent.run(request).await;
     assert!(result.is_ok());
     guard.finish(&result);
@@ -211,7 +211,7 @@ async fn observability_abandoned_host_trace_is_unknown_and_scope_is_enforced() {
     telemetry
         .register(&id, "a", "s", "r", "main-agent")
         .unwrap();
-    drop(TraceGuard::tracked(root, telemetry.store.clone(), BTreeMap::new()));
+    drop(TraceGuard::tracked(root, telemetry.store.clone(), "tron.session.run", &Context::new(), BTreeMap::new()));
     telemetry.flush().await;
     assert_eq!(
         telemetry.service().detail("a", &id).unwrap().trace.status,
@@ -387,7 +387,7 @@ async fn agent_completion_log_uses_the_real_otel_span_identifiers() {
                 .with_writer(daily_appender(temp.path(), 30).unwrap()),
         ),
         || {
-            let guard = TraceGuard(root, None, std::sync::atomic::AtomicBool::new(false));
+            let guard = TraceGuard(root, None, std::sync::atomic::AtomicBool::new(false), Default::default());
             guard.finish(&Err(
                 eliteforge_agent_core::AgentError::InvalidConfiguration(
                     "private test failure".into(),
@@ -426,7 +426,7 @@ async fn observability_platform_queries_include_all_workspaces_and_optional_filt
         let id = root.span().span_context().trace_id().to_string();
         telemetry.register(&id, workspace, "session", "run", "main-agent").unwrap();
         ids.push(id);
-        drop(TraceGuard::tracked(root, telemetry.store.clone(), BTreeMap::new()));
+        drop(TraceGuard::tracked(root, telemetry.store.clone(), "tron.session.run", &Context::new(), BTreeMap::new()));
     }
     let gauge = telemetry.runtime.metrics.meter("test").f64_gauge("workspace.load").build();
     for workspace in ["alpha", "beta"] { gauge.record(1., &[KeyValue::new("tron.workspace.code", workspace)]); }

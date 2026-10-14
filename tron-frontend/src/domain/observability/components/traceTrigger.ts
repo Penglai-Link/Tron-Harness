@@ -3,13 +3,18 @@ import type { i18n } from "i18next";
 import { appRoutes } from "@/router/routes";
 import type { TraceDetail } from "../model/Trace";
 
-export function triggerLabel(value: string | undefined, i18n: i18n): string {
+export function triggerLabel(value: string | undefined, i18n: i18n, category: "Page" | "Agent" = "Page"): string {
   if (!value) return "—";
+  if (category === "Agent") return value;
   const path = value.replace(/^page /, "");
-  if (!path.startsWith("/")) return value;
-  const route = appRoutes.find((route) => matchPath({ path: route.route, end: true }, path));
-  if (path === "/resource-management/files" || path.startsWith("/resource-management/files/")) return String(i18n.t("observability:filesTrigger"));
-  const section = path.split("/")[1];
+  if (!path.startsWith("/")) {
+    const route = appRoutes.find((route) => route.title === path || route.pageId === path);
+    return route?.titleTranslationKey ? String(i18n.t(route.titleTranslationKey)) : value;
+  }
+  const pathname = path.split(/[?#]/)[0];
+  const route = appRoutes.find((route) => matchPath({ path: route.route.split(/[?#]/)[0], end: true }, pathname));
+  if (pathname === "/resource-management/files" || pathname.startsWith("/resource-management/files/")) return String(i18n.t("observability:filesTrigger"));
+  const section = pathname.split("/")[1];
   const keys: Record<string, string> = { chats:"chatTrigger", apps:"appsTrigger", resources:"filesTrigger", files:"filesTrigger" };
   if (keys[section]) return String(i18n.t(`observability:${keys[section]}`));
   return route?.titleTranslationKey ? String(i18n.t(route.titleTranslationKey)) : route?.title ?? path;

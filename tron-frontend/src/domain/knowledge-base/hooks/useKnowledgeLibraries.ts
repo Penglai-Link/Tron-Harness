@@ -39,7 +39,7 @@ export function useKnowledgeAgents(enabled: boolean) {
     queryKey: ["knowledge-base-agents", user], enabled: Boolean(user && enabled),
     queryFn: async ({ signal }) => {
       const [agents, dudes] = await Promise.all([fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE, signal), listDudes(signal)]);
-      return [...agents.map(({ agentCode, name }) => ({ agentCode, name })), ...dudes.map(dude => ({ agentCode: dude.dudeCode, name: dude.name }))];
+      return [...agents.map(({ agentCode, name }) => ({ agentCode, name })), ...dudes.filter(dude => dude.enabled).map(dude => ({ agentCode: dude.dudeCode, name: dude.name }))];
     },
   });
 }

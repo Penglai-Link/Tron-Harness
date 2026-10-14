@@ -81,7 +81,17 @@ impl AgentManagementService {
             .find(|c| c.agent_code == "main-agent")
             .ok_or(AgentManagementError::InternalAgentNotFound)?;
         config.agent_code = code.into();
+        config.avatar_id = match code {
+            "main-dude" => "neo".into(),
+            "memory-dude" => "black-hole".into(),
+            _ => config.avatar_id,
+        };
         config.name = name.into();
+        config.description = match code {
+            "main-dude" => "统筹用户事务，协调智能体执行任务并跟进结果。",
+            "memory-dude" => "整理稳定事实与已验证经验，维护长期记忆和可复用技能。",
+            _ => "",
+        }.into();
         config.group_name = None;
         if let Some(prompt) = role_prompt {
             config.role_prompt = prompt
@@ -127,6 +137,10 @@ impl AgentManagementService {
             .filter(|p| !dudes.contains(&p.agent_code))
             .collect())
     }
+    /// Identity-only listing must not build tool policies or resolve capabilities.
+    pub fn platform_internal_agent_codes(&self) -> Result<Vec<String>, AgentManagementError> {
+        Ok(self.platform_internal_agent_configs()?.into_iter().map(|c| c.agent_code).collect())
+    }
     pub fn all_platform_internal_agents(
         &self,
     ) -> Result<Vec<InternalAgentToolPolicy>, AgentManagementError> {
@@ -149,6 +163,7 @@ impl AgentManagementService {
             .validate_internal_agent_group("", command.group_name)?
             .filter(|name| !name.is_empty());
         config.name = command.name.trim().to_owned();
+        config.description = internal_definitions::validate_description(&command.description)?;
         config.role_prompt = command.role_prompt;
         config.avatar_id = internal_definitions::validate_avatar_id(command.avatar_id.as_deref())?;
         config.candidate_model_codes =
@@ -236,6 +251,7 @@ impl AgentManagementService {
             self.validate_internal_agent_group("", command.group_name)?
         };
         self.change_platform_internal_agent(code, |config| {
+            if let Some(enabled) = command.enabled { config.enabled = enabled; }
             if let Some(name) = group_name {
                 config.group_name = (!name.is_empty()).then_some(name);
             }
@@ -251,6 +267,9 @@ impl AgentManagementService {
             }
             if let Some(name) = command.name {
                 config.name = name.trim().to_owned();
+            }
+            if let Some(description) = command.description {
+                config.description = internal_definitions::validate_description(&description)?;
             }
             if let Some(prompt) = command.role_prompt {
                 config.role_prompt = prompt;
@@ -371,10 +390,11 @@ fn platform_view(
         .collect::<Vec<_>>();
     let count = tools.len();
     InternalAgentToolPolicy {
+        enabled: config.enabled,
         workspace_code: String::new(),
         agent_code: config.agent_code.clone(),
         name: config.name,
-        description: "Platform internal agent.".into(),
+        description: config.description,
         role_prompt: config.role_prompt,
         loop_code: config.loop_code,
         avatar_id: config.avatar_id,
@@ -401,8 +421,10 @@ fn default_config(
     definition: internal_definitions::InternalAgentDefinition,
 ) -> PlatformInternalAgentConfig {
     PlatformInternalAgentConfig {
+        enabled: definition.enabled,
         agent_code: definition.agent_code,
         name: definition.name,
+        description: definition.description,
         role_prompt: definition.role_prompt,
         loop_code: definition.loop_code,
         avatar_id: definition.avatar_id,

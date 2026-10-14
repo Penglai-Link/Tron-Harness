@@ -60,6 +60,20 @@ impl AgentManagementService {
                 .or_default()
                 .push(assignment.server_code);
         }
+        let tools = self.list_tools(None, None, "en-US");
+        let local_definitions = self
+            .repository()
+            .list_workspace_internal_agent_definitions(workspace_code)?;
+        let mut selected_tools_by_agent = HashMap::<String, Vec<String>>::new();
+        for assignment in self
+            .repository()
+            .list_workspace_internal_agent_tool_assignments(Some(workspace_code), None)?
+        {
+            selected_tools_by_agent
+                .entry(assignment.agent_code)
+                .or_default()
+                .push(assignment.tool_code);
+        }
         let mut policies = Vec::new();
         let dudes = self.repository().list_dude_codes()?;
         for definition in self.internal_agent_definitions(workspace_code)? {
@@ -71,11 +85,28 @@ impl AgentManagementService {
             let default_policy = to_internal_policy_record(workspace_code, &definition);
             let policy = merge_policy(default_policy, override_policy);
             let mode = policy.tool_assignment_mode;
-            let selected_tool_codes =
-                self.resolve_internal_agent_tool_codes(workspace_code, &agent_code)?;
+            let selected = if policy
+                .overridden_fields
+                .iter()
+                .any(|f| f == "selectedToolCodes")
+            {
+                selected_tools_by_agent
+                    .remove(&agent_code)
+                    .unwrap_or_default()
+            } else {
+                definition.selected_tool_codes.clone()
+            };
+            let selected_tool_codes = normalize_string_codes(
+                tools
+                    .iter()
+                    .filter(|tool| mode.strategy().includes(tool, &selected))
+                    .map(|tool| tool.tool_code.clone())
+                    .collect(),
+            );
             let effective_tool_count = selected_tool_codes.len();
             let assigned_tool_count = effective_tool_count;
             policies.push(InternalAgentToolPolicy {
+                enabled: definition.enabled,
                 workspace_code: workspace_code.to_string(),
                 agent_code: agent_code.clone(),
                 name: definition.name,
@@ -89,9 +120,7 @@ impl AgentManagementService {
                 built_in: definition.built_in,
                 source: (override_policy.is_some()
                     || !definition.platform_defined
-                    || self
-                        .repository()
-                        .list_workspace_internal_agent_definitions(workspace_code)?
+                    || local_definitions
                         .iter()
                         .any(|record| record.agent_code == agent_code))
                 .then_some(InternalAgentPolicySource::WorkspaceOverride)
@@ -129,7 +158,6 @@ impl AgentManagementService {
         workspace_code: &str,
         agent_code: &str,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
-        self.active_workspace_detail(workspace_code)?;
         self.list_workspace_internal_agents(workspace_code)?
             .into_iter()
             .find(|policy| policy.agent_code.eq_ignore_ascii_case(agent_code))
@@ -343,8 +371,9 @@ impl AgentManagementService {
         agent_code: &str,
         locale: &str,
     ) -> Result<Vec<ToolCatalogRecord>, AgentManagementError> {
-        self.workspace_internal_agent_policy(workspace_code, agent_code)?;
-        let tool_codes = self.resolve_internal_agent_tool_codes(workspace_code, agent_code)?;
+        let tool_codes = self
+            .workspace_internal_agent_policy(workspace_code, agent_code)?
+            .selected_tool_codes;
         Ok(self
             .tools_by_codes(&tool_codes, locale)
             .into_iter()
@@ -352,59 +381,6 @@ impl AgentManagementService {
                 tool.availability_state == crate::domain::agent::ToolAvailabilityState::Available
             })
             .collect())
-    }
-
-    fn resolve_internal_agent_tool_codes(
-        &self,
-        workspace_code: &str,
-        agent_code: &str,
-    ) -> Result<Vec<String>, AgentManagementError> {
-        let definition = self
-            .resolve_internal_agent_default(workspace_code, agent_code)?
-            .ok_or(AgentManagementError::InternalAgentNotFound)?;
-        let agent_code = definition.agent_code.as_str();
-        let override_policy = self
-            .repository()
-            .list_workspace_internal_agent_policies(Some(workspace_code))?
-            .into_iter()
-            .find(|policy| {
-                policy
-                    .agent_code
-                    .eq_ignore_ascii_case(&definition.agent_code)
-            });
-        let policy = merge_policy(
-            to_internal_policy_record(workspace_code, &definition),
-            override_policy.as_ref(),
-        );
-        let mode = policy.tool_assignment_mode;
-
-        let selected = if policy
-            .overridden_fields
-            .iter()
-            .any(|field| field == "selectedToolCodes")
-        {
-            self.repository()
-                .list_workspace_internal_agent_tool_assignments(
-                    Some(workspace_code),
-                    Some(agent_code),
-                )?
-                .into_iter()
-                .map(|assignment| assignment.tool_code)
-                .collect()
-        } else {
-            definition.selected_tool_codes
-        };
-        let mut filtered = self
-            .list_tools(None, None, "en-US")
-            .into_iter()
-            // Keep saved assignments visible while a capability is disabled;
-            // availability is enforced when constructing runtime bindings.
-            .filter(|tool| mode.strategy().includes(tool, &selected))
-            .map(|tool| tool.tool_code)
-            .collect::<Vec<_>>();
-        filtered.sort_unstable();
-        filtered.dedup();
-        Ok(filtered)
     }
 
     pub(super) fn resolve_internal_agent_default(

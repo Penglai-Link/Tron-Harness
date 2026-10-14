@@ -46,7 +46,8 @@ function getDocumentLocale() {
 }
 
 export function getInitialLocale(): SupportedLocale {
-  return getStoredLocale() ?? getBrowserLocale() ?? fallbackLocale;
+  // Start in English; a language explicitly selected in the UI still wins.
+  return getStoredLocale() ?? fallbackLocale;
 }
 
 /**

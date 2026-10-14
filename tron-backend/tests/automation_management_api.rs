@@ -1076,6 +1076,7 @@ fn execute_tool_json(
 
 fn automation_tool_context(tools: Vec<EffectiveTool>) -> AgentRunContext {
     AgentRunContext {
+        system_agent_fast_mode: false,
         collaboration_owner: None,
         agent_code: None,
         conversation_code: Some("CONV-AUTOMATION-TOOLS".into()),

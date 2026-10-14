@@ -242,7 +242,7 @@ export function TaskDetailsPage() {
 
   useEffect(() => {
     if (!task.workspaceCode) {
-      setAgentOptions([mainAutomationAgentOption]);
+      setAgentOptions([]);
       setWorkspaceModelOptions([]);
       return;
     }
@@ -267,7 +267,7 @@ export function TaskDetailsPage() {
       })
       .catch((error) => {
         if (!active) return;
-        setAgentOptions([mainAutomationAgentOption]);
+        setAgentOptions([]);
         setWorkspaceModelOptions([]);
         toast.error(error instanceof Error ? error.message : pageT("errors.executionOptions", "Execution options could not be loaded"));
       })

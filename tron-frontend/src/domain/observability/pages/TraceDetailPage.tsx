@@ -2,9 +2,9 @@ import { useState } from "react";
 import { triggerDetail } from "../components/traceTrigger";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PageHeader, useWorkspaceSpaces } from "@/shared";
+import { useWorkspaceSpaces } from "@/shared";
+import { PlatformWorkspaceFilter } from "@/domain/settings/components/PlatformWorkspaceScope";
 import { useTraceDetail } from "../hooks/useObservability";
 import { TraceInspector } from "../components/TraceInspector";
 
@@ -22,10 +22,9 @@ export function TraceDetailPage() {
   const detail = useTraceDetail(workspaceCode, traceId);
   return (
     <>
-      <PageHeader
-        title={t("detail")}
-        actions={
-          <>
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-3" aria-label={t("detail")}>
+        <PlatformWorkspaceFilter />
+        <div className="ml-auto flex flex-wrap items-center gap-3">
             {rootSpanId && <Button variant="secondary" onClick={() => setShowFull((value) => !value)}>
               {t(showFull ? "showTriggerTrace" : "showFullTrace")}
             </Button>}
@@ -38,7 +37,6 @@ export function TraceDetailPage() {
                 />
               }
             >
-              <ArrowLeft />
               {t("backToTraces")}
             </Button>
             <Button
@@ -46,12 +44,10 @@ export function TraceDetailPage() {
               disabled={detail.isFetching}
               onClick={() => void detail.refetch()}
             >
-              <RefreshCcw />
               {t("refresh")}
             </Button>
-          </>
-        }
-      />
+        </div>
+      </header>
       {detail.isPending ? (
         <p role="status">{t("loading")}</p>
       ) : detail.isError ? (

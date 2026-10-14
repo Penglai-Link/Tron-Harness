@@ -548,6 +548,8 @@ impl AppState {
             agent_management.clone(),
         );
         dudes.bootstrap().expect("Dude defaults");
+        agent_framework.bind_dudes(dudes.clone());
+        chats.bind_dudes(dudes.clone());
         crate::application::dude::register_dude_tools(
             agent_tool_registry.as_ref(),
             dudes.clone(),

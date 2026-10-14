@@ -163,9 +163,19 @@ impl fw::ContextPreparationPolicy for TronContext {
             input,
             &host.harness.framework_context_config(),
         )?;
-        host.harness
+        let snapshot_sequence = host.harness
             .framework_record_context(&context, &projection, &window.report)
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
+        // Inspector metadata follows the native output/replay channel. Do not
+        // duplicate full history over SSE or fit a report into bus attribute caps.
+        input.run.emit_output(fw::OutputEvent::Custom {
+            name: "tron.short_term_memory.context.assembled".into(),
+            value: serde_json::json!({
+                "contextReport": window.report,
+                "budgetBreakdown": projection.budget_breakdown,
+                "snapshotSequence": snapshot_sequence.map(|value| value.to_string()),
+            }),
+        });
         let mut state = host.state.lock().await;
         state.context.messages = projection.messages.clone();
         state.context_force_compression = false;
@@ -182,27 +192,17 @@ impl fw::TokenEstimator for TronTokenEstimator {
         model: &fw::ModelRef,
         message: &fw::Message,
     ) -> Result<usize, fw::ModelError> {
-        let native = super::messages::decode(message).map_err(fw::ModelError::Fatal)?;
-        let native_tokens =
-            crate::application::short_term_memory::estimate_messages_tokens(&[native]) as usize;
-        let metadata = message
-            .model_context
-            .as_ref()
-            .map_or(0, |value| {
-                serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
-            })
-            .saturating_add(message.structured.as_ref().map_or(0, |value| {
-                serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
-            }))
-            .saturating_add(message.tool_result.as_ref().map_or(0, |value| {
-                serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
-            }));
-        // Native typed media/resource estimates remain binding even when the
-        // product history projection exposes a compact display representation.
-        let typed_tokens =
-            fw::TokenEstimator::message(&fw::ConservativeTokenEstimator, model, message).await?;
-        Ok(native_tokens.saturating_add(metadata).max(typed_tokens))
+        // Do not max this with byte counts: that would undo text-aware admission.
+        fw::TokenEstimator::message(&fw::UnicodeTokenEstimator, model, message).await
     }
+    async fn options(
+        &self,
+        model: &fw::ModelRef,
+        options: &fw::GenerationOptions,
+    ) -> Result<usize, fw::ModelError> {
+        fw::TokenEstimator::options(&fw::UnicodeTokenEstimator, model, options).await
+    }
+
     async fn tools(
         &self,
         _: &fw::ModelRef,

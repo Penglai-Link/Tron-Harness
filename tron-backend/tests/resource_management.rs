@@ -639,6 +639,7 @@ fn resource_tool_context(
     tools: Vec<tron_backend::domain::agent::EffectiveTool>,
 ) -> AgentRunContext {
     AgentRunContext {
+        system_agent_fast_mode: false,
         collaboration_owner: None,
         agent_code: None,
         conversation_code: Some("CONV-RESOURCE".to_string()),

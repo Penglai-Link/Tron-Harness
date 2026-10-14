@@ -9,6 +9,7 @@ import { createWorkspaceInternalAgentMock } from "@/domain/agent/mock";
 import { notifyInternalAgentRegistryChanged } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { AgentRolePromptField } from "./AgentRolePromptField";
+import { AgentDescriptionField } from "./AgentDescriptionField";
 
 import { AgentAvatarPicker } from "./AgentAvatarPicker";
 import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
@@ -26,6 +27,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   const [section, setSection] = useState("profile");
   const [agentCode, setAgentCode] = useState("");
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [loopCode, setLoopCode] = useState("");
   const [rolePrompt, setRolePrompt] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -45,7 +47,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
     setSaving(true);
     try {
       if (!loopCode) throw new Error(text("loopRequired", "Select an agent loop"));
-      const payload = { agentCode: agentCode.trim(), name: name.trim(), rolePrompt, loopCode, avatarId, groupName, candidateModelCodes };
+      const payload = { agentCode: agentCode.trim(), name: name.trim(), description: description.trim(), rolePrompt, loopCode, avatarId, groupName, candidateModelCodes };
       // Keep the created identity if assignment fails so retry cannot create twice.
       if (!createdAgentCode) {
         if (groupName && !groups.includes(groupName)) await createGroup(groupName);
@@ -66,6 +68,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
       setOpen(false);
       setAgentCode("");
       setName("");
+      setDescription("");
       setRolePrompt("");
       setLoopCode("");
       setAvatarId("robot"); setCandidateModelCodes([]);
@@ -81,7 +84,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   }
 
   return <>
-    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setRolePrompt(""); setAvatarId("robot"); setCandidateModelCodes([]); setLoopCode(""); setWorkspaceCodes([]); setGroupName(""); setSection("profile"); setOpen(true); }}>{text("create", "New")}</Button>
+    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setDescription(""); setRolePrompt(""); setAvatarId("robot"); setCandidateModelCodes([]); setLoopCode(""); setWorkspaceCodes([]); setGroupName(""); setSection("profile"); setOpen(true); }}>{text("create", "New")}</Button>
     <Dialog disablePointerDismissal open={open} onOpenChange={(next, details) => { if (details.reason === "outside-press" || saving) { details.cancel(); return; } setOpen(next); }}>
       <DialogContent className="flex h-[min(78dvh,48rem)] max-h-[90dvh] flex-col overflow-hidden sm:max-w-3xl" closeLabel={text("close", "Close")} showCloseButton={!saving}>
         <DialogHeader>
@@ -103,6 +106,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
               <Field label={text("name", "Name")} required>
                 <TextInput aria-label={text("name", "Name")} maxLength={100} required disabled={definitionDisabled} value={name} onChange={(event) => setName(event.target.value)} />
               </Field>
+              <AgentDescriptionField value={description} disabled={definitionDisabled} onChange={setDescription} />
               <InternalAgentGroupField workspaceCode={workspaceCode} value={groupName} disabled={definitionDisabled} onChange={setGroupName} />
             </TabsContent>
             <TabsContent value="runtime" keepMounted className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-3">

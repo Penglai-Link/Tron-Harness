@@ -41,12 +41,17 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
   const currentPage = Math.min(page, pageCount);
   const visibleRows = useMemo(() => filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize), [filteredRows, currentPage, pageSize]);
   const [selected, setSelected] = useState("");
-  const [view, setView] = useState("waterfall");
+  const [view, setView] = useState("table");
   const span =
     detail.spans.find((s) => s.spanId === selected) ??
     detail.spans.find((s) => s.name === "agent.run") ??
     detail.spans[0];
   const trace = detail.trace;
+  const triggerRoot = detail.spans.find((item) => item.spanId === trace.rootSpanId)
+    ?? detail.spans.find((item) => !item.parentSpanId);
+  const isPageTrigger = triggerRoot?.attributes["tron.trace.page"] === "true" || Boolean(triggerRoot?.attributes["url.path"]);
+  const triggerCategory = !isPageTrigger && (triggerRoot?.attributes["tron.agent.code"] || triggerRoot?.attributes["tron.dude.code"]) ? "Agent" : "Page";
+  const title = triggerLabel(trace.trigger, i18n, triggerCategory);
   const isDudeExecution = detail.spans.some((item) => item.name === "tron.dude.execute");
   const sessionHref = isDudeExecution
     ? `/dudes?${new URLSearchParams({ dude: trace.agentCode, tab: "history", session: trace.sessionCode })}`
@@ -80,7 +85,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <h2 className="font-semibold">{triggerLabel(trace.trigger, i18n) === "—" ? t("detail") : triggerLabel(trace.trigger, i18n)}</h2>
+          <h2 className="font-semibold">{title === "—" ? t("detail") : title}</h2>
           <code className="break-all text-xs">{trace.traceId}</code>
           <Button
             variant="ghost"
@@ -116,18 +121,17 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
       </dl>
       <div className="grid min-w-0 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
         <div className="min-w-0 p-5">
-          <div className="mb-3 space-y-3">
-            <h3 className="text-sm font-semibold">{t("spanList")}</h3>
-            <TextInput aria-label={t("searchSpans")} placeholder={t("searchSpans")} value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} />
-            {pagination}
-            <p className="text-xs text-[var(--color-on-surface-variant)]">{t("spanPagingHelp")}</p>
-          </div>
           <Tabs value={view} onValueChange={(value) => setView(String(value))}>
             <TabsList aria-label={t("detailView")}>
               <TabsTrigger value="table">{t("tableView")}</TabsTrigger>
               <TabsTrigger value="waterfall">{t("waterfall")}</TabsTrigger>
               <TabsTrigger value="topology">{t("topology")}</TabsTrigger>
             </TabsList>
+            <div className="my-3 space-y-3">
+              <h3 className="text-sm font-semibold">{t("spanList")}</h3>
+              <TextInput aria-label={t("searchSpans")} placeholder={t("searchSpans")} value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(1); }} />
+              {pagination}
+            </div>
             <TabsContent value="table">
               <Table>
                 <TableHeader>
@@ -213,8 +217,8 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
             className="min-w-0 border-t border-[var(--color-outline-variant)] p-5 xl:border-l xl:border-t-0"
             aria-label={t("spanDetail")}
           >
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">{span.name}</h3>
+            <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-2">
+              <h3 className="min-w-0 flex-1 text-sm font-semibold [overflow-wrap:anywhere]">{span.name}</h3>
               <TraceStatus status={span.status} />
             </div>
             <dl className="mb-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
@@ -235,7 +239,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
               <dd className="tabular-nums">{duration(span.durationMs)}</dd>
             </dl>
             <Tabs defaultValue="attributes">
-              <TabsList>
+              <TabsList className="max-w-full overflow-x-auto">
                 <TabsTrigger value="attributes">{t("attributes")}</TabsTrigger>
                 <TabsTrigger value="events">
                   {t("events")} ({formatNumber(span.events.length)})
@@ -255,7 +259,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
                       className="border-b border-[var(--color-outline-variant)] py-3"
                     >
                       <div className="mb-2 flex flex-wrap justify-between gap-2 text-xs">
-                        <span>{event.name}</span>
+                        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{event.name}</span>
                         <time>
                           {formatDateTime(event.timestamp, {
                             timeStyle: "medium",

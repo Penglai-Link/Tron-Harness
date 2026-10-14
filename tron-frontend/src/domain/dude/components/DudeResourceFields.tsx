@@ -1,3 +1,4 @@
+import { useToast } from "@/components/ui/toast";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -46,6 +47,7 @@ export const DudeResourceFields = forwardRef<DudeResourceFieldsHandle, DudeResou
   const { t } = useTranslation("pages");
   const text = (key: string, options?: Record<string, unknown>) => t(`workspaceAgents.internal.${key}`, options);
   const client = useQueryClient();
+  const toast = useToast();
   const [record, setRecord] = useState<WorkspaceInternalAgentRecord | null>(null);
   const [draft, setDraft] = useState<PolicyDraft | null>(null);
   const [tools, setTools] = useState<PlatformToolRecord[]>([]);
@@ -73,7 +75,11 @@ export const DudeResourceFields = forwardRef<DudeResourceFieldsHandle, DudeResou
       setRecord(agent); setDraft(asDraft(agent)); setDomains(nextDomains); setTools(nextTools);
       setServers(nextServers.map((server) => ({ ...server, platformEnabled: server.enabled, effectiveEnabled: server.enabled, source: "platform", workspaceOverrideDisabled: false })));
     }).catch((failure: unknown) => {
-      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : String(failure));
+      if (!controller.signal.aborted) {
+        const message = failure instanceof Error ? failure.message : String(failure);
+        setError(message);
+        toast.error(message);
+      }
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [dudeCode, loadAttempt]);
@@ -87,6 +93,7 @@ export const DudeResourceFields = forwardRef<DudeResourceFieldsHandle, DudeResou
   const blocked = disabled || saving || loading || !draft || !record;
 
   useImperativeHandle(ref, () => ({ save: async () => {
+    if (!dirty) return;
     if (savingRef.current) throw new Error(t("agentSkills.loading"));
     if (!record || !draft || loading) throw new Error(error || t("agentSkills.loading"));
     if (panel === "advanced") for (const key of ["maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const) {
@@ -133,19 +140,17 @@ export const DudeResourceFields = forwardRef<DudeResourceFieldsHandle, DudeResou
       setError(failure instanceof Error ? failure.message : String(failure));
       throw failure;
     } finally { savingRef.current = false; setSaving(false); }
-  } }), [record, draft, loading, error, dudeCode, skillDraft, knowledgeDraft, client, t]);
+  } }), [record, draft, loading, error, dirty, dudeCode, skillDraft, knowledgeDraft, client, t]);
 
   const label = (key: string) => <span className="inline-flex items-center gap-1.5"><span>{text(`labels.${key}`)}</span><InfoTooltip ariaLabel={text(`help.${key}.ariaLabel`)}><p>{text(`help.${key}.summary`)}</p><p>{text(`help.${key}.optionOne`)}</p><p>{text(`help.${key}.optionTwo`)}</p>{key === "toolAssignmentMode" ? <p>{text("help.toolAssignmentMode.optionThree")}</p> : null}</InfoTooltip></span>;
   if (loading) return <p role="status">{t("agentSkills.loading")}</p>;
-  if (!record || !draft) return <div role="alert" className="space-y-2"><p>{error}</p><Button type="button" variant="outline" disabled={disabled} onClick={() => setLoadAttempt((value) => value + 1)}>{t("agentSkills.retry")}</Button></div>;
+  if (!record || !draft) return <div className="space-y-2"><Button type="button" variant="outline" disabled={disabled} onClick={() => setLoadAttempt((value) => value + 1)}>{t("agentSkills.retry")}</Button></div>;
   if (panel === "advanced") return <div className="grid gap-3 lg:grid-cols-2">
-    {error ? <p role="alert" className="text-[var(--color-error)]">{error}</p> : null}
     <Field label={label("toolExposureMode")}><SelectInput disabled={blocked} value={draft.toolExposureMode} onValueChange={(value) => patch({ toolExposureMode: value as PolicyDraft["toolExposureMode"] })}><SelectItem value="direct_list">{text("modes.directList")}</SelectItem><SelectItem value="domain_discovery">{text("modes.domainDiscovery")}</SelectItem></SelectInput></Field>
     <Field label={label("expandedDomainPersistenceMode")}><SelectInput disabled={blocked} value={draft.expandedDomainPersistenceMode} onValueChange={(value) => patch({ expandedDomainPersistenceMode: value as PolicyDraft["expandedDomainPersistenceMode"] })}><SelectItem value="sticky_expanded">{text("modes.stickyExpanded")}</SelectItem><SelectItem value="ephemeral_expanded">{text("modes.ephemeralExpanded")}</SelectItem></SelectInput></Field>
     {(["maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const).map((key) => <Field key={key} label={label(key)}><TextInput aria-label={text(`labels.${key}`)} disabled={blocked} min={1} step={1} type="number" value={Number.isFinite(draft[key]) ? draft[key] : ""} onChange={(event) => patch({ [key]: event.currentTarget.valueAsNumber })} /></Field>)}
   </div>;
   return <div className="space-y-4">
-    {error ? <p role="alert" className="text-[var(--color-error)]">{error}</p> : null}
     <div className="grid gap-3 lg:grid-cols-2">
       <Field label={label("mcpAccessMode")} actions={draft.mcpAccessMode === "selected_servers" ? <Button type="button" size="sm" variant="outline" disabled={blocked} onClick={() => setAssignment("mcp")}>{text("assignmentDialog.editServers", { count: draft.selectedServerCodes.length })}</Button> : undefined}>
         <SelectInput disabled={blocked} value={draft.mcpAccessMode} onValueChange={(value) => value === "selected_servers" ? setAssignment("mcp") : patch({ mcpAccessMode: value as PolicyDraft["mcpAccessMode"] })}>

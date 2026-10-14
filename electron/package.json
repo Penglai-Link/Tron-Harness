@@ -39,7 +39,7 @@
     "mac": {
       "target": ["dmg"],
       "identity": "-",
-      "icon": "assets/tron.png"
+      "icon": "assets/tron.icns"
     },
     "win": {
       "target": ["nsis"],

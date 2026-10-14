@@ -96,6 +96,7 @@ struct Host {
     presentation: std::sync::RwLock<Option<crate::application::agent::AgentAguiStreamService>>,
     resources: Option<crate::application::resource::ResourceService>,
     agent_management: OnceCell<crate::application::agent::AgentManagementService>,
+    dudes: OnceCell<crate::application::dude::DudeService>,
     knowledge_bases: OnceCell<crate::application::knowledge_base::KnowledgeBaseService>,
     collaboration_builder:
         OnceCell<std::sync::Weak<crate::application::agent::AgentRunContextBuilder>>,
@@ -203,6 +204,10 @@ impl FrameworkHost {
         self.0.pty.clone()
     }
 
+    pub(crate) fn bind_dudes(&self, service:crate::application::dude::DudeService) {
+        let _ = self.0.dudes.set(service);
+    }
+    pub(crate) fn dudes(&self)->Option<crate::application::dude::DudeService> {self.0.dudes.get().cloned()}
     pub fn bind_knowledge_bases(
         &self,
         service: crate::application::knowledge_base::KnowledgeBaseService,
@@ -653,6 +658,7 @@ impl FrameworkHost {
             presentation: Default::default(),
             pty: Default::default(),
             resources,
+            dudes: OnceCell::new(),
             knowledge_bases: OnceCell::new(),
             agent_management: OnceCell::new(),
             collaboration_builder: OnceCell::new(),
@@ -699,6 +705,7 @@ impl FrameworkHost {
             presentation: Default::default(),
             pty: Default::default(),
             resources,
+            dudes: OnceCell::new(),
             knowledge_bases: OnceCell::new(),
             agent_management: OnceCell::new(),
             collaboration_builder: OnceCell::new(),

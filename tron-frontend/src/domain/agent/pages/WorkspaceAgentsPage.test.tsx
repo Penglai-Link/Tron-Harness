@@ -421,7 +421,7 @@ describe("internal agent cards and manual editing", () => {
     await screen.findByRole("button", { name: "Edit Main Agent" });
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getAllByRole("button", { pressed: false })).toHaveLength(11);
+    expect(within(dialog).getAllByRole("button", { pressed: false })).toHaveLength(30);
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.owl" }));
@@ -644,4 +644,14 @@ describe("internal agent groups and built-in platform editing", () => {
     expect(fixture.workspaceGrants).toHaveBeenCalledTimes(2);
   });
 
+});
+
+it("stages platform activation and persists it only on Save", async () => {
+  window.PointerEvent ??= MouseEvent as typeof PointerEvent;
+  render(<WorkspaceAgentsPage category="internal" scope="platform" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Edit Main Agent" }));
+  fireEvent.click(within(await screen.findByRole("dialog")).getByRole("switch"));
+  expect(fixture.patchDefinition).not.toHaveBeenCalled();
+  save();
+  await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledWith("$platform", "main-agent", { enabled: false }));
 });

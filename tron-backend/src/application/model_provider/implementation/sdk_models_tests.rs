@@ -852,3 +852,71 @@ async fn personai_tool_context_rejects_logged_out_and_stale_account_snapshots() 
     server.abort();
 }
 use std::collections::HashSet;
+
+#[tokio::test]
+async fn query_amplification_stream_deltas_only_write_changed_lineage() {
+    use sdk::ModelTransport;
+    struct Stream;
+    #[async_trait]
+    impl sdk::ModelTransport for Stream {
+        async fn json(&self, _: &str, _: &Value) -> Result<Value, fw::ModelError> {
+            unreachable!()
+        }
+        async fn events(
+            &self,
+            _: &str,
+            _: &Value,
+            sink: sdk::EventSink<'_>,
+        ) -> Result<(), fw::ModelError> {
+            for _ in 0..1000 {
+                sink(json!({"model":"actual-model", "choices":[{"delta":{"content":"x"}}]}))?;
+            }
+            sink(json!({"response":{"model":"actual-model","provider_code":"actual-vendor"}}))?;
+            sink(json!({"type":"response.output_text.delta","delta":"x"}))?;
+            // Metadata must survive a stream that fails after delivering partial output.
+            Err(fw::ModelError::Fatal("fixture interrupted".into()))
+        }
+    }
+    let cipher = Arc::new(
+        Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+            key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+        })
+        .unwrap(),
+    );
+    let providers = ModelProviderService::connect(":memory:", cipher).unwrap();
+    providers.connection.call(|c| c.execute_batch("CREATE TABLE snapshot_writes(n INTEGER); CREATE TRIGGER count_snapshot_insert AFTER INSERT ON provider_model_run_snapshots BEGIN INSERT INTO snapshot_writes VALUES(1); END; CREATE TRIGGER count_snapshot_update AFTER UPDATE ON provider_model_run_snapshots BEGIN INSERT INTO snapshot_writes VALUES(1); END;"), || rusqlite::Error::InvalidQuery).unwrap();
+    let transport = SnapshotTransport {
+        inner: Arc::new(Stream),
+        providers: providers.clone(),
+        config: person_ai_agent_config(
+            "PERSON_AI:ROUTE:ChatAuto",
+            "",
+            None,
+            None,
+            AgentModelProtocol::ChatCompletions,
+        ),
+        run: Some("stream-run".into()),
+        attempt: "fixture".into(),
+    };
+    let delivered = std::sync::atomic::AtomicUsize::new(0);
+    assert!(
+        transport
+            .events(
+                "/fixture",
+                &json!({}),
+                Arc::new(|_| {
+                    delivered.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                })
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(delivered.load(Ordering::SeqCst), 1002);
+    providers.connection.call(|c| {
+        assert_eq!(c.query_row("SELECT COUNT(*) FROM snapshot_writes", [], |r| r.get::<_, u32>(0))?, 2);
+        let row = c.query_row("SELECT resolved_model_code,resolved_upstream_vendor_code FROM provider_model_run_snapshots WHERE run_code='stream-run'", [], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?;
+        assert_eq!(row, ("actual-model".into(),"actual-vendor".into()));
+        Ok::<_,rusqlite::Error>(())
+    }, || rusqlite::Error::InvalidQuery).unwrap();
+}

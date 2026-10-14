@@ -150,11 +150,16 @@ impl FrameworkHost {
                     context.user_code.clone()
                 },
                 display_name: Some(
-                    match source {
-                        "Heartbeat" => "系统心跳",
-                        "TaskReminder" => "任务提醒",
-                        "ThreadFeedback" => "Thread 反馈",
-                        "UserMessage" => "你",
+                    match (source, crate::shared::locale::SupportedLocale::from_raw(&context.locale)) {
+                        ("Heartbeat", crate::shared::locale::SupportedLocale::EnUs) => "System heartbeat",
+                        ("TaskReminder", crate::shared::locale::SupportedLocale::EnUs) => "Task reminder",
+                        ("ThreadFeedback", crate::shared::locale::SupportedLocale::EnUs) => "Thread feedback",
+                        ("UserMessage", crate::shared::locale::SupportedLocale::EnUs) => "You",
+                        (_, crate::shared::locale::SupportedLocale::EnUs) => "Memory maintenance",
+                        ("Heartbeat", _) => "系统心跳",
+                        ("TaskReminder", _) => "任务提醒",
+                        ("ThreadFeedback", _) => "Thread 反馈",
+                        ("UserMessage", _) => "你",
                         _ => "记忆整理",
                     }
                     .into(),

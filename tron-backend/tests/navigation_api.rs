@@ -547,6 +547,43 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
 }
 
 #[tokio::test]
+async fn whole_group_can_move_into_another_group_with_descendants_preserved() {
+    let router = app();
+    let token = authenticated_bearer_token(&router).await;
+    let path = "/api/v1/admin/navigation/menu-trees/ADVANCED/menu-items/DATA";
+    let moved = request_json(&router, Method::PUT, path,
+        Some(json!({ "parentMenuCode": "EXPLORE_MORE", "position": 0, "childDisplay": "Inline" })),
+        Some(&token), None).await;
+    let status = moved.status();
+    let payload = response_json(moved).await;
+    assert_eq!(status, StatusCode::OK, "move entire group: {payload}");
+
+    let tree = request_json(&router, Method::GET,
+        "/api/v1/navigation/domains/ADVANCED/menu-tree", None, Some(&token), None).await;
+    let tree = response_json(tree).await;
+    let roots = tree["data"]["menus"].as_array().unwrap();
+    assert!(!roots.iter().any(|item| item["menuCode"] == "DATA"));
+    let explore = roots.iter().find(|item| item["menuCode"] == "EXPLORE_MORE").unwrap();
+    let data = &explore["children"][0];
+    assert_eq!(data["menuCode"], "DATA");
+    let resources = data["children"].as_array().unwrap().iter()
+        .find(|item| item["menuCode"] == "RESOURCE_MANAGEMENT").unwrap();
+    assert!(!resources["children"].as_array().unwrap().is_empty());
+
+    let cycle = request_json(&router, Method::PUT, path,
+        Some(json!({ "parentMenuCode": "RESOURCE_MANAGEMENT", "position": 0 })),
+        Some(&token), None).await;
+    assert_eq!(cycle.status(), StatusCode::BAD_REQUEST);
+
+    let restored = request_json(&router, Method::PUT, path,
+        Some(json!({ "parentMenuCode": null, "position": 0 })), Some(&token), None).await;
+    assert_eq!(restored.status(), StatusCode::OK);
+    let restored = response_json(restored).await;
+    assert_eq!(restored["data"][0]["menuCode"], "DATA");
+    assert!(!restored["data"][0]["children"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn widgets_and_pages_share_the_domain_tree_and_explore_group() {
     let router = app();
     let token = authenticated_bearer_token(&router).await;

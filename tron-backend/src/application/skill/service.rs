@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{domain::skill::*, shared::time::current_timestamp};
 
+mod approved_artifact;
 mod assignments;
 mod lock_file;
 mod parser;
@@ -22,7 +23,6 @@ mod registry_sync;
 #[cfg(test)]
 mod tests;
 mod use_cases;
-mod approved_artifact;
 pub use provider::SkillAgentIdentity;
 mod projection;
 
@@ -44,6 +44,12 @@ pub trait SkillRegistryRepository: Send {
     fn replace_agent_skills(&mut self, agent: &str, names: &[String]) -> Result<(), SkillError>;
     fn replace_skill_agents(&mut self, name: &str, agents: &[String]) -> Result<(), SkillError>;
     fn initialize_agent_skills(&mut self, agent: &str) -> Result<(), SkillError>;
+    fn initialize_agents_skills(&mut self, agents: &[String]) -> Result<(), SkillError> {
+        for agent in agents {
+            self.initialize_agent_skills(agent)?;
+        }
+        Ok(())
+    }
     fn delete_pack_skills(&mut self, pack: &str) -> Result<Vec<String>, SkillError>;
     fn get_rag_index_state(
         &mut self,

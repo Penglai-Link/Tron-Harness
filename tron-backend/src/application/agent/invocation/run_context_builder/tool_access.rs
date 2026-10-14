@@ -44,45 +44,24 @@ impl AgentRunContextBuilder {
                 .list_workspace_internal_agents(workspace_code)
         }
         .map_err(|error| map_agent_error(agent_code, error))?;
-        let internal_agent_policy = if internal_agents
-            .iter()
-            .any(|policy| policy.agent_code.eq_ignore_ascii_case(agent_code))
-        {
-            Some(
-                if self.platform_scope || workspace_code.is_empty() {
-                    self.management.platform_internal_agent_policy(agent_code)
-                } else {
-                    self.management
-                        .workspace_internal_agent_policy(workspace_code, agent_code)
-                }
-                .map_err(|error| map_agent_error(agent_code, error))?,
-            )
-        } else {
-            None
-        };
+        let internal_agent_policy = internal_agents
+            .into_iter()
+            .find(|policy| policy.agent_code.eq_ignore_ascii_case(agent_code));
 
         if let Some(policy) = internal_agent_policy.as_ref() {
             // Saved policy owns internal-agent authority. Request DTOs only narrow
             // that authority by name; their descriptions/schemas are never trusted.
             // An empty request keeps the legacy contract: use the saved policy.
-            let effective_tool_records = if self.platform_scope || workspace_code.is_empty() {
-                self.management
-                    .resolve_platform_agent_effective_tool_definitions(agent_code, locale)
-            } else {
-                self.management
-                    .resolve_internal_agent_effective_tool_definitions(
-                        workspace_code,
-                        agent_code,
-                        locale,
-                    )
-            }
-            .map_err(|error| map_agent_error(agent_code, error))?
-            .into_iter()
-            .filter(|tool| tool.availability_state == ToolAvailabilityState::Available)
-            .filter(|tool| {
-                requested_tool_names.is_empty() || requested_tool_names.contains(&tool.tool_name)
-            })
-            .collect::<Vec<_>>();
+            let effective_tool_records = self
+                .management
+                .tools_by_codes(&policy.selected_tool_codes, locale)
+                .into_iter()
+                .filter(|tool| tool.availability_state == ToolAvailabilityState::Available)
+                .filter(|tool| {
+                    requested_tool_names.is_empty()
+                        || requested_tool_names.contains(&tool.tool_name)
+                })
+                .collect::<Vec<_>>();
             match policy.tool_exposure_mode {
                 ToolExposureMode::DirectList => {
                     tools = effective_tool_records
@@ -154,11 +133,11 @@ impl AgentRunContextBuilder {
             // add MCP authority. A same-name request projection creates no tool.
             let mut permitted = HashSet::new();
             let mut records = HashMap::new();
-            for descriptor in &materialization.descriptors {
-                let record = self
-                    .management
-                    .register_tool_descriptor(descriptor)
-                    .map_err(AgentInvocationError::RuntimeFailed)?;
+            let discovered = self
+                .management
+                .register_tool_descriptors(&materialization.descriptors)
+                .map_err(AgentInvocationError::RuntimeFailed)?;
+            for (descriptor, record) in materialization.descriptors.iter().zip(discovered) {
                 if self
                     .management
                     .platform_tool_allowed(&descriptor.call_name)

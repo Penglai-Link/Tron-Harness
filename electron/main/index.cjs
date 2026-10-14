@@ -32,6 +32,7 @@ if (process.platform === "win32" && app.isPackaged) {
 if (["win32", "linux"].includes(process.platform) && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+const { createApplicationLogger } = require("./application-log.cjs");
 const { createUpdater, UPDATE_STATUS_EVENT } = require("./updater.cjs");
 
 const {
@@ -151,6 +152,7 @@ function createMainWindow() {
   const window = new BrowserWindow({
     height: 920,
     show: false,
+    backgroundColor: "#020305",
     title: "Tron",
     width: 1440,
     ...(["win32", "linux"].includes(process.platform) ? { icon: ICON_PATH } : {}),
@@ -272,165 +274,12 @@ async function keepStartupScreenVisible(startedAt) {
 }
 
 function startupPageHtml(message) {
-  const safeMessage = escapeHtml(message).replace(/\r?\n/g, "<br />");
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tron</title>
-    <style>
-      :root {
-        color-scheme: light;
-        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-        background: #f3f5f8;
-        color: #101827;
-      }
-
-      * { box-sizing: border-box; }
-
-      html, body { height: 100%; margin: 0; }
-
-      body {
-        display: grid;
-        min-height: 100%;
-        place-items: center;
-        padding: 32px;
-        overflow: hidden;
-        background:
-          radial-gradient(circle at center, rgba(255, 255, 255, 0.1) 0%, rgba(247, 250, 252, 0.48) 52%, rgba(238, 243, 248, 0.82) 100%),
-          #eef3f8;
-      }
-
-      body::before {
-        position: fixed;
-        inset: 0;
-        background-image: radial-gradient(rgba(142, 165, 214, 0.12) 1px, transparent 1px);
-        background-size: 8px 8px;
-        content: "";
-        mask-image: radial-gradient(circle at center, black, transparent 76%);
-        pointer-events: none;
-      }
-
-      .status {
-        position: relative;
-        width: min(100%, 420px);
-        padding: 32px;
-        border: 1px solid rgba(16, 24, 39, 0.08);
-        border-radius: 28px;
-        background: rgba(255, 255, 255, 0.72);
-        box-shadow: 0 18px 48px rgba(46, 54, 79, 0.08);
-        animation: appear 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-      }
-
-      .status-kicker {
-        color: #8992a2;
-        font-size: 10px;
-        font-weight: 750;
-        letter-spacing: 0.18em;
-      }
-
-      .status-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 20px;
-        color: #101827;
-        font-size: 14px;
-      }
-
-      .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #6f60e8;
-        box-shadow: 0 0 0 5px rgba(111, 96, 232, 0.12);
-        animation: pulse 1.8s ease-in-out infinite;
-      }
-
-      .status-message {
-        max-height: 86px;
-        margin-top: 14px;
-        overflow: auto;
-        color: #687386;
-        font-family: "SF Mono", "Roboto Mono", monospace;
-        font-size: 11px;
-        line-height: 1.65;
-        white-space: normal;
-      }
-
-      .progress {
-        position: relative;
-        height: 4px;
-        margin-top: 24px;
-        overflow: hidden;
-        border-radius: 10px;
-        background: rgba(16, 24, 39, 0.09);
-      }
-
-      .progress::after {
-        position: absolute;
-        inset: 0;
-        width: 42%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, transparent, #6f60e8, #9ff1ff, transparent);
-        content: "";
-        animation: sweep 2.1s ease-in-out infinite;
-      }
-
-      .meta {
-        display: grid;
-        gap: 8px;
-        margin-top: 26px;
-        color: #8992a2;
-        font-size: 11px;
-      }
-
-      .meta-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 20px;
-      }
-
-      .meta code {
-        color: #687386;
-        font-family: "SF Mono", "Roboto Mono", monospace;
-        font-size: 10px;
-      }
-
-      @keyframes appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes pulse { 0%, 100% { opacity: 0.45; transform: scale(0.82); } 50% { opacity: 1; transform: scale(1); } }
-      @keyframes sweep { 0% { transform: translateX(-130%); } 60%, 100% { transform: translateX(310%); } }
-
-      @media (max-width: 760px) {
-        body { padding: 24px; }
-        .status { padding: 24px; }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
-      }
-    </style>
-  </head>
-  <body>
-    <section class="status" aria-live="polite">
-      <div class="status-row"><span class="status-dot"></span><strong>Connecting to Tron backend</strong></div>
-      <div class="status-message">${safeMessage}</div>
-      <div class="progress" aria-hidden="true"></div>
-      <div class="meta">
-        <div class="meta-row"><span>Data directory</span><code>${escapeHtml(state.appDataDir)}</code></div>
-        <div class="meta-row"><span>Backend logs</span><code>${escapeHtml(state.backendLogPath)}</code></div>
-      </div>
-    </section>
-  </body>
-</html>`;
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return require("./startup-page.cjs").startupPageHtml({
+    message,
+    dataDir: state.appDataDir,
+    logPath: state.backendLogPath,
+    locale: app.getLocale()
+  });
 }
 
 function startBackend(resourcesDir) {
@@ -530,6 +379,7 @@ async function bootstrap() {
     getVersion: () => app.getVersion(),
     getVersionServerUrl: () => resolveUpdateServerUrl(resourcesDir),
     onStatus: sendUpdaterStatus,
+    onLog: createApplicationLogger(path.join(appDataDir, "logs")),
     openInstaller: (filePath) => shell.openPath(filePath),
     exit: (code) => {
       isQuitting = true;
@@ -1033,6 +883,10 @@ function registerIpcHandlers() {
 registerIpcHandlers();
 
 app.whenReady().then(() => {
+  if (process.platform === "darwin") {
+    app.setName("Tron");
+    app.dock?.setIcon(ICON_PATH);
+  }
   void bootstrap();
 });
 

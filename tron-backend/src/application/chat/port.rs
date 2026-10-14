@@ -1,6 +1,17 @@
 use crate::domain::chat::{ChatError, ChatMessage, ChatSession, ChatUserInputRequest};
 
+pub struct ChatSessionTitle {
+    pub session_code: String,
+    pub workspace_code: String,
+    pub title: String,
+}
+
 pub trait ChatRepository: Send {
+    fn session_titles(&mut self, codes: &[String]) -> Result<Vec<ChatSessionTitle>, ChatError> {
+        Ok(codes.iter().filter_map(|code| self.get_session(code).ok()).map(|session| ChatSessionTitle {
+            session_code: session.session_code, workspace_code: session.workspace_code, title: session.title,
+        }).collect())
+    }
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError>;
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError>;
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError>;

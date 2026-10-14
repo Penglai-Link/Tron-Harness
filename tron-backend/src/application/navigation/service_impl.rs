@@ -318,7 +318,7 @@ impl NavigationService {
         validate_parent(&items, command.parent_menu_code.as_deref(), menu.menu_type)?;
         let depth = proposed_depth(&items, &menu.menu_code, command.parent_menu_code.as_deref())?;
         if depth > self.max_depth() {
-            return Err(NavigationError::MaxDepthExceeded);
+            return Err(NavigationError::MaxDepthExceeded { depth, max_depth: self.max_depth() });
         }
         let item = NavigationTreeItem {
             id: crate::shared::id::SnowflakeId::new(repository.next_id()?),
@@ -435,8 +435,9 @@ impl NavigationService {
             .map(|item| subtree_height(&source, &item.menu.menu_code))
             .max()
             .unwrap_or(0);
-        if root_depth + source_height.saturating_sub(1) > self.max_depth() {
-            return Err(NavigationError::MaxDepthExceeded);
+        let depth = root_depth + source_height.saturating_sub(1);
+        if depth > self.max_depth() {
+            return Err(NavigationError::MaxDepthExceeded { depth, max_depth: self.max_depth() });
         }
         repository.copy_tree(target_domain_code, &command)?;
         Ok(build_tree(repository.list_items(target_domain_code)?))

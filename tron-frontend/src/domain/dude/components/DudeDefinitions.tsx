@@ -1,3 +1,4 @@
+import { AgentAvailabilityAvatar } from "@/domain/agent/components/AgentAvailabilityAvatar";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -81,11 +82,11 @@ export function DudeDefinitions({ embedded = false, title, titleHelp, titleHelpA
         {query.data?.map((dude) => (
           <div key={dude.dudeCode} className="relative min-w-0">
             <Button variant="ghost" className="h-auto w-full flex-col gap-2 whitespace-normal rounded-xl px-2 py-3 text-center" disabled={busy} onClick={() => setEditor(dude)}>
-              <AgentAvatarWithActivity
+              <AgentAvailabilityAvatar enabled={dude.enabled}><AgentAvatarWithActivity
                 active={dude.enabled}
                 avatarId={dude.avatarId}
                 name={dude.name}
-              />
+              /></AgentAvailabilityAvatar>
               <span className="block w-full truncate text-sm font-medium">{dude.name}</span>
               <span className="block w-full truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{dude.dudeCode}</span>
             </Button>

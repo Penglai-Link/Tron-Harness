@@ -67,11 +67,24 @@ impl NativeModelScope {
         };
         let mut order = vec![];
         let mut refreshers: Vec<Arc<dyn sdk::ModelCatalogRefresh>> = vec![];
+        let binding_configs = configs
+            .iter()
+            .flat_map(|config| {
+                [
+                    config.clone(),
+                    harness.framework_compaction_model_config(config),
+                ]
+            })
+            .collect::<Vec<_>>();
+        let mut prepared = harness.framework_bind_models(&binding_configs)?.into_iter();
         for config in configs {
+            let (main_scope, main_client) = prepared.next().expect("main model binding");
+            let (summary_scope, summary_client) = prepared.next().expect("summary model binding");
             let main = add_binding(
                 &runtime,
                 &mut bindings.models,
-                harness,
+                main_scope.clone(),
+                main_client,
                 context,
                 config.clone(),
                 false,
@@ -80,7 +93,8 @@ impl NativeModelScope {
             let summary = add_binding(
                 &runtime,
                 &mut bindings.models,
-                harness,
+                summary_scope,
+                summary_client,
                 context,
                 summary_config,
                 true,
@@ -94,9 +108,7 @@ impl NativeModelScope {
                     snapshot.model = config.clone();
                     snapshot
                 },
-                scope: harness
-                    .framework_model_authorization_scope(&config)
-                    .map_err(AgentError::InvalidConfiguration)?,
+                scope: main_scope,
             }));
             order.push(main);
         }
@@ -137,14 +149,12 @@ impl NativeModelScope {
 fn add_binding(
     runtime: &sdk::ModelRuntime,
     bindings: &mut BTreeMap<fw::ModelRef, Binding>,
-    harness: &ReactAgent,
+    scope: Option<String>,
+    client: Arc<dyn crate::application::agent::ModelClient>,
     context: &AgentRunContext,
     config: AgentModelConfig,
     auxiliary: bool,
 ) -> Result<fw::ModelRef, AgentError> {
-    let scope = harness
-        .framework_model_authorization_scope(&config)
-        .map_err(AgentError::InvalidConfiguration)?;
     if config.model_code.starts_with("PERSON_AI:")
         && let Some(expected) = context
             .auto_model_route
@@ -160,7 +170,6 @@ fn add_binding(
     if bindings.contains_key(&model) {
         return Ok(model);
     }
-    let client = harness.framework_bound_model_client(&config)?;
     let wire = crate::adapters::outbound::model::http_model_client::sdk_config(&config)
         .map_err(AgentError::InvalidConfiguration)?;
     let descriptor = eliteforge_agent_official_plugin_model_http::model_descriptor(&wire);

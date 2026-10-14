@@ -9,6 +9,7 @@ import {
   PanelRightOpen,
   ChevronsUpDown,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { ShinyText } from "@/shared/motion";
 import { setApiWorkspaceCode } from "@/shared/api/httpClient";
 import { defaultMainAgentWindowState, MAIN_AGENT_WINDOW_STORAGE_KEY } from "@/domain/agent/model/mainAgentWindowState";
@@ -323,38 +324,26 @@ export function TronShell({
     const viewportHeight = viewport?.height ?? window.innerHeight;
     const margin = 8;
     const gap = 8;
-    const panelHeight = Math.max(panelElement.scrollHeight, panelRect.height);
-    const panelWidth = panelRect.width;
-    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const maxWidth = Math.max(1, viewportWidth - margin * 2);
+    const panelWidth = Math.min(panelRect.width, maxWidth);
+    const preferredLeft = isMobileViewport ? triggerRect.left : triggerRect.right + gap;
+    const left = Math.max(viewportLeft + margin, Math.min(preferredLeft, viewportLeft + viewportWidth - panelWidth - margin));
 
-    let top: number;
-    let left: number;
-
-    if (isMobileViewport) {
-      const spaceAbove = Math.max(1, triggerRect.top - gap - margin);
-      const spaceBelow = Math.max(1, viewportHeight - triggerRect.bottom - gap - margin);
-      const openAbove = panelHeight <= spaceAbove || spaceAbove >= spaceBelow;
-      top = openAbove
-        ? triggerRect.top - gap - panelHeight
-        : triggerRect.bottom + gap;
-      left = clamp(triggerRect.left, margin, viewportWidth - panelWidth - margin);
-    } else {
-      top = triggerRect.top;
-      left = clamp(triggerRect.right + gap, margin, viewportWidth - panelWidth - margin);
-    }
-
-    top = clamp(top, margin, viewportHeight - panelHeight - margin);
-
+    // Anchor to the viewport bottom, outside the sidebar's filtered containing block.
     const nextStyle: CSSProperties = {
       left,
-      top,
+      bottom: Math.max(0, window.innerHeight - viewportTop - viewportHeight) + margin,
+      maxWidth,
       visibility: "visible",
     };
 
     setUserPanelStyle((current) => (
       current
       && current.left === nextStyle.left
-      && current.top === nextStyle.top
+      && current.bottom === nextStyle.bottom
+      && current.maxWidth === nextStyle.maxWidth
       && current.visibility === nextStyle.visibility
         ? current
         : nextStyle
@@ -1057,7 +1046,7 @@ export function TronShell({
             </>
           )}
         </button>
-        {utilityPanel === "user" ? (
+        {utilityPanel === "user" ? createPortal(
           <div
             ref={utilityPanelRef}
             className={cn(
@@ -1108,7 +1097,8 @@ export function TronShell({
               </dl>
             ) : null}
             <div className="border-t border-[var(--color-card-border)]">{renderUserPanelContent()}</div>
-          </div>
+          </div>,
+          document.body,
         ) : null}
       </div>
     );

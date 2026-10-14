@@ -1,3 +1,4 @@
+mod soul;
 use crate::adapters::inbound::http::auth::RequestAuthContext;
 use crate::{
     app::AppState,
@@ -21,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .merge(soul::routes())
         .route("/api/v1/dudes", get(list).post(create))
         .route("/api/v1/dudes/main/session", post(main_session))
         .route(
@@ -112,6 +114,7 @@ macro_rules! dude_response {
             dude_code: String,
             agent_code: String,
             name: String,
+            description: String,
             role_prompt: String,
             loop_code: Option<String>,
             avatar_id: String,
@@ -140,6 +143,7 @@ macro_rules! dude_response {
                     dude_code: d.dude_code,
                     agent_code: p.agent_code,
                     name: p.name,
+                    description: p.description,
                     role_prompt: p.role_prompt,
                     loop_code: p.loop_code,
                     avatar_id: p.avatar_id,
@@ -175,6 +179,8 @@ dude_response!(DesignateMainResponse);
 pub struct CreateDudeRequest {
     pub dude_code: String,
     pub name: String,
+    #[serde(default)]
+    pub description: String,
     pub role_prompt: String,
     pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
@@ -201,7 +207,7 @@ fn cadence() -> u32 {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateDudeRequest {
-    pub name: Option<String>,
+    pub description: Option<String>,
     pub role_prompt: Option<String>,
     pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
@@ -237,6 +243,7 @@ async fn create(
         definition: CreateWorkspaceInternalAgentCommand {
             agent_code: r.dude_code,
             name: r.name,
+            description: r.description,
             role_prompt: r.role_prompt,
             loop_code: r.loop_code,
             avatar_id: r.avatar_id,
@@ -261,7 +268,9 @@ async fn update(
         &code,
         UpdateDudeCommand {
             definition: UpdateWorkspaceInternalAgentDefinitionCommand {
-                name: r.name,
+                enabled: None,
+                name: None,
+                description: r.description,
                 role_prompt: r.role_prompt,
                 loop_code: r.loop_code,
                 avatar_id: r.avatar_id,
@@ -353,9 +362,15 @@ async fn main_session(
     auth: RequestAuthContext,
 ) -> Result<Json<ApiResponse<MainDudeSessionResponse>>, DudeApiError> {
     let code = s.dudes.main()?.dude_code;
-    let d = s
-        .dudes
-        .resolve_session(&code, DudeSessionPurpose::Interactive, "interactive", None)?;
+    let mut soul = s.dudes.soul(&code)?;
+    if soul.state!=SoulState::Ready && soul.session_code.is_none() {
+        soul=s.dudes.begin_awakening(&code,&auth.user().user_code)?.0;
+    }
+    let d = if soul.user_code.as_deref()==Some(&auth.user().user_code) && soul.session_code.is_some() {
+        s.dudes.session(soul.session_code.as_deref().unwrap())?.ok_or(DudeError::NotFound)?
+    } else {
+        s.dudes.resolve_session(&code, DudeSessionPurpose::Interactive, &format!("interactive:{}",auth.user().user_code), None)?
+    };
     let chat = s
         .chats
         .ensure_dude_session(&d, Some(auth.user().user_code.clone()))
@@ -369,9 +384,15 @@ async fn resolve_session(
     auth: RequestAuthContext,
     Path(code): Path<String>,
 ) -> Result<Json<ApiResponse<ResolveDudeSessionResponse>>, DudeApiError> {
-    let d = s
-        .dudes
-        .resolve_session(&code, DudeSessionPurpose::Interactive, "interactive", None)?;
+    let mut soul = s.dudes.soul(&code)?;
+    if soul.state!=SoulState::Ready && soul.session_code.is_none() {
+        soul=s.dudes.begin_awakening(&code,&auth.user().user_code)?.0;
+    }
+    let d = if soul.user_code.as_deref()==Some(&auth.user().user_code) && soul.session_code.is_some() {
+        s.dudes.session(soul.session_code.as_deref().unwrap())?.ok_or(DudeError::NotFound)?
+    } else {
+        s.dudes.resolve_session(&code, DudeSessionPurpose::Interactive, &format!("interactive:{}",auth.user().user_code), None)?
+    };
     let chat = s
         .chats
         .ensure_dude_session(&d, Some(auth.user().user_code.clone()))
@@ -387,10 +408,8 @@ async fn sessions(
 ) -> Result<Json<ApiResponse<Vec<ListDudeSessionResponse>>>, DudeApiError> {
     let mut result = vec![];
     for d in s.dudes.sessions(&code)? {
-        let chat = s
-            .chats
-            .ensure_dude_session(&d, Some(auth.user().user_code.clone()))
-            .map_err(|_| DudeError::Storage)?;
+        let Ok(chat) = s.chats.get_session(&d.session_code) else {continue;};
+        if chat.user_code.as_deref()!=Some(&auth.user().user_code) {continue;}
         result.push(ListDudeSessionResponse::from_record(chat, d));
     }
     Ok(Json(ApiResponse::protocol_success(result)))

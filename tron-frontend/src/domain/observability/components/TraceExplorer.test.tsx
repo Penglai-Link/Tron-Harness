@@ -37,3 +37,16 @@ it("does not repeat the same refresh error until a successful response", () => {
   state.error = new Error("invalid query"); rendered.rerender(view());
   expect(state.toast).toHaveBeenCalledTimes(2);
 });
+
+it("restores, submits and clears the session ID filter while resetting pagination", () => {
+  render(<MemoryRouter initialEntries={["/?category=Agent&sessionCode=original"]}><TraceExplorer workspaceCode="workspace" /></MemoryRouter>);
+  const input = screen.getByRole<HTMLInputElement>("textbox", { name: "sessionId" });
+  expect(input.value).toBe("original");
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  fireEvent.change(input, { target: { value: "  session-New  " } });
+  fireEvent.click(screen.getByRole("button", { name: "search" }));
+  expect(state.query).toHaveBeenLastCalledWith(expect.objectContaining({ sessionCode: "session-New", current: 1, category: "Agent" }));
+  fireEvent.change(input, { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "search" }));
+  expect(state.query).toHaveBeenLastCalledWith(expect.objectContaining({ sessionCode: "", current: 1 }));
+});

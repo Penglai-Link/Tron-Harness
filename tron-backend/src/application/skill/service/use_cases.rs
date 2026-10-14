@@ -5,6 +5,14 @@ impl SkillRegistryService {
         &self,
         query: RegistrySkillListQuery,
     ) -> Result<Vec<RegistrySkillListItem>, SkillError> {
+        self.registry_items(query, None)
+    }
+
+    pub(super) fn registry_items(
+        &self,
+        query: RegistrySkillListQuery,
+        agent: Option<&str>,
+    ) -> Result<Vec<RegistrySkillListItem>, SkillError> {
         self.initialize_assignments()?;
         let search = normalized_search(query.search);
         let mut repo = self.repository.lock().unwrap();
@@ -25,7 +33,12 @@ impl SkillRegistryService {
                 RegistrySkillListItem {
                     disabled_reason: disabled_reason(&s),
                     assigned_agent_count: count,
-                    assigned: false,
+                    assigned: s.available
+                        && agent.is_some_and(|agent| {
+                            assignments.iter().any(|a| {
+                                a.agent_code == agent && a.skill_name == s.skill_name && a.enabled
+                            })
+                        }),
                     skill_name: s.skill_name,
                     provider_pack_id: s.provider_pack_id,
                     available: s.available,

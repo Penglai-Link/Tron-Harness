@@ -16,7 +16,7 @@ fn evidence(values: Vec<String>) -> Result<Vec<String>, ToolError> {
     let mut values: Vec<_> = values.into_iter().map(|v| v.trim().to_owned()).collect();
     if values.is_empty()
         || values.len() > 20
-        || values.iter().any(|v| v.is_empty() || v.len() > 2000)
+        || values.iter().any(|v| v.is_empty() || v.chars().count() > 2000)
     {
         return Err(invalid(
             "Provide 1-20 nonempty evidence references (result, artifact, decision or interaction IDs).",
@@ -92,7 +92,7 @@ impl Tool for DudeWorkChangeTool {
         let value = match input {
             WorkInput::RecordResult { task_code, result } => {
                 owned_task(&self.tasks, dude, &task_code)?;
-                if result.trim().is_empty() || result.len() > 32000 {
+                if result.trim().is_empty() || result.chars().count() > 32000 {
                     return Err(invalid("Provide a concrete execution result"));
                 }
                 json!(
@@ -122,9 +122,9 @@ impl Tool for DudeWorkChangeTool {
                 let task = owned_task(&self.tasks, dude, &task_code)?;
                 let refs = evidence(refs)?;
                 if change_key.trim().is_empty()
-                    || change_key.len() > 200
+                    || change_key.chars().count() > 200
                     || summary.trim().is_empty()
-                    || summary.len() > 8000
+                    || summary.chars().count() > 8000
                 {
                     return Err(invalid(
                         "A stable changeKey and a concrete summary are required",
@@ -133,7 +133,8 @@ impl Tool for DudeWorkChangeTool {
                 let requested_action = requested_action
                     .map(|v| v.trim().to_owned())
                     .filter(|v| !v.is_empty());
-                if kind.actionable() && requested_action.as_ref().is_none_or(|v| v.len() > 8000) {
+                if requested_action.as_ref().is_some_and(|v| v.chars().count() > 8000)
+                    || (kind.actionable() && requested_action.is_none()) {
                     return Err(invalid(
                         "Actionable changes require a specific requestedAction",
                     ));
@@ -218,7 +219,7 @@ impl Tool for DudeWorkChangeTool {
                     .map_err(failure)?;
                 owned_task(&self.tasks, dude, &change.task_code)?;
                 let refs = evidence(refs)?;
-                if resolution.trim().is_empty() || resolution.len() > 8000 {
+                if resolution.trim().is_empty() || resolution.chars().count() > 8000 {
                     return Err(invalid(
                         "Explain the decision or action that resolved this item",
                     ));
@@ -266,7 +267,7 @@ pub(super) fn publish(
             "Task changed since this assessment. Reassess and record its current change before notifying",
         ));
     }
-    if title.trim().is_empty() || title.len() > 800 || body.trim().is_empty() || body.len() > 32000
+    if title.trim().is_empty() || title.chars().count() > 200 || body.trim().is_empty() || body.chars().count() > 8000
     {
         return Err(invalid("Notification title/body is empty or too long"));
     }

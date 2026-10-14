@@ -20,6 +20,8 @@ use serde::{Deserialize, Serialize};
 pub struct CreateInternalAgentRequest {
     agent_code: String,
     name: String,
+    #[serde(default)]
+    description: String,
     role_prompt: String,
     loop_code: Option<String>,
     avatar_id: Option<String>,
@@ -33,6 +35,8 @@ pub struct CreateInternalAgentRequest {
 pub struct CreateInternalAgentResponse {
     agent_code: String,
     name: String,
+    #[serde(default)]
+    description: String,
     role_prompt: String,
     loop_code: Option<String>,
     avatar_id: String,
@@ -45,6 +49,7 @@ pub struct CreateInternalAgentResponse {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateInternalAgentDefinitionRequest {
     name: Option<String>,
+    description: Option<String>,
     role_prompt: Option<String>,
     loop_code: Option<String>,
     avatar_id: Option<String>,
@@ -58,6 +63,8 @@ pub struct UpdateInternalAgentDefinitionRequest {
 pub struct UpdateInternalAgentDefinitionResponse {
     agent_code: String,
     name: String,
+    #[serde(default)]
+    description: String,
     role_prompt: String,
     loop_code: Option<String>,
     avatar_id: String,
@@ -79,6 +86,7 @@ pub async fn create_internal_agent(
             CreateWorkspaceInternalAgentCommand {
                 agent_code: request.agent_code,
                 name: request.name,
+                description: request.description,
                 role_prompt: request.role_prompt,
                 loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
@@ -90,6 +98,7 @@ pub async fn create_internal_agent(
     Ok(Json(ApiResponse::success(CreateInternalAgentResponse {
         agent_code: record.agent_code,
         name: record.name,
+        description: record.description,
         role_prompt: record.role_prompt,
         loop_code: record.loop_code,
         avatar_id: record.avatar_id,
@@ -110,7 +119,9 @@ pub async fn update_internal_agent_definition(
             &workspace,
             &agent,
             UpdateWorkspaceInternalAgentDefinitionCommand {
+                enabled: None,
                 name: request.name,
+                description: request.description,
                 role_prompt: request.role_prompt,
                 loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
@@ -123,6 +134,7 @@ pub async fn update_internal_agent_definition(
         UpdateInternalAgentDefinitionResponse {
             agent_code: record.agent_code,
             name: record.name,
+            description: record.description,
             role_prompt: record.role_prompt,
             loop_code: record.loop_code,
             avatar_id: record.avatar_id,

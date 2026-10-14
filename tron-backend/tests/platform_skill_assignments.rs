@@ -71,6 +71,7 @@ impl Fixture {
         self.state
             .agent_management
             .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+                description: String::new(),
                 candidate_model_codes: Vec::new(),
                 agent_code: code.into(),
                 name: code.into(),

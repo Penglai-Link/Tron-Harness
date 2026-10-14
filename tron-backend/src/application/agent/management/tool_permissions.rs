@@ -7,8 +7,17 @@ use tron_harness_capability::{ToolPermission, ToolPermissionSetting, ToolPermiss
 // Built-in descriptors are immutable; constructing their schemas for every
 // admission is as unnecessary as querying all persisted tools for each binding.
 fn fixed_tool(name: &str) -> Option<ToolCatalogRecord> {
-    static TOOLS: std::sync::OnceLock<BTreeMap<String, ToolCatalogRecord>> = std::sync::OnceLock::new();
-    TOOLS.get_or_init(|| BusinessToolCatalog::list_tools(None, None, "en-US").into_iter().map(|tool| (tool.tool_name.clone(), tool)).collect()).get(name).cloned()
+    static TOOLS: std::sync::OnceLock<BTreeMap<String, ToolCatalogRecord>> =
+        std::sync::OnceLock::new();
+    TOOLS
+        .get_or_init(|| {
+            BusinessToolCatalog::list_tools(None, None, "en-US")
+                .into_iter()
+                .map(|tool| (tool.tool_name.clone(), tool))
+                .collect()
+        })
+        .get(name)
+        .cloned()
 }
 
 impl AgentManagementService {
@@ -55,13 +64,21 @@ impl AgentManagementService {
             Some(tool) => Some(tool),
             None => self.cached_tool_by_name(name)?,
         };
-        let Some(tool) = tool else { return Ok(true); };
+        let Some(tool) = tool else {
+            return Ok(true);
+        };
+        self.platform_tool_record_allowed(&tool)
+    }
+    pub(crate) fn platform_tool_record_allowed(
+        &self,
+        tool: &ToolCatalogRecord,
+    ) -> Result<bool, AgentManagementError> {
         Ok(self.capability_available("tool", &tool.tool_code)
             && self.cached_tool_permission(&tool.tool_code)?.permission != ToolPermission::No)
     }
 }
 impl AgentManagementService {
-    pub(crate) fn register_tool_descriptor(
+    pub(crate) fn describe_tool_descriptor(
         &self,
         descriptor: &ToolDescriptor,
     ) -> Result<ToolCatalogRecord, String> {
@@ -94,9 +111,35 @@ impl AgentManagementService {
             availability_state: ToolAvailabilityState::Available,
             sample_result_summary: String::new(),
         };
-        self.remember_tool(&record)
-            .map_err(|_| "Could not read platform tool permission".to_string())?;
         Ok(record)
+    }
+    pub(crate) fn register_tool_descriptor(
+        &self,
+        descriptor: &ToolDescriptor,
+    ) -> Result<ToolCatalogRecord, String> {
+        let record = self.describe_tool_descriptor(descriptor)?;
+        if fixed_tool(&descriptor.call_name).is_none() {
+            self.remember_tool(&record)
+                .map_err(|_| "Could not save tool descriptor".to_string())?;
+        }
+        Ok(record)
+    }
+    pub(crate) fn register_tool_descriptors(
+        &self,
+        descriptors: &[ToolDescriptor],
+    ) -> Result<Vec<ToolCatalogRecord>, String> {
+        let records = descriptors
+            .iter()
+            .map(|d| self.describe_tool_descriptor(d))
+            .collect::<Result<Vec<_>, _>>()?;
+        let discovered = records
+            .iter()
+            .filter(|r| fixed_tool(&r.tool_name).is_none())
+            .cloned()
+            .collect::<Vec<_>>();
+        self.remember_tools(&discovered)
+            .map_err(|_| "Could not save tool descriptors".to_string())?;
+        Ok(records)
     }
 }
 impl ToolPermissionSource for AgentManagementService {

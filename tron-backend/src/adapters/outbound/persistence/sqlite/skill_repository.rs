@@ -449,6 +449,13 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
             || SkillError::StorageFailure,
         )
     }
+    fn initialize_agents_skills(&mut self, agents: &[String]) -> Result<(), SkillError> {
+        let agents = serde_json::to_string(agents).map_err(|_| SkillError::StorageFailure)?;
+        self.connection.call(move |connection| {
+            connection.execute("INSERT OR IGNORE INTO agent_skill_assignments SELECT a.value,s.skill_name,s.available FROM json_each(?1) a CROSS JOIN registry_skills s WHERE s.provider_pack_id IS NOT NULL", [agents]).map_err(storage_error)?;
+            Ok(())
+        }, || SkillError::StorageFailure)
+    }
     fn initialize_agent_skills(&mut self, agent: &str) -> Result<(), SkillError> {
         let agent = agent.to_owned();
         self.connection.call(

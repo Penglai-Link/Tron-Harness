@@ -27,23 +27,33 @@ impl AgentModelRouter {
         self
     }
 
-    fn candidate_codes(&self, workspace: &str, agent: &str) -> Result<Vec<String>, String> {
-        self.management
-            .as_ref()
-            .map(|management| {
-                if workspace.is_empty()
-                    || management
-                        .is_dude_definition(agent)
-                        .map_err(|error| format!("Agent kind lookup failed: {error:?}"))?
-                {
-                    management.platform_internal_agent_policy(agent)
-                } else {
-                    management.workspace_internal_agent_policy(workspace, agent)
-                }
-                .map(|policy| policy.candidate_model_codes)
-                .map_err(|error| format!("Agent model candidates lookup failed: {error:?}"))
-            })
-            .unwrap_or_else(|| Ok(Vec::new()))
+    /// Business workspace context must never select a Dude's model catalog.
+    fn model_workspace<'a>(&self, workspace: &'a str, agent: &str) -> Result<&'a str, String> {
+        if workspace.is_empty() {
+            return Ok("");
+        }
+        let is_dude = self.management.as_ref().map(|management| {
+            management.is_dude_definition(agent)
+                .map_err(|error| format!("Agent kind lookup failed: {error:?}"))
+        }).transpose()?.unwrap_or(false);
+        Ok(if is_dude { "" } else { workspace })
+    }
+
+    fn route_policy<'a>(
+        &self,
+        workspace: &'a str,
+        agent: &str,
+    ) -> Result<(&'a str, Vec<String>), String> {
+        let model_workspace = self.model_workspace(workspace, agent)?;
+        let Some(management) = self.management.as_ref() else {
+            return Ok((model_workspace, Vec::new()));
+        };
+        let policy = if model_workspace.is_empty() {
+            management.platform_internal_agent_policy(agent)
+        } else {
+            management.workspace_internal_agent_policy(model_workspace, agent)
+        }.map_err(|error| format!("Agent model candidates lookup failed: {error:?}"))?;
+        Ok((model_workspace, policy.candidate_model_codes))
     }
 
     pub fn authorized_models_for_route(
@@ -53,7 +63,7 @@ impl AgentModelRouter {
         current: &crate::domain::agent::AgentModelConfig,
     ) -> Result<Vec<crate::domain::agent::AgentModelConfig>, String> {
         // A refresh may revoke candidates, but must never escape this run's configured pool.
-        let current_codes = self.candidate_codes(workspace, &route.agent_code)?;
+        let (workspace, current_codes) = self.route_policy(workspace, &route.agent_code)?;
         let mut models = self.inner.authorized_models_with_candidates(
             workspace,
             current,
@@ -85,7 +95,7 @@ impl AgentModelRouter {
         ),
         String,
     > {
-        let codes = self.candidate_codes(workspace_code, agent_code)?;
+        let (workspace_code, codes) = self.route_policy(workspace_code, agent_code)?;
         self.inner.resolve_initial_with_candidates(
             workspace_code,
             session_code,
@@ -115,6 +125,7 @@ impl AgentModelRouter {
         route: &mut crate::domain::agent::AutoModelRouteContext,
         model: &crate::domain::agent::AgentModelConfig,
     ) -> Result<(), String> {
+        let workspace_code = self.model_workspace(workspace_code, &route.agent_code)?;
         self.inner.mark_success(workspace_code, route, model)
     }
 }

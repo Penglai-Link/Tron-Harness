@@ -1,6 +1,50 @@
 use super::*;
 
 impl ModelService {
+    /// Load inheritance and model definitions once for the whole Auto candidate set.
+    pub fn auto_chat_candidates(
+        &self,
+        workspace: &str,
+        allowed: &[String],
+        reasoning: Option<ReasoningEffort>,
+    ) -> Result<Vec<AgentModelConfig>, ModelError> {
+        let records = if workspace.is_empty() {
+            let models = self.all_models()?;
+            let defaults =
+                resolve_platform_defaults(&models, &self.all_platform_default_assignments()?);
+            platform_models(&models)
+                .into_iter()
+                .map(|model| {
+                    let key = model.api_key_ref.clone();
+                    (build_platform_view(model, &defaults), key)
+                })
+                .collect::<Vec<_>>()
+        } else {
+            let workspace = self.active_workspace_detail(workspace)?;
+            self.resolve_workspace_catalog_state(&workspace)?
+                .records
+                .into_iter()
+                .map(|r| (r.view, r.definition_model.api_key_ref))
+                .collect()
+        };
+        records
+            .into_iter()
+            .filter(|(view, _)| {
+                view.enabled
+                    && view.model_type == ModelType::Text
+                    && view.context_window_tokens.is_some_and(|n| n > 0)
+                    && (allowed.is_empty() || allowed.contains(&view.model_code))
+            })
+            .filter_map(|(view, key)| match self.reveal_api_key_ref(&key) {
+                Ok(key) => agent_model_config_from_view(&view, &key).map(|mut config| {
+                    config.reasoning_effort = reasoning;
+                    Ok(config)
+                }),
+                Err(error) => Some(Err(error)),
+            })
+            .collect()
+    }
+
     pub fn list_workspace_models(
         &self,
         workspace_code: &str,

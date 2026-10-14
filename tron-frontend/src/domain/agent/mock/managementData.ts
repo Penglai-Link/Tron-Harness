@@ -26,6 +26,9 @@ type SystemAgentSeed = {
   agentCode: string;
   baseAgentCode?: string | null;
   modelId?: string | null;
+  fastMode?: boolean;
+  reasoningEffort?: SystemAgentProfilePayload["reasoningEffort"];
+  avatarId?: string | null;
   available: boolean;
   description: string;
   models: Array<{ modelId: string; displayName: string }>;
@@ -245,6 +248,7 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     rolePrompt: agentRolePromptSeeds.find((seed) => seed.promptCode === "ROLE_MAIN_AGENT")?.translations["zh-CN"].promptBody ?? "",
     loopCode: "",
     agentCode: "main-agent",
+    avatarId: "red-blue-pills",
     description: "Primary platform internal agent used for workspace chat runtime policy.",
     groupName: "主智能体",
     expandedDomainPersistenceMode: "sticky_expanded",
@@ -318,6 +322,9 @@ function buildPlatformRecord(record: SystemAgentSeed): PlatformSystemAgentRecord
   return {
     agentCode: record.agentCode,
     baseAgentCode: record.baseAgentCode,
+    avatarId: record.avatarId,
+    fastMode: record.fastMode ?? false,
+    reasoningEffort: record.reasoningEffort,
     modelId: record.modelId,
     available: record.available,
     description: record.description,
@@ -343,6 +350,9 @@ function buildWorkspaceSystemRecord(workspaceCode: string, record: SystemAgentSe
   return {
     agentCode: record.agentCode,
     baseAgentCode: record.baseAgentCode,
+    avatarId: record.avatarId,
+    fastMode: record.fastMode ?? false,
+    reasoningEffort: record.reasoningEffort,
     modelId: record.modelId,
     available: record.available,
     description: record.description,
@@ -509,7 +519,7 @@ export function createWorkspaceInternalAgentMock(workspaceCode: string, payload:
     throw new Error("Agent code is already in use; choose another code");
   }
   const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
-  const agent = { ...workspaceInternalAgentSeed[0], ...payload, groupName, agentCode, loopCode: payload.loopCode ?? "", name: payload.name.trim(), description: "Workspace internal agent." };
+  const agent = { ...workspaceInternalAgentSeed[0], ...payload, groupName, agentCode, loopCode: payload.loopCode ?? "", name: payload.name.trim(), description: payload.description?.trim() ?? "" };
   workspaceInternalAgentDefinitions[workspaceCode] = [...(workspaceInternalAgentDefinitions[workspaceCode] ?? []), agent];
   return buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode);
 }
@@ -534,7 +544,7 @@ export function deleteWorkspaceInternalAgentMock(workspaceCode: string, agentCod
   };
 }
 
-export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; rolePrompt?: string; loopCode?: string; candidateModelCodes?: string[]; avatarId?: string; groupName?: string | null }) {
+export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; description?: string; rolePrompt?: string; loopCode?: string; candidateModelCodes?: string[]; avatarId?: string; groupName?: string | null }) {
   if (buildWorkspaceInternalAgentRecord(workspaceCode, agentCode).builtIn) throw new Error("Built-in agent definitions are read-only");
   const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
   const patch = { ...payload, ...(groupName !== undefined ? { groupName } : {}) };
@@ -697,8 +707,8 @@ export function createPlatformSystemAgentMock(payload: SystemAgentProfilePayload
   systemAgentRegistry.push(record);
   return buildPlatformRecord(record);
 }
-export function updatePlatformSystemAgentMock(code: string, payload: Pick<SystemAgentProfilePayload, "name" | "modelId">) {
-  const record = systemAgentRegistry.find((agent) => agent.agentCode === code && agent.baseAgentCode);
+export function updatePlatformSystemAgentMock(code: string, payload: Pick<SystemAgentProfilePayload, "name" | "description" | "modelId" | "reasoningEffort" | "avatarId" | "fastMode">) {
+  const record = systemAgentRegistry.find((agent) => agent.agentCode === code);
   if (!record) throw new Error("System Agent configuration was not found");
   Object.assign(record, payload, { models: [{ modelId: payload.modelId, displayName: payload.modelId }] });
   return buildPlatformRecord(record);

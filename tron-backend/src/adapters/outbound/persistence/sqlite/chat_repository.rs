@@ -249,6 +249,19 @@ impl SqliteChatRepository {
     }
 }
 impl ChatRepository for SqliteChatRepository {
+    fn session_titles(&mut self, codes: &[String]) -> Result<Vec<crate::application::chat::ChatSessionTitle>, ChatError> {
+        if codes.is_empty() { return Ok(Vec::new()); }
+        let codes = codes.to_vec();
+        blocking(async {
+            self.host.shared_database().await.map_err(chat_error)?.call(move |c| {
+                let placeholders = vec!["?"; codes.len()].join(",");
+                let mut statement = c.prepare(&format!("SELECT l.session_id,l.workspace_code,json_extract(s.record,'$.title') FROM workspace_session_links l JOIN ef_sessions s ON s.id=l.session_id WHERE l.session_id IN ({placeholders})"))?;
+                statement.query_map(rusqlite::params_from_iter(codes),|row| Ok(crate::application::chat::ChatSessionTitle {
+                    session_code:row.get(0)?,workspace_code:row.get(1)?,title:row.get(2)?,
+                }))?.collect::<rusqlite::Result<Vec<_>>>()
+            }).await.map_err(|_| ChatError::StorageFailure)
+        })
+    }
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError> {
         let mut record = fw::SessionRecord::new(&session.title);
         record.id = session.session_code.clone();

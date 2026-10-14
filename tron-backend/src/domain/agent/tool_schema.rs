@@ -23,8 +23,8 @@ impl PreparedToolSchema {
         let estimated_tokens = if source_tools.is_empty() {
             0
         } else {
-            let bytes = serde_json::to_vec(&payload).map_err(|error| error.to_string())?;
-            u32::try_from(bytes.len().div_ceil(4)).unwrap_or(u32::MAX)
+            let text = serde_json::to_string(&payload).map_err(|error| error.to_string())?;
+            u32::try_from(eliteforge_agent_core::estimate_unicode_text_tokens(&text)).unwrap_or(u32::MAX)
         };
         Ok(Self {
             protocol,

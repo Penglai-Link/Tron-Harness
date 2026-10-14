@@ -53,7 +53,7 @@ export function availableAutomationAgents(
   internalAgents: WorkspaceInternalAgentRecord[] = [],
 ): AutomationAgentOption[] {
   const availableInternalAgents = internalAgents
-    .filter((agent) => agent.agentCode !== mainAutomationAgentOption.agentCode)
+    .filter((agent) => agent.enabled !== false)
     .map((agent) => ({
       agentCode: agent.agentCode,
       description: agent.description,
@@ -71,7 +71,7 @@ export function availableAutomationAgents(
       name: agent.name,
     }));
 
-  return [mainAutomationAgentOption, ...availableInternalAgents, ...availableSystemAgents];
+  return [...availableInternalAgents, ...availableSystemAgents];
 }
 
 export function automationModelOptionsForAgent(

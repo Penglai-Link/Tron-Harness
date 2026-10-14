@@ -18,6 +18,7 @@ async fn candidate_models_persist_inherit_and_bound_initial_and_refreshed_auto_s
     let b = add_text_model(&f.state, "Model B");
     let management = &f.state.agent_management;
     let command = |code: &str| CreateWorkspaceInternalAgentCommand {
+        description: String::new(),
         candidate_model_codes: vec![a.clone(), a.clone()],
         agent_code: code.into(),
         name: code.into(),

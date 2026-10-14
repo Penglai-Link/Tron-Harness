@@ -27,6 +27,8 @@ use serde::{Deserialize, Serialize};
 pub struct CreatePlatformInternalAgentRequest {
     agent_code: String,
     name: String,
+    #[serde(default)]
+    description: String,
     role_prompt: String,
     loop_code: Option<String>,
     avatar_id: Option<String>,
@@ -37,7 +39,9 @@ pub struct CreatePlatformInternalAgentRequest {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdatePlatformInternalAgentDefinitionRequest {
+    enabled: Option<bool>,
     name: Option<String>,
+    description: Option<String>,
     role_prompt: Option<String>,
     loop_code: Option<String>,
     avatar_id: Option<String>,
@@ -59,6 +63,7 @@ pub struct ReplacePlatformInternalAgentServersRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformInternalAgentView {
+    enabled: bool,
     workspace_code: String,
     agent_code: String,
     name: String,
@@ -87,6 +92,7 @@ pub struct PlatformInternalAgentView {
 impl From<InternalAgentToolPolicy> for PlatformInternalAgentView {
     fn from(record: InternalAgentToolPolicy) -> Self {
         Self {
+            enabled: record.enabled,
             workspace_code: record.workspace_code,
             agent_code: record.agent_code,
             name: record.name,
@@ -175,6 +181,7 @@ pub async fn create_platform_internal_agent(
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
             agent_code: request.agent_code,
             name: request.name,
+            description: request.description,
             role_prompt: request.role_prompt,
             loop_code: request.loop_code,
             avatar_id: request.avatar_id,
@@ -209,7 +216,9 @@ pub async fn update_platform_internal_agent_definition(
         .update_platform_internal_agent_definition(
             &code,
             UpdateWorkspaceInternalAgentDefinitionCommand {
+                enabled: request.enabled,
                 name: request.name,
+                description: request.description,
                 role_prompt: request.role_prompt,
                 loop_code: request.loop_code,
                 avatar_id: request.avatar_id,

@@ -20,6 +20,7 @@ async fn knowledge_authorization_follows_agent_assignments_without_library_space
         .state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            description: String::new(),
             candidate_model_codes: Vec::new(),
             avatar_id: None,
             loop_code: Some(DEFAULT_REACT_LOOP_CODE.into()),
@@ -184,6 +185,7 @@ async fn platform_agent_assignment_controls_catalog_and_runtime() {
     let service = &f.state.agent_management;
     let agent = service
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            description: String::new(),
             candidate_model_codes: Vec::new(),
             avatar_id: None,
             loop_code: Some(DEFAULT_REACT_LOOP_CODE.into()),
@@ -339,6 +341,9 @@ fn system_agent_assignment_controls_runtime_and_preserves_global_enablement() {
         SqliteAgentManagementRepository::connect(&f.state.config.database_url).unwrap();
     repository
         .upsert_system_agent(&SystemAgentRegistryEntry {
+            fast_mode: false,
+            reasoning_effort: None,
+            avatar_id: None,
             base_agent_code: None,
             model_id: None,
             agent_code: "system-expert".into(),

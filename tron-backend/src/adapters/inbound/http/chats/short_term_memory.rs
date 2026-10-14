@@ -52,6 +52,7 @@ pub async fn get_todos(
 pub(crate) struct ContextDetailQuery {
     session_code: String,
     block_code: String,
+    snapshot_sequence: Option<String>,
 }
 
 pub async fn get_context_detail(
@@ -64,16 +65,19 @@ pub async fn get_context_detail(
         Err(error) => return invalid_request_response(error.to_string()),
     };
     if query.session_code.trim().is_empty()
-        || !matches!(
-            query.block_code.as_str(),
-            "systemPrompt" | "toolSchema" | "familyContext" | "applicationContext" | "history"
-        )
+        || query.block_code.is_empty()
+        || query.block_code.len() > 256
     {
         return invalid_request_response("sessionCode and a supported blockCode are required");
     }
+    let snapshot_sequence = match query.snapshot_sequence.as_deref().map(str::parse::<u64>) {
+        Some(Ok(sequence)) if sequence > 0 => Some(sequence),
+        Some(_) => return invalid_request_response("snapshotSequence must be a positive event sequence"),
+        None => None,
+    };
     match state
         .short_term_memory
-        .context_detail(&query.session_code, &query.block_code)
+        .context_detail_at(&query.session_code, &query.block_code, snapshot_sequence)
     {
         Ok(Some(detail)) => Json(ApiResponse::success(detail)).into_response(),
         Ok(None) => (

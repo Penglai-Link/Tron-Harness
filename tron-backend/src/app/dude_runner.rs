@@ -231,6 +231,11 @@ impl PlatformDudeExecutor {
             .current_context()
             .map_err(|e| DudeError::Runtime(e.to_string()))?
             .person_ai_user_id;
+        let owner = self.state.chats.get_session(&session.session_code).ok().and_then(|s|s.user_code)
+            .or_else(||event.payload.get("userCode").and_then(|v|v.as_str()).map(str::to_owned));
+        if owner.as_ref().is_some_and(|owner|owner!=&run_user) {
+            return Err(DudeError::ExecutionBusy);
+        }
         self.state
             .chats
             .ensure_dude_session(&session, Some(run_user.clone()))
@@ -242,7 +247,7 @@ impl PlatformDudeExecutor {
         .with_agent_management(self.state.agent_management.clone());
         let (model, route) = router
             .resolve_initial(
-                session.workspace_code.as_deref().unwrap_or(""),
+                "",
                 &session.session_code,
                 &event.dude_code,
                 None,
@@ -261,7 +266,7 @@ impl PlatformDudeExecutor {
         }
         let agent = self
             .agent()
-            .with_runtime_input(format!("DUDE_{:?}", event.source).to_uppercase(), serde_json::json!({"source":format!("{:?}",event.source),"eventId":event.event_id,"ownerDudeCode":event.dude_code,"taskCode":event.task_code}))
+            .with_runtime_input(crate::application::dude::soul::runtime_input_kind(event.source), serde_json::json!({"source":format!("{:?}",event.source),"eventId":event.event_id,"ownerDudeCode":event.dude_code,"taskCode":event.task_code}))
             .with_auto_model_route(Some(route), Some(router))
             .with_collaboration_owner(AgentCollaborationOwner {
                 kind: "DUDE".into(),
@@ -300,7 +305,7 @@ impl PlatformDudeExecutor {
                 },
                 model,
                 Some(run_user),
-                Some("zh-CN".into()),
+                Some(crate::shared::locale::SupportedLocale::from_raw(event.payload["locale"].as_str().unwrap_or("zh-CN")).as_str().into()),
                 None,
                 agent,
             )

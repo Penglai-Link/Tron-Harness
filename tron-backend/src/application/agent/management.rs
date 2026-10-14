@@ -1,4 +1,5 @@
 mod internal_agents;
+mod agent_directory;
 mod internal_definition_error;
 mod internal_definitions;
 mod internal_groups;
@@ -7,8 +8,8 @@ mod platform_internal_agents;
 mod platform_runtime;
 mod system_agent_profiles;
 mod system_agents;
-mod tool_permissions;
 mod tool_metadata;
+mod tool_permissions;
 mod workspace_grants;
 
 use std::{
@@ -57,6 +58,7 @@ pub struct UpdateWorkspaceInternalAgentPolicyCommand {
 pub struct CreateWorkspaceInternalAgentCommand {
     pub agent_code: String,
     pub name: String,
+    pub description: String,
     pub role_prompt: String,
     pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
@@ -67,8 +69,10 @@ pub struct CreateWorkspaceInternalAgentCommand {
 
 #[derive(Debug, Clone, Default)]
 pub struct UpdateWorkspaceInternalAgentDefinitionCommand {
+    pub enabled: Option<bool>,
     pub candidate_model_codes: Option<Vec<String>>,
     pub name: Option<String>,
+    pub description: Option<String>,
     pub role_prompt: Option<String>,
     pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
@@ -85,6 +89,8 @@ pub struct UpdateWorkspaceInternalAgentMcpPolicyCommand {
 pub struct ResolvedAgentRuntime {
     pub agent_code: String,
     pub system_model_id: Option<String>,
+    pub system_reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    pub system_fast_mode: bool,
     pub runtime_type: AgentRuntimeType,
     pub command_name: Option<String>,
     pub name: String,
@@ -149,6 +155,15 @@ pub trait AgentManagementRepository: Send {
     ) -> Result<(), AgentManagementError> {
         Ok(())
     }
+    fn remember_discovered_tools(
+        &mut self,
+        tools: &[ToolCatalogRecord],
+    ) -> Result<(), AgentManagementError> {
+        for tool in tools {
+            self.remember_discovered_tool(tool)?;
+        }
+        Ok(())
+    }
 
     fn list_loop_designs(
         &mut self,
@@ -171,6 +186,22 @@ pub trait AgentManagementRepository: Send {
         _agent: &str,
     ) -> Result<Option<Vec<String>>, AgentManagementError> {
         Ok(None)
+    }
+    fn assigned_agent_codes(
+        &mut self,
+        workspace: &str,
+        agents: &[String],
+    ) -> Result<Vec<String>, AgentManagementError> {
+        let mut assigned = Vec::new();
+        for agent in agents {
+            if self
+                .agent_workspace_grants(agent)?
+                .is_none_or(|grants| grants.iter().any(|code| code == workspace))
+            {
+                assigned.push(agent.clone());
+            }
+        }
+        Ok(assigned)
     }
     fn replace_agent_workspace_grants(
         &mut self,

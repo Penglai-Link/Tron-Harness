@@ -33,6 +33,7 @@ fn service(database: &str) -> AgentManagementService {
 }
 fn create(code: &str, group: Option<&str>) -> CreateWorkspaceInternalAgentCommand {
     CreateWorkspaceInternalAgentCommand {
+        description: String::new(),
         candidate_model_codes: Vec::new(),
         agent_code: code.into(),
         name: code.into(),

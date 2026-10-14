@@ -301,6 +301,8 @@ export interface ChatActiveRun {
 }
 
 export interface ChatRuntimeRunState {
+  /** History or authoritative run status is still being resolved. */
+  loading?: boolean;
   active: boolean;
   runCode: string;
   sessionCode: string;
@@ -487,6 +489,8 @@ export interface ChatClientConfig {
   fullScreen?: boolean;
   fullScreenMinWidth?: number;
   inputPlaceholder?: string;
+  queuedInputPlaceholder?: string;
+  steeringInputPlaceholder?: string;
   maxFileSize?: number;
   maxLimitFile?: number;
   open?: boolean;

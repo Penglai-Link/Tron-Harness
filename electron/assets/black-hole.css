@@ -1,0 +1,91 @@
+.black-hole-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #020305;
+  pointer-events: none;
+}
+.black-hole-scene canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  /* A fresh host must reveal its first frame immediately at the handoff. */
+  transition: none;
+}
+.black-hole-scene canvas.black-hole-ready {
+  opacity: 1;
+}
+.black-hole-fallback {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 64% 47%, #10131b, #020305 65%);
+}
+.black-hole-fallback i {
+  position: absolute;
+  width: 36vh;
+  aspect-ratio: 1;
+  left: 64%;
+  top: 47%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 -2px 2px #eee6d6c0, 0 -5px 16px #bdc8dd55, 0 0 50px #bcc9dc12;
+}
+.black-hole-fallback b {
+  position: absolute;
+  left: 64%;
+  top: 48%;
+  width: 85vh;
+  height: 10vh;
+  transform: translate(-50%, -50%) rotate(-4deg);
+  border-radius: 50%;
+  border-bottom: 2px solid #d8d3c8;
+  box-shadow: 0 5px 7px -5px #d3dfeb;
+}
+@media (max-aspect-ratio: 1/1) {
+  .black-hole-fallback i,
+  .black-hole-fallback b {
+    left: 50%;
+    top: 27%;
+  }
+  .black-hole-fallback i {
+    width: 28vh;
+  }
+  .black-hole-fallback b {
+    width: 62vh;
+  }
+}
+
+.black-hole-scene[data-camera-distance="far"] .black-hole-fallback i {
+  width: 14vh;
+}
+.black-hole-scene[data-camera-distance="far"] .black-hole-fallback b {
+  width: 34vh;
+  height: 4vh;
+}
+.black-hole-scene[data-camera-distance="arriving"] .black-hole-fallback i {
+  animation: black-hole-fallback-core 2.4s ease-in-out both;
+}
+.black-hole-scene[data-camera-distance="arriving"] .black-hole-fallback b {
+  animation: black-hole-fallback-disk 2.4s ease-in-out both;
+}
+@keyframes black-hole-fallback-core {
+  from {
+    width: 14vh;
+  }
+  to {
+    width: 36vh;
+  }
+}
+@keyframes black-hole-fallback-disk {
+  from {
+    width: 34vh;
+    height: 4vh;
+  }
+  to {
+    width: 85vh;
+    height: 10vh;
+  }
+}

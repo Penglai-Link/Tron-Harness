@@ -176,6 +176,7 @@ fn executor() -> (
 
 fn context() -> AgentRunContext {
     AgentRunContext {
+        system_agent_fast_mode: false,
         collaboration_owner: None,
         agent_code: None,
         conversation_code: Some("CONV-1".into()),

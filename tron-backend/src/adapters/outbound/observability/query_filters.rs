@@ -7,7 +7,8 @@ pub(super) fn append_filters(sql: &mut String, values: &mut Vec<Value>, filters:
         values.push(Value::Text(agent.clone()));
     }
     if let Some(status) = &filters.status {
-        sql.push_str(&format!(" AND (CASE WHEN ({unfinished}) OR json_extract({attrs},'$.\"tron.operation.active\"')='true' THEN 'Running' WHEN ({abandoned}) THEN 'Unknown' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='unknown' THEN 'Unknown' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='cancelled' THEN 'Cancelled' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"') IN ('waiting','awaiting_input') THEN 'Waiting' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"') IN ('interrupted','step_limit','tool_call_limit') THEN 'Interrupted' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='error' OR {code}=2 THEN 'Error' ELSE 'Completed' END)=?"));
+        let expression = status_sql(attrs, code, unfinished, abandoned);
+        sql.push_str(&format!(" AND ({expression})=?"));
         values.push(Value::Text(status.clone()));
     }
     if !filters.keyword.is_empty() {
@@ -20,6 +21,10 @@ pub(super) fn append_filters(sql: &mut String, values: &mut Vec<Value>, filters:
         sql.push(')');
     }
 }
+pub(super) fn status_sql(attrs: &str, code: &str, unfinished: &str, abandoned: &str) -> String {
+    format!("CASE WHEN ({unfinished}) OR json_extract({attrs},'$.\"tron.operation.active\"')='true' THEN 'Running' WHEN ({abandoned}) THEN 'Unknown' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='unknown' THEN 'Unknown' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='cancelled' THEN 'Cancelled' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"') IN ('waiting','awaiting_input') THEN 'Waiting' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"') IN ('interrupted','step_limit','tool_call_limit') THEN 'Interrupted' WHEN json_extract({attrs},'$.\"agent.operation.outcome\"')='error' OR {code}=2 THEN 'Error' ELSE 'Completed' END")
+}
+
 /// Match an exact span in a page trace, or an execution root containing that span.
 /// UNION deduplicates ancestors so malformed cycles cannot recurse forever.
 pub(super) fn append_span_filter(sql: &mut String, values: &mut Vec<Value>, id: Option<&str>, trace: &str, root: Option<&str>) {
@@ -43,34 +48,47 @@ impl TelemetryProjection {
     }
     pub(super) fn page_triggers(&self, q: &TraceQuery) -> Result<TracePage, ObservabilityError> {
         let mut clause = "json_extract(t.attributes,'$.\"tron.trace.page\"')='true' AND COALESCE(json_extract(t.attributes,'$.\"url.path\"'),'') NOT IN ('/api/v1/profiles/events','/api/v1/system/skins/events')".to_owned();
+        if q.category.is_none() { clause="1=1".into(); }
         let mut values = Vec::<Value>::new();
-        for (key,value) in [("tron.workspace.code",Some(q.workspace_code.clone()).filter(|v| !v.is_empty())),("tron.session.code",q.session_code.clone())] {
-            if let Some(value)=value { clause.push_str(" AND json_extract(t.attributes,?)=?"); values.push(Value::Text(format!("$.\"{key}\""))); values.push(Value::Text(value)); }
+        for (key,value) in [("tron.workspace.code",Some(q.workspace_code.clone()).filter(|v|!v.is_empty())),("tron.session.code",q.session_code.clone())] {
+            if let Some(value)=value { clause.push_str(&format!(" AND json_extract(t.attributes,'$.\"{key}\"')=?")); values.push(Value::Text(value)); }
         }
-        if let Some(id)=&q.trace_id { clause.push_str(" AND t.trace_id=?"); values.push(Value::Text(id.clone())); }
-        append_span_filter(&mut clause, &mut values, q.filters.span_id.as_deref(), "t.trace_id", None);
+        if let Some(id)=&q.trace_id {clause.push_str(" AND t.trace_id=?");values.push(Value::Text(id.clone()));}
+        append_span_filter(&mut clause,&mut values,q.filters.span_id.as_deref(),"t.trace_id",None);
         append_filters(&mut clause,&mut values,&q.filters,"t.attributes","t.status_code","t.ended_at IS NULL","t.abandoned","t.trace_id","t.attributes");
-        let sorts = if q.sorts.is_empty() {vec![TraceSort{field:q.sort_by,direction:q.sort_direction}]} else {q.sorts.clone()};
-        let default_order=sorts.len()==1 && sorts[0].field==TraceSortField::StartedAt && sorts[0].direction==TraceSortDirection::Desc;
-        let offset=(q.current-1)*q.size;
-        let size=q.size;
-        let (total,traces)=blocking(self.database.call(move |c| -> rusqlite::Result<_> {
-            let total=c.query_row(&format!("SELECT COUNT(*) FROM ef_telemetry_traces t WHERE {clause}"),params_from_iter(&values),|r|r.get(0))?;
-            let mut sql=format!("SELECT trace_id,started_at,ended_at,status_code,attributes,abandoned FROM ef_telemetry_traces t WHERE {clause} ORDER BY started_at DESC,trace_id DESC");
-            if default_order {sql.push_str(" LIMIT ? OFFSET ?");values.push(Value::Integer(size as i64));values.push(Value::Integer(offset as i64));}
-            let mut stmt=c.prepare(&sql)?;
-            let records=stmt.query_map(params_from_iter(values),|r| {
-                let attrs:String=r.get(4)?;
-                Ok(TelemetryTrace{trace_id:r.get(0)?,started_at:r.get(1)?,ended_at:r.get(2)?,status_code:r.get(3)?,attributes:serde_json::from_str(&attrs).map_err(|_|rusqlite::Error::InvalidQuery)?,abandoned:r.get(5)?})
-            })?.collect::<rusqlite::Result<Vec<_>>>()?;
-            Ok((total,records))
+        let sorts=list_query::sorts(q);
+        let metric_sort=list_query::needs_metrics(&sorts);
+        let order=list_query::order(&sorts);
+        let limit=format!("LIMIT {} OFFSET {}",q.size,(q.current-1)*q.size);
+        let timestamp=now();
+        let raw_roots=format!("SELECT t.*, '' AS root_span_id,MAX(0,COALESCE(t.ended_at,{timestamp})-t.started_at) AS duration_ms FROM ef_telemetry_traces t WHERE {clause}");
+        let roots=if metric_sort {raw_roots} else {format!("SELECT * FROM ({raw_roots}) r ORDER BY {order} {limit}")};
+        let columns=list_query::METRIC_COLUMNS;
+        let sql=format!("WITH roots AS MATERIALIZED ({roots}) SELECT r.trace_id,r.started_at,r.ended_at,r.status_code,r.attributes,r.abandoned,{columns},
+            (SELECT p.data FROM ef_telemetry_spans p WHERE p.trace_id=r.trace_id
+                AND (json_extract(p.data,'$.name') LIKE 'page %' OR json_extract(p.data,'$.parentSpanId') IS NULL)
+                ORDER BY CASE WHEN json_extract(p.data,'$.name') LIKE 'page %' THEN 0 ELSE 1 END,json_extract(p.data,'$.startedAt'),p.span_id LIMIT 1)
+        FROM roots r LEFT JOIN ef_telemetry_trace_rollups m ON m.trace_id=r.trace_id ORDER BY {order} {}",if metric_sort {limit} else {String::new()});
+        let (total,rows)=blocking(self.database.call(move |c| -> rusqlite::Result<_> {
+            let transaction=c.transaction()?;
+            let total:usize=transaction.query_row(&format!("SELECT COUNT(*) FROM ef_telemetry_traces t WHERE {clause}"),params_from_iter(&values),|r|r.get(0))?;
+            let rows=if total==0 {Vec::new()} else {
+                let mut statement=transaction.prepare(&sql)?;
+                statement.query_map(params_from_iter(&values),|r|Ok((
+                    (r.get::<_,String>(0)?,r.get::<_,i64>(1)?,r.get::<_,Option<i64>>(2)?,r.get::<_,i32>(3)?,r.get::<_,String>(4)?,r.get::<_,bool>(5)?),
+                    list_query::Metrics::read(r,6)?,r.get::<_,Option<String>>(13)?
+                )))?.collect::<rusqlite::Result<Vec<_>>>()?
+            };
+            transaction.commit()?;
+            Ok((total,rows))
         })).map_err(failure)?;
-        let mut records=Vec::new();
-        for trace in traces {
-            let spans=blocking(self.store.spans(trace.trace_id.clone())).map_err(failure)?.into_iter().map(span).collect::<Vec<_>>();
-            records.push(summary(trace,&spans));
-        }
-        if !default_order {sort_trace_summaries(&mut records,&sorts);records=records.into_iter().skip(offset).take(size).collect();}
-        Ok(TracePage{agent_options:Vec::new(),current:q.current,size:q.size,total,records})
+        let records=rows.into_iter().map(|((trace_id,started_at,ended_at,status_code,attributes,abandoned),metrics,root)| {
+            let trace=TelemetryTrace {trace_id,started_at,ended_at,status_code,abandoned,attributes:serde_json::from_str(&attributes).map_err(failure)?};
+            let root=root.map(|data|serde_json::from_str::<TelemetrySpan>(&data).map(span).map_err(failure)).transpose()?;
+            let mut record=summary(trace,root.as_slice());
+            metrics.apply(&mut record);
+            Ok(record)
+        }).collect::<Result<Vec<_>,ObservabilityError>>()?;
+        Ok(TracePage {agent_options:Vec::new(),current:q.current,size:q.size,total,records})
     }
 }

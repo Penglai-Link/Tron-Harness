@@ -783,6 +783,9 @@ CREATE TABLE skill_rag_index_states (
 );
 
 CREATE TABLE system_agent_registries (
+    fast_mode INTEGER NOT NULL DEFAULT 0,
+    reasoning_effort TEXT,
+    avatar_id TEXT,
     agent_code TEXT PRIMARY KEY,
     base_agent_code TEXT,
     model_id TEXT,
@@ -872,6 +875,7 @@ CREATE TABLE workspace_internal_agent_definitions (
     workspace_code TEXT NOT NULL,
     agent_code TEXT NOT NULL,
     name TEXT,
+    description TEXT NULL CHECK (description IS NULL OR length(trim(description)) <= 200),
     role_prompt TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL, loop_code TEXT, avatar_id TEXT, group_name TEXT,
@@ -1257,37 +1261,38 @@ INSERT INTO memory_work_domains (domain_code, name, description, status, created
     ('testing', 'testing', 'Testing, validation, and quality assurance knowledge.', 'ACTIVE', 1781568000000, 1781568000000),
     ('product', 'product', 'Product design, requirements, and workflow knowledge.', 'ACTIVE', 1781568000000, 1781568000000);
 
--- navigation_domains
+-- Default navigation definitions and arrangement.
+
 INSERT INTO navigation_domains (id, domain_code, built_in, enabled, is_default, position, created_at, updated_at) VALUES
     (734500000000000001, 'ADVANCED', 1, 1, 1, 0, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z');
 
--- navigation_domain_translations
 INSERT INTO navigation_domain_translations (id, domain_id, locale, name, description) VALUES
     (734500100000000001, 734500000000000001, 'zh-CN', '高级模式', '高级模式'),
     (734500100000000002, 734500000000000001, 'en-US', 'Advanced', 'Advanced');
 
--- navigation_menus
-INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, enabled, created_at, updated_at) VALUES
-    (734510000000000001, 'CORE', 'BuiltIn', 'Group', NULL, NULL, 'LayoutDashboard', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000002, 'APPS', 'BuiltIn', 'Internal', 'apps.index', NULL, 'FolderGit2', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000003, 'TASKS', 'BuiltIn', 'Internal', 'tasks.index', NULL, 'ListTodo', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000004, 'AUTOMATIONS', 'BuiltIn', 'Internal', 'automations.index', NULL, 'AlarmClock', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000005, 'AGENT_OPERATIONS', 'BuiltIn', 'Group', NULL, NULL, 'Bot', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000008, 'MCP_SERVERS', 'BuiltIn', 'Internal', 'mcpServers.index', NULL, 'PlugZap', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000010, 'MODELS', 'BuiltIn', 'Internal', 'models.index', NULL, 'Sparkles', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000012, 'DATA', 'BuiltIn', 'Group', NULL, NULL, 'Database', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000017, 'RESOURCE_MANAGEMENT', 'BuiltIn', 'Group', NULL, NULL, 'Archive', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000018, 'FILE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.files', NULL, 'Folder', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000019, 'DATA_SOURCE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.dataSources', NULL, 'DatabaseZap', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000020, 'SERVER_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.servers', NULL, 'Server', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000021, 'SERVER_ACCOUNT_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.serverAccounts', NULL, 'UserRound', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
-    (734550000000000002, 'CHAT_NEW_SESSION', 'BuiltIn', 'Widget', 'chat.newSession', NULL, 'SquarePen', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
-    (734550000000000003, 'CHAT_PROJECTS', 'BuiltIn', 'Widget', 'chat.projects', NULL, 'FolderKanban', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
-    (734550000000000004, 'CHAT_RECENTS', 'BuiltIn', 'Widget', 'chat.recents', NULL, 'History', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z');
+INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, description_zh_cn, description_en_us, enabled, created_at, updated_at) VALUES
+    (734510000000000001, 'CORE', 'BuiltIn', 'Group', NULL, NULL, 'LayoutDashboard', '常用工作入口，包括应用、任务和自动化。', 'Primary workspace shortcuts for apps, tasks, and automations.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000002, 'APPS', 'BuiltIn', 'Internal', 'apps.index', NULL, 'FolderGit2', '查看和管理工作区中的应用。', 'Browse and manage applications in the workspace.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000003, 'TASKS', 'BuiltIn', 'Internal', 'tasks.index', NULL, 'ListTodo', '创建、查看和跟踪工作任务。', 'Create, review, and track work tasks.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000004, 'AUTOMATIONS', 'BuiltIn', 'Internal', 'automations.index', NULL, 'AlarmClock', '配置自动化规则并查看执行情况。', 'Configure automation rules and review their executions.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000005, 'AGENT_OPERATIONS', 'BuiltIn', 'Group', NULL, NULL, 'Bot', '智能体相关入口，包括 Dude、MCP 服务和模型。', 'Agent-related entry points, including Dude, MCP servers, and models.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000008, 'MCP_SERVERS', 'BuiltIn', 'Internal', 'mcpServers.index', NULL, 'PlugZap', '配置和管理可供智能体使用的 MCP 服务。', 'Configure MCP servers available to agents.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000010, 'MODELS', 'BuiltIn', 'Internal', 'models.index', NULL, 'Sparkles', '管理模型服务商、模型及其配置。', 'Manage model providers, models, and their configuration.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000012, 'DATA', 'BuiltIn', 'Group', NULL, NULL, 'Database', '数据与资源管理相关入口。', 'Entry points for data and resource management.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000017, 'RESOURCE_MANAGEMENT', 'BuiltIn', 'Group', NULL, NULL, 'Archive', '管理文件、数据源、服务器及服务器账号。', 'Manage files, data sources, servers, and server accounts.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000018, 'FILE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.files', NULL, 'Folder', '浏览和管理工作区文件与已上传资源。', 'Browse and manage workspace files and uploaded resources.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000019, 'DATA_SOURCE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.dataSources', NULL, 'DatabaseZap', '配置可供应用和智能体访问的数据源。', 'Configure data sources available to apps and agents.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000020, 'SERVER_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.servers', NULL, 'Server', '管理外部服务器连接及其配置。', 'Manage external server connections and their configuration.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000021, 'SERVER_ACCOUNT_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.serverAccounts', NULL, 'UserRound', '维护服务器连接可复用的账号和凭据。', 'Maintain reusable accounts and credentials for server connections.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', '管理平台或工作区可复用的变量。', 'Manage reusable platform or workspace variables.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734550000000000001, 'CHAT_SESSIONS', 'BuiltIn', 'Group', NULL, NULL, 'MessageSquareText', '会话区域的分组入口，包含新建会话、项目和最近会话。', 'The chat section, containing new chat, projects, and recent sessions.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
+    (734550000000000002, 'CHAT_NEW_SESSION', 'BuiltIn', 'Widget', 'chat.newSession', NULL, 'SquarePen', '开始一个新的会话。', 'Start a new conversation.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
+    (734550000000000003, 'CHAT_PROJECTS', 'BuiltIn', 'Widget', 'chat.projects', NULL, 'FolderKanban', '查看项目及其关联的会话。', 'Browse projects and their associated conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
+    (734550000000000004, 'CHAT_RECENTS', 'BuiltIn', 'Widget', 'chat.recents', NULL, 'History', '查看并继续最近访问的会话。', 'View and continue recently accessed conversations.', 1, '2026-09-22T00:00:00Z', '2026-09-22T00:00:00Z'),
+    (734560000000000001, 'DUDES', 'BuiltIn', 'Internal', 'dudes.index', NULL, 'Bot', '与 Dude 助手交互，并查看其工作和历史记录。', 'Interact with Dude assistants and review their work and history.', 1, '2026-10-11T00:00:00Z', '2026-10-11T00:00:00Z'),
+    (734560000000000002, 'NOTIFICATIONS', 'BuiltIn', 'Internal', 'notifications.index', NULL, 'Bell', '查看消息通知并处理需要关注的事项。', 'Review notifications and handle items that need attention.', 1, '2026-10-11T00:00:00Z', '2026-10-11T00:00:00Z'),
+    (734570000000000001, 'EXPLORE_MORE', 'BuiltIn', 'Group', NULL, NULL, 'Ellipsis', '收纳不常用或可选的菜单入口。', 'Collect optional or less frequently used menu entries.', 1, '2026-10-13T00:00:00Z', '2026-10-13T00:00:00Z');
 
--- navigation_menu_translations
 INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734530000000000001, 734510000000000001, 'zh-CN', '核心'),
     (734530000000000002, 734510000000000001, 'en-US', 'Core'),
@@ -1324,116 +1329,38 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734550100000000005, 734550000000000003, 'zh-CN', '项目'),
     (734550100000000006, 734550000000000003, 'en-US', 'Projects'),
     (734550100000000007, 734550000000000004, 'zh-CN', '最近'),
-    (734550100000000008, 734550000000000004, 'en-US', 'Recents');
+    (734550100000000008, 734550000000000004, 'en-US', 'Recents'),
+    (734560100000000001, 734560000000000001, 'zh-CN', '好兄弟'),
+    (734560100000000002, 734560000000000001, 'en-US', 'Dude'),
+    (734560100000000003, 734560000000000002, 'zh-CN', '通知'),
+    (734560100000000004, 734560000000000002, 'en-US', 'Notifications'),
+    (734570100000000001, 734570000000000001, 'zh-CN', '探索更多'),
+    (734570100000000002, 734570000000000001, 'en-US', 'Explore more');
 
--- navigation_menu_trees
 INSERT INTO navigation_menu_trees (id, tree_code, tree_type, domain_id, built_in, enabled, created_at, updated_at) VALUES
     (734500000000000001, 'ADVANCED', 'Domain', 734500000000000001, 1, 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z');
 
--- navigation_menu_tree_items
 INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) VALUES
-    (734520000000000001, 734500000000000001, 734510000000000001, NULL, 1, 'Flyout'),
+    (734560200000000001, 734500000000000001, 734560000000000001, NULL, 0, 'Inline'),
+    (734550200000000002, 734500000000000001, 734550000000000002, NULL, 1, 'Inline'),
+    (734570200000000001, 734500000000000001, 734570000000000001, NULL, 2, 'Flyout'),
+    (734560200000000002, 734500000000000001, 734560000000000002, 734570200000000001, 0, 'Inline'),
+    (734520000000000001, 734500000000000001, 734510000000000001, 734570200000000001, 1, 'Inline'),
     (734520000000000002, 734500000000000001, 734510000000000002, 734520000000000001, 0, 'Inline'),
     (734520000000000003, 734500000000000001, 734510000000000003, 734520000000000001, 1, 'Inline'),
     (734520000000000004, 734500000000000001, 734510000000000004, 734520000000000001, 2, 'Inline'),
-    (734520000000000005, 734500000000000001, 734510000000000005, NULL, 2, 'Flyout'),
-    (734520000000000008, 734500000000000001, 734510000000000008, 734520000000000005, 1, 'Inline'),
-    (734520000000000010, 734500000000000001, 734510000000000010, 734520000000000005, 3, 'Inline'),
-    (734520000000000012, 734500000000000001, 734510000000000012, NULL, 3, 'Flyout'),
-    (734520000000000017, 734500000000000001, 734510000000000017, 734520000000000012, 4, 'Inline'),
+    (734520000000000022, 734500000000000001, 734510000000000022, 734520000000000001, 3, 'Inline'),
+    (734520000000000005, 734500000000000001, 734510000000000005, 734570200000000001, 2, 'Inline'),
+    (734520000000000008, 734500000000000001, 734510000000000008, 734520000000000005, 0, 'Inline'),
+    (734520000000000010, 734500000000000001, 734510000000000010, 734520000000000005, 1, 'Inline'),
+    (734520000000000012, 734500000000000001, 734510000000000012, 734570200000000001, 3, 'Inline'),
+    (734520000000000017, 734500000000000001, 734510000000000017, 734520000000000012, 0, 'Inline'),
     (734520000000000018, 734500000000000001, 734510000000000018, 734520000000000017, 0, 'Inline'),
     (734520000000000019, 734500000000000001, 734510000000000019, 734520000000000017, 1, 'Inline'),
     (734520000000000020, 734500000000000001, 734510000000000020, 734520000000000017, 2, 'Inline'),
     (734520000000000021, 734500000000000001, 734510000000000021, 734520000000000017, 3, 'Inline'),
-    (734520000000000022, 734500000000000001, 734510000000000022, 734520000000000012, 5, 'Inline'),
-    (734550200000000001, 734500000000000001, 734550000000000001, NULL, 0, 'Inline'),
-    (734550200000000002, 734500000000000001, 734550000000000002, 734550200000000001, 0, 'Inline'),
-    (734550200000000003, 734500000000000001, 734550000000000003, 734550200000000001, 1, 'Inline'),
-    (734550200000000004, 734500000000000001, 734550000000000004, 734550200000000001, 2, 'Inline');
-
-UPDATE navigation_menus SET
-    description_zh_cn = CASE menu_code
-        WHEN 'CORE' THEN '常用工作入口，包括应用、任务和自动化。'
-        WHEN 'APPS' THEN '查看和管理工作区中的应用。'
-        WHEN 'TASKS' THEN '创建、查看和跟踪工作任务。'
-        WHEN 'AUTOMATIONS' THEN '配置自动化规则并查看执行情况。'
-        WHEN 'AGENT_OPERATIONS' THEN '智能体相关入口，包括 Dude、MCP 服务和模型。'
-        WHEN 'MCP_SERVERS' THEN '配置和管理可供智能体使用的 MCP 服务。'
-        WHEN 'MODELS' THEN '管理模型服务商、模型及其配置。'
-        WHEN 'DATA' THEN '数据与资源管理相关入口。'
-        WHEN 'RESOURCE_MANAGEMENT' THEN '管理文件、数据源、服务器及服务器账号。'
-        WHEN 'FILE_MANAGEMENT' THEN '浏览和管理工作区文件与已上传资源。'
-        WHEN 'DATA_SOURCE_MANAGEMENT' THEN '配置可供应用和智能体访问的数据源。'
-        WHEN 'SERVER_MANAGEMENT' THEN '管理外部服务器连接及其配置。'
-        WHEN 'SERVER_ACCOUNT_MANAGEMENT' THEN '维护服务器连接可复用的账号和凭据。'
-        WHEN 'VARIABLES' THEN '管理平台或工作区可复用的变量。'
-        WHEN 'CHAT_SESSIONS' THEN '会话区域的分组入口，包含新建会话、项目和最近会话。'
-        WHEN 'CHAT_NEW_SESSION' THEN '开始一个新的会话。'
-        WHEN 'CHAT_PROJECTS' THEN '查看项目及其关联的会话。'
-        WHEN 'CHAT_RECENTS' THEN '查看并继续最近访问的会话。'
-        WHEN 'DUDES' THEN '与 Dude 助手交互，并查看其工作和历史记录。'
-        WHEN 'NOTIFICATIONS' THEN '查看消息通知并处理需要关注的事项。'
-        WHEN 'EXPLORE_MORE' THEN '收纳不常用或可选的菜单入口。'
-        ELSE description_zh_cn
-    END,
-    description_en_us = CASE menu_code
-        WHEN 'CORE' THEN 'Primary workspace shortcuts for apps, tasks, and automations.'
-        WHEN 'APPS' THEN 'Browse and manage applications in the workspace.'
-        WHEN 'TASKS' THEN 'Create, review, and track work tasks.'
-        WHEN 'AUTOMATIONS' THEN 'Configure automation rules and review their executions.'
-        WHEN 'AGENT_OPERATIONS' THEN 'Agent-related entry points, including Dude, MCP servers, and models.'
-        WHEN 'MCP_SERVERS' THEN 'Configure MCP servers available to agents.'
-        WHEN 'MODELS' THEN 'Manage model providers, models, and their configuration.'
-        WHEN 'DATA' THEN 'Entry points for data and resource management.'
-        WHEN 'RESOURCE_MANAGEMENT' THEN 'Manage files, data sources, servers, and server accounts.'
-        WHEN 'FILE_MANAGEMENT' THEN 'Browse and manage workspace files and uploaded resources.'
-        WHEN 'DATA_SOURCE_MANAGEMENT' THEN 'Configure data sources available to apps and agents.'
-        WHEN 'SERVER_MANAGEMENT' THEN 'Manage external server connections and their configuration.'
-        WHEN 'SERVER_ACCOUNT_MANAGEMENT' THEN 'Maintain reusable accounts and credentials for server connections.'
-        WHEN 'VARIABLES' THEN 'Manage reusable platform or workspace variables.'
-        WHEN 'CHAT_SESSIONS' THEN 'The chat section, containing new chat, projects, and recent sessions.'
-        WHEN 'CHAT_NEW_SESSION' THEN 'Start a new conversation.'
-        WHEN 'CHAT_PROJECTS' THEN 'Browse projects and their associated conversations.'
-        WHEN 'CHAT_RECENTS' THEN 'View and continue recently accessed conversations.'
-        WHEN 'DUDES' THEN 'Interact with Dude assistants and review their work and history.'
-        WHEN 'NOTIFICATIONS' THEN 'Review notifications and handle items that need attention.'
-        WHEN 'EXPLORE_MORE' THEN 'Collect optional or less frequently used menu entries.'
-        ELSE description_en_us
-    END;
-
--- Always-on workspace navigation.
-INSERT INTO navigation_menus (id,menu_code,source,menu_type,page_code,url,icon,enabled,created_at,updated_at) VALUES
-(734560000000000001,'DUDES','BuiltIn','Internal','dudes.index',NULL,'Bot',1,'2026-10-11T00:00:00Z','2026-10-11T00:00:00Z'),
-(734560000000000002,'NOTIFICATIONS','BuiltIn','Internal','notifications.index',NULL,'Bell',1,'2026-10-11T00:00:00Z','2026-10-11T00:00:00Z');
-INSERT INTO navigation_menu_translations(id,menu_id,locale,label) VALUES
-(734560100000000001,734560000000000001,'zh-CN','好兄弟'),(734560100000000002,734560000000000001,'en-US','Dude'),
-(734560100000000003,734560000000000002,'zh-CN','通知'),(734560100000000004,734560000000000002,'en-US','Notifications');
-INSERT INTO navigation_menu_tree_items(id,tree_id,menu_id,parent_item_id,position,child_display) VALUES
-(734560200000000001,734500000000000001,734560000000000001,734520000000000005,0,'Inline'),
-(734560200000000002,734500000000000001,734560000000000002,NULL,4,'Inline');
-
--- Configurable overflow entry; contents are arranged in the same domain tree.
-INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, icon, enabled, created_at, updated_at) VALUES
-    (734570000000000001, 'EXPLORE_MORE', 'BuiltIn', 'Group', NULL, NULL, 'Ellipsis', 1, '2026-10-13T00:00:00Z', '2026-10-13T00:00:00Z');
-INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
-    (734570100000000001, 734570000000000001, 'zh-CN', '探索更多'),
-    (734570100000000002, 734570000000000001, 'en-US', 'Explore more');
-INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) VALUES
-    (734570200000000001, 734500000000000001, 734570000000000001, NULL, 5, 'Flyout');
-
-UPDATE navigation_menus SET
-    description_zh_cn = CASE menu_code
-        WHEN 'DUDES' THEN '与 Dude 助手交互，并查看其工作和历史记录。'
-        WHEN 'NOTIFICATIONS' THEN '查看消息通知并处理需要关注的事项。'
-        WHEN 'EXPLORE_MORE' THEN '收纳不常用或可选的菜单入口。'
-        ELSE description_zh_cn
-    END,
-    description_en_us = CASE menu_code
-        WHEN 'DUDES' THEN 'Interact with Dude assistants and review their work and history.'
-        WHEN 'NOTIFICATIONS' THEN 'Review notifications and handle items that need attention.'
-        WHEN 'EXPLORE_MORE' THEN 'Collect optional or less frequently used menu entries.'
-        ELSE description_en_us
-    END;
+    (734550200000000003, 734500000000000001, 734550000000000003, NULL, 3, 'Inline'),
+    (734550200000000004, 734500000000000001, 734550000000000004, NULL, 4, 'Inline');
 
 -- task_flows
 INSERT INTO task_flows (flow_code, name, created_at, updated_at) VALUES
@@ -1462,6 +1389,18 @@ CREATE TABLE dudes (
  is_main INTEGER NOT NULL DEFAULT 0 CHECK(is_main IN (0,1))
 );
 CREATE UNIQUE INDEX dudes_single_main ON dudes(is_main) WHERE is_main=1;
+-- Souls are platform identities; builtin seeds exist before runtime definitions.
+CREATE TABLE dude_souls (dude_code TEXT PRIMARY KEY, record_json TEXT NOT NULL CHECK(json_valid(record_json)));
+INSERT INTO dude_souls VALUES
+('main-dude','{"dudeCode":"main-dude","name":"未命名","nameConfirmed":false,"markdown":"","state":"Uninitialized","sessionCode":null,"userCode":null,"pendingInteractionId":null,"awakeningStarted":false,"awakeningDeferred":false}'),
+('memory-dude','{"dudeCode":"memory-dude","name":"记忆整理","nameConfirmed":true,"markdown":"谨慎、诚实、简洁。区分事实、推测和经验，保留不确定性。尊重用户选择，不将观察到的偏好擅自升级为稳定约定。","state":"Ready","sessionCode":null,"userCode":null,"pendingInteractionId":null,"awakeningStarted":false,"awakeningDeferred":false}');
+-- Dude config serialization deliberately omits the authoritative soul name.
+CREATE TRIGGER dude_config_name_insert AFTER INSERT ON platform_internal_agent_configs
+WHEN EXISTS(SELECT 1 FROM dude_souls WHERE dude_code=NEW.agent_code)
+BEGIN UPDATE platform_internal_agent_configs SET config_json=json_remove(NEW.config_json,'$.name') WHERE agent_code=NEW.agent_code; END;
+CREATE TRIGGER dude_config_name_update AFTER UPDATE OF config_json ON platform_internal_agent_configs
+WHEN EXISTS(SELECT 1 FROM dude_souls WHERE dude_code=NEW.agent_code) AND json_type(NEW.config_json,'$.name') IS NOT NULL
+BEGIN UPDATE platform_internal_agent_configs SET config_json=json_remove(NEW.config_json,'$.name') WHERE agent_code=NEW.agent_code; END;
 CREATE TABLE dude_sessions (
  session_code TEXT PRIMARY KEY, dude_code TEXT NOT NULL REFERENCES dudes(dude_code),
  purpose TEXT NOT NULL, correlation_key TEXT NOT NULL, record_json TEXT NOT NULL,

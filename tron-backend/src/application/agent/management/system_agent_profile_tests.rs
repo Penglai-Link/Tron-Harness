@@ -23,6 +23,7 @@ impl SystemCommandProbe for Probe {
         Ok(["model-fast", "model-deep"]
             .into_iter()
             .map(|model| SystemAgentModelRecord {
+                supported_reasoning_efforts: Vec::new(),
                 model_id: model.into(),
                 display_name: model.into(),
                 context_window_tokens: Some(128_000),

@@ -247,6 +247,10 @@ impl Runtime {
 
 #[async_trait::async_trait]
 impl AgentCollaborationRuntime for Runtime {
+    async fn agent_details(&self, code: &str, parent: &fw::RunContext) -> Result<serde_json::Value, fw::AgentError> {
+        self.read_agent_details(code, parent).await
+    }
+
     async fn spawn_child(
         &self,
         request: fw::RunRequest,

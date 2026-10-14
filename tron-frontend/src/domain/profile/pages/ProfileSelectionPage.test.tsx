@@ -7,6 +7,9 @@ import * as profileApi from "@/domain/profile/api";
 import { useAuthStore } from "@/store/authStore";
 import { ProfileSelectionPage } from "./ProfileSelectionPage";
 
+vi.mock("@/domain/dude/awakening/BlackHole", () => ({ BlackHole: () => null }));
+vi.mock("@/domain/dude/api/dudeApi", () => ({ getAwakening: async () => ({ started: true, state: "Ready" }) }));
+vi.mock("@/shared/motion/motionPreferences", () => ({ useMotionPreference: () => "off" }));
 vi.mock("react-i18next", () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
@@ -46,6 +49,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   useAuthStore.setState({ ensureSessionFresh: originalEnsureSessionFresh, status: "unauthenticated", session: null });
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.resetAllMocks();
 });
@@ -81,6 +85,7 @@ it.each(["first-login", "reauthorization", "failed-session"])("keeps %s in progr
   expect(screen.queryByRole("button", { name: "personAiProfiles.authorizeNewAccount" })).toBeNull();
   expect(screen.getByRole("button", { name: "personAiProfiles.signingIn" }).hasAttribute("disabled")).toBe(true);
   expect(screen.queryByRole("button", { name: "personAiProfiles.cancelAuthorization" })).toBeNull();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
   await act(async () => {
     if (mode !== "failed-session") useAuthStore.setState({ status: "authenticated" });
     finish(mode !== "failed-session");
@@ -89,6 +94,7 @@ it.each(["first-login", "reauthorization", "failed-session"])("keeps %s in progr
     expect(screen.getByRole("alert").textContent).toBe("personAiProfiles.errors.activate");
     expect(screen.getByTestId("location").textContent).toBe("/profiles");
   } else {
+    await act(() => vi.advanceTimersByTimeAsync(4300));
     expect(screen.getByText("Workspace")).toBeTruthy();
   }
 });

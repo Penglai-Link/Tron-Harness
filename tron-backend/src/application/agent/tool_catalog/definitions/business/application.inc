@@ -267,16 +267,38 @@ fn dude_notify_definition() -> ToolCatalogDefinition {
                 "changeId":{"type":"string","minLength":1},"title":{"type":"string","minLength":1,"maxLength":200},"body":{"type":"string","minLength":1,"maxLength":8000}},"additionalProperties":false})))
 }
 fn dude_work_change_definition() -> ToolCatalogDefinition {
+    // Model providers require a concrete object at the parameter root. Operation-
+    // specific required fields are enforced by WorkInput before any mutation.
     definition("dude.work_change", "dude", ToolOperationKind::Command,
         schema("agent.toolCatalog.tools.dude.work_change.description", json!([{"operation":"list","taskCode":"task-id"}]),
-            json!({"type":"object","oneOf":[
-                {"type":"object","required":["operation","taskCode"],"properties":{"operation":{"const":"list"},"taskCode":{"type":"string"}},"additionalProperties":false},
-                {"type":"object","required":["operation","taskCode","result"],"properties":{"operation":{"const":"recordResult"},"taskCode":{"type":"string"},"result":{"type":"string","minLength":1,"maxLength":32000}},"additionalProperties":false},
-                {"type":"object","required":["operation","taskCode","changeKey","kind","summary","evidence"],"properties":{
-                    "operation":{"const":"record"},"taskCode":{"type":"string"},"changeKey":{"type":"string","minLength":1,"maxLength":200},
-                    "kind":{"enum":["Progress","Completed","NeedsDecision","Blocked"]},"summary":{"type":"string","minLength":1,"maxLength":8000},
-                    "evidence":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":2000}},
-                    "requestedAction":{"type":"string","maxLength":8000}},"additionalProperties":false},
-                {"type":"object","required":["operation","changeId","resolution","evidence"],"properties":{"operation":{"const":"resolve"},"changeId":{"type":"string"},"resolution":{"type":"string","minLength":1,"maxLength":8000},"evidence":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":2000}}},"additionalProperties":false}
-            ]})))
+            json!({"type":"object","required":["operation"],"properties":{
+                "operation":{"type":"string","enum":["list","recordResult","record","resolve"],"description":"list: requires taskCode. recordResult: requires taskCode and result. record: requires taskCode, changeKey, kind, summary and evidence; NeedsDecision/Blocked also require requestedAction. resolve: requires changeId, resolution and evidence. Omit fields belonging to other operations."},
+                "taskCode":{"type":"string","minLength":1},
+                "result":{"type":"string","minLength":1,"maxLength":32000},
+                "changeKey":{"type":"string","minLength":1,"maxLength":200},
+                "kind":{"type":"string","enum":["Progress","Completed","NeedsDecision","Blocked"]},
+                "summary":{"type":"string","minLength":1,"maxLength":8000},
+                "evidence":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":2000}},
+                "requestedAction":{"type":"string","maxLength":8000},
+                "changeId":{"type":"string","minLength":1},
+                "resolution":{"type":"string","minLength":1,"maxLength":8000}
+            },"additionalProperties":false})))
+}
+
+fn dude_soul_read_definition() -> ToolCatalogDefinition {
+    definition("dude.soul_read", "dude", ToolOperationKind::Query,
+        schema("agent.toolCatalog.tools.dude.soul_read.description", json!([{}]),json!({"type":"object","properties":{},"additionalProperties":false})))
+}
+fn dude_soul_update_definition() -> ToolCatalogDefinition {
+    definition("dude.soul_update", "dude", ToolOperationKind::Command,
+        schema("agent.toolCatalog.tools.dude.soul_update.description", json!([
+            {"name":"小川"},
+            {"edits":[{"old":"","new":"回答简洁。"}]}
+        ]),json!({"type":"object","properties":{
+        "name":{"type":"string","minLength":1,"maxLength":100,"description":"Confirmed formal name, only when the user authorized naming or renaming."},
+        "initialSoul":{"type":"string","minLength":1,"maxLength":16384,"description":"Nonempty Markdown for first establishment in the onboarding session from user answers or an explicit soul request. Write the entire Markdown, including headings, in the language the user uses during onboarding; honor an explicit language preference first, retain the ongoing language for short answers, and use the interface locale only as fallback. Do not copy the language of system instructions or seed content. Preserve the confirmed name verbatim. Maximum 16384 UTF-8 bytes. Renaming alone does not authorize this. Cannot be combined with edits; unavailable once Ready."},
+        "edits":{"type":"array","minItems":1,"description":"Apply in order to the latest soul. Only change requested passages; a missing or ambiguous old passage fails the entire update. Result must fit 16384 UTF-8 bytes.","items":{"type":"object","required":["old","new"],"properties":{
+            "old":{"type":"string","maxLength":16384,"description":"Exact unique passage to replace; empty string appends new as a new line."},
+            "new":{"type":"string","maxLength":16384,"description":"Replacement text; empty string deletes a nonempty old passage. Must differ from old."}
+        },"additionalProperties":false}}},"additionalProperties":false})))
 }

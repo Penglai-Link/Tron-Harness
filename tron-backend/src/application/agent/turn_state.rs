@@ -286,6 +286,7 @@ mod tests {
 
     fn responses_context() -> AgentRunContext {
         AgentRunContext {
+            system_agent_fast_mode: false,
             collaboration_owner: None,
             agent_code: None,
             auto_model_route: None,

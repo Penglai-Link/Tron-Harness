@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import type { TraceDetail, TraceSpan } from "../model/Trace";
 import { formatTraceDuration } from "./traceFormat";
+import { useSpanChartPalette } from "./spanChartPalette";
 
+const TOPOLOGY_NODE_SIZE: [number, number] = [190, 56];
 
 export function SpanVisualization({
   detail,
@@ -22,6 +24,7 @@ export function SpanVisualization({
 }) {
   const { t } = useTranslation("observability");
   const { currentLocale } = useLocaleFormatters();
+  const palette = useSpanChartPalette();
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onSelect);
   callback.current = onSelect;
@@ -58,6 +61,16 @@ export function SpanVisualization({
         }));
         const labels = new Map(rows.map((row) => [row.spanId, row.label]));
         chart.options({
+          theme: {
+            type: palette.dark ? "dark" : "light",
+            view: { viewFill: "transparent" },
+            tooltip: { css: {
+              ".g2-tooltip": { background: palette.surface, color: palette.text },
+              ".g2-tooltip-title": { color: palette.text },
+              ".g2-tooltip-list-item-name-label": { color: palette.muted },
+              ".g2-tooltip-list-item-value": { color: palette.text },
+            } },
+          },
           type: "interval",
           data: rows,
           coordinate: { transform: [{ type: "transpose" }] },
@@ -67,18 +80,28 @@ export function SpanVisualization({
             y: { domain: [0, Math.max(1, detail.trace.durationMs)], nice: true },
             color: {
               domain: ["Error", "Completed", "Running", "Unknown"],
-              range: ["#d04444", "#16876b", "#3478ce", "#8b8492"],
+              range: [palette.error, palette.success, palette.primary, palette.muted],
             },
           },
           axis: {
             x: {
               title: false,
+              labelFill: palette.text,
+              labelFillOpacity: 1,
+              lineStroke: palette.outline,
+              tickStroke: palette.outline,
               labelFormatter: (id: string) =>
                 labels.get(id) ?? id,
               labelAutoEllipsis: true,
             },
             y: {
               title: t("elapsedTime"),
+              titleFill: palette.text,
+              labelFill: palette.muted,
+              labelFillOpacity: 1,
+              gridStroke: palette.outline,
+              lineStroke: palette.outline,
+              tickStroke: palette.outline,
               labelFormatter: (value: number) =>
                 formatTraceDuration(Number(value), currentLocale),
             },
@@ -118,20 +141,34 @@ export function SpanVisualization({
                   span.durationMs,
                   currentLocale
                 )}`,
-                fill: span.status === "Error" ? "#fff0f0" : "#eef7f4",
-                stroke: span.status === "Error" ? "#d04444" : "#16876b",
+                fill: palette.surface,
+                stroke: span.status === "Error" ? palette.error : palette.success,
               },
             })),
             edges: data.edges,
           },
-          layout: { type: "dagre", rankdir: "TB", nodesep: 32, ranksep: 56 },
+          layout: {
+            type: "antv-dagre",
+            rankdir: "TB",
+            nodeSize: TOPOLOGY_NODE_SIZE,
+            nodesep: 32,
+            ranksep: 72,
+            // This layout emits interior waypoints rather than repeating the endpoints,
+            // which would leave the arrow with a zero-length final segment.
+            controlPoints: true,
+          },
           node: {
             type: "rect",
             style: {
-              size: [190, 56],
+              size: TOPOLOGY_NODE_SIZE,
               radius: 8,
+              lineWidth: 1.25,
+              ports: [
+                { key: "in", placement: "top", r: 0 },
+                { key: "out", placement: "bottom", r: 0 },
+              ],
               labelPlacement: "center",
-              labelFill: "#1c2524",
+              labelFill: palette.text,
               labelFontSize: 12,
               labelWordWrap: true,
               labelMaxLines: 2,
@@ -142,18 +179,23 @@ export function SpanVisualization({
           edge: {
             type: "polyline",
             style: {
-              stroke: "#71878b",
+              sourcePort: "out",
+              targetPort: "in",
+              router: { type: "orth", padding: 16 },
+              radius: 6,
+              stroke: palette.muted,
               lineWidth: 1.5,
               endArrow: true,
               endArrowType: "triangle",
-              endArrowSize: [8, 8],
-              endArrowFill: "#71878b",
-              endArrowStroke: "#71878b",
-              endArrowOffset: 6,
+              endArrowSize: [10, 10],
+              endArrowFill: palette.muted,
+              endArrowStroke: palette.muted,
+              endArrowLineWidth: 0,
+              endArrowOffset: 8,
             },
           },
           behaviors: ["drag-canvas", "zoom-canvas"],
-          padding: 32,
+          padding: 48,
         });
         const observer = new ResizeObserver(() => graph.resize());
         observer.observe(container.current);
@@ -174,12 +216,9 @@ export function SpanVisualization({
       disposed = true;
       destroy?.();
     };
-  }, [data, detail.trace.startedAt, detail.trace.durationMs, mode, currentLocale, t, attempt]);
+  }, [data, detail.trace.startedAt, detail.trace.durationMs, mode, currentLocale, t, attempt, palette]);
   return (
     <div className="space-y-3">
-      <p className="text-xs text-[var(--color-on-surface-variant)]">
-        {t(mode === "topology" ? "topologyHelp" : "waterfallHelp")}
-      </p>
       {failed && (
         <div role="alert">
           {t("chartFailed")}

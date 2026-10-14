@@ -55,9 +55,12 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
         "raccoon",
         "rabbit",
         "dragon",
+        "neo",
+        "kucha",
     ] {
         let created = agents
             .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+                description: String::new(),
                 candidate_model_codes: Vec::new(),
                 agent_code: format!("avatar-{avatar}"),
                 name: avatar.into(),
@@ -102,6 +105,7 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
         .create_internal_agent(
             "TRON_CORE",
             CreateWorkspaceInternalAgentCommand {
+                description: String::new(),
                 candidate_model_codes: Vec::new(),
                 agent_code: "local-avatar".into(),
                 name: "Local".into(),
@@ -173,4 +177,75 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
     })).unwrap();
     assert_eq!(config.avatar_id, "robot");
     assert_eq!(config.role_prompt, "Keep this role");
+}
+
+#[test]
+fn built_in_dudes_have_independent_default_avatars_and_preserve_customization() {
+    let config = common::prepared_config(AppConfig::default());
+    let agents = service(&config.database_url);
+    agents
+        .update_platform_internal_agent_definition(
+            "main-agent",
+            UpdateWorkspaceInternalAgentDefinitionCommand {
+                loop_code: Some("test-react".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    for (code, avatar) in [("main-dude", "neo"), ("memory-dude", "kucha")] {
+        agents.initialize_dude_definition(code, code, None).unwrap();
+        let definition = agents
+            .all_platform_internal_agents()
+            .unwrap()
+            .into_iter()
+            .find(|agent| agent.agent_code == code)
+            .unwrap();
+        assert_eq!(definition.avatar_id, avatar);
+    }
+    agents
+        .update_platform_internal_agent_definition(
+            "main-dude",
+            UpdateWorkspaceInternalAgentDefinitionCommand {
+                avatar_id: Some("fox".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    drop(agents);
+    let agents = service(&config.database_url);
+    agents
+        .initialize_dude_definition("main-dude", "ignored", None)
+        .unwrap();
+    assert_eq!(
+        agents
+            .all_platform_internal_agents()
+            .unwrap()
+            .into_iter()
+            .find(|agent| agent.agent_code == "main-dude")
+            .unwrap()
+            .avatar_id,
+        "fox"
+    );
+}
+
+
+#[test]
+fn disabled_internal_agent_persists_and_blocks_platform_and_workspace_execution() {
+    let config = common::prepared_config(AppConfig::default());
+    let agents = service(&config.database_url);
+    agents.assign_agent_workspaces("prd-agent", vec!["TRON_CORE".into()]).unwrap();
+    agents.update_platform_internal_agent_definition("prd-agent", UpdateWorkspaceInternalAgentDefinitionCommand {
+        enabled: Some(false), loop_code: Some("test-react".into()), ..Default::default()
+    }).unwrap();
+    drop(agents);
+    let agents = service(&config.database_url);
+    assert!(!agents.list_platform_internal_agents().unwrap().iter().find(|a| a.agent_code == "prd-agent").unwrap().enabled);
+    assert!(!agents.workspace_internal_agent_policy("TRON_CORE", "prd-agent").unwrap().enabled);
+    assert!(agents.resolve_platform_agent_runtime(Some("prd-agent")).is_err());
+    assert!(agents.resolve_workspace_agent_runtime("TRON_CORE", Some("prd-agent")).is_err());
+    agents.update_platform_internal_agent_definition("prd-agent", UpdateWorkspaceInternalAgentDefinitionCommand {
+        enabled: Some(true), ..Default::default()
+    }).unwrap();
+    assert!(agents.resolve_platform_agent_runtime(Some("prd-agent")).is_ok());
+    assert!(agents.resolve_workspace_agent_runtime("TRON_CORE", Some("prd-agent")).is_ok());
 }

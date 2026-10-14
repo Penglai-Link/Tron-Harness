@@ -1,6 +1,8 @@
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
+  agentActivation: { active: "Active", disabled: "Disabled" },
+  awakening: {"queuePlaceholder": "Enter to queue · Shift+Enter for newline", "steerPlaceholder": "Enter to queue · ⌘/Ctrl+Enter to steer · Shift+Enter for newline", "startTimeout": "Dude has not started responding yet. Retry, set up manually, or skip for now.", "startFailed": "Awakening could not start. Retry or set up manually.", "skip": "SKIP", "title": "A new connection", "subtitle": "Let’s get to know each other.", "later": "Continue later", "manual": "Set up manually", "backToChat": "Back to conversation", "enter": "Enter Tron", "connecting": "Waking your Dude…", "continue": "Continue awakening"},
   "Automations": "Automations",
   "Refresh": "Refresh",
   "New": "New",
@@ -56,6 +58,7 @@ export const pages = {
   "Automation lifecycle update failed": "Automation lifecycle update failed",
   "Automation list refreshed": "Automation list refreshed",
   "dude": {
+"soulSection":"Soul","soulBody":"Soul","soulEdit":"Edit","soulPreview":"Preview","soulHelp":"Personality, expression, preferences and lasting principles.","soulSaved":"Soul saved","soulStates":{"Uninitialized": "Not established", "AwaitingUser": "Awaiting your answer", "Ready": "Ready"},
   "selectDude": "Select Dude",
   "activity": "Activity",
   "viewResult": "View result",
@@ -1878,8 +1881,8 @@ export const pages = {
         runningPrefix: "Running",
         completed: "{{name}}",
         running: "{{name}}",
-        domainExpanded: "Expand {{name}}",
-        domainExpanding: "Expanding {{name}}",
+        domainExpanded: "Expand {{name}} tools",
+        domainExpanding: "Expanding {{name}} tools",
         badgeDone: "done",
         badgeRunning: "running",
         parameters: "Parameters",
@@ -2122,6 +2125,22 @@ export const pages = {
           },
         },
         systemPromptName: "System Prompt",
+        baseInstructionsName: "Base Instructions",
+        applicationContextName: "Application Context",
+        runtimeIdentityName: "Runtime Identity",
+        skillsCatalogName: "Skills Catalog",
+        a2uiGuidanceName: "A2UI Guidance",
+        knowledgeBaseName: "Knowledge Base Context",
+        agentDirectoryName: "Agent Directory",
+        dudeOnboardingName: "Dude Onboarding",
+        dudeEnvironmentName: "Dude Environment",
+        dudeWakeupName: "Dude Wakeup Context",
+        mergedSourcesNote: "Sources merged in order; usage is the group total",
+        contributorEmpty: "No messages from this source were retained in this request.",
+        reductionStat: "Before reduction: {{original}}; retained: {{final}} tokens.",
+        outcomes: { Reduced: "Reduced", NoGain: "No reduction gain", Omitted: "Omitted", Failed: "Failed" },
+        protocolName: "Tools and Request Protocol",
+        protocolNote: "Separate from message assembly order; includes tool schemas and protocol costs for model request options.",
         toolSchemaName: "Tool Schema",
         toolsEmpty: "No tool definitions.",
         toolParameter: "Parameter",
@@ -2176,9 +2195,9 @@ export const pages = {
         effectiveInputFormula:
           "Effective input budget = model context window − output reserve",
         historyFormula:
-          "Current session history budget =\neffective input budget\n− {{systemPrompt}}\n− {{checkpoint}}\n− {{familyContext}}\n− {{workingState}}\n− {{toolSchema}}",
+          "Current session history budget =\neffective input budget\n− tools and request protocol\n− other context blocks in this request",
         budgetFormulaNote:
-          "Fixed input blocks are deducted first; the remainder retains recent conversation history.",
+          "Context blocks follow this request's assembly report order. The remaining budget retains recent conversation history.",
         checkpointStat: "1 checkpoint",
         none: "none",
         workingStateStat: "{{goals}} goal · {{todos}} todos",
@@ -2485,6 +2504,9 @@ export const pages = {
       code: "Code",
       model: "Model",
       modelPlaceholder: "Select or enter a model ID",
+      customModelHelp: "No matching model. You can use the entered model ID.",
+      fastMode: "Fast mode",
+      fastModeHelp: "Use Codex’s faster service tier with the selected model and reasoning effort. Requires a supported model and account, and consumes more usage.",
       openCodeModelHelp: "OpenCode requires a provider/model ID.",
       codeHelp: "Use 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter.",
       help: "Uses the base Agent’s existing sign-in and subscription. Tasks dispatched to this Agent use the selected model.",
@@ -2708,6 +2730,10 @@ export const pages = {
         codeInvalid:
           "Use 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter.",
         rolePrompt: "Instructions",
+        shortDescription: "Short description",
+        descriptionHelp: "Used in multi-agent collaboration to identify responsibilities, select agents and delegate tasks. Summarize the main responsibility and suitable tasks in up to 200 characters. Put detailed behavior rules in Instructions.",
+        descriptionHelpAria: "How the short description is used",
+        descriptionPlaceholder: "For example: Read-only codebase exploration, architecture analysis and locating implementations or issues.",
         roleHelp:
           "Sets this agent's role and instructions. Changes apply to its next run.",
         roleHelpAria: "Role prompt help",
@@ -3001,7 +3027,14 @@ export const pages = {
         unsupported: "Notifications are unavailable in this browser or context. Use a secure connection and check browser support.",
         requestFailed: "Could not request browser notification permission. Check browser settings and try again.",
       },
+      test: {
+        title: "Tron test notification",
+        body: "This is a test notification from Tron.",
+        failed: "Could not send the test notification. Check browser permissions and system notification settings.",
+        requireEnabled: "Authorize and enable browser notifications first.",
+      },
       actions: {
+        test: "Test notification",
         authorize: "Authorize and enable",
         enable: "Enable browser notifications",
         disable: "Turn off browser notifications",

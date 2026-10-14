@@ -146,3 +146,30 @@ pub struct DudeWorkChange {
     pub resolution_evidence: Vec<String>,
     pub notification: Option<PlatformNotification>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SoulState { Uninitialized, AwaitingUser, Ready }
+
+/// One platform-owned identity per Dude. No account or workspace copies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DudeSoul {
+    pub dude_code: String,
+    pub name: String,
+    pub name_confirmed: bool,
+    pub markdown: String,
+    pub state: SoulState,
+    pub session_code: Option<String>,
+    pub user_code: Option<String>,
+    pub pending_interaction_id: Option<String>,
+    pub awakening_started: bool,
+    pub awakening_deferred: bool,
+}
+impl DudeSoul {
+    pub fn new(code: &str, name: &str) -> Self {
+        Self { dude_code: code.into(), name: name.into(), name_confirmed: true,
+            markdown: String::new(), state: SoulState::Uninitialized, session_code: None,
+            user_code: None, pending_interaction_id: None, awakening_started: false,
+            awakening_deferred: false }
+    }
+}

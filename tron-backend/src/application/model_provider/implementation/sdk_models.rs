@@ -224,15 +224,31 @@ impl sdk::ModelTransport for SnapshotTransport {
         body: &Value,
         sink: sdk::EventSink<'_>,
     ) -> Result<(), fw::ModelError> {
+        let metadata = std::sync::Mutex::new(super::snapshots::RuntimeSnapshotMetadata::default());
         let result = self
             .inner
             .events(
                 path,
                 body,
                 Arc::new(|event| {
-                    self.providers
-                        .record_runtime_snapshot(self.run.as_deref(), "", &self.config, &event)
-                        .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
+                    {
+                        let mut saved = metadata
+                            .lock()
+                            .map_err(|_| fw::ModelError::Fatal("snapshot lock poisoned".into()))?;
+                        let mut next = saved.clone();
+                        next.merge(&event);
+                        if next != *saved {
+                            self.providers
+                                .record_runtime_snapshot(
+                                    self.run.as_deref(),
+                                    "",
+                                    &self.config,
+                                    &next.value(),
+                                )
+                                .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
+                            *saved = next;
+                        }
+                    }
                     sink(event)
                 }),
             )

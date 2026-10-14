@@ -1,3 +1,7 @@
+import { AgentActivationSwitch } from "./AgentActivationSwitch";
+import { AgentAvatar } from "./AgentAvatarPicker";
+import { notifyInternalAgentRegistryChanged } from "../model";
+import { AgentAvailabilityAvatar } from "./AgentAvailabilityAvatar";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -10,10 +14,6 @@ import {
   updatePlatformSystemAgent,
   deletePlatformSystemAgent,
 } from "@/domain/agent/api";
-import {
-  AgentPolicySwitch,
-  AgentStatusBadge,
-} from "@/domain/agent/components";
 import {
   listPlatformSystemAgentsMock,
   rescanPlatformSystemAgentsMock,
@@ -40,10 +40,10 @@ const brandImages: Record<string, string> = {
   opencode: "/agent-brands/opencode-pixel.png",
 };
 
-function SystemAgentAvatar({ code, name }: { code: string; name: string }) {
+function SystemAgentAvatar({ code, name, avatarId }: { code: string; name: string; avatarId?: string | null }) {
   const image = brandImages[code];
   return <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-[var(--color-outline-variant)]">
-    {image ? <img src={image} alt={name} className="size-full object-contain [image-rendering:pixelated]" /> : <span className="text-xl font-semibold text-black" aria-hidden="true">{name.slice(0, 2)}</span>}
+    {avatarId ? <AgentAvatar avatarId={avatarId} alt={name} className="size-full" /> : image ? <img src={image} alt={name} className="size-full object-contain [image-rendering:pixelated]" /> : <span className="text-xl font-semibold text-black" aria-hidden="true">{name.slice(0, 2)}</span>}
   </span>;
 }
 
@@ -120,6 +120,7 @@ export function PlatformSystemAgentsSection() {
           : await enablePlatformSystemAgent(record.agentCode))
         : setPlatformSystemAgentEnabledMock(record.agentCode, !record.enabled);
       await refreshSystemAgents();
+      notifyInternalAgentRegistryChanged();
       toast.success(pageT(
         updated.enabled ? "messages.enabled" : "messages.disabled",
         updated.enabled ? "{{name}} enabled" : "{{name}} disabled",
@@ -157,11 +158,11 @@ export function PlatformSystemAgentsSection() {
     <SurfaceCard className="min-h-40 p-4">
       {systemAgents.length ? <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
         {systemAgents.map((agent) => <Button key={agent.agentCode} variant="ghost" aria-label={pageT("table.manageLabel", "Manage {{name}}", { name: agent.name })}
-          className="group h-auto min-w-0 flex-col gap-2 rounded-xl px-2 py-4 text-center whitespace-normal" onClick={() => setSelectedCode(agent.agentCode)}>
-          <span className="transition-transform duration-150 motion-reduce:transition-none group-hover:scale-105"><SystemAgentAvatar code={agent.baseAgentCode || agent.agentCode} name={agent.name} /></span>
+          className="group h-auto min-w-0 justify-start flex-col gap-2 rounded-xl px-2 py-4 text-center whitespace-normal" onClick={() => setSelectedCode(agent.agentCode)}>
+          <span className="transition-transform duration-150 motion-reduce:transition-none group-hover:scale-105"><AgentAvailabilityAvatar enabled={agent.enabled}><SystemAgentAvatar code={agent.baseAgentCode || agent.agentCode} name={agent.name} avatarId={agent.avatarId} /></AgentAvailabilityAvatar></span>
           <span className="block w-full truncate text-sm font-medium">{agent.name}</span>
           <span className="block w-full truncate font-mono text-xs text-[var(--color-on-surface-variant)]">{agent.agentCode}</span>
-          {agent.modelId ? <span className="block w-full truncate text-xs text-[var(--color-on-surface-variant)]" title={agent.modelId}>{agent.modelId}</span> : null}
+          <span className="block h-4 w-full truncate text-xs text-[var(--color-on-surface-variant)]" title={agent.modelId ?? undefined}>{agent.modelId ?? ""}</span>
         </Button>)}
       </div> : <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("table.empty", "No system agents available.")}</p>}
     </SurfaceCard>
@@ -171,27 +172,28 @@ export function PlatformSystemAgentsSection() {
     }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg" closeLabel={t("common:actions.close")} showCloseButton={rowBusyCode !== selectedAgent.agentCode}>
         <DialogHeader>
-          <DialogTitle>{selectedAgent.name}</DialogTitle>
+          <div className="flex items-center justify-between gap-4 pr-8">
+            <DialogTitle>{selectedAgent.name}</DialogTitle>
+            <AgentActivationSwitch
+              checked={selectedAgent.enabled}
+              disabled={!selectedAgent.available || Boolean(rowBusyCode) || scanning}
+              onChange={() => void handleToggleAgent(selectedAgent)}
+            />
+          </div>
           <DialogDescription>{selectedAgent.agentCode}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-4">
-          <SystemAgentAvatar code={selectedAgent.baseAgentCode || selectedAgent.agentCode} name={selectedAgent.name} />
+          <SystemAgentAvatar code={selectedAgent.baseAgentCode || selectedAgent.agentCode} name={selectedAgent.name} avatarId={selectedAgent.avatarId} />
           <p className="text-sm text-[var(--color-on-surface-variant)]">{translateSystemAgentDescription(t, selectedAgent)}</p>
         </div>
         {selectedAgent.modelId ? <Field label={pageT("profile.model", "Model")}><p className="break-all text-sm">{selectedAgent.modelId}</p></Field> : null}
-        {selectedAgent.baseAgentCode ? <div className="flex justify-end gap-2">
+        {<div className="flex justify-end gap-2">
           <Button variant="outline" disabled={Boolean(rowBusyCode)} onClick={() => { setSelectedCode(null); setProfileDialog(selectedAgent); }}>{pageT("profile.edit", "Edit")}</Button>
-          <Button variant="outline" disabled={Boolean(rowBusyCode)} onClick={() => setConfirmDelete(true)}>{pageT("profile.delete", "Delete")}</Button>
-        </div> : null}
+          {selectedAgent.baseAgentCode && <Button variant="outline" disabled={Boolean(rowBusyCode)} onClick={() => setConfirmDelete(true)}>{pageT("profile.delete", "Delete")}</Button>}
+        </div>}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={pageT("table.columns.status", "Status")}><AgentStatusBadge status={selectedAgent.status} /></Field>
           <Field label={pageT("table.columns.source", "Source")}><p className="text-sm">{translateSystemAgentSource(t, selectedAgent.source)}</p></Field>
           <Field label={pageT("table.columns.lastScanned", "Last Scanned")}><p className="text-sm">{selectedAgent.lastScannedAt ? formatDateTime(selectedAgent.lastScannedAt) : pageT("table.notScanned", "Not scanned")}</p></Field>
-          <Field label={pageT("table.columns.status", "Status")}>
-            <AgentPolicySwitch checked={selectedAgent.enabled} disabled={!selectedAgent.available || Boolean(rowBusyCode) || scanning} loading={rowBusyCode === selectedAgent.agentCode}
-              label={!selectedAgent.available ? pageT("table.unavailableLabel", "{{name}} unavailable", { name: selectedAgent.name }) : selectedAgent.enabled ? pageT("table.disableLabel", "Disable {{name}}", { name: selectedAgent.name }) : pageT("table.enableLabel", "Enable {{name}}", { name: selectedAgent.name })}
-              onToggle={() => void handleToggleAgent(selectedAgent)} />
-          </Field>
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] pt-4">
           <span className="text-sm font-medium">{t("pages:platformData.agentAuthorization")}</span>
@@ -199,15 +201,22 @@ export function PlatformSystemAgentsSection() {
         </div>
       </DialogContent>
     </Dialog> : null}
-    {profileDialog ? <SystemAgentProfileDialog agents={systemAgents} record={profileDialog === "new" ? undefined : profileDialog} onClose={() => setProfileDialog(null)} onSave={async (payload) => {
+    {profileDialog ? <SystemAgentProfileDialog agents={systemAgents} record={profileDialog === "new" ? undefined : profileDialog} onClose={() => setProfileDialog(null)} onSave={async ({ enabled, ...payload }) => {
       if (profileDialog === "new") {
         if (dataSource === "api") await createPlatformSystemAgent(payload);
         else createPlatformSystemAgentMock(payload);
       } else {
-        if (dataSource === "api") await updatePlatformSystemAgent(payload.agentCode, { name: payload.name, modelId: payload.modelId });
+        if (dataSource === "api") await updatePlatformSystemAgent(payload.agentCode, { name: payload.name, description: payload.description, modelId: payload.modelId, reasoningEffort: payload.reasoningEffort, avatarId: payload.avatarId, fastMode: payload.fastMode });
         else updatePlatformSystemAgentMock(payload.agentCode, payload);
       }
+      if (profileDialog === "new" ? !enabled : enabled !== profileDialog.enabled) {
+        if (dataSource === "api") {
+          if (enabled) await enablePlatformSystemAgent(payload.agentCode);
+          else await disablePlatformSystemAgent(payload.agentCode);
+        } else setPlatformSystemAgentEnabledMock(payload.agentCode, enabled);
+      }
       await refreshSystemAgents();
+      notifyInternalAgentRegistryChanged();
     }} /> : null}
     {confirmDelete && selectedAgent ? <Dialog open onOpenChange={(open) => { if (!rowBusyCode) setConfirmDelete(open); }}>
       <DialogContent showCloseButton={!rowBusyCode}>

@@ -427,6 +427,7 @@ mod tests {
 
     fn context(max_retries: u32) -> AgentRunContext {
         AgentRunContext {
+            system_agent_fast_mode: false,
             collaboration_owner: None,
             agent_code: None,
             auto_model_route: None,

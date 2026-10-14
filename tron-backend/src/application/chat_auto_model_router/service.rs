@@ -2,10 +2,7 @@ use crate::{
     application::{model::ModelService, model_provider::ModelProviderService},
     domain::{
         agent::{AgentModelConfig, AutoModelCandidate, AutoModelRouteContext},
-        model::ModelType,
-        model_provider::{
-            ModelProviderCode, ModelSelection, ModelSelectionKind, ProviderCatalogModelStatus,
-        },
+        model_provider::ModelSelection,
         reasoning::ReasoningEffort,
     },
 };
@@ -211,65 +208,30 @@ impl ChatAutoModelRouter {
         let mut candidates = Vec::new();
         // An unavailable provider is represented by no enabled options.
         // A failed catalog read must retain its cause, not masquerade as revocation.
-        for option in self
+        for (code, selection, config) in self
             .providers
-            .list_text_select_options(workspace_code)
+            .auto_chat_candidates(allowed, reasoning_effort)
             .map_err(|error| format!("Auto provider catalog lookup failed: {error}"))?
         {
-            if option.selection.kind != ModelSelectionKind::Fixed
-                || option.selection.provider_code != Some(ModelProviderCode::PersonAi)
-                || !option.enabled
-                || option.remote_status != ProviderCatalogModelStatus::Available
-                || (!allowed.is_empty() && !allowed.contains(&option.option_code))
-                || option.context_window_tokens.is_none_or(|value| value == 0)
-            {
-                continue;
-            }
-            if let Some(mut config) = self
-                .providers
-                .resolve_chat_selection(workspace_code, Some(&option.selection), None, None)
-                .map_err(|error| error.to_string())?
-            {
-                config.reasoning_effort = reasoning_effort;
-                let prefers_responses =
-                    config.protocol == crate::domain::agent::AgentModelProtocol::Responses;
-                candidates.push(Candidate {
-                    code: option.option_code,
-                    key: candidate_key(&option.selection),
-                    selection: option.selection,
-                    config,
-                    provider: true,
-                    prefers_responses,
-                });
-            }
+            let prefers_responses =
+                config.protocol == crate::domain::agent::AgentModelProtocol::Responses;
+            candidates.push(Candidate {
+                code,
+                key: candidate_key(&selection),
+                selection,
+                config,
+                provider: true,
+                prefers_responses,
+            });
         }
-        for option in self
+        for config in self
             .models
-            .list_workspace_select_options(workspace_code)
+            .auto_chat_candidates(workspace_code, allowed, reasoning_effort)
             .map_err(|error| error.to_string())?
         {
-            if option.model_type != ModelType::Text
-                || !option.enabled
-                || (!allowed.is_empty() && !allowed.contains(&option.option_code))
-                || option.context_window_tokens.is_none_or(|value| value == 0)
-            {
-                continue;
-            }
-            let Some(mut config) = self
-                .models
-                .text_agent_model_config_with_reasoning_effort(
-                    workspace_code,
-                    Some(&option.model_code),
-                    None,
-                )
-                .map_err(|error| error.to_string())?
-            else {
-                continue;
-            };
-            config.reasoning_effort = reasoning_effort;
-            let selection = ModelSelection::fixed(option.model_code);
+            let selection = ModelSelection::fixed(config.model_code.clone());
             candidates.push(Candidate {
-                code: option.option_code,
+                code: config.model_code.clone(),
                 key: candidate_key(&selection),
                 selection,
                 config,

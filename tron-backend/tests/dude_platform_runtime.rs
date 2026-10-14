@@ -165,6 +165,7 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
     state
         .agent_management
         .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
+            description: String::new(),
             agent_code: "acceptance-dude".into(),
             name: "Acceptance Dude".into(),
             role_prompt: "Run a focused acceptance task.".into(),

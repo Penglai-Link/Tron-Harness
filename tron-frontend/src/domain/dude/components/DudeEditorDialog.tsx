@@ -1,4 +1,7 @@
-import { useId, useRef, useState } from "react";
+import { useToast } from "@/components/ui/toast";
+import { SoulFields } from "./SoulFields";
+import { getDudeSoul, saveDudeSoul, type SoulState } from "../api/dudeApi";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Field, TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
@@ -16,6 +19,7 @@ import { AgentAvatarPicker } from "@/domain/agent/components/AgentAvatarPicker";
 import { AgentLoopField } from "@/domain/agent/components/AgentLoopField";
 import { AgentCandidateModelsField } from "@/domain/agent/components/AgentCandidateModelsField";
 import { AgentRolePromptField } from "@/domain/agent/components/AgentRolePromptField";
+import { AgentDescriptionField } from "@/domain/agent/components/AgentDescriptionField";
 import {
   DudeResourceFields,
   type DudeResourceFieldsHandle,
@@ -37,11 +41,15 @@ export function DudeEditorDialog({
   onSaved: () => Promise<unknown>;
 }) {
   const { t } = useTranslation("pages");
+  const toast = useToast();
+  const soulBaseline = useRef<{ name: string; markdown: string } | null>(null);
+  const reportError = (reason: unknown) => toast.error(reason instanceof Error ? reason.message : String(reason));
   const labelId = useId();
   const [section, setSection] = useState("profile");
   const [draft, setDraft] = useState<DudeInput>(() => ({
     dudeCode: dude?.dudeCode ?? "",
     name: dude?.name ?? "",
+    description: dude?.description ?? "",
     rolePrompt: dude?.rolePrompt ?? "",
     loopCode: dude?.loopCode ?? "",
     avatarId: dude?.avatarId ?? "robot",
@@ -51,37 +59,71 @@ export function DudeEditorDialog({
     memoryAutoApprove: dude?.memoryAutoApprove ?? false,
     kind: dude?.kind === "Memory" ? "Memory" : "Custom",
   }));
+  const [soulBody, setSoulBody] = useState("");
+  const [soulState, setSoulState] = useState<SoulState>("Uninitialized");
+  const [soulLoaded, setSoulLoaded] = useState(!dude);
+  useEffect(() => {
+    if (!dude) return;
+    const controller = new AbortController();
+    getDudeSoul(dude.dudeCode, controller.signal)
+      .then((soul) => {
+        soulBaseline.current = { name: soul.name, markdown: soul.markdown };
+        setSoulBody(soul.markdown);
+        setSoulState(soul.state);
+        field("name", soul.name);
+        setSoulLoaded(true);
+      })
+      .catch((reason) => {
+        if (!controller.signal.aborted) reportError(reason);
+      });
+    return () => controller.abort();
+  }, [dude?.dudeCode]);
   const createdCode = useRef<string | null>(null);
   const resources = useRef<DudeResourceFieldsHandle>(null);
   const advancedResources = useRef<DudeResourceFieldsHandle>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const field = <K extends keyof DudeInput>(key: K, value: DudeInput[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
   const valid =
     /^[a-z][a-z0-9_-]{0,63}$/.test(draft.dudeCode) &&
     Boolean(draft.name.trim()) &&
+    [...draft.name].length <= 100 &&
     Boolean(draft.loopCode) &&
     Boolean(draft.rolePrompt.trim()) &&
     draft.heartbeatMinutes >= 1;
   async function save() {
-    if (!valid || saving) return;
+    if (
+      !valid ||
+      saving ||
+      !soulLoaded ||
+      new TextEncoder().encode(soulBody).length > 16384
+    )
+      return;
     setSaving(true);
-    setError(null);
     try {
       if (dude || createdCode.current) {
-        const { dudeCode: _code, kind: _kind, ...body } = draft;
-        await updateDude(dude?.dudeCode ?? createdCode.current!, body);
+        const { dudeCode: _code, kind: _kind, name: _name, ...body } = draft;
+        const changes = dude
+          ? Object.fromEntries(Object.entries(body).filter(([key, value]) =>
+            JSON.stringify(value) !== JSON.stringify(dude[key as keyof Dude])))
+          : body;
+        if (Object.keys(changes).length) await updateDude(dude?.dudeCode ?? createdCode.current!, changes);
       } else {
         const created = await createDude(draft);
         createdCode.current = created.dudeCode;
+      }
+      if (!soulBaseline.current || soulBaseline.current.name !== draft.name || soulBaseline.current.markdown !== soulBody) {
+        const saved = await saveDudeSoul(dude?.dudeCode ?? createdCode.current!, {
+          name: draft.name, markdown: soulBody,
+        });
+        soulBaseline.current = { name: saved.name, markdown: saved.markdown };
       }
       await resources.current?.save();
       await advancedResources.current?.save();
       await onSaved();
       onClose();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      reportError(reason);
     } finally {
       setSaving(false);
     }
@@ -104,7 +146,9 @@ export function DudeEditorDialog({
             <DialogTitle>{t(dude ? "dude.edit" : "dude.create")}</DialogTitle>
             {dude ? (
               <div className="flex items-center gap-2 pr-8 text-sm">
-                <span>{t(draft.enabled ? "dude.activated" : "dude.paused")}</span>
+                <span>
+                  {t(draft.enabled ? "dude.activated" : "dude.paused")}
+                </span>
                 <Switch
                   aria-label={t(draft.enabled ? "dude.pause" : "dude.resume")}
                   checked={draft.enabled}
@@ -127,17 +171,16 @@ export function DudeEditorDialog({
             variant="line"
             className="w-full justify-start border-b border-[var(--color-outline-variant)]"
           >
-            {["profile", "background", ...(dude ? ["resources", "advanced"] : [])].map(
-              (value) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="flex-none px-3"
-                >
-                  {t(`dude.${value}Section`)}
-                </TabsTrigger>
-              )
-            )}
+            {[
+              "profile",
+              "soul",
+              "background",
+              ...(dude ? ["resources", "advanced"] : []),
+            ].map((value) => (
+              <TabsTrigger key={value} value={value} className="flex-none px-3">
+                {t(`dude.${value}Section`)}
+              </TabsTrigger>
+            ))}
           </TabsList>
           <form
             className="flex min-h-0 flex-1 flex-col gap-4"
@@ -173,15 +216,7 @@ export function DudeEditorDialog({
                     onChange={(event) => field("dudeCode", event.target.value)}
                   />
                 </Field>
-                <Field label={t("dude.name")} required>
-                  <TextInput
-                    required
-                    aria-label={t("dude.name")}
-                    disabled={saving}
-                    value={draft.name}
-                    onChange={(event) => field("name", event.target.value)}
-                  />
-                </Field>
+                <AgentDescriptionField value={draft.description ?? ""} disabled={saving} onChange={(value) => field("description", value)} />
                 <AgentLoopField
                   value={draft.loopCode}
                   defaultKind={!dude ? "React" : undefined}
@@ -202,8 +237,27 @@ export function DudeEditorDialog({
                   onChange={(value) => field("rolePrompt", value)}
                 />
               </TabsContent>
+              <TabsContent value="soul" keepMounted className="space-y-4 py-2">
+                <SoulFields
+                  name={draft.name}
+                  markdown={soulBody}
+                  state={soulState}
+                  disabled={saving || !soulLoaded}
+                  onName={(v) => {
+                    field("name", v);
+                  }}
+                  onMarkdown={(v) => {
+                    setSoulBody(v);
+                  }}
+                  onSave={() => void save()}
+                />
+              </TabsContent>
               {dude ? (
-                <TabsContent value="resources" keepMounted className="space-y-4 py-2">
+                <TabsContent
+                  value="resources"
+                  keepMounted
+                  className="space-y-4 py-2"
+                >
                   <DudeResourceFields
                     ref={resources}
                     dudeCode={dude.dudeCode}
@@ -213,7 +267,11 @@ export function DudeEditorDialog({
                 </TabsContent>
               ) : null}
               {dude ? (
-                <TabsContent value="advanced" keepMounted className="space-y-4 py-2">
+                <TabsContent
+                  value="advanced"
+                  keepMounted
+                  className="space-y-4 py-2"
+                >
                   <DudeResourceFields
                     ref={advancedResources}
                     dudeCode={dude.dudeCode}
@@ -277,11 +335,6 @@ export function DudeEditorDialog({
                 ) : null}
               </TabsContent>
             </div>
-            {error ? (
-              <p role="alert" className="text-sm text-[var(--color-error)]">
-                {error}
-              </p>
-            ) : null}
             <DialogFooter className="shrink-0 border-t border-[var(--color-outline-variant)] pt-4">
               <Button
                 type="button"

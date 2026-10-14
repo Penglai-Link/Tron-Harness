@@ -55,6 +55,9 @@ fn seed_external(f: &Fixture) -> std::path::PathBuf {
     SqliteAgentManagementRepository::connect(&f.state.config.database_url)
         .unwrap()
         .upsert_system_agent(&SystemAgentRegistryEntry {
+            fast_mode: false,
+            reasoning_effort: None,
+            avatar_id: None,
             agent_code: "codex".into(),
             base_agent_code: None,
             model_id: None,

@@ -4,6 +4,10 @@ use super::*;
 use crate::domain::agent::{TokenEstimateSnapshot, TokenUsageAuditSnapshot};
 
 impl ReactAgent {
+    pub(crate) fn framework_dudes(&self)->Option<crate::application::dude::DudeService> {
+        self.framework_host.as_ref().and_then(|h|h.dudes())
+    }
+
     pub(crate) fn framework_knowledge_bases(
         &self,
     ) -> Option<crate::application::knowledge_base::KnowledgeBaseService> {
@@ -30,13 +34,13 @@ impl ReactAgent {
         context: &AgentRunContext,
         prepared: &PreparedModelContext,
         report: &eliteforge_agent_core::ContextAssemblyReport,
-    ) -> Result<(), AgentError> {
+    ) -> Result<Option<u64>, AgentError> {
         if let Some(memory) = &self.short_term_memory {
-            memory
+            return memory
                 .record_framework_context(context, prepared, report)
-                .map_err(short_term_memory_error)?;
+                .map_err(short_term_memory_error);
         }
-        Ok(())
+        Ok(None)
     }
     pub(crate) fn framework_context_config(
         &self,
@@ -60,6 +64,7 @@ impl ReactAgent {
         context: &mut AgentRunContext,
         turn_state: &mut TurnStateAdapter,
     ) -> Result<PreparedModelContext, AgentError> {
+        if context.is_owning_dude() { context.model.responses_stateful_enabled = false; }
         if let Some(inspector) = self.directory_inspector.clone() {
             if crate::application::agent::refresh_execution_context(context, inspector).await? {
                 // Stateful providers must replay the updated prefix, not retain stale cwd facts.

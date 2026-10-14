@@ -1,3 +1,4 @@
+import type { ReasoningEffort } from "@/domain/model/model/ModelRegistryModel";
 export type AgentStatus = "Enabled" | "Disabled" | "Unavailable";
 
 export type ToolAssignmentMode = "all_platform_tools" | "selected_tools" | "all_read_only_tools";
@@ -16,6 +17,7 @@ export type McpAccessMode =
 export const PLATFORM_INTERNAL_AGENT_SCOPE = "$platform";
 
 export interface SystemAgentModelRecord {
+  supportedReasoningEfforts?: ReasoningEffort[];
   modelId: string;
   displayName: string;
   contextWindowTokens?: number | null;
@@ -25,6 +27,9 @@ interface SystemAgentBaseRecord {
   agentCode: string;
   baseAgentCode?: string | null;
   modelId?: string | null;
+  fastMode?: boolean;
+  reasoningEffort?: ReasoningEffort | null;
+  avatarId?: string | null;
   name: string;
   description: string;
   source: string;
@@ -40,8 +45,12 @@ export interface PlatformSystemAgentRecord extends SystemAgentBaseRecord {}
 export interface SystemAgentProfilePayload {
   agentCode: string;
   name: string;
+  description?: string;
   baseAgentCode: string;
   modelId: string;
+  fastMode?: boolean;
+  reasoningEffort?: ReasoningEffort | null;
+  avatarId?: string | null;
 }
 
 export interface PlatformSystemAgentRescanResult {
@@ -79,6 +88,7 @@ export interface PlatformToolRecord {
 }
 
 export interface WorkspaceInternalAgentRecord {
+  enabled?: boolean;
   agentCode: string;
   name: string;
   description: string;
@@ -104,6 +114,7 @@ export interface WorkspaceInternalAgentRecord {
 export interface CreateInternalAgentPayload {
   agentCode: string;
   name: string;
+  description?: string;
   rolePrompt: string;
   loopCode?: string | null;
   avatarId?: string;
@@ -112,7 +123,9 @@ export interface CreateInternalAgentPayload {
 }
 
 export interface UpdateInternalAgentDefinitionPayload {
+  enabled?: boolean;
   name?: string;
+  description?: string;
   rolePrompt?: string;
   loopCode?: string | null;
   avatarId?: string;

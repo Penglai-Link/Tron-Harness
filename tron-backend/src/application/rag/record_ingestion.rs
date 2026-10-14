@@ -266,6 +266,11 @@ where
                 }
             })
             .collect();
+        let model_workspace = if request.corpus_id == "memory-card" {
+            super::MEMORY_MODEL_WORKSPACE
+        } else {
+            request.workspace_code.as_str()
+        };
         {
             let mut task = checkpoint
                 .task
@@ -276,11 +281,11 @@ where
                     saved.vectors.fingerprint = self
                         .runtime
                         .embedding_fingerprint(
-                            &request.workspace_code,
+                            model_workspace,
                             settings.embedding_model_code.as_deref(),
                             dimension,
                         )
-                        .map_err(|_| RagError::EmbeddingFailed)?;
+                        .map_err(RagError::EmbeddingFailure)?;
                 }
             }
             self.repository.save_record_task(&task)?;
@@ -295,7 +300,7 @@ where
             .unwrap_or_default();
         let prepared = self
             .prepare_index(
-                &request.workspace_code,
+                model_workspace,
                 settings,
                 units,
                 completed,
@@ -305,9 +310,9 @@ where
             .await
             .map_err(|error| {
                 if let Ok(mut task) = checkpoint.task.lock() {
-                    task.error = Some(error);
+                    task.error = Some(error.clone());
                 }
-                RagError::EmbeddingFailed
+                RagError::EmbeddingFailure(error)
             })?;
         metadata["embeddingModelCode"] = json!(prepared.vectors.model_code);
         metadata["embeddingProviderModel"] = json!(prepared.vectors.provider_model);

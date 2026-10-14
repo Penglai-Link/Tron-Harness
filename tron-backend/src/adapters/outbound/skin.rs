@@ -273,8 +273,8 @@ impl SkinStore for FileSkinStore {
         if let Some(skin) = id.and_then(|id| self.read_skin(&id).ok()) {
             return Ok(skin);
         }
-        atomic_write(&self.root.join("active.json"), br#"{"id":"light"}"#)?;
-        self.read_skin("light")
+        atomic_write(&self.root.join("active.json"), br#"{"id":"matrix-dark"}"#)?;
+        self.read_skin("matrix-dark")
     }
 
     fn activate(&self, id: &str) -> Result<Skin, SkinError> {

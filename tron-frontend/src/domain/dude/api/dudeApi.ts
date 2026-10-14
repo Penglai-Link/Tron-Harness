@@ -3,13 +3,14 @@ import { requestApi } from "@/shared/api/httpClient";
 import { normalizeChatSession, type ChatSession } from "@tron/chat-core";
 
 export interface Dude {
+  description?: string;
   dudeCode: string; name: string; rolePrompt: string; loopCode: string | null;
   avatarId: string; candidateModelCodes: string[];
   enabled: boolean; heartbeatMinutes: number; memoryAutoApprove: boolean;
   kind: "Main" | "Memory" | "Custom"; isMain: boolean;
   createdAt: number; updatedAt: number;
 }
-export type DudeInput = Pick<Dude, "dudeCode" | "name" | "rolePrompt" | "loopCode" | "avatarId" | "candidateModelCodes" | "enabled" | "heartbeatMinutes" | "memoryAutoApprove"> & { kind?: "Custom" | "Memory" };
+export type DudeInput = Pick<Dude, "dudeCode" | "name" | "description" | "rolePrompt" | "loopCode" | "avatarId" | "candidateModelCodes" | "enabled" | "heartbeatMinutes" | "memoryAutoApprove"> & { kind?: "Custom" | "Memory" };
 export interface DudeSession extends ChatSession { purpose: string; ownerDudeCode: string; }
 interface DudeSessionResponse extends Omit<DudeSession, "createdAt" | "updatedAt"> { createdAt: number; updatedAt: number; }
 function normalizeDudeSession(value: DudeSessionResponse): DudeSession {
@@ -24,7 +25,7 @@ export interface DudeEvent { eventId: string; source: string; status: string; se
 export const dudeQueryKeys = { all: ["dudes"] as const, sessions: (code: string) => ["dude-sessions", code] as const, tasks: (code: string) => ["dude-tasks", code] as const };
 export const listDudes = (signal?: AbortSignal) => requestApi<Dude[]>("GET /api/v1/dudes", { signal });
 export const createDude = (body: DudeInput) => requestApi<Dude>("POST /api/v1/dudes", { body });
-export const updateDude = (dudeCode: string, body: Partial<Omit<DudeInput, "dudeCode">>) => requestApi<Dude>("PATCH /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode }, body });
+export const updateDude = (dudeCode: string, body: Partial<Omit<DudeInput, "dudeCode" | "name">>) => requestApi<Dude>("PATCH /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode }, body });
 export const deleteDude = (dudeCode: string) => requestApi<void>("DELETE /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode } });
 export const resolveMainDudeSession = () => requestApi<DudeSessionResponse>("POST /api/v1/dudes/main/session").then(normalizeDudeSession);
 export const resolveDudeSession = (dudeCode: string) => requestApi<DudeSessionResponse>("POST /api/v1/dudes/{dudeCode}/sessions", { pathParams: { dudeCode } }).then(normalizeDudeSession);
@@ -43,3 +44,12 @@ export const getDudeThreadHistory = (dudeCode: string, sessionCode: string, quer
 export const getDudeResources = (dudeCode: string, signal?: AbortSignal) => requestApi<WorkspaceInternalAgentRecordApi>("GET /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode }, signal }).then(record => normalizeWorkspaceInternalAgentRecord({ ...record, description: record.description ?? "", platformDefined: true }));
 export const sendDudeThreadMessage = (dudeCode: string, sessionCode: string, content: string) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/messages", { pathParams: { dudeCode, sessionCode }, body: { content } });
 export const answerDudeThreadInteraction = (dudeCode: string, sessionCode: string, interactionId: string, value: unknown) => requestApi<DudeThread>("POST /api/v1/dudes/{dudeCode}/threads/{sessionCode}/answer", { pathParams: { dudeCode, sessionCode }, body: { interactionId, value } });
+
+export type SoulState = "Uninitialized" | "AwaitingUser" | "Ready";
+export interface DudeSoul { dudeCode: string; name: string; markdown: string; nameConfirmed: boolean; state: SoulState }
+export interface AwakeningStatus { dudeCode: string; name: string; state: SoulState; started: boolean; deferred: boolean; sessionCode: string | null; canResume: boolean }
+export const getDudeSoul = (dudeCode: string, signal?: AbortSignal) => requestApi<DudeSoul>("GET /api/v1/dudes/{dudeCode}/soul", { pathParams: { dudeCode }, signal });
+export const saveDudeSoul = (dudeCode: string, body: { name: string; markdown: string }) => requestApi<DudeSoul>("PUT /api/v1/dudes/{dudeCode}/soul", { pathParams: { dudeCode }, body });
+export const getAwakening = (signal?: AbortSignal) => requestApi<AwakeningStatus>("GET /api/v1/dudes/main/awakening", { signal });
+export const beginAwakening = () => requestApi<AwakeningStatus & { playEntrance: boolean }>("POST /api/v1/dudes/main/awakening");
+export const deferAwakening = () => requestApi<AwakeningStatus>("POST /api/v1/dudes/main/awakening/defer");

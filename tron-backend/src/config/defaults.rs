@@ -39,7 +39,7 @@ impl Default for AppConfig {
             model_invocation: super::ModelInvocationConfig::default(),
             short_term_memory: ShortTermMemoryConfig::default(),
             event_bus: EventBusConfig::default(),
-            navigation: NavigationConfig { max_depth: 3 },
+            navigation: NavigationConfig { max_depth: 16 },
         }
     }
 }

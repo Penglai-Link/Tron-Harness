@@ -54,6 +54,11 @@ pub trait ModelClient: Send + Sync {
     fn bind_for_run(&self, _: &AgentModelConfig) -> Result<Option<Arc<dyn ModelClient>>, String> {
         Ok(None)
     }
+    /// Bind a catalog together so credential-backed adapters can share one
+    /// account scope across candidate and compaction models.
+    fn bind_models_for_run(&self, configs: &[AgentModelConfig]) -> Result<Vec<(Option<String>, Option<Arc<dyn ModelClient>>)>, String> {
+        configs.iter().map(|config| Ok((self.authorization_scope(config)?, self.bind_for_run(config)?))).collect()
+    }
     fn authorization_scope(&self, _: &AgentModelConfig) -> Result<Option<String>, String> {
         Ok(None)
     }

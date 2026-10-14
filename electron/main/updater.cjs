@@ -269,6 +269,7 @@ class Updater {
     this.openInstaller = options.openInstaller ?? (async () => "desktop-open-not-configured");
     this.exit = options.exit ?? (() => {});
     this.onStatus = options.onStatus ?? (() => {});
+    this.onLog = options.onLog ?? (() => {});
     this.status = { type: "idle" };
     this.update = null;
     this.downloadPromise = null;
@@ -282,6 +283,11 @@ class Updater {
   setStatus(status) {
     if (!UPDATE_TYPES.has(status.type)) {
       throw new Error(`unknown update status: ${status.type}`);
+    }
+    if (this.status.type !== status.type) {
+      this.onLog(status.type === "error" ? "ERROR" : "INFO",
+        status.type === "error" ? status.message : `Update status: ${status.type}`,
+        { operation: "desktop.update", state: status.type, platform: this.platformName, architecture: this.archName });
     }
     this.status = cloneStatus(status);
     this.onStatus(this.getStatus());
@@ -347,7 +353,13 @@ class Updater {
       const osType = currentOsType(this.platformName, this.archName);
       const packages = Array.isArray(latest?.packages) ? latest.packages : [];
       const packageInfo = packages.find((item) => Number(item?.os_type ?? item?.osType) === osType);
-      if (!packageInfo) throw new Error("no update package is available for the current platform");
+      if (!packageInfo) {
+        this.update = null;
+        this.onLog("INFO", "No update package published for the current platform", {
+          operation: "desktop.update.check", version, platform: this.platformName, architecture: this.archName
+        });
+        return this.setStatus({ type: "upToDate" });
+      }
 
       const versionId = String(latest?.id || "").trim();
       if (!versionId) throw new Error("version service returned no version id");

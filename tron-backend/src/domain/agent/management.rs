@@ -69,6 +69,7 @@ pub struct WorkspaceInternalAgentDefinition {
     pub workspace_code: String,
     pub agent_code: String,
     pub name: Option<String>,
+    pub description: Option<String>,
     pub role_prompt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loop_code: Option<String>,
@@ -85,8 +86,12 @@ pub struct WorkspaceInternalAgentDefinition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformInternalAgentConfig {
+    #[serde(default = "default_agent_enabled")]
+    pub enabled: bool,
     pub agent_code: String,
     pub name: String,
+    #[serde(default)]
+    pub description: String,
     pub role_prompt: String,
     #[serde(default)]
     pub loop_code: Option<String>,
@@ -130,6 +135,8 @@ pub struct WorkspaceInternalAgentMcpServerAssignment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InternalAgentToolPolicy {
+    #[serde(default = "default_agent_enabled")]
+    pub enabled: bool,
     pub workspace_code: String,
     pub agent_code: String,
     pub name: String,
@@ -188,9 +195,15 @@ pub enum SystemAgentStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemAgentRegistryEntry {
+    #[serde(default)]
+    pub fast_mode: bool,
     pub agent_code: String,
     pub base_agent_code: Option<String>,
     pub model_id: Option<String>,
+    #[serde(default)]
+    pub reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    #[serde(default)]
+    pub avatar_id: Option<String>,
     pub name: String,
     pub description: String,
     pub runtime_type: AgentRuntimeType,
@@ -206,9 +219,15 @@ pub struct SystemAgentRegistryEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManagedSystemAgentRecord {
+    #[serde(default)]
+    pub fast_mode: bool,
     pub agent_code: String,
     pub base_agent_code: Option<String>,
     pub model_id: Option<String>,
+    #[serde(default)]
+    pub reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    #[serde(default)]
+    pub avatar_id: Option<String>,
     pub name: String,
     pub description: String,
     pub agent_type: ManagedAgentType,
@@ -230,6 +249,8 @@ pub struct ManagedSystemAgentRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemAgentModelRecord {
+    #[serde(default)]
+    pub supported_reasoning_efforts: Vec<crate::domain::reasoning::ReasoningEffort>,
     pub model_id: String,
     pub display_name: String,
     #[serde(default)]
@@ -341,3 +362,5 @@ pub struct ToolCatalogRecord {
 fn default_avatar_id() -> String {
     "robot".into()
 }
+
+fn default_agent_enabled() -> bool { true }

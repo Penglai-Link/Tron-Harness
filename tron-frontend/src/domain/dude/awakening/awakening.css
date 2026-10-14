@@ -1,0 +1,373 @@
+.tron-login {
+  background: #020305 !important;
+  color: #eee !important;
+  justify-content: flex-start !important;
+  padding-left: clamp(24px, 8vw, 150px) !important;
+  isolation: isolate;
+}
+.tron-login-panel {
+  background: linear-gradient(135deg, #080c13db, #080b10a8) !important;
+  border: 1px solid #ffffff16 !important;
+  box-shadow: 0 30px 100px #0008 !important;
+  backdrop-filter: blur(22px);
+  --color-on-surface: #eef3f7;
+  --color-on-surface-variant: #a4aeba;
+  --color-surface: #10151e;
+  --color-background: #080b11;
+  --color-surface-container: #141a24;
+  --color-outline: #303843;
+  --color-outline-variant: #262e38;
+  --color-primary: #edcf98;
+  --primary: #edcf98;
+  --primary-foreground: #18120b;
+  --tron-button-primary-bg: #edcf98;
+  --tron-button-primary-fg: #18120b;
+  --tron-button-primary-hover-bg: #f7e3bf;
+  --tron-button-primary-border: #fff3d74d;
+  --color-on-primary: #10151a;
+}
+.awakening-world {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  overflow: hidden;
+  background: #000;
+  color: #e7ffef;
+  isolation: isolate;
+  --color-background: #040a07;
+  --color-surface: #07130c;
+  --color-elevated-surface: #0b1710;
+  --color-on-surface: #e1f4e7;
+  --color-on-surface-variant: #92b89f;
+  --color-outline: #244631;
+  --color-outline-variant: #183824;
+  --color-primary: #8bf5b0;
+  --color-surface-container: #0b1b11;
+  --background: #060e09;
+  --foreground: #e1f4e7;
+  --primary: #8bf5b0;
+  --primary-foreground: #031208;
+}
+.awakening-code-rain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 700ms;
+}
+.awakening-world:is([data-phase="dialog"], [data-phase="rain"], [data-phase="exit"]) {
+  background: transparent;
+}
+.awakening-world[data-phase="exit"] .awakening-skip {
+  opacity: 0;
+  transition: opacity 400ms;
+}
+.awakening-stage {
+  position: absolute;
+  inset: clamp(22px, 5vh, 70px) max(24px, calc((100vw - 780px) / 2));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  opacity: 0;
+  transition: opacity 700ms ease;
+}
+.awakening-world[data-phase="dialog"] .awakening-stage {
+  opacity: 1;
+  transform: none;
+}
+.awakening-avatar {
+  position: relative;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 25%, #225439, #06170d);
+  border: 1px solid #83ffb14d;
+  box-shadow: 0 0 50px #2dee7223, inset 0 0 18px #67ffa71a;
+  font-size: 26px;
+  color: #b9ffd1;
+}
+.awakening-avatar:after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px solid #62e98e17;
+}
+.awakening-heading {
+  text-align: center;
+}
+.awakening-avatar-image {
+  width: 88px;
+  height: 88px;
+}
+.awakening-world[data-phase="dialog"] .awakening-heading {
+  animation: awakening-avatar-reveal 1500ms ease both;
+}
+.awakening-chat {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid #86f7b22b;
+  background: #050d0952;
+  box-shadow: 0 35px 120px #000c, 0 0 80px #20dc5710;
+  backdrop-filter: blur(5px);
+  --agent-ui-chat-surface-color: transparent;
+  --agent-ui-chat-surface-strong-color: #030b075c;
+  --agent-ui-chat-surface-muted-color: #0b211454;
+  --agent-ui-chat-surface-soft-color: #0b21146b;
+  --agent-ui-chat-text-color: #d8f6e3;
+}
+.awakening-chat > div {
+  height: 100%;
+}
+.awakening-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.awakening-actions button {
+  font-size: 12px;
+}
+.awakening-error {
+  padding: 12px 16px;
+  color: #ffd8c1;
+  background: #321c1555;
+  border: 1px solid #b6795444;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.awakening-manual {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  background: #07130d80;
+  backdrop-filter: blur(5px);
+  border: 1px solid #5ee39233;
+  border-radius: 18px;
+}
+.awakening-skip {
+  position: absolute;
+  right: 24px;
+  top: 20px;
+  z-index: 4;
+  color: #afc8b7 !important;
+}
+.awakening-loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 160px;
+  color: #9cbaaa;
+  font-size: 13px;
+}
+@media (max-width: 700px) {
+  .tron-login {
+    padding: 24px !important;
+    justify-content: center !important;
+  }
+  .tron-login-panel {
+    margin-top: 20vh;
+  }
+  .awakening-stage {
+    inset: 62px 12px 28px;
+    gap: 12px;
+  }
+  .awakening-avatar {
+    width: 88px;
+    height: 88px;
+  }
+  .awakening-avatar-image {
+    width: 64px;
+    height: 64px;
+  }
+  .awakening-chat {
+    border-radius: 12px;
+  }
+}
+[data-tron-motion-policy="off"] .awakening-stage,
+[data-tron-motion-policy="reduced"] .awakening-stage {
+  transform: none;
+  transition-duration: 100ms;
+}
+
+.awakening-home-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  pointer-events: none;
+  isolation: isolate;
+  overflow: hidden;
+}
+.awakening-home-veil::before,
+.awakening-home-veil::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.awakening-home-veil::before {
+  background: #000;
+  z-index: -1;
+}
+.awakening-home-veil::after {
+  background: radial-gradient(ellipse at 50% 45%, #42ff8c14, transparent 72%);
+  opacity: 0;
+}
+.awakening-home-veil .awakening-code-rain {
+  opacity: 1;
+  animation: awakening-rain-arrive 700ms ease both;
+}
+.awakening-home-veil[data-destination="true"] {
+  z-index: 100;
+}
+.awakening-home-veil[data-phase="reveal"] {
+  animation: awakening-home-reveal 3000ms ease both;
+}
+.awakening-home-veil[data-phase="reveal"]::before {
+  animation: awakening-darkness-lift 2800ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+.awakening-home-veil[data-phase="reveal"]::after {
+  animation: awakening-afterglow 3000ms ease both;
+}
+.awakening-home-veil[data-phase="reveal"] .awakening-code-rain {
+  animation: awakening-rain-depth 3000ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transform-origin: 50% 45%;
+}
+.awakening-home-veil[data-phase="reveal"][data-reduced="true"],
+.awakening-home-veil[data-phase="reveal"][data-reduced="true"]::before,
+.awakening-home-veil[data-phase="reveal"][data-reduced="true"]::after {
+  animation-duration: 240ms;
+}
+.awakening-home-veil[data-phase="reveal"][data-reduced="true"] .awakening-code-rain {
+  animation: none;
+}
+@keyframes awakening-rain-arrive {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes awakening-home-reveal {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes awakening-darkness-lift {
+  0% { opacity: 1; }
+  15% { opacity: 0.95; }
+  45% { opacity: 0.48; }
+  78%, 100% { opacity: 0; }
+}
+@keyframes awakening-rain-depth {
+  from { transform: scale(1); }
+  to { transform: scale(1.045); }
+}
+@keyframes awakening-afterglow {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.awakening-world[data-phase="exit"] .awakening-stage {
+  opacity: 1;
+}
+.awakening-world[data-phase="exit"] :is(.awakening-chat, .awakening-manual) {
+  pointer-events: none;
+  animation: awakening-slit-close 950ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+.awakening-world[data-phase="exit"] :is(.awakening-heading, .awakening-actions) {
+  pointer-events: none;
+  animation: awakening-presence-out 700ms ease both;
+}
+@keyframes awakening-slit-close {
+  0% { opacity: 1; clip-path: inset(0 round 18px); }
+  65% { opacity: 0.6; clip-path: inset(49.6% 0 round 2px); }
+  100% { opacity: 0; clip-path: inset(49.9% 45% round 1px); }
+}
+@keyframes awakening-presence-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-8px); }
+}
+[data-tron-motion-policy="off"] .awakening-world[data-phase="exit"] *,
+[data-tron-motion-policy="reduced"] .awakening-world[data-phase="exit"] * {
+  animation-duration: 100ms;
+}
+
+.tron-login-panel {
+  transition: opacity 600ms ease, transform 900ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tron-login[data-camera-phase="approach"] .tron-login-panel {
+  opacity: 0;
+  transform: translateY(18px);
+  pointer-events: none;
+}
+.tron-login[data-camera-phase="dive"] .tron-login-panel {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.97);
+  transition-duration: 240ms;
+  pointer-events: none;
+}
+
+/* Reveal the real chat from a narrow horizontal opening without scaling text. */
+.awakening-world[data-phase="dialog"] :is(.awakening-chat, .awakening-manual) {
+  animation: awakening-slit-open 2600ms cubic-bezier(0.22, 0.65, 0.25, 1) both;
+}
+.awakening-world[data-phase="dialog"] .awakening-actions {
+  animation: awakening-avatar-reveal 800ms 2100ms ease both;
+}
+@keyframes awakening-slit-open {
+  0% { opacity: 0; clip-path: inset(49.9% 46% round 1px); }
+  12% { opacity: 1; clip-path: inset(49.8% 32% round 1px); }
+  35% { opacity: 1; clip-path: inset(49.65% 0 round 2px); }
+  100% { opacity: 1; clip-path: inset(0 round 18px); }
+}
+@keyframes awakening-avatar-reveal {
+  from { opacity: 0; filter: blur(8px); }
+  to { opacity: 1; filter: blur(0); }
+}
+[data-tron-motion-policy="off"] .awakening-world[data-phase="dialog"] :is(.awakening-chat, .awakening-manual, .awakening-heading, .awakening-actions),
+[data-tron-motion-policy="reduced"] .awakening-world[data-phase="dialog"] :is(.awakening-chat, .awakening-manual, .awakening-heading, .awakening-actions) {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-tron-motion-policy="full"]) .awakening-world[data-phase="dialog"] :is(.awakening-chat, .awakening-manual, .awakening-heading, .awakening-actions) {
+    animation: none;
+  }
+}
+
+.awakening-chat::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 1px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, #a4f9c3b3, transparent);
+  box-shadow: 0 0 14px #72ecaa66;
+  pointer-events: none;
+  z-index: 2;
+}
+.awakening-world[data-phase="dialog"] .awakening-chat::before {
+  animation: awakening-seam 2600ms ease both;
+}
+@keyframes awakening-seam {
+  0% { width: 8%; opacity: 0; }
+  15% { width: 38%; opacity: 0.8; }
+  35% { width: 100%; opacity: 1; }
+  65%, 100% { width: 100%; opacity: 0; }
+}
+[data-tron-motion-policy="off"] .awakening-chat::before,
+[data-tron-motion-policy="reduced"] .awakening-chat::before {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-tron-motion-policy="full"]) .awakening-chat::before { display: none; }
+}

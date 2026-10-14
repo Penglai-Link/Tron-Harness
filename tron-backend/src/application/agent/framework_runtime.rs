@@ -9,6 +9,7 @@ mod context;
 mod context_auxiliary;
 mod context_projection;
 mod context_providers;
+mod dude_context;
 
 mod tools;
 
@@ -24,6 +25,8 @@ pub use host::{FrameworkHost, SubagentRecord, SubagentView, DudeThreadCatalogIte
 
 mod external;
 mod native_sessions;
+mod native_session_scope;
+pub(crate) use native_session_scope::NativeCollaborationScope;
 pub(crate) use external::FrameworkExternalRuntime;
 
 mod question;

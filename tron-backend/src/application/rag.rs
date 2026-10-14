@@ -33,3 +33,7 @@ pub use service::*;
 
 mod chunking;
 pub use chunking::*;
+
+// The shared memory corpus uses platform models for writes and retrieval alike.
+// Business workspace codes remain exclusively in access scopes and persisted tasks.
+const MEMORY_MODEL_WORKSPACE: &str = "PLATFORM";

@@ -48,14 +48,25 @@ export function translateInternalAgentGroupName(t: TFunction, name: string) {
 }
 
 export function translateInternalAgentDescription(t: TFunction, agent: WorkspaceInternalAgentRecord) {
-  const key = internalAgentCatalogKeyByCode[agent.agentCode];
+  const defaults: Record<string, string[]> = {
+    "main-agent": ["Primary workspace internal agent with access to platform business tools.", "Primary platform internal agent used for workspace chat runtime policy."],
+    "explore-agent": ["只读探索任务使用的内置智能体。"],
+    "fullstack-agent": ["用于全栈开发任务的内置智能体。"],
+    "prd-agent": ["用于产品分析与设计任务的内置智能体。"],
+  };
+  const key = defaults[agent.agentCode]?.includes(agent.description) ? internalAgentCatalogKeyByCode[agent.agentCode] : undefined;
   return key
     ? t(`pages:workspaceAgents.internal.catalog.${key}.description`, { defaultValue: agent.description })
     : agent.description;
 }
 
 export function translateSystemAgentDescription(t: TFunction, agent: Pick<WorkspaceSystemAgentRecord, "agentCode" | "baseAgentCode" | "description">) {
-  const key = systemAgentCatalogKeyByCode[agent.baseAgentCode || agent.agentCode];
+  const defaults: Record<string, string[]> = {
+    codex: ["OpenAI Codex CLI agent runtime.", "OpenAI coding agent runtime used for structured feature delivery."],
+    opencode: ["OpenCode CLI agent runtime.", "Local CLI coding agent kept as a platform-level fallback executor."],
+  };
+  const baseCode = agent.baseAgentCode || agent.agentCode;
+  const key = defaults[baseCode]?.includes(agent.description) ? systemAgentCatalogKeyByCode[baseCode] : undefined;
   return key
     ? t(`pages:workspaceAgents.table.catalog.${key}.description`, { defaultValue: agent.description })
     : agent.description;

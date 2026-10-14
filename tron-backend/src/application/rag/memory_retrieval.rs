@@ -50,7 +50,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
         })?;
         let mut result = self
             .retrieve_authorized(
-                &request.workspace_code,
+                super::MEMORY_MODEL_WORKSPACE,
                 &request.query,
                 &ranges,
                 request.limit,
