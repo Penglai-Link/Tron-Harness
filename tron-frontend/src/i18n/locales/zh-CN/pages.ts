@@ -1716,6 +1716,7 @@ export const pages = {
       thinking: "正在思考…",
       workedFor: "已工作 {{duration}}",
       workingFor: "正在工作 {{duration}}",
+      working: "工作中",
       failed: "运行失败",
       stopped: "已停止",
       compactionInterrupted: "本次运行已结束，未收到压缩完成事件",
@@ -1820,6 +1821,11 @@ export const pages = {
         waitingModelAria: "等待模型",
       },
       composer: {
+        commands: "指令",
+        skills: "技能",
+        commandsAndSkills: "指令与技能",
+        goalSuggestion: "设置本会话的执行目标",
+        suggestionsFailed: "无法加载技能与指令建议",
         uploadAttachment: "上传附件",
         uploading: "上传中…",
         removeAttachment: "移除 {{label}}",
@@ -1844,6 +1850,7 @@ export const pages = {
         description: "永久删除“{{title}}”？此操作不可撤销。",
       },
       toasts: {
+        suggestionsFailedTitle: "无法加载技能与指令建议",
         attachNoSession: "请先创建或选择会话",
         sessionRequiredTitle: "需要会话",
         attachmentUploadFailed: "附件上传失败",

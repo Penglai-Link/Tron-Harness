@@ -61,6 +61,7 @@ pub struct ChatService {
     pub(super) event_bus: EventBusHandle,
     resources: Option<ResourceService>,
     projects: Option<ProjectService>,
+    skills: Option<crate::application::skill::SkillRegistryService>,
     execution_memory: Option<crate::application::short_term_memory::ShortTermMemoryService>,
     id_provider: Arc<dyn SnowflakeIdProvider>,
     coordinator_namespace: u64,
@@ -109,6 +110,7 @@ impl ChatService {
             resources: None,
             projects: None,
             execution_memory: None,
+            skills: None,
             id_provider,
             coordinator_namespace: CHAT_SERVICE_COORDINATOR_NAMESPACE
                 .fetch_add(1, Ordering::Relaxed),
@@ -125,6 +127,7 @@ impl ChatService {
             resources: self.resources.clone(),
             projects: self.projects.clone(),
             execution_memory: self.execution_memory.clone(),
+            skills: self.skills.clone(),
             id_provider,
             coordinator_namespace: self.coordinator_namespace,
             active_runs: self.active_runs.clone(),

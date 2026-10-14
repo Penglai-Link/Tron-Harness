@@ -250,6 +250,7 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
         body: {
           attachments: input.attachments ?? [],
           content: input.content,
+          requestedSkills: input.requestedSkills ?? [],
           expectedRunCode: context.expectedRunCode,
           sessionCode: session.sessionCode,
         },

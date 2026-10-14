@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/ui/toast";
 
 const errorTitles = {
+  "Chat suggestions failed": "suggestionsFailedTitle",
   "Chat send failed": "chatSendFailedTitle",
   "Chat load failed": "chatLoadFailedTitle",
   "Chat answer failed": "answerFailedTitle",

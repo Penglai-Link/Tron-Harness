@@ -106,7 +106,9 @@ impl ChatService {
             .unwrap_or(1);
         let mut request = fw::RunRequest::new(session_code, "");
         request.goal_id = active.map(|view| view.goal.goal_code);
-        request.execution_scope = Some("goal-driver".into());
+        // Each admitted user run gets its own journal. Reusing the session-wide
+        // scope would replay a completed driver when a goal is updated/resumed.
+        request.execution_scope = Some(format!("goal-driver/{previous_run}"));
         let continuation = fw::ContinuationRequest {
             policy: policy.clone(),
             initial_state: json!({"runCode":previous_run}),

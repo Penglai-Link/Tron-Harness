@@ -16,6 +16,8 @@ impl FrameworkHost {
             .into(),
         );
         // These loops delegate execution and never invoke the Framework tool pipeline.
+        selection.skills_from_host = false;
+        selection.skills = Some(vec![]);
         selection.tool_policies = Some(vec![]);
         selection.tool_providers = Some(vec![]);
         selection.context_assembler = Some("tron.driver.context".into());

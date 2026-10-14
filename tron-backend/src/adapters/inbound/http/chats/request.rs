@@ -27,6 +27,8 @@ pub struct SteerChatMessageRequest {
     pub content: Option<String>,
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
+    #[serde(default)]
+    pub requested_skills: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

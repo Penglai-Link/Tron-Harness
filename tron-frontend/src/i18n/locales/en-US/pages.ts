@@ -1795,6 +1795,7 @@ export const pages = {
       thinking: "Thinking…",
       workedFor: "Worked for {{duration}}",
       workingFor: "Working for {{duration}}",
+      working: "Working",
       failed: "Run failed",
       stopped: "Run stopped",
       compactionInterrupted:
@@ -1900,6 +1901,11 @@ export const pages = {
         waitingModelAria: "Waiting for model",
       },
       composer: {
+        commands: "Commands",
+        skills: "Skills",
+        commandsAndSkills: "Commands and skills",
+        goalSuggestion: "Set the execution objective for this chat",
+        suggestionsFailed: "Could not load skill and command suggestions",
         uploadAttachment: "Upload attachment",
         uploading: "Uploading…",
         removeAttachment: "Remove {{label}}",
@@ -1927,6 +1933,7 @@ export const pages = {
           'Delete "{{title}}" permanently? This action cannot be undone.',
       },
       toasts: {
+        suggestionsFailedTitle: "Could not load skill and command suggestions",
         attachNoSession: "Create or select a session before attaching a file",
         sessionRequiredTitle: "Session required",
         attachmentUploadFailed: "Attachment upload failed",

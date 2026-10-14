@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
@@ -6,6 +7,7 @@ import { i18n } from "@/i18n";
 import { AgentChatWindow } from "./AgentChatWindow";
 
 const feedback = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn() }));
+vi.mock("@/shared/api/httpClient", () => ({ requestApi: vi.fn().mockResolvedValue({ agentCode: "main-agent", commands: ["goal"], skills: [{ name: "review", description: "Review changes" }] }) }));
 vi.mock("@/components/ui/toast", () => ({ useToast: () => feedback }));
 
 beforeEach(() => {
@@ -32,7 +34,7 @@ describe("AgentChatWindow feedback", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     const adapter = createInternalChatAdapter({ workspaceCode: "WORKSPACE", getHeaders: () => ({ "Accept-Language": document.documentElement.lang }) });
-    render(<AgentChatWindow adapter={adapter} config={{ workspaceCode: "WORKSPACE", floating: false }} initialSession={{ id: 1, sessionCode: "SESSION", workspaceCode: "WORKSPACE", title: "Chat", status: "ACTIVE", createdAt: "2026-10-07T00:00:00Z", updatedAt: "2026-10-07T00:00:00Z" }} />);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AgentChatWindow adapter={adapter} config={{ workspaceCode: "WORKSPACE", floating: false }} initialSession={{ id: 1, sessionCode: "SESSION", workspaceCode: "WORKSPACE", title: "Chat", status: "ACTIVE", createdAt: "2026-10-07T00:00:00Z", updatedAt: "2026-10-07T00:00:00Z" }} /></QueryClientProvider>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "hello" } });

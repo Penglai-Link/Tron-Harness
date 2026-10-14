@@ -237,6 +237,7 @@ async fn run_automation_with_main_agent(
         .send_message(
             &session.session_code,
             SendChatMessageCommand {
+                requested_skills: Vec::new(),
                 a2ui_action_id: None,
                 a2ui_metadata: None,
                 run_code: None,

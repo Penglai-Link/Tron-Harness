@@ -75,6 +75,8 @@ pub struct ChatMessage {
     pub output_tokens: Option<u32>,
     pub total_tokens: Option<u32>,
     pub created_at: String,
+    #[serde(default)]
+    pub requested_skills: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -186,6 +188,11 @@ pub struct ChatUserInputRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatError {
+    RequestedSkillsInvalid,
+    RequestedSkillForbidden,
+    GoalCommandInvalid,
+    GoalCommandUnavailable,
+    GoalCommandConflict,
     AttachmentInvalid(String),
     AttachmentNotFound,
     MessageRequired,
@@ -210,6 +217,11 @@ impl Display for ChatError {
         match self {
             Self::AttachmentInvalid(message) => write!(f, "chat attachment is invalid: {message}"),
             Self::AttachmentNotFound => f.write_str("chat attachment was not found"),
+            Self::RequestedSkillsInvalid => f.write_str("invalid explicit skill selection"),
+            Self::RequestedSkillForbidden => f.write_str("selected skill is not granted to the execution Agent"),
+            Self::GoalCommandInvalid => f.write_str("goal objective is required"),
+            Self::GoalCommandConflict => f.write_str("session goal changed concurrently"),
+            Self::GoalCommandUnavailable => f.write_str("goal commands are unavailable for this execution Agent"),
             Self::MessageRequired => f.write_str("chat message content is required"),
             Self::SessionNotFound => f.write_str("chat session was not found"),
             Self::SessionMustBeArchived => {

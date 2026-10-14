@@ -21,6 +21,7 @@ use super::short_term_memory::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/chats/input-suggestions", get(super::composer::suggestions))
         .route("/api/v1/chats/sessions/{session_code}/subagents", get(super::subagents::list))
         .route("/api/v1/chats/sessions/{session_code}/subagents/{run_id}", get(super::subagents::read))
         .route("/api/v1/chats/sessions/{session_code}/a2ui-state",get(super::a2ui::state))

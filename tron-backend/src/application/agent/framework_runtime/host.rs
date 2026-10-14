@@ -781,31 +781,21 @@ struct HostSteering {
 }
 #[async_trait::async_trait]
 impl fw::LiveInputSource for HostSteering {
-    async fn drain(
-        &self,
-        run: &fw::RunContext,
-        seal: bool,
-    ) -> Result<Vec<fw::Content>, fw::AgentError> {
-        let inputs = if seal {
-            self.control.take_pending_or_begin_finishing()
-        } else {
-            self.control.take_pending()
-        }
-        .map_err(|error| fw::AgentError::Run(error.to_string()))?;
+    async fn drain(&self, run: &fw::RunContext, seal: bool) -> Result<Vec<fw::Content>, fw::AgentError> {
+        Ok(self.drain_inputs(run, seal).await?.into_iter().map(|input| input.content).collect())
+    }
+    async fn drain_inputs(&self, run: &fw::RunContext, seal: bool) -> Result<Vec<fw::LiveInput>, fw::AgentError> {
+        let inputs = if seal { self.control.take_pending_or_begin_finishing() } else { self.control.take_pending() }
+            .map_err(|error| fw::AgentError::Run(error.to_string()))?;
+        let selected = inputs.iter().map(|input| input.requested_skills.clone()).collect::<Vec<_>>();
         let host = HostExecution::from_extensions(&run.extensions)?;
         let state = host.state.lock().await;
-        let messages = host
-            .harness
-            .framework_steering(&state.context, inputs)
+        let messages = host.harness.framework_steering(&state.context, inputs)
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-        messages
-            .iter()
-            .map(|message| {
-                super::messages::encode(message)
-                    .map(|message| message.content)
-                    .map_err(fw::AgentError::InvalidConfiguration)
-            })
-            .collect()
+        messages.iter().zip(selected).map(|(message, requested_skills)| {
+            super::messages::encode(message).map(|message| fw::LiveInput { content: message.content, requested_skills })
+                .map_err(fw::AgentError::InvalidConfiguration)
+        }).collect()
     }
 }
 fn map_error(error: fw::AgentError) -> AgentError {

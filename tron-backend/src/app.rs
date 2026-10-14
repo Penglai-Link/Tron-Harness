@@ -506,6 +506,7 @@ impl AppState {
         .with_active_runs(active_runs.clone())
         .with_projects(projects.clone())
         .with_execution_memory(short_term_memory.clone())
+        .with_skill_registry(skills.clone())
         .with_resources(resources.clone())
         .with_prompt_service(prompts.clone())
         .with_llm_router(llm_router.clone())

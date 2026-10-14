@@ -239,6 +239,7 @@ pub async fn execute_task(
 
     let run_code = generate_agent_run_code();
     let request = SendChatMessageCommand {
+        requested_skills: Vec::new(),
         a2ui_action_id: None,
         a2ui_metadata: None,
         run_code: Some(run_code.clone()),

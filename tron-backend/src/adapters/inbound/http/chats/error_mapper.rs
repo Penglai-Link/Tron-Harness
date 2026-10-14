@@ -15,6 +15,16 @@ use crate::{
 };
 
 pub fn chat_error_response(error: ChatError) -> Response {
+    if let Some(descriptor) = crate::application::chat::composer_input::descriptor(&error) {
+        let status = match error {
+            ChatError::RequestedSkillForbidden => StatusCode::FORBIDDEN,
+            ChatError::GoalCommandConflict => StatusCode::CONFLICT,
+            ChatError::GoalCommandUnavailable => StatusCode::UNPROCESSABLE_ENTITY,
+            _ => StatusCode::BAD_REQUEST,
+        };
+        let message = composer_error_message(&error);
+        return (status, Json(ApiResponse::error(descriptor.code, message))).into_response();
+    }
     let (status, code, message) = match error {
         ChatError::AttachmentInvalid(message) => {
             (StatusCode::BAD_REQUEST, "CHAT_ATTACHMENT_INVALID", message)
@@ -94,6 +104,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_USER_INPUT_REQUEST_NOT_FOUND",
             "chat user input request was not found".to_string(),
         ),
+        ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict => unreachable!("composer errors have descriptors"),
         ChatError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "CHAT_STORAGE_FAILED",
@@ -101,6 +112,23 @@ pub fn chat_error_response(error: ChatError) -> Response {
         ),
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
+}
+
+pub(super) fn composer_error_message(error: &ChatError) -> String {
+    use crate::shared::locale::SupportedLocale;
+    let locale = crate::shared::auth_holder::AuthHolder::get()
+        .map(|auth| SupportedLocale::from_raw(&auth.locale));
+    let key = crate::application::chat::composer_input::descriptor(error)
+        .expect("composer error descriptor").message_key;
+    let (zh, en) = match key {
+        "tron.chat.requested_skill_forbidden" => ("所选技能未授权给当前 Agent，或已被禁用", "Selected skills are not granted to this Agent or have been disabled"),
+        "tron.chat.requested_skills_invalid" => ("技能选择无效，最多选择 32 个技能", "Invalid skill selection; select at most 32 skills"),
+        "tron.chat.goal_command_invalid" => ("请在 /goal 后输入目标", "Enter an objective after /goal"),
+        "tron.chat.goal_command_conflict" => ("目标已发生变化，请重试", "The goal changed; please try again"),
+        "tron.chat.goal_command_unavailable" => ("当前 Agent 无法使用 /goal", "This Agent cannot use /goal"),
+        _ => unreachable!("unknown composer message key"),
+    };
+    if locale == Some(SupportedLocale::EnUs) { en.into() } else { zh.into() }
 }
 
 pub fn chat_send_error_response(error: ChatSendError) -> Response {

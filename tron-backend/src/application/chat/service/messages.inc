@@ -106,6 +106,10 @@ impl ChatService {
             normalized_optional(command.agent_code.clone()).or(session.agent_code.clone())
         }
         .unwrap_or_else(|| MAIN_AGENT_CODE.to_string());
+        let requested_skills = self.authorize_requested_skills(&effective_agent_code, &command.requested_skills)
+            .map_err(ChatSendError::Chat)?;
+        let goal = super::composer_input::goal_objective(&content).map_err(ChatSendError::Chat)?;
+        if goal.is_some() { self.ensure_goal_agent(&effective_agent_code).map_err(ChatSendError::Chat)?; }
         let reservation = self.reserve_run(
             session_code,
             command.run_code.clone(),
@@ -119,10 +123,13 @@ impl ChatService {
             .repository()
             .runtime_session_id(session_code, runtime_adapter_key, &effective_agent_code)
             .map_err(ChatSendError::Chat)?;
+        if let Some(objective) = goal {
+            self.apply_goal_command(session_code, objective, user_code.clone()).map_err(ChatSendError::Chat)?;
+        }
         let user_message = if transcript_user_content.is_empty() && attachments.is_empty() {
             None
         } else {
-            Some(self.create_message(
+            Some(self.create_message_with_skills(
                 session_code,
                 (!command.resume.is_empty()).then(|| run_code.clone()),
                 ChatMessageRole::User,
@@ -131,6 +138,7 @@ impl ChatService {
                 &transcript_user_content,
                 attachments.clone(),
                 None,
+                requested_skills.clone(),
             )?)
         };
         if should_generate_title
@@ -190,7 +198,7 @@ impl ChatService {
             page_context: command.page_context,
             supports_user_input_requests,
             transcript_input_kind: None,
-            transcript_input_metadata: Some(json!({"resume": command.resume, "a2uiClientCapabilities":command.client_capabilities.and_then(|c|c.a2ui),"a2uiMetadata":command.a2ui_metadata})),
+            transcript_input_metadata: Some(json!({"requestedSkills": requested_skills, "resume": command.resume, "a2uiClientCapabilities":command.client_capabilities.and_then(|c|c.a2ui),"a2uiMetadata":command.a2ui_metadata})),
         };
         let mut run = if let Some(sink) = sink {
             agent
@@ -396,6 +404,15 @@ impl ChatService {
         attachments: Vec<ChatMessageAttachment>,
         token_usage: Option<ModelTokenUsage>,
     ) -> Result<ChatMessage, ChatSendError> {
+        self.create_message_with_skills(session_code, run_code, role, channel, actor, content, attachments, token_usage, Vec::new())
+    }
+
+    pub(super) fn create_message_with_skills(
+        &self, session_code: &str, run_code: Option<String>, role: ChatMessageRole,
+        channel: ChatMessageChannel, actor: &str, content: &str,
+        attachments: Vec<ChatMessageAttachment>, token_usage: Option<ModelTokenUsage>,
+        requested_skills: Vec<String>,
+    ) -> Result<ChatMessage, ChatSendError> {
         let id = self
             .id_provider
             .next_id()
@@ -410,6 +427,7 @@ impl ChatService {
             channel,
             actor: actor.into(),
             content: content.into(),
+            requested_skills,
             attachments,
             input_tokens: token_usage.map(|usage| usage.input_tokens),
             output_tokens: token_usage.map(|usage| usage.output_tokens),

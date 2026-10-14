@@ -4,6 +4,7 @@ import type * as Ui from "@eliteforge/agent-ui-chat-core";
 import type { ChatAdapter, ChatClientConfig, ChatMessageAttachment, ChatRuntimeRunState, ChatSession, SendChatMessageInput } from "@tron/chat-core";
 import { createAgentUiAdapter } from "@tron/chat-agent-ui-adapter";
 import { fromUiAttachment, fromUiSession, toUiAttachment, toUiInput, toUiSession } from "@tron/chat-agent-ui-adapter";
+import { useChatInputSuggestions } from "@/domain/chat/hooks/useChatInputSuggestions";
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
 
 type MappedProps = "adapter" | "config" | "initialSession" | "pendingAttachments" | "onPendingAttachmentsChange" | "onSessionChange" | "onRunStateChange" | "createSendInput";
@@ -22,6 +23,7 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
 export function AgentChatWindow({ adapter, config, initialSession, pendingAttachments,
   onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
+  const inputSuggestions = useChatInputSuggestions(config.agentCode, initialSession?.sessionCode, initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined, config.workspaceCode);
   const uiAdapter = useMemo(() => createAgentUiAdapter(adapter, config),
     [adapter, config.workspaceCode, config.appCode, config.taskCode, config.agentCode]);
   const session = useMemo(() => initialSession ? toUiSession(initialSession) : initialSession, [initialSession]);
@@ -45,7 +47,7 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
   return <ChatRuntimeWindow {...props} adapter={uiAdapter}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
-    config={{ ...config, defaultSessionId: config.defaultSessionCode }}
+    config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode }}
     initialSession={session} pendingAttachments={attachments} createSendInput={createInput}
     onSessionChange={handleSession} onPendingAttachmentsChange={handleAttachments} onRunStateChange={handleRun} />;
 }

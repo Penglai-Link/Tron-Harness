@@ -275,6 +275,7 @@ impl PlatformDudeExecutor {
             .send_message(
                 &session.session_code,
                 crate::application::chat::SendChatMessageCommand {
+                    requested_skills: Vec::new(),
                     a2ui_action_id: None,
                     a2ui_metadata: None,
                     run_code: Some(event.event_id.clone()),

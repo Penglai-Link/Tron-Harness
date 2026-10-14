@@ -124,6 +124,11 @@ impl FrameworkHost {
         }
         let mut request = fw::RunRequest::new(&session, input);
         let memory = context.short_term_memory.as_ref();
+        request.requested_skills = memory.and_then(|input| input.input_metadata.as_ref())
+            .and_then(|metadata| metadata.get("requestedSkills"))
+            .map(|value| serde_json::from_value(value.clone()))
+            .transpose().map_err(|_| AgentError::InvalidConfiguration("invalid requested skills".into()))?
+            .unwrap_or_default();
         let runtime_input = memory.filter(|input| input.input_kind != "USER_PROMPT");
         let source = runtime_input
             .and_then(|input| input.input_metadata.as_ref())

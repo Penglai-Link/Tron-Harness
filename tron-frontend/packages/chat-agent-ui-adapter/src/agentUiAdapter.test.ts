@@ -23,13 +23,14 @@ describe("Tron / Agent UI boundary", () => {
 
   it("keeps routing, source page, attachments and external model IDs when a send is queued", () => {
     const input: SendChatMessageInput = {
-      content: "Continue", workspaceCode: "WORKSPACE", appCode: "APP", taskCode: "TASK", agentCode: "codex",
+      content: "Continue", requestedSkills: ["review"], workspaceCode: "WORKSPACE", appCode: "APP", taskCode: "TASK", agentCode: "codex",
       modelSelection: { kind: "ProviderRoute", providerCode: "PersonAi", qualityType: "High", routeCode: "ChatAuto" },
       modelCode: "kuaishou/deepseek", systemModelId: "codex/model", reasoningEffort: "XHigh",
       pageContext: { title: "Application", path: "/apps/APP" },
       attachments: [{ id: "FILE", resourceCode: "RESOURCE", kind: "image", metadata: { fileRef: "attachment" }, summary: "Image" }],
     };
     expect(fromUiInput({ ...toUiInput(input) })).toEqual(input);
+    expect(fromUiInput({ ...toUiInput(input), requestedSkills: ["different-skill"] }).requestedSkills).toEqual(["different-skill"]);
     expect(fromUiAttachment(toUiAttachment(input.attachments![0]))).toEqual(input.attachments![0]);
   });
 

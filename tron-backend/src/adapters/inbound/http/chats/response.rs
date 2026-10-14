@@ -84,6 +84,7 @@ pub struct SteeredChatMessageResponse {
     pub actor: String,
     pub content: String,
     pub attachments: Vec<ChatMessageAttachment>,
+    pub requested_skills: Vec<String>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub total_tokens: Option<u32>,
@@ -106,6 +107,7 @@ impl From<ChatSteerResult> for ChatSteerResultResponse {
                 actor: message.actor,
                 content: message.content,
                 attachments: message.attachments,
+                requested_skills: message.requested_skills,
                 input_tokens: message.input_tokens,
                 output_tokens: message.output_tokens,
                 total_tokens: message.total_tokens,
@@ -192,6 +194,7 @@ pub struct ArchivedMessageResponse {
     pub actor: String,
     pub content: String,
     pub attachments: Vec<ChatMessageAttachment>,
+    pub requested_skills: Vec<String>,
     pub created_at: i64,
 }
 impl From<crate::domain::chat::ChatMessage> for ArchivedMessageResponse {
@@ -203,6 +206,7 @@ impl From<crate::domain::chat::ChatMessage> for ArchivedMessageResponse {
             actor: m.actor,
             content: m.content,
             attachments: m.attachments,
+            requested_skills: m.requested_skills,
             created_at: timestamp_to_millis(&m.created_at),
         }
     }

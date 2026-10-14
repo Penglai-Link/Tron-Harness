@@ -36,6 +36,7 @@ function steerResultFixture() {
       actor: "User",
       channel: "mainAgent",
       content: "Steer the active response",
+      requestedSkills: ["review"],
       createdAt: "2026-07-16T00:00:01Z",
       id: 2,
       messageCode: "MSG-2",
@@ -296,6 +297,7 @@ describe("createInternalChatAdapter", () => {
     const abortController = new AbortController();
     const input = {
       content: "Steer the active response",
+      requestedSkills: ["review"],
       expectedRunCode: "FORGED-RUN",
       modelCode: "MODEL-1",
       sessionCode: "FORGED-SESSION",
@@ -330,6 +332,7 @@ describe("createInternalChatAdapter", () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       attachments: [],
       content: "Steer the active response",
+      requestedSkills: ["review"],
       expectedRunCode: "RUN-1",
       sessionCode: "SESSION-1",
     });

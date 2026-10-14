@@ -14,6 +14,7 @@ use crate::domain::chat::ChatMessageAttachment;
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentSteerInput {
     pub steer_code: String,
+    pub requested_skills: Vec<String>,
     pub content: String,
     pub attachments: Vec<ChatMessageAttachment>,
 }
@@ -582,6 +583,7 @@ mod tests {
                     Ok::<_, ()>((
                         (),
                         AgentSteerInput {
+                            requested_skills: Vec::new(),
                             steer_code: "MSG-1".into(),
                             content: "too late".into(),
                             attachments: Vec::new(),

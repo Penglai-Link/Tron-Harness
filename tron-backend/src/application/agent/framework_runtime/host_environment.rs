@@ -479,6 +479,7 @@ impl FrameworkHost {
                     .map(str::to_owned)
                     .collect(),
             ),
+            skills_from_host: self.0.skill_registry.get().is_some(),
             skills: if self.0.skill_registry.get().is_some() {
                 None
             } else {

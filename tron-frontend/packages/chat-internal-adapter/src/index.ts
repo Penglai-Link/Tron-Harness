@@ -191,6 +191,7 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
         body: {
           attachments: input.attachments ?? [],
           content: input.content,
+          requestedSkills: input.requestedSkills ?? [],
           expectedRunCode: context.expectedRunCode,
           sessionCode: session.sessionCode,
         },

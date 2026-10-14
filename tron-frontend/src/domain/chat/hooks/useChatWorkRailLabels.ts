@@ -58,6 +58,7 @@ export function useChatWorkRailLabels() {
       preparing: t("chat.workRail.preparing"),
       responding: t("chat.workRail.responding"),
       thinking: t("chat.workRail.thinking"),
+      working: t("chat.workRail.working"),
       workedFor: (duration) => t("chat.workRail.workedFor", { duration }),
       workingFor: (duration) => t("chat.workRail.workingFor", { duration }),
       failed: t("chat.workRail.failed"),

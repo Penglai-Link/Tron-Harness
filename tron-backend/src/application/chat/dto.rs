@@ -119,6 +119,8 @@ pub struct SendChatMessageCommand {
     pub client_capabilities: Option<ChatClientCapabilities>,
     #[serde(default)]
     pub resume: Vec<ChatResumeEntry>,
+    #[serde(default)]
+    pub requested_skills: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -129,6 +131,8 @@ pub struct SteerChatMessageCommand {
     pub content: Option<String>,
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
+    #[serde(default)]
+    pub requested_skills: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

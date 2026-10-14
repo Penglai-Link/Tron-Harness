@@ -14,3 +14,5 @@ mod terminals;
 pub(crate) mod workspace_scope;
 
 mod a2ui;
+
+mod composer;

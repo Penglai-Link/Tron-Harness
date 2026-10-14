@@ -23,6 +23,7 @@ export interface ChatModelSelection {
 }
 
 export interface ChatSession {
+  sourceCode?: string | null;
   id: number | string;
   sessionCode: string;
   workspaceCode: string | null;
@@ -78,6 +79,7 @@ export interface ChatMessage {
   outputTokens?: number | null;
   totalTokens?: number | null;
   createdAt: string;
+  requestedSkills?: string[];
 }
 
 export type ChatMessageAttachmentKind = "file" | "image" | "inspection";
@@ -270,6 +272,7 @@ export interface SendChatMessageInput {
     userInputRequests?: boolean;
     a2ui?: { version: "v0.9.1"; catalogIds: string[] };
   };
+  requestedSkills?: string[];
 }
 
 export interface ChatQueuedSubmission {
@@ -468,6 +471,9 @@ export interface ChatFloatingState {
 }
 
 export interface ChatClientConfig {
+  inputSuggestions?: Array<{ kind: "skill" | "command"; name: string; displayName?: string; description?: string; category?: string }>;
+  inputSuggestionLabels?: { commands: string; skills: string; commandsAndSkills: string };
+  skillSuggestionTriggers?: Array<"$" | "/">;
   accept?: string;
   agentCode?: string;
   appCode?: string;

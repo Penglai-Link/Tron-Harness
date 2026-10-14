@@ -420,6 +420,7 @@ describe("createOpenApiChatAdapter", () => {
     const abortController = new AbortController();
     const input = {
       content: "Steer the active response",
+      requestedSkills: ["review"],
       expectedRunCode: "FORGED-RUN",
       sessionCode: "FORGED-SESSION",
       systemModelId: "SYSTEM-MODEL-1",
@@ -454,6 +455,7 @@ describe("createOpenApiChatAdapter", () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       attachments: [],
       content: "Steer the active response",
+      requestedSkills: ["review"],
       expectedRunCode: "RUN-1",
       sessionCode: "SESSION-1",
     });

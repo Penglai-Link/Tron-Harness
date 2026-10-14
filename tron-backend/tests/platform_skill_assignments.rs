@@ -842,3 +842,231 @@ async fn conflicting_imports_preserve_the_installed_catalog_and_restart() {
         drop(restarted);
     }
 }
+
+
+fn composer_session(f: &Fixture) -> tron_backend::domain::chat::ChatSession {
+    f.state
+        .chats
+        .create_session(
+            tron_backend::application::chat::CreateChatSessionCommand {
+                agent_code: Some("main-agent".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                title: Some("Composer acceptance".into()),
+                workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
+            },
+            Some("USR-AUTH-0001".into()),
+        )
+        .unwrap()
+}
+
+#[tokio::test]
+async fn composer_suggestions_follow_effective_grants_and_exclude_external_agents() {
+    let f = Fixture::new();
+    f.agent("composer-child");
+    f.state
+        .skills
+        .replace_agent_skills("main-agent", &["independent".into()])
+        .unwrap();
+    f.state
+        .skills
+        .replace_agent_skills("composer-child", &[])
+        .unwrap();
+    let data = f
+        .api(
+            Method::GET,
+            "/api/v1/chats/input-suggestions?agentCode=main-agent",
+            None,
+        )
+        .await;
+    assert_eq!(data["code"], "0");
+    assert_eq!(data["data"]["skills"][0]["name"], "independent");
+    assert_eq!(data["data"]["commands"], json!(["goal"]));
+    let child = f
+        .api(
+            Method::GET,
+            "/api/v1/chats/input-suggestions?agentCode=composer-child",
+            None,
+        )
+        .await;
+    assert_eq!(child["data"]["skills"], json!([]));
+    let external = f
+        .api(
+            Method::GET,
+            "/api/v1/chats/input-suggestions?agentCode=external-provider",
+            None,
+        )
+        .await;
+    assert_eq!(external["data"]["skills"], json!([]));
+    assert_eq!(external["data"]["commands"], json!([]));
+    f.state
+        .skills
+        .replace_agent_skills("main-agent", &[])
+        .unwrap();
+    let revoked = f
+        .api(
+            Method::GET,
+            "/api/v1/chats/input-suggestions?agentCode=main-agent",
+            None,
+        )
+        .await;
+    assert_eq!(revoked["data"]["skills"], json!([]));
+}
+
+#[tokio::test]
+async fn composer_steer_persists_selection_and_rejects_revocation_before_admission() {
+    let f = Fixture::new();
+    f.state
+        .skills
+        .replace_agent_skills("main-agent", &["independent".into()])
+        .unwrap();
+    let session = composer_session(&f);
+    let _active = f
+        .state
+        .active_runs
+        .register(&session.session_code, "composer-run", "REACT", true)
+        .unwrap();
+    let payload = json!({"sessionCode":session.session_code,"expectedRunCode":"composer-run","content":"$independent adjust now","attachments":[],"requestedSkills":["independent","independent"]});
+    let accepted = f
+        .api(
+            Method::POST,
+            "/api/v1/chats/sessions/steer-message",
+            Some(payload.clone()),
+        )
+        .await;
+    assert_eq!(
+        accepted["data"]["message"]["requestedSkills"],
+        json!(["independent"])
+    );
+    let messages = f.state.chats.list_messages(&session.session_code).unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].requested_skills, vec!["independent"]);
+    let pending = f
+        .state
+        .active_runs
+        .control(&session.session_code, "composer-run")
+        .unwrap()
+        .take_pending()
+        .unwrap();
+    assert_eq!(pending[0].requested_skills, vec!["independent"]);
+    f.state
+        .skills
+        .replace_agent_skills("main-agent", &[])
+        .unwrap();
+    let rejected = common::authenticated_request(
+        &f.app,
+        Method::POST,
+        "/api/v1/chats/sessions/steer-message",
+        Some(payload),
+    )
+    .await;
+    assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+    assert_eq!(common::response_json(rejected).await["code"], "101032002");
+    assert_eq!(
+        f.state
+            .chats
+            .list_messages(&session.session_code)
+            .unwrap()
+            .len(),
+        1
+    );
+    for suffix in ["messages", "messages/stream"] {
+        let response = common::authenticated_request(
+            &f.app,
+            Method::POST,
+            &format!("/api/v1/chats/sessions/{}/{}", session.session_code, suffix),
+            Some(json!({"content":"$independent rejected","requestedSkills":["independent"]})),
+        )
+        .await;
+        // The active run is rejected before any new message can be admitted.
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+    drop(_active);
+    for suffix in ["messages", "messages/stream"] {
+        let response = common::authenticated_request(
+            &f.app,
+            Method::POST,
+            &format!("/api/v1/chats/sessions/{}/{}", session.session_code, suffix),
+            Some(json!({"content":"$independent rejected","requestedSkills":["independent"]})),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(common::response_json(response).await["code"], "101032002");
+    }
+}
+
+#[tokio::test]
+async fn composer_goal_steer_is_fenced_and_persists_the_goal_and_original_message() {
+    let f = Fixture::new();
+    let session = composer_session(&f);
+    let _active = f
+        .state
+        .active_runs
+        .register(&session.session_code, "goal-run", "REACT", true)
+        .unwrap();
+    let path = "/api/v1/chats/sessions/steer-message";
+    let stale = common::authenticated_request(&f.app, Method::POST, path, Some(json!({"sessionCode":session.session_code,"expectedRunCode":"stale","content":"/goal should not persist","requestedSkills":[]}))).await;
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    let empty = common::authenticated_request(&f.app, Method::POST, path, Some(json!({"sessionCode":session.session_code,"expectedRunCode":"goal-run","content":"/goal","requestedSkills":[]}))).await;
+    assert_eq!(empty.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(common::response_json(empty).await["code"], "101032003");
+    let accepted = f.api(Method::POST, path, Some(json!({"sessionCode":session.session_code,"expectedRunCode":"goal-run","content":"/goal finish composer acceptance","requestedSkills":[]}))).await;
+    assert_eq!(
+        accepted["data"]["message"]["content"],
+        "/goal finish composer acceptance"
+    );
+    let goal = f
+        .api(
+            Method::GET,
+            &format!(
+                "/api/v1/chats/sessions/get-latest-goal?sessionCode={}",
+                session.session_code
+            ),
+            None,
+        )
+        .await;
+    assert_eq!(
+        goal["data"]["goal"]["objectiveMarkdown"], "finish composer acceptance",
+        "{goal}"
+    );
+    f.state
+        .short_term_memory
+        .pause_goal(
+            tron_backend::application::short_term_memory::GoalSessionCommand {
+                session_code: session.session_code.clone(),
+                goal_code: None,
+            },
+        )
+        .unwrap();
+    f.api(Method::POST, path, Some(json!({"sessionCode":session.session_code,"expectedRunCode":"goal-run","content":"/goal revised acceptance","requestedSkills":[]}))).await;
+    let revised = f
+        .api(
+            Method::GET,
+            &format!(
+                "/api/v1/chats/sessions/get-latest-goal?sessionCode={}",
+                session.session_code
+            ),
+            None,
+        )
+        .await;
+    assert_eq!(
+        revised["data"]["goal"]["goalCode"],
+        goal["data"]["goal"]["goalCode"]
+    );
+    assert_eq!(
+        revised["data"]["goal"]["objectiveMarkdown"],
+        "revised acceptance"
+    );
+    assert_eq!(revised["data"]["goal"]["status"], "ACTIVE");
+    assert_eq!(
+        f.state
+            .chats
+            .list_messages(&session.session_code)
+            .unwrap()
+            .len(),
+        2
+    );
+}

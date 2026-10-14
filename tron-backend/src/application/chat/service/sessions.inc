@@ -424,6 +424,7 @@ impl ChatService {
     ) -> Result<SendChatMessageCommand, ChatError> {
         let session = self.repository().get_session(session_code)?;
         Ok(SendChatMessageCommand {
+            requested_skills: Vec::new(),
             a2ui_action_id: None, a2ui_metadata: None,
             run_code: None,
             content: None,
@@ -478,6 +479,11 @@ impl ChatService {
             .repository()
             .get_session(&session_code)
             .map_err(ChatSteerError::Chat)?;
+        if session.status != ChatSessionStatus::Active { return Err(ChatSteerError::Chat(ChatError::SessionArchived)); }
+        let agent_code = session.agent_code.as_deref().unwrap_or(MAIN_AGENT_CODE);
+        let requested_skills = self.authorize_requested_skills(agent_code, &command.requested_skills).map_err(ChatSteerError::Chat)?;
+        let goal = super::composer_input::goal_objective(&content).map_err(ChatSteerError::Chat)?;
+        if goal.is_some() { self.ensure_goal_agent(agent_code).map_err(ChatSteerError::Chat)?; }
         let (attachments, invocation_attachments) = self
             .prepare_session_attachments(&session, attachments)
             .map_err(ChatSteerError::Chat)?;
@@ -491,7 +497,9 @@ impl ChatService {
         match self
             .active_runs
             .accept_steer(&session_code, &expected_run_code, || {
-                let message = self.create_message(
+                // Admission is fenced by the active-run lock before command side effects.
+                if let Some(objective) = goal { self.apply_goal_command(&session_code, objective, crate::shared::auth_holder::AuthHolder::get().map(|auth| auth.user_code().to_string())).map_err(ChatSendError::Chat)?; }
+                let message = self.create_message_with_skills(
                     &session_code,
                     Some(expected_run_code.clone()),
                     ChatMessageRole::User,
@@ -500,9 +508,11 @@ impl ChatService {
                     &content,
                     attachments.clone(),
                     None,
+                    requested_skills.clone(),
                 )?;
                 let input = AgentSteerInput {
                     steer_code: message.message_code.clone(),
+                    requested_skills: requested_skills.clone(),
                     content: prompt.clone(),
                     attachments: invocation_attachments.clone(),
                 };

@@ -20,6 +20,9 @@ pub async fn send_message(
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
     };
+    if let Err(error) = state.chats.validate_composer_input(&shared::effective_agent_code(&session, &request), request.content.as_deref().unwrap_or_default(), &request.requested_skills) {
+        return chat_error_response(error);
+    }
     let run_code = request.run_code.clone().unwrap_or_else(generate_agent_run_code);
     request.run_code = Some(run_code.clone());
     let prepared_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
@@ -121,6 +124,7 @@ pub async fn steer_message(
         expected_run_code: request.expected_run_code,
         content: request.content,
         attachments: request.attachments,
+        requested_skills: request.requested_skills,
     }) {
         Ok(result) => {
             Json(ApiResponse::success(ChatSteerResultResponse::from(result))).into_response()
@@ -161,6 +165,9 @@ pub(crate) async fn stream_message_command(
         Err(error) => return chat_send_error_response(error),
     };
     let supports_steer = matches!(resolved_runtime.runtime_type, AgentRuntimeType::React);
+    if let Err(error) = state.chats.validate_composer_input(&shared::effective_agent_code(&session, &request), request.content.as_deref().unwrap_or_default(), &request.requested_skills) {
+        return chat_error_response(error);
+    }
     let run_code = request.run_code.clone().unwrap_or_else(generate_agent_run_code);
     request.run_code = Some(run_code.clone());
     let prepared_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
