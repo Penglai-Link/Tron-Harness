@@ -83,21 +83,26 @@ impl TurnStateAdapter {
 
     /// Persist only provider continuation metadata, never credentials or messages.
     /// The digest prevents replaying a response against edited/compacted history.
-    pub(crate) fn checkpoint(&self, messages: &[AgentMessage]) -> Result<Option<Value>, String> {
+    pub(crate) fn checkpoint(
+        &mut self,
+        messages: &[AgentMessage],
+    ) -> Result<Option<Value>, String> {
         let Self::Responses(state) = self else {
             return Ok(None);
         };
-        let Some(response_id) = &state.previous_response_id else {
+        let Some(response_id) = state.previous_response_id.clone() else {
             return Ok(None);
         };
-        let consumed = state.consumed_message_count;
-        if consumed > messages.len() {
+        if state.consumed_message_count > messages.len() {
             return Err("continuation exceeds transcript".into());
         }
+        // The chain folds each consumed message exactly once; a turn only
+        // hashes the delta since the previous checkpoint.
+        state.advance_chain(messages)?;
         Ok(Some(serde_json::json!({
             "responseId": response_id,
-            "consumedMessages": consumed,
-            "prefixDigest": continuation_digest(&messages[..consumed])?,
+            "consumedMessages": state.consumed_message_count,
+            "prefixDigest": state.chain_digest_hex(),
             "contextHash": state.context_hash,
         })))
     }
@@ -124,6 +129,11 @@ impl TurnStateAdapter {
         state.previous_response_id = Some(checkpoint.response_id);
         state.consumed_message_count = checkpoint.consumed_messages;
         state.context_hash = checkpoint.context_hash;
+        // Seed the running chain so post-restore checkpoints stay incremental.
+        state.chain = Some(continuation_digest_bytes(
+            &messages[..checkpoint.consumed_messages],
+        )?);
+        state.chain_count = checkpoint.consumed_messages;
         Ok(true)
     }
 
@@ -145,10 +155,48 @@ struct ResponsesCheckpoint {
     context_hash: Option<String>,
 }
 
-fn continuation_digest(messages: &[AgentMessage]) -> Result<String, String> {
+/// Chained digest: each message is folded in exactly once, so maintaining
+/// the chain costs the new messages only instead of re-serializing the
+/// whole consumed prefix every turn.
+const CHAIN_DOMAIN: &[u8] = b"tron.continuation.v2";
+
+type ChainDigest = [u8; 32];
+
+fn empty_chain() -> ChainDigest {
     use sha2::{Digest, Sha256};
-    let bytes = serde_json::to_vec(messages).map_err(|error| error.to_string())?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    let mut hasher = Sha256::new();
+    hasher.update(CHAIN_DOMAIN);
+    hasher.finalize().into()
+}
+
+fn chain_step(previous: Option<ChainDigest>, message: &AgentMessage) -> Result<ChainDigest, String> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    match previous {
+        Some(digest) => hasher.update(digest),
+        None => hasher.update(CHAIN_DOMAIN),
+    }
+    let bytes = serde_json::to_vec(message).map_err(|error| error.to_string())?;
+    hasher.update(bytes);
+    Ok(hasher.finalize().into())
+}
+
+/// Full recomputation over a prefix; used once at restore, when no running
+/// chain exists yet.
+fn continuation_digest_bytes(messages: &[AgentMessage]) -> Result<ChainDigest, String> {
+    let mut chain = None;
+    for message in messages {
+        chain = Some(chain_step(chain, message)?);
+    }
+    Ok(chain.unwrap_or_else(empty_chain))
+}
+
+fn continuation_digest(messages: &[AgentMessage]) -> Result<String, String> {
+    Ok(hex_digest(&continuation_digest_bytes(messages)?))
+}
+
+fn hex_digest(digest: &ChainDigest) -> String {
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[derive(Debug, Clone, Default)]
@@ -181,9 +229,41 @@ pub struct ResponsesItemState {
     previous_response_id: Option<String>,
     consumed_message_count: usize,
     context_hash: Option<String>,
+    /// Running chained digest over the consumed prefix. `chain_count` is the
+    /// number of transcript positions already folded in; the chain resets on
+    /// rebase, so each checkpoint hashes only the delta since the last one.
+    chain: Option<ChainDigest>,
+    chain_count: usize,
 }
 
 impl ResponsesItemState {
+    fn reset_continuation(&mut self) {
+        self.previous_response_id = None;
+        self.consumed_message_count = 0;
+        self.chain = None;
+        self.chain_count = 0;
+    }
+    /// Fold newly consumed messages into the running chain. A rebase or a
+    /// shrinking consumed count restarts the chain from the new head.
+    fn advance_chain(&mut self, messages: &[AgentMessage]) -> Result<(), String> {
+        let target = self.consumed_message_count.min(messages.len());
+        if self.chain_count > self.consumed_message_count {
+            self.chain = None;
+            self.chain_count = 0;
+        }
+        while self.chain_count < target {
+            self.chain = Some(chain_step(self.chain, &messages[self.chain_count])?);
+            self.chain_count += 1;
+        }
+        Ok(())
+    }
+    fn chain_digest_hex(&self) -> String {
+        self.chain
+            .as_ref()
+            .map(|digest| hex_digest(digest))
+            .unwrap_or_else(|| hex_digest(&empty_chain()))
+    }
+
     pub fn build_request(
         &mut self,
         context: &AgentRunContext,
@@ -196,8 +276,7 @@ impl ResponsesItemState {
             .unwrap_or(false);
         let unhashable_rebase = rebased && context_hash.is_none();
         if unhashable_rebase || context_changed || self.consumed_message_count > messages.len() {
-            self.previous_response_id = None;
-            self.consumed_message_count = 0;
+            self.reset_continuation();
         }
         if let Some(hash) = context_hash {
             self.context_hash = Some(hash.to_string());
@@ -504,8 +583,54 @@ mod tests {
         assert_eq!(items[2]["output"], json!("found"));
     }
     #[test]
-    fn durable_continuation_rejects_edited_prefix_and_restores_exact_history() {
+    fn chained_checkpoints_match_full_recomputation_and_reject_edits() {
         let context = responses_context();
+        let mut state = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
+        state.apply_model_response(
+            &ModelResponse::final_output_with_usage_and_response_id(
+                "ok",
+                None,
+                Some("resp-1".into()),
+            ),
+            context.messages.len(),
+        );
+        // First checkpoint folds the whole prefix once.
+        let first = state.checkpoint(&context.messages).unwrap().unwrap();
+        // Append turns: each checkpoint hashes only the delta, yet must agree
+        // with a full recomputation of the same prefix.
+        let mut messages = context.messages.clone();
+        for turn in 0..3 {
+            messages.push(AgentMessage::user(format!("turn {turn}")));
+            state.apply_model_response(
+                &ModelResponse::final_output_with_usage_and_response_id(
+                    &format!("ok {turn}"),
+                    None,
+                    Some(format!("resp-{turn}")),
+                ),
+                messages.len(),
+            );
+            let checkpoint = state.checkpoint(&messages).unwrap().unwrap();
+            assert_eq!(
+                checkpoint["prefixDigest"],
+                serde_json::json!(super::continuation_digest(
+                    &messages[..checkpoint["consumedMessages"].as_u64().unwrap() as usize]
+                )
+                .unwrap())
+            );
+        }
+        // Restoring against the unedited transcript succeeds and keeps the
+        // incremental chain; restoring against an edited prefix is rejected.
+        let last = state.checkpoint(&messages).unwrap().unwrap();
+        let mut restored = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
+        assert!(restored.restore_checkpoint(&last, &messages).unwrap());
+        let mut edited = messages.clone();
+        edited[0] = AgentMessage::system("New instructions");
+        assert!(!restored.restore_checkpoint(&last, &edited).unwrap());
+        let _ = first;
+    }
+
+    #[test]
+    fn durable_continuation_rejects_edited_prefix_and_restores_exact_history() {        let context = responses_context();
         let mut state = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
         state.apply_model_response(
             &ModelResponse::final_output_with_usage_and_response_id(
