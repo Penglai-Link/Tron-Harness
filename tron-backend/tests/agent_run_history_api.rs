@@ -3,6 +3,7 @@ mod common;
 use axum::{
     Json, Router,
     http::{Method, StatusCode},
+    response::IntoResponse,
     routing::post,
 };
 use serde_json::{Value, json};
@@ -34,7 +35,9 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
     }
 }
 
-async fn agent_chat_completion(Json(payload): Json<Value>) -> Json<Value> {
+async fn agent_chat_completion(
+    axum::extract::Json(payload): axum::extract::Json<Value>,
+) -> axum::response::Response {
     let prompt = payload["messages"]
         .as_array()
         .and_then(|messages| {
@@ -45,14 +48,37 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Json<Value> {
             })
         })
         .unwrap_or_default();
+    let text = format!("history completion for {prompt} with sk-history-secret");
+    if payload["stream"].as_bool().unwrap_or(false) {
+        // Real OpenAI-compatible servers answer stream requests with SSE.
+        let chunks = [
+            json!({"choices":[{"index":0,"delta":{"role":"assistant","content":text}}]}),
+            json!({"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}),
+        ];
+        let mut body = String::new();
+        for chunk in chunks {
+            body.push_str(&format!("data: {chunk}\n\n"));
+        }
+        body.push_str("data: [DONE]\n\n");
+        return (
+            StatusCode::OK,
+            [(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::header::HeaderValue::from_static("text/event-stream"),
+            )],
+            body,
+        )
+            .into_response();
+    }
     Json(json!({
         "choices": [{
             "message": {
                 "role": "assistant",
-                "content": format!("history completion for {prompt} with sk-history-secret")
+                "content": text
             }
         }]
     }))
+    .into_response()
 }
 
 #[tokio::test]

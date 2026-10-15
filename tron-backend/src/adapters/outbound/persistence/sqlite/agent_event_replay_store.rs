@@ -130,8 +130,17 @@ impl SqliteAgentEventReplayStore {
         match storage.sessions.get(key).await {
             Ok(s) => Ok(s.id),
             Err(fw::StateError::NotFound) => {
-                let id = fw::RunId::parse_str(key).map_err(|_| fw::StateError::NotFound)?;
-                Ok(storage.sessions.store.get_run(id).await?.session_id)
+                if let Ok(id) = fw::RunId::parse_str(key) {
+                    if let Ok(run) = storage.sessions.store.get_run(id).await {
+                        return Ok(run.session_id);
+                    }
+                }
+                // A stream can start before its conversation session exists
+                // (warnings, early diagnostics). The replay journal owns its
+                // session keyed by the stream, shared with later runs.
+                let mut record = fw::SessionRecord::new("");
+                record.id = key.into();
+                storage.sessions.create(record).await.map(|s| s.id)
             }
             Err(e) => Err(e),
         }

@@ -15,6 +15,92 @@ pub struct SqliteChatRepository {
     host: FrameworkHost,
 }
 
+/// One round trip builds the whole session projection: business link, native
+/// session record, latest non-summary run, and the external runtime reference.
+/// The correlated subqueries use the ef_runs_session index and
+/// ef_session_context primary key.
+const SESSION_PROJECTION_SQL: &str = "SELECT l.session_id, l.business_json, \
+    json_extract(s.record,'$.title'), json_extract(s.record,'$.status'), \
+    json_extract(s.record,'$.created_at_ms'), json_extract(s.record,'$.updated_at_ms'), \
+    (SELECT r.record FROM ef_runs r WHERE (r.session_id=l.session_id OR r.owner_session_id=l.session_id) \
+        AND json_extract(r.record,'$.kind')<>'SUMMARY' \
+        ORDER BY json_extract(r.record,'$.started_at_ms') DESC, r.id DESC LIMIT 1), \
+    (SELECT c.value FROM ef_session_context c WHERE c.session_id=l.session_id AND c.key='tron.external-reference') \
+    FROM workspace_session_links l JOIN ef_sessions s ON s.id=l.session_id";
+
+/// Columns of SESSION_PROJECTION_SQL before the ChatSession mapping.
+struct SessionProjection {
+    session_id: String,
+    link_json: String,
+    title: String,
+    status: String,
+    created_at_ms: i64,
+    updated_at_ms: i64,
+    last_run_json: Option<String>,
+    external_reference: Option<String>,
+}
+fn session_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionProjection> {
+    Ok(SessionProjection {
+        session_id: row.get(0)?,
+        link_json: row.get(1)?,
+        title: row.get(2)?,
+        status: row.get(3)?,
+        created_at_ms: row.get(4)?,
+        updated_at_ms: row.get(5)?,
+        last_run_json: row.get(6)?,
+        external_reference: row.get(7)?,
+    })
+}
+fn chat_session_from_row(row: SessionProjection) -> Result<ChatSession, ChatError> {
+    let link: Link =
+        serde_json::from_str(&row.link_json).map_err(|_| ChatError::StorageFailure)?;
+    let status = match row.status.as_str() {
+        "Active" | "ACTIVE" => ChatSessionStatus::Active,
+        "Archived" | "ARCHIVED" => ChatSessionStatus::Archived,
+        _ => return Err(ChatError::StorageFailure),
+    };
+    let last_run = row
+        .last_run_json
+        .as_deref()
+        .map(serde_json::from_str::<fw::ManagedRun>)
+        .transpose()
+        .map_err(|_| ChatError::StorageFailure)?;
+    let last = last_run.as_ref();
+    let runtime = row
+        .external_reference
+        .as_deref()
+        .and_then(|value| serde_json::from_str::<Value>(value).ok())
+        .and_then(|value| value["sessionId"].as_str().map(str::to_owned));
+    Ok(ChatSession {
+        id: link.id,
+        session_code: row.session_id,
+        workspace_code: link.workspace_code,
+        project_code: link.project_code,
+        user_code: link.user_code,
+        app_code: link.app_code,
+        task_code: link.task_code,
+        source_type: link.source_type,
+        source_code: link.source_code,
+        agent_code: link.agent_code,
+        system_agent_session_id: runtime,
+        title: row.title,
+        status,
+        last_run_code: last.map(|r| r.id.to_string()),
+        last_run_status: last.map(|r| {
+            match r.status {
+                fw::ManagedRunStatus::Completed => "COMPLETED",
+                fw::ManagedRunStatus::AwaitingInput => "AWAITING_USER_INPUT",
+                fw::ManagedRunStatus::Running => "RUNNING",
+                fw::ManagedRunStatus::Cancelled => "STOPPED",
+                _ => "FAILED",
+            }
+            .into()
+        }),
+        created_at: crate::shared::time::timestamp_from_millis(row.created_at_ms),
+        updated_at: crate::shared::time::timestamp_from_millis(row.updated_at_ms),
+    })
+}
+
 /// Remove the execution spans owned by a deleted session. A trace can also
 /// contain an HTTP span or another session, so deleting the trace unconditionally
 /// would erase unrelated observability data.
@@ -185,7 +271,10 @@ impl SqliteChatRepository {
                 }
                 return Ok(());
             }
-            Err(ChatError::SessionNotFound) if context.conversation_code.is_none() => {}
+            // A missing conversation is materialized lazily: explicit
+            // conversation codes and run-scoped temp sessions share the same
+            // creation path, bound to the already validated run workspace.
+            Err(ChatError::SessionNotFound) => {}
             Err(error) => return Err(error),
         }
         let mut record = fw::SessionRecord::new("临时运行");
@@ -254,59 +343,28 @@ impl SqliteChatRepository {
             .map_err(|_| ChatError::StorageFailure)
     }
     async fn session(&self, id: &str) -> Result<ChatSession, ChatError> {
-        let link = self.link(id).await?;
-        let framework = self.framework().await?;
-        let sessions = framework
-            .sessions()
-            .map_err(|_| ChatError::StorageFailure)?;
-        let session = sessions.get(id).await.map_err(chat_error)?;
-        let runs = framework
-            .runs()
-            .map_err(|_| ChatError::StorageFailure)?
-            .list(id)
-            .await
-            .map_err(chat_error)?;
-        let last = runs
-            .iter()
-            .filter(|run| run.kind != "SUMMARY")
-            .max_by_key(|r| (r.started_at_ms, r.id));
-        let runtime = sessions
-            .read_context(id, "tron.external-reference")
+        // Building the framework lazily creates the ef_* tables this
+        // projection reads; the first call initializes shared storage.
+        self.framework().await?;
+        let id = id.to_owned();
+        let raw = self
+            .host
+            .shared_database()
             .await
             .map_err(chat_error)?
-            .map(|(_, v)| v);
-        Ok(ChatSession {
-            id: link.id,
-            session_code: session.id,
-            workspace_code: link.workspace_code,
-            project_code: link.project_code,
-            user_code: link.user_code,
-            app_code: link.app_code,
-            task_code: link.task_code,
-            source_type: link.source_type,
-            source_code: link.source_code,
-            agent_code: link.agent_code,
-            system_agent_session_id: runtime
-                .and_then(|v| v["sessionId"].as_str().map(str::to_owned)),
-            title: session.title,
-            status: match session.status {
-                fw::SessionStatus::Active => ChatSessionStatus::Active,
-                fw::SessionStatus::Archived => ChatSessionStatus::Archived,
-            },
-            last_run_code: last.map(|r| r.id.to_string()),
-            last_run_status: last.map(|r| {
-                match r.status {
-                    fw::ManagedRunStatus::Completed => "COMPLETED",
-                    fw::ManagedRunStatus::AwaitingInput => "AWAITING_USER_INPUT",
-                    fw::ManagedRunStatus::Running => "RUNNING",
-                    fw::ManagedRunStatus::Cancelled => "STOPPED",
-                    _ => "FAILED",
-                }
-                .into()
-            }),
-            created_at: crate::shared::time::timestamp_from_millis(session.created_at_ms as i64),
-            updated_at: crate::shared::time::timestamp_from_millis(session.updated_at_ms as i64),
-        })
+            .call_read(move |c| -> Result<Vec<SessionProjection>, ChatError> {
+                let mut statement = c
+                    .prepare(&format!("{SESSION_PROJECTION_SQL} WHERE l.session_id=?1"))
+                    .map_err(|_| ChatError::StorageFailure)?;
+                statement
+                    .query_map(params![id], session_row)
+                    .map_err(|_| ChatError::StorageFailure)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| ChatError::StorageFailure)
+            })
+            .await
+            .map_err(|_| ChatError::StorageFailure)?;
+        chat_session_from_row(raw.into_iter().next().ok_or(ChatError::SessionNotFound)?)
     }
     async fn events(&self, session: &str, kind: &str) -> Result<Vec<fw::SessionEvent>, ChatError> {
         self.link(session).await?;
@@ -318,12 +376,15 @@ impl SqliteChatRepository {
         let mut result = Vec::new();
         let mut after = 0;
         loop {
-            let page = store.list(session, after, 1000).await.map_err(chat_error)?;
+            let page = store
+                .list_by_kind(session, kind, after, 1000)
+                .await
+                .map_err(chat_error)?;
             if page.is_empty() {
                 break;
             }
             after = page.last().unwrap().sequence;
-            result.extend(page.into_iter().filter(|e| e.kind == kind));
+            result.extend(page);
         }
         Ok(result)
     }
@@ -429,27 +490,84 @@ impl ChatRepository for SqliteChatRepository {
     }
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError> {
         blocking(async {
+            self.framework().await?;
             let db = self.host.shared_database().await.map_err(chat_error)?;
-            let codes = db
-                .call(|c| {
-                    let mut stmt = c.prepare(
-                        "SELECT session_id FROM workspace_session_links ORDER BY session_id",
-                    )?;
-                    stmt.query_map([], |r| r.get::<_, String>(0))?
+            let raw = db
+                .call_read(|c| -> Result<Vec<SessionProjection>, ChatError> {
+                    let mut statement = c
+                        .prepare(&format!("{SESSION_PROJECTION_SQL} ORDER BY l.session_id"))
+                        .map_err(|_| ChatError::StorageFailure)?;
+                    statement
+                        .query_map([], session_row)
+                        .map_err(|_| ChatError::StorageFailure)?
                         .collect::<Result<Vec<_>, _>>()
+                        .map_err(|_| ChatError::StorageFailure)
                 })
                 .await
                 .map_err(|_| ChatError::StorageFailure)?;
-            let mut result = Vec::new();
-            for code in codes {
-                result.push(self.session(&code).await?);
-            }
+            let mut result = raw
+                .into_iter()
+                .map(chat_session_from_row)
+                .collect::<Result<Vec<_>, _>>()?;
             result.sort_by(|a, b| {
                 b.updated_at
                     .cmp(&a.updated_at)
                     .then_with(|| b.session_code.cmp(&a.session_code))
             });
             Ok(result)
+        })
+    }
+    /// Archived listing pushes filtering, ordering, counting and paging into
+    /// SQL so each page costs one read instead of replaying every session.
+    fn list_archived_sessions(
+        &mut self,
+        workspace_code: Option<&str>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<(Vec<ChatSession>, u64), ChatError> {
+        blocking(async {
+            self.framework().await?;
+            let db = self.host.shared_database().await.map_err(chat_error)?;
+            let workspace = workspace_code.map(str::to_owned);
+            let filter = "WHERE s.status IN ('Archived','ARCHIVED') \
+                 AND (?1 IS NULL OR l.workspace_code=?1) \
+                 AND substr(coalesce(json_extract(l.business_json,'$.source_code'),''),1,7) <> '__dude:'";
+            let rows = db
+                .call_read(move |c| -> Result<(Vec<SessionProjection>, u64), ChatError> {
+                    let total: u64 = c
+                        .query_row(
+                            &format!(
+                                "SELECT count(*) FROM workspace_session_links l \
+                                 JOIN ef_sessions s ON s.id=l.session_id {filter}"
+                            ),
+                            params![workspace],
+                            |r| r.get(0),
+                        )
+                        .map_err(|_| ChatError::StorageFailure)?;
+                    let mut statement = c
+                        .prepare(&format!("{SESSION_PROJECTION_SQL} {filter} \
+                            ORDER BY json_extract(s.record,'$.updated_at_ms') DESC, l.session_id DESC \
+                            LIMIT ?2 OFFSET ?3"))
+                        .map_err(|_| ChatError::StorageFailure)?;
+                    let rows = statement
+                        .query_map(
+                            params![workspace, i64::from(limit), i64::from(offset)],
+                            session_row,
+                        )
+                        .map_err(|_| ChatError::StorageFailure)?
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|_| ChatError::StorageFailure)?;
+                    Ok((rows, total))
+                })
+                .await
+                .map_err(|_| ChatError::StorageFailure)?;
+            let total = rows.1;
+            let items = rows
+                .0
+                .into_iter()
+                .map(chat_session_from_row)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((items, total))
         })
     }
     fn get_session(&mut self, id: &str) -> Result<ChatSession, ChatError> {
@@ -644,15 +762,19 @@ impl ChatRepository for SqliteChatRepository {
             let interactions = services
                 .get::<fw::InteractionStoreService>()
                 .ok_or(ChatError::StorageFailure)?;
+            // One batched lookup for every pending request in the session.
+            let ids = requests
+                .keys()
+                .map(|code| fw::RunId::parse_str(code))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| ChatError::StorageFailure)?;
+            let records = interactions
+                .0
+                .get_many(id, &ids)
+                .await
+                .map_err(chat_error)?;
             let mut views = Vec::new();
-            for mut request in requests.into_values() {
-                let interaction = fw::RunId::parse_str(&request.request_code)
-                    .map_err(|_| ChatError::StorageFailure)?;
-                let record = interactions
-                    .0
-                    .get(id, interaction)
-                    .await
-                    .map_err(chat_error)?;
+            for (mut request, record) in requests.into_values().zip(records) {
                 request.status = if record.response.is_some() {
                     ChatUserInputRequestStatus::Answered
                 } else {

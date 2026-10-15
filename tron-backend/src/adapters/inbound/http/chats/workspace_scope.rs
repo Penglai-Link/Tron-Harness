@@ -179,7 +179,13 @@ pub async fn require_workspace(
     let Some(workspace) = workspace.filter(|w| !w.trim().is_empty()) else {
         return chat_error_response(ChatError::WorkspaceRequired);
     };
-    if state.workspaces.get_workspace(&workspace).is_err() {
+    // Run creation owns its workspace validation contract
+    // (AGENT_WORKSPACE_INVALID); the middleware only needs the scope for
+    // resolving existing run and session ownership.
+    let run_creation = runs
+        && path == "/api/v1/agents/runs"
+        && request.method() != axum::http::Method::GET;
+    if !run_creation && state.workspaces.get_workspace(&workspace).is_err() {
         return chat_error_response(ChatError::SessionNotFound);
     }
     // Query extractors downstream must receive the validated header scope too.
@@ -289,7 +295,17 @@ pub async fn require_workspace(
         }
         let record = match state.chats.get_session(&session) {
             Ok(record) => record,
-            Err(error) => return chat_error_response(error),
+            Err(error) => {
+                if runs || replay {
+                    // Run and stream scopes resolve their session best-effort:
+                    // a code that maps to nothing persisted yet belongs to the
+                    // handler, which creates the new conversation or answers
+                    // with the domain error. Existing foreign sessions were
+                    // already rejected by the resolution above.
+                    return next.run(request).await;
+                }
+                return chat_error_response(error);
+            }
         };
         if state.dudes.session(&session).ok().flatten().is_some() {
             return chat_error_response(ChatError::SessionNotFound);

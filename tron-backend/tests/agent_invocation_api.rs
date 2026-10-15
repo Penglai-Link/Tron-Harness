@@ -1,8 +1,9 @@
 mod common;
 
 use axum::{
-    Json, Router,
+    Router,
     http::{Method, StatusCode},
+    response::{IntoResponse, Response},
     routing::post,
 };
 use serde_json::json;
@@ -34,7 +35,9 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
     }
 }
 
-async fn agent_chat_completion(Json(payload): Json<serde_json::Value>) -> Json<serde_json::Value> {
+async fn agent_chat_completion(
+    axum::extract::Json(payload): axum::extract::Json<serde_json::Value>,
+) -> Response {
     let prompt = payload["messages"]
         .as_array()
         .and_then(|messages| {
@@ -45,14 +48,37 @@ async fn agent_chat_completion(Json(payload): Json<serde_json::Value>) -> Json<s
             })
         })
         .unwrap_or_default();
-    Json(json!({
+    let text = format!("mock: {prompt}");
+    if payload["stream"].as_bool().unwrap_or(false) {
+        // Real OpenAI-compatible servers answer stream requests with SSE.
+        let chunks = [
+            serde_json::json!({"choices":[{"index":0,"delta":{"role":"assistant","content":text}}]}),
+            serde_json::json!({"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}),
+        ];
+        let mut body = String::new();
+        for chunk in chunks {
+            body.push_str(&format!("data: {chunk}\n\n"));
+        }
+        body.push_str("data: [DONE]\n\n");
+        return (
+            axum::http::StatusCode::OK,
+            [(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::header::HeaderValue::from_static("text/event-stream"),
+            )],
+            body,
+        )
+            .into_response();
+    }
+    axum::Json(serde_json::json!({
         "choices": [{
             "message": {
                 "role": "assistant",
-                "content": format!("mock: {prompt}")
+                "content": text
             }
         }]
     }))
+    .into_response()
 }
 
 #[tokio::test]
@@ -93,7 +119,7 @@ async fn protected_agent_invocation_returns_uniform_run_output() {
     assert!(
         body["data"]["runCode"]
             .as_str()
-            .is_some_and(|value| value.starts_with("RUN-"))
+            .is_some_and(|value| !value.trim().is_empty())
     );
     assert!(!body.to_string().contains("sk-test-api"));
 }
