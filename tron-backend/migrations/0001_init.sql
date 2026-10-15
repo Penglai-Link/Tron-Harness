@@ -1413,10 +1413,13 @@ CREATE TABLE dude_events (
  attempts INTEGER NOT NULL DEFAULT 0, record_json TEXT NOT NULL
 );
 CREATE INDEX dude_events_ready ON dude_events(status,available_at,lease_until);
+CREATE INDEX dude_events_dude ON dude_events(dude_code,source,status);
+CREATE INDEX dude_events_session ON dude_events(session_code,status);
 CREATE TABLE platform_notifications (
  notification_id TEXT PRIMARY KEY, dedup_key TEXT NOT NULL UNIQUE, record_json TEXT NOT NULL,
  created_at INTEGER NOT NULL
 );
+CREATE INDEX platform_notifications_created ON platform_notifications(created_at DESC);
 CREATE TABLE collaboration_threads (
  session_id TEXT PRIMARY KEY, workspace_code TEXT NOT NULL, user_code TEXT,
  owner_kind TEXT NOT NULL, owner_code TEXT NOT NULL, record_json TEXT NOT NULL,
