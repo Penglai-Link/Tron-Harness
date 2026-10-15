@@ -213,6 +213,11 @@ impl fw::ChatModel for TronChatModel {
             {
                 return;
             }
+            // Raw chain-of-thought is internal evidence: present the reasoning
+            // summary to streams, never the raw reasoning itself.
+            if event.kind == crate::domain::agent::ModelStreamEventKind::Reasoning {
+                return;
+            }
             if event.delta.len() > 256 * 1024 || sender.try_send(event.clone()).is_err() {
                 callback_overflow.store(true, std::sync::atomic::Ordering::Release);
                 return;
@@ -257,8 +262,10 @@ impl fw::ChatModel for TronChatModel {
                             if let Some(event) = event {
                                 match event.kind {
                                     crate::domain::agent::ModelStreamEventKind::Text => stream.text_delta(&event.delta).await,
-                                    crate::domain::agent::ModelStreamEventKind::ReasoningSummary
-                                    | crate::domain::agent::ModelStreamEventKind::Reasoning => stream.reasoning_delta(&event.delta).await,
+                                    // Presented reasoning is the summary; raw
+                                    // chain-of-thought never reaches public streams.
+                                    crate::domain::agent::ModelStreamEventKind::ReasoningSummary => stream.reasoning_delta(&event.delta).await,
+                                    crate::domain::agent::ModelStreamEventKind::Reasoning => {}
                                 }
                             } else {
                                 break invocation.await;

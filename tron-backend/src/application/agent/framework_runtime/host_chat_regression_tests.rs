@@ -195,7 +195,9 @@ async fn provider_thinking_and_summary_reach_live_native_events_and_durable_repl
     use crate::shared::event_bus::{AguiEventSink, EventBusConfig};
 
     for kind in [
-        ModelStreamEventKind::Reasoning,
+        // Raw provider chain-of-thought (ModelStreamEventKind::Reasoning) is
+        // internal evidence: it is never forwarded to public streams, so only
+        // the presentable summary kind is exercised here.
         ModelStreamEventKind::ReasoningSummary,
     ] {
         let host = FrameworkHost::temporary(None).unwrap();
