@@ -301,6 +301,9 @@ pub(crate) async fn stream_message_command(
         let mut continuation_seen = false;
         let mut presentation_incomplete = false;
         let mut replay_read_stalled = false;
+        // Incremental reads clone only frames appended since the last tick.
+        // None keeps the durable full-snapshot fallback.
+        let mut replay_cursor: Option<u64> = None;
         loop {
             interval.tick().await;
             if completion.is_none() {
@@ -312,7 +315,8 @@ pub(crate) async fn stream_message_command(
             let replay = if replay_read_stalled {
                 None
             } else {
-                let (events, stalled) = read_protocol_with_deadline(stream_service.clone(), stream_key.clone(), Duration::from_secs(5)).await;
+                let (events, cursor, stalled) = read_protocol_with_deadline(stream_service.clone(), stream_key.clone(), replay_cursor, Duration::from_secs(5)).await;
+                if let Some(next) = cursor { replay_cursor = Some(next); }
                 replay_read_stalled |= stalled;
                 Some(events)
             };
@@ -544,23 +548,26 @@ fn poll_product_completion(
 async fn read_protocol_with_deadline(
     service: crate::application::agent::AgentAguiStreamService,
     session: String,
+    cursor: Option<u64>,
     deadline: Duration,
 ) -> (
     Result<
         Vec<crate::domain::agent::AgentAguiProtocolEvent>,
         crate::application::agent::AgentAguiStreamError,
     >,
+    Option<u64>,
     bool,
 ) {
     let reader = service.clone();
     let stream_key = session.clone();
     match tokio::time::timeout(
         deadline,
-        tokio::task::spawn_blocking(move || reader.protocol_events(&stream_key)),
+        tokio::task::spawn_blocking(move || reader.protocol_events_since(&stream_key, cursor)),
     )
     .await
     {
-        Ok(Ok(result)) => (result, false),
+        Ok(Ok(Ok((events, cursor)))) => (Ok(events), cursor, false),
+        Ok(Ok(Err(error))) => (Err(error), None, false),
         _ => {
             service.mark_incomplete(
                 &session,
@@ -572,6 +579,7 @@ async fn read_protocol_with_deadline(
                         "presentation replay read acknowledgment unavailable".into(),
                     ),
                 ),
+                None,
                 true,
             )
         }

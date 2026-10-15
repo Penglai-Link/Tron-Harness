@@ -51,9 +51,27 @@ pub struct AgentAguiStreamService {
     transient_protocol: bool,
     protocol_buffer: Arc<Mutex<ProtocolBuffer>>,
 }
-#[derive(Default)]
 struct ProtocolBuffer {
-    frames: VecDeque<(String, AgentAguiProtocolEvent, usize)>,
+    frames: VecDeque<ProtocolFrame>,
+    bytes: usize,
+    next_sequence: u64,
+}
+impl Default for ProtocolBuffer {
+    fn default() -> Self {
+        // Sequences start at 1 so `cursor.unwrap_or(0)` reads the full tail.
+        Self {
+            frames: VecDeque::new(),
+            bytes: 0,
+            next_sequence: 1,
+        }
+    }
+}
+/// One recorded frame with a monotonically increasing sequence, so polling
+/// readers can take only the frames appended since their last read.
+struct ProtocolFrame {
+    key: String,
+    sequence: u64,
+    event: AgentAguiProtocolEvent,
     bytes: usize,
 }
 const MAX_PROTOCOL_BUFFER_BYTES: usize = 8 * 1024 * 1024;
@@ -100,9 +118,56 @@ mod reconnect_tests {
         let buffer = service.protocol_buffer.lock().unwrap();
         assert!(buffer.bytes <= MAX_PROTOCOL_BUFFER_BYTES);
         assert!(buffer.frames.len() <= MAX_PROTOCOL_BUFFER_FRAMES);
-        assert!(buffer.frames.iter().all(|(key, _, _)| key == "third"));
+        assert!(buffer.frames.iter().all(|frame| frame.key == "third"));
         drop(buffer);
         assert!(service.protocol_events("oversized").unwrap().is_empty());
+    }
+
+    #[test]
+    fn incremental_reads_only_clone_frames_after_the_cursor() {
+        let service =
+            AgentAguiStreamService::new(Arc::new(AguiEventSink::new(&EventBusConfig::default())));
+        for sequence in 0..6 {
+            service
+                .record_protocol_event(
+                    "session",
+                    AgentAguiProtocolEvent {
+                        sse_event: "TEXT_MESSAGE_CONTENT".into(),
+                        data: serde_json::json!({"sequence": sequence}),
+                    },
+                )
+                .unwrap();
+        }
+        let (events, cursor) = service.protocol_events_since("session", None).unwrap();
+        assert_eq!(events.len(), 6);
+        assert_eq!(cursor, Some(6));
+        // Idle poll: no new frames, cursor unchanged, nothing cloned.
+        let (events, next) = service.protocol_events_since("session", cursor).unwrap();
+        assert!(events.is_empty());
+        assert_eq!(next, Some(6));
+        // One new frame: only that frame is returned.
+        service
+            .record_protocol_event(
+                "session",
+                AgentAguiProtocolEvent {
+                    sse_event: "TEXT_MESSAGE_CONTENT".into(),
+                    data: serde_json::json!({"sequence": 6}),
+                },
+            )
+            .unwrap();
+        service
+            .record_protocol_event(
+                "other",
+                AgentAguiProtocolEvent {
+                    sse_event: "TEXT_MESSAGE_CONTENT".into(),
+                    data: serde_json::json!({"sequence": 0}),
+                },
+            )
+            .unwrap();
+        let (events, next) = service.protocol_events_since("session", next).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].data["sequence"], 6);
+        assert_eq!(next, Some(7));
     }
 }
 
@@ -184,15 +249,29 @@ impl AgentAguiStreamService {
     ) -> Result<Vec<AgentAguiProtocolEvent>, AgentAguiStreamError> {
         let stream_key = normalized_stream_key(stream_key)?;
         if self.transient_protocol {
-            return Ok(self
+            let buffered = self
                 .protocol_buffer
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .frames
                 .iter()
-                .filter(|(key, _, _)| key == &stream_key)
-                .map(|(_, frame, _)| frame.clone())
-                .collect());
+                .filter(|frame| frame.key == stream_key)
+                .map(|frame| frame.event.clone())
+                .collect::<Vec<_>>();
+            // Product diagnostics (MCP warnings, context notices) travel on the
+            // event bus, not the native AG-UI stream. Their in-memory replay is
+            // merged so transient reads stay SQLite-free yet complete.
+            let memory_events = self
+                .sink
+                .replay(&stream_key)
+                .into_iter()
+                .flat_map(|event| translate_protocol_events(&stream_key, &event))
+                .collect::<Vec<_>>();
+            let mut events = merge_protocol_events(buffered, memory_events);
+            for event in &mut events {
+                project_product_visibility(&mut event.data);
+            }
+            return Ok(events);
         }
         let memory_events = self
             .sink
@@ -219,6 +298,51 @@ impl AgentAguiStreamService {
         Ok(events)
     }
 
+    /// Incremental read for polling loops: only the frames recorded after
+    /// `cursor` are cloned, plus the new cursor to pass to the next call.
+    /// `None` means "read the retained history from the start". Durable-mode
+    /// services return a full snapshot and no cursor.
+    pub fn protocol_events_since(
+        &self,
+        stream_key: &str,
+        cursor: Option<u64>,
+    ) -> Result<(Vec<AgentAguiProtocolEvent>, Option<u64>), AgentAguiStreamError> {
+        let stream_key = normalized_stream_key(stream_key)?;
+        if !self.transient_protocol {
+            let events = self.protocol_events(&stream_key)?;
+            return Ok((events, None));
+        }
+        let after = cursor.unwrap_or(0);
+        let buffer = self
+            .protocol_buffer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut events = Vec::new();
+        let mut latest = cursor;
+        for frame in buffer
+            .frames
+            .iter()
+            .filter(|frame| frame.key == stream_key && frame.sequence > after)
+        {
+            events.push(frame.event.clone());
+            latest = Some(frame.sequence);
+        }
+        // Bus diagnostics (MCP warnings, context notices) are re-read from the
+        // in-memory event replay each poll; the caller dedups them by stable
+        // event identity, so repetition costs only the clone, not SQLite.
+        let memory_events = self
+            .sink
+            .replay(&stream_key)
+            .into_iter()
+            .flat_map(|event| translate_protocol_events(&stream_key, &event))
+            .collect::<Vec<_>>();
+        let mut events = merge_protocol_events(events, memory_events);
+        for event in &mut events {
+            project_product_visibility(&mut event.data);
+        }
+        Ok((events, latest))
+    }
+
     pub fn record_protocol_event(
         &self,
         stream_key: &str,
@@ -239,14 +363,21 @@ impl AgentAguiStreamService {
             while buffer.bytes.saturating_add(bytes) > MAX_PROTOCOL_BUFFER_BYTES
                 || buffer.frames.len() >= MAX_PROTOCOL_BUFFER_FRAMES
             {
-                if let Some((_, _, size)) = buffer.frames.pop_front() {
-                    buffer.bytes = buffer.bytes.saturating_sub(size);
+                if let Some(frame) = buffer.frames.pop_front() {
+                    buffer.bytes = buffer.bytes.saturating_sub(frame.bytes);
                 } else {
                     break;
                 }
             }
             buffer.bytes += bytes;
-            buffer.frames.push_back((stream_key, event, bytes));
+            let sequence = buffer.next_sequence;
+            buffer.next_sequence += 1;
+            buffer.frames.push_back(ProtocolFrame {
+                key: stream_key,
+                sequence,
+                event,
+                bytes,
+            });
             return Ok(());
         }
         if let Some(store) = self.replay_store.as_ref() {

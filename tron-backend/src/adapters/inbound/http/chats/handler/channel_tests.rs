@@ -93,14 +93,15 @@ async fn stalled_replay_reader_has_one_bounded_acknowledgment_and_does_not_block
     );
     let result = tokio::time::timeout(
         Duration::from_secs(1),
-        read_protocol_with_deadline(service, "SESSION".into(), Duration::from_millis(20)),
+        read_protocol_with_deadline(service, "SESSION".into(), None, Duration::from_millis(20)),
     )
     .await;
     // Always release the detached blocking reader before assertions/Runtime drop.
     *release.0.lock().unwrap() = true;
     release.1.notify_all();
-    let (events, stalled) = result.expect("HTTP replay acknowledgment must be bounded");
+    let (events, cursor, stalled) = result.expect("HTTP replay acknowledgment must be bounded");
     assert!(events.is_err());
+    assert!(cursor.is_none());
     assert!(stalled);
     assert!(store.incomplete.load(Ordering::SeqCst));
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
