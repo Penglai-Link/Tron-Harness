@@ -4,11 +4,12 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import * as profileApi from "@/domain/profile/api";
+import { getAwakening, type AwakeningStatus } from "@/domain/dude/api/dudeApi";
 import { useAuthStore } from "@/store/authStore";
 import { ProfileSelectionPage } from "./ProfileSelectionPage";
 
-vi.mock("@/domain/dude/awakening/BlackHole", () => ({ BlackHole: () => null }));
-vi.mock("@/domain/dude/api/dudeApi", () => ({ getAwakening: async () => ({ started: true, state: "Ready" }) }));
+vi.mock("@/domain/dude/awakening/BlackHole", () => ({ BlackHole: () => <div data-testid="black-hole" /> }));
+vi.mock("@/domain/dude/api/dudeApi", () => ({ getAwakening: vi.fn() }));
 vi.mock("@/shared/motion/motionPreferences", () => ({ useMotionPreference: () => "off" }));
 vi.mock("react-i18next", () => {
   const t = (key: string) => key;
@@ -41,10 +42,95 @@ function Location() {
 }
 
 beforeEach(() => {
+  localStorage.clear();
+  vi.mocked(getAwakening).mockResolvedValue({
+    dudeCode: "main-dude", name: "Neo", state: "Ready", started: true,
+    deferred: false, sessionCode: "guide", canResume: true,
+  });
   useAuthStore.setState({ status: "unauthenticated", session: null });
   vi.spyOn(window, "open").mockReturnValue(null);
   vi.mocked(profileApi.createPendingProfile).mockResolvedValue(pendingProfile);
   vi.mocked(profileApi.createPersonAiAuthorization).mockResolvedValue(session);
+});
+
+it.each<{
+  label: string;
+  state: AwakeningStatus["state"];
+  started: boolean;
+  deferred: boolean;
+  canResume: boolean;
+  destination: string;
+}>([
+  { label: "never started", state: "Uninitialized", started: false, deferred: false, canResume: false, destination: "/awakening?arrival=inside" },
+  { label: "closed before answering", state: "AwaitingUser", started: true, deferred: false, canResume: true, destination: "/awakening?arrival=inside" },
+  { label: "closed before the first question", state: "Uninitialized", started: true, deferred: false, canResume: true, destination: "/awakening?arrival=inside" },
+  { label: "unfinished without a resumable private session", state: "AwaitingUser", started: true, deferred: false, canResume: false, destination: "/awakening?arrival=inside" },
+  { label: "explicitly skipped", state: "AwaitingUser", started: true, deferred: true, canResume: true, destination: "/workspace" },
+  { label: "finished", state: "Ready", started: true, deferred: false, canResume: true, destination: "/workspace" },
+])("routes returning users correctly when initialization was $label", async ({ label: _, destination, ...status }) => {
+  vi.useFakeTimers();
+  vi.mocked(getAwakening).mockResolvedValue({ dudeCode: "main-dude", name: "Neo", sessionCode: "guide", ...status });
+  vi.mocked(profileApi.fetchProfiles).mockResolvedValue([activeProfile]);
+  vi.mocked(profileApi.fetchBootstrapProfileStatus).mockResolvedValue(bootstrap(activeProfile));
+  useAuthStore.setState({ status: "authenticated" });
+  await act(async () => {
+    render(<MemoryRouter initialEntries={["/profiles"]}>
+      <Location />
+      <Routes>
+        <Route path="/profiles" element={<ProfileSelectionPage />} />
+        <Route path="/workspace" element={<p>Workspace</p>} />
+        <Route path="/awakening" element={<p>Resume initialization</p>} />
+      </Routes>
+    </MemoryRouter>);
+  });
+  if (status.state === "Ready") {
+    // No approach, dive, or arrival delay for an initialized user's default.
+    expect(screen.getByTestId("location").textContent).toBe("/workspace");
+    expect(screen.queryByTestId("black-hole")).toBeNull();
+  } else {
+    expect(screen.getByTestId("location").textContent).toBe("/profiles");
+    expect(screen.getByTestId("black-hole")).toBeTruthy();
+  }
+  await act(() => vi.advanceTimersByTimeAsync(4300));
+  expect(getAwakening).toHaveBeenCalledOnce();
+  expect(screen.getByTestId("location").textContent).toBe(destination);
+});
+
+it.each([null, "false"])("keeps the black hole before first authorization with entrance preference %s", async (preference) => {
+  if (preference !== null) localStorage.setItem("tron.app-entrance-animation", preference);
+  vi.useFakeTimers();
+  vi.mocked(profileApi.fetchProfiles).mockResolvedValue([]);
+  vi.mocked(profileApi.fetchBootstrapProfileStatus).mockResolvedValue(bootstrap(null));
+  await act(async () => {
+    render(<MemoryRouter><ProfileSelectionPage /></MemoryRouter>);
+  });
+  expect(screen.getByTestId("black-hole")).toBeTruthy();
+  expect(document.querySelector('[data-camera-phase="approach"]')).toBeTruthy();
+  expect(document.querySelector('[data-tron-entry-ready]')).toBeNull();
+  expect(getAwakening).not.toHaveBeenCalled();
+  await act(() => vi.advanceTimersByTimeAsync(2400));
+  expect(document.querySelector('[data-camera-phase="login"]')).toBeTruthy();
+  expect(screen.getByTestId("black-hole")).toBeTruthy();
+});
+
+it("plays the entrance on returning when explicitly enabled", async () => {
+  localStorage.setItem("tron.app-entrance-animation", "true");
+  vi.useFakeTimers();
+  vi.mocked(profileApi.fetchProfiles).mockResolvedValue([activeProfile]);
+  vi.mocked(profileApi.fetchBootstrapProfileStatus).mockResolvedValue(bootstrap(activeProfile));
+  useAuthStore.setState({ status: "authenticated" });
+  await act(async () => {
+    render(<MemoryRouter initialEntries={["/profiles"]}><Location /><Routes>
+      <Route path="/profiles" element={<ProfileSelectionPage />} />
+      <Route path="/workspace" element={<p>Workspace</p>} />
+    </Routes></MemoryRouter>);
+  });
+  expect(screen.getByTestId("location").textContent).toBe("/profiles");
+  expect(screen.getByTestId("black-hole")).toBeTruthy();
+  await act(() => vi.advanceTimersByTimeAsync(2400));
+  expect(document.querySelector('[data-camera-phase="dive"]')).toBeTruthy();
+  await act(() => vi.advanceTimersByTimeAsync(1800));
+  expect(screen.getByText("Workspace")).toBeTruthy();
 });
 afterEach(() => {
   cleanup();

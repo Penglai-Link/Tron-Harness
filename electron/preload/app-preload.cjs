@@ -17,3 +17,5 @@ contextBridge.exposeInMainWorld("tronDesktop", {
 ipcRenderer.on("desktop-target-event", (_event, payload) => {
   window.postMessage(payload, window.location.origin);
 });
+
+require("./startup-animation.cjs")({ ipcRenderer, window, document });

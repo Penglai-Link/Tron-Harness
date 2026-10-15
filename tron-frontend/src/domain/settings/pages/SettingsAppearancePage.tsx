@@ -1,6 +1,7 @@
 import { SkinSettings } from "../components/SkinSettings";
 import { BackgroundAppearanceSettings } from "../components/BackgroundAppearanceSettings";
 import { MotionSettings } from "../components/MotionSettings";
+import { AppEntranceSettings } from "../components/AppEntranceSettings";
 import { SidebarAppearanceSettings } from "../components/SidebarAppearanceSettings";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -71,6 +72,7 @@ export function SettingsAppearancePage() {
       <SkinSettings />
       <BackgroundAppearanceSettings />
       <SidebarAppearanceSettings />
+      <AppEntranceSettings />
       <MotionSettings />
       <SurfaceCard className="p-0">
         <Item size="xs">

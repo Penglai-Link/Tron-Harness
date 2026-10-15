@@ -1,10 +1,9 @@
-import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { useTranslation } from "react-i18next";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // Contributor IDs are extensible; the familiar aliases keep their richer previews.
-export type ContextDetailBlock = "systemPrompt" | "toolSchema" | "familyContext" | "applicationContext" | "history" | (string & {});
+export type ContextDetailBlock = "systemPrompt" | "toolSchema" | "applicationContext" | "history" | (string & {});
 type RecordValue = Record<string, unknown>;
 const keyPrefix = "chat.shortTermMemory.contextPanel.";
 
@@ -143,25 +142,6 @@ function ToolPreview({ value }: { value: unknown }) {
   })}</div>;
 }
 
-function FamilyPreview({ value }: { value: unknown }) {
-  const { t, i18n } = useTranslation("pages");
-  const messages = record(value) ? records(value.messages) : [];
-  const summaries = messages.flatMap((message) => records(message.parts).filter((part) => part.type === "context").map((part) => parse(part.text)));
-  if (!summaries.length) return <Empty label={t(`${keyPrefix}familyEmpty`)} />;
-  return <div className="divide-y divide-[var(--color-outline-variant)]">{summaries.map((summary, index) => {
-    if (!record(summary)) return <StructuredContent key={index} value={summary} />;
-    const sessionCode = typeof summary.sessionCode === "string" ? summary.sessionCode : "";
-    return <section className="space-y-2 py-4 first:pt-0 last:pb-0" key={index}>
-      <h3 className="text-xs font-semibold" title={sessionCode}>{typeof summary.title === "string" ? summary.title : t(`${keyPrefix}familySession`, { session: sessionCode.slice(0, 8) })}</h3>
-      <div className="flex flex-wrap gap-x-3 text-xs text-[var(--color-on-surface-variant)]">
-        {typeof summary.coveredMessages === "number" ? <span>{t(`${keyPrefix}familyCoveredMessages`, { count: summary.coveredMessages })}</span> : null}
-        {typeof summary.createdAt === "number" ? <time>{new Intl.DateTimeFormat(i18n.language, { timeZone: getUserTimeZone(), dateStyle: "medium", timeStyle: "short" }).format(summary.createdAt)}</time> : null}
-      </div>
-      <StructuredContent value={summary.summary} />
-    </section>;
-  })}</div>;
-}
-
 function ApplicationPreview({ value }: { value: unknown }) {
   const { t } = useTranslation("pages");
   const scope = record(value) && record(value.executionScope) ? value.executionScope : null;
@@ -184,7 +164,6 @@ function ApplicationPreview({ value }: { value: unknown }) {
 
 export function ContextDetailPreview({ block, value, onOpenPrompt }: { block: ContextDetailBlock; value: unknown; onOpenPrompt?: (code: string) => void }) {
   if (block === "toolSchema") return <ToolPreview value={value} />;
-  if (block === "familyContext") return <FamilyPreview value={value} />;
   if (block === "applicationContext") return <ApplicationPreview value={value} />;
   return <MessagesPreview value={value} history={block === "history"} systemPrompt={block === "systemPrompt"} onOpenPrompt={onOpenPrompt} />;
 }

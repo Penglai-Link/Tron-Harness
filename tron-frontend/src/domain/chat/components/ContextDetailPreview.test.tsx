@@ -22,23 +22,6 @@ describe.each(["zh-CN", "en-US"])("context inspector in %s", (locale) => {
     expect(screen.queryByText("budgetBreakdown")).toBeNull();
   });
 
-  it("shows an explicit empty family state instead of rendering report internals", async () => {
-    await i18n.changeLanguage(locale);
-    const { container } = render(<ContextDetailPreview block="familyContext" value={{ blockCode: "familyContext", messages: [], blocks: [{ id: "session_family_context", source_version: "hash:0", final_message_count: 0 }], budgetBreakdown: {} }} />);
-    expect(screen.getByText(locale === "zh-CN" ? "没有加载相关会话摘要。" : "No related session summaries were loaded.")).toBeTruthy();
-    expect(container.textContent).not.toContain("session_family_context");
-    expect(container.textContent).not.toContain("hash:0");
-  });
-
-  it("shows the authorized family summary and coverage without technical envelopes", async () => {
-    await i18n.changeLanguage(locale);
-    const { container } = render(<ContextDetailPreview block="familyContext" value={{ messages: [{ role: "user", parts: [{ type: "context", kind: "session_family_context", text: JSON.stringify({ sessionCode: "session-a-12345", summaryCode: "opaque-hash", summary: "Remember sapphire", coveredMessages: 4, createdAt: 1791350400000, sourceRevision: 6 }) }] }], blocks: [{ id: "session_family_context" }] }} />);
-    expect(screen.getByText("Remember sapphire")).toBeTruthy();
-    expect(container.textContent).toContain(locale === "zh-CN" ? "摘要覆盖 4 条消息" : "Summary covers 4 messages");
-    expect(container.textContent).not.toContain("opaque-hash");
-    expect(container.querySelectorAll("article")).toHaveLength(0);
-  });
-
   it("renders system message parts directly with flat sections", async () => {
     await i18n.changeLanguage(locale);
     const { container } = render(<ContextDetailPreview block="systemPrompt" value={{ messages: [{ role: "system", parts: [{ type: "text", text: 'System instructions\n\nAvailable domains:\n[{"name":"Filesystem","description":"Read files","sampleTools":["read_file"]}]' }] }], blocks: [{ id: "framework.instructions" }], budgetBreakdown: { promptPrefixTokens: 6906 } }} />);

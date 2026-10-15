@@ -33,7 +33,6 @@ pub struct ContextProvidersConfig {
     /// Actual message block order. Tools retain their provider-native protocol location.
     pub order: Vec<String>,
     pub checkpoint: ContextProviderPolicy,
-    pub family: ContextProviderPolicy,
     pub working: ContextProviderPolicy,
     pub history: ContextProviderPolicy,
     pub prices: ContextPriceInputs,
@@ -55,7 +54,6 @@ impl Default for ContextProvidersConfig {
                 "seed_prompt_prefix",
                 "application_context",
                 "current_session_checkpoint",
-                "session_family_context",
                 "current_session_working_state",
                 "knowledge_base",
                 "current_session_history",
@@ -63,7 +61,6 @@ impl Default for ContextProvidersConfig {
             .map(str::to_owned)
             .to_vec(),
             checkpoint: ContextProviderPolicy::new(ContextReductionStrategy::Bound, 8_000),
-            family: ContextProviderPolicy::new(ContextReductionStrategy::Bound, 8_000),
             working: ContextProviderPolicy::new(ContextReductionStrategy::Bound, 8_000),
             history: ContextProviderPolicy::new(ContextReductionStrategy::Checkpoint, 2_000),
             prices: ContextPriceInputs::default(),
@@ -116,7 +113,7 @@ impl ContextProvidersConfig {
         {
             return Err("context order must contain every context block exactly once".into());
         }
-        for policy in [&self.checkpoint, &self.family, &self.working] {
+        for policy in [&self.checkpoint, &self.working] {
             if policy.strategy == ContextReductionStrategy::Checkpoint {
                 return Err("checkpoint strategy is only supported for history".into());
             }
@@ -127,7 +124,7 @@ impl ContextProvidersConfig {
         ) {
             return Err("history supports only keep or checkpoint".into());
         }
-        for policy in [&self.checkpoint, &self.family, &self.working, &self.history] {
+        for policy in [&self.checkpoint, &self.working, &self.history] {
             if policy.strategy != ContextReductionStrategy::Keep
                 && policy.target_ratio_bps >= policy.trigger_ratio_bps
             {

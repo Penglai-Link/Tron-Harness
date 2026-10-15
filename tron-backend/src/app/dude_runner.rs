@@ -272,7 +272,7 @@ impl PlatformDudeExecutor {
         }
         let agent = self
             .agent()
-            .with_runtime_input(crate::application::dude::soul::runtime_input_kind(event.source), serde_json::json!({"source":format!("{:?}",event.source),"eventId":event.event_id,"ownerDudeCode":event.dude_code,"taskCode":event.task_code}))
+            .with_runtime_input(crate::application::dude::soul::runtime_input_kind(event.source), serde_json::json!({"source":format!("{:?}",event.source),"eventId":event.event_id,"ownerDudeCode":event.dude_code,"taskCode":event.task_code,"onboarding":event.dedup_key.starts_with("soul-awakening:") && event.payload["onboarding"] == true}))
             .with_auto_model_route(Some(route), Some(router))
             .with_collaboration_owner(AgentCollaborationOwner {
                 kind: "DUDE".into(),
@@ -306,7 +306,7 @@ impl PlatformDudeExecutor {
                     attachments: vec![],
                     client_capabilities: Some(crate::domain::chat::ChatClientCapabilities {
                         user_input_requests: true,
-                        a2ui: None,
+                        a2ui: event.payload.get("a2ui").filter(|v| !v.is_null()).cloned().and_then(|v| serde_json::from_value(v).ok()),
                     }),
                     resume: vec![],
                 },

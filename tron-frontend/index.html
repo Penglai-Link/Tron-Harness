@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#020305" />
     <title>Tron</title>
-    <style>html { background: #020305; }</style>
+    <script>try { document.documentElement.dataset.theme = localStorage.getItem("tron.theme") === "light" ? "light" : "matrix-dark"; } catch {}</script>
+    <style>html, body { background: #020305; } html[data-theme="light"], html[data-theme="light"] body { background: #fff; }</style>
   </head>
   <body>
     <div id="root"></div>

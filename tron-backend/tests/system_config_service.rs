@@ -144,7 +144,6 @@ fn classifies_all_setting_groups_and_omits_unused_legacy_limits() {
             | "resource.limits.maxDepth"
             | "resource.limits.maxValidationErrors"
             | "resource.limits.maxBinaries"
-            | "shortTermMemory.context.familyContextMaxChars"
     )));
 }
 

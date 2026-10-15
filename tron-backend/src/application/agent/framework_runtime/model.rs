@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub(super) struct HostRunState {
+    pub onboarding: bool,
     pub context: AgentRunContext,
     /// Product ACL captured before model exposure rewrites `context.tools`.
     pub product_tool_authority: std::collections::BTreeSet<String>,
@@ -50,6 +51,7 @@ impl HostRunState {
             .map(|tool| tool.tool_name.clone())
             .collect();
         Self {
+            onboarding: false,
             context,
             product_tool_authority,
             trusted_prefix,

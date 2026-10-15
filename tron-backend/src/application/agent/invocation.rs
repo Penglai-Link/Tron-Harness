@@ -4,7 +4,6 @@ mod attachments;
 mod continuation;
 mod helpers;
 mod run_context_builder;
-mod session_summary;
 mod short_term_memory;
 
 pub(crate) use attachments::user_prompt_message;
@@ -32,10 +31,6 @@ use super::{
 };
 use helpers::safe_preview;
 pub(crate) use run_context_builder::{AgentRunContextBuilder, PreparedAgentRun};
-use session_summary::{
-    completed_session_summary_outcome, failed_session_summary_outcome, schedule_session_summary,
-};
-
 #[derive(Clone)]
 pub struct AgentInvocationService {
     platform_scope: bool,
@@ -313,7 +308,6 @@ impl AgentInvocationService {
             plan_steps: _plan_steps,
             collaboration: _collaboration,
             metadata,
-            session_summary_job_context,
             execution,
         } = orchestrator
             .execute(command, user_code, locale, sink, reservation)
@@ -393,16 +387,6 @@ impl AgentInvocationService {
                         created_at: current_timestamp(),
                     })
                     .map_err(|_| AgentInvocationError::HistoryStorageFailed)?;
-                schedule_session_summary(
-                    self.short_term_memory.clone(),
-                    self.prompt_service.clone(),
-                    self.model_client.clone(),
-                    session_summary_job_context,
-                    match &limit_error {
-                        Some(error) => failed_session_summary_outcome(error),
-                        None => completed_session_summary_outcome(awaiting_user_input),
-                    },
-                );
                 Ok(AgentInvocationResult {
                     run_code: result.run_code,
                     conversation_code: result.conversation_code,
@@ -424,7 +408,6 @@ impl AgentInvocationService {
             }
             Err(invocation_error) => {
                 let finished_at = current_timestamp();
-                let summary_outcome = failed_session_summary_outcome(&invocation_error);
                 self.history
                     .create_run(AgentRunHistoryRecord {
                         id: 0,
@@ -454,13 +437,6 @@ impl AgentInvocationService {
                         created_at: current_timestamp(),
                     })
                     .map_err(|_| AgentInvocationError::HistoryStorageFailed)?;
-                schedule_session_summary(
-                    self.short_term_memory.clone(),
-                    self.prompt_service.clone(),
-                    self.model_client.clone(),
-                    session_summary_job_context,
-                    summary_outcome,
-                );
                 Err(invocation_error)
             }
         }

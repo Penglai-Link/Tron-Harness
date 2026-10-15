@@ -25,8 +25,29 @@ it("keeps the exact live rain canvas through navigation, then removes it after h
   expect(rain.parentElement?.dataset.destination).toBe("true");
   await act(() => vi.advanceTimersByTimeAsync(50));
   expect(rain.parentElement?.dataset.phase).toBe("reveal");
-  await act(() => vi.advanceTimersByTimeAsync(1700));
+  await act(() => vi.advanceTimersByTimeAsync(2700));
   expect(screen.getByTestId("rain")).toBe(rain);
-  await act(() => vi.advanceTimersByTimeAsync(150));
+  await act(() => vi.advanceTimersByTimeAsync(350));
   expect(screen.queryByTestId("rain")).toBeNull();
+});
+
+it("reveals home without mounting code rain for an initialized user", async () => {
+  vi.useFakeTimers();
+  function Login() {
+    const { beginArrival } = useAwakeningBackdrop();
+    const navigate = useNavigate();
+    return <button onClick={() => { beginArrival(false, false); navigate("/workspace"); }}>Login</button>;
+  }
+  const { container } = render(<MemoryRouter initialEntries={["/profiles"]}><HomeArrivalVeil><Routes>
+    <Route path="/profiles" element={<Login />} />
+    <Route path="/workspace" element={<div>Home</div>} />
+  </Routes></HomeArrivalVeil></MemoryRouter>);
+  fireEvent.click(screen.getByText("Login"));
+  expect(screen.queryByTestId("rain")).toBeNull();
+  expect(container.querySelector(".awakening-home-veil")?.getAttribute("data-phase")).toBe("cover");
+  await act(() => vi.advanceTimersByTimeAsync(50));
+  expect(container.querySelector(".awakening-home-veil")?.getAttribute("data-phase")).toBe("reveal");
+  expect(screen.queryByTestId("rain")).toBeNull();
+  await act(() => vi.advanceTimersByTimeAsync(750));
+  expect(container.querySelector(".awakening-home-veil")).toBeNull();
 });

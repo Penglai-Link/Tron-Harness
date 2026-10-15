@@ -4,7 +4,6 @@ use super::{
 };
 
 use crate::{
-    application::short_term_memory::SessionSummaryJobContext,
     domain::agent::{AgentExecutionMode, AgentRunPlanStep, CollaborationRun},
     domain::reasoning::ReasoningEffort,
     shared::time::current_timestamp,
@@ -28,7 +27,6 @@ pub(crate) struct AgentOrchestrationRun {
     pub plan_steps: Vec<AgentRunPlanStep>,
     pub collaboration: CollaborationRun,
     pub metadata: AgentRunExecutionMetadata,
-    pub session_summary_job_context: Option<SessionSummaryJobContext>,
     pub execution: Result<AgentRunExecutionResult, AgentInvocationError>,
 }
 
@@ -97,17 +95,6 @@ impl AgentOrchestrator {
         } = prepared;
         let step_code = single_agent_step_code(&run_code);
         let plan_step = AgentRunPlanStep::serial(step_code, agent_code, objective.clone());
-        let mut session_summary_job_context =
-            context
-                .short_term_memory
-                .as_ref()
-                .map(|memory| SessionSummaryJobContext {
-                    session_code: memory.session_code.clone(),
-                    run_code: context.run_code.clone(),
-                    workspace_code: context.workspace_code.clone(),
-                    locale: context.locale.clone(),
-                    model: context.model.clone(),
-                });
         let mut metadata = AgentRunExecutionMetadata {
             run_code: run_code.clone(),
             conversation_code,
@@ -143,9 +130,6 @@ impl AgentOrchestrator {
             if let Some(model) = &result.run.effective_model {
                 metadata.model_code = model.model_code.clone();
                 metadata.reasoning_effort = model.reasoning_effort;
-                if let Some(summary) = &mut session_summary_job_context {
-                    summary.model = model.clone();
-                }
             }
         }
         let finished_at = current_timestamp();
@@ -167,7 +151,6 @@ impl AgentOrchestrator {
             plan_steps: vec![plan_step],
             collaboration,
             metadata,
-            session_summary_job_context,
             execution,
         })
     }

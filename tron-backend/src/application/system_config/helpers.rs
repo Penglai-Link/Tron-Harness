@@ -12,9 +12,6 @@ const INACTIVE_CONFIG_PATHS: &[&str] = &[
     "resource.limits.maxDepth",
     "resource.limits.maxValidationErrors",
     "resource.limits.maxBinaries",
-    "shortTermMemory.context.familyContextMaxChars",
-    "shortTermMemory.context.familyContextMaxRatioBps",
-    "shortTermMemory.context.familyContextHardCapTokens",
 ];
 
 pub(super) fn parse_yaml(content: &str, path: &Path) -> Result<Value, SystemConfigError> {
@@ -302,7 +299,6 @@ pub(super) fn effective_context_value(
             json!({
                 "seedPromptPrefix": budget(&blocks.seed_prompt_prefix),
                 "currentSessionCheckpoint": budget(&blocks.current_session_checkpoint),
-                "sessionFamilyContext": budget(&blocks.session_family_context),
                 "currentSessionWorkingState": budget(&blocks.current_session_working_state),
                 "toolSchema": budget(&blocks.tool_schema)
             }),
@@ -311,7 +307,7 @@ pub(super) fn effective_context_value(
             "shortTermMemory.context.providers",
             json!({
                 "order": providers.order, "checkpoint": policy(&providers.checkpoint),
-                "family": policy(&providers.family), "working": policy(&providers.working),
+                "working": policy(&providers.working),
                 "history": policy(&providers.history), "prices": providers.prices,
                 "maxAuxiliaryCallsPerStep": providers.max_auxiliary_calls_per_step
             }),

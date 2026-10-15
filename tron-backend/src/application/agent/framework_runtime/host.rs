@@ -768,7 +768,11 @@ impl FrameworkHost {
     }
 
     async fn internal_agent(&self, workspace: &str, code: &str) -> Result<Agent, fw::AgentError> {
-        let key = (workspace.to_owned(), code.to_ascii_lowercase());
+        self.internal_agent_profile(workspace, code, false).await
+    }
+
+    async fn internal_agent_profile(&self, workspace: &str, code: &str, onboarding: bool) -> Result<Agent, fw::AgentError> {
+        let key = (workspace.to_owned(), if onboarding { format!("{}::onboarding", code.to_ascii_lowercase()) } else { code.to_ascii_lowercase() });
         let cell = self
             .0
             .internal_agents
@@ -782,9 +786,20 @@ impl FrameworkHost {
                 .map_err(fw::AgentError::InvalidConfiguration)?;
             let framework = self.framework().await?;
             let (packs, extensions) = self.capability_state();
-            let selection = self
+            let mut selection = self
                 .main_selection(&framework, &packs, &extensions)
                 .map_err(fw::AgentError::InvalidConfiguration)?;
+            if onboarding {
+                let providers = selection.tool_providers.as_deref().unwrap_or_default();
+                if !providers.iter().any(|p| p == "tron.harness.tools") || !providers.iter().any(|p| p == "agent.a2ui") {
+                    return Err(fw::AgentError::InvalidConfiguration("Soul onboarding requires Tron tools and A2UI".into()));
+                }
+                selection.tool_providers = Some(vec!["tron.harness.tools".into(), "tron.onboarding-ui".into()]);
+                selection.skills_from_host = false;
+                // A2UI negotiation uses SkillAccess even when no skill tools are leased.
+                selection.skills = Some(vec![eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into()]);
+                selection.context_sources = Some(vec![]);
+            }
             framework.agent(selection).build().await
         })
         .await

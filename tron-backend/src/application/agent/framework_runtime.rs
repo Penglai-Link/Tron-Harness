@@ -10,6 +10,7 @@ mod context_auxiliary;
 mod context_projection;
 mod context_providers;
 mod dude_context;
+mod onboarding;
 
 mod tools;
 

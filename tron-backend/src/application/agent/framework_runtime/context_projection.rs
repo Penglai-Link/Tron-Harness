@@ -95,10 +95,6 @@ pub(super) fn update(
         "current_session_checkpoint",
         &config.context.blocks.current_session_checkpoint,
     )?;
-    let family_cap = configured_cap(
-        "session_family_context",
-        &config.context.blocks.session_family_context,
-    )?;
     let working_cap = configured_cap(
         "current_session_working_state",
         &config.context.blocks.current_session_working_state,
@@ -145,7 +141,6 @@ pub(super) fn update(
             .saturating_add(tokens("seed_prompt_prefix"))
             .saturating_add(report.application_context_tokens);
         report.checkpoint_tokens = tokens("current_session_checkpoint");
-        report.session_family_context_tokens = tokens("session_family_context");
         report.working_state_tokens = tokens("current_session_working_state");
         report.recent_transcript_tokens = tokens(fw::HISTORY_BLOCK);
         report.raw_tail_transcript_tokens = report.recent_transcript_tokens;
@@ -181,7 +176,6 @@ pub(super) fn update(
         report.input_budget_exceeded = false;
         report.compaction_trigger_reached = projection.compaction_trigger_reached;
         report.checkpoint_budget_tokens = Some(checkpoint_cap);
-        report.session_family_context_budget_tokens = Some(family_cap);
         report.working_state_budget_tokens = Some(working_cap);
         report.current_session_history_budget_tokens = cap(fw::HISTORY_BLOCK);
     }

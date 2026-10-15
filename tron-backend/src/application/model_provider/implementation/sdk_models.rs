@@ -271,6 +271,16 @@ impl ModelProviderService {
         .map_err(|e| ModelProviderError::Remote(e.to_string()))?;
         let factory: Arc<dyn sdk::ModelTransportFactory> =
             Arc::new(sdk::FixedModelTransportFactory(Arc::new(transport)));
+        self.verify_sdk_model_routes(factory).await
+    }
+
+    async fn verify_sdk_model_routes(
+        &self,
+        factory: Arc<dyn sdk::ModelTransportFactory>,
+    ) -> Result<(), ModelProviderError> {
+        // Automatic routes may select reasoning models. Their output budget
+        // includes reasoning tokens before the short verification answer.
+        const VERIFICATION_OUTPUT_TOKENS: u32 = 1024;
         let config = person_ai_agent_config(
             "PERSON_AI:ROUTE:ChatAuto",
             "",
@@ -281,7 +291,7 @@ impl ModelProviderService {
         let mut config: sdk::AgentModelConfig =
             crate::adapters::outbound::model::http_model_client::convert(&config)
                 .map_err(ModelProviderError::Remote)?;
-        config.max_tokens = Some(8);
+        config.max_tokens = Some(VERIFICATION_OUTPUT_TOKENS);
         let request = sdk::ModelRequest {
             messages: vec![sdk::AgentMessage::user("Reply with OK.")],
             tools: vec![],
@@ -304,7 +314,7 @@ impl ModelProviderService {
         )
         .map_err(sdk_provider_error)?;
         let limits = fw::RunLimits {
-            max_model_output_tokens: 8,
+            max_model_output_tokens: VERIFICATION_OUTPUT_TOKENS,
             max_model_retries: 0,
             max_model_calls_per_step: Some(1),
             ..Default::default()

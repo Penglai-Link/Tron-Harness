@@ -53,7 +53,7 @@ export default function RoutedApp() {
               path="/awakening"
               element={
                 <ProtectedRoute>
-                  <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
+                  <Suspense fallback={<div className="fixed inset-0 bg-[var(--scene-background)]" />}>
                     <AwakeningPage />
                   </Suspense>
                 </ProtectedRoute>

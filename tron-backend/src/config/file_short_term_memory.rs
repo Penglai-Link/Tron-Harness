@@ -4,16 +4,13 @@ use crate::config::percentage::optional_ratio;
 
 use crate::application::short_term_memory::{
     CompactionPolicyConfig, ContextBlockBudgetConfig, ContextBlockBudgets, ContextBudgetConfig,
-    FamilyLoadConfig, GoalLoopConfig, ShortTermMemoryConfig,
+    GoalLoopConfig, ShortTermMemoryConfig,
 };
 
 impl ShortTermMemoryConfig {
     pub(super) fn apply_overrides(&mut self, overrides: ShortTermMemoryFileConfig) {
         if let Some(value) = overrides.context {
             self.context.apply_overrides(value);
-        }
-        if let Some(value) = overrides.family_load {
-            self.family_load.apply_overrides(value);
         }
         if let Some(value) = overrides.compaction {
             self.compaction.apply_overrides(value);
@@ -29,38 +26,11 @@ impl ContextBudgetConfig {
         if let Some(value) = overrides.default_context_window_tokens {
             self.default_context_window_tokens = value.max(1);
         }
-        if let Some(value) = overrides.family_context_max_ratio_bps {
-            let ratio = value.min(10_000);
-            self.family_context_max_ratio_bps = ratio;
-            self.blocks.session_family_context.max_ratio_bps = Some(ratio);
-        }
-        if let Some(value) = overrides.family_context_hard_cap_tokens {
-            let max_tokens = value.max(1);
-            self.family_context_hard_cap_tokens = max_tokens;
-            self.blocks.session_family_context.max_tokens = Some(max_tokens);
-        }
-        if let Some(value) = overrides.family_context_max_chars {
-            self.family_context_max_chars = value.max(1);
-        }
         if let Some(value) = overrides.providers {
             value.apply_to(&mut self.providers);
         }
         if let Some(value) = overrides.blocks {
             self.blocks.apply_overrides(value);
-            if let Some(ratio) = self.blocks.session_family_context.max_ratio_bps {
-                self.family_context_max_ratio_bps = ratio;
-            }
-            if let Some(max_tokens) = self.blocks.session_family_context.max_tokens {
-                self.family_context_hard_cap_tokens = max_tokens;
-            }
-        }
-    }
-}
-
-impl FamilyLoadConfig {
-    fn apply_overrides(&mut self, overrides: FamilyLoadFileConfig) {
-        if let Some(value) = overrides.default_max_sessions {
-            self.default_max_sessions = value.max(1);
         }
     }
 }
@@ -76,9 +46,6 @@ impl ApplyMemoryOverrides<ContextBlockBudgetsFileConfig> for ContextBlockBudgets
         }
         if let Some(value) = overrides.current_session_checkpoint {
             self.current_session_checkpoint.apply_overrides(value);
-        }
-        if let Some(value) = overrides.session_family_context {
-            self.session_family_context.apply_overrides(value);
         }
         if let Some(value) = overrides.current_session_working_state {
             self.current_session_working_state.apply_overrides(value);
@@ -123,7 +90,6 @@ impl GoalLoopConfig {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct ShortTermMemoryFileConfig {
     context: Option<ContextBudgetFileConfig>,
-    family_load: Option<FamilyLoadFileConfig>,
     compaction: Option<CompactionPolicyFileConfig>,
     goal_loop: Option<GoalLoopFileConfig>,
 }
@@ -132,15 +98,6 @@ pub(super) struct ShortTermMemoryFileConfig {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContextBudgetFileConfig {
     default_context_window_tokens: Option<u32>,
-    #[serde(
-        default,
-        rename = "familyContextMaxRatio",
-        alias = "familyContextMaxRatioBps",
-        deserialize_with = "optional_ratio"
-    )]
-    family_context_max_ratio_bps: Option<u32>,
-    family_context_hard_cap_tokens: Option<u32>,
-    family_context_max_chars: Option<usize>,
     blocks: Option<ContextBlockBudgetsFileConfig>,
     providers: Option<ContextProvidersFileConfig>,
 }
@@ -150,7 +107,6 @@ struct ContextBudgetFileConfig {
 struct ContextBlockBudgetsFileConfig {
     seed_prompt_prefix: Option<ContextBlockBudgetFileConfig>,
     current_session_checkpoint: Option<ContextBlockBudgetFileConfig>,
-    session_family_context: Option<ContextBlockBudgetFileConfig>,
     current_session_working_state: Option<ContextBlockBudgetFileConfig>,
     tool_schema: Option<ContextBlockBudgetFileConfig>,
 }
@@ -178,12 +134,6 @@ fn explicit_optional_tokens<'de, D: serde::Deserializer<'de>>(
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct FamilyLoadFileConfig {
-    default_max_sessions: Option<usize>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CompactionPolicyFileConfig {
     auto_enabled: Option<bool>,
     #[serde(
@@ -206,7 +156,6 @@ struct GoalLoopFileConfig {
 struct ContextProvidersFileConfig {
     order: Option<Vec<String>>,
     checkpoint: Option<ContextProviderFilePolicy>,
-    family: Option<ContextProviderFilePolicy>,
     working: Option<ContextProviderFilePolicy>,
     history: Option<ContextProviderFilePolicy>,
     prices: Option<crate::application::short_term_memory::ContextPriceInputs>,
@@ -219,9 +168,6 @@ impl ContextProvidersFileConfig {
         }
         if let Some(policy) = self.checkpoint {
             policy.apply_to(&mut config.checkpoint);
-        }
-        if let Some(policy) = self.family {
-            policy.apply_to(&mut config.family);
         }
         if let Some(policy) = self.working {
             policy.apply_to(&mut config.working);
@@ -284,7 +230,7 @@ mod provider_tests {
             "triggerRatioBps: 7500\n      targetRatioBps: 2500",
         ] {
             let text = format!(
-                "context:\n  providers:\n    order: [application_context, seed_prompt_prefix, current_session_checkpoint, session_family_context, current_session_working_state, current_session_history]\n    working:\n      strategy: semantic\n      {ratio}\n"
+                "context:\n  providers:\n    order: [application_context, seed_prompt_prefix, current_session_checkpoint, current_session_working_state, current_session_history]\n    working:\n      strategy: semantic\n      {ratio}\n"
             );
             let overrides: ShortTermMemoryFileConfig = serde_yaml::from_str(&text).unwrap();
             let mut config = ShortTermMemoryConfig::default();

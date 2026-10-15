@@ -109,7 +109,6 @@ export interface ChatContextBudgetBreakdown {
   promptPrefixMessageCount?: number | null;
   promptPrefixTokens: number;
   checkpointTokens: number;
-  sessionFamilyContextTokens: number;
   workingStateTokens: number;
   recentTranscriptTokens: number;
   rawTailTranscriptTokens: number;
@@ -121,7 +120,6 @@ export interface ChatContextBudgetBreakdown {
   promptPrefixMaxRatioBps?: number | null;
   promptPrefixMaxTokens?: number | null;
   checkpointBudgetTokens?: number | null;
-  sessionFamilyContextBudgetTokens?: number | null;
   workingStateBudgetTokens?: number | null;
   effectiveInputBudget?: number | null;
   contextWindowLimit?: number | null;

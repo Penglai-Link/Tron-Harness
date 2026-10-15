@@ -1,8 +1,11 @@
+/* Shared by the native startup view and every React entry scene. */
+:root { --scene-background: #020305; --scene-foreground: #eee; --scene-ink: #edcf98; }
+:root[data-theme="light"] { --scene-background: #fff; --scene-foreground: #202124; --scene-ink: #555; }
 .black-hole-scene {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #020305;
+  background: var(--scene-background);
   pointer-events: none;
 }
 .black-hole-scene canvas {
@@ -20,7 +23,7 @@
 .black-hole-fallback {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at 64% 47%, #10131b, #020305 65%);
+  background: var(--scene-background);
 }
 .black-hole-fallback i {
   position: absolute;
@@ -89,3 +92,25 @@
     height: 10vh;
   }
 }
+
+/* Rotate the texture inside the projected ellipse, independently of the camera. */
+.black-hole-fallback b { overflow: hidden; border-color: var(--scene-ink); }
+.black-hole-fallback b::before {
+  content: "";
+  position: absolute;
+  inset: -400% 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, transparent 0deg 18deg, var(--scene-ink) 30deg, transparent 52deg 90deg);
+  animation: black-hole-orbit 6s linear infinite;
+}
+@keyframes black-hole-orbit { to { transform: rotate(360deg); } }
+.black-hole-scene[data-diving="true"] .black-hole-fallback {
+  animation: black-hole-fallback-dive 1800ms ease-in both;
+}
+@keyframes black-hole-fallback-dive {
+  0% { transform: scale(1); opacity: 1; }
+  84% { opacity: 1; }
+  100% { transform: scale(12); opacity: 0; }
+}
+[data-theme="light"] .black-hole-fallback i { background: #fff; box-shadow: 0 -2px 2px #555, 0 -5px 16px #7775; }
+[data-theme="light"] .black-hole-fallback b { box-shadow: 0 5px 7px -5px #444; }

@@ -32,6 +32,8 @@ impl FrameworkHost {
         registration: host_control::NativeRegistration,
     ) -> Result<AgentRunResult, AgentError> {
         collaboration::authorize_tools(self, &mut context);
+        let onboarding = super::super::onboarding::active(&context, harness.framework_dudes().as_ref());
+        if onboarding { super::super::onboarding::narrow(&mut context); }
         let admission = self.0.config_lock.lock().await;
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
@@ -43,7 +45,7 @@ impl FrameworkHost {
         .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?;
         let mut lifecycle = host_run::ProductLifecycle::start(&harness, &context)?;
         let agent = if let Some(code) = context.agent_code.as_deref() {
-            self.internal_agent(&context.workspace_code, code)
+            self.internal_agent_profile(&context.workspace_code, code, onboarding)
                 .await
                 .map_err(map_error)?
         } else {
@@ -319,7 +321,9 @@ impl FrameworkHost {
         request.generation.temperature = context.model.temperature;
         request.generation.top_p = context.model.top_p;
         request.generation.max_output_tokens = context.model.max_tokens.filter(|value| *value > 0);
-        let state = Arc::new(Mutex::new(HostRunState::new(context.clone())));
+        let mut run_state = HostRunState::new(context.clone());
+        run_state.onboarding = onboarding;
+        let state = Arc::new(Mutex::new(run_state));
         request
             .extensions
             .insert(fw::ToolResultProcessorService(Arc::new(ToolAudit)));
@@ -331,8 +335,15 @@ impl FrameworkHost {
                 },
             )),
         );
-        self.attach_skill_access(&context, &mut request)
-            .map_err(map_error)?;
+        if onboarding {
+            request.extensions.insert(fw::SkillAccess { names: [eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into()].into_iter().collect() });
+            let service = framework.services().map_err(map_error)?
+                .get::<eliteforge_agent_official_plugin_a2ui::A2uiService>()
+                .ok_or_else(|| AgentError::InvalidConfiguration("A2UI unavailable for onboarding".into()))?;
+            request.extensions.insert((*service).clone());
+        } else {
+            self.attach_skill_access(&context, &mut request).map_err(map_error)?;
+        }
         request.extensions.insert(HostExecution {
             harness: harness.clone(),
             state: state.clone(),
@@ -370,7 +381,7 @@ impl FrameworkHost {
                     control,
                 })));
         }
-        collaboration::attach(self, &context, &mut request);
+        if !onboarding { collaboration::attach(self, &context, &mut request); }
         harness
             .framework_model_scope(&context)?
             .attach(&mut request);
@@ -423,6 +434,15 @@ impl FrameworkHost {
         };
         trace_guard.finish(&result);
         drop(trace_guard);
+        if onboarding && result.as_ref().is_ok_and(|r| r.status == fw::RunStatus::AwaitingInput) {
+            if let Some(dudes) = harness.framework_dudes() {
+                for interaction in agent.pending_interactions(context.conversation_code.as_deref().unwrap_or(&context.run_code)).await.map_err(map_error)? {
+                    if !matches!(interaction.request.kind, fw::InteractionKind::Input) { continue; }
+                    dudes.record_soul_question(&interaction.session_id, &interaction.request.id.to_string())
+                        .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?;
+                }
+            }
+        }
         // Multiple terminal DAG nodes produce structured JSON rather than text.
         // Keep every result visible in Tron's text-oriented run/history contract.
         if let Ok(result) = &mut result {

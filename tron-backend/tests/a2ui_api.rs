@@ -9,7 +9,8 @@ use eliteforge_agent_official_plugin_a2ui::{
 };
 use serde_json::json;
 use tron_backend::config::AppConfig;
-#[tokio::test]
+// Product repository reads use the same synchronous SQLite bridge as production.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn authenticated_snapshots_conflicts_and_workspace_isolation() {
     let mut host = None;
     let app = app_with_state_setup(prepared_config(AppConfig::default()), |s| {

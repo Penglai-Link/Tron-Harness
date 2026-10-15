@@ -623,6 +623,70 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
 }
 
 #[tokio::test]
+async fn authorization_verification_allows_reasoning_before_the_answer_but_requires_content() {
+    struct ReasoningModel {
+        answer: bool,
+        calls: Mutex<Vec<String>>,
+    }
+    #[async_trait]
+    impl sdk::ModelTransport for ReasoningModel {
+        async fn json(&self, path: &str, body: &Value) -> Result<Value, fw::ModelError> {
+            self.calls.lock().unwrap().push(path.to_owned());
+            if path == "embeddings" {
+                return Ok(json!({"data":[{"index":0,"embedding":[0.25,0.75]}]}));
+            }
+            assert_eq!(path, "chat/completions");
+            // A real automatic-route response needed 157 reasoning tokens
+            // before returning OK; the former 8-token cap produced no answer.
+            let has_answer = self.answer && body["max_tokens"].as_u64().unwrap() >= 162;
+            Ok(json!({
+                "choices":[{
+                    "message":{
+                        "role":"assistant",
+                        "content":if has_answer { "OK" } else { "" },
+                        "reasoning_content":"Reasoning preceding the final answer"
+                    },
+                    "finish_reason":if has_answer { "stop" } else { "length" }
+                }],
+                "usage":{"prompt_tokens":16,"completion_tokens":162,"total_tokens":178,
+                    "completion_tokens_details":{"reasoning_tokens":157}}
+            }))
+        }
+
+        async fn events(
+            &self,
+            _: &str,
+            _: &Value,
+            _: sdk::EventSink<'_>,
+        ) -> Result<(), fw::ModelError> {
+            unreachable!("authorization verification uses non-streaming requests")
+        }
+    }
+
+    let (service, _, server) = fixture().await;
+    for answer in [true, false] {
+        let transport = Arc::new(ReasoningModel {
+            answer,
+            calls: Mutex::new(vec![]),
+        });
+        let result = service
+            .verify_sdk_model_routes(Arc::new(sdk::FixedModelTransportFactory(transport.clone())))
+            .await;
+        if answer {
+            result.unwrap();
+            assert_eq!(
+                *transport.calls.lock().unwrap(),
+                ["chat/completions", "embeddings"]
+            );
+        } else {
+            assert!(result.is_err());
+            assert_eq!(*transport.calls.lock().unwrap(), ["chat/completions"]);
+        }
+    }
+    server.abort();
+}
+
+#[tokio::test]
 async fn completed_personai_authorization_verifies_distinct_model_routes_before_commit() {
     let (service, state, server) = fixture().await;
     state.lock().unwrap().steps = completed_steps(StatusCode::OK);

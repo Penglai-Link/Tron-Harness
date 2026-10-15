@@ -7,6 +7,7 @@ uniform vec2 pointer;
 uniform float time;
 uniform float plunge;
 uniform float approach;
+uniform float lightTheme;
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -69,7 +70,7 @@ vec2 diskMaterial(float radius, float angle, float age, vec2 footprint) {
   // only the undeformed disk coordinates.
   // Resolve broader strands when the whole disk is distant; fine filaments
   // remain in the near view instead of aliasing or averaging into featureless fog.
-  float radialFrequency = mix(2.8, 12.0, approach);
+  float radialFrequency = mix(2.8, 6.0, approach);
   vec2 uv = vec2(radius * radialFrequency, orbit * 2.546479);
   vec2 fw = vec2(footprint.x * radialFrequency,
     (footprint.y + footprint.x * age * speed * 1.5 / max(radius, 3.0)) * 2.546479);
@@ -79,7 +80,11 @@ vec2 diskMaterial(float radius, float angle, float age, vec2 footprint) {
   uv.x += (currents - 0.5) * 1.8;
   float strands = filteredSilk(uv, fw * 1.35, 16.0);
   float fine = filteredSilk(uv * 2.0, fw * 2.7, 32.0);
-  float density = 0.025 + pow(strands, 4.0) * 2.6 + pow(fine, 4.0) * 0.12;
+  // Broad, continuously orbiting currents survive minification during the dive.
+  // Their phase has no age-dependent radial shear, so filtering cannot erase motion.
+  float current = 0.5 + 0.5 * cos(angle * 3.0 - time * 1.35 + radius * 0.7);
+  float density = (0.045 + pow(strands, 4.0) * 2.6 + pow(fine, 4.0) * 0.12)
+    * mix(0.48, 1.65, current);
   float flecks = filteredSilk(uv * vec2(1.25, 16.0), fw * vec2(1.7, 21.6), 256.0);
   float knots = pow(smoothstep(0.55, 0.82, flecks), 3.0);
   return vec2(density, knots);
@@ -172,10 +177,10 @@ void main() {
     light += emission;
     visibility = 1.0 - smoothstep(0.001, 0.025, length(emission));
   }
-  if (!captured) light += starfield(normalize(direction)) * visibility;
+  if (!captured) light += starfield(normalize(direction)) * visibility * (1.0 - lightTheme);
   // Dust behind the disk adds cold depth while the horizon itself stays black.
   float dust = turbulence(screen * 1.8 + vec2(12.0, 4.0));
-  light += vec3(0.0016, 0.0032, 0.0040) * dust * (captured ? 0.0 : 1.0);
+  light += vec3(0.0016, 0.0032, 0.0040) * dust * (captured ? 0.0 : 1.0) * (1.0 - lightTheme);
   light *= 1.0 - smoothstep(0.84, 1.0, plunge);
   // Encode HDR into a filterable RGBA8 target. Both hosts use the same bloom
   // pipeline and decode before filtering; no float-texture extension is needed.

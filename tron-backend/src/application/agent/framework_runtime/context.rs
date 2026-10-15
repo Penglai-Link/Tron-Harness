@@ -108,13 +108,17 @@ impl fw::ContextPreparationPolicy for TronContext {
         }
         let auxiliary_calls = state.context_auxiliary_calls.as_ref().unwrap().1.clone();
         let force = state.context_force_compression;
+        let onboarding = state.onboarding;
         let previous_messages = state
             .prepared
             .as_ref()
             .map(|prepared| prepared.messages.clone());
         // No host mutex may be held while a reducer invokes an auxiliary model.
         drop(state);
-        let window = match super::context_providers::assemble(
+        let assembled = if onboarding {
+            let dudes = host.harness.framework_dudes().ok_or_else(|| fw::AgentError::Run("Dude service unavailable".into()))?;
+            super::onboarding::assemble(input, &context, &dudes).await
+        } else { super::context_providers::assemble(
             input,
             host.clone(),
             &context,
@@ -122,8 +126,8 @@ impl fw::ContextPreparationPolicy for TronContext {
             force,
             auxiliary_calls,
         )
-        .await
-        {
+        .await };
+        let window = match assembled {
             Ok(window) => window,
             Err(error) => match error.primary() {
                 fw::AgentError::Context(fw::ContextError::RefreshRequired { source_revision }) => {

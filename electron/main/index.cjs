@@ -9,7 +9,7 @@ if (applyUpdateArgIndex >= 0) {
   const installerPath = process.argv[applyUpdateArgIndex + 1] || "";
   void runApplyUpdate(installerPath, { logPath: process.argv[applyUpdateArgIndex + 2] }).then((code) => process.exit(code));
 } else {
-const { app, BrowserWindow, clipboard, ipcMain, Menu, shell, Tray } = require("electron");
+const { app, BrowserWindow, WebContentsView, clipboard, ipcMain, Menu, shell, Tray } = require("electron");
 const { STARTUP_ARG, ICON_PATH } = require("./desktop-constants.cjs");
 const { createWindowsDesktop } = require("./windows-desktop.cjs");
 const { createLinuxDesktop } = require("./linux-desktop.cjs");
@@ -76,6 +76,7 @@ const commentCapablePageIdsByWebContentsId = new Map();
 let isQuitting = false;
 let mainWindowRequested = false;
 let residentDesktop = null;
+let startupScene = null;
 
 function showMainWindow() {
   mainWindowRequested = true;
@@ -166,6 +167,7 @@ function createMainWindow() {
   });
 
   state.mainWindow = window;
+  startupScene = require("./startup-scene.cjs").createStartupScene({ window, WebContentsView, ipcMain, dataDir: desktopDataDir });
 
   window.on("close", (event) => {
     if (isQuitting || (process.platform !== "darwin" && !residentDesktop?.isResident())) {
@@ -263,7 +265,7 @@ async function showStartupMessage(message) {
     return;
   }
   const html = startupPageHtml(message);
-  await state.mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  await startupScene.show(html);
 }
 
 async function keepStartupScreenVisible(startedAt) {
@@ -278,7 +280,8 @@ function startupPageHtml(message) {
     message,
     dataDir: state.appDataDir,
     logPath: state.backendLogPath,
-    locale: app.getLocale()
+    locale: app.getLocale(),
+    theme: startupScene.theme
   });
 }
 

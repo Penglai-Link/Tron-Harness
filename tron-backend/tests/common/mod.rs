@@ -456,13 +456,3 @@ pub async fn native_goal(database: &str, id: &str) -> eliteforge_agent_core::Goa
         .await
         .unwrap()
 }
-pub async fn wait_native_summary(database: &str, session: &str) -> Value {
-    for _ in 0..250 {
-        if let Some(summary) = native_context(database, session, "tron.session-summary-view").await
-        {
-            return summary;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-    panic!("native session summary did not finish");
-}

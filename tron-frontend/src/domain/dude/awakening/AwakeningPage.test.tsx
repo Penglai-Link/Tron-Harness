@@ -55,7 +55,7 @@ it("waits for Ready and the final reply before automatically leaving, with a rea
   expect(screen.queryByText("Home")).toBeNull();
   await act(() => vi.advanceTimersByTimeAsync(100));
   expect(document.querySelector("main")?.dataset.phase).toBe("exit");
-  await act(() => vi.advanceTimersByTimeAsync(800));
+  await act(() => vi.advanceTimersByTimeAsync(1000));
   expect(screen.getByText("Home")).toBeTruthy();
   expect(mocks.defer).not.toHaveBeenCalled();
 });

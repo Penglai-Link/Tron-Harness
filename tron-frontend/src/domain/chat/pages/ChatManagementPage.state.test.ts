@@ -79,7 +79,6 @@ describe("tool schema context budget", () => {
         "chat.shortTermMemory.contextPanel.toolSchemaName": "工具定义",
         "chat.shortTermMemory.contextPanel.checkpointName": "当前会话检查点",
         "chat.shortTermMemory.contextPanel.workingStateName": "当前会话工作状态",
-        "chat.shortTermMemory.contextPanel.familyContextName": "相关会话",
         "chat.shortTermMemory.contextPanel.sessionHistoryName": "模型请求中的历史",
       }[key] ?? key),
     });
@@ -90,7 +89,6 @@ describe("tool schema context budget", () => {
       "工具定义",
       "当前会话检查点",
       "当前会话工作状态",
-      "相关会话",
       "模型请求中的历史",
     ]);
     expect(blocks.every((block) => !("meta" in block))).toBe(true);

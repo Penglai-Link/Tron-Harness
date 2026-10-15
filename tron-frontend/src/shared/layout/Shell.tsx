@@ -1161,6 +1161,7 @@ export function TronShell({
           className="tron-skin-canvas isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]"
           data-theme-part="app-sidebar-frame"
           data-theme-anchor="app-shell"
+          data-tron-entry-ready=""
           open={!sidebarCollapsed}
           onOpenChange={(open) => setSidebarCollapsed(!open)}
         >

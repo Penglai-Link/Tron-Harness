@@ -78,7 +78,6 @@ shortTermMemory:
     cleanupMaxRowsPerStartup: 50000
   context:
     defaultContextWindowTokens: 32000
-    familyContextMaxChars: 6000
     reasoningSummaryReplayEnabled: false
     blocks:
       seedPromptPrefix:
@@ -87,9 +86,6 @@ shortTermMemory:
       currentSessionCheckpoint:
         maxRatio: "20%"
         maxTokens: 6000
-      sessionFamilyContext:
-        maxRatio: "10%"
-        maxTokens: 12000
       currentSessionWorkingState:
         maxRatio: "10%"
         maxTokens: 2000
@@ -102,15 +98,9 @@ shortTermMemory:
         - seed_prompt_prefix
         - application_context
         - current_session_checkpoint
-        - session_family_context
         - current_session_working_state
         - current_session_history
       checkpoint:
-        strategy: bound
-        triggerRatio: "100%"
-        targetRatio: "80%"
-        minGainTokens: 1
-      family:
         strategy: bound
         triggerRatio: "100%"
         targetRatio: "80%"
@@ -126,15 +116,6 @@ shortTermMemory:
         targetRatio: "20%"
         minGainTokens: 1
       maxAuxiliaryCallsPerStep: 16
-  familyLoad:
-    defaultMaxSessions: 3
-    defaultSnapshotMaxChars: 2000
-    defaultTtlHours: 72
-    taskWeight: "65%"
-    requirementWeight: "25%"
-    workspaceChatWeight: "10%"
-    workspaceHeartbeatWeight: "10%"
-    otherWeight: "5%"
   compaction:
     autoEnabled: true
     triggerRatio: "80%"

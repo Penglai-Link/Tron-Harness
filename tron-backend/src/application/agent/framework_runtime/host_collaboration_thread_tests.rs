@@ -361,93 +361,16 @@ fn memory_context(record: &ThreadRecord) -> AgentRunContext {
 }
 // Exercise synchronous STM adapters on the same runtime flavor as production native execution.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn native_thread_stm_scope_and_family_come_from_durable_owner_without_user_chat_link() {
+async fn native_thread_stm_scope_comes_from_durable_owner_without_user_chat_link() {
     use crate::application::short_term_memory::{ShortTermMemoryConfig, ShortTermMemoryService};
     let host = FrameworkHost::temporary(None).unwrap();
     let agent = recovery_agent(&host, Arc::new(std::sync::atomic::AtomicUsize::new(0))).await;
-    let sessions = host.storage_framework().await.unwrap().sessions().unwrap();
     let mut current = record("memory-current");
     current.feedback_pending = false;
     host.persist_thread(&mut current, true).await.unwrap();
-    for (id, owner, user, workspace, origin, task, summary) in [
-        (
-            "memory-current",
-            "main-dude",
-            "profile",
-            "",
-            "dude-work-session",
-            "task-1",
-            "current",
-        ),
-        (
-            "memory-sibling",
-            "main-dude",
-            "profile",
-            "",
-            "dude-work-session",
-            "task-1",
-            "authorized-family",
-        ),
-        (
-            "memory-other-dude",
-            "other-dude",
-            "profile",
-            "",
-            "dude-work-session",
-            "task-1",
-            "other-dude-secret",
-        ),
-        (
-            "memory-other-user",
-            "main-dude",
-            "other-profile",
-            "",
-            "dude-work-session",
-            "task-1",
-            "other-user-secret",
-        ),
-        (
-            "memory-other-workspace",
-            "main-dude",
-            "profile",
-            "other-workspace",
-            "dude-work-session",
-            "task-1",
-            "other-workspace-secret",
-        ),
-        (
-            "memory-unrelated",
-            "main-dude",
-            "profile",
-            "",
-            "other-origin",
-            "other-task",
-            "unrelated-secret",
-        ),
-    ] {
-        if id != "memory-current" {
-            let mut related = record(id);
-            related.owner.code = owner.into();
-            related.user_code = Some(user.into());
-            related.workspace_code = workspace.into();
-            related.origin_session_code = origin.into();
-            related.owner.task_code = Some(task.into());
-            related.feedback_pending = false;
-            host.persist_thread(&mut related, true).await.unwrap();
-        }
-        let mut request = fw::RunRequest::new(id, "seed native history");
-        request.model = Some(fw::ModelRef::new("fixture", "complete"));
-        agent.run(request).await.unwrap();
-        sessions
-            .write_context(
-                id,
-                "tron.session-summary-view",
-                None,
-                serde_json::json!({"summary":summary}),
-            )
-            .await
-            .unwrap();
-    }
+    let mut request = fw::RunRequest::new("memory-current", "seed native history");
+    request.model = Some(fw::ModelRef::new("fixture", "complete"));
+    agent.run(request).await.unwrap();
     let service = ShortTermMemoryService::with_host(host.clone(), ShortTermMemoryConfig::default());
     let context = memory_context(&current);
     let prepared = service
@@ -457,12 +380,6 @@ async fn native_thread_stm_scope_and_family_come_from_durable_owner_without_user
         prepared.sources.unwrap().revision.scope,
         context.memory_scope("memory-current").unwrap()
     );
-    let family = service
-        .framework_data_source(&context, "session_family_context")
-        .unwrap()
-        .0;
-    assert_eq!(family.len(), 1);
-    assert!(family[0].text_content().contains("authorized-family"));
     for change in ["owner", "user", "workspace"] {
         let mut forged = context.clone();
         match change {
@@ -472,7 +389,7 @@ async fn native_thread_stm_scope_and_family_come_from_durable_owner_without_user
         }
         assert!(
             service
-                .framework_data_source(&forged, "session_family_context")
+                .framework_data_source(&forged, "current_session_working_state")
                 .is_err(),
             "caller cannot forge {change} to rebind native Thread STM"
         );

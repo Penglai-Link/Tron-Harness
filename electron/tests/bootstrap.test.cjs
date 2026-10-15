@@ -47,6 +47,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       this.webContents = new EventEmitter();
       this.webContents.setWindowOpenHandler = () => {};
       this.webContents.openDevTools = () => {};
+      this.contentView = { addChildView() {}, removeChildView() {} };
     }
     async loadURL(url) { this.urls.push(url); }
     show() { this.shown = true; }
@@ -56,6 +57,13 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
     isVisible() { return Boolean(this.shown); }
     isMinimized() { return Boolean(this.minimized); }
     restore() { this.minimized = false; }
+    setBackgroundColor() {}
+    getContentSize() { return [1440, 920]; }
+  }
+  class FakeView {
+    constructor() { this.webContents = { loadURL: async () => {}, isDestroyed: () => false, close() {} }; }
+    setBounds() {}
+    setBackgroundColor() {}
   }
   class FakeTray extends EventEmitter {
     constructor() {
@@ -81,12 +89,13 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
           requestSingleInstanceLock: () => { startupEvents.push("lock"); return true; },
           setPath(name, directory) { electronPaths.set(name, directory); startupEvents.push(name); },
           setAppUserModelId() {},
+          setName() {},
           getLoginItemSettings: () => ({ openAtLogin: loginEnabled, executableWillLaunchAtLogin: loginEnabled }),
           setLoginItemSettings(settings) { loginCalls.push(settings); loginEnabled = settings.openAtLogin; },
           quit() { quitCalls++; handlers.get("before-quit")?.(); },
           whenReady: () => Promise.resolve(), on: (name, cb) => handlers.set(name, cb)
         },
-        BrowserWindow: FakeWindow, Tray: FakeTray, ipcMain: { handle() {} }, clipboard: {},
+        BrowserWindow: FakeWindow, WebContentsView: FakeView, Tray: FakeTray, ipcMain: { handle() {}, on() {}, removeListener() {} }, clipboard: {},
         Menu: { buildFromTemplate: template => template }, shell: {}
       };
       if (name === "node:fs") return { ...fs,

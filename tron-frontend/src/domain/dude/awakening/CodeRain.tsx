@@ -27,6 +27,7 @@ export function CodeRain({ active = true, departing = false }: { active?: boolea
     type Drop = { x: number; y: number; speed: number; alpha: number; strip: Strip };
     let frame = 0, last = 0, w = 0, h = 0, ratio = 0;
     let strips: Strip[] = [], drops: Drop[] = [];
+    let light = document.documentElement.dataset.theme === "light";
     const media = matchMedia("(prefers-reduced-motion: reduce)");
     const reduced = () => {
       const policy = document.documentElement.dataset.tronMotionPolicy;
@@ -47,7 +48,7 @@ export function CodeRain({ active = true, departing = false }: { active?: boolea
       const y = 8 + (strip.length - 1 - j) * strip.size;
       c.clearRect(0, y, strip.width, strip.size);
       c.globalAlpha = strip.alpha[j];
-      c.fillStyle = j === 0 ? "#d2ffe1" : j < 4 ? "#68ff99" : "#14e157";
+      c.fillStyle = light ? (j === 0 ? "#111" : j < 4 ? "#444" : "#777") : (j === 0 ? "#d2ffe1" : j < 4 ? "#68ff99" : "#14e157");
       const n = strip.seed + j * 17 + tick;
       const family = glyphFamilies[n % glyphFamilies.length];
       c.fillText(family[Math.floor(n / glyphFamilies.length) % family.length], 8, y);
@@ -74,7 +75,7 @@ export function CodeRain({ active = true, departing = false }: { active?: boolea
           Math.min(1, Math.pow(1 - j / length, 1.35) * brightness + (j === 0 ? 0.2 : 0))),
       };
       // Bake the bright leading halo once; never run shadowBlur in the frame loop.
-      if (brightness > 0.5) {
+      if (!light && brightness > 0.5) {
         const glow = context.createRadialGradient(width / 2, height - size / 2 - 8, 0, width / 2, height - size / 2 - 8, size);
         glow.addColorStop(0, "#8affbd66");
         glow.addColorStop(1, "#8affbd00");
@@ -156,8 +157,12 @@ export function CodeRain({ active = true, departing = false }: { active?: boolea
       if (!document.hidden) frame = requestAnimationFrame(draw);
     }
     const ro = new ResizeObserver(resize);
-    const motionObserver = new MutationObserver(schedule);
-    motionObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-tron-motion-policy"] });
+    const motionObserver = new MutationObserver(() => {
+      const nextLight = document.documentElement.dataset.theme === "light";
+      if (light !== nextLight) { light = nextLight; ratio = 0; resize(); }
+      schedule();
+    });
+    motionObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-tron-motion-policy", "data-theme"] });
     ro.observe(el);
     resize();
     document.addEventListener("visibilitychange", schedule);

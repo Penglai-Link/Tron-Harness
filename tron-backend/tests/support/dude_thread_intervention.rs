@@ -73,25 +73,6 @@ impl ModelClient for HumanScript {
                 }
                 self.questions.fetch_add(1, Ordering::AcqRel);
                 assert!(request.tools.iter().any(|t| t.call_name == "chat_ask_user"));
-                assert!(
-                    request
-                        .messages
-                        .iter()
-                        .filter(|message| message.role == fw::Role::User)
-                        .flat_map(|message| &message.content.0)
-                        .any(|block| match block {
-                            fw::ContentBlock::Json { value } => {
-                                let part = &value["tronMessagePart"];
-                                part["type"] == "context"
-                                    && part["kind"] == "session_family_context"
-                                    && part["text"].as_str().is_some_and(|text| {
-                                        text.contains("trusted-dude-family-note")
-                                    })
-                            }
-                            _ => false,
-                        }),
-                    "native Thread must load its own authorized STM family source"
-                );
                 return Ok(ModelResponse::tool_call(
                     "chat_ask_user",
                     json!({"intro":"Choose deployment target","questions":[{"question":"Which target?","options":[{"label":"Staging"},{"label":"Production"}]}]}),
@@ -207,19 +188,6 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
             },
             Some(USER.into()),
         )
-        .unwrap();
-    host.storage_framework()
-        .await
-        .unwrap()
-        .sessions()
-        .unwrap()
-        .write_context(
-            "original-dude-work-session",
-            "tron.session-summary-view",
-            None,
-            json!({"summary":"trusted-dude-family-note"}),
-        )
-        .await
         .unwrap();
     let mut parent = context("root:dude-native");
     parent.agent_code = Some("main-dude".into());

@@ -116,9 +116,6 @@ fn short_term_memory_yaml_overrides_load_policy() {
 shortTermMemory:
   context:
     defaultContextWindowTokens: 16000
-    familyContextMaxRatioBps: 750
-    familyContextHardCapTokens: 2000
-    familyContextMaxChars: 1200
     blocks:
       seedPromptPrefix:
         maxRatioBps: 2500
@@ -128,8 +125,6 @@ shortTermMemory:
         maxTokens: 900
       currentSessionWorkingState:
         maxTokens: 300
-  familyLoad:
-    defaultMaxSessions: 4
   compaction:
     triggerRatioBps: 7500
   goalLoop:
@@ -151,20 +146,6 @@ shortTermMemory:
             .max_tokens,
         Some(700)
     );
-    assert_eq!(
-        config
-            .short_term_memory
-            .context
-            .family_context_max_ratio_bps,
-        750
-    );
-
-    assert_eq!(config.short_term_memory.family_load.default_max_sessions, 4);
-
-    let current_family_load = serde_json::to_value(&config.short_term_memory.family_load)
-        .expect("runtime family-load config should serialize");
-    assert!(current_family_load.get("default_max_snapshots").is_none());
-    assert!(current_family_load.get("defaultMaxSnapshots").is_none());
     assert_eq!(
         config
             .short_term_memory
@@ -195,7 +176,7 @@ fn short_term_memory_block_ratios_use_effective_input_budget() {
     );
     assert_eq!(
         plan.block_budgets
-            .session_family_context
+            .current_session_working_state
             .effective_limit_tokens,
         150
     );
@@ -215,7 +196,6 @@ fn short_term_memory_percentages_preserve_ratio_and_weight_meaning() {
         r#"
 shortTermMemory:
   context:
-    familyContextMaxRatio: "7.50%"
     blocks:
       seedPromptPrefix:
         maxRatio: "50%"
@@ -232,11 +212,6 @@ shortTermMemory:
     )
     .unwrap()
     .short_term_memory;
-    assert_eq!(config.context.family_context_max_ratio_bps, 750);
-    assert_eq!(
-        config.context.blocks.session_family_context.max_ratio_bps,
-        Some(750)
-    );
     assert_eq!(
         config.context.blocks.seed_prompt_prefix.max_ratio_bps,
         Some(5000)
@@ -281,11 +256,6 @@ shortTermMemory:
 #[test]
 fn short_term_memory_percentages_reject_conflicting_aliases_in_both_orders() {
     for (section, name, legacy) in [
-        (
-            "  context:\n",
-            "familyContextMaxRatio",
-            "familyContextMaxRatioBps",
-        ),
         (
             "  context:\n    blocks:\n      toolSchema:\n",
             "maxRatio",

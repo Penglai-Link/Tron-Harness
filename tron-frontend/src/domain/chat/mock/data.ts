@@ -44,8 +44,6 @@ const mockContextBudgetBreakdown: ChatContextBudgetBreakdown = {
   rawTailTranscriptTokens: 10_800,
   recentTranscriptTokens: 10_800,
   retainedHistoryRatioBps: 5_000,
-  sessionFamilyContextBudgetTokens: 10_000,
-  sessionFamilyContextTokens: 2_600,
   toolSchemaBudgetTokens: 6_000,
   toolSchemaTokens: 1_800,
   workingStateBudgetTokens: 5_000,

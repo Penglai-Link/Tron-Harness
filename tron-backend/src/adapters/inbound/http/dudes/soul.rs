@@ -126,6 +126,7 @@ async fn status(
 async fn begin(
     State(s): State<AppState>,
     auth: RequestAuthContext,
+    request: Option<Json<BeginAwakeningRequest>>,
 ) -> Result<Json<ApiResponse<BeginAwakeningResponse>>, DudeApiError> {
     let (mut soul, play_entrance) = s
         .dudes
@@ -139,6 +140,10 @@ async fn begin(
             .chats
             .list_user_input_requests(code)
             .map_err(|_| DudeError::Storage)?;
+        let native = s.agent_framework.pending_native_interactions(code).await.map_err(|_| DudeError::Storage)?;
+        if let Some(interaction) = native.iter().find(|i| matches!(i.request.kind, eliteforge_agent_core::InteractionKind::Input)) {
+            s.dudes.record_soul_question(code, &interaction.request.id.to_string())?;
+        }
         if let Some(question) = requests
             .iter()
             .find(|r| r.status == crate::domain::chat::ChatUserInputRequestStatus::Pending)
@@ -152,7 +157,7 @@ async fn begin(
                 e.dedup_key.starts_with("soul-awakening:") && e.status == DudeEventStatus::Failed
             })
             .max_by_key(|e| e.created_at);
-        let no_question = requests
+        let no_question = native.is_empty() && requests
             .iter()
             .all(|r| r.status != crate::domain::chat::ChatUserInputRequestStatus::Pending);
         let empty = s
@@ -163,7 +168,7 @@ async fn begin(
         if soul.state != SoulState::Ready && no_question && (empty || failed.is_some()) {
             s.dudes.publish_event(DudeEventInput {dude_code:soul.dude_code.clone(),source:DudeEventSource::UserMessage,
                 dedup_key:failed.map(|e|format!("soul-awakening:{}:retry:{}",soul.dude_code,e.event_id)).unwrap_or_else(||format!("soul-awakening:{}",soul.dude_code)),session_code:Some(code.clone()),task_code:None,workspace_code:None,
-                payload:serde_json::json!({"content":crate::application::dude::soul::awakening_message(&auth.locale),"locale":auth.locale,"userCode":auth.user().user_code}),available_at:chrono::Utc::now().timestamp_millis()})?;
+                payload:serde_json::json!({"content":crate::application::dude::soul::awakening_message(&auth.locale),"locale":auth.locale,"userCode":auth.user().user_code,"onboarding":true,"a2ui":request.as_ref().and_then(|Json(r)|r.a2ui.as_ref())}),available_at:chrono::Utc::now().timestamp_millis()})?;
         }
     }
     soul = s.dudes.soul(&soul.dude_code)?;
@@ -171,6 +176,12 @@ async fn begin(
         BeginAwakeningResponse::new(soul, &auth.user().user_code, play_entrance),
     )))
 }
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BeginAwakeningRequest { a2ui: Option<AwakeningA2uiCapabilitiesRequest> }
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AwakeningA2uiCapabilitiesRequest { version: String, catalog_ids: Vec<String> }
 async fn defer(
     State(s): State<AppState>,
     auth: RequestAuthContext,

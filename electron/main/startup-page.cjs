@@ -8,7 +8,7 @@ const escape = (value) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-function startupPageHtml({ message, dataDir, logPath, locale = "en" }) {
+function startupPageHtml({ message, dataDir, logPath, locale = "en", theme = "matrix-dark" }) {
   const zh = locale.startsWith("zh");
   // These local assets are packaged under assets/**/* and are available offline
   // before the backend starts. The shader is also imported by the React scene.
@@ -21,11 +21,11 @@ function startupPageHtml({ message, dataDir, logPath, locale = "en" }) {
     "\\u003c"
   );
   return `<!doctype html>
-<html lang="${zh ? "zh-CN" : "en"}">
+<html lang="${zh ? "zh-CN" : "en"}" data-theme="${theme === "light" ? "light" : "matrix-dark"}">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tron</title>
 <style>
 ${asset("black-hole.css")}
-:root { color-scheme: dark; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; background:#020305; color:#e6e9ef; }
+:root { color-scheme: dark; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; background:var(--scene-background); color:var(--scene-foreground); }
 * { box-sizing:border-box; }
 html,body { height:100%; margin:0; }
 body { display:flex; align-items:center; padding:40px clamp(24px,8vw,150px); overflow:hidden; }
@@ -48,6 +48,12 @@ code { font-size:10px; overflow-wrap:anywhere; color:#a6b0c0; }
 @keyframes pulse { 50% { opacity:.35; } }
 @keyframes sweep { from { transform:translateX(-110%); } to { transform:translateX(390%); } }
 @media(max-width:700px) { body { align-items:flex-end; padding-bottom:12vh; } .status { width:100%; } }
+[data-theme="light"] { color-scheme:light; }
+[data-theme="light"] .brand { color:#202124; }
+[data-theme="light"] .dot { background:#555; box-shadow:0 0 12px #0003; }
+[data-theme="light"] .progress { background:#0001; }
+[data-theme="light"] .progress:after { background:linear-gradient(90deg,transparent,#777,transparent); }
+[data-theme="light"] :is(.message, details, .meta span, code) { color:#60646b; }
 </style></head>
 <body>
 <div class="black-hole-scene" aria-hidden="true"><div class="black-hole-fallback"><i></i><b></b></div><canvas id="black-hole"></canvas></div>

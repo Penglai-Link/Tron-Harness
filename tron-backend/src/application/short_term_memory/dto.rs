@@ -1,22 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::agent::{AgentMessage, AgentModelConfig};
-
-#[derive(Clone)]
-pub struct SessionSummaryJobContext {
-    pub session_code: String,
-    pub workspace_code: String,
-    pub run_code: String,
-    pub locale: String,
-    pub model: AgentModelConfig,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SessionSummaryRunOutcome {
-    pub status: String,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-}
+use crate::domain::agent::AgentMessage;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,7 +71,6 @@ pub struct PreparedContextSources {
     pub revision: eliteforge_agent_memory::MemoryRevision,
     pub prefix: Vec<AgentMessage>,
     pub checkpoint: Vec<AgentMessage>,
-    pub family: Vec<AgentMessage>,
     pub working: Vec<AgentMessage>,
     pub history: Vec<AgentMessage>,
 }
@@ -101,7 +84,6 @@ pub struct ContextBudgetBreakdown {
     pub prompt_prefix_message_count: usize,
     pub prompt_prefix_tokens: u32,
     pub checkpoint_tokens: u32,
-    pub session_family_context_tokens: u32,
     pub working_state_tokens: u32,
     pub recent_transcript_tokens: u32,
     pub raw_tail_transcript_tokens: u32,
@@ -113,7 +95,6 @@ pub struct ContextBudgetBreakdown {
     pub prompt_prefix_max_ratio_bps: Option<u32>,
     pub prompt_prefix_max_tokens: Option<u32>,
     pub checkpoint_budget_tokens: Option<u32>,
-    pub session_family_context_budget_tokens: Option<u32>,
     pub working_state_budget_tokens: Option<u32>,
     pub effective_input_budget: Option<u32>,
     pub context_window_limit: Option<u32>,

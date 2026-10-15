@@ -4,6 +4,7 @@ uniform sampler2D bloomTexture;
 uniform vec2 resolution;
 uniform vec2 direction;
 uniform float mode;
+uniform float lightTheme;
 vec3 decode(vec3 value) { value *= value; return value / max(vec3(0.015), 1.0 - value); }
 vec3 encode(vec3 value) { return sqrt(value / (1.0 + value)); }
 vec3 film(vec3 x) { return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
@@ -31,6 +32,10 @@ void main() {
     // Wide highlights retain a warm corona; the brightest knots roll off to white.
     vec3 result = pow(film(light * 0.85), vec3(1.0 / 2.2));
     float vignette = 1.0 - 0.24 * smoothstep(0.35, 0.95, length(uv - 0.5));
-    gl_FragColor = vec4(result * vignette, 1.0);
+    vec3 dark = result * vignette;
+    float ink = dot(result, vec3(0.2126, 0.7152, 0.0722));
+    // Paper stays white even inside the horizon; only emitted light becomes ink.
+    vec3 paper = vec3(1.0 - ink * 0.9);
+    gl_FragColor = vec4(mix(dark, paper, lightTheme), 1.0);
   }
 }

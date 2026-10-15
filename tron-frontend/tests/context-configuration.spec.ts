@@ -19,7 +19,7 @@ async function document() {
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   directory = await mkdtemp(join(tmpdir(), "tron-context-config-browser-"));
-  await writeFile(join(directory, "application.yaml"), "port: 8080\nvariableCrypto:\n  keyBase64: dGVzdC1zZWNyZXQ=\nshortTermMemory:\n  context:\n    familyContextMaxChars: 6100\n  compaction:\n    retainedHistoryRatio: '30%'\n", { mode: 0o600 });
+  await writeFile(join(directory, "application.yaml"), "port: 8080\nvariableCrypto:\n  keyBase64: dGVzdC1zZWNyZXQ=\nshortTermMemory:\n  context:\n    defaultContextWindowTokens: 6100\n  compaction:\n    retainedHistoryRatio: '30%'\n", { mode: 0o600 });
   const port = await new Promise<number>((done, reject) => {
     const socket = createServer(); socket.on("error", reject); socket.listen(0, "127.0.0.1", () => {
       const address = socket.address(); if (!address || typeof address === "string") throw new Error("missing port");
@@ -68,7 +68,7 @@ test("system configuration exposes omitted defaults and persists context order a
   };
   await expand();
   const order = page.getByRole("textbox", {name:"shortTermMemory.context.providers.order", exact:true});
-  await expect(order).toHaveValue("seed_prompt_prefix\napplication_context\ncurrent_session_checkpoint\nsession_family_context\ncurrent_session_working_state\ncurrent_session_history");
+  await expect(order).toHaveValue("seed_prompt_prefix\napplication_context\ncurrent_session_checkpoint\ncurrent_session_working_state\nknowledge_base\ncurrent_session_history");
   const entries = (await order.inputValue()).split("\n");
   [entries[0], entries[1]] = [entries[1], entries[0]];
   await order.fill(entries.join("\n"));
@@ -86,7 +86,7 @@ test("system configuration exposes omitted defaults and persists context order a
   const yaml = parse(await readFile(filename, "utf8"));
   expect(yaml.shortTermMemory.context.providers.order).toEqual(entries);
   expect(yaml.shortTermMemory.context.providers.working.strategy).toBe("semantic");
-  expect(yaml.shortTermMemory.context.familyContextMaxChars).toBe(6100);
+  expect(yaml.shortTermMemory.context.defaultContextWindowTokens).toBe(6100);
   expect(yaml.shortTermMemory.context.providers.history).toBeUndefined();
   expect(find(await document(), "shortTermMemory.context.providers.history.targetRatio")).toBe("30%");
   await page.reload(); await expand();

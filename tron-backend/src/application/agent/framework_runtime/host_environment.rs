@@ -295,6 +295,10 @@ impl FrameworkHost {
                 .map_err(|error| error.to_string())?,
             ))
             .plugin(fw::ToolProviderPlugin::new(
+                "tron.onboarding-ui",
+                super::super::onboarding::FormTools,
+            ))
+            .plugin(fw::ToolProviderPlugin::new(
                 "tron.remote.tools",
                 remote_tools::RemoteTools(Arc::downgrade(&self.0)),
             ))
@@ -463,6 +467,7 @@ impl FrameworkHost {
                     .into_iter()
                     .filter(|id| {
                         selected(id)
+                            && *id != "tron.onboarding-ui"
                             && enabled("tool")
                             && (*id != "agent.a2ui"
                                 || pack_enabled(

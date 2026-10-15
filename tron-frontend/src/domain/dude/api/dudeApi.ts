@@ -51,5 +51,7 @@ export interface AwakeningStatus { dudeCode: string; name: string; state: SoulSt
 export const getDudeSoul = (dudeCode: string, signal?: AbortSignal) => requestApi<DudeSoul>("GET /api/v1/dudes/{dudeCode}/soul", { pathParams: { dudeCode }, signal });
 export const saveDudeSoul = (dudeCode: string, body: { name: string; markdown: string }) => requestApi<DudeSoul>("PUT /api/v1/dudes/{dudeCode}/soul", { pathParams: { dudeCode }, body });
 export const getAwakening = (signal?: AbortSignal) => requestApi<AwakeningStatus>("GET /api/v1/dudes/main/awakening", { signal });
-export const beginAwakening = () => requestApi<AwakeningStatus & { playEntrance: boolean }>("POST /api/v1/dudes/main/awakening");
+export const beginAwakening = () => requestApi<AwakeningStatus & { playEntrance: boolean }>("POST /api/v1/dudes/main/awakening", { body: {
+  a2ui: { version: "v0.9.1", catalogIds: ["https://eliteforge.dev/a2ui/v0.9.1/agent", "https://eliteforge.dev/a2ui/v0.9.1/minimal"] },
+} });
 export const deferAwakening = () => requestApi<AwakeningStatus>("POST /api/v1/dudes/main/awakening/defer");

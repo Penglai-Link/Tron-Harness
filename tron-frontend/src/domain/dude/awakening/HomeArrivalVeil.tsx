@@ -6,7 +6,7 @@ import "./awakening.css";
 type BackdropPhase = "hidden" | "rain" | "cover" | "reveal";
 const ArrivalContext = createContext({
   showRain: (_visible: boolean) => {},
-  beginArrival: (_reduced: boolean) => {},
+  beginArrival: (_reduced: boolean, _withRain = true) => {},
 });
 export const useAwakeningBackdrop = () => useContext(ArrivalContext);
 
@@ -15,16 +15,19 @@ export function HomeArrivalVeil({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const [phase, setPhase] = useState<BackdropPhase>("hidden");
   const [reduced, setReduced] = useState(false);
+  const [withRain, setWithRain] = useState(true);
   const showRain = useCallback((visible: boolean) => {
+    if (visible) setWithRain(true);
     setPhase((current) => current === "cover" || current === "reveal"
       ? current : visible ? "rain" : "hidden");
   }, []);
-  const beginArrival = useCallback((short: boolean) => {
+  const beginArrival = useCallback((short: boolean, rain = true) => {
     setReduced(short);
+    setWithRain(rain);
     setPhase("cover");
   }, []);
   useEffect(() => {
-    if (pathname === "/awakening") return;
+    if (pathname === "/awakening" || pathname === "/profiles") return;
     if (phase === "rain") setPhase("hidden");
     if (phase !== "cover") return;
     // Wait until the destination has committed before unveiling it.
@@ -36,16 +39,16 @@ export function HomeArrivalVeil({ children }: { children: ReactNode }) {
   }, [pathname, phase]);
   useEffect(() => {
     if (phase !== "reveal") return;
-    const timer = setTimeout(() => setPhase("hidden"), reduced ? 240 : 3000);
+    const timer = setTimeout(() => setPhase("hidden"), reduced ? 240 : withRain ? 3000 : 700);
     return () => clearTimeout(timer);
-  }, [phase, reduced]);
+  }, [phase, reduced, withRain]);
   const actions = useMemo(() => ({ showRain, beginArrival }), [showRain, beginArrival]);
   return (
     <ArrivalContext.Provider value={actions}>
       {children}
       {phase !== "hidden" && (
-        <div className="awakening-home-veil" data-phase={phase} data-destination={pathname !== "/awakening"} data-reduced={reduced} aria-hidden="true">
-          <CodeRain departing={phase === "reveal"} />
+        <div className="awakening-home-veil" data-phase={phase} data-rain={withRain} data-destination={pathname !== "/awakening"} data-reduced={reduced} aria-hidden="true">
+          {withRain && <CodeRain departing={phase === "reveal"} />}
         </div>
       )}
     </ArrivalContext.Provider>

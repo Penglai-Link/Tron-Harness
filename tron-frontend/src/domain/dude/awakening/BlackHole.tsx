@@ -31,6 +31,7 @@ export function BlackHole({
         powerPreference: "high-performance",
       });
     } catch {
+      el.parentElement!.dataset.renderer = "fallback";
       return;
     }
     const uniforms = {
@@ -39,6 +40,7 @@ export function BlackHole({
       time: { value: 0 },
       plunge: { value: 0 },
       approach: { value: initialArrival.current ? 0 : 1 },
+      lightTheme: { value: 0 },
     };
     const material = new THREE.ShaderMaterial({
       vertexShader: vertex,
@@ -67,6 +69,7 @@ export function BlackHole({
       resolution: { value: new THREE.Vector2(1, 1) },
       direction: { value: new THREE.Vector2() },
       mode: { value: 0 },
+      lightTheme: { value: 0 },
     };
     const postMaterial = new THREE.ShaderMaterial({
       vertexShader: vertex,
@@ -86,12 +89,12 @@ export function BlackHole({
     const startedAt = performance.now();
     let diveStartedAt: number | null = null;
     const target = new THREE.Vector2();
-    let scale = Math.min(window.devicePixelRatio || 1, 2);
+    let scale = Math.min(window.devicePixelRatio || 1, 1.25);
     const resize = () => {
       const { width, height } = el.getBoundingClientRect();
       const ratio = Math.min(
         scale,
-        Math.sqrt(8294400 / Math.max(1, width * height))
+        Math.sqrt(2073600 / Math.max(1, width * height))
       );
       renderer.setSize(
         Math.max(1, Math.round(width * ratio)),
@@ -130,9 +133,9 @@ export function BlackHole({
           resize();
         } else if (
           fastFrames > 600 &&
-          scale < Math.min(devicePixelRatio || 1, 2)
+          scale < Math.min(devicePixelRatio || 1, 1.25)
         ) {
-          scale = Math.min(scale + 0.25, devicePixelRatio || 1, 2);
+          scale = Math.min(scale + 0.25, devicePixelRatio || 1, 1.25);
           fastFrames = 0;
           resize();
         }
@@ -148,6 +151,8 @@ export function BlackHole({
       progress =
         diveStartedAt === null ? 0 : Math.min(1, (now - diveStartedAt) / 1800);
       uniforms.plunge.value = progress;
+      postUniforms.lightTheme.value = document.documentElement.dataset.theme === "light" ? 1 : 0;
+      uniforms.lightTheme.value = postUniforms.lightTheme.value;
       uniforms.time.value = elapsed;
       uniforms.pointer.value.lerp(target, 0.035);
       try {
@@ -172,9 +177,13 @@ export function BlackHole({
           renderer.setRenderTarget(target);
           renderer.render(scene, camera);
         }
-        el.classList.add("black-hole-ready");
+        if (!el.classList.contains("black-hole-ready")) {
+          el.classList.add("black-hole-ready");
+          el.parentElement!.dataset.renderer = "webgl";
+        }
       } catch {
         el.classList.remove("black-hole-ready");
+        el.parentElement!.dataset.renderer = "fallback";
         return;
       }
       frame = requestAnimationFrame(draw);
@@ -189,6 +198,7 @@ export function BlackHole({
       lost = true;
       cancelAnimationFrame(frame);
       el.classList.remove("black-hole-ready");
+      el.parentElement!.dataset.renderer = "fallback";
     };
     const restore = () => {
       lost = false;
@@ -219,6 +229,7 @@ export function BlackHole({
     <div
       className="black-hole-scene"
       data-camera-distance={distant ? "far" : arriving ? "arriving" : "near"}
+      data-diving={diving}
       aria-hidden="true"
     >
       <div className="black-hole-fallback">

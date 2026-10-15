@@ -2060,9 +2060,6 @@ export const pages = {
         toolParameterRequired: "必填",
         toolNoParameters: "无需参数。",
         toolInputSchema: "完整参数定义",
-        familyEmpty: "没有加载相关会话摘要。",
-        familySession: "会话 {{session}}",
-        familyCoveredMessages: "摘要覆盖 {{count}} 条消息",
         historyEmpty: "这次模型请求没有历史消息。",
         historyNote:
           "最近一次模型请求中的消息，包括工具调用、工具结果和交互回答；不包含该请求生成的回复。",
@@ -2099,7 +2096,6 @@ export const pages = {
         toolDomainMutationTools: "包含修改操作",
         checkpointName: "当前会话检查点",
         workingStateName: "当前会话工作状态",
-        familyContextName: "相关会话",
         sessionHistoryName: "模型请求中的历史",
         budgetFormulaAria: "查看上下文预算计算方式",
         budgetFormulaTitle: "预算计算方式",
@@ -4938,6 +4934,8 @@ export const pages = {
     },
   },
   settingsAppearance: {
+    appEntranceAnimation: "进入 App 动画",
+    appEntranceAnimationDescription: "仅控制完成初始化后再次进入 App 的动画。关闭后，加载完成即进入首页；首次初始化仍播放完整动画。",
     motion: "界面动效",
     motionSystem: "跟随系统设置",
     motionReduced: "减少动态效果",

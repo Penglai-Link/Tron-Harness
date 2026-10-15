@@ -625,8 +625,6 @@ export function normalizeContextBudgetBreakdown(parsed: Partial<ChatContextBudge
     rawTailTranscriptTokens: tokenField(parsed.rawTailTranscriptTokens) ?? 0,
     recentTranscriptTokens: tokenField(parsed.recentTranscriptTokens) ?? 0,
     retainedHistoryRatioBps: tokenField(parsed.retainedHistoryRatioBps),
-    sessionFamilyContextBudgetTokens: tokenField(parsed.sessionFamilyContextBudgetTokens),
-    sessionFamilyContextTokens: tokenField(parsed.sessionFamilyContextTokens) ?? 0,
     toolSchemaBudgetTokens: tokenField(parsed.toolSchemaBudgetTokens),
     toolSchemaTokens: tokenField(parsed.toolSchemaTokens) ?? 0,
     workingStateBudgetTokens: tokenField(parsed.workingStateBudgetTokens),
@@ -2448,7 +2446,7 @@ function goalVerdictLabel(value: string | null | undefined, translate: (key: str
   return value?.trim() ?? normalized;
 }
 
-type ContextBlockColor = "seed" | "tool" | "checkpoint" | "state" | "family" | "history";
+type ContextBlockColor = "seed" | "tool" | "checkpoint" | "state" | "history";
 
 interface ContextMemoryBlockItem {
   code: string;
@@ -2473,7 +2471,6 @@ const contributorLabelKeys: Record<string, string> = {
   application_context: "applicationContextName",
   current_session_checkpoint: "checkpointName",
   current_session_working_state: "workingStateName",
-  session_family_context: "familyContextName",
   "framework.history": "sessionHistoryName",
   runtime_identity: "runtimeIdentityName",
   "skills.catalog": "skillsCatalogName",
@@ -2493,7 +2490,7 @@ function buildReportedContextMemoryBlocks(
   const label = (id: string) => contributorLabelKeys[id] ? translate(prefix + contributorLabelKeys[id]) : id;
   const detailAliases: Record<string, ContextDetailBlock> = {
     "framework.instructions": "systemPrompt", seed_prompt_prefix: "systemPrompt",
-    application_context: "applicationContext", session_family_context: "familyContext", "framework.history": "history",
+    application_context: "applicationContext", "framework.history": "history",
   };
   const blocks: ContextMemoryBlockItem[] = snapshot.blocks.map((block, index) => ({
     code: block.id,
@@ -2535,7 +2532,6 @@ const mutedContextBlockColor = {
 
 const contextBlockColorClasses: Record<ContextBlockColor, { dot: string; fill: string }> = {
   checkpoint: mutedContextBlockColor,
-  family: mutedContextBlockColor,
   history: mutedContextBlockColor,
   seed: mutedContextBlockColor,
   state: mutedContextBlockColor,
@@ -2626,17 +2622,6 @@ export function buildContextMemoryBlocks({
       tokens: breakdown?.workingStateTokens ?? 0,
     },
     {
-      code: "05",
-      color: "family",
-      detailCode: "familyContext",
-      limitTokens: breakdown?.sessionFamilyContextBudgetTokens ?? null,
-      name: translate("chat.shortTermMemory.contextPanel.familyContextName"),
-      stat: breakdown?.sessionFamilyContextTokens
-        ? translate("chat.shortTermMemory.contextPanel.loaded")
-        : translate("chat.shortTermMemory.contextPanel.none"),
-      tokens: breakdown?.sessionFamilyContextTokens ?? 0,
-    },
-    {
       code: "06",
       color: "history",
       detailCode: "history",
@@ -2689,7 +2674,6 @@ function ContextOverviewPanel({
                   {t("chat.shortTermMemory.contextPanel.historyFormula", {
                     systemPrompt: t("chat.shortTermMemory.contextPanel.systemPromptName"),
                     checkpoint: t("chat.shortTermMemory.contextPanel.checkpointName"),
-                    familyContext: t("chat.shortTermMemory.contextPanel.familyContextName"),
                     workingState: t("chat.shortTermMemory.contextPanel.workingStateName"),
                     toolSchema: t("chat.shortTermMemory.contextPanel.toolSchemaName"),
                   })}

@@ -16,7 +16,7 @@ function startBlackHole(canvas, fragment, postFragment) {
     slow = 0,
     fast = 0;
   const startedAt = performance.now();
-  let scale = Math.min(devicePixelRatio || 1, 2);
+  let scale = Math.min(devicePixelRatio || 1, 1.25);
   let locations, postProgram, postLocations;
   const targets = [];
   const shaders = [];
@@ -49,7 +49,7 @@ function startBlackHole(canvas, fragment, postFragment) {
     program = link(fragment);
     postProgram = link(postFragment);
     postLocations = Object.fromEntries(
-      ["resolution", "direction", "mode", "sceneTexture", "bloomTexture"].map(
+      ["resolution", "direction", "mode", "lightTheme", "sceneTexture", "bloomTexture"].map(
         (key) => [key, gl.getUniformLocation(postProgram, key)]
       )
     );
@@ -65,7 +65,7 @@ function startBlackHole(canvas, fragment, postFragment) {
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
     locations = Object.fromEntries(
-      ["resolution", "pointer", "time", "plunge", "approach"].map((key) => [
+      ["resolution", "pointer", "time", "plunge", "approach", "lightTheme"].map((key) => [
         key,
         gl.getUniformLocation(program, key),
       ])
@@ -96,7 +96,7 @@ function startBlackHole(canvas, fragment, postFragment) {
   function resize() {
     const ratio = Math.min(
       scale,
-      Math.sqrt(8294400 / Math.max(1, innerWidth * innerHeight))
+      Math.sqrt(2073600 / Math.max(1, innerWidth * innerHeight))
     );
     canvas.width = Math.max(1, Math.round(innerWidth * ratio));
     canvas.height = Math.max(1, Math.round(innerHeight * ratio));
@@ -130,8 +130,8 @@ function startBlackHole(canvas, fragment, postFragment) {
         scale = Math.max(1, scale - 0.25);
         slow = 0;
         resize();
-      } else if (fast > 600 && scale < Math.min(devicePixelRatio || 1, 2)) {
-        scale = Math.min(scale + 0.25, devicePixelRatio || 1, 2);
+      } else if (fast > 600 && scale < Math.min(devicePixelRatio || 1, 1.25)) {
+        scale = Math.min(scale + 0.25, devicePixelRatio || 1, 1.25);
         fast = 0;
         resize();
       }
@@ -141,9 +141,11 @@ function startBlackHole(canvas, fragment, postFragment) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, targets[0].framebuffer);
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.uniform2f(locations.resolution, canvas.width, canvas.height);
+    gl.uniform1f(locations.lightTheme, document.documentElement.dataset.theme === "light" ? 1 : 0);
     gl.uniform1f(locations.time, (Date.now() % 3600000) / 1000);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.useProgram(postProgram);
+    gl.uniform1f(postLocations.lightTheme, document.documentElement.dataset.theme === "light" ? 1 : 0);
     gl.uniform1i(postLocations.sceneTexture, 0);
     gl.uniform1i(postLocations.bloomTexture, 1);
     for (let pass = 0; pass < 3; pass++) {
@@ -197,7 +199,7 @@ function startBlackHole(canvas, fragment, postFragment) {
       lost = false;
       visibility();
     } catch {
-      /* keep static fallback */
+      /* keep animated CSS fallback */
     }
   }
   function dispose() {

@@ -63,7 +63,6 @@ pub(super) async fn assemble(
             history: context.messages[prefix.len()..].to_vec(),
             prefix,
             checkpoint: vec![],
-            family: vec![],
             working: vec![],
         }
     });
@@ -188,12 +187,6 @@ pub(super) async fn assemble(
             &source.checkpoint,
             block_budget(&caps.current_session_checkpoint)?,
             Some(&config.context.providers.checkpoint),
-        ),
-        (
-            "session_family_context",
-            &source.family,
-            block_budget(&caps.session_family_context)?,
-            Some(&config.context.providers.family),
         ),
         (
             "current_session_working_state",
