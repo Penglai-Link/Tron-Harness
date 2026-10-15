@@ -22,7 +22,10 @@ export function useChatInputSuggestions(agentCode?: string, sessionCode?: string
       queryParams: { agentCode, sessionCode, workspaceCode: workspaceCode ?? undefined },
       headers: dudeCode ? { "X-Dude-Code": dudeCode } : undefined, signal,
     }),
-    staleTime: 0,
+    // Suggestions change rarely; capability changes force a refetch through
+    // CAPABILITY_RESOURCES_CHANGED, so a short cache window avoids refetching
+    // on every composer remount.
+    staleTime: 30_000,
     enabled: Boolean(workspaceCode || dudeCode),
   });
   const { refetch } = query;
