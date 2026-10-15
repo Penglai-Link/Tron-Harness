@@ -85,7 +85,6 @@ impl<'a> SqliteTaskRepositorySql<'a> {
         }
         tx.commit().map_err(storage_error)
     }
-
     fn read_task_flow(&self, flow_code: &str) -> Result<Option<TaskFlow>, TaskError> {
         let Some((flow_code, name)) = self
             .connection
@@ -293,31 +292,15 @@ impl TaskRepository for SqliteTaskRepositorySql<'_> {
     }
 
     fn next_id(&mut self) -> Result<i64, TaskError> {
-        let max_id = self.connection.query_row(
-            "SELECT max(id) FROM (SELECT id FROM tasks UNION ALL SELECT id FROM task_agent_links UNION ALL SELECT id FROM task_app_links)",
-            [],
-            |row| row.get::<_, Option<i64>>(0),
-        ).map_err(storage_error)?.unwrap_or(734_500_000_000_000_000);
-        Ok(max_id + 1)
+        next_task_id(self.connection)
     }
 
     fn create_task(&mut self, task: &Task) -> Result<(), TaskError> {
-        self.connection.execute(
-            "INSERT INTO tasks (id, task_code, workspace_code, parent_task_code, title, description, execution_result, flow_code, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at, owner_dude_code, due_at, planned_start_at, next_followup_at, work_session_code, schedule_version) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
-            params![task.id.value(), task.task_code, task.workspace_code, task.parent_task_code, task.title, task.description, task.execution_result, task.flow_code, task.status, task.previous_status, task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, task.agent_code, task.model_code, i64::from(task.progress), timestamp_to_millis(&task.created_at), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref()), task.owner_dude_code, task.due_at, task.planned_start_at, task.next_followup_at, task.work_session_code, task.schedule_version],
-        ).map_err(storage_error)?;
-        Ok(())
+        insert_task_row(self.connection, task)
     }
 
     fn update_task(&mut self, task: &Task) -> Result<(), TaskError> {
-        let changed = self.connection.execute(
-            "UPDATE tasks SET parent_task_code = ?2, title = ?3, description = ?4, execution_result = ?5, flow_code = ?6, status = ?7, previous_status = ?8, priority = ?9, task_type = ?10, source_type = ?11, source_url = ?12, agent_code = ?13, model_code = ?14, progress_value = ?15, updated_at = ?16, archived_at = ?17, due_at = ?18, planned_start_at = ?19, next_followup_at = ?20, schedule_version = schedule_version + 1 WHERE task_code = ?1 AND schedule_version = ?21",
-            params![task.task_code, task.parent_task_code, task.title, task.description, task.execution_result, task.flow_code, task.status, task.previous_status, task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, task.agent_code, task.model_code, i64::from(task.progress), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref()), task.due_at, task.planned_start_at, task.next_followup_at, task.schedule_version],
-        ).map_err(storage_error)?;
-        if changed == 0 {
-            return Err(TaskError::InvalidRequest);
-        }
-        Ok(())
+        update_task_row(self.connection, task)
     }
 
     fn list_user_assignments(
@@ -357,14 +340,140 @@ impl TaskRepository for SqliteTaskRepositorySql<'_> {
         self.replace_code_links("task_app_links", "app_code", task_code, entries)?;
         self.list_app_links(task_code)
     }
+    /// One transaction covers the task row and every link table, so a task and
+    /// its links commit together instead of one fsync per method.
+    fn create_task_with_links(
+        &mut self,
+        task: &Task,
+        _user_assignments: &[TaskUserAssignment],
+        agent_links: &[TaskCodeLink],
+        app_links: &[TaskCodeLink],
+    ) -> Result<(), TaskError> {
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
+        insert_task_row(&transaction, task)?;
+        let mut next_id = next_task_id(&transaction)?;
+        replace_code_links_row(
+            &transaction,
+            "task_agent_links",
+            "agent_code",
+            &task.task_code,
+            agent_links,
+            &mut next_id,
+        )?;
+        replace_code_links_row(
+            &transaction,
+            "task_app_links",
+            "app_code",
+            &task.task_code,
+            app_links,
+            &mut next_id,
+        )?;
+        transaction.commit().map_err(storage_error)
+    }
+    fn update_task_with_links(
+        &mut self,
+        task: &Task,
+        _user_assignments: Option<&[TaskUserAssignment]>,
+        agent_links: Option<&[TaskCodeLink]>,
+        app_links: Option<&[TaskCodeLink]>,
+    ) -> Result<(), TaskError> {
+        let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
+        update_task_row(&transaction, task)?;
+        if let Some(entries) = agent_links {
+            let mut next_id = next_task_id(&transaction)?;
+            replace_code_links_row(
+                &transaction,
+                "task_agent_links",
+                "agent_code",
+                &task.task_code,
+                entries,
+                &mut next_id,
+            )?;
+        }
+        if let Some(entries) = app_links {
+            let mut next_id = next_task_id(&transaction)?;
+            replace_code_links_row(
+                &transaction,
+                "task_app_links",
+                "app_code",
+                &task.task_code,
+                entries,
+                &mut next_id,
+            )?;
+        }
+        transaction.commit().map_err(storage_error)
+    }
+}
+
+fn next_task_id(connection: &Connection) -> Result<i64, TaskError> {
+    let max_id = connection
+        .query_row(
+            "SELECT max(id) FROM (SELECT id FROM tasks UNION ALL SELECT id FROM task_agent_links UNION ALL SELECT id FROM task_app_links)",
+            [],
+            |row| row.get::<_, Option<i64>>(0),
+        )
+        .map_err(storage_error)?
+        .unwrap_or(734_500_000_000_000_000);
+    Ok(max_id + 1)
+}
+
+fn insert_task_row(connection: &Connection, task: &Task) -> Result<(), TaskError> {
+    connection
+        .execute(
+            "INSERT INTO tasks (id, task_code, workspace_code, parent_task_code, title, description, execution_result, flow_code, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at, owner_dude_code, due_at, planned_start_at, next_followup_at, work_session_code, schedule_version) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
+            params![task.id.value(), task.task_code, task.workspace_code, task.parent_task_code, task.title, task.description, task.execution_result, task.flow_code, task.status, task.previous_status, task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, task.agent_code, task.model_code, i64::from(task.progress), timestamp_to_millis(&task.created_at), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref()), task.owner_dude_code, task.due_at, task.planned_start_at, task.next_followup_at, task.work_session_code, task.schedule_version],
+        )
+        .map_err(storage_error)?;
+    Ok(())
+}
+
+fn update_task_row(connection: &Connection, task: &Task) -> Result<(), TaskError> {
+    let changed = connection
+        .execute(
+            "UPDATE tasks SET parent_task_code = ?2, title = ?3, description = ?4, execution_result = ?5, flow_code = ?6, status = ?7, previous_status = ?8, priority = ?9, task_type = ?10, source_type = ?11, source_url = ?12, agent_code = ?13, model_code = ?14, progress_value = ?15, updated_at = ?16, archived_at = ?17, due_at = ?18, planned_start_at = ?19, next_followup_at = ?20, schedule_version = schedule_version + 1 WHERE task_code = ?1 AND schedule_version = ?21",
+            params![task.task_code, task.parent_task_code, task.title, task.description, task.execution_result, task.flow_code, task.status, task.previous_status, task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, task.agent_code, task.model_code, i64::from(task.progress), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref()), task.due_at, task.planned_start_at, task.next_followup_at, task.schedule_version],
+        )
+        .map_err(storage_error)?;
+    if changed == 0 {
+        return Err(TaskError::InvalidRequest);
+    }
+    Ok(())
+}
+
+/// Delete and re-insert link rows inside an already open transaction.
+/// `next_id` carries the id allocation across multiple link tables.
+fn replace_code_links_row(
+    connection: &Connection,
+    table: &str,
+    code_column: &str,
+    task_code: &str,
+    entries: &[TaskCodeLink],
+    next_id: &mut i64,
+) -> Result<(), TaskError> {
+    let delete_sql = format!("DELETE FROM {table} WHERE task_code = ?1");
+    let insert_sql = format!(
+        "INSERT INTO {table} (id, task_code, {code_column}, linked_at) VALUES (?1, ?2, ?3, ?4)"
+    );
+    connection
+        .execute(&delete_sql, [task_code])
+        .map_err(storage_error)?;
+    for entry in entries {
+        connection
+            .execute(
+                &insert_sql,
+                params![*next_id, task_code, entry.code, timestamp_to_millis(&entry.linked_at)],
+            )
+            .map_err(storage_error)?;
+        *next_id += 1;
+    }
+    Ok(())
 }
 
 fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
     let priority: String = row.get(10)?;
     let task_type: String = row.get(11)?;
     let source_type: String = row.get(12)?;
-    let progress: i64 = row.get(16)?;
-    Ok(Task {
+    let progress: i64 = row.get(16)?;    Ok(Task {
         id: SnowflakeId::new(row.get(0)?),
         task_code: row.get(1)?,
         workspace_code: row.get(2)?,
@@ -679,6 +788,52 @@ impl TaskRepository for SqliteTaskRepository {
         let task = task.to_owned();
         self.connection.call(
             move |connection| SqliteTaskRepositorySql { connection }.update_task(&task),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn create_task_with_links(
+        &mut self,
+        task: &Task,
+        user_assignments: &[TaskUserAssignment],
+        agent_links: &[TaskCodeLink],
+        app_links: &[TaskCodeLink],
+    ) -> Result<(), TaskError> {
+        let task = task.to_owned();
+        let user_assignments = user_assignments.to_owned();
+        let agent_links = agent_links.to_owned();
+        let app_links = app_links.to_owned();
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }.create_task_with_links(
+                    &task,
+                    &user_assignments,
+                    &agent_links,
+                    &app_links,
+                )
+            },
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn update_task_with_links(
+        &mut self,
+        task: &Task,
+        user_assignments: Option<&[TaskUserAssignment]>,
+        agent_links: Option<&[TaskCodeLink]>,
+        app_links: Option<&[TaskCodeLink]>,
+    ) -> Result<(), TaskError> {
+        let task = task.to_owned();
+        let user_assignments = user_assignments.map(<[TaskUserAssignment]>::to_owned);
+        let agent_links = agent_links.map(<[TaskCodeLink]>::to_owned);
+        let app_links = app_links.map(<[TaskCodeLink]>::to_owned);
+        self.connection.call(
+            move |connection| {
+                SqliteTaskRepositorySql { connection }.update_task_with_links(
+                    &task,
+                    user_assignments.as_deref(),
+                    agent_links.as_deref(),
+                    app_links.as_deref(),
+                )
+            },
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }

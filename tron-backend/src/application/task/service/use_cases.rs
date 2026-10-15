@@ -129,10 +129,7 @@ impl TaskService {
             updated_at: current_timestamp(),
             archived_at: None,
         };
-        repository.create_task(&task)?;
-        repository.replace_user_assignments(&task_code, &assignees)?;
-        repository.replace_agent_links(&task_code, &agent_links)?;
-        repository.replace_app_links(&task_code, &app_links)?;
+        repository.create_task_with_links(&task, &assignees, &agent_links, &app_links)?;
         drop(repository);
         let detail = self.get_task(&task_code)?;
         self.publish_task_detail_event("task.created", "Created task", &detail);
@@ -237,16 +234,12 @@ impl TaskService {
                 .repository
                 .lock()
                 .expect("task repository mutex poisoned");
-            repository.update_task(&task)?;
-            if let Some(entries) = assignees {
-                repository.replace_user_assignments(task_code, &entries)?;
-            }
-            if let Some(entries) = agent_links {
-                repository.replace_agent_links(task_code, &entries)?;
-            }
-            if let Some(entries) = app_links {
-                repository.replace_app_links(task_code, &entries)?;
-            }
+            repository.update_task_with_links(
+                &task,
+                assignees.as_deref(),
+                agent_links.as_deref(),
+                app_links.as_deref(),
+            )?;
         }
         let detail = self.get_task(task_code)?;
         self.publish_task_detail_event("task.updated", "Updated task", &detail);

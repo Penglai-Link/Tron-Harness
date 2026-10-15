@@ -110,6 +110,43 @@ pub trait TaskRepository: Send {
     fn next_id(&mut self) -> Result<i64, TaskError>;
     fn create_task(&mut self, task: &Task) -> Result<(), TaskError>;
     fn update_task(&mut self, task: &Task) -> Result<(), TaskError>;
+    /// Create the task row and replace all link sets in one storage
+    /// transaction. Storage without transactional link writes falls back to
+    /// sequential method calls.
+    fn create_task_with_links(
+        &mut self,
+        task: &Task,
+        user_assignments: &[TaskUserAssignment],
+        agent_links: &[TaskCodeLink],
+        app_links: &[TaskCodeLink],
+    ) -> Result<(), TaskError> {
+        self.create_task(task)?;
+        self.replace_user_assignments(&task.task_code, user_assignments)?;
+        self.replace_agent_links(&task.task_code, agent_links)?;
+        self.replace_app_links(&task.task_code, app_links)?;
+        Ok(())
+    }
+    /// Update the task row and replace only the provided link sets, all in one
+    /// storage transaction.
+    fn update_task_with_links(
+        &mut self,
+        task: &Task,
+        user_assignments: Option<&[TaskUserAssignment]>,
+        agent_links: Option<&[TaskCodeLink]>,
+        app_links: Option<&[TaskCodeLink]>,
+    ) -> Result<(), TaskError> {
+        self.update_task(task)?;
+        if let Some(entries) = user_assignments {
+            self.replace_user_assignments(&task.task_code, entries)?;
+        }
+        if let Some(entries) = agent_links {
+            self.replace_agent_links(&task.task_code, entries)?;
+        }
+        if let Some(entries) = app_links {
+            self.replace_app_links(&task.task_code, entries)?;
+        }
+        Ok(())
+    }
     fn list_user_assignments(
         &mut self,
         task_code: &str,
