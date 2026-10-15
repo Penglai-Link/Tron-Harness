@@ -40,6 +40,14 @@ pub(super) fn localize_domain_record(
     domain_code: &str,
     items: &[&ToolCatalogRecord],
 ) -> ToolDomainRecord {
+    // The directory is the model's only preview of a domain before expansion.
+    // A wide window keeps run-leased dynamic tools visible without another
+    // round trip; large domains still stay bounded.
+    let sample_tools = items
+        .iter()
+        .take(SAMPLE_TOOL_WINDOW)
+        .map(|tool| tool.tool_code.clone())
+        .collect::<Vec<_>>();
     if let Some(definition) = domain_definitions()
         .into_iter()
         .find(|definition| definition.domain_code.eq_ignore_ascii_case(domain_code))
@@ -49,11 +57,7 @@ pub(super) fn localize_domain_record(
             name: translate(locale, definition.name_i18n_key).to_string(),
             description: translate(locale, definition.description_i18n_key).to_string(),
             tool_count: items.len(),
-            sample_tools: items
-                .iter()
-                .take(3)
-                .map(|tool| tool.tool_code.clone())
-                .collect(),
+            sample_tools,
             has_mutation_tools: items
                 .iter()
                 .any(|tool| tool.operation_kind == ToolOperationKind::Command),
@@ -72,16 +76,14 @@ pub(super) fn localize_domain_record(
             SupportedLocale::EnUs => format!("Business tools under the {domain_code} domain."),
         },
         tool_count: items.len(),
-        sample_tools: items
-            .iter()
-            .take(3)
-            .map(|tool| tool.tool_code.clone())
-            .collect(),
+        sample_tools,
         has_mutation_tools: items
             .iter()
             .any(|tool| tool.operation_kind == ToolOperationKind::Command),
     }
 }
+
+const SAMPLE_TOOL_WINDOW: usize = 8;
 
 pub(crate) fn materialize_schema(locale: SupportedLocale, schema: &Value) -> Value {
     let mut localized = schema.clone();

@@ -71,6 +71,12 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
         "framework.tool-pack.agent-collaboration" => vec![
             AgentGetTool::descriptor(),
             AgentSpawnTool::descriptor(),
+            ChildWaitTool::descriptor(),
+            ChildSendTool::descriptor(),
+            ChildAnswerTool::descriptor(),
+            ChildCancelTool::descriptor(),
+            ChildReadTool::descriptor(),
+            ChildListTool::descriptor(),
             ThreadCreateTool::descriptor(),
             ThreadSendTool::descriptor(),
             ThreadAnswerTool::descriptor(),
@@ -335,7 +341,7 @@ mod content_tests {
                 .iter()
                 .filter(|item| item.kind == "Tool")
                 .count(),
-            8
+            15
         );
     }
 
