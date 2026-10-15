@@ -10,6 +10,20 @@ mod platform_catalog;
 struct SqliteKnowledgeBaseRepositorySql<'a> {
     connection: &'a mut Connection,
 }
+/// Document payloads for one knowledge base in id order.
+fn document_payload(
+    connection: &Connection,
+    id: &str,
+) -> Result<Vec<String>, KnowledgeBaseError> {
+    let mut statement = connection
+        .prepare("SELECT payload_json FROM knowledge_base_documents WHERE knowledge_base_id=?1 ORDER BY id")
+        .map_err(storage)?;
+    statement
+        .query_map([id], |r| r.get::<_, String>(0))
+        .map_err(storage)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage)
+}
 #[derive(Clone)]
 pub struct SqliteKnowledgeBaseRepository {
     connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
@@ -38,12 +52,7 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
     }
     pub fn documents(&self, id: &str) -> Result<Vec<KnowledgeBaseDocument>, KnowledgeBaseError> {
         let conn = &*self.connection;
-        let mut stmt=conn.prepare("SELECT payload_json FROM knowledge_base_documents WHERE knowledge_base_id=?1 ORDER BY id").map_err(storage)?;
-        let raw = stmt
-            .query_map([id], |r| r.get::<_, String>(0))
-            .map_err(storage)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage)?;
+        let raw = document_payload(conn, id)?;
         raw.iter().map(|s| decode(s)).collect()
     }
     pub fn document(
@@ -51,10 +60,18 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
         kb: &str,
         id: &str,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.documents(kb)?
-            .into_iter()
-            .find(|d| d.id == id)
-            .ok_or(KnowledgeBaseError::NotFound)
+        // Point lookup on the primary key instead of decoding the whole
+        // knowledge base document list.
+        let encoded: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT payload_json FROM knowledge_base_documents WHERE knowledge_base_id=?1 AND id=?2",
+                params![kb, id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(storage)?;
+        decode(&encoded.ok_or(KnowledgeBaseError::NotFound)?)
     }
     pub fn insert_document(
         &self,
@@ -267,7 +284,7 @@ fn decode<T: DeserializeOwned>(v: &str) -> Result<T, KnowledgeBaseError> {
 impl SqliteKnowledgeBaseRepository {
     pub fn get(&self, id: &str) -> Result<KnowledgeBase, KnowledgeBaseError> {
         let id = id.to_owned();
-        self.connection.call(
+        self.connection.call_read(
             move |connection| SqliteKnowledgeBaseRepositorySql { connection }.get(&id),
             || storage("database worker stopped"),
         )
@@ -282,7 +299,7 @@ impl SqliteKnowledgeBaseRepository {
     }
     pub fn documents(&self, id: &str) -> Result<Vec<KnowledgeBaseDocument>, KnowledgeBaseError> {
         let id = id.to_owned();
-        self.connection.call(
+        self.connection.call_read(
             move |connection| SqliteKnowledgeBaseRepositorySql { connection }.documents(&id),
             || storage("database worker stopped"),
         )
@@ -294,7 +311,7 @@ impl SqliteKnowledgeBaseRepository {
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
         let kb = kb.to_owned();
         let id = id.to_owned();
-        self.connection.call(
+        self.connection.call_read(
             move |connection| SqliteKnowledgeBaseRepositorySql { connection }.document(&kb, &id),
             || storage("database worker stopped"),
         )
