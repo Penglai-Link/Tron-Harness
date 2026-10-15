@@ -62,7 +62,7 @@ redis = { version = "0.32.7", default-features = false, features = ["cluster-asy
 rusqlite = { version = "0.37", features = ["bundled", "load_extension"] }
 tokio-rusqlite = { version = "0.7.0", features = ["bundled"] }
 russh = { version = "0.62.6", default-features = false, features = ["ring", "rsa"] }
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 serde_path_to_error = "0.1"
 serde_json = "1"
 semver = "1"

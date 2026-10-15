@@ -64,7 +64,8 @@ impl fw::ContextPreparationPolicy for TronContext {
             .iter()
             .map(super::messages::decode)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(fw::AgentError::InvalidConfiguration)?;
+            .map_err(fw::AgentError::InvalidConfiguration)?
+            .into();
         // Instructions belong to the current authorized host scope. Persisted
         // conversation history cannot freeze an earlier workspace/agent prefix.
         let old_prefix_len = state
@@ -74,7 +75,7 @@ impl fw::ContextPreparationPolicy for TronContext {
             .take_while(|message| matches!(message.role.as_str(), "system" | "developer"))
             .count();
         let prefix = state.trusted_prefix.clone();
-        state.context.messages.splice(..old_prefix_len, prefix);
+        std::sync::Arc::make_mut(&mut state.context.messages).splice(..old_prefix_len, prefix);
         state.context.tools = input
             .tools
             .iter()
@@ -144,7 +145,8 @@ impl fw::ContextPreparationPolicy for TronContext {
             .iter()
             .map(super::messages::decode)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(fw::AgentError::InvalidConfiguration)?;
+            .map_err(fw::AgentError::InvalidConfiguration)?
+            .into();
         if force && previous_messages.as_ref() == Some(&projection.messages) {
             return Err(fw::ModelError::ContextOverflow(
                 "configured context strategies reproduced the failed model input".into(),

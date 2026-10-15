@@ -399,8 +399,9 @@ impl Runtime {
             memory.current_input_message =
                 (!request.input.text().is_empty()).then_some(current_input);
         } else {
-            context.messages.pop();
-            context.messages.push(current_input);
+            let messages = std::sync::Arc::make_mut(&mut context.messages);
+            messages.pop();
+            messages.push(current_input);
         }
         if sender.is_none()
             && matches!(
@@ -416,7 +417,7 @@ impl Runtime {
                     "This is a synchronous delegated agent_spawn task. Return a bounded result or the precise missing facts to your caller. Do not ask the user directly, close the owning Dude's work, or publish notifications. Parallel sub-work can use agent_spawn with background=true; work needing user decisions or durable continuation belongs in thread_create."
                 }
             });
-            context.messages.push(guidance.clone());
+            std::sync::Arc::make_mut(&mut context.messages).push(guidance.clone());
             if let Some(memory) = &mut context.short_term_memory {
                 memory.prompt_prefix.push(guidance);
                 memory.prompt_prefix_sources.push(None);

@@ -481,7 +481,7 @@ mod tests {
             tool_exposure: Default::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
-            messages: vec![AgentMessage::user("hello")],
+            messages: vec![AgentMessage::user("hello")].into(),
             observations: Vec::new(),
             short_term_memory: None,
             started_at: "2026-05-30T00:00:00Z".into(),

@@ -35,8 +35,7 @@ pub(super) fn activate_short_term_memory(
         if let Some(message) = user_prompt_message.as_mut() {
             message.parts.push(part.clone());
         }
-        if let Some(message) = context
-            .messages
+        if let Some(message) = std::sync::Arc::make_mut(&mut context.messages)
             .iter_mut()
             .rev()
             .find(|message| message.role == "user")
@@ -55,7 +54,7 @@ pub(super) fn activate_short_term_memory(
 
     let input_kind = input_kind.unwrap_or("USER_PROMPT");
     let input_code = context.run_code.clone();
-    context.messages = prompt_prefix_messages;
+    context.messages = prompt_prefix_messages.into();
     let current_input_message =
         runtime_input_context_message(input_kind, prompt, &input_metadata).or(user_prompt_message);
     context.short_term_memory = Some(AgentShortTermMemoryRunContext {
@@ -65,7 +64,7 @@ pub(super) fn activate_short_term_memory(
         input_code,
         input_kind: input_kind.to_string(),
         input_metadata,
-        prompt_prefix: context.messages.clone(),
+        prompt_prefix: context.messages.as_ref().clone(),
         prompt_prefix_sources,
         current_input_message,
         agent_code: Some(agent_code.to_string()),
@@ -221,7 +220,7 @@ mod tests {
             tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
-            messages: vec![AgentMessage::user("hello")],
+            messages: vec![AgentMessage::user("hello")].into(),
             observations: Vec::new(),
             short_term_memory: None,
             started_at: "2026-06-17T00:00:00Z".into(),

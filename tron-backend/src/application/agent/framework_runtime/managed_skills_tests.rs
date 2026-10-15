@@ -444,7 +444,7 @@ async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_i
         let mut context = context(1);
         context.tools.clear();
         if client_support {
-            context.messages[0].parts.push(crate::domain::agent::AgentMessagePart::Context {kind:"tron_interaction_response".into(),text:String::new(),metadata:Some(json!({"a2uiClientCapabilities":{"version":"v0.9.1","catalogIds":["https://eliteforge.dev/a2ui/v0.9.1/agent"]}}))});
+            std::sync::Arc::make_mut(&mut context.messages)[0].parts.push(crate::domain::agent::AgentMessagePart::Context {kind:"tron_interaction_response".into(),text:String::new(),metadata:Some(json!({"a2uiClientCapabilities":{"version":"v0.9.1","catalogIds":["https://eliteforge.dev/a2ui/v0.9.1/agent"]}}))});
         }
         let result = agent.run(context).await.unwrap();
         assert_eq!(result.final_output, "done");

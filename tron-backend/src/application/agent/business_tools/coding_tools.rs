@@ -283,7 +283,7 @@ mod tests {
                 max_tool_calls: 4,
                 max_parallel_tool_calls: 2,
             },
-            messages: vec![AgentMessage::user("hello")],
+            messages: vec![AgentMessage::user("hello")].into(),
             observations: Vec::new(),
             short_term_memory: None,
             started_at: "2026-06-04T00:00:00Z".into(),

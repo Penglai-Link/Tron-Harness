@@ -61,8 +61,7 @@ pub(super) fn narrow(context: &mut AgentRunContext) {
     context.tool_assignment = None;
     context.tool_exposure = Default::default();
     context.skills.clear();
-    context
-        .messages
+    std::sync::Arc::make_mut(&mut context.messages)
         .retain(|m| !matches!(m.role.as_str(), "system" | "developer"));
 }
 

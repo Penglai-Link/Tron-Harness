@@ -120,7 +120,7 @@ pub async fn refresh_execution_context(
             true
         }
     }
-    replace(&mut context.messages, &message);
+    replace(&mut std::sync::Arc::make_mut(&mut context.messages), &message);
     if let Some(memory) = context.short_term_memory.as_mut() {
         if replace(&mut memory.prompt_prefix, &message) {
             memory.prompt_prefix_sources.push(None);
@@ -185,9 +185,9 @@ fn replace_project_instructions(
     if !changed {
         return false;
     }
-    context.messages.retain(|item| !is_project(item));
+    std::sync::Arc::make_mut(&mut context.messages).retain(|item| !is_project(item));
     if let Some(message) = &message {
-        context.messages.insert(0, message.clone());
+        std::sync::Arc::make_mut(&mut context.messages).insert(0, message.clone());
     }
     if let Some(memory) = context.short_term_memory.as_mut() {
         for index in (0..memory.prompt_prefix.len()).rev() {

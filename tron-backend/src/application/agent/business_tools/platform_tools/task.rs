@@ -466,7 +466,7 @@ mod tests {
             tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
-            messages: vec![],
+            messages: vec![].into(),
             observations: vec![],
             short_term_memory: None,
             started_at: "2026-10-11T00:00:00Z".into(),

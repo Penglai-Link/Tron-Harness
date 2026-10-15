@@ -91,7 +91,7 @@ async fn background_summary_allows_next_chat_turn_and_rejects_a_stale_snapshot()
     context.run_code = fw::RunId::new_v4().to_string();
     context.conversation_code = Some(session.clone());
     context.stream_key = Some(session.clone());
-    context.messages = vec![AgentMessage::user("simplify the answer")];
+    context.messages = vec![AgentMessage::user("simplify the answer")].into();
     let second = within(host.run(harness, context.clone(), None, None))
         .await
         .unwrap();

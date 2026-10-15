@@ -510,7 +510,7 @@ impl AgentRunContextBuilder {
                 allowed_local_directories: Vec::new(),
             }),
             limits,
-            messages,
+            messages: messages.into(),
             observations: Vec::new(),
             short_term_memory: None,
             started_at: chrono::Utc::now().to_rfc3339(),
@@ -520,9 +520,8 @@ impl AgentRunContextBuilder {
         {
             prompt_prefix_messages.push(message.clone());
             prompt_prefix_sources.push(None);
-            context
-                .messages
-                .insert(context.messages.len().saturating_sub(1), message);
+            let index = context.messages.len().saturating_sub(1);
+            std::sync::Arc::make_mut(&mut context.messages).insert(index, message);
         }
         if context.agent_kind == crate::domain::agent::AgentKind::React {
             if let Some(inspector) = &self.directory_inspector {
@@ -534,9 +533,8 @@ impl AgentRunContextBuilder {
                 {
                     prompt_prefix_messages.push(message.clone());
                     prompt_prefix_sources.push(None);
-                    context
-                        .messages
-                        .insert(context.messages.len().saturating_sub(1), message);
+                    let index = context.messages.len().saturating_sub(1);
+                    std::sync::Arc::make_mut(&mut context.messages).insert(index, message);
                 }
             }
         }
@@ -555,11 +553,10 @@ impl AgentRunContextBuilder {
         )?;
         if let Some(message) = page_context_message(page_context.as_ref()) {
             if context.short_term_memory.is_some() {
-                context.messages.push(message);
+                std::sync::Arc::make_mut(&mut context.messages).push(message);
             } else {
-                context
-                    .messages
-                    .insert(context.messages.len().saturating_sub(1), message);
+                let index = context.messages.len().saturating_sub(1);
+                std::sync::Arc::make_mut(&mut context.messages).insert(index, message);
             }
         }
 

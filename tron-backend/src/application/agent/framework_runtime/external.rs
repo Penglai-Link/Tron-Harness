@@ -54,7 +54,10 @@ impl fw::ExternalAgent for HostExternalAgent {
             .ok_or_else(|| fw::AgentError::Run("external execution is missing".into()))?;
         let mut context = execution.context.clone();
         if let Some(value) = fw::annotation_model_context(&request.annotations)
-            && let Some(message) = context.messages.iter_mut().rfind(|message| message.role == "user") {
+            && let Some(message) = std::sync::Arc::make_mut(&mut context.messages)
+                .iter_mut()
+                .rfind(|message| message.role == "user")
+        {
             message.parts.push(crate::domain::agent::AgentMessagePart::Context {
                 kind: "conversation_annotations".into(), text: value.to_string(), metadata: Some(value),
             });

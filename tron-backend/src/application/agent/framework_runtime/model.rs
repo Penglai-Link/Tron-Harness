@@ -179,7 +179,7 @@ impl fw::ChatModel for TronChatModel {
                 );
             }
         }
-        state.context.messages = native;
+        state.context.messages = native.into();
         state.context.model.temperature = request.options.temperature;
         state.context.model.top_p = request.options.top_p;
         state.context.model.max_tokens = request.options.max_output_tokens;
@@ -246,7 +246,7 @@ impl fw::ChatModel for TronChatModel {
                     turn,
                     *usage,
                     Some(callback),
-                    prepared.clone(),
+                    prepared.take(),
                     Some(&request),
                 );
                 tokio::pin!(invocation);
@@ -339,11 +339,15 @@ impl fw::ChatModel for TronChatModel {
         }
         let message =
             super::messages::encode(&response.assistant).map_err(fw::ModelError::Fatal)?;
-        let mut persisted_messages = context.messages.clone();
-        if response.finish == crate::domain::agent::ModelFinish::Final {
-            persisted_messages.push(response.assistant.clone());
-            turn.apply_model_response(&response, persisted_messages.len());
-        }
+        let persisted_messages: std::borrow::Cow<'_, [crate::domain::agent::AgentMessage]> =
+            if response.finish == crate::domain::agent::ModelFinish::Final {
+                let mut messages = context.messages.as_ref().clone();
+                messages.push(response.assistant.clone());
+                turn.apply_model_response(&response, messages.len());
+                std::borrow::Cow::Owned(messages)
+            } else {
+                std::borrow::Cow::Borrowed(&context.messages)
+            };
         let provider_identity = provider_scope(context)?;
         let continuation = turn
             .checkpoint(&persisted_messages)

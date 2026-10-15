@@ -46,7 +46,9 @@ pub struct GoalSessionCommand {
 pub struct PreparedModelContext {
     /// Authorized sources only; the SDK asynchronous assembler owns model admission.
     pub sources: Option<PreparedContextSources>,
-    pub messages: Vec<AgentMessage>,
+    /// Shared transcript snapshot: cloning the prepared context is a pointer
+    /// copy instead of an O(history) deep copy.
+    pub messages: std::sync::Arc<Vec<AgentMessage>>,
     pub rebased: bool,
     pub context_hash: Option<String>,
     pub checkpoint_code: Option<String>,

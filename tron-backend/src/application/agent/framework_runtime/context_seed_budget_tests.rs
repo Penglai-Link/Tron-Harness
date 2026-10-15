@@ -128,7 +128,7 @@ fn context(window: u32) -> AgentRunContext {
     context.messages = vec![
         AgentMessage::system("trusted workspace rule"),
         AgentMessage::user("question"),
-    ];
+    ].into();
     context
 }
 async fn fixture(

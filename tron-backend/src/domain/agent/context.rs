@@ -190,7 +190,10 @@ pub struct AgentRunContext {
     pub tool_exposure: AgentToolExposureState,
     pub execution_scope: AgentExecutionScope,
     pub limits: AgentRunLimits,
-    pub messages: Vec<AgentMessage>,
+    /// Shared transcript snapshot. Clones across preparation, turn state and
+    /// the model call are pointer copies instead of O(history) deep copies;
+    /// mutations go through `Arc::make_mut` (copy-on-write only when shared).
+    pub messages: std::sync::Arc<Vec<AgentMessage>>,
     pub observations: Vec<ToolObservation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_term_memory: Option<AgentShortTermMemoryRunContext>,
@@ -336,7 +339,7 @@ mod tests {
             },
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
-            messages: Vec::new(),
+            messages: Vec::new().into(),
             observations: Vec::new(),
             short_term_memory: None,
             started_at: String::new(),
