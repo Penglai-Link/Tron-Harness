@@ -115,7 +115,10 @@ shortTermMemory:
     defaultContextWindowTokens: 32000
     blocks:
       seedPromptPrefix:
-        maxRatio: "50%"
+        # Protected instructions plus application context share this pool. Keep
+        # it generous relative to the post-tool-schema remainder so default
+        # (32k) windows still admit the full system prompt set.
+        maxRatio: "80%"
         maxTokens: 16000
       currentSessionCheckpoint:
         maxRatio: "20%"

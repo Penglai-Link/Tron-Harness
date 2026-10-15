@@ -160,7 +160,12 @@ pub(super) async fn assemble(
             limit: config.context.providers.max_auxiliary_calls_per_step,
         },
     }));
-    contributors.push(Arc::new(super::dude_context::DudeContributor { service:host.harness.framework_dudes(),context:context.clone(),id:"runtime_identity" }));
+    // The runtime-identity contributor feeds the dude blocks; only an owning
+    // dude context declares those blocks. Registering it elsewhere bills its
+    // instruction contribution against the shared seed without a block.
+    if context.is_owning_dude() {
+        contributors.push(Arc::new(super::dude_context::DudeContributor { service:host.harness.framework_dudes(),context:context.clone(),id:"runtime_identity" }));
+    }
     let mut configs = std::collections::HashMap::new();
     let directory = input
         .run
