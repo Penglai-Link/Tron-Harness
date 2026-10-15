@@ -411,8 +411,8 @@ mod tests {
             AgentModelProtocol::ChatCompletions,
         );
         config.model_code = "external".into();
-        let external =
-            crate::adapters::outbound::model::http_model_client::convert(&config).unwrap();
+        let external: eliteforge_agent_official_plugin_model_http::AgentModelConfig =
+            eliteforge_agent_official_plugin_model_http::AgentModelConfig::from(&config);
         factory.on_failure(&external, &rejected);
         assert_eq!(
             service
@@ -427,8 +427,8 @@ mod tests {
             ProviderConnectionStatus::Connected
         );
         config.model_code = "PERSON_AI:ROUTE:ChatAuto".into();
-        let personai =
-            crate::adapters::outbound::model::http_model_client::convert(&config).unwrap();
+        let personai: eliteforge_agent_official_plugin_model_http::AgentModelConfig =
+            eliteforge_agent_official_plugin_model_http::AgentModelConfig::from(&config);
         factory.on_failure(&personai, &rejected);
         assert_eq!(
             service

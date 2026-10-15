@@ -1,4 +1,4 @@
-use super::{HttpModelProviderClient, http_model_client::convert};
+use super::HttpModelProviderClient;
 use crate::{application::model_provider::ModelProviderService, domain::agent::AgentModelConfig};
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
@@ -41,7 +41,7 @@ impl sdk::ModelTransportFactory for PersonAiModelProviderClient {
     ) -> Result<Arc<dyn sdk::ModelTransport>, fw::ModelError> {
         if self.providers.is_person_ai_config(&config.model_code) {
             self.providers
-                .sdk_model_transport(&convert(config).map_err(fw::ModelError::Fatal)?)
+                .sdk_model_transport(&crate::domain::agent::AgentModelConfig::from(config))
                 .await
         } else {
             self.fallback.create(config).await

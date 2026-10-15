@@ -3,6 +3,7 @@
 use super::{ModelClient, ReactAgent};
 use crate::domain::agent::{AgentModelConfig, ModelRequest};
 use eliteforge_agent_core as fw;
+use eliteforge_agent_official_plugin_model_http as sdk;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -29,9 +30,7 @@ impl CompactionModelInput {
         model.top_p = request.options.top_p;
         model.max_tokens = request.options.max_output_tokens;
         let native = eliteforge_agent_official_plugin_model_http::request_from_framework(request)?;
-        let native: ModelRequest =
-            crate::adapters::outbound::model::http_model_client::convert(&native)
-                .map_err(fw::ModelError::Fatal)?;
+        let native: ModelRequest = native.into();
         let response = self
             .client
             .generate_once(&model, &native)
@@ -45,10 +44,9 @@ impl CompactionModelInput {
                 "compaction returned tool execution".into(),
             ));
         }
-        eliteforge_agent_official_plugin_model_http::response_to_framework(
-            crate::adapters::outbound::model::http_model_client::convert(&response)
-                .map_err(fw::ModelError::Fatal)?,
-        )
+        eliteforge_agent_official_plugin_model_http::response_to_framework(sdk::ModelResponse::from(
+            response,
+        ))
     }
 }
 impl ReactAgent {

@@ -288,9 +288,7 @@ impl ModelProviderService {
             None,
             AgentModelProtocol::ChatCompletions,
         );
-        let mut config: sdk::AgentModelConfig =
-            crate::adapters::outbound::model::http_model_client::convert(&config)
-                .map_err(ModelProviderError::Remote)?;
+        let mut config: sdk::AgentModelConfig = sdk::AgentModelConfig::from(&config);
         config.max_tokens = Some(VERIFICATION_OUTPUT_TOKENS);
         let request = sdk::ModelRequest {
             messages: vec![sdk::AgentMessage::user("Reply with OK.")],
@@ -337,9 +335,7 @@ impl ModelProviderService {
             None,
             AgentModelProtocol::Embeddings,
         );
-        let config =
-            crate::adapters::outbound::model::http_model_client::convert(&embedding_config)
-                .map_err(ModelProviderError::Remote)?;
+        let config: sdk::AgentModelConfig = sdk::AgentModelConfig::from(&embedding_config);
         let service = fw::EmbeddingModelService::new(
             fw::ModelRef::new("verify", "embedding"),
             Arc::new(sdk::HttpEmbeddingModel { config, factory }),

@@ -1,6 +1,5 @@
 //! Product DTO conversion only. All wire request construction and response
 //! parsing belong to the public SDK model plugin.
-use super::http_model_client::convert;
 use crate::domain::agent::{
     AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent,
     ModelTokenUsage,
@@ -50,7 +49,10 @@ macro_rules! adapter {
             ) -> Result<Value, String> {
                 sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
                     .unwrap()
-                    .request_body(&convert(config)?, &convert(request)?)
+                    .request_body(
+                        &sdk::AgentModelConfig::from(config),
+                        &sdk::ModelRequest::from(request),
+                    )
             }
             fn stream_request_body(
                 &self,
@@ -59,39 +61,38 @@ macro_rules! adapter {
             ) -> Result<Value, String> {
                 sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
                     .unwrap()
-                    .stream_request_body(&convert(config)?, &convert(request)?)
+                    .stream_request_body(
+                        &sdk::AgentModelConfig::from(config),
+                        &sdk::ModelRequest::from(request),
+                    )
             }
             fn parse_response(&self, body: &Value) -> Result<ModelResponse, String> {
-                convert(
-                    &sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
+                Ok(ModelResponse::from(
+                    sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
                         .unwrap()
                         .parse_response(body)?,
-                )
+                ))
             }
             fn parse_stream_event(&self, body: &Value) -> Result<Option<ModelStreamEvent>, String> {
-                sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
+                Ok(sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
                     .unwrap()
                     .parse_stream_event(body)?
-                    .as_ref()
-                    .map(convert)
-                    .transpose()
+                    .map(ModelStreamEvent::from))
             }
             fn parse_stream_terminal_response(
                 &self,
                 body: &Value,
             ) -> Result<Option<ModelResponse>, String> {
-                sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
+                Ok(sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
                     .unwrap()
                     .parse_stream_terminal_response(body)?
-                    .as_ref()
-                    .map(convert)
-                    .transpose()
+                    .map(ModelResponse::from))
             }
             fn parse_usage(&self, body: &Value) -> Option<ModelTokenUsage> {
                 sdk::protocol::adapter_for_protocol(sdk::AgentModelProtocol::$kind)
                     .unwrap()
                     .parse_usage(body)
-                    .and_then(|usage| convert(&usage).ok())
+                    .map(ModelTokenUsage::from)
             }
         }
     };
@@ -119,7 +120,7 @@ pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> V
         .expect("serializable model DTO")
 }
 pub fn embeddings_request(config: &AgentModelConfig, input: &str) -> Value {
-    sdk::protocol::embeddings_request(&convert(config).expect("serializable model config"), input)
+    sdk::protocol::embeddings_request(&sdk::AgentModelConfig::from(config), input)
 }
 
 #[cfg(test)]

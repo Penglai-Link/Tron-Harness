@@ -9,14 +9,8 @@ use crate::{
     domain::agent::{AgentModelConfig, ModelRequest, ModelResponse},
 };
 
-pub(crate) fn convert<T: serde::de::DeserializeOwned>(
-    value: &impl serde::Serialize,
-) -> Result<T, String> {
-    serde_json::from_value(serde_json::to_value(value).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())
-}
 pub(crate) fn sdk_config(config: &AgentModelConfig) -> Result<sdk::AgentModelConfig, String> {
-    let mut config: sdk::AgentModelConfig = convert(config)?;
+    let mut config = sdk::AgentModelConfig::from(config);
     if config.model_code.starts_with("PERSON_AI:") {
         config.api_path = None;
     }
@@ -40,7 +34,7 @@ fn native_request(admitted: &fw::ChatRequest) -> Result<sdk::ModelRequest, Strin
     // Translate the host's reserved records through both typed codecs. Never
     // rename arbitrary JSON keys or turn native tool identities into prose.
     let mut wire = admitted.clone();
-    wire.messages = sdk::request_to_framework(convert(&product)?)
+    wire.messages = sdk::request_to_framework(product.into())
         .map_err(|e| e.to_string())?
         .messages;
     sdk::request_from_framework(&wire).map_err(|e| sdk::encode_model_error(&e))
@@ -115,7 +109,7 @@ impl HttpModelClient {
         }
         Ok(Arc::new(sdk::ScopedModelTransportFactory::new(
             self.factory.clone(),
-            &convert(config).map_err(fw::AgentError::InvalidConfiguration)?,
+            &sdk::AgentModelConfig::from(config),
         )?))
     }
     fn chat_binding(
@@ -148,9 +142,7 @@ impl HttpModelClient {
         parent: Option<&fw::RunContext>,
     ) -> eliteforge_agent_framework::ObservedModelResult<ModelResponse> {
         let prepared = self.chat_binding(config).and_then(|(client, reference)| {
-            let mut input = sdk::request_to_framework(
-                convert(request).map_err(fw::AgentError::InvalidConfiguration)?,
-            )?;
+            let mut input = sdk::request_to_framework(sdk::ModelRequest::from(request))?;
             input.options.temperature = config.temperature;
             input.options.top_p = config.top_p;
             input.options.max_output_tokens = config.max_tokens.filter(|v| *v > 0);
@@ -196,9 +188,7 @@ impl HttpModelClient {
             result: observed
                 .result
                 .and_then(|response| sdk::response_from_framework(response).map_err(Into::into))
-                .and_then(|response| {
-                    convert(&response).map_err(fw::AgentError::InvalidConfiguration)
-                }),
+                .map(crate::domain::agent::ModelResponse::from),
             report: observed.report,
         }
     }
@@ -233,7 +223,7 @@ impl ModelClient for HttpModelClient {
             input.response_input_items = product.response_input_items.clone();
             let transport = self
                 .factory
-                .create(&convert(config)?)
+                .create(&sdk::AgentModelConfig::from(config))
                 .await
                 .map_err(|e| sdk::encode_model_error(&e))?;
             let client = sdk::HttpProtocolClient::new(transport);
@@ -244,9 +234,7 @@ impl ModelClient for HttpModelClient {
                             &sdk_config(config)?,
                             &input,
                             Arc::new(move |event| {
-                                if let Ok(event) = convert(&event) {
-                                    sink(event)
-                                }
+                                sink(crate::domain::agent::ModelStreamEvent::from(event));
                             }),
                         )
                         .await
@@ -254,7 +242,7 @@ impl ModelClient for HttpModelClient {
                 None => client.generate(&sdk_config(config)?, &input).await,
             }
             .map_err(|e| sdk::encode_model_error(&e))?;
-            convert(&response)
+            Ok(crate::domain::agent::ModelResponse::from(response))
         })
     }
 
@@ -264,8 +252,11 @@ impl ModelClient for HttpModelClient {
     ) -> Result<Option<Arc<dyn ModelClient>>, String> {
         Ok(Some(Arc::new(Self {
             factory: Arc::new(
-                sdk::ScopedModelTransportFactory::new(self.factory.clone(), &convert(config)?)
-                    .map_err(|e| sdk::encode_model_error(&e))?,
+                sdk::ScopedModelTransportFactory::new(
+                    self.factory.clone(),
+                    &sdk::AgentModelConfig::from(config),
+                )
+                .map_err(|e| sdk::encode_model_error(&e))?,
             ),
             executor: self.executor.clone(),
             runtime_config: self.runtime_config.clone(),
@@ -286,7 +277,7 @@ impl ModelClient for HttpModelClient {
                 }
                 let factory = self.scoped_factory(config).map_err(error)?;
                 let scope = factory
-                    .authorization_scope(&convert(config)?)
+                    .authorization_scope(&sdk::AgentModelConfig::from(config))
                     .map_err(|e| sdk::encode_model_error(&e))?;
                 let client: Arc<dyn ModelClient> = Arc::new(Self {
                     factory,
@@ -304,7 +295,7 @@ impl ModelClient for HttpModelClient {
     }
     fn authorization_scope(&self, config: &AgentModelConfig) -> Result<Option<String>, String> {
         self.factory
-            .authorization_scope(&convert(config)?)
+            .authorization_scope(&sdk::AgentModelConfig::from(config))
             .map_err(|e| sdk::encode_model_error(&e))
     }
     fn close_observed<'a>(
@@ -341,9 +332,8 @@ impl ModelClient for HttpModelClient {
         })
     }
     fn on_model_failure(&self, config: &AgentModelConfig, error: &fw::ModelError) {
-        if let Ok(config) = convert(config) {
-            self.factory.on_failure(&config, error);
-        }
+        self.factory
+            .on_failure(&sdk::AgentModelConfig::from(config), error);
     }
     fn generate<'a>(
         &'a self,
@@ -368,14 +358,17 @@ impl ModelClient for HttpModelClient {
         Box::pin(async move {
             let transport = self
                 .factory
-                .create(&convert(config)?)
+                .create(&sdk::AgentModelConfig::from(config))
                 .await
                 .map_err(|e| sdk::encode_model_error(&e))?;
             let response = sdk::HttpProtocolClient::new(transport)
-                .generate(&sdk_config(config)?, &convert(request)?)
+                .generate(
+                    &sdk_config(config)?,
+                    &sdk::ModelRequest::from(request),
+                )
                 .await
                 .map_err(|e| sdk::encode_model_error(&e))?;
-            convert(&response)
+            Ok(crate::domain::agent::ModelResponse::from(response))
         })
     }
     fn generate_stream<'a>(
@@ -387,22 +380,20 @@ impl ModelClient for HttpModelClient {
         Box::pin(async move {
             let transport = self
                 .factory
-                .create(&convert(config)?)
+                .create(&sdk::AgentModelConfig::from(config))
                 .await
                 .map_err(|e| sdk::encode_model_error(&e))?;
             let response = sdk::HttpProtocolClient::new(transport)
                 .generate_stream(
                     &sdk_config(config)?,
-                    &convert(request)?,
+                    &sdk::ModelRequest::from(request),
                     Arc::new(move |event| {
-                        if let Ok(event) = convert(&event) {
-                            sink(event);
-                        }
+                        sink(crate::domain::agent::ModelStreamEvent::from(event));
                     }),
                 )
                 .await
                 .map_err(|e| sdk::encode_model_error(&e))?;
-            convert(&response)
+            Ok(crate::domain::agent::ModelResponse::from(response))
         })
     }
     fn recover_authentication<'a>(
@@ -412,7 +403,7 @@ impl ModelClient for HttpModelClient {
     ) -> Pin<Box<dyn Future<Output = Result<bool, fw::ModelError>> + Send + 'a>> {
         Box::pin(async move {
             self.factory
-                .recover_authentication(&convert(config).map_err(fw::ModelError::Fatal)?, error)
+                .recover_authentication(&sdk::AgentModelConfig::from(config), error)
                 .await
         })
     }

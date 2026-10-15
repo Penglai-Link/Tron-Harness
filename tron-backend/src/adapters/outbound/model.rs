@@ -1,3 +1,4 @@
+mod conversion;
 mod http_llm_runtime_client;
 pub(crate) mod http_model_client;
 pub(crate) mod person_ai_model_provider_client;
