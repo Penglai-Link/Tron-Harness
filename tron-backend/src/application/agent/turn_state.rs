@@ -117,11 +117,14 @@ impl TurnStateAdapter {
         };
         let checkpoint: ResponsesCheckpoint = serde_json::from_value(value.clone())
             .map_err(|e| format!("invalid continuation checkpoint: {e}"))?;
-        if checkpoint.response_id.is_empty()
-            || checkpoint.consumed_messages > messages.len()
-            || checkpoint.prefix_digest
-                != continuation_digest(&messages[..checkpoint.consumed_messages])?
-        {
+        if checkpoint.response_id.is_empty() || checkpoint.consumed_messages > messages.len() {
+            *state = ResponsesItemState::default();
+            return Ok(false);
+        }
+        // Restores validate the persisted prefix once, then reuse its digest
+        // for subsequent incremental checkpoints.
+        let digest = continuation_digest_bytes(&messages[..checkpoint.consumed_messages])?;
+        if checkpoint.prefix_digest != hex_digest(&digest) {
             // A user edited history or compaction changed the prefix. Replay it fully.
             *state = ResponsesItemState::default();
             return Ok(false);
@@ -130,9 +133,7 @@ impl TurnStateAdapter {
         state.consumed_message_count = checkpoint.consumed_messages;
         state.context_hash = checkpoint.context_hash;
         // Seed the running chain so post-restore checkpoints stay incremental.
-        state.chain = Some(continuation_digest_bytes(
-            &messages[..checkpoint.consumed_messages],
-        )?);
+        state.chain = (checkpoint.consumed_messages > 0).then_some(digest);
         state.chain_count = checkpoint.consumed_messages;
         Ok(true)
     }
@@ -169,15 +170,31 @@ fn empty_chain() -> ChainDigest {
     hasher.finalize().into()
 }
 
-fn chain_step(previous: Option<ChainDigest>, message: &AgentMessage) -> Result<ChainDigest, String> {
+struct DigestWriter<'a>(&'a mut sha2::Sha256);
+
+impl std::io::Write for DigestWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        use sha2::Digest;
+        self.0.update(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+fn chain_step(
+    previous: Option<ChainDigest>,
+    message: &AgentMessage,
+) -> Result<ChainDigest, String> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     match previous {
         Some(digest) => hasher.update(digest),
         None => hasher.update(CHAIN_DOMAIN),
     }
-    let bytes = serde_json::to_vec(message).map_err(|error| error.to_string())?;
-    hasher.update(bytes);
+    serde_json::to_writer(DigestWriter(&mut hasher), message).map_err(|error| error.to_string())?;
     Ok(hasher.finalize().into())
 }
 
@@ -191,6 +208,7 @@ fn continuation_digest_bytes(messages: &[AgentMessage]) -> Result<ChainDigest, S
     Ok(chain.unwrap_or_else(empty_chain))
 }
 
+#[cfg(test)]
 fn continuation_digest(messages: &[AgentMessage]) -> Result<String, String> {
     Ok(hex_digest(&continuation_digest_bytes(messages)?))
 }
@@ -354,6 +372,7 @@ fn format_tool_observation_message(observation: &ToolObservation) -> String {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use sha2::{Digest, Sha256};
 
     use crate::domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
@@ -422,11 +441,57 @@ mod tests {
             messages: vec![
                 AgentMessage::system("You are helpful."),
                 AgentMessage::user("hello"),
-            ],
+            ]
+            .into(),
             observations: Vec::new(),
             short_term_memory: None,
             started_at: "2026-06-04T00:00:00Z".into(),
         }
+    }
+
+    #[test]
+    fn shared_transcript_clones_only_when_mutated() {
+        let context = responses_context();
+        let mut snapshot = context.messages.clone();
+        assert!(std::sync::Arc::ptr_eq(&context.messages, &snapshot));
+        std::sync::Arc::make_mut(&mut snapshot).push(AgentMessage::user("new turn"));
+        assert!(!std::sync::Arc::ptr_eq(&context.messages, &snapshot));
+        assert_eq!(context.messages.len(), 2);
+        assert_eq!(snapshot.len(), 3);
+    }
+
+    #[test]
+    fn streamed_chain_hash_matches_serialized_message_bytes() {
+        let message = AgentMessage::user("image-sized payload".repeat(1024));
+        let mut expected = Sha256::new();
+        expected.update(super::CHAIN_DOMAIN);
+        expected.update(serde_json::to_vec(&message).unwrap());
+        assert_eq!(
+            super::chain_step(None, &message).unwrap(),
+            <[u8; 32]>::from(expected.finalize())
+        );
+    }
+
+    #[test]
+    fn restored_empty_prefix_uses_the_same_first_chain_step() {
+        let mut original = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
+        let response = ModelResponse::final_output_with_usage_and_response_id(
+            "ok",
+            None,
+            Some("resp-1".into()),
+        );
+        original.apply_model_response(&response, 0);
+        let initial = original.checkpoint(&[]).unwrap().unwrap();
+        let mut restored = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
+        assert!(restored.restore_checkpoint(&initial, &[]).unwrap());
+
+        let messages = [AgentMessage::user("first message")];
+        original.apply_model_response(&response, 1);
+        restored.apply_model_response(&response, 1);
+        assert_eq!(
+            original.checkpoint(&messages).unwrap(),
+            restored.checkpoint(&messages).unwrap()
+        );
     }
 
     #[test]
@@ -463,7 +528,7 @@ mod tests {
         );
         assert_eq!(message.first_tool_call_id(), Some("call-1"));
 
-        let mut messages = context.messages.clone();
+        let mut messages = context.messages.as_ref().clone();
         messages.push(message);
         let request = state.build_request(&context, &messages, false, Some("hash-1"));
         assert_eq!(request.previous_response_id.as_deref(), Some("resp-1"));
@@ -506,7 +571,7 @@ mod tests {
             ),
             context.messages.len(),
         );
-        let mut messages = context.messages.clone();
+        let mut messages = context.messages.as_ref().clone();
         messages.push(AgentMessage::tool_result(
             "lookup",
             Some("call-1".into()),
@@ -545,14 +610,14 @@ mod tests {
     #[test]
     fn responses_state_replays_tool_calls_after_rebase_without_previous_response() {
         let mut context = responses_context();
-        context
-            .messages
-            .push(AgentMessage::assistant_tool_calls(vec![(
+        std::sync::Arc::make_mut(&mut context.messages).push(AgentMessage::assistant_tool_calls(
+            vec![(
                 Some("call-1".into()),
                 "lookup".into(),
                 json!({"query": "stm"}),
-            )]));
-        context.messages.push(AgentMessage::tool_result(
+            )],
+        ));
+        std::sync::Arc::make_mut(&mut context.messages).push(AgentMessage::tool_result(
             "lookup",
             Some("call-1".into()),
             "found",
@@ -598,7 +663,7 @@ mod tests {
         let first = state.checkpoint(&context.messages).unwrap().unwrap();
         // Append turns: each checkpoint hashes only the delta, yet must agree
         // with a full recomputation of the same prefix.
-        let mut messages = context.messages.clone();
+        let mut messages = context.messages.as_ref().clone();
         for turn in 0..3 {
             messages.push(AgentMessage::user(format!("turn {turn}")));
             state.apply_model_response(
@@ -612,10 +677,12 @@ mod tests {
             let checkpoint = state.checkpoint(&messages).unwrap().unwrap();
             assert_eq!(
                 checkpoint["prefixDigest"],
-                serde_json::json!(super::continuation_digest(
-                    &messages[..checkpoint["consumedMessages"].as_u64().unwrap() as usize]
+                serde_json::json!(
+                    super::continuation_digest(
+                        &messages[..checkpoint["consumedMessages"].as_u64().unwrap() as usize]
+                    )
+                    .unwrap()
                 )
-                .unwrap())
             );
         }
         // Restoring against the unedited transcript succeeds and keeps the
@@ -630,7 +697,8 @@ mod tests {
     }
 
     #[test]
-    fn durable_continuation_rejects_edited_prefix_and_restores_exact_history() {        let context = responses_context();
+    fn durable_continuation_rejects_edited_prefix_and_restores_exact_history() {
+        let context = responses_context();
         let mut state = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
         state.apply_model_response(
             &ModelResponse::final_output_with_usage_and_response_id(
@@ -643,7 +711,7 @@ mod tests {
         let checkpoint = state.checkpoint(&context.messages).unwrap().unwrap();
         assert!(!checkpoint.to_string().contains("sk-test"));
         let mut restored = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
-        let mut next = context.messages.clone();
+        let mut next = context.messages.as_ref().clone();
         next.push(AgentMessage::user("continue"));
         assert!(restored.restore_checkpoint(&checkpoint, &next).unwrap());
         let request = restored.build_request(&context, &next, false, None);
