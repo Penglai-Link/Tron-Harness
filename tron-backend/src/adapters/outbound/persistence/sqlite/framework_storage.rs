@@ -13,6 +13,10 @@ pub(crate) fn blocking<T: Send>(future: impl Future<Output = T> + Send) -> T {
     });
     use opentelemetry::trace::FutureExt;
     let future = future.with_context(opentelemetry::Context::current());
+    // The dedicated OS thread is required: the calling thread can be inside
+    // an arbitrary runtime context (including a current-thread test runtime
+    // or a main-runtime worker), and entering this runtime's block_on there
+    // panics. The thread is cheap relative to the storage round trip.
     let execute = || {
         std::thread::scope(|scope| {
             scope
@@ -117,6 +121,35 @@ impl SharedDatabase {
         operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T, E> + Send + 'static,
         failure: impl FnOnce() -> E,
     ) -> Result<T, E> {
+        self.tracked_call(
+            operation,
+            |boxed| self.0.call_blocking(boxed),
+            failure,
+        )
+    }
+    /// Read-only queries run on the WAL reader pool instead of queueing
+    /// behind the serialized write connection. Falls back to `call` inside a
+    /// transaction or for in-memory databases.
+    #[track_caller]
+    pub fn call_read<T: Send + 'static, E: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T, E> + Send + 'static,
+        failure: impl FnOnce() -> E,
+    ) -> Result<T, E> {
+        self.tracked_call(
+            operation,
+            |boxed| self.0.call_read_blocking(boxed),
+            failure,
+        )
+    }
+    fn tracked_call<T: Send + 'static, E: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T, E> + Send + 'static,
+        invoke: impl FnOnce(
+            Box<dyn FnOnce(&mut rusqlite::Connection) -> Result<T, E> + Send + 'static>,
+        ) -> Result<T, tokio_rusqlite::Error<E>>,
+        failure: impl FnOnce() -> E,
+    ) -> Result<T, E> {
         let caller = std::panic::Location::caller();
         // Closure types retain the repository method, unlike a shared generic span name.
         let operation_name = std::any::type_name_of_val(&operation).trim_end_matches("::{{closure}}");
@@ -132,15 +165,14 @@ impl SharedDatabase {
         let worker_context = parent.clone();
         let started = std::time::SystemTime::now();
         let started_instant = std::time::Instant::now();
-        let result = self.0
-            .call_blocking(move |connection| {
-                let _guard = worker_context.attach();
-                operation(connection)
-            })
-            .map_err(|error| match error {
-                tokio_rusqlite::Error::Error(error) => error,
-                _ => failure(),
-            });
+        let result = invoke(Box::new(move |connection| {
+            let _guard = worker_context.attach();
+            operation(connection)
+        }))
+        .map_err(|error| match error {
+            tokio_rusqlite::Error::Error(error) => error,
+            _ => failure(),
+        });
         let failed = result.is_err();
         if failed || started_instant.elapsed() >= std::time::Duration::from_millis(25) {
             crate::app::telemetry::completed_operation(&span_name, &parent, started,
