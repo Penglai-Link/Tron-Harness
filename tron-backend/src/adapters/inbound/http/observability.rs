@@ -159,12 +159,48 @@ pub async fn get_trace(
             .await?
             .detail(q.workspace_code.as_deref().unwrap_or_default(), &id)?;
         attach_session_name(&state, &mut detail.trace);
-        let mut names = std::collections::BTreeMap::new();
+        // Resolve every distinct (workspace, agent) pair in one batched query
+        // instead of three full registry scans per span.
+        let mut pairs: std::collections::BTreeSet<(String, String)> =
+            std::collections::BTreeSet::new();
+        for span in &detail.spans {
+            if let Some(code) = span.attributes.get("tron.agent.code") {
+                let workspace = span
+                    .attributes
+                    .get("tron.workspace.code")
+                    .cloned()
+                    .unwrap_or_default();
+                pairs.insert((workspace, code.clone()));
+            }
+        }
+        let mut names: std::collections::BTreeMap<(String, String), String> =
+            std::collections::BTreeMap::new();
+        if !pairs.is_empty() {
+            let workspaces: Vec<String> = pairs
+                .iter()
+                .map(|(workspace, _)| workspace.clone())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let agent_management = state.agent_management.clone();
+            names = tokio::task::spawn_blocking(move || {
+                agent_management.trace_agent_names(&workspaces)
+            })
+            .await
+            .map_err(|_| ObservabilityError::Storage)?;
+        }
         for span in &mut detail.spans {
             if let Some(code) = span.attributes.get("tron.agent.code").cloned() {
-                let workspace = span.attributes.get("tron.workspace.code").cloned().unwrap_or_default();
-                let name = names.entry((workspace.clone(), code.clone())).or_insert_with(|| state.agent_management.trace_agent_name(&workspace, &code).unwrap_or(code));
-                span.attributes.insert("tron.agent.name".into(), name.clone());
+                let workspace = span
+                    .attributes
+                    .get("tron.workspace.code")
+                    .cloned()
+                    .unwrap_or_default();
+                let name = names
+                    .get(&(workspace, code.clone()))
+                    .cloned()
+                    .unwrap_or(code);
+                span.attributes.insert("tron.agent.name".into(), name);
             }
         }
         Ok(detail)
