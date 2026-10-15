@@ -354,8 +354,8 @@ impl AppState {
             llm_runtime.clone(),
         )
         .with_document_parser(Arc::new(
-            crate::adapters::outbound::mineru_documents::RuntimeMineruDocumentParser::new(
-                runtime_config.clone(),
+            crate::adapters::outbound::person_ai_documents::PersonAiDocumentParser::new(
+                model_providers.clone(),
             ),
         ))
         .with_image_descriptions(config.mineru.image_description.clone())

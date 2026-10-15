@@ -1,6 +1,6 @@
-//! Document source adapter for the fixed RAG task executor. Knowledge libraries
-//! retain originals and the publication pointer; index orchestration lives here.
-use super::*;
+//! Integration layer: knowledge-library parsing output enters the generic RAG indexer.
+//! Neither domain imports the other from inside its own module.
+use crate::application::rag::*;
 use crate::domain::resource::ResourceKind;
 use crate::{
     app::AppRagService,
@@ -146,12 +146,15 @@ impl AppRagService {
             None => Default::default(),
         };
         if !embedded.vector_resources.is_empty() {
-            if !embedded.vectors.is_empty() || embedded.vector_resources.len() > stored.chunks.len()
-            {
+            if !embedded.vectors.is_empty() || embedded.completed_units > stored.chunks.len() {
                 return Err(KnowledgeBaseError::Invalid("向量检查点不匹配".into()));
             }
             for code in &embedded.vector_resources {
-                embedded.vectors.push(host.read_checkpoint(&task, code)?);
+                let batch: Vec<Vec<f32>> = host.read_checkpoint(&task, code)?;
+                embedded.vectors.extend(batch);
+            }
+            if embedded.vectors.len() != embedded.completed_units {
+                return Err(KnowledgeBaseError::Invalid("向量检查点数量不匹配".into()));
             }
         }
         if embedded.vectors.len() > stored.chunks.len() {
@@ -296,5 +299,39 @@ impl AppRagService {
             service.clean_document_deletion(plan).await;
         });
         Ok(())
+    }
+}
+
+impl KnowledgeBaseService {
+    pub fn rag_task_views(&self, user: &str) -> Result<Vec<RagTaskView>, KnowledgeBaseError> {
+        self.require_user(user)?;
+        Ok(self
+            .queue
+            .index_tasks_for_user(user)
+            .map_err(queue_error)?
+            .into_iter()
+            .map(|(task, title)| RagTaskView {
+                file_size_bytes: task.file_size_bytes,
+                id: task.id,
+                document_id: Some(task.document_id.clone()),
+                corpus_id: task.knowledge_base_id,
+                source_code: task.document_id,
+                title,
+                state: match task.state.as_str() {
+                    "READY" => "COMPLETED",
+                    "WAITING_EMBEDDING" | "WAITING_RETRY" => "QUEUED",
+                    other => other,
+                }
+                .into(),
+                stage: task
+                    .index_stage
+                    .unwrap_or_else(|| format!("{:?}", task.stage).to_ascii_uppercase()),
+                completed_units: task.completed_units,
+                total_units: task.total_units,
+                error: task.error,
+                created_at: task.created_at,
+                updated_at: task.updated_at,
+            })
+            .collect())
     }
 }

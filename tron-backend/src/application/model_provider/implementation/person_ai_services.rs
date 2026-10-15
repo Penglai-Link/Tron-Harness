@@ -1,13 +1,31 @@
 use super::{ModelProviderError, ModelProviderService, server_api_error};
+use super::storage_read::read_connection;
 use crate::domain::model_provider::ModelProviderCode;
 use crab_serverapi::{
     ServerApiError,
+    AuthorizedClientContext,
     base::PageResult,
     checkin::{CheckinClient, CheckinRecord, CheckinStatus},
     skin::{SkinMarketClient, SkinMarketItem, SkinMarketQuery},
 };
 
 impl ModelProviderService {
+    /// The durable knowledge task belongs to one Person-AI account. A profile
+    /// switch must pause its remote work instead of submitting under another user.
+    pub async fn document_parse_session(
+        &self,
+        user: &str,
+    ) -> Result<(AuthorizedClientContext, String), ModelProviderError> {
+        let credentials = self.active_credentials(ModelProviderCode::PersonAi).await?;
+        let active = self.connection.call(
+            move |connection| read_connection(connection, ModelProviderCode::PersonAi),
+            || ModelProviderError::Storage,
+        )?;
+        if active.and_then(|row| row.person_ai_user_id).as_deref() != Some(user) {
+            return Err(ModelProviderError::AuthenticationRequired);
+        }
+        Ok((credentials.context(), credentials.server_base_url))
+    }
     fn person_ai_service_result<T>(
         &self,
         result: Result<T, ServerApiError>,

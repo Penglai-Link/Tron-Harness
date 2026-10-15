@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { KnowledgeDocumentChunksDialog } from "../components/KnowledgeDocumentChunksDialog";
+import { KnowledgeDocumentTasksDialog } from "../components/KnowledgeDocumentTasksDialog";
 
 import { PageHeader, SurfaceCard } from "@/shared";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ function KnowledgeDetail({ id }: { id: string }) {
   const [selected, setSelected] = useState<KnowledgeDocument | null>(null);
   const [agentGrants, setAgentGrants] = useState(false);
   const [chunksDocument, setChunksDocument] = useState<KnowledgeDocument | null>(null);
+  const [tasksDocument, setTasksDocument] = useState<KnowledgeDocument | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [resources, setResources] = useState<KnowledgeDocument | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<KnowledgeDocument | null>(null);
@@ -185,9 +187,10 @@ function KnowledgeDetail({ id }: { id: string }) {
   });
   const busy = upload.isPending || operation.isPending || deletion.isPending || batchRetry.isPending;
   const parsingQuality = (doc: KnowledgeDocument) => {
-    if (/\.(md|docx|xlsx)$/i.test(doc.fileName)) return text("parsingTiers.flash");
+    if (/\.(md|docx|xlsx)$/i.test(doc.fileName)) return text("parseModes.Text");
+    if (doc.ocrMode === "Ocr") return text("parseModes.Ocr");
     const tier = doc.parsingArtifact?.effectiveTier ?? doc.parsingTier ?? capabilities.data?.defaultTier;
-    return tier ? text(`parsingTiers.${tier}`) : text("inheritShort");
+    return text(`parseModes.${tier === "advanced" ? "Precise" : "Text"}`);
   };
   const statusLabel = (doc: KnowledgeDocument) => {
     // A finished task keeps its last stage for diagnostics, not current progress.
@@ -227,6 +230,7 @@ function KnowledgeDetail({ id }: { id: string }) {
               <DropdownMenuItem onClick={() => operation.mutate({ type: "download", document: doc })}>{text("downloadAction")}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setResources(doc)}>{text("previewAction")}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setChunksDocument(doc)}>{text("viewChunks")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTasksDocument(doc)}>{text("taskHistory")}</DropdownMenuItem>
               {canRetryDocument(doc) ? <DropdownMenuItem onClick={() => operation.mutate({ type: "retry", document: doc })}>{text("retry")}</DropdownMenuItem> : null}
               <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(doc)}>{text("deleteAction")}</DropdownMenuItem>
               {inProgress(doc) ? <DropdownMenuItem onClick={() => operation.mutate({ type: "cancel", document: doc })}>{text("cancel")}</DropdownMenuItem> : null}
@@ -241,6 +245,7 @@ function KnowledgeDetail({ id }: { id: string }) {
     <ConfirmDialog open={Boolean(deleteTarget)} title={text("deleteTitle")} description={t("knowledgeLibrary.deleteDescription", { file: deleteTarget?.fileName ?? "" })} cancelText={text("cancelDelete")} confirmText={text("deleteDocument")} pending={deletion.isPending} onCancel={() => setDeleteTarget(null)} onConfirm={() => { if (deleteTarget) deletion.mutate(deleteTarget); }} />
     {selected && library ? <DocumentSettingsDialog libraryId={id} document={selected} defaults={library.defaultChunkConfig} onClose={() => setSelected(null)} onChanged={() => query.refetch()} /> : null}
     {chunksDocument ? <KnowledgeDocumentChunksDialog libraryId={id} document={chunksDocument} onClose={() => setChunksDocument(null)} /> : null}
+    {tasksDocument ? <KnowledgeDocumentTasksDialog libraryId={id} document={tasksDocument} onClose={() => setTasksDocument(null)} /> : null}
     {resources ? <KnowledgeDocumentResourcesDialog libraryId={id} document={resources} onClose={() => setResources(null)} /> : null}
     {agentGrants && library ? <KnowledgeGrantsDialog libraryId={id} onClose={() => setAgentGrants(false)} onChanged={refreshLibrary} /> : null}
   </>;

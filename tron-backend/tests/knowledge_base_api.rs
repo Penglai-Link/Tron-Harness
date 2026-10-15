@@ -303,7 +303,7 @@ async fn knowledge_base_corpus_is_automatic_and_owner_filtered() {
             .corpus_summaries(&owned)
             .unwrap()
             .iter()
-            .any(|corpus| corpus.id == kb.id && corpus.knowledge_base_id.as_ref() == Some(&kb.id))
+            .any(|corpus| corpus.id == kb.id && corpus.managed_source_id.as_ref() == Some(&kb.id))
     );
     assert!(
         !f.state
@@ -313,6 +313,31 @@ async fn knowledge_base_corpus_is_automatic_and_owner_filtered() {
             .iter()
             .any(|corpus| corpus.id == kb.id)
     );
+}
+
+#[tokio::test]
+async fn image_description_model_is_chosen_by_rag_and_pinned_to_the_index_task() {
+    use tron_backend::application::rag::RagSettings;
+    let f = Fixture::new();
+    let library = f.service.create(USER, "Image policy", "").unwrap();
+    let document = f.service.upload(USER, &library.id, "guide.md", b"orchid").unwrap();
+    f.service.start_index(USER, &library.id, &document.id).unwrap();
+    let default_task = f.service.ingestion_tasks(USER, &library.id, &document.id).unwrap();
+    assert_eq!(default_task[0].configuration["imageDescription"]["enabled"], false);
+
+    let configured = f.service.create(USER, "Image policy enabled", "").unwrap();
+    f.state.rag.configure_corpus(&configured.id, RagSettings {
+        image_description_model_code: Some("synthetic-vision".into()),
+        ..Default::default()
+    }).unwrap();
+    let image_document = f.service.upload(USER, &configured.id, "image.md", b"orchid").unwrap();
+    f.service.start_index(USER, &configured.id, &image_document.id).unwrap();
+    let task = f.service.ingestion_tasks(USER, &configured.id, &image_document.id).unwrap();
+    assert_eq!(task[0].configuration["imageDescription"]["enabled"], true);
+    assert_eq!(task[0].configuration["imageDescription"]["modelCode"], "synthetic-vision");
+    f.state.rag.configure_corpus(&configured.id, RagSettings::default()).unwrap();
+    assert_eq!(f.service.ingestion_tasks(USER, &configured.id, &image_document.id).unwrap()[0].configuration["imageDescription"]["modelCode"], "synthetic-vision");
+    f.service.stop_ingestion_workers();
 }
 #[tokio::test]
 async fn reopening_storage_preserves_metadata_and_explicit_rebuild_publishes_a_new_generation() {
@@ -761,7 +786,17 @@ async fn durable_task_http_contract_cancel_retry_and_owner_scope() {
     assert_eq!(get.status(), StatusCode::OK);
     let tasks = common::response_json(get).await;
     assert_eq!(tasks["code"], "SUCCESS");
-    assert_eq!(tasks["data"].as_array().unwrap().len(), 1);
+    assert_eq!(tasks["data"].as_array().unwrap().len(), 2);
+    assert_eq!(tasks["data"][0]["kind"], "INDEXING");
+    assert_eq!(tasks["data"][1]["kind"], "PARSING");
+    assert_eq!(tasks["data"][1]["state"], "COMPLETED");
+    let rag_tasks = common::authenticated_request(&app, Method::GET, "/api/v1/rag/tasks", None).await;
+    assert_eq!(rag_tasks.status(), StatusCode::OK);
+    let rag_tasks = common::response_json(rag_tasks).await;
+    let matching = rag_tasks["data"].as_array().unwrap().iter()
+        .filter(|task| task["documentId"] == doc.id).collect::<Vec<_>>();
+    assert_eq!(matching.len(), 1);
+    assert_eq!(matching[0]["id"], tasks["data"][0]["id"]);
     assert_eq!(tasks["data"][0]["stage"], "Embedding");
     assert_eq!(tasks["data"][0]["state"], "RUNNING");
     assert!(tasks["data"][0].get("configuration").is_none());

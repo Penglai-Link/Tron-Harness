@@ -1,5 +1,5 @@
 //! One source-located splitter for normalized documents and structured records.
-use crate::application::knowledge_base::local_documents::{
+use super::{
     ChunkConfig, ChunkMode, LocalDocumentError, LocatedChunk, LocatedSection, MAX_CHUNKS,
     MAX_TEXT_BYTES, ParsedDocument,
 };

@@ -385,6 +385,18 @@ impl RagConfigRepository for SqliteRagRepository {
             || RagError::StorageFailure,
         )
     }
+    fn list_corpora_with_counts(&self) -> Result<Vec<(RagCorpusRecord, crate::application::rag::RagIndexCounts)>, RagError> {
+        self.connection.call(
+            move |connection| {
+                let sql = SqliteRagRepositorySql { connection };
+                sql.list_corpora()?.into_iter().map(|corpus| {
+                    let counts = sql.index_counts_for(&corpus)?;
+                    Ok((corpus, counts))
+                }).collect()
+            },
+            || RagError::StorageFailure,
+        )
+    }
     fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
         self.connection.call(
             move |connection| SqliteRagRepositorySql { connection }.list_corpora(),

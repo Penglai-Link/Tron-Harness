@@ -45,8 +45,8 @@ pub(super) fn detach_obsolete_resources(
     let mut retained = std::collections::BTreeSet::new();
     crate::application::knowledge_base::deletion::collect_codes(ready, &mut retained);
     let historical = {
-        let mut stmt = tx.prepare("SELECT payload_json FROM knowledge_base_ingestion_tasks WHERE document_id=?1 AND id!=?2").map_err(storage)?;
-        stmt.query_map(params![task.document_id, task.id], |r| {
+        let mut stmt = tx.prepare("SELECT payload_json FROM knowledge_base_ingestion_tasks WHERE document_id=?1 AND id!=?2 AND id!=?3").map_err(storage)?;
+        stmt.query_map(params![task.document_id, task.id,task.parsing_task_id], |r| {
             r.get::<_, String>(0)
         })
         .map_err(storage)?
@@ -58,10 +58,16 @@ pub(super) fn detach_obsolete_resources(
         .filter(|t| t.cancellation_pending || t.reconciling)
         .collect();
     tx.execute(
-        "DELETE FROM knowledge_base_ingestion_tasks WHERE document_id=?1 AND id!=?2",
-        params![task.document_id, task.id],
+        "DELETE FROM knowledge_base_ingestion_tasks WHERE document_id=?1 AND id!=?2 AND id!=?3",
+        params![task.document_id, task.id,task.parsing_task_id],
     )
     .map_err(storage)?;
+    if let Some(parse_id) = &task.parsing_task_id {
+        let mut parsing = read(tx, parse_id)?;
+        parsing.parsed_resource_code = None;
+        parsing.chunks_resource_code = None;
+        write(tx, &parsing)?;
+    }
     tx.execute(
         "DELETE FROM knowledge_base_ingestion_intents WHERE document_id=?1",
         [&task.document_id],

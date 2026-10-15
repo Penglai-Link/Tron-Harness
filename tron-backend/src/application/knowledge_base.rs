@@ -296,7 +296,7 @@ impl KnowledgeBaseService {
             .capabilities()
             .await
     }
-    fn require_user(&self, user: &str) -> Result<(), KnowledgeBaseError> {
+    pub(crate) fn require_user(&self, user: &str) -> Result<(), KnowledgeBaseError> {
         if user.trim().is_empty() {
             return Err(KnowledgeBaseError::Forbidden);
         }
@@ -343,13 +343,11 @@ impl KnowledgeBaseService {
     pub fn detail(&self, user: &str, id: &str) -> Result<KnowledgeBase, KnowledgeBaseError> {
         let mut kb = self.owned(user, id)?;
         kb.documents = self.repository.documents(id)?;
+        let document_ids = kb.documents.iter().map(|doc| doc.id.clone()).collect::<Vec<_>>();
+        let latest_tasks = self.queue.latest_for_library(id, &document_ids)
+            .map_err(ingestion_worker::queue_error)?;
         for doc in &mut kb.documents {
-            if let Some(task) = self
-                .queue
-                .for_document(&doc.id)
-                .map_err(ingestion_worker::queue_error)?
-                .first()
-            {
+            if let Some(task) = latest_tasks.get(&doc.id) {
                 doc.task_id = Some(task.id.clone());
                 doc.stage = Some(task.stage);
                 doc.wait_reason = task.wait_reason.clone();
@@ -1014,15 +1012,7 @@ impl KnowledgeBaseService {
         {
             return Ok(vec![]);
         }
-        let mut allowed = vec![];
-        for kb in self.repository.platform_libraries(user)? {
-            if self.repository.grants(&kb.id)?.iter().any(|a| a == agent) {
-                let detail = self.detail(user, &kb.id)?;
-
-                allowed.push(detail);
-            }
-        }
-        Ok(allowed)
+        self.repository.authorized_libraries_with_documents(user, agent)
     }
     pub(crate) fn authorized_rag_ranges(
         &self,

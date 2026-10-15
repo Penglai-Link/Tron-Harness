@@ -15,29 +15,29 @@ impl<R: RagConfigRepository + Clone, E: Clone> RagService<R, E> {
     }
     pub fn corpus_summaries(
         &self,
-        knowledge_base_ids: &BTreeSet<String>,
+        managed_corpus_ids: &BTreeSet<String>,
     ) -> Result<Vec<RagCorpusSummary>, RagError> {
         self.repository
-            .list_corpora()?
+            .list_corpora_with_counts()?
             .into_iter()
-            .filter(|corpus| {
+            .filter(|(corpus, _)| {
                 matches!(corpus.corpus_id.as_str(), "memory-card" | "skill")
-                    || knowledge_base_ids.contains(&corpus.corpus_id)
+                    || managed_corpus_ids.contains(&corpus.corpus_id)
             })
-            .map(|corpus| {
-                let knowledge_base_id = knowledge_base_ids
+            .map(|(corpus, counts)| {
+                let managed_source_id = managed_corpus_ids
                     .contains(&corpus.corpus_id)
                     .then(|| corpus.corpus_id.clone());
                 Ok(RagCorpusSummary {
-                    counts: self.repository.index_counts(&corpus.corpus_id)?,
+                    counts,
                     settings: RagSettings::from_capabilities(&corpus.capabilities)?,
-                    kind: if knowledge_base_id.is_some() {
-                        "knowledgeBase"
+                    kind: if managed_source_id.is_some() {
+                        "managed"
                     } else {
                         "builtin"
                     }
                     .into(),
-                    knowledge_base_id,
+                    managed_source_id,
                     id: corpus.corpus_id,
                     name: corpus.display_name,
                 })

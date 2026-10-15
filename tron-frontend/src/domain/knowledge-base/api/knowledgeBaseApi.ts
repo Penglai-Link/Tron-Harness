@@ -1,5 +1,5 @@
 import { requestApi, requestApiBlob } from "@/shared/api/httpClient";
-import type { PublishedChunkPage, ChunkConfig, ChunkPreview, KnowledgeDocument, KnowledgeLibrary, KnowledgeLibrarySummary, KnowledgeLibraryDetail, ParsingTier, OcrMode, ParsingCapabilities } from "../model/KnowledgeLibraryModel";
+import type { PublishedChunkPage, ChunkConfig, ChunkPreview, KnowledgeDocument, KnowledgeLibrary, KnowledgeLibrarySummary, KnowledgeLibraryDetail, ParsingTier, OcrMode, ParsingCapabilities, IngestionTask } from "../model/KnowledgeLibraryModel";
 
 const root = "/api/v1/knowledge-bases";
 const libraryPath = `${root}/{id}`;
@@ -35,6 +35,9 @@ export function indexKnowledgeDocument(id: string, documentId: string, retry = f
 }
 export function cancelKnowledgeDocument(id: string, documentId: string) {
   return requestApi<KnowledgeDocument>(`POST ${documentPath}/cancel`, { pathParams: { id, documentId }, body: {} });
+}
+export function getKnowledgeDocumentTasks(id: string, documentId: string, signal?: AbortSignal) {
+  return requestApi<IngestionTask[]>(`GET ${documentPath}/tasks`, { pathParams: { id, documentId }, signal });
 }
 export function setKnowledgeLibraryGrants(id: string, agentCodes: string[]) {
   return requestApi<unknown>(`PUT ${libraryPath}/grants`, { pathParams: { id }, body: { agentCodes } });

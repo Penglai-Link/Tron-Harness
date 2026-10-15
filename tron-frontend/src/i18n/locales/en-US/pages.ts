@@ -494,6 +494,9 @@ export const pages = {
     graphHelp:
       "Search original evidence by entities and relations. A model extracts these from documents; for skills, the system records which instructions, scripts and reference files each skill contains.",
     embeddingModelCode: "Embedding model",
+    imageDescriptionModelCode: "Image retrieval",
+    imageDescriptionModelCodeHelp: "Index existing captions and OCR text, or select a vision model to generate descriptions before indexing them with the current text embedding model. Images without text are not directly embedded.",
+    imageSourceTextOnly: "Use existing captions and OCR text only",
     embeddingModelCodeHelp:
       "Embeds content during ingestion and questions during retrieval using the same model. If unspecified, uses the platform default Embedding model.",
     graphModelCode: "Graph extraction model",
@@ -779,6 +782,13 @@ export const pages = {
     downloadAction: "Download",
     deleteAction: "Delete",
     viewChunks: "View chunks",
+    taskHistory: "Parsing and indexing tasks",
+    parsingTask: "Document parsing",
+    indexingTask: "RAG indexing",
+    taskStage: "Stage",
+    taskAttempts: "Attempts",
+    cancellationPending: "Confirming parsing cancellation",
+    noTasks: "No tasks yet",
     settingsDisabledProcessing:
       "Settings are unavailable while the document is processing. Wait for it to finish or cancel processing.",
     chunkPosition: "Chunk / Location",
@@ -895,9 +905,11 @@ export const pages = {
       Text: "Extract existing text: prefer the PDF text layer without forcing full-page OCR. Scans may have missing body text; image and table regions may still require recognition.",
     },
     parsingQuality: "Parsing quality",
+    parseModeHelp: "PersonAI supports document parsing, scanned-document OCR, and precise parsing. RAG indexing starts after parsing and settlement complete.",
+    parseModes: { Text: "Document parsing", Ocr: "Scanned document OCR", Precise: "Precise parsing" },
     inheritParsing: "Use platform default ({{tier}})",
     actualParsing:
-      "Parsed: {{tier}} · MinerU {{version}} · {{count}} image resources",
+      "Parsed: {{tier}} · {{version}} · {{count}} image resources",
     parsingTiers: {
       flash: "Native text",
       basic: "Basic",

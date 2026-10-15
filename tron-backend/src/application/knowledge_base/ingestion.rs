@@ -12,9 +12,23 @@ pub enum IngestionStage {
     Publishing,
 }
 
+/// Parsing produces a reusable document artifact. Indexing consumes that artifact
+/// and can be retried without submitting another paid parsing request.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum IngestionKind {
+    #[default]
+    Parsing,
+    Indexing,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestionTask {
+    #[serde(default)]
+    pub kind: IngestionKind,
+    #[serde(default)]
+    pub parsing_task_id: Option<String>,
     /// Original resource size captured when this generation is submitted.
     #[serde(default)]
     pub file_size_bytes: Option<u64>,
@@ -82,6 +96,8 @@ impl IngestionTask {
         configuration: serde_json::Value,
     ) -> Self {
         Self {
+            kind: IngestionKind::Parsing,
+            parsing_task_id: None,
             file_size_bytes: None,
             index_stage: None,
             completed_units: 0,
@@ -170,6 +186,17 @@ pub struct PublicationCleanup {
 /// Clocks are supplied by the application so expiry/backoff can be tested.
 pub trait KnowledgeIngestionQueue: Send + Sync {
     fn for_document(&self, document: &str) -> Result<Vec<IngestionTask>, IngestionQueueError>;
+    /// One authorized index-task snapshot for the RAG task page.
+    fn index_tasks_for_user(&self, user: &str) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError>;
+    fn latest_for_library(&self, library: &str, documents: &[String]) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
+        let mut latest = std::collections::BTreeMap::new();
+        for document in documents {
+            if let Some(task) = self.for_document(document)?.into_iter().next() {
+                if task.knowledge_base_id == library { latest.insert(document.clone(), task); }
+            }
+        }
+        Ok(latest)
+    }
     fn pending(&self, stage: IngestionStage, now_ms: i64) -> Result<bool, IngestionQueueError>;
     fn pending_cancellations(&self) -> Result<Vec<IngestionTask>, IngestionQueueError>;
     fn complete_cancellation(

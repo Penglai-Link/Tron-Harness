@@ -40,13 +40,33 @@ fn managed(state: &AppState, user: &str, id: &str) -> bool {
     matches!(id, "memory-card" | "skill")
         || corpus_ids(state, user).is_ok_and(|ids| ids.contains(id))
 }
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RagCorpusView {
+    id: String,
+    name: String,
+    kind: String,
+    knowledge_base_id: Option<String>,
+    settings: RagSettings,
+    counts: RagIndexCounts,
+}
+impl From<RagCorpusSummary> for RagCorpusView {
+    fn from(summary: RagCorpusSummary) -> Self {
+        Self {
+            id: summary.id, name: summary.name,
+            kind: if summary.managed_source_id.is_some() { "knowledgeBase" } else { "builtin" }.into(),
+            knowledge_base_id: summary.managed_source_id,
+            settings: summary.settings, counts: summary.counts,
+        }
+    }
+}
 pub async fn corpora(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
     let ids = match corpus_ids(&state, &auth.user().user_code) {
         Ok(ids) => ids,
         Err(error) => return failure(error),
     };
     match state.rag.corpus_summaries(&ids) {
-        Ok(rows) => Json(ApiResponse::success(rows)).into_response(),
+        Ok(rows) => Json(ApiResponse::success(rows.into_iter().map(RagCorpusView::from).collect::<Vec<_>>())).into_response(),
         Err(error) => rag_error_response(error),
     }
 }

@@ -126,12 +126,16 @@ impl KnowledgeBaseService {
         } else {
             None
         };
-        let schema = if chart_plan.as_ref().is_some_and(|p| p.has_charts()) {
-            "mineru-v1-middle-v2:office-chart-v1"
-        } else {
-            "mineru-v1-middle-v2"
-        };
         let identity = parser.profile_identity();
+        let schema = match (
+            identity["provider"].as_str(),
+            chart_plan.as_ref().is_some_and(|plan| plan.has_charts()),
+        ) {
+            (Some("person-ai-document-parse"), true) => "person-ai-document-parse-v1:office-chart-v1",
+            (Some("person-ai-document-parse"), false) => "person-ai-document-parse-v1",
+            (_, true) => "mineru-v1-middle-v2:office-chart-v1",
+            (_, false) => "mineru-v1-middle-v2",
+        };
         let parser_version = match identity["expectedParserVersion"].as_str() {
             Some(version) => version.to_owned(),
             None => parser.capabilities().await?.parser_version,
@@ -166,9 +170,14 @@ impl KnowledgeBaseService {
                 return Err(KnowledgeBaseError::Invalid("解析缓存超过上限".into()));
             }
             let parsed: StoredParse = serde_json::from_slice(&data).map_err(invalid_storage)?;
-            let paths = parsed.image_resources.keys().cloned().collect();
-            let mut document = super::parsing::normalize_middle(&parsed.middle, &paths)?;
-            super::source_locations::apply(&mut document, bytes, &parsed.middle)?;
+            let mut document = if parsed.middle["schema"] == "docvortex.middle" {
+                let paths = parsed.image_resources.keys().cloned().collect();
+                let mut document = super::parsing::normalize_middle(&parsed.middle, &paths)?;
+                super::source_locations::apply(&mut document, bytes, &parsed.middle)?;
+                document
+            } else {
+                parsed.document
+            };
             map_image_resources(&mut document, &parsed.image_resources)?;
             super::office_visuals::append_rendered_sections(
                 &mut document,
@@ -182,10 +191,12 @@ impl KnowledgeBaseService {
                 .await?
         } else {
             parser
-                .parse(&doc.file_name, bytes, doc.parsing_tier)
+                .parse_for_user(user, &doc.file_name, bytes, doc.parsing_tier)
                 .await?
         };
-        super::source_locations::apply(&mut result.document, bytes, &result.middle)?;
+        if result.middle["schema"] == "docvortex.middle" {
+            super::source_locations::apply(&mut result.document, bytes, &result.middle)?;
+        }
         let mut rendered_sections = Vec::new();
         let mut rendered_pdf_resource = None;
         if let Some(plan) = chart_plan.filter(|p| p.has_charts()) {

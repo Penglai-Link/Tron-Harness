@@ -30,6 +30,12 @@ export function DocumentSettingsDialog({ libraryId, document, defaults, onClose,
   const [ocrMode, setOcrMode] = useState<OcrMode | "inherit">(document.ocrMode ?? "inherit");
   const office = /\.(docx|xlsx)$/i.test(document.fileName);
   const [tier, setTier] = useState<ParsingTier | "inherit">(document.parsingTier ?? "inherit");
+  const parseMode = tier === "inherit" && ocrMode === "inherit" ? "inherit" : ocrMode === "Ocr" ? "Ocr" : tier === "advanced" ? "Precise" : "Text";
+  const setParseMode = (mode: "inherit" | "Text" | "Ocr" | "Precise") => {
+    setTier(mode === "inherit" ? "inherit" : mode === "Precise" ? "advanced" : "standard");
+    setOcrMode(mode === "inherit" ? "inherit" : mode === "Ocr" ? "Ocr" : "Text");
+    setPreview(null);
+  };
   const capabilities = useQuery({ queryKey: ["kb-parsing-capabilities"], queryFn: ({ signal }) => getParsingCapabilities( signal), enabled: !markdown, retry: false });
   const [preview, setPreview] = useState<ChunkPreview | null>(null);
   const [persisted, setPersisted] = useState({ config: document.chunkConfig, tier: document.parsingTier ?? null, ocrMode: document.ocrMode ?? null });
@@ -72,18 +78,13 @@ export function DocumentSettingsDialog({ libraryId, document, defaults, onClose,
   return <Dialog open onOpenChange={(open) => { if (!open && !save.isPending) onClose(); }}>
     <DialogContent initialFocus={titleRef} closeLabel={text("close")} aria-describedby={undefined} className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
       <DialogHeader><DialogTitle ref={titleRef} tabIndex={-1} className="outline-none">{document.fileName}</DialogTitle></DialogHeader>
-      {!markdown ? <Field label={text("parsingQuality")} hintAriaLabel={text("parsingQualityHelp")} hint={<div className="max-w-sm space-y-2 text-left">{["inherit", "flash", "basic", "standard", "advanced"].map((value) => <p key={value}>{text(`parsingTierHelp.${value}`)}</p>)}</div>}><SelectInput aria-label={text("parsingQuality")} value={tier} disabled={save.isPending || !capabilities.data} onValueChange={(value) => { setTier(value as ParsingTier | "inherit"); setPreview(null); }}>
-        <SelectItem value="inherit">{t("knowledgeLibrary.inheritParsing", { tier: text(`parsingTiers.${office ? "flash" : capabilities.data?.defaultTier ?? "standard"}`) })}</SelectItem>
-        {(capabilities.data?.availableTiers ?? []).filter((value) => !office || value === "flash").map((value) => <SelectItem key={value} value={value}>{text(`parsingTiers.${value}`)}</SelectItem>)}
-      </SelectInput>
+      {!markdown ? <Field label={text("parsingQuality")} hintAriaLabel={text("parsingQualityHelp")} hint={text("parseModeHelp")}>
+        {office ? <p className="text-sm">{text("parseModes.Text")}</p> : <SelectInput aria-label={text("parsingQuality")} value={parseMode} disabled={save.isPending || !capabilities.data} onValueChange={(value) => setParseMode(value as "inherit" | "Text" | "Ocr" | "Precise")}>
+          <SelectItem value="inherit">{t("knowledgeLibrary.inheritParsing", { tier: text("parseModes.Text") })}</SelectItem>
+          {(["Text", "Ocr", "Precise"] as const).map((mode) => <SelectItem key={mode} value={mode}>{text(`parseModes.${mode}`)}</SelectItem>)}
+        </SelectInput>}
       {capabilities.error ? <p role="alert" className="text-[var(--color-error)]">{capabilities.error.message}</p> : null}
-      {document.parsingArtifact ? <p className="text-xs">{t("knowledgeLibrary.actualParsing", { tier: text(`parsingTiers.${document.parsingArtifact.effectiveTier}`), version: document.parsingArtifact.parserVersion, count: document.parsingArtifact.imageResourceCodes.length })}</p> : null}
-      </Field> : null}
-      {pdf ? <Field label={text("ocrMode")} hintAriaLabel={text("ocrModeHelpLabel")} hint={<div className="max-w-sm space-y-2 text-left">{["inherit", "Auto", "Ocr", "Text"].map((value) => <p key={value}>{text(`ocrModeHelp.${value}`)}</p>)}</div>}>
-        <SelectInput aria-label={text("ocrMode")} value={ocrMode} disabled={save.isPending || !capabilities.data} onValueChange={(value) => { setOcrMode(value as OcrMode | "inherit"); setPreview(null); }}>
-          <SelectItem value="inherit">{t("knowledgeLibrary.inheritOcrMode", { mode: capabilities.data ? text(`ocrModes.${capabilities.data.defaultOcrMode}`) : "—" })}</SelectItem>
-          {(["Auto", "Ocr", "Text"] as const).map((value) => <SelectItem key={value} value={value}>{text(`ocrModes.${value}`)}</SelectItem>)}
-        </SelectInput>
+      {document.parsingArtifact ? <p className="text-xs">{t("knowledgeLibrary.actualParsing", { tier: text(`parseModes.${document.ocrMode === "Ocr" ? "Ocr" : document.parsingArtifact.effectiveTier === "advanced" ? "Precise" : "Text"}`), version: document.parsingArtifact.parserVersion, count: document.parsingArtifact.imageResourceCodes.length })}</p> : null}
       </Field> : null}
       <label className="flex items-center justify-between gap-4"><span>{text("inherit")}</span><Switch checked={inherit} disabled={save.isPending} onCheckedChange={(value) => { setInherit(value); setPreview(null); }} /></label>
       <fieldset className="grid gap-4">

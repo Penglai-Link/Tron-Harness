@@ -28,14 +28,8 @@ impl KnowledgeBaseService {
         self.require_user(user)
             .map_err(|_| RagError::SearchScopeInvalid)?;
         self.repository
-            .platform_libraries(user)
-            .map_err(|_| RagError::StorageFailure)?
-            .into_iter()
-            .map(|kb| {
-                self.detail(user, &kb.id)
-                    .map_err(|_| RagError::StorageFailure)
-            })
-            .collect()
+            .platform_libraries_with_documents(user)
+            .map_err(|_| RagError::StorageFailure)
     }
 }
 

@@ -1012,6 +1012,8 @@ CREATE INDEX idx_kb_documents_parent ON knowledge_base_documents(knowledge_base_
 
 CREATE INDEX idx_kb_ingestion_claim
  ON knowledge_base_ingestion_tasks(state,stage,retry_after_ms,lease_until_ms);
+CREATE INDEX idx_kb_ingestion_library_document
+ ON knowledge_base_ingestion_tasks(knowledge_base_id,document_id);
 
 CREATE UNIQUE INDEX idx_kb_ingestion_one_live_document
  ON knowledge_base_ingestion_tasks(document_id)

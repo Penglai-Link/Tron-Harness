@@ -68,6 +68,21 @@ export interface IngestionWaitReason {
   params?: Record<string, string | number | null> | null;
   details?: IngestionWaitReason[];
 }
+export interface IngestionTask {
+  id: string;
+  documentId: string;
+  kind: "PARSING" | "INDEXING";
+  parsingTaskId: string | null;
+  state: string;
+  stage: string;
+  attempt: number;
+  failures: number;
+  cancellationPending: boolean;
+  retryAfterMs: number;
+  endpointId: string | null;
+  error: string | null;
+  waitReason: IngestionWaitReason | null;
+}
 
 export interface KnowledgeLibrary {
   id: string;

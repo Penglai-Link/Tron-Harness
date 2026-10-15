@@ -190,6 +190,7 @@ async fn cancelled_rebuild_keeps_old_whole_index_and_manual_retry_uses_saved_chu
     service
         .set_grants(USER, &kb.id, vec![f.agent.clone()])
         .unwrap();
+    assert_eq!(service.search_for_agent(USER, WORKSPACE, &f.agent, "orchid", 1200).await.unwrap().hits.len(), 1, "published index must be searchable before rebuild");
     f.client.blocking.store(true, Ordering::SeqCst);
     service.start_index(USER, &kb.id, &doc.id).unwrap();
     wait_document(&service, &kb.id, &doc.id, "EMBEDDING").await;
@@ -282,7 +283,7 @@ async fn automatic_retry_backoff_is_bounded_and_partial_embedding_never_publishe
                 .remove(0);
             if task.state == "FAILED" {
                 assert_eq!(task.failures, 3);
-                assert_eq!(task.attempt, 4);
+                assert_eq!(task.attempt, 3);
                 assert!(task.chunks_resource_code.is_some());
                 break;
             }
@@ -432,6 +433,8 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
     q.wait_for_embedding(&parse, &owned(&parse), 2).unwrap();
     let mut c = claim(IngestionStage::Embedding);
     c.now_ms = 3;
+    let index_id = format!("{}_index", task.id);
+    c.task_id = Some(index_id.clone());
     let mut publish = q.claim(c).unwrap().unwrap();
     publish.stage = IngestionStage::Publishing;
     let mut vector = vec![0.0f32; 1024];
@@ -453,8 +456,8 @@ async fn publishing_restart_reuses_vectors_and_atomically_retires_old_generation
     let ready = wait_document(&resumed, &kb.id, &doc.id, "READY").await;
     assert_eq!(f.client.calls.load(Ordering::SeqCst), before);
     assert_eq!(ready.index_revision, 2);
-    assert_eq!(q.get(&task.id).unwrap().state, "READY");
-    let completed = q.get(&task.id).unwrap();
+    assert_eq!(q.get(&index_id).unwrap().state, "READY");
+    let completed = q.get(&index_id).unwrap();
     assert_eq!(
         ready.active_source_code.as_deref(),
         Some(completed.generation_source_code().as_str())
@@ -578,7 +581,7 @@ async fn settings_and_task_enqueue_are_atomic_and_stale_settings_cannot_overwrit
             .ingestion_tasks(USER, &kb.id, &before.id)
             .unwrap()
             .len(),
-        1
+        2
     );
     conn.execute_batch("DROP TRIGGER reject_rebuild_task;")
         .unwrap();
@@ -707,8 +710,9 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
         .clone();
     assert_ne!(new_cache, old_cache);
     let tasks = service.ingestion_tasks(USER, &kb.id, &first.id).unwrap();
-    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks.len(), 2);
     assert_eq!(tasks[0].state, "READY");
+    assert_eq!(tasks[1].state, "COMPLETED");
     assert!(
         tasks[0].parsed_resource_code.is_none()
             && tasks[0].chunks_resource_code.is_none()
@@ -850,7 +854,7 @@ async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
             .ingestion_tasks(USER, &kb.id, &first.id)
             .unwrap()
             .len(),
-        2
+        4
     );
     assert!(
         repo.derived_resources(&first.id)
@@ -867,7 +871,7 @@ async fn publication_cleanup_failure_rolls_back_old_index_and_can_retry() {
             .ingestion_tasks(USER, &kb.id, &first.id)
             .unwrap()
             .len(),
-        1
+        2
     );
     assert!(
         !repo

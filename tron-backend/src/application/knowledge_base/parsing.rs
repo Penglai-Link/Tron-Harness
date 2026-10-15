@@ -174,6 +174,15 @@ pub trait KnowledgeDocumentParser: Send + Sync {
         bytes: &[u8],
         tier: Option<ParsingTier>,
     ) -> Result<StructuredParse, KnowledgeBaseError>;
+    async fn parse_for_user(
+        &self,
+        _user: &str,
+        filename: &str,
+        bytes: &[u8],
+        tier: Option<ParsingTier>,
+    ) -> Result<StructuredParse, KnowledgeBaseError> {
+        self.parse(filename, bytes, tier).await
+    }
 }
 
 /// The transport persists the upstream identity before polling or issuing a job POST.

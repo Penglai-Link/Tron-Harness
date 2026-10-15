@@ -35,6 +35,12 @@ pub trait RagConfigRepository {
     fn index_counts(&self, _corpus: &str) -> Result<super::RagIndexCounts, RagError> {
         Err(RagError::StorageFailure)
     }
+    fn list_corpora_with_counts(&self) -> Result<Vec<(RagCorpusRecord, super::RagIndexCounts)>, RagError> {
+        self.list_corpora()?.into_iter().map(|corpus| {
+            let counts = self.index_counts(&corpus.corpus_id)?;
+            Ok((corpus, counts))
+        }).collect()
+    }
     fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError>;
     fn get_corpus(&self, corpus_id: &str) -> Result<Option<RagCorpusRecord>, RagError>;
 }
@@ -77,6 +83,9 @@ where
         self.lock()
             .map_err(|_| RagError::StorageFailure)?
             .index_counts(corpus)
+    }
+    fn list_corpora_with_counts(&self) -> Result<Vec<(RagCorpusRecord, super::RagIndexCounts)>, RagError> {
+        self.lock().map_err(|_| RagError::StorageFailure)?.list_corpora_with_counts()
     }
     fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
         self.lock()

@@ -2,7 +2,6 @@ mod access;
 mod catalog;
 mod catalog_service;
 mod diagnostics;
-mod document_ingestion;
 mod facade;
 mod indexing;
 mod ingest;
@@ -31,8 +30,7 @@ pub use search::*;
 pub use search_filter::*;
 pub use service::*;
 
-mod chunking;
-pub use chunking::*;
+pub use crate::application::document::split_document;
 
 // The shared memory corpus uses platform models for writes and retrieval alike.
 // Business workspace codes remain exclusively in access scopes and persisted tasks.

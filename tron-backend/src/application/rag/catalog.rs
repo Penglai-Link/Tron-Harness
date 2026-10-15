@@ -20,6 +20,10 @@ pub struct RagSettings {
     pub rerank_model_code: Option<String>,
     #[serde(default)]
     pub graph_model_code: Option<String>,
+    /// None indexes only source captions/OCR; Some generates image descriptions
+    /// with this vision model before the existing text Embedding step.
+    #[serde(default)]
+    pub image_description_model_code: Option<String>,
 }
 fn enabled() -> bool {
     true
@@ -37,6 +41,7 @@ impl Default for RagSettings {
             embedding_dimension: 1024,
             rerank_model_code: None,
             graph_model_code: None,
+            image_description_model_code: None,
         }
     }
 }
@@ -61,6 +66,7 @@ impl RagSettings {
             &self.embedding_model_code,
             &self.rerank_model_code,
             &self.graph_model_code,
+            &self.image_description_model_code,
         ]
         .into_iter()
         .flatten()
@@ -151,7 +157,7 @@ pub struct RagCorpusSummary {
     pub id: String,
     pub name: String,
     pub kind: String,
-    pub knowledge_base_id: Option<String>,
+    pub managed_source_id: Option<String>,
     pub settings: RagSettings,
     pub counts: RagIndexCounts,
 }

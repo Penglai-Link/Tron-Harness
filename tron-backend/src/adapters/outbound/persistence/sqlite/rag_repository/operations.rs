@@ -64,6 +64,9 @@ impl SqliteRagRepositorySql<'_> {
         let corpus = self
             .get_corpus(corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
+        self.index_counts_for(&corpus)
+    }
+    pub(super) fn index_counts_for(&self, corpus: &crate::domain::rag::RagCorpusRecord) -> Result<RagIndexCounts, RagError> {
         let Some(table) = corpus.storage_binding.sqlite_table_for_segment("textUnit") else {
             return Ok(RagIndexCounts::default());
         };
@@ -93,7 +96,7 @@ impl SqliteRagRepositorySql<'_> {
         {
             vector_count+=self.connection.query_row(&format!("SELECT COUNT(*) FROM {} vec JOIN {table} units ON units.id=vec.rowid {join} WHERE {active}",super::sql_plan::quote_identifier(&vec_name)?),[],|row|row.get::<_,usize>(0)).map_err(super::storage_error)?;
         }
-        let graph_count = self.connection.query_row(&format!("SELECT COUNT(*) FROM rag_graph_evidence g JOIN {table} units ON g.target_code=units.text_unit_code AND g.source_code=units.source_code AND g.source_version=units.source_version AND g.scope_type=units.scope_type AND g.scope_code=units.scope_code {join} WHERE g.corpus_id=?1 AND {active}"), [corpus_id], |row| row.get(0)).map_err(super::storage_error)?;
+        let graph_count = self.connection.query_row(&format!("SELECT COUNT(*) FROM rag_graph_evidence g JOIN {table} units ON g.target_code=units.text_unit_code AND g.source_code=units.source_code AND g.source_version=units.source_version AND g.scope_type=units.scope_type AND g.scope_code=units.scope_code {join} WHERE g.corpus_id=?1 AND {active}"), [&corpus.corpus_id], |row| row.get(0)).map_err(super::storage_error)?;
         let settings =
             crate::application::rag::RagSettings::from_capabilities(&corpus.capabilities)?;
         let metadata_column = super::sql_plan::quote_identifier(
@@ -118,6 +121,7 @@ impl SqliteRagRepositorySql<'_> {
                         && (old.embedding_model_code != settings.embedding_model_code
                             || old.embedding_dimension != settings.embedding_dimension))
                     || (settings.graph && old.graph_model_code != settings.graph_model_code)
+                    || old.image_description_model_code != settings.image_description_model_code
             }) {
                 rebuild_source_count += 1;
             }

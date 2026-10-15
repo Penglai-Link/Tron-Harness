@@ -8,9 +8,10 @@ use tron_backend::{
 fn fixture() -> (tempfile::TempDir, SqliteKnowledgeIngestionQueue) {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("queue.sqlite");
+    let queue = SqliteKnowledgeIngestionQueue::connect(db.to_str().unwrap()).unwrap();
     let conn = Connection::open(&db).unwrap();
-    conn.execute_batch("CREATE TABLE knowledge_base_documents(id TEXT PRIMARY KEY,knowledge_base_id TEXT,payload_json TEXT,revision INTEGER NOT NULL);").unwrap();
     conn.execute_batch("CREATE TABLE rag_kb_units(source_code TEXT, source_status TEXT,status TEXT,embedding_status TEXT,embedding_dimension INTEGER,metadata TEXT,scope_code TEXT);").unwrap();
+    conn.execute("INSERT INTO knowledge_bases(id,owner_user_code,payload_json) VALUES('kb','user','{}')", []).unwrap();
     for source in ["fully-staged", "complete"] {
         for _ in 0..12 {
             conn.execute(
@@ -28,10 +29,7 @@ fn fixture() -> (tempfile::TempDir, SqliteKnowledgeIngestionQueue) {
         )
         .unwrap();
     }
-    (
-        dir,
-        SqliteKnowledgeIngestionQueue::connect(db.to_str().unwrap()).unwrap(),
-    )
+    (dir, queue)
 }
 fn queued(id: &str, hash: &str) -> IngestionTask {
     use sha2::{Digest, Sha256};
@@ -96,6 +94,27 @@ fn complete_parse(
     task.chunks_resource_code = Some(format!("chunks-{}", task.id));
     q.wait_for_embedding(&task, &l, now).unwrap();
     q.get(&task.id).unwrap()
+}
+
+#[test]
+fn parsing_and_indexing_have_separate_durable_tasks_and_retries() {
+    let (_dir, queue) = fixture();
+    let parse = queue.enqueue(queued("a", "separate")).unwrap();
+    let claimed = queue.claim(claim(IngestionStage::Parsing, "parser", 1, 1))
+        .unwrap().unwrap();
+    let completed = complete_parse(&queue, claimed, 2);
+    assert_eq!(completed.id, parse.id);
+    assert_eq!(completed.kind, IngestionKind::Parsing);
+    assert_eq!(completed.state, "COMPLETED");
+    let index = queue.claim(claim(IngestionStage::Embedding, "indexer", 3, 1))
+        .unwrap().unwrap();
+    assert_eq!(index.kind, IngestionKind::Indexing);
+    assert_eq!(index.parsing_task_id.as_deref(), Some(parse.id.as_str()));
+    assert_eq!(index.parsed_resource_code, completed.parsed_resource_code);
+    queue.fail(&lease(&index), 4, "embedding unavailable", None).unwrap();
+    queue.retry(&index.id, 5).unwrap();
+    assert_eq!(queue.get(&parse.id).unwrap().state, "COMPLETED");
+    assert_eq!(queue.for_document("a").unwrap().len(), 2);
 }
 fn doc(dir: &tempfile::TempDir, id: &str) -> Value {
     let conn = Connection::open(dir.path().join("queue.sqlite")).unwrap();
@@ -398,7 +417,8 @@ fn durable_completed_parse_skips_parse_queue_after_restart() {
         .claim(claim(IngestionStage::Embedding, "e", 3, 1))
         .unwrap()
         .unwrap();
-    assert_eq!(embedding.id, queued.id);
+    assert_eq!(embedding.parsing_task_id.as_deref(), Some(queued.id.as_str()));
+    assert_eq!(embedding.kind, IngestionKind::Indexing);
     assert!(embedding.parsed_resource_code.is_some());
     assert!(embedding.chunks_resource_code.is_some());
 }

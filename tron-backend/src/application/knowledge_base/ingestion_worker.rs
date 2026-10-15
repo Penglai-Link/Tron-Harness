@@ -93,6 +93,8 @@ pub(crate) struct StoredEmbeddings {
     pub(crate) vectors: Vec<Vec<f32>>,
     #[serde(default)]
     pub(crate) vector_resources: Vec<String>,
+    #[serde(default)]
+    pub(crate) completed_units: usize,
     pub(crate) provider_model: Option<String>,
 }
 struct InlineAttempt {
@@ -417,7 +419,10 @@ impl KnowledgeBaseService {
             doc.parsing_tier
                 .or_else(|| parser.as_ref().map(|p| p.default_tier()))
         };
-        let config = json!({"ragSettings":settings,"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": self.image_description_config()});
+        let mut image_description = self.image_description_config();
+        image_description.enabled = settings.image_description_model_code.is_some();
+        image_description.model_code = settings.image_description_model_code.clone().unwrap_or_default();
+        let config = json!({"ragSettings":settings,"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": image_description});
         let identity = hash(&format!(
             "{}:{}:{config}",
             doc.resource_code, doc.resource_revision
@@ -506,8 +511,11 @@ impl KnowledgeBaseService {
     }
     pub(super) async fn run_task_inline(&self, id: &str) -> Result<(), KnowledgeBaseError> {
         let owner = format!("kb-inline-{}", new_id());
+        let initial = self.queue.get(id).map_err(queue_error)?;
+        let mut index_id = id.to_owned();
         for stage in [IngestionStage::Parsing, IngestionStage::Embedding] {
-            let Some(task) = self.claim_task(stage, &owner, Some(id.into())).await? else {
+            let selected = if stage == IngestionStage::Parsing { id } else { &index_id };
+            let Some(task) = self.claim_task(stage, &owner, Some(selected.into())).await? else {
                 continue;
             };
             let mut guard = InlineAttempt {
@@ -517,6 +525,15 @@ impl KnowledgeBaseService {
             };
             self.execute_claimed(task, false).await;
             guard.finished = true;
+            if stage == IngestionStage::Parsing {
+                if let Some(index) = self.queue.for_document(&initial.document_id)
+                    .map_err(queue_error)?
+                    .into_iter()
+                    .find(|candidate| candidate.parsing_task_id.as_deref() == Some(id))
+                {
+                    index_id = index.id;
+                }
+            }
         }
         Ok(())
     }

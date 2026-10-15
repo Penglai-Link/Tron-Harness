@@ -110,12 +110,32 @@ fn clear_lease(task: &mut IngestionTask) {
 }
 
 impl SqliteKnowledgeIngestionQueueSql<'_> {
+    fn latest_for_library(&self, library: &str) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
+        let mut stmt = self.connection.prepare("SELECT payload_json FROM (SELECT payload_json, ROW_NUMBER() OVER (PARTITION BY document_id ORDER BY rowid DESC) AS rank FROM knowledge_base_ingestion_tasks WHERE knowledge_base_id=?1) WHERE rank=1").map_err(storage)?;
+        let tasks = stmt.query_map([library], |row| row.get::<_, String>(0)).map_err(storage)?;
+        let mut latest = std::collections::BTreeMap::new();
+        for task in tasks {
+            let task: IngestionTask = serde_json::from_str(&task.map_err(storage)?).map_err(storage)?;
+            latest.insert(task.document_id.clone(), task);
+        }
+        Ok(latest)
+    }
     fn for_document(&self, document: &str) -> Result<Vec<IngestionTask>, IngestionQueueError> {
         let conn = &*self.connection;
         let mut stmt = conn.prepare("SELECT payload_json FROM knowledge_base_ingestion_tasks WHERE document_id=?1 ORDER BY rowid DESC").map_err(storage)?;
         stmt.query_map([document], |r| r.get::<_, String>(0))
             .map_err(storage)?
             .map(|r| serde_json::from_str(&r.map_err(storage)?).map_err(storage))
+            .collect()
+    }
+    fn index_tasks_for_user(&self, user: &str) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError> {
+        let mut stmt = self.connection.prepare("SELECT t.payload_json, json_extract(d.payload_json,'$.name') FROM knowledge_base_ingestion_tasks t JOIN knowledge_base_documents d ON d.id=t.document_id AND d.knowledge_base_id=t.knowledge_base_id JOIN knowledge_bases k ON k.id=t.knowledge_base_id WHERE k.owner_user_code=?1 AND json_extract(t.payload_json,'$.kind')='INDEXING' ORDER BY t.rowid DESC").map_err(storage)?;
+        stmt.query_map([user], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(storage)?
+            .map(|row| {
+                let (raw, title) = row.map_err(storage)?;
+                Ok((serde_json::from_str(&raw).map_err(storage)?, title))
+            })
             .collect()
     }
     fn pending(&self, stage: IngestionStage, now: i64) -> Result<bool, IngestionQueueError> {
@@ -525,12 +545,28 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         }
         task.parsed_resource_code = update.parsed_resource_code.clone();
         task.chunks_resource_code = update.chunks_resource_code.clone();
-        task.stage = IngestionStage::Embedding;
-        task.state = "QUEUED".into();
-        task.retry_after_ms = now;
+        task.state = "COMPLETED".into();
+        task.updated_at = now;
         clear_lease(&mut task);
-        document_state(&tx, &task, "QUEUED", None)?;
         write(&tx, &task)?;
+        let mut index = task.clone();
+        index.id = format!("{}_index", task.id);
+        index.kind = IngestionKind::Indexing;
+        index.parsing_task_id = Some(task.id.clone());
+        index.stage = IngestionStage::Embedding;
+        index.state = "QUEUED".into();
+        index.attempt = 0;
+        index.failures = 0;
+        index.endpoint_id = None;
+        index.remote_file_id = None;
+        index.remote_job_id = None;
+        index.reconciling = false;
+        index.retry_after_ms = now;
+        index.created_at = now;
+        index.updated_at = now;
+        tx.execute("INSERT INTO knowledge_base_ingestion_tasks(id,document_id,knowledge_base_id,input_config_hash,state,stage,attempt,lease_until_ms,retry_after_ms,payload_json) VALUES(?1,?2,?3,?4,'QUEUED','Embedding',0,0,?5,?6)",
+            params![index.id,index.document_id,index.knowledge_base_id,index.input_config_hash,now,encode(&index)?]).map_err(storage)?;
+        document_state(&tx, &index, "QUEUED", None)?;
         tx.commit().map_err(storage)
     }
     fn cancel(&self, id: &str) -> Result<IngestionTask, IngestionQueueError> {
@@ -627,12 +663,26 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
 }
 
 impl KnowledgeIngestionQueue for SqliteKnowledgeIngestionQueue {
+    fn latest_for_library(&self, library: &str, _documents: &[String]) -> Result<std::collections::BTreeMap<String, IngestionTask>, IngestionQueueError> {
+        let library = library.to_owned();
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.latest_for_library(&library),
+            || storage("database worker stopped"),
+        )
+    }
     fn for_document(&self, document: &str) -> Result<Vec<IngestionTask>, IngestionQueueError> {
         let document = document.to_owned();
         self.connection.call(
             move |connection| {
                 SqliteKnowledgeIngestionQueueSql { connection }.for_document(&document)
             },
+            || storage("database worker stopped"),
+        )
+    }
+    fn index_tasks_for_user(&self, user: &str) -> Result<Vec<(IngestionTask, String)>, IngestionQueueError> {
+        let user = user.to_owned();
+        self.connection.call(
+            move |connection| SqliteKnowledgeIngestionQueueSql { connection }.index_tasks_for_user(&user),
             || storage("database worker stopped"),
         )
     }

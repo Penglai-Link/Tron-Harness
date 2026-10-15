@@ -80,7 +80,13 @@ impl KnowledgeBaseService {
         mut parsed: ParsedDocument,
         generate: bool,
     ) -> Result<(ParsedDocument, KnowledgeBaseDocument), KnowledgeBaseError> {
-        let config = self.image_description_config();
+        let mut config = self.image_description_config();
+        if self.parse_checkpoint.is_none() {
+            let settings = self.rag.settings_for_corpus(&kb.id)
+                .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?;
+            config.enabled = settings.image_description_model_code.is_some();
+            config.model_code = settings.image_description_model_code.unwrap_or_default();
+        }
         let mut cached_doc = doc.clone();
         if parsed.image_analysis.is_none() {
             return Ok((parsed, cached_doc));

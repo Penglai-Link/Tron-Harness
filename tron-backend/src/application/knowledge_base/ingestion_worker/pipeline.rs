@@ -101,25 +101,19 @@ impl RagIndexCheckpoint for VectorCheckpoint<'_> {
             .map_err(|error| error.to_string())?;
         let mut next = task.clone();
         let mut next_resources = resources.clone();
-        for vector in &result.vectors {
-            let code = self
-                .service
-                .derived_resource(
-                    &task.user_code,
-                    &task.workspace_code,
-                    self.document,
-                    "ingestion-vector.json",
-                    ResourceKind::File,
-                    &serde_json::to_vec(&vector.values).map_err(|error| error.to_string())?,
-                )
-                .map_err(|error| error.to_string())?;
-            next_resources.push(code);
-        }
-        next.completed_units = next_resources.len();
+        let batch = result.vectors.iter().map(|vector| &vector.values).collect::<Vec<_>>();
+        let code = self.service.derived_resource(
+            &task.user_code, &task.workspace_code, self.document,
+            "ingestion-vector-batch.json", ResourceKind::File,
+            &serde_json::to_vec(&batch).map_err(|error| error.to_string())?,
+        ).map_err(|error| error.to_string())?;
+        next_resources.push(code);
+        next.completed_units += result.vectors.len();
         next.updated_at = now_ms();
         let manifest = StoredEmbeddings {
             vectors: vec![],
             vector_resources: next_resources.clone(),
+            completed_units: next.completed_units,
             provider_model: result.provider_model.clone(),
         };
         next.embedding_resource_code = Some(

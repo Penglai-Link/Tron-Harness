@@ -920,6 +920,32 @@ dependencies = [
 [[package]]
 name = "crab-serverapi"
 version = "0.3.0"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=19e2efac5c2e1defb26fb82648b2687ecc9e9e71#19e2efac5c2e1defb26fb82648b2687ecc9e9e71"
+dependencies = [
+ "aes-gcm 0.10.3",
+ "async-trait",
+ "base64 0.22.1",
+ "futures-util",
+ "rand 0.8.7",
+ "reqwest 0.12.28",
+ "rsa 0.9.10",
+ "serde",
+ "serde_json",
+ "sha1 0.10.7",
+ "sha2 0.10.9",
+ "sm3",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-tungstenite 0.24.0",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "crab-serverapi"
+version = "0.3.0"
 source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=d36495205418c1925f32a09267c68401ec4d24b5#d36495205418c1925f32a09267c68401ec4d24b5"
 dependencies = [
  "aes-gcm 0.10.3",
@@ -1533,7 +1559,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
- "crab-serverapi",
+ "crab-serverapi 0.3.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=d36495205418c1925f32a09267c68401ec4d24b5)",
  "eliteforge-agent-core",
  "eliteforge-agent-framework",
  "eliteforge-agent-official-plugin-tools-discovery",
@@ -1709,7 +1735,7 @@ name = "eliteforge-agent-official-plugin-model-http"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "crab-serverapi",
+ "crab-serverapi 0.3.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=d36495205418c1925f32a09267c68401ec4d24b5)",
  "eliteforge-agent-core",
  "hex",
  "reqwest 0.12.28",
@@ -7132,7 +7158,8 @@ dependencies = [
  "bcrypt",
  "chrono",
  "chrono-tz",
- "crab-serverapi",
+ "crab-serverapi 0.3.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=19e2efac5c2e1defb26fb82648b2687ecc9e9e71)",
+ "crab-serverapi 0.3.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=d36495205418c1925f32a09267c68401ec4d24b5)",
  "cron",
  "eliteforge-agent-capability-external",
  "eliteforge-agent-capability-personai",

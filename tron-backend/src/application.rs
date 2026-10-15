@@ -29,8 +29,10 @@ pub mod workspace;
 pub mod skin;
 
 pub mod knowledge_base;
+mod knowledge_rag_ingestion;
 
 pub mod capability;
 
 pub mod dude;
 pub mod dude_memory;
+pub mod document;

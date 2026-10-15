@@ -419,8 +419,8 @@ fn new_id() -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn normalized(text: &str) -> crate::application::knowledge_base::local_documents::ParsedDocument {
-    use crate::application::knowledge_base::local_documents::*;
+fn normalized(text: &str) -> crate::application::document::ParsedDocument {
+    use crate::application::document::*;
     ParsedDocument {
         format: "STRUCTURED".into(),
         warnings: vec![],

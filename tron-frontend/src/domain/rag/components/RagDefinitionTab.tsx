@@ -110,6 +110,13 @@ export function RagDefinitionTab({ corpora, onSaved, onIngestion }: { corpora: R
             {key === "graphModelCode" ? <SelectItem value="PERSON_AI:ROUTE:ChatAuto">{t("ragUnified.autoRoute")}</SelectItem> : null}
             {(models.data ?? []).filter((model) => model.enabled && model.modelType === (key === "embeddingModelCode" ? "EMBEDDING" : key === "graphModelCode" ? "TEXT" : "RERANK")).map((model) => <SelectItem key={model.modelCode} value={model.modelCode}>{model.displayName}</SelectItem>)}
           </SelectInput></Field>)}
+          {editing?.knowledgeBaseId ? <Field>
+            {fieldLabel("imageDescriptionModelCode", "imageDescriptionModelCodeHelp", "rag-image-description")}
+            <SelectInput id="rag-image-description" aria-label={t("ragUnified.imageDescriptionModelCode")} value={settings.imageDescriptionModelCode ?? "__none__"} onValueChange={(value) => setSettings({ ...settings, imageDescriptionModelCode: value === "__none__" ? null : String(value) })}>
+              <SelectItem value="__none__">{t("ragUnified.imageSourceTextOnly")}</SelectItem>
+              {(models.data ?? []).filter((model) => model.enabled && model.modelType === "TEXT" && (model.modelCapabilities.includes("VISION_UNDERSTANDING") || model.modelCapabilities.includes("MULTIMODAL_ALL"))).map((model) => <SelectItem key={model.modelCode} value={model.modelCode}>{model.displayName}</SelectItem>)}
+            </SelectInput>
+          </Field> : null}
         </div> : null}
         <DialogFooter><Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>{t("ragUnified.close")}</Button><Button onClick={() => void save()} disabled={saving || !settings || (!!editing?.knowledgeBaseId && settings.graph && !settings.graphModelCode)}>{t("ragUnified.save")}</Button></DialogFooter>
       </DialogContent>

@@ -481,6 +481,9 @@ export const pages = {
     graphHelp:
       "启用后，可以按实体和关系检索原文证据。普通资料用模型抽取；技能则直接记录它包含哪些说明、脚本和参考文件。",
     embeddingModelCode: "Embedding 模型",
+    imageDescriptionModelCode: "图片检索方式",
+    imageDescriptionModelCodeHelp: "仅索引图片已有图注和 OCR 文字；或选视觉模型先生成描述，再用当前文本 Embedding 模型建立索引。没有文字依据的图片不会直接生成文本向量。",
+    imageSourceTextOnly: "仅使用已有图注和 OCR 文字",
     embeddingModelCodeHelp:
       "入库时将正文转换为向量，检索时将问题转换为同一模型的向量。未指定时使用平台默认 Embedding 模型。",
     graphModelCode: "图谱抽取模型",
@@ -756,6 +759,13 @@ export const pages = {
     downloadAction: "下载",
     deleteAction: "删除",
     viewChunks: "查看分块",
+    taskHistory: "解析与索引任务",
+    parsingTask: "文档解析",
+    indexingTask: "RAG 索引",
+    taskStage: "阶段",
+    taskAttempts: "执行次数",
+    cancellationPending: "正在确认取消解析任务",
+    noTasks: "暂无任务",
     settingsDisabledProcessing: "文档正在处理中，完成或取消后才能修改设置。",
     chunkPosition: "分块 / 位置",
     chunkContent: "正文",
@@ -853,9 +863,11 @@ export const pages = {
       Text: "提取已有文本：优先读取 PDF 文本层，不强制整页 OCR；扫描件可能缺少正文。图片、表格等区域仍可能需要识别。",
     },
     parsingQuality: "解析质量",
+    parseModeHelp: "PersonAI 文档解析提供文档解析、扫描件识别和高精度解析三种模式。解析任务完成并结算后，RAG 才会建立索引。",
+    parseModes: { Text: "文档解析", Ocr: "扫描件识别", Precise: "高精度解析" },
     inheritParsing: "继承平台（{{tier}}）",
     actualParsing:
-      "已解析：{{tier}} · MinerU {{version}} · {{count}} 个图片资源",
+      "已解析：{{tier}} · {{version}} · {{count}} 个图片资源",
     parsingTiers: {
       flash: "原生文本",
       basic: "基础",

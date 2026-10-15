@@ -318,7 +318,7 @@ pub fn pdf() -> Vec<u8> {
 }
 
 // Baseline product tests isolate extraction behind the application port. Production
-// explicitly uses MinerU; real MinerU structured outputs are covered separately.
+// uses Person-AI; provider result handling is covered separately.
 struct FixtureDocumentParser;
 #[async_trait::async_trait]
 impl tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser
