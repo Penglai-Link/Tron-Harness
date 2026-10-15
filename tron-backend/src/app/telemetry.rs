@@ -13,7 +13,7 @@ use eliteforge_agent_official_plugin_storage_local::TelemetryStoragePlugin;
 use eliteforge_agent_plugin_core::PluginContainer;
 use opentelemetry::{
     Context, KeyValue,
-    trace::{FutureExt, SpanKind},
+    trace::{FutureExt, Span as _, SpanKind},
     trace::{TraceContextExt, Tracer, TracerProvider},
 };
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
@@ -335,6 +335,27 @@ pub(crate) fn child_operation(name: &str, attributes: Vec<KeyValue>) -> Context 
     let tracer = runtime.traces.tracer("tron.business");
     let span = tracer.span_builder(name.to_owned()).with_attributes(attributes).start_with_context(&tracer, &parent);
     parent.with_span(span)
+}
+
+/// Keep database diagnostics for slow or failed calls without exporting every
+/// fast SQLite lookup performed by a long-running agent or a polling request.
+pub(crate) fn completed_operation(
+    name: &str,
+    parent: &Context,
+    started: std::time::SystemTime,
+    ended: std::time::SystemTime,
+    attributes: Vec<KeyValue>,
+    failed: bool,
+) {
+    let Some(runtime) = parent.get::<Arc<OtelRuntimeService>>() else { return; };
+    if !parent.span().span_context().is_valid() { return; }
+    let tracer = runtime.traces.tracer("tron.business");
+    let mut span = tracer.span_builder(name.to_owned())
+        .with_start_time(started)
+        .with_attributes(attributes)
+        .start_with_context(&tracer, parent);
+    if failed { span.set_status(opentelemetry::trace::Status::error("Database operation failed")); }
+    span.end_with_timestamp(ended);
 }
 
 /// Preserve the request's Profile and parent span on blocking business workers.

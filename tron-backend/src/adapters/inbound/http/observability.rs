@@ -401,6 +401,10 @@ enum BrowserSpanKind { Page, Resource, Request }
 
 fn ignored_trace_path(path: &str) -> bool {
     path.starts_with("/api/v1/observability/")
+        || (path.starts_with("/api/v1/agents/agui/streams/")
+            && (path.ends_with("/protocol-events") || path.ends_with("/events")))
+        || (path.starts_with("/api/v1/chats/sessions/")
+            && (path.ends_with("/subagents") || path.contains("/subagents/") || path.ends_with("/history/query")))
         || matches!(path, "/api/v1/health" | "/api/v1/ready" | "/api/v1/readiness" | "/health" | "/ready" | "/api/v1/profiles/events" | "/api/v1/system/skins/events")
 }
 
@@ -571,6 +575,15 @@ fn validate_workspace(state: &AppState, workspace: Option<&str>) -> Result<(), O
 mod http_trace_tests {
     use super::*;
     use opentelemetry::trace::TraceContextExt;
+    #[test]
+    fn ignores_chat_polling_but_keeps_agent_requests() {
+        for path in [
+            "/api/v1/agents/agui/streams/session/protocol-events",
+            "/api/v1/chats/sessions/session/subagents",
+            "/api/v1/chats/sessions/session/history/query",
+        ] { assert!(ignored_trace_path(path)); }
+        assert!(!ignored_trace_path("/api/v1/chats/sessions/session/messages/stream"));
+    }
     #[test]
     fn accepts_valid_w3c_context_and_rejects_invalid_ids() {
         for value in [

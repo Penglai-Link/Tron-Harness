@@ -499,6 +499,26 @@ async fn background_operations_generate_fresh_server_roots_without_browser_conte
     telemetry.close().await.unwrap();
 }
 
+#[tokio::test]
+async fn completed_database_operation_preserves_duration_and_parent() {
+    let temp = tempfile::tempdir().unwrap();
+    let telemetry = LocalTelemetry::open(&temp.path().join("database-operation.sqlite3")).await.unwrap();
+    let guard = telemetry.begin_operation("test.root", &Context::new(), vec![]);
+    let trace_id = guard.0.span().span_context().trace_id().to_string();
+    let root_id = guard.0.span().span_context().span_id().to_string();
+    let ended = std::time::SystemTime::now();
+    completed_operation("db.sqlite.test", &guard.0, ended - Duration::from_millis(40), ended, vec![], true);
+    guard.complete("completed");
+    drop(guard);
+    telemetry.flush().await;
+    let spans = telemetry.store.spans(trace_id).await.unwrap();
+    let database = spans.iter().find(|span| span.name == "db.sqlite.test").unwrap();
+    assert_eq!(database.parent_span_id.as_deref(), Some(root_id.as_str()));
+    assert!(database.ended_at - database.started_at >= 40);
+    assert_eq!(database.status_code, 2);
+    telemetry.close().await.unwrap();
+}
+
 struct ChildModel;
 #[async_trait::async_trait]
 impl ChatModel for ChildModel {

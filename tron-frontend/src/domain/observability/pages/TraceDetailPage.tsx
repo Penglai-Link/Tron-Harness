@@ -44,11 +44,11 @@ export function TraceDetailPage() {
               disabled={detail.isFetching}
               onClick={() => void detail.refetch()}
             >
-              {t("refresh")}
+              {detail.isFetching ? t("loading") : t("refresh")}
             </Button>
         </div>
       </header>
-      {detail.isPending ? (
+      {detail.isPending || detail.isFetching ? (
         <p role="status">{t("loading")}</p>
       ) : detail.isError ? (
         <div role="alert">

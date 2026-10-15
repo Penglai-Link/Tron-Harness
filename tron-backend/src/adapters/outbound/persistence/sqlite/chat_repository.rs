@@ -6,12 +6,108 @@ use crate::{
     domain::chat::*,
 };
 use eliteforge_agent_core as fw;
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub struct SqliteChatRepository {
     host: FrameworkHost,
+}
+
+/// Remove the execution spans owned by a deleted session. A trace can also
+/// contain an HTTP span or another session, so deleting the trace unconditionally
+/// would erase unrelated observability data.
+fn delete_session_telemetry(c: &Connection, code: &str) -> rusqlite::Result<()> {
+    let exists: bool = c.query_row(
+        "SELECT EXISTS(SELECT 1 FROM telemetry.sqlite_master WHERE type='table' AND name='ef_telemetry_traces')",
+        [], |row| row.get(0),
+    )?;
+    if !exists { return Ok(()); }
+    let trace_ids = c.prepare(
+        "SELECT trace_id FROM telemetry.ef_telemetry_traces WHERE json_extract(attributes,'$.\"tron.session.code\"')=?1
+         UNION SELECT trace_id FROM telemetry.ef_telemetry_spans WHERE json_extract(data,'$.attributes.\"tron.session.code\"')=?1",
+    )?.query_map([code], |row| row.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+    for trace_id in trace_ids {
+        let spans = c.prepare(
+            "SELECT span_id,json_extract(data,'$.parentSpanId'),json_extract(data,'$.attributes.\"tron.session.code\"')
+             FROM telemetry.ef_telemetry_spans WHERE trace_id=?1",
+        )?.query_map([&trace_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, Option<String>>(2)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut children: HashMap<String, Vec<String>> = HashMap::new();
+        let mut owners = HashMap::new();
+        let mut doomed = HashSet::new();
+        let mut queue = VecDeque::new();
+        for (id, parent, owner) in &spans {
+            if let Some(parent) = parent { children.entry(parent.clone()).or_default().push(id.clone()); }
+            owners.insert(id.clone(), owner.clone());
+            if owner.as_deref() == Some(code) {
+                doomed.insert(id.clone());
+                queue.push_back(id.clone());
+            }
+        }
+        while let Some(parent) = queue.pop_front() {
+            for child in children.get(&parent).into_iter().flatten() {
+                // A child execution for a different session must survive even
+                // when its parent belongs to the deleted session.
+                if owners.get(child).and_then(Option::as_deref).is_some_and(|owner| owner != code) { continue; }
+                if doomed.insert(child.clone()) { queue.push_back(child.clone()); }
+            }
+        }
+        if !spans.is_empty() && doomed.len() == spans.len() {
+            c.execute("DELETE FROM telemetry.ef_telemetry_traces WHERE trace_id=?1", [&trace_id])?;
+            continue;
+        }
+        for id in &doomed {
+            c.execute("DELETE FROM telemetry.ef_telemetry_spans WHERE trace_id=?1 AND span_id=?2", params![trace_id, id])?;
+            c.execute("DELETE FROM telemetry.ef_telemetry_span_rollups WHERE trace_id=?1 AND span_id=?2", params![trace_id, id])?;
+        }
+        // Preserve surviving execution roots without dangling parent links.
+        for (id, parent, _) in &spans {
+            if doomed.contains(id) { continue; }
+            if parent.as_ref().is_some_and(|parent| doomed.contains(parent)) {
+                c.execute("UPDATE telemetry.ef_telemetry_spans SET data=json_set(data,'$.parentSpanId',NULL) WHERE trace_id=?1 AND span_id=?2", params![trace_id, id])?;
+                c.execute("UPDATE telemetry.ef_telemetry_span_rollups SET parent_id=NULL WHERE trace_id=?1 AND span_id=?2", params![trace_id, id])?;
+            }
+        }
+        if spans.is_empty() {
+            c.execute("DELETE FROM telemetry.ef_telemetry_traces WHERE trace_id=?1", [&trace_id])?;
+            continue;
+        }
+        // A shared trace may have been registered with the deleted session's
+        // metadata. Remove only that association.
+        c.execute("UPDATE telemetry.ef_telemetry_traces SET attributes=json_remove(attributes,'$.\"tron.session.code\"','$.\"tron.run.code\"','$.\"tron.agent.code\"','$.\"tron.trace.agent\"') WHERE trace_id=?1 AND json_extract(attributes,'$.\"tron.session.code\"')=?2", params![trace_id, code])?;
+        if !doomed.is_empty() { rebuild_trace_rollups(c, &trace_id)?; }
+    }
+    Ok(())
+}
+
+fn rebuild_trace_rollups(c: &Connection, trace_id: &str) -> rusqlite::Result<()> {
+    type Counts = [i64; 7];
+    let nodes = c.prepare("SELECT span_id,parent_id,own_span_count,own_error_count,own_model_count,own_tool_count,own_input_tokens,own_cached_input_tokens,own_output_tokens FROM telemetry.ef_telemetry_span_rollups WHERE trace_id=?1")?
+        .query_map([trace_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, [row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?,row.get(6)?,row.get(7)?,row.get(8)?])))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let parents: HashMap<_, _> = nodes.iter().map(|(id, parent, _)| (id.clone(), parent.clone())).collect();
+    let mut totals: HashMap<String, Counts> = nodes.iter().map(|(id, _, _)| (id.clone(), [0; 7])).collect();
+    let mut trace_total = [0; 7];
+    for (id, _, own) in &nodes {
+        for (sum, value) in trace_total.iter_mut().zip(own) { *sum += value; }
+        let mut current = Some(id.as_str());
+        let mut seen = HashSet::new();
+        while let Some(node) = current {
+            if !seen.insert(node) { break; }
+            let Some(total) = totals.get_mut(node) else { break; };
+            for (sum, value) in total.iter_mut().zip(own) { *sum += value; }
+            current = parents.get(node).and_then(Option::as_deref);
+        }
+    }
+    for (id, counts) in totals {
+        c.execute("UPDATE telemetry.ef_telemetry_span_rollups SET span_count=?3,error_count=?4,model_count=?5,tool_count=?6,input_tokens=?7,cached_input_tokens=?8,output_tokens=?9 WHERE trace_id=?1 AND span_id=?2",
+            params![trace_id,id,counts[0],counts[1],counts[2],counts[3],counts[4],counts[5],counts[6]])?;
+    }
+    c.execute("UPDATE telemetry.ef_telemetry_trace_rollups SET span_count=?2,error_count=?3,model_count=?4,tool_count=?5,input_tokens=?6,cached_input_tokens=?7,output_tokens=?8 WHERE trace_id=?1",
+        params![trace_id,trace_total[0],trace_total[1],trace_total[2],trace_total[3],trace_total[4],trace_total[5],trace_total[6]])?;
+    Ok(())
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Link {
@@ -301,6 +397,13 @@ impl ChatRepository for SqliteChatRepository {
                 .sessions()
                 .map_err(|_| ChatError::StorageFailure)?;
             let code = id.to_owned();
+            self.host.telemetry().await.map_err(|_| ChatError::StorageFailure)?;
+            let telemetry_path = self.host.telemetry_database_path().to_string_lossy().into_owned();
+            db.call(move |c| {
+                let attached: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM pragma_database_list WHERE name='telemetry')",[],|r|r.get(0))?;
+                if !attached { c.execute("ATTACH DATABASE ?1 AS telemetry",[telemetry_path])?; }
+                Ok::<_,rusqlite::Error>(())
+            }).await.map_err(|_| ChatError::StorageFailure)?;
             db.transaction(async {
                 let record=sessions.get(id).await?;
                 if record.status!=fw::SessionStatus::Archived {return Err(fw::StateError::Invalid("session must be archived".into()));}
@@ -309,6 +412,7 @@ impl ChatRepository for SqliteChatRepository {
                 }
                 sessions.delete(id).await?;
                 db.call(move|c| {
+                    delete_session_telemetry(c, &code)?;
                     c.execute("DELETE FROM resource_chat_session_attachments WHERE session_code=?1",[&code])?;
                     for (table, sql) in [
                         ("chat_session_auto_model_routes", "DELETE FROM chat_session_auto_model_routes WHERE session_code=?1"),
@@ -638,6 +742,21 @@ mod shared_transaction_tests {
             updated_at: "".into(),
         }
     }
+    fn seed_telemetry(repository: &SqliteChatRepository) -> eliteforge_agent_official_plugin_storage_local::SqliteDatabase {
+        blocking(repository.host.telemetry()).unwrap();
+        blocking(eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(repository.host.telemetry_database_path())).unwrap()
+    }
+    fn insert_span(database: &eliteforge_agent_official_plugin_storage_local::SqliteDatabase, trace: &str, id: &str, parent: Option<&str>, owner: Option<&str>) {
+        let data = json!({"name":"tron.session.run","traceId":trace,"spanId":id,"parentSpanId":parent,"attributes":owner.map(|value|json!({"tron.session.code":value})).unwrap_or_else(||json!({}))}).to_string();
+        let trace = trace.to_owned();
+        let id = id.to_owned();
+        let parent = parent.map(str::to_owned);
+        database.call_blocking(move |c| {
+            c.execute("INSERT INTO ef_telemetry_spans(trace_id,span_id,ended_at,data) VALUES(?1,?2,0,?3)",params![trace,id,data])?;
+            c.execute("INSERT INTO ef_telemetry_span_rollups(trace_id,span_id,parent_id,own_span_count,span_count) VALUES(?1,?2,?3,1,1)",params![trace,id,parent])?;
+            Ok::<_,rusqlite::Error>(())
+        }).unwrap();
+    }
     #[test]
     fn ordinary_archived_history_excludes_dude_work_even_in_same_workspace() {
         let (_directory, mut repository) = fixture();
@@ -722,8 +841,13 @@ mod shared_transaction_tests {
             .update_session_status("atomic-delete", ChatSessionStatus::Archived, "")
             .unwrap();
         let database = blocking(repository.host.shared_database()).unwrap();
+        let telemetry = seed_telemetry(&repository);
+        telemetry.call_blocking(|c| c.execute("INSERT INTO ef_telemetry_traces(trace_id,started_at,status_code,attributes) VALUES('trace-atomic',0,0,'{\"tron.session.code\":\"atomic-delete\"}')",[])).unwrap();
+        insert_span(&telemetry,"trace-atomic","root",None,Some("atomic-delete"));
         database.call_blocking(|c| c.execute_batch("CREATE TRIGGER reject_delete BEFORE DELETE ON workspace_session_links BEGIN SELECT RAISE(ABORT,'injected delete failure'); END;")).unwrap();
         assert!(repository.delete_session("atomic-delete").is_err());
+        let trace_count: i64 = telemetry.call_blocking(|c| c.query_row("SELECT count(*) FROM ef_telemetry_traces WHERE trace_id='trace-atomic'",[],|row|row.get(0))).unwrap();
+        assert_eq!(trace_count,1);
         assert_eq!(
             repository.get_session("atomic-delete").unwrap().status,
             ChatSessionStatus::Archived
@@ -738,6 +862,8 @@ mod shared_transaction_tests {
             .call_blocking(|c| c.execute_batch("DROP TRIGGER reject_delete"))
             .unwrap();
         repository.delete_session("atomic-delete").unwrap();
+        let trace_count: i64 = telemetry.call_blocking(|c| c.query_row("SELECT count(*) FROM ef_telemetry_traces WHERE trace_id='trace-atomic'",[],|row|row.get(0))).unwrap();
+        assert_eq!(trace_count,0);
         assert!(matches!(
             blocking(framework.sessions().unwrap().get("atomic-delete")),
             Err(fw::StateError::NotFound)
@@ -746,6 +872,34 @@ mod shared_transaction_tests {
             repository.get_session("atomic-delete"),
             Err(ChatError::SessionNotFound)
         ));
+    }
+    #[test]
+    fn deleting_archived_session_preserves_other_session_in_shared_trace() {
+        let (_directory, mut repository) = fixture();
+        repository.create_session(&session("session-a")).unwrap();
+        repository.create_session(&session("session-b")).unwrap();
+        repository.update_session_status("session-a",ChatSessionStatus::Archived,"").unwrap();
+        let database = seed_telemetry(&repository);
+        database.call_blocking(|c| c.execute("INSERT INTO ef_telemetry_traces(trace_id,started_at,status_code,attributes) VALUES('shared',0,0,'{\"tron.session.code\":\"session-a\",\"tron.trace.page\":\"true\"}')",[])).unwrap();
+        database.call_blocking(|c| c.execute("INSERT INTO ef_telemetry_trace_rollups(trace_id,span_count) VALUES('shared',4)",[])).unwrap();
+        insert_span(&database,"shared","page",None,None);
+        insert_span(&database,"shared","a",Some("page"),Some("session-a"));
+        insert_span(&database,"shared","a-child",Some("a"),None);
+        insert_span(&database,"shared","b",Some("a"),Some("session-b"));
+        repository.delete_session("session-a").unwrap();
+        let survivors: Vec<(String,Option<String>)> = database.call_blocking(|c| c.prepare("SELECT span_id,json_extract(data,'$.parentSpanId') FROM ef_telemetry_spans WHERE trace_id='shared' ORDER BY span_id")?.query_map([],|row|Ok((row.get(0)?,row.get(1)?)))?.collect()).unwrap();
+        assert_eq!(survivors,vec![("b".into(),None),("page".into(),None)]);
+        let (session, trace_count, page_count): (Option<String>,i64,i64) = database.call_blocking(|c| {
+            Ok::<_,rusqlite::Error>((
+                c.query_row("SELECT json_extract(attributes,'$.\"tron.session.code\"') FROM ef_telemetry_traces WHERE trace_id='shared'",[],|row|row.get(0))?,
+                c.query_row("SELECT span_count FROM ef_telemetry_trace_rollups WHERE trace_id='shared'",[],|row|row.get(0))?,
+                c.query_row("SELECT span_count FROM ef_telemetry_span_rollups WHERE trace_id='shared' AND span_id='page'",[],|row|row.get(0))?,
+            ))
+        }).unwrap();
+        assert_eq!(session,None);
+        assert_eq!(trace_count,2);
+        assert_eq!(page_count,1);
+        assert!(repository.get_session("session-b").is_ok());
     }
     #[test]
     fn synchronous_business_sql_joins_the_framework_transaction() {

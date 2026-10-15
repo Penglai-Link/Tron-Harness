@@ -7,6 +7,8 @@ function identifier(bytes: number) {
 }
 function ignored(path: string) {
   return path.startsWith("/api/v1/observability/") ||
+    (path.startsWith("/api/v1/agents/agui/streams/") && (path.endsWith("/protocol-events") || path.endsWith("/events"))) ||
+    (path.startsWith("/api/v1/chats/sessions/") && (path.endsWith("/subagents") || path.includes("/subagents/") || path.endsWith("/history/query"))) ||
     ["/api/v1/health", "/api/v1/ready", "/api/v1/readiness", "/health", "/ready", "/api/v1/profiles/events", "/api/v1/system/skins/events"].includes(path);
 }
 type BrowserSpan = {

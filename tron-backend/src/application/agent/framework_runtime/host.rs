@@ -106,6 +106,9 @@ struct Host {
     _temporary: Option<tempfile::TempDir>,
 }
 impl FrameworkHost {
+    pub(crate) fn telemetry_database_path(&self) -> std::path::PathBuf {
+        self.0.path.with_extension("telemetry.sqlite3")
+    }
     pub(crate) async fn telemetry(
         &self,
     ) -> Result<
@@ -116,7 +119,7 @@ impl FrameworkHost {
             .telemetry
             .get_or_try_init(|| async {
                 crate::app::telemetry::LocalTelemetry::open(
-                    &self.0.path.with_extension("telemetry.sqlite3"),
+                    &self.telemetry_database_path(),
                 )
                 .await
             })
@@ -835,6 +838,7 @@ impl fw::LiveInputSource for HostSteering {
                         content: message.content,
                         requested_skills,
                         annotations,
+                        provenance: None,
                     })
                     .map_err(fw::AgentError::InvalidConfiguration)
             })

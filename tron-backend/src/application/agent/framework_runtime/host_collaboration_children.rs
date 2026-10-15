@@ -516,7 +516,7 @@ impl FrameworkHost {
             Err(error) => error.clone(),
         };
         let message = format!(
-            "后台子执行已完成（childRunId={}，status={}，agent={}）。输出摘要：{}。需要完整结果时用 child_wait 获取。",
+            "后台子执行已结束（childRunId={}，status={}，agent={}）。输出摘要：{}。需要完整结果时用 child_wait 获取。",
             notification.run_id,
             serde_json::to_value(&notification.status)
                 .ok()
@@ -525,7 +525,7 @@ impl FrameworkHost {
             notification.session_id,
             outcome
         );
-        self.steer_native_run(&notification.parent_run_code, &message);
+        self.notify_native_run(&notification.parent_run_code, &message);
     }
     pub(super) async fn enqueue_child_feedback(
         &self,

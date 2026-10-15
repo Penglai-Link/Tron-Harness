@@ -122,13 +122,16 @@ impl SharedDatabase {
         let operation_name = std::any::type_name_of_val(&operation).trim_end_matches("::{{closure}}");
         let short_name = operation_name.split("::sqlite::").last().unwrap_or(operation_name);
         let span_name = format!("db.sqlite.{short_name}");
-        let context = crate::app::telemetry::child_operation(&span_name, vec![
+        let attributes = vec![
             opentelemetry::KeyValue::new("code.function.name", operation_name.to_owned()),
             opentelemetry::KeyValue::new("db.system.name", "sqlite"),
             opentelemetry::KeyValue::new("code.file.path", caller.file()),
             opentelemetry::KeyValue::new("code.line.number", i64::from(caller.line())),
-        ]);
-        let worker_context = context.clone();
+        ];
+        let parent = opentelemetry::Context::current();
+        let worker_context = parent.clone();
+        let started = std::time::SystemTime::now();
+        let started_instant = std::time::Instant::now();
         let result = self.0
             .call_blocking(move |connection| {
                 let _guard = worker_context.attach();
@@ -138,10 +141,11 @@ impl SharedDatabase {
                 tokio_rusqlite::Error::Error(error) => error,
                 _ => failure(),
             });
-        use opentelemetry::trace::TraceContextExt;
-        if result.is_err() { context.span().set_status(opentelemetry::trace::Status::error("Database operation failed")); }
-        // child_operation returns an empty context when tracing is disabled.
-        context.span().end();
+        let failed = result.is_err();
+        if failed || started_instant.elapsed() >= std::time::Duration::from_millis(25) {
+            crate::app::telemetry::completed_operation(&span_name, &parent, started,
+                std::time::SystemTime::now(), attributes, failed);
+        }
         result
     }
 }

@@ -31,8 +31,9 @@ export function useTraceDetail(workspaceCode: string, traceId: string) {
     queryFn: ({ signal }) => getTrace(workspaceCode, traceId, signal),
     enabled: Boolean(traceId),
     retry: false,
-    refetchInterval: (query) =>
-      query.state.data?.trace.status === "Running" ? 2000 : false,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 

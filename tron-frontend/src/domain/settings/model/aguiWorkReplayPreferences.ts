@@ -13,7 +13,15 @@ export const maximumAguiWorkReplayTurnLimit = 20;
 
 export interface AguiWorkReplayPreferences {
   recentTurnLimit: number;
+  showReasoningCards: boolean;
+  runningEnterSubmitMode: "steer" | "queue";
 }
+
+const defaultPreferences: AguiWorkReplayPreferences = {
+  recentTurnLimit: defaultAguiWorkReplayTurnLimit,
+  showReasoningCards: false,
+  runningEnterSubmitMode: "steer",
+};
 
 function normalizeTurnLimit(value: unknown) {
   const numericValue = typeof value === "number" ? value : Number(value);
@@ -26,24 +34,26 @@ function normalizeTurnLimit(value: unknown) {
 
 function normalizePreferences(value: unknown): AguiWorkReplayPreferences {
   if (typeof value !== "object" || value === null) {
-    return { recentTurnLimit: defaultAguiWorkReplayTurnLimit };
+    return { ...defaultPreferences };
   }
   const candidate = value as Partial<AguiWorkReplayPreferences>;
   return {
     recentTurnLimit: normalizeTurnLimit(candidate.recentTurnLimit),
+    showReasoningCards: candidate.showReasoningCards === true,
+    runningEnterSubmitMode: candidate.runningEnterSubmitMode === "queue" ? "queue" : "steer",
   };
 }
 
 function readPreferences() {
   if (typeof window === "undefined") {
-    return { recentTurnLimit: defaultAguiWorkReplayTurnLimit };
+    return { ...defaultPreferences };
   }
 
   try {
     const raw = window.localStorage.getItem(storageKey);
-    return raw ? normalizePreferences(JSON.parse(raw)) : { recentTurnLimit: defaultAguiWorkReplayTurnLimit };
+    return raw ? normalizePreferences(JSON.parse(raw)) : { ...defaultPreferences };
   } catch {
-    return { recentTurnLimit: defaultAguiWorkReplayTurnLimit };
+    return { ...defaultPreferences };
   }
 }
 
@@ -57,8 +67,24 @@ export function useAguiWorkReplayPreferences() {
   const [preferences, setPreferenceState] = useState<AguiWorkReplayPreferences>(() => readPreferences());
 
   const setRecentTurnLimit = useCallback((recentTurnLimit: number) => {
-    setPreferenceState(() => {
-      const next = normalizePreferences({ recentTurnLimit });
+    setPreferenceState((current) => {
+      const next = normalizePreferences({ ...current, recentTurnLimit });
+      writePreferences(next);
+      return next;
+    });
+  }, []);
+
+  const setShowReasoningCards = useCallback((showReasoningCards: boolean) => {
+    setPreferenceState((current) => {
+      const next = normalizePreferences({ ...current, showReasoningCards });
+      writePreferences(next);
+      return next;
+    });
+  }, []);
+
+  const setRunningEnterSubmitMode = useCallback((runningEnterSubmitMode: "steer" | "queue") => {
+    setPreferenceState((current) => {
+      const next = normalizePreferences({ ...current, runningEnterSubmitMode });
       writePreferences(next);
       return next;
     });
@@ -85,5 +111,7 @@ export function useAguiWorkReplayPreferences() {
   return {
     preferences,
     setRecentTurnLimit,
+    setShowReasoningCards,
+    setRunningEnterSubmitMode,
   };
 }

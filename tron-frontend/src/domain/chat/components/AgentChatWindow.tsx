@@ -9,6 +9,7 @@ import { createAgentUiAdapter } from "@tron/chat-agent-ui-adapter";
 import { fromUiAttachment, fromUiSession, toUiAttachment, toUiInput, toUiSession } from "@tron/chat-agent-ui-adapter";
 import { useChatInputSuggestions } from "@/domain/chat/hooks/useChatInputSuggestions";
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
+import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 
 type MappedProps = "adapter" | "config" | "initialSession" | "pendingAttachments" | "onPendingAttachmentsChange" | "onSessionChange" | "onRunStateChange" | "createSendInput";
 export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, MappedProps> {
@@ -26,6 +27,7 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
 export function AgentChatWindow({ adapter, config, initialSession, pendingAttachments,
   onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
+  const { preferences: workPreferences } = useAguiWorkReplayPreferences();
   const inputSuggestions = useChatInputSuggestions(config.agentCode, initialSession?.sessionCode, initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined, config.workspaceCode);
   const { t, i18n } = useTranslation("pages");
   const workRailLabels = useChatWorkRailLabels();
@@ -67,12 +69,15 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
   return <ChatRuntimeWindow {...props} adapter={uiAdapter}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
+      showReasoningCards: workPreferences.showReasoningCards,
+      runningEnterSubmitMode: workPreferences.runningEnterSubmitMode,
+      inputPlaceholder: "",
+      queuedInputPlaceholder: "",
+      steeringInputPlaceholder: "",
       annotationLabels: i18n.language.startsWith("zh") ? zhChatAnnotationLabels : defaultChatAnnotationLabels,
       workRailLabels: config.workRailLabels ?? workRailLabels,
       historyLabels: config.historyLabels ?? historyLabels,
       userInputLabels: config.userInputLabels ?? userInputLabels,
-      queuedInputPlaceholder: config.queuedInputPlaceholder ?? t("awakening.queuePlaceholder"),
-      steeringInputPlaceholder: config.steeringInputPlaceholder ?? t("awakening.steerPlaceholder"),
     }}
     initialSession={session} pendingAttachments={attachments} createSendInput={createInput}
     onSessionChange={handleSession} onPendingAttachmentsChange={handleAttachments} onRunStateChange={handleRun} />;

@@ -46,4 +46,15 @@ describe("browser HTTP tracing", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls[0][1]).toEqual({});
   });
+  it("does not add spans to high-frequency chat polling", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(""));
+    vi.stubGlobal("fetch", fetcher);
+    for (const path of [
+      "/api/v1/agents/agui/streams/session/protocol-events",
+      "/api/v1/chats/sessions/session/subagents",
+      "/api/v1/chats/sessions/session/history/query",
+    ]) await tracedFetch(path);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls.every(([, init]) => !new Headers(init?.headers).has("traceparent"))).toBe(true);
+  });
 });

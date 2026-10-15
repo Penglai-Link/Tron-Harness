@@ -2933,12 +2933,18 @@ export const pages = {
     },
     aguiWorkReplay: {
       description:
-        "控制切换聊天或刷新页面后，保留多少个最近完成的对话回合及其面向用户的工作轨道。",
-      help: "查看 AG-UI 工作回放设置说明",
+        "控制聊天工作过程中的思考卡片、运行时回车行为，以及切换聊天或刷新页面后保留的最近回合数。",
+      help: "查看聊天工作过程设置说明",
       recentWorkTurns: "最近工作回合数",
       recentWorkTurnsAria: "AG-UI 最近工作回合数限制",
       recentWorkTurnsHint: "每个会话显示 {{min}} 至 {{max}} 个最近回合。",
-      title: "AG-UI 工作回放",
+      showReasoningCards: "展示思考过程卡片",
+      showReasoningCardsHint: "默认关闭。开启后可在聊天工作过程中手动展开思考内容。",
+      runningEnterSubmitMode: "Agent 运行时的回车行为",
+      runningEnterSubmitModeHint: "另一个操作使用 ⌘/Ctrl+Enter；Shift+Enter 换行。默认回车立即调整当前回复。",
+      steerOnEnter: "回车立即调整（steer）",
+      queueOnEnter: "回车加入队列（queue）",
+      title: "聊天工作过程",
     },
     systemConfig: {
       mineruNodes: {

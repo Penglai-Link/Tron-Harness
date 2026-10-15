@@ -48,9 +48,9 @@ describe("AgentChatWindow feedback", () => {
 
 describe("awakening conversation locale", () => {
   it.each([
-    ["en-US", "Wake up", "You", "Enter to queue"],
-    ["zh-CN", "醒醒", "你", "Enter 加入队列"],
-  ])("renders the visible wakeup and running composer in %s", async (locale, wakeup, actor, placeholder) => {
+    ["en-US", "Wake up", "You"],
+    ["zh-CN", "醒醒", "你"],
+  ])("renders the visible wakeup and running composer in %s", async (locale, wakeup, actor) => {
     await i18n.changeLanguage(locale);
     const run = { id: "RUN", sessionId: "SESSION", parentRunId: null, rootRunId: "RUN", status: "Running", startedAtMs: 1, finishedAtMs: null, error: null };
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
@@ -67,7 +67,6 @@ describe("awakening conversation locale", () => {
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AgentChatWindow adapter={adapter} showHeader={false} config={{ floating: false }} initialSession={{ id: 1, sessionCode: "SESSION", workspaceCode: "WORKSPACE", title: "Awakening", status: "ACTIVE", createdAt: "2026-10-14T00:00:00Z", updatedAt: "2026-10-14T00:00:00Z" }} /></QueryClientProvider>);
     await screen.findByText(wakeup, { selector: ".ef-chat__message-body" });
     expect(screen.getByText(actor)).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("textbox").getAttribute("placeholder")).toContain(placeholder));
-    if (locale === "en-US") expect(screen.getByRole("textbox").getAttribute("placeholder")).not.toMatch(/[\u3400-\u9fff]/);
+    await waitFor(() => expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe(""));
   });
 });

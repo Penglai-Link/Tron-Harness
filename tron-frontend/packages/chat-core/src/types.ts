@@ -494,6 +494,7 @@ export interface ChatClientConfig {
   inputPlaceholder?: string;
   queuedInputPlaceholder?: string;
   steeringInputPlaceholder?: string;
+  runningEnterSubmitMode?: "steer" | "queue";
   maxFileSize?: number;
   maxLimitFile?: number;
   open?: boolean;

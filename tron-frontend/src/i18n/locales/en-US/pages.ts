@@ -3045,13 +3045,19 @@ export const pages = {
     },
     aguiWorkReplay: {
       description:
-        "Controls how many recent completed conversation turns keep user-facing work rails after chat switching or page refresh.",
-      help: "Show AG-UI work replay settings help",
+        "Controls reasoning cards, Enter behavior during a run, and how many recent turns remain after switching chats or refreshing.",
+      help: "Show chat work settings help",
       recentWorkTurns: "Recent Work Turns",
       recentWorkTurnsAria: "AG-UI recent work turn limit",
       recentWorkTurnsHint:
         "Show between {{min}} and {{max}} recent turns per session.",
-      title: "AG-UI Work Replay",
+      showReasoningCards: "Show reasoning cards",
+      showReasoningCardsHint: "Off by default. Turn on to expand reasoning manually in chat work history.",
+      runningEnterSubmitMode: "Enter while an agent is running",
+      runningEnterSubmitModeHint: "The other action uses Cmd/Ctrl+Enter; Shift+Enter adds a newline. Enter steers by default.",
+      steerOnEnter: "Steer current reply",
+      queueOnEnter: "Add to queue",
+      title: "Chat work process",
     },
     systemConfig: {
       mineruNodes: {

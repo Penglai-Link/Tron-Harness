@@ -141,10 +141,9 @@ impl FrameworkHost {
             control,
         })))
     }
-    /// Queue one steering message into a still-executing native run keyed by
-    /// its run code. Best-effort push used for detached child completion
-    /// notifications; returns whether the run admitted the message.
-    pub fn steer_native_run(&self, key: &str, message: &str) -> bool {
+    /// Queue host-owned context into a still-executing native run without
+    /// attributing the notification to the human sender.
+    pub fn notify_native_run(&self, key: &str, message: &str) -> bool {
         let control = self
             .0
             .control
@@ -156,7 +155,16 @@ impl FrameworkHost {
         if let Some(control) = control {
             let state = control.lock().unwrap_or_else(|e| e.into_inner());
             if let Some((_, sdk)) = &state.sdk {
-                return sdk.steer(message.to_owned()).is_ok();
+                return sdk.notify(message.to_owned(), fw::MessageProvenance {
+                    sender: fw::MessageSender {
+                        kind: "SYSTEM".into(),
+                        id: None,
+                        display_name: Some("系统通知".into()),
+                        avatar_url: None,
+                    },
+                    source: Some("ChildRunCompletion".into()),
+                    correlation: None,
+                }).is_ok();
             }
         }
         false
