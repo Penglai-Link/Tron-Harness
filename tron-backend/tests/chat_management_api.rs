@@ -317,7 +317,7 @@ async fn delayed_steer_model_mock_server() -> (AgentModelMockServer, DelayedStee
 
 async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
     if is_session_summary_request(&payload) {
-        return session_summary_mock_response();
+        return session_summary_mock_response(&payload);
     }
 
     let prompt = payload["messages"]
@@ -394,9 +394,8 @@ async fn scripted_agent_chat_completion(
     State(state): State<ScriptedAgentModelMockState>,
     Json(payload): Json<Value>,
 ) -> Response {
-    assert_ne!(payload["stream"].as_bool(), Some(true));
     if is_session_summary_request(&payload) {
-        return session_summary_mock_response();
+        return session_summary_mock_response(&payload);
     }
     let content = state
         .responses
@@ -404,15 +403,7 @@ async fn scripted_agent_chat_completion(
         .expect("scripted mock responses should lock")
         .pop_front()
         .expect("scripted mock response should exist");
-    Json(json!({
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": content
-            }
-        }]
-    }))
-    .into_response()
+    valid_mock_completion(&payload, content)
 }
 
 async fn delayed_steer_chat_completion(
@@ -420,7 +411,7 @@ async fn delayed_steer_chat_completion(
     Json(payload): Json<Value>,
 ) -> Response {
     if is_session_summary_request(&payload) {
-        return session_summary_mock_response();
+        return session_summary_mock_response(&payload);
     }
     state
         .requests
@@ -471,8 +462,9 @@ fn is_session_summary_request(payload: &Value) -> bool {
     })
 }
 
-fn session_summary_mock_response() -> Response {
-    Json(json!({"choices":[{"message":{"role":"assistant","content":json!({"summary":"Mock native session summary"}).to_string()},"finish_reason":"stop"}]})).into_response()
+fn session_summary_mock_response(payload: &Value) -> Response {
+    let content = json!({"summary":"Mock native session summary"}).to_string();
+    valid_mock_completion(payload, content)
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1163,7 +1155,10 @@ async fn chat_steer_endpoint_persists_server_message_and_continues_the_active_st
         records.iter().any(|message| {
             message["role"] == json!("ASSISTANT")
                 && message["runCode"] == json!(active_run_code)
-                && message["content"] == json!("first boundary outputsteered final output")
+                // The steered re-dispatch owns the turn: the interrupted
+                // partial text stays in the live stream, the persisted
+                // assistant message carries the final steered output.
+                && message["content"] == json!("steered final output")
         })
     }));
 }

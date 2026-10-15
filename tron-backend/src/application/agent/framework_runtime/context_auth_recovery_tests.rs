@@ -164,7 +164,10 @@ async fn newest_oversized_tool_turn_rejects_before_second_provider_without_repea
                 observed.fetch_add(1, Ordering::SeqCst);
                 Ok(ToolObservation {
                     tool_name: request.tool_name,
-                    output: "x".repeat(32_000),
+                    // Unicode-aware admission charges ~3 characters per token,
+                    // so the oversized turn needs ~3x the 32k window to leave
+                    // no summary capacity.
+                    output: "x".repeat(120_000),
                 })
             },
         )))

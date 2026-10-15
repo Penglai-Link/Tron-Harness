@@ -516,7 +516,8 @@ mod tests {
     fn skins_survive_restart_and_missing_active_falls_back() {
         let temp = tempfile::tempdir().unwrap();
         let store = FileSkinStore::new(temp.path().into());
-        assert_eq!(store.active().unwrap().id, "light");
+        // matrix-dark is the shipped default when no active skin is recorded.
+        assert_eq!(store.active().unwrap().id, "matrix-dark");
         store
             .install(&serde_json::to_vec(&custom()).unwrap())
             .unwrap();
@@ -525,7 +526,7 @@ mod tests {
         assert_eq!(reopened.active().unwrap().id, "ocean");
         assert_eq!(reopened.list().unwrap().len(), BUILTINS.len() + 1);
         fs::remove_dir_all(temp.path().join("ocean")).unwrap();
-        assert_eq!(reopened.active().unwrap().id, "light");
+        assert_eq!(reopened.active().unwrap().id, "matrix-dark");
     }
     #[test]
     fn rejects_overwrite_injection_and_missing_resources() {
@@ -555,7 +556,7 @@ mod tests {
         store.active().unwrap();
         fs::write(temp.path().join("light/skin.json"), b"broken").unwrap();
         fs::write(temp.path().join("active.json"), b"broken").unwrap();
-        assert_eq!(store.active().unwrap().id, "light");
+        assert_eq!(store.active().unwrap().id, "matrix-dark");
         assert_eq!(store.list().unwrap().len(), BUILTINS.len());
     }
 

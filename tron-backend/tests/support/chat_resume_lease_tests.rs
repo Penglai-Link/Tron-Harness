@@ -44,7 +44,7 @@ async fn chat_question_resume_drains_native_execution_with_and_without_restart()
                 async move {
                     requests.lock().unwrap().push(payload.clone());
                     if payload["stream"] != true {
-                        return session_summary_mock_response();
+                        return session_summary_mock_response(&payload);
                     }
                     let first = main_calls.fetch_add(1, Ordering::SeqCst) == 0;
                     let delta = if first {

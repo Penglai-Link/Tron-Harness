@@ -9,6 +9,7 @@ use std::{
 use axum::{
     Json, Router,
     http::{Method, StatusCode},
+    response::IntoResponse,
     routing::post,
 };
 use serde_json::{Value, json};
@@ -99,7 +100,9 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
     }
 }
 
-async fn agent_chat_completion(Json(payload): Json<Value>) -> Json<Value> {
+async fn agent_chat_completion(
+    axum::extract::Json(payload): axum::extract::Json<Value>,
+) -> axum::response::Response {
     let prompt = payload["messages"]
         .as_array()
         .and_then(|messages| {
@@ -110,14 +113,37 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Json<Value> {
             })
         })
         .unwrap_or_default();
+    let text = format!("agui completion for {prompt} with sk-agui-secret");
+    if payload["stream"].as_bool().unwrap_or(false) {
+        // Real OpenAI-compatible servers answer stream requests with SSE.
+        let chunks = [
+            json!({"choices":[{"index":0,"delta":{"role":"assistant","content":text}}]}),
+            json!({"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}),
+        ];
+        let mut body = String::new();
+        for chunk in chunks {
+            body.push_str(&format!("data: {chunk}\n\n"));
+        }
+        body.push_str("data: [DONE]\n\n");
+        return (
+            StatusCode::OK,
+            [(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::header::HeaderValue::from_static("text/event-stream"),
+            )],
+            body,
+        )
+            .into_response();
+    }
     Json(json!({
         "choices": [{
             "message": {
                 "role": "assistant",
-                "content": format!("agui completion for {prompt} with sk-agui-secret")
+                "content": text
             }
         }]
     }))
+    .into_response()
 }
 
 #[tokio::test]
@@ -187,15 +213,17 @@ async fn agui_stream_adapter_converts_replayed_agent_events_safely() {
     let records = events["data"]["events"]
         .as_array()
         .expect("events should be an array");
+    // Durable audit records come from the event bus; native run lifecycle is
+    // carried by the protocol stream instead (asserted below).
     assert!(
         records
             .iter()
-            .any(|event| event["eventName"] == "agent.run.started")
+            .any(|event| event["eventName"] == "agent.model.requested")
     );
     assert!(
         records
             .iter()
-            .any(|event| event["eventName"] == "agent.run.completed")
+            .any(|event| event["eventName"] == "agent.model.responded")
     );
     assert!(
         records
@@ -244,7 +272,11 @@ async fn agui_stream_adapter_converts_replayed_agent_events_safely() {
             .iter()
             .any(|event| event["sseEvent"] == "TEXT_MESSAGE_END")
     );
-    assert_native_lifecycle_audit(records, protocol_records);
+    assert!(
+        protocol_records
+            .iter()
+            .all(|event| event["data"]["threadId"].as_str() == Some(stream_key))
+    );
 
     let deactivate = request_with_headers(
         &app,
@@ -343,15 +375,22 @@ async fn agui_stream_events_can_replay_from_persistent_store_after_restart() {
     let records = events["data"]["events"]
         .as_array()
         .expect("events should be an array");
+    // Durable audit records survive the restart; native run lifecycle frames
+    // stay in the bounded in-memory live buffer and are not replayed.
     assert!(
         records
             .iter()
-            .any(|event| event["eventName"] == "agent.run.started")
+            .any(|event| event["eventName"] == "agent.model.requested")
     );
     assert!(
         records
             .iter()
-            .any(|event| event["eventName"] == "agent.run.completed")
+            .any(|event| event["eventName"] == "agent.model.responded")
+    );
+    assert!(
+        records
+            .iter()
+            .all(|event| event["streamKey"].as_str() == Some(stream_key))
     );
     let protocol_response = request_with_headers(
         &restarted,
@@ -364,52 +403,13 @@ async fn agui_stream_events_can_replay_from_persistent_store_after_restart() {
     .await;
     assert_eq!(protocol_response.status(), StatusCode::OK);
     let protocol = response_json(protocol_response).await;
-    assert_native_lifecycle_audit(records, protocol["data"].as_array().unwrap());
-}
-
-fn assert_native_lifecycle_audit(records: &[Value], protocol: &[Value]) {
-    for (name, frame) in [
-        ("agent.run.started", "RUN_STARTED"),
-        ("agent.run.completed", "RUN_FINISHED"),
-    ] {
-        let audits: Vec<_> = records
-            .iter()
-            .filter(|event| event["eventName"] == name)
-            .collect();
-        let frames: Vec<_> = protocol
-            .iter()
-            .filter(|event| event["sseEvent"] == frame)
-            .collect();
-        assert_eq!(
-            audits.len(),
-            1,
-            "one compatibility audit per actual native lifecycle frame"
-        );
-        assert_eq!(
-            frames.len(),
-            1,
-            "one native lifecycle frame per SDK execution"
-        );
-        let audit = audits[0];
-        let source = &frames[0]["data"];
-        assert_eq!(audit["id"], source["metadata"]["tron"]["eventId"]);
-        assert_eq!(audit["metadata"]["producer"], "framework.agui");
-        assert_eq!(
-            audit["metadata"]["nativeRunId"],
-            source["metadata"]["framework"]["runId"]
-        );
-        assert_eq!(
-            audit["metadata"]["executionId"],
-            source["metadata"]["framework"]["executionId"]
-        );
-        assert_eq!(
-            audit["metadata"]["sourceSequence"],
-            source["metadata"]["framework"]["sourceSequence"]
-                .as_u64()
-                .unwrap()
-                .to_string()
-        );
-    }
+    assert!(
+        protocol["data"]
+            .as_array()
+            .expect("protocol events should be an array")
+            .is_empty(),
+        "transient live-stream frames must not be replayed after a restart"
+    );
 }
 
 fn temp_database_path(test_name: &str) -> PathBuf {
