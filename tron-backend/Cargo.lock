@@ -920,7 +920,7 @@ dependencies = [
 [[package]]
 name = "crab-serverapi"
 version = "0.3.0"
-source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=19e2efac5c2e1defb26fb82648b2687ecc9e9e71#19e2efac5c2e1defb26fb82648b2687ecc9e9e71"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=d36495205418c1925f32a09267c68401ec4d24b5#d36495205418c1925f32a09267c68401ec4d24b5"
 dependencies = [
  "aes-gcm 0.10.3",
  "async-trait",
@@ -946,7 +946,7 @@ dependencies = [
 [[package]]
 name = "crab-serverapi"
 version = "0.3.0"
-source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=d36495205418c1925f32a09267c68401ec4d24b5#d36495205418c1925f32a09267c68401ec4d24b5"
+source = "git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=e40814933084a4fa217e3a310846affae1d341ea#e40814933084a4fa217e3a310846affae1d341ea"
 dependencies = [
  "aes-gcm 0.10.3",
  "async-trait",
@@ -7158,8 +7158,8 @@ dependencies = [
  "bcrypt",
  "chrono",
  "chrono-tz",
- "crab-serverapi 0.3.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=19e2efac5c2e1defb26fb82648b2687ecc9e9e71)",
  "crab-serverapi 0.3.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=d36495205418c1925f32a09267c68401ec4d24b5)",
+ "crab-serverapi 0.3.0 (git+https://gitee.com/person-ai/person-ai-index-rust-sdk.git?rev=e40814933084a4fa217e3a310846affae1d341ea)",
  "cron",
  "eliteforge-agent-capability-external",
  "eliteforge-agent-capability-personai",
