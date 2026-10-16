@@ -498,7 +498,9 @@ export const pages = {
     imageDescriptionModelCodeHelp: "Index existing captions and OCR text, or select a vision model to generate descriptions before indexing them with the current text embedding model. Images without text are not directly embedded.",
     imageSourceTextOnly: "Use existing captions and OCR text only",
     embeddingModelCodeHelp:
-      "Embeds content during ingestion and questions during retrieval using the same model. If unspecified, uses the platform default Embedding model.",
+      "Select a specific Embedding model when vector search is enabled. Indexing and retrieval use the same model code; Tron routes among instances of that code.",
+    instanceCount: "{{count}} instances",
+    embeddingModelRequired: "Select a specific Embedding model when vector search is enabled.",
     graphModelCode: "Graph extraction model",
     graphModelCodeHelp:
       "When graph indexing is enabled, this model extracts entities and relations from the text during ingestion and keeps the original evidence. Choose the same Auto route as Agent conversations or a specific model. Skill-to-file links come directly from the skill directory and do not require a model call. Disabled graph indexing does not call it.",
@@ -507,7 +509,7 @@ export const pages = {
     rerankModelCodeHelp:
       "Rescores fused candidate evidence to prioritize content relevant to the question. With reranking off, uses the fused ranking directly.",
     rerankOff: "Reranking off",
-    defaultModel: "Platform default model",
+    defaultModel: "Select a specific model",
     chooseModel: "Select model",
     close: "Close",
     save: "Save",

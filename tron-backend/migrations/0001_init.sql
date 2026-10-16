@@ -1084,6 +1084,8 @@ CREATE INDEX idx_provider_catalog_models_provider_status
 
 CREATE INDEX idx_provider_multimedia_catalog_models_provider_status
     ON provider_multimedia_catalog_models(provider_code, status, media_type, model_name);
+CREATE INDEX idx_provider_multimedia_catalog_models_embedding_route
+    ON provider_multimedia_catalog_models(provider_code, media_type, status, model_code, model_id);
 
 CREATE INDEX idx_provider_run_snapshots_session
     ON provider_model_run_snapshots(session_code);

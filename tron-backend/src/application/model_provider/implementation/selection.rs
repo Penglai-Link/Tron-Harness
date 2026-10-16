@@ -325,6 +325,45 @@ impl ModelProviderService {
         model_code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelProviderError> {
         let requested = model_code.map(str::trim).filter(|value| !value.is_empty());
+        if let Some(logical_code) = requested.and_then(|value| value.strip_prefix(PERSON_AI_EMBEDDING_PREFIX)) {
+            if logical_code.is_empty() {
+                return Ok(None);
+            }
+            self.require_active_connection(ModelProviderCode::PersonAi)?;
+            let code = logical_code.to_owned();
+            let available = self.connection.call(
+                {
+                    let code = code.clone();
+                    move |connection| connection.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM provider_multimedia_catalog_models
+                         WHERE provider_code = 'PersonAi' AND media_type = 6
+                           AND status = 'Available' AND model_code = ?1)",
+                        [&code], |row| row.get::<_, bool>(0),
+                    ).map_err(|_| ModelProviderError::Storage)
+                },
+                || ModelProviderError::Storage,
+            )?;
+            if !available {
+                return Ok(None);
+            }
+            return Ok(Some(RuntimeModelConfig {
+                model_code: format!("{PERSON_AI_EMBEDDING_PREFIX}{code}"),
+                protocol: ModelProtocol::OpenAiCompatibleEmbedding,
+                model_type: ModelType::Embedding,
+                base_url: "https://person-ai.invalid".into(),
+                api_path: Some("embeddings".into()),
+                api_key: String::new(),
+                model_name: code,
+                thinking_enabled: false,
+                reasoning_effort: None,
+                responses_stateful_enabled: false,
+                temperature: None,
+                max_tokens: None,
+                context_window_tokens: None,
+                top_p: None,
+                max_retries: Some(0),
+            }));
+        }
         if requested.is_some_and(|value| value != "PERSON_AI:ROUTE:EmbeddingAuto") {
             return Ok(None);
         }

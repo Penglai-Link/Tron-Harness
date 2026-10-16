@@ -21,6 +21,35 @@ use tron_backend::{
 };
 
 const AUTO: &str = "PERSON_AI:ROUTE:EmbeddingAuto";
+const BGE_M3: &str = "PERSON_AI:EMBEDDING:bge-m3";
+
+#[test]
+fn person_ai_embedding_identity_is_stable_across_same_model_instances() {
+    let f = Fixture::new();
+    connect_auto(&f);
+    let connection = Connection::open(&f.state.config.database_url).unwrap();
+    for (id, code) in [("instance-a", "bge-m3"), ("other-model", "different-model")] {
+        connection.execute(
+            "INSERT INTO provider_multimedia_catalog_models
+             (provider_code,model_id,model_code,model_name,media_type,status,first_seen_at,last_seen_at,updated_at)
+             VALUES('PersonAi',?1,?2,?2,6,'Available',1,1,1)",
+            params![id, code],
+        ).unwrap();
+    }
+    let runtime = LlmRuntimeService::new(Arc::new(resolver(&f)), Arc::new(f.client.clone()));
+    let config = resolver(&f).embedding_runtime_model_config(WORKSPACE, Some(BGE_M3)).unwrap().unwrap();
+    assert_eq!(config.model_code, BGE_M3);
+    assert_eq!(config.model_name, "bge-m3");
+    let fingerprint = runtime.embedding_space_fingerprint(WORKSPACE, Some(BGE_M3), 1024).unwrap();
+    connection.execute(
+        "INSERT INTO provider_multimedia_catalog_models
+         (provider_code,model_id,model_code,model_name,media_type,status,first_seen_at,last_seen_at,updated_at)
+         VALUES('PersonAi','instance-b','bge-m3','BGE-M3',6,'Available',1,1,1)",
+        [],
+    ).unwrap();
+    assert_eq!(runtime.embedding_space_fingerprint(WORKSPACE, Some(BGE_M3), 1024).unwrap(), fingerprint);
+    assert!(resolver(&f).embedding_runtime_model_config(WORKSPACE, Some("PERSON_AI:EMBEDDING:missing")).unwrap().is_none());
+}
 
 // All configuration writes below target the fixture's temporary database, never ~/.tron.
 fn connect_auto(f: &Fixture) {

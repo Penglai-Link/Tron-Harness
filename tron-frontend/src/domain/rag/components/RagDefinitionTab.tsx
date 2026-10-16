@@ -18,6 +18,7 @@ import { SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableHead, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { fetchPlatformModels } from "@/domain/model/api/modelApi";
+import { fetchProviderCatalog } from "@/domain/model/api/modelProviderApi";
 import { configureRagCorpus } from "../api/ragApi";
 import type { RagCorpus, RagSettings } from "../model/RagModel";
 import { useRagErrorToast } from "../hooks/useRagErrorToast";
@@ -34,7 +35,16 @@ export function RagDefinitionTab({ corpora, onSaved, onIngestion }: { corpora: R
   const [saving, setSaving] = useState(false);
   const user = useAuthStore((state) => state.session?.user.userCode ?? "");
   const models = useQuery({ queryKey: ["rag-platform-models", user], queryFn: ({ signal }) => fetchPlatformModels(signal), enabled: editing !== null });
+  const providerCatalog = useQuery({ queryKey: ["rag-person-ai-catalog", user], queryFn: ({ signal }) => fetchProviderCatalog("PersonAi", signal), enabled: editing !== null });
   useRagErrorToast(editing ? models.error?.message : undefined);
+  useRagErrorToast(editing ? providerCatalog.error?.message : undefined);
+  const embeddingCatalog = new Map<string, { name: string; instances: number }>();
+  for (const model of providerCatalog.data ?? []) {
+    if (model.catalogModelType !== "Embedding" || model.status !== "Available" || !model.modelId) continue;
+    const entry = embeddingCatalog.get(model.modelCode);
+    if (entry) entry.instances += 1;
+    else embeddingCatalog.set(model.modelCode, { name: model.modelName, instances: 1 });
+  }
   const open = (corpus: RagCorpus) => { setEditing(corpus); setSettings({ ...corpus.settings, embeddingDimension: 1024 }); };
   const fieldLabel = (key: string, helpKey: string, id: string) => <div className="flex items-center gap-1.5">
     <FieldLabel htmlFor={id}>{t(`ragUnified.${key}`)}</FieldLabel>
@@ -106,10 +116,11 @@ export function RagDefinitionTab({ corpora, onSaved, onIngestion }: { corpora: R
           </Field>)}
           <Field>{fieldLabel("embeddingDimension", "dimensionHelp", "rag-dimension")}<Input id="rag-dimension" type="number" value={1024} disabled /></Field>
           {(["embeddingModelCode", "graphModelCode", "rerankModelCode"] as const).map((key) => <Field key={key}>{fieldLabel(key, `${key}Help`, `rag-${key}`)}<SelectInput id={`rag-${key}`} aria-label={t(`ragUnified.${key}`)} value={settings[key] ?? "__none__"} onValueChange={(value) => setSettings({ ...settings, [key]: value === "__none__" ? null : String(value) })}>
-            <SelectItem value="__none__">{t(key === "rerankModelCode" ? "ragUnified.rerankOff" : key === "graphModelCode" ? "ragUnified.chooseModel" : "ragUnified.defaultModel")}</SelectItem>
+            <SelectItem value="__none__">{t(key === "rerankModelCode" ? "ragUnified.rerankOff" : "ragUnified.chooseModel")}</SelectItem>
             {key === "graphModelCode" ? <SelectItem value="PERSON_AI:ROUTE:ChatAuto">{t("ragUnified.autoRoute")}</SelectItem> : null}
+            {key === "embeddingModelCode" ? [...embeddingCatalog].map(([code, model]) => <SelectItem key={`person-ai-${code}`} value={`PERSON_AI:EMBEDDING:${code}`}>{model.name} · Person-AI{model.instances > 1 ? ` (${t("ragUnified.instanceCount", { count: model.instances })})` : ""}</SelectItem>) : null}
             {(models.data ?? []).filter((model) => model.enabled && model.modelType === (key === "embeddingModelCode" ? "EMBEDDING" : key === "graphModelCode" ? "TEXT" : "RERANK")).map((model) => <SelectItem key={model.modelCode} value={model.modelCode}>{model.displayName}</SelectItem>)}
-          </SelectInput></Field>)}
+          </SelectInput>{key === "embeddingModelCode" && settings.vector && (!settings.embeddingModelCode || settings.embeddingModelCode === "PERSON_AI:ROUTE:EmbeddingAuto") ? <p className="text-sm text-destructive">{t("ragUnified.embeddingModelRequired")}</p> : null}</Field>)}
           {editing?.knowledgeBaseId ? <Field>
             {fieldLabel("imageDescriptionModelCode", "imageDescriptionModelCodeHelp", "rag-image-description")}
             <SelectInput id="rag-image-description" aria-label={t("ragUnified.imageDescriptionModelCode")} value={settings.imageDescriptionModelCode ?? "__none__"} onValueChange={(value) => setSettings({ ...settings, imageDescriptionModelCode: value === "__none__" ? null : String(value) })}>
@@ -118,7 +129,7 @@ export function RagDefinitionTab({ corpora, onSaved, onIngestion }: { corpora: R
             </SelectInput>
           </Field> : null}
         </div> : null}
-        <DialogFooter><Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>{t("ragUnified.close")}</Button><Button onClick={() => void save()} disabled={saving || !settings || (!!editing?.knowledgeBaseId && settings.graph && !settings.graphModelCode)}>{t("ragUnified.save")}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>{t("ragUnified.close")}</Button><Button onClick={() => void save()} disabled={saving || !settings || (settings.vector && (!settings.embeddingModelCode || settings.embeddingModelCode === "PERSON_AI:ROUTE:EmbeddingAuto")) || (!!editing?.knowledgeBaseId && settings.graph && !settings.graphModelCode)}>{t("ragUnified.save")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </>;

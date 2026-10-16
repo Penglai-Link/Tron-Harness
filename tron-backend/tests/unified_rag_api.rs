@@ -520,7 +520,7 @@ async fn memory_search_enforces_source_scope_governance_expiry_and_latest_retry(
     let rows = rag.corpus_summaries(&Default::default()).unwrap();
     let memory = rows.iter().find(|r| r.id == "memory-card").unwrap();
     assert_eq!(memory.counts.rebuild_source_count, 0);
-    rag.configure_corpus("memory-card", RagSettings::default())
+    rag.configure_corpus("memory-card", RagSettings { vector: false, ..Default::default() })
         .unwrap();
     assert!(
         rag.corpus_summaries(&Default::default())

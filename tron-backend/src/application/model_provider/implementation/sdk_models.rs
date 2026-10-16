@@ -45,9 +45,11 @@ impl ModelProviderService {
             .active_credentials(ModelProviderCode::PersonAi)
             .await
             .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
-        let attempt = {
+        let embedding_code = config.model_code.strip_prefix(PERSON_AI_EMBEDDING_PREFIX).map(str::to_owned);
+        let (attempt, embedding_instance_id) = {
             let this = self.clone();
             let worker_credentials = credentials.clone();
+            let embedding_code = embedding_code.clone();
             this.connection.clone().call(
                 move |connection| {
                     let credentials = worker_credentials;
@@ -70,7 +72,17 @@ impl ModelProviderService {
                             "PersonAI profile changed before model dispatch".into(),
                         ));
                     }
-                    Ok(this.sdk_attempt_for_row(&row, &credentials.token))
+                    let instance_id = if let Some(code) = embedding_code.as_deref() {
+                        let ordinal = this.embedding_route_counter.fetch_add(1, Ordering::Relaxed);
+                        Some(select_embedding_instance(connection, code, ordinal)
+                            .map_err(|_| fw::ModelError::Fatal("embedding catalog lookup failed".into()))?
+                            .ok_or_else(|| fw::ModelError::Fatal(format!(
+                                "PersonAI embedding model {code} has no available instances"
+                            )))?)
+                    } else {
+                        None
+                    };
+                    Ok((this.sdk_attempt_for_row(&row, &credentials.token), instance_id))
                 },
                 || fw::ModelError::Fatal("provider database worker stopped".into()),
             )?
@@ -91,6 +103,8 @@ impl ModelProviderService {
             config: config.clone(),
             run: run.map(str::to_owned),
             attempt,
+            embedding_instance_id,
+            embedding_logical_code: embedding_code,
         }))
     }
     pub async fn sdk_recover_model_authentication(
@@ -203,17 +217,37 @@ struct SnapshotTransport {
     config: AgentModelConfig,
     run: Option<String>,
     attempt: String,
+    embedding_instance_id: Option<String>,
+    embedding_logical_code: Option<String>,
 }
 #[async_trait]
 impl sdk::ModelTransport for SnapshotTransport {
     async fn json(&self, path: &str, body: &Value) -> Result<Value, fw::ModelError> {
-        let response = self.inner.json(path, body).await;
+        let routed_body = if let Some(instance_id) = self.embedding_instance_id.as_deref() {
+            let mut routed_body = body.clone();
+            let object = routed_body.as_object_mut().ok_or_else(|| {
+                fw::ModelError::Fatal("embedding request body must be an object".into())
+            })?;
+            object.insert("model".into(), Value::String(instance_id.to_owned()));
+            Some(routed_body)
+        } else {
+            None
+        };
+        let response = self.inner.json(path, routed_body.as_ref().unwrap_or(body)).await;
         match response {
             Ok(response) => {
                 self.providers
                     .record_runtime_snapshot(self.run.as_deref(), "", &self.config, &response)
                     .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
-                Ok(response)
+                if let Some(logical_code) = self.embedding_logical_code.as_deref() {
+                    let mut normalized = response;
+                    if let Some(object) = normalized.as_object_mut() {
+                        object.insert("model".into(), Value::String(logical_code.to_owned()));
+                    }
+                    Ok(normalized)
+                } else {
+                    Ok(response)
+                }
             }
             Err(error) => Err(self.failure(error)),
         }

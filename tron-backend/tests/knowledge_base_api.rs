@@ -328,6 +328,7 @@ async fn image_description_model_is_chosen_by_rag_and_pinned_to_the_index_task()
     let configured = f.service.create(USER, "Image policy enabled", "").unwrap();
     f.state.rag.configure_corpus(&configured.id, RagSettings {
         image_description_model_code: Some("synthetic-vision".into()),
+        embedding_model_code: Some("synthetic-embedding".into()),
         ..Default::default()
     }).unwrap();
     let image_document = f.service.upload(USER, &configured.id, "image.md", b"orchid").unwrap();
@@ -335,7 +336,10 @@ async fn image_description_model_is_chosen_by_rag_and_pinned_to_the_index_task()
     let task = f.service.ingestion_tasks(USER, &configured.id, &image_document.id).unwrap();
     assert_eq!(task[0].configuration["imageDescription"]["enabled"], true);
     assert_eq!(task[0].configuration["imageDescription"]["modelCode"], "synthetic-vision");
-    f.state.rag.configure_corpus(&configured.id, RagSettings::default()).unwrap();
+    f.state.rag.configure_corpus(&configured.id, RagSettings {
+        embedding_model_code: Some("synthetic-embedding".into()),
+        ..Default::default()
+    }).unwrap();
     assert_eq!(f.service.ingestion_tasks(USER, &configured.id, &image_document.id).unwrap()[0].configuration["imageDescription"]["modelCode"], "synthetic-vision");
     f.service.stop_ingestion_workers();
 }

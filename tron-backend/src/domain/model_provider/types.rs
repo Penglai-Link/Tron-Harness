@@ -93,7 +93,7 @@ impl ProviderCatalogModelType {
             2 => Some(Self::Speech),
             3 => Some(Self::AigcTextDetection),
             4 => Some(Self::AigcImageDetection),
-            5 => Some(Self::Embedding),
+            6 => Some(Self::Embedding),
             _ => None,
         }
     }
@@ -101,7 +101,7 @@ impl ProviderCatalogModelType {
     pub const fn person_ai_media_type(self) -> Option<i32> {
         match self {
             Self::Chat => None,
-            Self::Embedding => Some(5),
+            Self::Embedding => Some(6),
             Self::Image => Some(0),
             Self::Video => Some(1),
             Self::Speech => Some(2),

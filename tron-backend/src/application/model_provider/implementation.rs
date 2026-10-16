@@ -6,7 +6,7 @@ use std::{
     pin::Pin,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -55,6 +55,7 @@ const PERSON_AI_CLIENT_NAME: &str = "Tron";
 const PERSON_AI_PRODUCT_CODE: &str = "tron";
 const PERSON_AI_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROVIDER_RUNTIME_PREFIX: &str = "PERSON_AI:";
+const PERSON_AI_EMBEDDING_PREFIX: &str = "PERSON_AI:EMBEDDING:";
 const TOKEN_REFRESH_LEAD_MILLIS: i64 = 7 * 24 * 60 * 60 * 1000;
 const MAX_PROVIDER_SYNC_RUNS: i64 = 10;
 
@@ -66,6 +67,7 @@ pub struct ModelProviderService {
     token_refresh_lock: Arc<tokio::sync::Mutex<()>>,
     server_auth_events: broadcast::Sender<()>,
     device_unbound: Arc<AtomicBool>,
+    embedding_route_counter: Arc<AtomicU64>,
     device_id: String,
     cipher: Arc<dyn VariableCipher>,
     adapters: Arc<HashMap<ModelProviderCode, Arc<dyn ModelProviderAdapter>>>,
@@ -258,6 +260,7 @@ mod tests {
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
             server_auth_events: broadcast::channel(16).0,
             device_unbound: Arc::new(AtomicBool::new(false)),
+            embedding_route_counter: Arc::new(AtomicU64::new(0)),
             device_id: "test-device-id".into(),
             cipher,
             adapters: Arc::new(HashMap::from([(

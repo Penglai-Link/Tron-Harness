@@ -485,7 +485,9 @@ export const pages = {
     imageDescriptionModelCodeHelp: "仅索引图片已有图注和 OCR 文字；或选视觉模型先生成描述，再用当前文本 Embedding 模型建立索引。没有文字依据的图片不会直接生成文本向量。",
     imageSourceTextOnly: "仅使用已有图注和 OCR 文字",
     embeddingModelCodeHelp:
-      "入库时将正文转换为向量，检索时将问题转换为同一模型的向量。未指定时使用平台默认 Embedding 模型。",
+      "启用向量检索后须选择具体 Embedding 模型。建库与检索使用同一模型编码；同一编码有多个实例时，Tron 在这些实例间自动路由。",
+    instanceCount: "{{count}} 个实例",
+    embeddingModelRequired: "启用向量检索时，请选择具体的 Embedding 模型。",
     graphModelCode: "图谱抽取模型",
     graphModelCodeHelp:
       "启用图谱后，入库时用这个模型从正文找出实体和关系，并保留对应原文。可选择与 Agent 对话相同的 Auto 自动路由，也可指定模型。技能包含哪些文件由系统根据目录直接记录，无需调用模型；禁用图谱时也不调用。",
@@ -494,7 +496,7 @@ export const pages = {
     rerankModelCodeHelp:
       "对融合后的候选证据重新评分，优先返回更贴近问题的内容。选择关闭重排时直接使用融合排序。",
     rerankOff: "关闭重排",
-    defaultModel: "使用平台默认模型",
+    defaultModel: "选择具体模型",
     chooseModel: "选择模型",
     close: "关闭",
     save: "保存",

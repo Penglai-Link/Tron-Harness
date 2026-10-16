@@ -62,6 +62,15 @@ impl RagSettings {
         if !self.fulltext && !self.vector && !self.graph {
             return Err(RagError::SearchRequestInvalid);
         }
+        if self.vector
+            && self.embedding_model_code.as_deref().is_none_or(|code| {
+                code.trim().is_empty()
+                    || code == "PERSON_AI:ROUTE:EmbeddingAuto"
+                    || code == "PERSON_AI:EMBEDDING:"
+            })
+        {
+            return Err(RagError::SearchRequestInvalid);
+        }
         for value in [
             &self.embedding_model_code,
             &self.rerank_model_code,
@@ -76,6 +85,24 @@ impl RagSettings {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RagSettings;
+
+    #[test]
+    fn vector_index_requires_a_concrete_embedding_model() {
+        let mut settings = RagSettings::default();
+        assert!(settings.validate().is_err());
+        settings.embedding_model_code = Some("PERSON_AI:ROUTE:EmbeddingAuto".into());
+        assert!(settings.validate().is_err());
+        settings.embedding_model_code = Some("PERSON_AI:EMBEDDING:bge-m3".into());
+        assert!(settings.validate().is_ok());
+        settings.embedding_model_code = None;
+        settings.vector = false;
+        assert!(settings.validate().is_ok());
     }
 }
 

@@ -54,6 +54,7 @@ impl ModelProviderService {
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
             server_auth_events: broadcast::channel(16).0,
             device_unbound: Arc::new(AtomicBool::new(device_unbound)),
+            embedding_route_counter: Arc::new(AtomicU64::new(0)),
             device_id,
             cipher,
             adapters: Arc::new(adapters),

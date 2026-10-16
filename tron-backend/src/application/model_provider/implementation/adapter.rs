@@ -204,12 +204,6 @@ impl ModelProviderAdapter for PersonAiAdapter {
                 else {
                     continue;
                 };
-                // Embeddings are a Person-AI managed capability, not a
-                // selectable remote model. Keep them out of the provider
-                // catalogue even if a future upstream list includes type 5.
-                if catalog_model_type == ProviderCatalogModelType::Embedding {
-                    continue;
-                }
                 distinct.entry(model.model_id.clone()).or_insert_with(|| {
                     ExternalMultimediaCatalogModel {
                         model_id: model.model_id,

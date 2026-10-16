@@ -119,10 +119,8 @@ pub(super) fn catalog_model_count(
     Ok(usize::try_from(count).unwrap_or(usize::MAX))
 }
 
-/// Older builds represented Person-AI's managed embedding route as a remote
-/// multimedia catalogue entry (`media_type = 5`). The route remains a default
-/// selection, but it is not a physical model and must not appear in the
-/// synchronised catalogue.
+/// Older builds stored a synthetic embedding route as `media_type = 5`.
+/// Person-AI now uses type 6 for physical embedding models; type 5 is TTS.
 pub(super) fn remove_legacy_person_ai_embedding_catalog_models(
     connection: &Connection,
 ) -> Result<(), ModelProviderError> {
@@ -319,6 +317,30 @@ pub(super) fn read_multimedia_catalog_models(
         .map_err(|_| ModelProviderError::Storage)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| ModelProviderError::Storage)
+}
+
+pub(super) fn select_embedding_instance(
+    connection: &Connection,
+    model_code: &str,
+    ordinal: u64,
+) -> Result<Option<String>, ModelProviderError> {
+    let count: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM provider_multimedia_catalog_models
+         WHERE provider_code = 'PersonAi' AND media_type = 6
+           AND status = 'Available' AND model_code = ?1",
+        [model_code], |row| row.get(0),
+    ).map_err(|_| ModelProviderError::Storage)?;
+    if count == 0 {
+        return Ok(None);
+    }
+    connection.query_row(
+        "SELECT model_id FROM provider_multimedia_catalog_models
+         WHERE provider_code = 'PersonAi' AND media_type = 6
+           AND status = 'Available' AND model_code = ?1
+         ORDER BY model_id LIMIT 1 OFFSET ?2",
+        params![model_code, (ordinal % count as u64) as i64],
+        |row| row.get::<_, String>(0),
+    ).map(Some).map_err(|_| ModelProviderError::Storage)
 }
 
 pub(super) fn read_catalog_model(

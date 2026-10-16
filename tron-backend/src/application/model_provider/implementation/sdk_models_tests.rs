@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 
 use crate::{adapters::outbound::crypto::Sm4GcmVariableCipher, config::VariableCryptoConfig};
 use axum::{Router, body::to_bytes, extract::State, http::StatusCode, response::IntoResponse};
+use sdk::ModelTransport;
 
 // Synthetic public key generated solely for this fixture; no private key is stored.
 const PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlKl+adEvKdKFqV+yOzZX\ncLN501KY3n07350ilbPO9h5y+vQII/TIg7ds++O50O/1Md5tAM2CxxtRzKLZR0tG\naqlZfIx8GtBFFi1UsB/aX2WnxSgwctFgwFAK7dMcc0J8/UUQ2jORuTOCestuXODV\nYHlP3HAtmZQ00a3LQHJFwfLNvWn4zgAbD3s6tagpcjtl6qxzRB3d42d1Zp80enVr\n1sAQL1yGNlF2y9f19HG1U+Bn+KfX/0cWymn8yDSixjPLWN3N/7FBpAD6NnNykYs2\n82pF0ITF5WxLoTfUxAMa1PRzLhvaC5czX6blziL3dziJh1ObQvt4Onp18ASWXypR\nVQIDAQAB\n-----END PUBLIC KEY-----";
@@ -23,6 +24,73 @@ struct MockState {
 }
 
 type SharedMock = Arc<Mutex<MockState>>;
+
+#[test]
+fn embedding_auto_route_stays_within_one_model_code() {
+    let cipher = Arc::new(
+        Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+            key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+        }).unwrap(),
+    );
+    let service = ModelProviderService::connect(":memory:", cipher).unwrap();
+    let selected = service.connection.call(
+        |connection| {
+            for (id, code, status) in [
+                ("a", "bge-m3", "Available"),
+                ("b", "bge-m3", "Available"),
+                ("c", "other-model", "Available"),
+                ("d", "bge-m3", "Unavailable"),
+            ] {
+                connection.execute(
+                    "INSERT INTO provider_multimedia_catalog_models
+                     (provider_code,model_id,model_code,model_name,media_type,status,first_seen_at,last_seen_at,updated_at)
+                     VALUES('PersonAi',?1,?2,?2,6,?3,1,1,1)",
+                    params![id, code, status],
+                ).unwrap();
+            }
+            Ok::<_, ModelProviderError>((0..4)
+                .map(|ordinal| select_embedding_instance(connection, "bge-m3", ordinal).unwrap().unwrap())
+                .collect::<Vec<_>>())
+        },
+        || ModelProviderError::Storage,
+    ).unwrap();
+    assert_eq!(selected, ["a", "b", "a", "b"]);
+}
+
+#[tokio::test]
+async fn embedding_transport_dispatches_instance_and_reports_logical_model() {
+    struct Capture(Arc<Mutex<Value>>);
+    #[async_trait]
+    impl sdk::ModelTransport for Capture {
+        async fn json(&self, _: &str, body: &Value) -> Result<Value, fw::ModelError> {
+            *self.0.lock().unwrap() = body.clone();
+            Ok(json!({"model":"physical-instance","data":[]}))
+        }
+        async fn events(&self, _: &str, _: &Value, _: sdk::EventSink<'_>) -> Result<(), fw::ModelError> {
+            unreachable!()
+        }
+    }
+    let cipher = Arc::new(
+        Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+            key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+        }).unwrap(),
+    );
+    let observed = Arc::new(Mutex::new(Value::Null));
+    let transport = SnapshotTransport {
+        inner: Arc::new(Capture(observed.clone())),
+        providers: ModelProviderService::connect(":memory:", cipher).unwrap(),
+        config: person_ai_agent_config(
+            "PERSON_AI:EMBEDDING:bge-m3", "bge-m3", None, None, AgentModelProtocol::Embeddings,
+        ),
+        run: None,
+        attempt: "fixture".into(),
+        embedding_instance_id: Some("physical-instance".into()),
+        embedding_logical_code: Some("bge-m3".into()),
+    };
+    let response = transport.json("embeddings", &json!({"model":"bge-m3","input":["text"]})).await.unwrap();
+    assert_eq!(observed.lock().unwrap()["model"], "physical-instance");
+    assert_eq!(response["model"], "bge-m3");
+}
 
 async fn respond(
     State(state): State<SharedMock>,
@@ -395,17 +463,23 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
             json!([
                 {"model_id":"image-1","model_code":"agnes-image","media_type":0},
                 {"model_id":"speech-1","model_code":"qwen-asr","media_type":2},
-                {"model_id":"aigc-1","model_code":"aigc-detector","media_type":3}
+                {"model_id":"aigc-1","model_code":"aigc-detector","media_type":3},
+                {"model_id":"embedding-1","model_code":"bge-m3","media_type":6}
             ]),
         ),
     ]);
     state.lock().unwrap().steps = steps;
     let run = service.sync_now(ModelProviderCode::PersonAi).await.unwrap();
-    assert_eq!(run.model_count, Some(11));
+    assert_eq!(run.model_count, Some(12));
     let catalog = service
         .list_catalog_models(ModelProviderCode::PersonAi)
         .unwrap();
-    assert_eq!(catalog.len(), 11);
+    assert_eq!(catalog.len(), 12);
+    assert!(catalog.iter().any(|model| {
+        model.model_code == "bge-m3"
+            && model.catalog_model_type == ProviderCatalogModelType::Embedding
+            && model.status == ProviderCatalogModelStatus::Available
+    }));
     assert_eq!(
         catalog
             .iter()
@@ -566,7 +640,11 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
     let last_good = service
         .list_catalog_models(ModelProviderCode::PersonAi)
         .unwrap();
-    assert_eq!(last_good.len(), 11);
+    assert_eq!(last_good.len(), 12);
+    assert!(last_good.iter().any(|model| {
+        model.model_code == "bge-m3"
+            && model.status == ProviderCatalogModelStatus::Unavailable
+    }));
     assert_eq!(
         last_good
             .iter()
@@ -961,6 +1039,8 @@ async fn query_amplification_stream_deltas_only_write_changed_lineage() {
         ),
         run: Some("stream-run".into()),
         attempt: "fixture".into(),
+        embedding_instance_id: None,
+        embedding_logical_code: None,
     };
     let delivered = std::sync::atomic::AtomicUsize::new(0);
     assert!(
