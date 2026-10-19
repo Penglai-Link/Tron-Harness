@@ -2,8 +2,8 @@
 use super::super::{
     KnowledgeBaseError,
     local_documents::{
-        DocumentLocation, ImageAnalysisSummary, ImageAnnotation, LocatedSection, MAX_TEXT_BYTES,
-        ParsedDocument,
+        DocumentLocation, ImageAnalysisSummary, ImageAnnotation, LocatedSection,
+        MAX_PARSED_TEXT_BYTES, ParsedDocument,
     },
 };
 use serde_json::Value;
@@ -13,7 +13,16 @@ fn invalid(e: impl std::fmt::Display) -> KnowledgeBaseError {
 }
 fn block_text(value: &Value) -> String {
     match value {
-        Value::String(s) => s.clone(),
+        Value::String(s) => {
+            static INLINE_IMAGE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+            INLINE_IMAGE
+                .get_or_init(|| {
+                    regex::Regex::new(r"(?i)data:image/[a-z0-9.+-]+;base64,[a-z0-9+/=\r\n]+")
+                        .expect("static inline-image expression")
+                })
+                .replace_all(s, "[embedded image]")
+                .into_owned()
+        }
         Value::Array(a) => a
             .iter()
             .map(block_text)
@@ -67,13 +76,18 @@ pub(crate) fn normalize_middle(
             .as_u64()
             .and_then(|p| u32::try_from(p).ok())
             .ok_or_else(|| invalid("MinerU页码无效"))?;
-        for block in page["blocks"]
+        for (block_position, block) in page["blocks"]
             .as_array()
             .ok_or_else(|| invalid("MinerU缺少块信息"))?
+            .iter()
+            .enumerate()
         {
             let kind = block["type"]
                 .as_str()
                 .ok_or_else(|| invalid("MinerU块类型无效"))?;
+            // Charts are visual blocks too. Their native body describes the figure;
+            // keep its provenance separate from captions and original document text.
+            let kind = if kind == "chart" { "image" } else { kind };
             let index = block["index"]
                 .as_u64()
                 .ok_or_else(|| invalid("MinerU缺少块标识"))?;
@@ -84,8 +98,9 @@ pub(crate) fn normalize_middle(
             if images.iter().any(|p| !assets.contains(p)) {
                 return Err(invalid("MinerU结构引用的图片附件缺失"));
             }
-            let annotations = if kind == "image" {
-                image_annotations(middle, block, page_index)?
+            let block_id = format!("page/{page_index}/blocks/{block_position}:{index}");
+            let annotations = if matches!(kind, "image" | "table") {
+                image_annotations(middle, block, page_index, &block_id)?
             } else {
                 vec![]
             };
@@ -103,7 +118,7 @@ pub(crate) fn normalize_middle(
             if !images.is_empty() {
                 text.push_str(&format!("\n[图片资源: {}]", images.join(", ")));
             }
-            if kind == "image" {
+            if !images.is_empty() {
                 summary.image_count += 1;
                 let source = annotations
                     .iter()
@@ -127,8 +142,8 @@ pub(crate) fn normalize_middle(
                 continue;
             }
             text_bytes = text_bytes.saturating_add(text.len());
-            if text_bytes > MAX_TEXT_BYTES {
-                return Err(invalid("解析文本超过2 MiB上限"));
+            if text_bytes > MAX_PARSED_TEXT_BYTES {
+                return Err(invalid("解析文本超过16 MiB上限"));
             }
             let level = if matches!(kind, "paragraph_title" | "doc_title") {
                 Some(block["level"].as_u64().unwrap_or(1).clamp(1, 6) as u8)
@@ -140,6 +155,7 @@ pub(crate) fn normalize_middle(
                 text: text.clone(),
                 heading_level: level,
                 location: DocumentLocation {
+                    source_block_id: Some(block_id.clone()),
                     bbox: block_bbox(block)?,
                     page: (middle["metadata"]["file_suffix"] == "pdf")
                         .then(|| page_index.checked_add(1))
@@ -147,7 +163,7 @@ pub(crate) fn normalize_middle(
                     logical_page: (middle["metadata"]["file_suffix"] != "pdf")
                         .then_some(page_index),
                     heading: level.map(|_| text),
-                    blocks: vec![format!("{page_index}:{index}")],
+                    blocks: vec![block_id],
                     image_resource_codes: images,
                     image_annotations: annotations,
                     block_kind: Some(kind.into()),
@@ -212,6 +228,7 @@ fn image_annotations(
     middle: &Value,
     block: &Value,
     page_index: u32,
+    parent_block_id: &str,
 ) -> Result<Vec<ImageAnnotation>, KnowledgeBaseError> {
     let children = block["content"]
         .as_array()
@@ -224,13 +241,13 @@ fn image_annotations(
         && middle["metadata"]["producer"]["version"] == "4.0.10"
         && middle["extensions"]["mineru"]["tier"] == "advanced";
     let mut result = Vec::new();
-    for child in children {
+    for (position, child) in children.iter().enumerate() {
         let source_type = child["type"].as_str().unwrap_or("");
         let kind = match source_type {
-            "image_caption" => "source_caption",
-            "image_footnote" => "source_footnote",
-            "image_body" if generated_contract => "generated_description",
-            "image_body" => "parser_body_text",
+            "image_caption" | "table_caption" | "chart_caption" => "source_caption",
+            "image_footnote" | "table_footnote" | "chart_footnote" => "source_footnote",
+            "image_body" | "chart_body" if generated_contract => "generated_description",
+            "image_body" | "chart_body" => "parser_body_text",
             _ => continue,
         };
         let text = block_text(&child["content"]).trim().to_owned();
@@ -241,14 +258,25 @@ fn image_annotations(
             .as_u64()
             .or_else(|| block["index"].as_u64())
             .ok_or_else(|| invalid("MinerU图片文本缺少块标识"))?;
+        let mut paths = Vec::new();
+        image_paths(child, &mut paths);
+        paths.sort();
+        paths.dedup();
+        if paths.is_empty() {
+            image_paths(block, &mut paths);
+            paths.sort();
+            paths.dedup();
+        }
+        let resource_code = (paths.len() == 1).then(|| paths[0].clone());
         let annotation = ImageAnnotation {
             kind: kind.into(),
             source: format!("docvortex.middle.v2.{source_type}.content"),
             text,
             page: (middle["metadata"]["file_suffix"] == "pdf").then_some(page),
-            block: format!("{page_index}:{index}"),
+            block: format!("{parent_block_id}/content/{position}:{index}"),
             model_code: None,
             artifact_resource_code: None,
+            resource_code,
         };
         if !result.contains(&annotation) {
             result.push(annotation);
@@ -302,7 +330,7 @@ mod tests {
         let sources = &chunks[0].location.image_annotations;
         assert_eq!(sources.len(), 2);
         assert_eq!(sources[0].page, Some(3));
-        assert_eq!(sources[0].block, "2:5");
+        assert_eq!(sources[0].block, "page/2/blocks/0:4/content/1:5");
         assert_eq!(
             sources[0].source,
             "docvortex.middle.v2.image_caption.content"
@@ -313,6 +341,65 @@ mod tests {
             vec!["images/figure.jpg"]
         );
     }
+    #[test]
+    fn chart_is_a_visual_block_and_keeps_model_description_distinct_from_original_caption() {
+        let mut middle = document(
+            "advanced",
+            json!([
+                {"type":"chart_body","index":4,"image_path":"images/figure.jpg","content":"Generated waveform interpretation"},
+                {"type":"chart_caption","index":5,"content":[{"type":"text","content":"Original waveform caption"}]}
+            ]),
+        );
+        middle["pages"][0]["blocks"][0]["type"] = json!("chart");
+        let parsed = normalize_middle(&middle, &paths()).unwrap();
+        let section = &parsed.sections[0];
+        assert_eq!(section.location.block_kind.as_deref(), Some("image"));
+        assert_eq!(
+            section.location.image_resource_codes,
+            vec!["images/figure.jpg"]
+        );
+        assert_eq!(
+            section.location.image_annotations[0].kind,
+            "generated_description"
+        );
+        assert_eq!(
+            section.location.image_annotations[0].source,
+            "docvortex.middle.v2.chart_body.content"
+        );
+        assert_eq!(section.location.image_annotations[1].kind, "source_caption");
+        assert_eq!(
+            parsed
+                .image_analysis
+                .as_ref()
+                .unwrap()
+                .with_generated_descriptions,
+            1
+        );
+        let chunks = split_document(&parsed, &ChunkConfig::default()).unwrap();
+        assert!(chunks[0].text.contains("Original waveform caption"));
+    }
+
+    #[test]
+    fn embedded_table_image_binary_never_becomes_text_or_embedding_input() {
+        let payload = "QUJDREVGRw==".repeat(1000);
+        let mut middle = document("standard", json!([]));
+        middle["pages"][0]["blocks"][0] = json!({"type":"table","index":4,"content":[
+            {"type":"table_caption","index":3,"content":"Original table caption"},
+            {"type":"table_body","index":4,"content":format!("<table><tr><td>Original value</td><td><img src=\"data:image/jpeg;base64,{payload}\"></td></tr></table>")}
+        ]});
+        let parsed = normalize_middle(&middle, &BTreeSet::new()).unwrap();
+        assert!(parsed.sections[0].text.contains("Original value"));
+        assert!(!parsed.sections[0].text.contains("data:image"));
+        assert!(!parsed.sections[0].text.contains("QUJDREVGRw"));
+        assert!(parsed.sections[0].text.contains("[embedded image]"));
+        let chunks = split_document(&parsed, &ChunkConfig::default()).unwrap();
+        assert!(
+            chunks
+                .iter()
+                .all(|chunk| !chunk.index_text.contains("QUJDREVGRw"))
+        );
+    }
+
     #[test]
     fn only_approved_image_analysis_contract_labels_generated_body_text() {
         let standard =

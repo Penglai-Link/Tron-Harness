@@ -28,6 +28,120 @@ use filters::append_filter_clauses;
 use terms::{fts_query, search_terms};
 
 impl RagSearchRepository for SqliteRagRepositorySql<'_> {
+    fn invalidate_vector_cache(&self, query: RagRouteSearchQuery) -> Result<(), RagError> {
+        if query.scopes.is_empty() {
+            return Ok(());
+        }
+        let corpus = self
+            .get_corpus(&query.corpus_id)?
+            .ok_or(RagError::CorpusNotFound)?;
+        let plan = compile_sql_corpus_plan(self, &corpus)?;
+        let strategy = sqlite_retriever_strategy("STRUCTURED_FILTER_SQLITE_V1")?;
+        let from = from_sql(&plan, &query, strategy)?;
+        let (mut conditions, mut parameters) = where_sql(&plan, &query, strategy)?;
+        let metadata = source_metadata_expr(&plan)?;
+        if let Some(generations) = query
+            .policy
+            .get("graphGenerationIds")
+            .and_then(Value::as_array)
+        {
+            conditions.push_str(&format!(" AND json_extract({metadata},'$.graphGenerationId') IN (SELECT value FROM json_each(?))"));
+            parameters.push(SqlValue::Text(
+                serde_json::to_string(generations).map_err(|_| RagError::StorageFailure)?,
+            ));
+        } else {
+            let model = query
+                .query_embedding_model_code
+                .as_ref()
+                .ok_or(RagError::SearchRequestInvalid)?;
+            conditions.push_str(" AND tu.embedding_model_code=?");
+            parameters.push(SqlValue::Text(model.clone()));
+            for (key, path) in [
+                ("fingerprint", "embeddingFingerprint"),
+                ("providerModel", "embeddingProviderModel"),
+            ] {
+                if let Some(value) = query.policy.get(key) {
+                    conditions.push_str(&format!(" AND json_extract({metadata},'$.{path}') IS ?"));
+                    parameters.push(
+                        value
+                            .as_str()
+                            .map(|v| SqlValue::Text(v.into()))
+                            .unwrap_or(SqlValue::Null),
+                    );
+                }
+            }
+        }
+        let tx=crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(self.connection,rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
+        let sources = {
+            let mut statement=tx.prepare(&format!("SELECT DISTINCT tu.source_code,tu.source_version,tu.scope_type,tu.scope_code,{metadata} {from} {conditions}")).map_err(storage_error)?;
+            statement
+                .query_map(params_from_iter(parameters), |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, String>(4)?,
+                    ))
+                })
+                .map_err(storage_error)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(storage_error)?
+        };
+        let table = quote_identifier(
+            plan.source_table
+                .as_deref()
+                .unwrap_or(&plan.text_unit_table),
+        )?;
+        let column = quote_identifier(
+            plan.source_metadata_column
+                .as_deref()
+                .ok_or(RagError::StorageBindingInvalid)?,
+        )?;
+        for (source, version, scope_type, scope_code, raw) in sources {
+            let saved: Value = serde_json::from_str(&raw).map_err(|_| RagError::StorageFailure)?;
+            // The trusted range selects the model partition; all writes remain
+            // bound to its exact source/scope rows, never to a global model name.
+            tx.execute(&format!("UPDATE {table} SET {column}=json_set({column},'$.embeddingCacheInvalidated',1) WHERE source_code=?1 AND source_version=?2 AND scope_type=?3 AND scope_code=?4"),
+                params![source,version,scope_type,scope_code]).map_err(storage_error)?;
+            if let Some(generation) = saved["graphGenerationId"].as_str() {
+                tx.execute("UPDATE rag_graph_generations SET vector_cache_invalidated=1 WHERE generation_id=?1 AND corpus_id=?2 AND source_code=?3 AND source_version=?4 AND scope_type=?5 AND scope_code=?6",params![generation,query.corpus_id,source,version,scope_type,scope_code]).map_err(storage_error)?;
+            }
+        }
+        tx.commit().map_err(storage_error)
+    }
+    fn published_graph_generations(
+        &self,
+        query: RagRouteSearchQuery,
+    ) -> Result<Vec<String>, RagError> {
+        if query.scopes.is_empty() {
+            return Ok(vec![]);
+        }
+        let corpus = self
+            .get_corpus(&query.corpus_id)?
+            .ok_or(RagError::CorpusNotFound)?;
+        let plan = compile_sql_corpus_plan(self, &corpus)?;
+        let strategy = sqlite_retriever_strategy("STRUCTURED_FILTER_SQLITE_V1")?;
+        let from = from_sql(&plan, &query, strategy)?;
+        let (conditions, mut parameters) = where_sql(&plan, &query, strategy)?;
+        let metadata = source_metadata_expr(&plan)?;
+        // Bind the generation to the exact authorized source row, not just to a
+        // user-controlled JSON pointer. This also works when body vector/FTS is off.
+        let sql = format!(
+            "SELECT DISTINCT json_extract({metadata},'$.graphGenerationId') {from} {conditions} \
+            AND EXISTS (SELECT 1 FROM rag_graph_generations g JOIN rag_graph_active_sources a ON a.generation_id=g.generation_id \
+            WHERE g.generation_id=json_extract({metadata},'$.graphGenerationId') AND g.state='Active' \
+            AND g.corpus_id=? AND g.source_code=tu.source_code AND g.source_version=tu.source_version \
+            AND g.scope_type=tu.scope_type AND g.scope_code=tu.scope_code) ORDER BY 1"
+        );
+        parameters.push(SqlValue::Text(query.corpus_id));
+        let mut statement = self.connection.prepare(&sql).map_err(storage_error)?;
+        statement
+            .query_map(params_from_iter(parameters), |r| r.get::<_, String>(0))
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
+    }
     fn embedding_partitions(
         &self,
         query: RagRouteSearchQuery,
@@ -38,7 +152,7 @@ impl RagSearchRepository for SqliteRagRepositorySql<'_> {
         let plan = compile_sql_corpus_plan(self, &corpus)?;
         let retriever = sqlite_retriever_strategy("STRUCTURED_FILTER_SQLITE_V1")?;
         let from = from_sql(&plan, &query, retriever)?;
-        let (conditions, params) = where_sql(self.connection, &plan, &query, retriever)?;
+        let (conditions, params) = where_sql(&plan, &query, retriever)?;
         let metadata = source_metadata_expr(&plan)?;
         let sql = format!(
             "SELECT DISTINCT tu.source_code,tu.embedding_model_code,tu.embedding_dimension,json_extract({metadata},'$.embeddingProviderModel'),json_extract({metadata},'$.embeddingFingerprint') {from} {conditions} AND tu.embedding_status='INDEXED' AND tu.embedding_model_code IS NOT NULL AND tu.embedding_dimension IS NOT NULL"
@@ -111,7 +225,7 @@ fn search_route(
     validate_retriever_available(repository, plan, query, retriever)?;
     let select = select_projection(plan, query, retriever)?;
     let from_sql = from_sql(plan, query, retriever)?;
-    let (where_sql, where_params) = where_sql(repository.connection, plan, query, retriever)?;
+    let (where_sql, where_params) = where_sql(plan, query, retriever)?;
     let limit_sql = " LIMIT ?";
     let order_sql = order_sql(plan, query, retriever)?;
     let sql = format!(
@@ -376,7 +490,6 @@ fn validate_retriever_available(
 }
 
 fn where_sql(
-    connection: &rusqlite::Connection,
     plan: &SqliteRagCorpusPlan,
     query: &RagRouteSearchQuery,
     retriever: SqliteRetrieverStrategy,
@@ -482,30 +595,6 @@ fn where_sql(
         }
     }
 
-    if query.retriever == "GRAPH_EVIDENCE_V1" {
-        let segmented: String = connection
-            .query_row("SELECT jieba_query(?1,0)", [&query.query], |row| row.get(0))
-            .map_err(storage_error)?;
-        let terms = search_terms(&segmented.replace(" AND ", " ").replace(" OR ", " "));
-        if terms.is_empty() {
-            return Ok(("WHERE 0".into(), vec![]));
-        }
-        let matching = terms
-            .iter()
-            .map(|_| "LOWER(g.text) LIKE ? ESCAPE '\\'")
-            .collect::<Vec<_>>()
-            .join(" OR ");
-        clauses.push(format!("EXISTS (SELECT 1 FROM rag_graph_evidence g WHERE g.corpus_id=? AND g.source_code=tu.source_code AND g.source_version=tu.source_version AND g.scope_type=tu.scope_type AND g.scope_code=tu.scope_code AND g.target_code=tu.text_unit_code AND ({matching}))"));
-        params.push(SqlValue::Text(query.corpus_id.clone()));
-        params.extend(terms.into_iter().map(|term| {
-            SqlValue::Text(format!(
-                "%{}%",
-                term.replace('\\', "\\\\")
-                    .replace('%', "\\%")
-                    .replace('_', "\\_")
-            ))
-        }));
-    }
     if let Some(targets) = query.policy.get("targetCodes").and_then(Value::as_array) {
         if targets.is_empty() {
             clauses.push("0".into());
@@ -558,7 +647,7 @@ fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrateg
         "VECTOR_SQLITE_VEC0_COSINE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::VectorVec0,
         }),
-        "STRUCTURED_FILTER_SQLITE_V1" | "GRAPH_EVIDENCE_V1" => Ok(SqliteRetrieverStrategy {
+        "STRUCTURED_FILTER_SQLITE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::StructuredFilter,
         }),
         "TREE_FULLTEXT_V1" => Ok(SqliteRetrieverStrategy {
@@ -572,6 +661,23 @@ fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrateg
 }
 
 impl RagSearchRepository for SqliteRagRepository {
+    fn invalidate_vector_cache(&self, query: RagRouteSearchQuery) -> Result<(), RagError> {
+        self.connection.call(
+            move |connection| SqliteRagRepositorySql { connection }.invalidate_vector_cache(query),
+            || RagError::StorageFailure,
+        )
+    }
+    fn published_graph_generations(
+        &self,
+        query: RagRouteSearchQuery,
+    ) -> Result<Vec<String>, RagError> {
+        self.connection.call(
+            move |connection| {
+                SqliteRagRepositorySql { connection }.published_graph_generations(query)
+            },
+            || RagError::StorageFailure,
+        )
+    }
     fn embedding_partitions(
         &self,
         query: RagRouteSearchQuery,

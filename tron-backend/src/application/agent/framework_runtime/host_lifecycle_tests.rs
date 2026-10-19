@@ -866,6 +866,7 @@ async fn read_only_assignment_admits_fresh_native_bindings_and_preserves_request
                         AgentMessagePart::Text { text }
                             if text.starts_with("Current authorized tool domains") =>
                         {
+                            assert_eq!(message.role, "system");
                             Some(text)
                         }
                         _ => None,

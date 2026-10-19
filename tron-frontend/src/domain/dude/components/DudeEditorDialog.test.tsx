@@ -9,13 +9,13 @@ const { create, update, soul, saveSoul, toastError } = vi.hoisted(() => ({
 }));
 vi.mock("@/components/ui/toast", () => ({ useToast: () => ({ error: toastError }) }));
 vi.mock("./SoulFields", () => ({ SoulFields: ({ name, onName }: { name: string; onName: (name: string) => void }) => <input aria-label="dude.name" value={name} onChange={e => onName(e.target.value)} /> }));
-vi.mock("../api/dudeApi", () => ({ createDude: create, updateDude: update, getDudeSoul: soul, saveDudeSoul: saveSoul }));
+vi.mock("../api/dudeApi", () => ({ createDude: create, updateDude: update, getDudeSoul: soul, saveDudeSoul: saveSoul, getDudeResources: vi.fn() }));
 vi.mock("@/domain/agent/components/AgentAvatarPicker", () => ({ AgentAvatarPicker: ({ onChange }: { onChange: (value: string) => void }) => <button type="button" onClick={() => onChange("neo")}>Neo</button> }));
 vi.mock("@/domain/agent/components/AgentLoopField", () => ({ AgentLoopField: ({ onChange, defaultKind }: { onChange: (value: string) => void; defaultKind?: string }) => <><button type="button" data-default-kind={defaultKind} onClick={() => onChange("main")}>Choose loop</button></> }));
 vi.mock("@/domain/agent/components/AgentCandidateModelsField", () => ({ AgentCandidateModelsField: () => null }));
 vi.mock("@/domain/agent/components/AgentRolePromptField", () => ({ AgentRolePromptField: ({ value, onChange, required }: { value: string; onChange: (value: string) => void; required?: boolean }) => <textarea aria-label="Role prompt" required={required} value={value} onChange={event => onChange(event.target.value)} /> }));
 vi.mock("@/domain/agent/components/InternalAgentGroupField", () => ({ InternalAgentGroupField: () => <span>Agent group</span> }));
-vi.mock("./DudeResourceFields", () => ({ DudeResourceFields: () => null }));
+vi.mock("@/domain/agent/components/AgentResourcesEditor", () => ({ AgentResourcesEditor: () => null }));
 vi.mock("react-i18next", async importOriginal => ({ ...await importOriginal<typeof import("react-i18next")>(), useTranslation: () => ({ t: (key: string) => key }) }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 it("shows the points warning and retries refresh without creating another Dude", async () => {
@@ -84,4 +84,15 @@ it("reports save failures as a toast and keeps the avatar draft open for retry",
   expect(screen.queryByText("Save failed")).toBeNull();
   expect(close).not.toHaveBeenCalled();
   expect(saveSoul).not.toHaveBeenCalled();
+});
+
+it("exposes the same tabs and activation control for creation and editing", async () => {
+  const props = { onClose: vi.fn(), onSaved: vi.fn() };
+  const { rerender } = render(<DudeEditorDialog {...props} />);
+  const creationTabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
+  expect(creationTabs).toEqual(["dude.profileSection", "dude.soulSection", "dude.backgroundSection", "dude.resourcesSection", "dude.advancedSection"]);
+  expect(screen.getByRole("switch", { name: "dude.pause" })).toBeTruthy();
+  rerender(<DudeEditorDialog {...props} dude={existing} />);
+  await waitFor(() => expect(soul).toHaveBeenCalled());
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(creationTabs);
 });

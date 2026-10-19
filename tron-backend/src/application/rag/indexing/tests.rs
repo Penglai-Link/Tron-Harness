@@ -1,5 +1,5 @@
 use super::*;
-use crate::application::rag::{RagEmbeddingCall, RagEmbeddingResult};
+use crate::application::rag::{RagEmbeddingBatchCall, RagEmbeddingCall, RagEmbeddingResult};
 use eliteforge_agent_framework::EmbeddingVector;
 use std::sync::{
     Arc, Mutex,
@@ -9,11 +9,31 @@ use std::sync::{
 #[derive(Clone, Default)]
 struct BatchRuntime {
     calls: Arc<Mutex<Vec<Vec<String>>>>,
+    route_resolutions: Arc<Mutex<usize>>,
+    requested_models: Arc<Mutex<Vec<Option<String>>>>,
     mode: &'static str,
     after_first: Option<Arc<dyn Fn() + Send + Sync>>,
     changed: Arc<AtomicBool>,
 }
 impl RagEmbeddingRuntime for BatchRuntime {
+    fn embedding_batch_input_limit(
+        &self,
+        _: &str,
+        _: Option<&str>,
+    ) -> Result<Option<usize>, String> {
+        Ok((self.mode == "provider-limit").then_some(4))
+    }
+    fn resolve_index_model(&self, _: &str, model: Option<&str>) -> Result<Option<String>, String> {
+        if model == Some("PERSON_AI:ROUTE:EmbeddingAuto") {
+            let mut count = self.route_resolutions.lock().unwrap();
+            *count += 1;
+            // A second route resolution would choose a different vector space.
+            Ok(Some(if *count == 1 { "model" } else { "changed" }.into()))
+        } else {
+            Ok(model.map(str::to_owned))
+        }
+    }
+
     fn embedding_fingerprint(
         &self,
         _: &str,
@@ -44,6 +64,10 @@ impl RagEmbeddingRuntime for BatchRuntime {
         Box<dyn std::future::Future<Output = Result<RagEmbeddingBatchResult, String>> + Send + 'a>,
     > {
         Box::pin(async move {
+            self.requested_models
+                .lock()
+                .unwrap()
+                .push(call.model_code.clone());
             let mut calls = self.calls.lock().unwrap();
             calls.push(call.inputs.clone());
             if calls.len() == 1 {
@@ -452,4 +476,166 @@ async fn embedding_batch_settings_hot_update_and_resume_preserve_completed_vecto
         vec![3, 1, 1, 1, 1]
     );
     assert_eq!(runtime.calls.lock().unwrap()[2], vec!["3"]);
+}
+
+#[tokio::test]
+async fn automatic_embedding_resolves_once_and_resume_keeps_published_space() {
+    let runtime = BatchRuntime {
+        mode: "fail_second",
+        ..Default::default()
+    };
+    let checkpoint = Checkpoint::default();
+    let rag =
+        RagService::new((), runtime.clone()).with_embedding_batch_limits(RagEmbeddingBatchLimits {
+            max_inputs: 2,
+            max_tokens: 100,
+        });
+    assert!(
+        rag.prepare_vectors(
+            "PLATFORM",
+            Some("PERSON_AI:ROUTE:EmbeddingAuto"),
+            &inputs(5),
+            2,
+            Default::default(),
+            Some(&checkpoint)
+        )
+        .await
+        .is_err()
+    );
+    let completed = checkpoint.saved.lock().unwrap().clone();
+    assert_eq!(completed.model_code.as_deref(), Some("model"));
+    let result = rag
+        .prepare_vectors(
+            "PLATFORM",
+            Some("PERSON_AI:ROUTE:EmbeddingAuto"),
+            &inputs(5),
+            2,
+            completed,
+            Some(&checkpoint),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.vectors.len(), 5);
+    assert_eq!(*runtime.route_resolutions.lock().unwrap(), 1);
+    assert!(
+        runtime
+            .requested_models
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|code| code.as_deref() == Some("model"))
+    );
+}
+
+#[tokio::test]
+async fn provider_batch_limit_is_applied_before_dispatch_without_discarding_checkpoints() {
+    let runtime = BatchRuntime {
+        mode: "provider-limit",
+        ..Default::default()
+    };
+    let rag = RagService::new((), runtime.clone());
+    let checkpoint = Checkpoint::default();
+    let result = rag
+        .prepare_vectors(
+            "PLATFORM",
+            Some("model"),
+            &inputs(10),
+            2,
+            Default::default(),
+            Some(&checkpoint),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        runtime
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .map(Vec::len)
+            .collect::<Vec<_>>(),
+        [4, 4, 2]
+    );
+    assert_eq!(result.vectors.len(), 10);
+    assert_eq!(*checkpoint.batches.lock().unwrap(), [4, 4, 2]);
+}
+
+#[test]
+fn structured_graph_preserves_cross_chunk_declarations_without_fabricating_quotes() {
+    use crate::application::rag::{RagTextUnitWrite, graph::build_graph_generation};
+    use crate::domain::rag::graph::{GraphPartition, RagGraphGeneration, RagGraphNodeKind};
+    use serde_json::json;
+    fn unit(code: &str, text: &str, ordinal: usize) -> RagTextUnitWrite {
+        RagTextUnitWrite {
+            text_unit_code: code.into(),
+            unit_type: "LEAF".into(),
+            text: text.into(),
+            search_text: text.into(),
+            heading_path: String::new(),
+            ordinal,
+            token_count: 10,
+            content_hash: code.into(),
+            status: "ACTIVE".into(),
+            fulltext_status: "INDEXED".into(),
+            embedding_model_code: None,
+            embedding_version: None,
+            embedding_text_hash: None,
+            embedding_dimension: None,
+            embedding: None,
+            embedding_status: "NOT_ENABLED".into(),
+            metadata: json!({"location":{"lineStart":ordinal+1}}),
+        }
+    }
+    let units = vec![
+        unit("first", "Alpha is the registry skill.", 0),
+        unit("second", "Files: SKILL.md", 1),
+        unit(
+            "third",
+            "Other original instructions without a named entity.",
+            2,
+        ),
+    ];
+    let structured = json!({"nodes":[{"ref":"skill","name":"Alpha","type":"Skill","evidence":"Alpha"},{"ref":"file","name":"SKILL.md","type":"SkillFile","evidence":"SKILL.md"}],"edges":[{"from":"skill","to":"file","relationship":"CONTAINS","evidence":"SKILL.md"}]});
+    let evidence = structured_evidence(&units, &structured).unwrap();
+    assert_eq!(evidence["second"]["references"]["skill"], "first");
+    assert!(
+        evidence["second"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|node| node["ref"] != "skill")
+    );
+    assert!(evidence["third"]["nodes"].as_array().unwrap().is_empty());
+    let generation = RagGraphGeneration {
+        partition: GraphPartition {
+            corpus_id: "skill".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "PLATFORM".into(),
+        },
+        id: "generation".into(),
+        source_code: "one-protected-source".into(),
+        source_version: "v1".into(),
+        task_id: "task".into(),
+        nodes: vec![],
+        edges: vec![],
+    };
+    let (facts, projections) =
+        build_graph_generation(generation.clone(), &units, &evidence).unwrap();
+    assert_eq!(projections.len(), 2);
+    let relation = facts.edges.iter().find(|edge| !edge.structural).unwrap();
+    assert_eq!(relation.support.chunk_code, "second");
+    assert_eq!(relation.support.quote, "SKILL.md");
+    let declaration = facts
+        .nodes
+        .iter()
+        .find(|node| node.kind == RagGraphNodeKind::EntityContribution && node.name == "Alpha")
+        .unwrap();
+    assert_eq!(declaration.properties["chunkCode"], "first");
+    assert_eq!(declaration.properties["description"], "Alpha");
+    let mut foreign = evidence.clone();
+    foreign["second"]["references"]["skill"] = json!("foreign-source-chunk");
+    assert!(build_graph_generation(generation.clone(), &units, &foreign).is_err());
+    let mut invented = evidence;
+    invented["first"]["nodes"][0]["name"] = json!("Invented");
+    assert!(build_graph_generation(generation, &units, &invented).is_err());
 }

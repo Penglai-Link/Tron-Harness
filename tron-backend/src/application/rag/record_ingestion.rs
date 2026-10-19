@@ -240,7 +240,7 @@ where
                     unit_type: "LEAF".into(),
                     text: text.into(),
                     search_text: text.into(),
-                    heading_path: String::new(),
+                    heading_path: serde_json::to_string(&chunk.heading_path).unwrap_or_default(),
                     ordinal: chunk.ordinal,
                     token_count: text.chars().count().div_ceil(4) as i64,
                     content_hash: hash(text),
@@ -262,7 +262,7 @@ where
                         "NOT_ENABLED"
                     }
                     .into(),
-                    metadata: json!({"location":chunk.location,"sourceCode":request.source.code}),
+                    metadata: json!({"location":chunk.location,"sourceCode":request.source.code,"sourceSpans":chunk.source_spans,"sourceLocations":chunk.source_locations,"sourceFactsVersion":"normalized-blocks-v3"}),
                 }
             })
             .collect();
@@ -298,6 +298,29 @@ where
             .as_ref()
             .map(|checkpoint| checkpoint.vectors.clone())
             .unwrap_or_default();
+        let graph_context = super::graph::GraphIndexContext {
+            partition: crate::domain::rag::graph::GraphPartition {
+                corpus_id: request.corpus_id.clone(),
+                scope_type: request.target_scope.scope_type.clone(),
+                scope_code: request.target_scope.scope_code.clone(),
+            },
+            logical_source_code: request.source.code.clone(),
+            source_code: request.source.code.clone(),
+            source_version: request.source.version.clone(),
+            task_id: task.id.clone(),
+            configuration_hash: hash(&format!(
+                "{}:{}",
+                hash(text),
+                serde_json::to_string(settings).map_err(|_| RagError::IngestRequestInvalid)?
+            )),
+        };
+        let graph_checkpoint = super::graph::GraphComputationCheckpoint::new(
+            self.graph.as_ref(),
+            checkpoint,
+            &graph_context,
+            settings,
+        )
+        .map_err(RagError::EmbeddingFailure)?;
         let prepared = self
             .prepare_index(
                 model_workspace,
@@ -305,7 +328,7 @@ where
                 units,
                 completed,
                 request.payload.get("relatedGraph").cloned(),
-                checkpoint,
+                &graph_checkpoint,
             )
             .await
             .map_err(|error| {
@@ -314,6 +337,22 @@ where
                 }
                 RagError::EmbeddingFailure(error)
             })?;
+        let graph_id = self
+            .stage_graph_generation(
+                model_workspace,
+                settings,
+                &graph_context,
+                &prepared,
+                &graph_checkpoint,
+            )
+            .await
+            .map_err(RagError::EmbeddingFailure)?;
+        graph_checkpoint
+            .stage("PUBLISHING")
+            .map_err(RagError::EmbeddingFailure)?;
+        metadata["graphGenerationId"] = json!(graph_id);
+        metadata["graphConfigurationHash"] = json!(graph_context.configuration_hash);
+        metadata["logicalSourceCode"] = json!(request.source.code);
         metadata["embeddingModelCode"] = json!(prepared.vectors.model_code);
         metadata["embeddingProviderModel"] = json!(prepared.vectors.provider_model);
         metadata["embeddingFingerprint"] = json!(prepared.vectors.fingerprint);
@@ -329,8 +368,6 @@ where
             body_hash: None,
             metadata,
             domain_fields,
-            related_graph: prepared.graph,
-            graph_write_policy: json!({}),
             text_units: prepared.units,
             tree_nodes: vec![],
             warnings: vec![],
@@ -380,8 +417,27 @@ impl<R: RagConfigRepository + Send + Sync> RagIndexCheckpoint for RecordCheckpoi
             .record_task(&task.user_code, &task.id)
             .map_err(|error| error.to_string())?
             .ok_or("入库任务不存在")?;
-        if current.state != "RUNNING" {
-            return Err("入库任务已取消或状态已改变".into());
+        if current.state != "RUNNING"
+            || !self
+                .repository
+                .record_task_is_latest(&current)
+                .map_err(|e| e.to_string())?
+        {
+            return Err("入库任务已取消、被新任务替代或状态已改变".into());
+        }
+        let corpus = self
+            .repository
+            .get_corpus(&task.corpus_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("语料库不存在")?;
+        let settings = super::RagSettings::from_capabilities(&corpus.capabilities)
+            .map_err(|e| e.to_string())?;
+        if current
+            .checkpoint
+            .as_ref()
+            .is_none_or(|saved| saved.settings != settings)
+        {
+            return Err("索引配置已改变，请重新提交任务".into());
         }
         Ok(())
     }

@@ -1,15 +1,15 @@
-import { TriangleAlert } from "lucide-react";
+import { Info } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { KnowledgeDocument } from "../model/KnowledgeLibraryModel";
 import { formatIngestionWaitReason } from "../model/ingestionWaitReason";
 import { formatKnowledgeDocumentError } from "../model/knowledgeDocumentError";
-import { imageAnalysisMessages } from "./ImageAnalysisStatus";
+import { currentImageWarnings, imageAnalysisMessages } from "./ImageAnalysisStatus";
 
 export function KnowledgeDocumentName({ document }: { document: KnowledgeDocument }) {
   const { t } = useTranslation("pages");
-  const warnings = (document.warnings ?? [])
+  const warnings = currentImageWarnings(document.warnings ?? [], document.imageAnalysis)
     .filter((warning) => !document.imageAnalysis || warning !== "图片原件和位置已保留；图片语义描述需要单独验证")
     .map((warning) => {
       if (warning === "图片原件和位置已保留；图片语义描述需要单独验证") return t("knowledgeLibrary.imageNotice");
@@ -24,10 +24,10 @@ export function KnowledgeDocumentName({ document }: { document: KnowledgeDocumen
   return <div className="flex items-start gap-2">
     {error || notices.length ? <Tooltip>
       <TooltipTrigger
-        aria-label={t("knowledgeLibrary.documentWarnings", { name: document.fileName })}
-        render={<button type="button" className="mt-0.5 shrink-0 cursor-help rounded-sm text-[var(--color-warning)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" />}
+        aria-label={t("knowledgeLibrary.documentDetails", { name: document.fileName })}
+        render={<button type="button" className="mt-0.5 shrink-0 cursor-help rounded-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" />}
       >
-        <TriangleAlert size={16} aria-hidden="true" />
+        <Info size={16} aria-hidden="true" />
       </TooltipTrigger>
       <TooltipContent side="top" align="start" className="max-w-sm whitespace-normal break-words">
         <div className="space-y-2 text-left">

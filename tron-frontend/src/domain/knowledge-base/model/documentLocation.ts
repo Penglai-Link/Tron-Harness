@@ -5,7 +5,8 @@ export function formatDocumentLocation(location: DocumentLocation, t: TFunction,
     const number = (value: number) => new Intl.NumberFormat(locale).format(value);
     const range = (start: number, end?: number) => end && end !== start ? `${number(start)}–${number(end)}` : number(start);
     const parts: string[] = [];
-    if (location.page) parts.push(t("knowledgeLibrary.location.page", { value: number(location.page) }));
+    if (location.pages?.length) parts.push(t("knowledgeLibrary.location.page", { value: location.pages.map(number).join(", ") }));
+    else if (location.page) parts.push(t("knowledgeLibrary.location.page", { value: number(location.page) }));
     if (location.renderedPage) parts.push(t("knowledgeLibrary.location.renderedPage", { value: number(location.renderedPage) }));
     if (location.chartSources?.length) parts.push(location.chartSources.join("; "));
     if (location.sheet) parts.push(t("knowledgeLibrary.location.sheet", { value: location.sheet }));

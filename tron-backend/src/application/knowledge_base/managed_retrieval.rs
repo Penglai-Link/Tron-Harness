@@ -24,6 +24,69 @@ impl KnowledgeBaseService {
             .await
     }
 
+    pub async fn graph_search_for_user(
+        &self,
+        user: &str,
+        input: crate::application::rag::graph::GraphSearchInput,
+    ) -> Result<
+        crate::application::rag::graph::GraphQueryOutput,
+        crate::application::rag::graph::GraphQueryError,
+    > {
+        self.rag
+            .graph_search(
+                &ManagedRagAccess(self),
+                &RagIdentity {
+                    user_code: user.into(),
+                    workspace_code: "PLATFORM".into(),
+                    agent_code: String::new(),
+                },
+                input,
+                None,
+            )
+            .await
+    }
+    pub async fn graph_expand_for_user(
+        &self,
+        user: &str,
+        input: crate::application::rag::graph::GraphExpandInput,
+    ) -> Result<
+        crate::application::rag::graph::GraphQueryOutput,
+        crate::application::rag::graph::GraphQueryError,
+    > {
+        self.rag
+            .graph_expand(
+                &ManagedRagAccess(self),
+                &RagIdentity {
+                    user_code: user.into(),
+                    workspace_code: "PLATFORM".into(),
+                    agent_code: String::new(),
+                },
+                input,
+            )
+            .await
+    }
+
+    pub async fn graph_browse_for_user(
+        &self,
+        user: &str,
+        input: crate::application::rag::graph::GraphBrowseInput,
+    ) -> Result<
+        crate::application::rag::graph::GraphQueryOutput,
+        crate::application::rag::graph::GraphQueryError,
+    > {
+        self.rag
+            .graph_browse(
+                &ManagedRagAccess(self),
+                &RagIdentity {
+                    user_code: user.into(),
+                    workspace_code: "PLATFORM".into(),
+                    agent_code: String::new(),
+                },
+                input,
+            )
+            .await
+    }
+
     fn managed_libraries(&self, user: &str) -> Result<Vec<KnowledgeBase>, RagError> {
         self.require_user(user)
             .map_err(|_| RagError::SearchScopeInvalid)?;
@@ -98,7 +161,7 @@ impl RagAccessResolver for ManagedRagAccess<'_> {
         Ok(ranges)
     }
 
-    fn recheck(
+    fn recheck_sources(
         &self,
         identity: &RagIdentity,
         result: &mut RagEvidenceResult,
@@ -143,6 +206,23 @@ impl RagAccessResolver for ManagedRagAccess<'_> {
                         .and_then(Value::as_i64)
                         .is_none_or(|expiry| expiry > now))
         });
+
         Ok(())
+    }
+    fn recheck(
+        &self,
+        identity: &RagIdentity,
+        result: &mut RagEvidenceResult,
+    ) -> Result<(), RagError> {
+        self.recheck_sources(identity, result)
+    }
+    fn assemble_context(
+        &self,
+        identity: &RagIdentity,
+        result: &mut RagEvidenceResult,
+    ) -> Result<(), RagError> {
+        self.0
+            .expand_context_evidence(&identity.user_code, result)
+            .map_err(|_| RagError::StorageFailure)
     }
 }

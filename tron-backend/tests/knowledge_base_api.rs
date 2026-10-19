@@ -14,6 +14,95 @@ use tron_backend::{
         },
     },
 };
+
+#[tokio::test]
+async fn knowledge_base_defaults_and_graph_only_publication_use_real_source_generations() {
+    use tron_backend::{application::{rag::*,knowledge_base::ingestion::IngestionKind},domain::rag::graph::GraphPartition,
+        adapters::outbound::persistence::SqliteRagRepository};
+    use tron_backend::application::rag::graph::RagGraphIndexRepository;
+    let f=Fixture::new();let kb=f.service.create(USER,"Service manual","").unwrap();
+    let settings=f.state.rag.settings_for_corpus(&kb.id).unwrap();assert!(settings.graph);
+    assert_eq!(settings.embedding_model_code.as_deref(),Some("PERSON_AI:ROUTE:MultimodalEmbeddingAuto"));
+    f.state.rag.configure_corpus(&kb.id,RagSettings{fulltext:true,vector:false,..settings.clone()}).unwrap();
+    let doc=f.service.upload(USER,&kb.id,"manual.md",b"# Services\nAlpha calls Beta.").unwrap();
+    let ready=f.service.index(USER,&kb.id,&doc.id).await.unwrap();assert_eq!(ready.status,"READY","{:?}",ready.error);
+    assert!(ready.embedding_dimension.is_none(),"chunk vectors remain off");
+    let tasks=f.service.ingestion_tasks(USER,&kb.id,&doc.id).unwrap();let task=tasks.iter().find(|t|t.kind==IngestionKind::Indexing).unwrap();
+    let index=SqliteRagRepository::connect(&f.state.config.database_url).unwrap().graph_index_repository().unwrap();
+    let partition=GraphPartition{corpus_id:kb.id.clone(),scope_type:"SPACE".into(),scope_code:task.workspace_code.clone()};
+    let generations=index.active_generations(&[partition.clone()]).unwrap();assert_eq!(generations.len(),1);
+    assert_eq!(generations[0].expected_projections,2);assert_eq!(generations[0].task_id,task.id);
+    assert_eq!(task.completed_units,ready.chunk_count,"node embedding progress must not corrupt chunk counters");
+    let second=f.service.upload(USER,&kb.id,"second.md",b"# Other services\nAlpha calls Beta. Additional source.").unwrap();
+    let second=f.service.index(USER,&kb.id,&second.id).await.unwrap();assert_eq!(second.status,"READY","{:?}",second.error);
+    assert_eq!(index.active_generations(&[partition.clone()]).unwrap().len(),2);
+    f.service.remove_document(USER,&kb.id,&second.id).unwrap();
+    let remaining=index.active_generations(&[partition.clone()]).unwrap();assert_eq!(remaining.len(),1);
+    assert_eq!(remaining[0].id,generations[0].id,"deleting one support must preserve the other source generation");
+    f.state.rag.configure_corpus(&kb.id,RagSettings{fulltext:true,vector:false,graph:false,..settings}).unwrap();
+    let republished=f.service.index(USER,&kb.id,&doc.id).await.unwrap();assert_eq!(republished.status,"READY","{:?}",republished.error);
+    assert!(index.active_generations(&[partition]).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn unresolved_embedding_identity_recovers_on_retry_without_reparsing() {
+    use std::sync::{Arc, atomic::AtomicBool};
+    use tron_backend::{
+        application::{knowledge_base::ingestion::IngestionKind, llm::LlmRuntimeModelResolver, model::RuntimeModelConfig},
+        domain::model::ModelError,
+    };
+    struct RecoveringResolver(Arc<AtomicBool>);
+    impl LlmRuntimeModelResolver for RecoveringResolver {
+        fn embedding_runtime_model_config(
+            &self,
+            workspace: &str,
+            model: Option<&str>,
+        ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+            if !self.0.load(Ordering::SeqCst) {
+                return Err(ModelError::RuntimeResolutionFailed("No tagged embedding candidates".into()));
+            }
+            EmbeddingResolver.embedding_runtime_model_config(workspace, model)
+        }
+        fn rerank_runtime_model_config(
+            &self, _: &str, _: Option<&str>,
+        ) -> Result<Option<RuntimeModelConfig>, ModelError> { Ok(None) }
+    }
+    let available = Arc::new(AtomicBool::new(false));
+    let f = Fixture::with_resolver(Arc::new(RecoveringResolver(available.clone())));
+    let kb = f.service.create(USER, "Recovery", "").unwrap();
+    let doc = f.service.upload(USER, &kb.id, "guide.pdf", &pdf()).unwrap();
+    let failed = f.service.index(USER, &kb.id, &doc.id).await.unwrap();
+    assert_eq!(failed.status, "FAILED");
+    assert!(failed.error.unwrap().contains("No tagged embedding candidates"));
+    assert_eq!(f.client.calls.load(Ordering::SeqCst), 0);
+    let before = f.service.ingestion_tasks(USER, &kb.id, &doc.id).unwrap();
+    let parsing = before.iter().find(|t| t.kind == IngestionKind::Parsing).unwrap();
+    assert_eq!(parsing.state, "COMPLETED", "{:?}",parsing.error);
+    let index = before.iter().find(|t| t.kind == IngestionKind::Indexing).unwrap();
+    assert!(index.configuration["embeddingModel"].is_null());
+    assert!(index.chunks_resource_code.is_some());
+
+    available.store(true, Ordering::SeqCst);
+    f.service.retry_index(USER, &kb.id, &doc.id).unwrap();
+    let ready = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let doc = f.service.detail(USER, &kb.id).unwrap().documents.remove(0);
+            if doc.status == "READY" || doc.status == "FAILED" { break doc; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.unwrap();
+    assert_eq!(ready.status, "READY", "{:?}", ready.error);
+    let after = f.service.ingestion_tasks(USER, &kb.id, &doc.id).unwrap();
+    let same_parse = after.iter().find(|t| t.id == parsing.id).unwrap();
+    assert_eq!(same_parse.attempt, parsing.attempt, "successful parsing must not rerun");
+    let same_index = after.iter().find(|t| t.id == index.id).unwrap();
+    assert_eq!(same_index.state, "READY");
+    assert!(same_index.chunks_resource_code.is_none(), "published task checkpoints are retired");
+    assert_eq!(same_index.configuration, index.configuration, "input lineage remains immutable");
+    assert_eq!(same_index.embedding_model_code(), Some("fixture-embedding"));
+    assert!(same_index.embedding_fingerprint().is_some());
+    f.service.stop_ingestion_workers();
+}
 #[tokio::test]
 async fn four_real_formats_are_private_indexed_granted_and_retrieved_with_locations() {
     let f = Fixture::new();
@@ -323,7 +412,7 @@ async fn image_description_model_is_chosen_by_rag_and_pinned_to_the_index_task()
     let document = f.service.upload(USER, &library.id, "guide.md", b"orchid").unwrap();
     f.service.start_index(USER, &library.id, &document.id).unwrap();
     let default_task = f.service.ingestion_tasks(USER, &library.id, &document.id).unwrap();
-    assert_eq!(default_task[0].configuration["imageDescription"]["enabled"], false);
+    assert_eq!(default_task[0].configuration["imageDescription"]["enabled"], true);
 
     let configured = f.service.create(USER, "Image policy enabled", "").unwrap();
     f.state.rag.configure_corpus(&configured.id, RagSettings {
@@ -383,7 +472,7 @@ async fn product_http_contract_upload_configure_preview_index_and_grants() {
         &app,
         Method::POST,
         "/api/v1/knowledge-bases",
-        Some(json!({"workspaceCode":WORKSPACE,"name":"HTTP Library","description":"synthetic"})),
+        Some(json!({"name":"HTTP Library","description":"synthetic","defaultParsePreference":"Auto"})),
     )
     .await;
     assert_eq!(created.status(), StatusCode::OK);
@@ -678,7 +767,7 @@ async fn automatic_ingestion_preserves_recorded_parser_failure_without_a_review_
     let before = f.client.calls.load(Ordering::SeqCst);
     let result = f.service.index(USER, &kb.id, &bad.id).await.unwrap();
     assert_eq!(result.status, "FAILED");
-    assert!(result.error.as_ref().unwrap().contains("source comparator"));
+    assert!(result.error.as_ref().unwrap().contains("source comparator"),"{:?}",result.error);
     assert!(result.active_source_code.is_none());
     assert_eq!(before, f.client.calls.load(Ordering::SeqCst));
     let configured = f
@@ -841,4 +930,222 @@ async fn durable_task_http_contract_cancel_retry_and_owner_scope() {
     f.client.blocking.store(false, Ordering::SeqCst);
     wait_http_ready(&app, &kb.id, &doc.id).await;
     f.service.stop_ingestion_workers();
+}
+
+#[tokio::test]
+async fn library_settings_metadata_and_noop_preserve_documents_grants_and_tasks() {
+    use tron_backend::application::knowledge_base::DocumentParsePreference;
+    let f = Fixture::new();
+    let kb = f.service.create(USER, "Manual", "Original").unwrap();
+    let doc = f.service.upload(USER, &kb.id, "guide.pdf", &pdf()).unwrap();
+    let before = f.service.detail(USER, &kb.id).unwrap();
+    let tasks = f.service.ingestion_tasks(USER, &kb.id, &doc.id).unwrap();
+    let mut settings = f.service.library_settings(USER, &kb.id).unwrap();
+    f.service
+        .update_library_settings(USER, &kb.id, settings.clone())
+        .unwrap();
+    settings.name = "  Updated manual  ".into();
+    settings.description = " Updated description ".into();
+    settings.default_parse_preference = DocumentParsePreference::Recognition;
+    let saved = f
+        .service
+        .update_library_settings(USER, &kb.id, settings)
+        .unwrap();
+    assert_eq!(saved.name, "Updated manual");
+    let after = f.service.detail(USER, &kb.id).unwrap();
+    assert_eq!(
+        serde_json::to_value(before.documents).unwrap(),
+        serde_json::to_value(after.documents).unwrap()
+    );
+    assert_eq!(before.agent_codes, after.agent_codes);
+    assert_eq!(
+        f.service
+            .ingestion_tasks(USER, &kb.id, &doc.id)
+            .unwrap()
+            .len(),
+        tasks.len()
+    );
+    assert_eq!(f.client.calls.load(Ordering::SeqCst), 0);
+    let reread = f.service.library_settings(USER, &kb.id).unwrap();
+    assert_eq!(reread.description, "Updated description");
+    assert_eq!(
+        serde_json::to_value(reread.default_parse_preference).unwrap(),
+        "Recognition"
+    );
+    assert_eq!(
+        f.state
+            .rag
+            .corpus_summaries(&[kb.id.clone()].into())
+            .unwrap()
+            .iter()
+            .find(|c| c.id == kb.id)
+            .unwrap()
+            .name,
+        "Updated manual"
+    );
+    let mut invalid = reread.clone();
+    invalid.name = " ".into();
+    invalid.index_settings.graph = false;
+    assert!(
+        f.service
+            .update_library_settings(USER, &kb.id, invalid)
+            .is_err()
+    );
+    assert!(
+        f.service
+            .update_library_settings("OTHER-USER", &kb.id, reread)
+            .is_err()
+    );
+    assert!(
+        f.service
+            .library_settings(USER, &kb.id)
+            .unwrap()
+            .index_settings
+            .graph
+    );
+    assert_eq!(
+        f.service.detail(USER, &kb.id).unwrap().name,
+        "Updated manual"
+    );
+}
+
+#[tokio::test]
+async fn library_settings_http_roundtrip_is_owner_scoped_and_localized() {
+    let f = Fixture::new();
+    let kb = f.service.create(USER, "Manual", "Original").unwrap();
+    let mut state = f.state.clone();
+    state.knowledge_bases = f.service.clone();
+    let app = tron_backend::app::build_router_with_state(state).unwrap();
+    async fn request(
+        app: &axum::Router,
+        method: &str,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> (u16, serde_json::Value) {
+        let response =
+            common::authenticated_request(app, method.parse().unwrap(), path, body).await;
+        (
+            response.status().as_u16(),
+            common::response_json(response).await,
+        )
+    }
+    let path = format!("/api/v1/knowledge-bases/{}/settings", kb.id);
+    let (status, read) = request(&app, "GET", &path, None).await;
+    assert_eq!(status, 200, "{read}");
+    let mut settings = read["data"].clone();
+    settings["name"] = json!("Updated through API");
+    let (status, saved) = request(&app, "PUT", &path, Some(settings)).await;
+    assert_eq!(status, 200, "{saved}");
+    assert_eq!(saved["code"], "0");
+    assert_eq!(saved["data"]["name"], "Updated through API");
+    let (_, read) = request(&app, "GET", &path, None).await;
+    assert_eq!(read["data"], saved["data"]);
+    let mut invalid = read["data"].clone();
+    invalid["name"] = json!("");
+    let (status, error) = request(&app, "PUT", &path, Some(invalid)).await;
+    assert_eq!(status, 400, "{error}");
+    assert_eq!(error["data"], json!({}));
+    use tower::ServiceExt;
+    let mut invalid = read["data"].clone();
+    invalid["name"] = json!("");
+    let response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("PUT")
+                .uri(&path)
+                .header("content-type", "application/json")
+                .header("accept-language", "en-US")
+                .body(axum::body::Body::from(invalid.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 400);
+    let error = common::response_json(response).await;
+    assert_eq!(
+        error["message"],
+        "Invalid knowledge base name, description or index settings"
+    );
+    let foreign = f
+        .service
+        .create("OTHER-USER", "Private library", "")
+        .unwrap();
+    let (status, error) = request(
+        &app,
+        "GET",
+        &format!("/api/v1/knowledge-bases/{}/settings", foreign.id),
+        None,
+    )
+    .await;
+    assert_eq!(status, 404, "{error}");
+    assert_eq!(error["data"], json!({}));
+}
+
+#[tokio::test]
+async fn library_settings_index_change_supplements_cached_pdf_without_parser_resubmission() {
+    let f = Fixture::new();
+    let kb = f.service.create(USER, "Cached document", "").unwrap();
+    let doc = f.service.upload(USER, &kb.id, "guide.pdf", &pdf()).unwrap();
+    let ready = f.service.index(USER, &kb.id, &doc.id).await.unwrap();
+    assert_eq!(ready.status, "READY", "{:?}", ready.error);
+    use tron_backend::application::knowledge_base::{KnowledgeBaseError, parsing::*};
+    struct RejectParser;
+    #[async_trait::async_trait]
+    impl KnowledgeDocumentParser for RejectParser {
+        fn default_tier(&self) -> ParsingTier {
+            ParsingTier::Standard
+        }
+        async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
+            Err(KnowledgeBaseError::Storage(
+                "Parser must not be used for cached indexing".into(),
+            ))
+        }
+        async fn parse(
+            &self,
+            _: &str,
+            _: &[u8],
+            _: Option<ParsingTier>,
+        ) -> Result<StructuredParse, KnowledgeBaseError> {
+            panic!("Cached indexing must never call the parser")
+        }
+    }
+    let service = f
+        .service
+        .clone()
+        .with_document_parser(std::sync::Arc::new(RejectParser));
+    let embedding_calls = f.client.calls.load(Ordering::SeqCst);
+    let mut settings = f.service.library_settings(USER, &kb.id).unwrap();
+    settings.index_settings.graph = false;
+    service
+        .update_library_settings(USER, &kb.id, settings)
+        .unwrap();
+    let completed = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let current = service.detail(USER, &kb.id).unwrap().documents.remove(0);
+            if current.status == "READY" || current.status == "FAILED" {
+                break current;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(completed.status, "READY", "{:?}", completed.error);
+    let after_tasks = service.ingestion_tasks(USER, &kb.id, &doc.id).unwrap();
+    assert!(
+        after_tasks
+            .iter()
+            .any(|t| t.configuration["reuseParsedOnly"] == true)
+    );
+    assert_eq!(
+        f.client.calls.load(Ordering::SeqCst),
+        embedding_calls,
+        "compatible body vectors must be reused"
+    );
+    assert_eq!(
+        completed.parsing_artifact.as_ref().unwrap().resource_code,
+        ready.parsing_artifact.as_ref().unwrap().resource_code
+    );
+    service.stop_ingestion_workers();
 }

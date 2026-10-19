@@ -40,7 +40,7 @@ impl HostRunState {
         let trusted_prefix = context
             .messages
             .iter()
-            .take_while(|message| matches!(message.role.as_str(), "system" | "developer"))
+            .take_while(|message| message.role == "system")
             .cloned()
             .collect();
         let product_tool_authority = context

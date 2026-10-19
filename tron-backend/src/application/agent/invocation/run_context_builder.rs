@@ -397,20 +397,6 @@ impl AgentRunContextBuilder {
                 prompt_prefix_sources.push(None);
             }
         }
-        if requested_task_code.is_none()
-            && matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
-        {
-            messages.push(AgentMessage::system(managed_system_prompt(
-                self.prompt_service.as_ref(),
-                "agent.final-output",
-                &locale,
-                &empty_runtime_prompt_values,
-            )?));
-            prompt_prefix_sources.push(Some(managed_system_prompt_source(
-                "agent.final-output",
-                &locale,
-            )));
-        }
         if matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
             && requested_conversation_code.is_some()
             && supports_user_input_requests

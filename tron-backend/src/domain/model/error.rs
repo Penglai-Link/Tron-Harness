@@ -27,6 +27,7 @@ pub enum ModelError {
     DefaultTargetTypeMismatch,
     ReferencedByWorkspace { workspace_count: usize },
     VerificationFailed(String),
+    RuntimeResolutionFailed(String),
     StorageFailure,
 }
 
@@ -86,6 +87,7 @@ impl fmt::Display for ModelError {
                 "platform model is still referenced by {workspace_count} workspace record(s)"
             ),
             Self::VerificationFailed(message) => formatter.write_str(message),
+            Self::RuntimeResolutionFailed(message) => formatter.write_str(message),
             Self::StorageFailure => formatter.write_str("model storage failure"),
         }
     }

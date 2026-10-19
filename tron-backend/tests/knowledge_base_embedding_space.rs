@@ -37,18 +37,33 @@ fn person_ai_embedding_identity_is_stable_across_same_model_instances() {
         ).unwrap();
     }
     let runtime = LlmRuntimeService::new(Arc::new(resolver(&f)), Arc::new(f.client.clone()));
-    let config = resolver(&f).embedding_runtime_model_config(WORKSPACE, Some(BGE_M3)).unwrap().unwrap();
+    let config = resolver(&f)
+        .embedding_runtime_model_config(WORKSPACE, Some(BGE_M3))
+        .unwrap()
+        .unwrap();
     assert_eq!(config.model_code, BGE_M3);
     assert_eq!(config.model_name, "bge-m3");
-    let fingerprint = runtime.embedding_space_fingerprint(WORKSPACE, Some(BGE_M3), 1024).unwrap();
+    let fingerprint = runtime
+        .embedding_space_fingerprint(WORKSPACE, Some(BGE_M3), 1024)
+        .unwrap();
     connection.execute(
         "INSERT INTO provider_multimedia_catalog_models
          (provider_code,model_id,model_code,model_name,media_type,status,first_seen_at,last_seen_at,updated_at)
          VALUES('PersonAi','instance-b','bge-m3','BGE-M3',6,'Available',1,1,1)",
         [],
     ).unwrap();
-    assert_eq!(runtime.embedding_space_fingerprint(WORKSPACE, Some(BGE_M3), 1024).unwrap(), fingerprint);
-    assert!(resolver(&f).embedding_runtime_model_config(WORKSPACE, Some("PERSON_AI:EMBEDDING:missing")).unwrap().is_none());
+    assert_eq!(
+        runtime
+            .embedding_space_fingerprint(WORKSPACE, Some(BGE_M3), 1024)
+            .unwrap(),
+        fingerprint
+    );
+    assert!(
+        resolver(&f)
+            .embedding_runtime_model_config(WORKSPACE, Some("PERSON_AI:EMBEDDING:missing"))
+            .unwrap()
+            .is_none()
+    );
 }
 
 // All configuration writes below target the fixture's temporary database, never ~/.tron.
@@ -59,7 +74,11 @@ fn connect_auto(f: &Fixture) {
          ON CONFLICT(provider_code) DO UPDATE SET status='Connected';
          INSERT OR REPLACE INTO default_model_selections
          (scope_key,workspace_code,model_type,selection_kind,provider_code,route_code,created_at,updated_at)
-         VALUES('platform',NULL,'EMBEDDING','ProviderRoute','PersonAi','EmbeddingAuto',1,1);",
+         VALUES('platform',NULL,'EMBEDDING','ProviderRoute','PersonAi','EmbeddingAuto',1,1);
+         INSERT INTO provider_multimedia_catalog_models
+         (provider_code,model_id,model_code,model_name,media_type,status,first_seen_at,last_seen_at,updated_at)
+         VALUES('PersonAi','seed-embedding','bge-m3','BGE-M3',6,'Available',1,1,1);
+         UPDATE provider_multimedia_catalog_models SET tags_json=json_array('text_embedding'),dimension=1024 WHERE model_id='seed-embedding';",
     ).unwrap();
 }
 
@@ -82,10 +101,12 @@ fn resolver(f: &Fixture) -> ProviderAwareLlmRuntimeResolver {
 fn service(f: &Fixture, llm: LlmRuntimeService) -> KnowledgeBaseService {
     KnowledgeBaseService::new(
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
-        tron_backend::application::rag::RagService::new(
-            Arc::new(std::sync::Mutex::new(tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(&f.state.config.database_url).unwrap())),
-            tron_backend::application::rag::DefaultRagRuntime::new(llm.clone(),f.state.llm_router.clone()),
-        ),
+        f.state
+            .rag
+            .with_runtime(tron_backend::application::rag::DefaultRagRuntime::new(
+                llm.clone(),
+                fixture::FixtureGraphRouter,
+            )),
         f.state.resources.clone(),
         f.state.agent_management.clone(),
         llm,
@@ -102,7 +123,7 @@ fn run() -> eliteforge_agent_core::RunContext {
 }
 
 #[test]
-fn explicit_embedding_route_obeys_workspace_selection_and_connection_state() {
+fn explicit_embedding_route_overrides_default_and_obeys_connection_state() {
     let f = Fixture::new();
     connect_auto(&f);
     let r = resolver(&f);
@@ -112,7 +133,7 @@ fn explicit_embedding_route_obeys_workspace_selection_and_connection_state() {
                 .unwrap()
                 .unwrap()
                 .model_code,
-            AUTO
+            BGE_M3
         );
     }
     assert!(
@@ -126,13 +147,13 @@ fn explicit_embedding_route_obeys_workspace_selection_and_connection_state() {
             .unwrap()
             .unwrap()
             .model_code,
-        AUTO
+        BGE_M3
     );
     fixed_selection(&f, WORKSPACE, "missing-fixed-model");
     assert!(
         r.embedding_runtime_model_config(WORKSPACE, Some(AUTO))
             .unwrap()
-            .is_none()
+            .is_some()
     );
     fixed_selection(&f, "nonexistent-workspace", "missing-fixed-model");
     assert!(
@@ -206,6 +227,17 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
     let llm = LlmRuntimeService::new(Arc::new(resolver(&f)), Arc::new(f.client.clone()));
     let svc = service(&f, llm);
     let kb = svc.create(USER, "Pinned space", "").unwrap();
+    f.state
+        .rag
+        .configure_corpus(
+            &kb.id,
+            tron_backend::application::rag::RagSettings {
+                embedding_model_code: Some(model.model_code.clone()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
     let doc = svc
         .upload(
             USER,
@@ -303,6 +335,9 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
     );
     let svc = service(&f, llm);
     let kb = svc.create(USER, "Single model route", "").unwrap();
+    let mut settings = f.state.rag.settings_for_corpus(&kb.id).unwrap();
+    settings.embedding_model_code = Some(AUTO.into());
+    f.state.rag.configure_corpus(&kb.id, settings).unwrap();
     let doc = svc
         .upload(
             USER,
@@ -326,6 +361,7 @@ async fn singleton_auto_route_indexes_rebuilds_queries_and_detects_observed_mode
     let first = svc.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(first.status, "READY", "{:?}", first.error);
     assert!(first.chunk_count > 1);
+    assert_eq!(first.embedding_model_code.as_deref(), Some(BGE_M3));
     assert_eq!(first.embedding_dimension, Some(1024));
     assert_eq!(
         first.embedding_provider_model.as_deref(),
@@ -467,6 +503,11 @@ async fn query_geometry_change_requires_rebuild_and_failed_rebuild_keeps_1024_ge
         f.service.detail(USER, &kb.id).unwrap().documents[0].status,
         "READY"
     );
+    // A distinct model space requires real fresh vectors; unchanged content in
+    // the existing space is intentionally served from the validated cache.
+    let mut settings = f.state.rag.settings_for_corpus(&kb.id).unwrap();
+    settings.embedding_model_code = Some("fresh-fixture-embedding".into());
+    f.state.rag.configure_corpus(&kb.id, settings).unwrap();
     let failed = f.service.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(failed.status, "FAILED");
     assert_eq!(failed.active_source_code, ready.active_source_code);
@@ -560,6 +601,11 @@ async fn mixed_chunk_dimensions_cannot_replace_published_1024_vectors() {
         .lock()
         .unwrap()
         .extend([1024, 4096]);
+    // A distinct model space requires real fresh vectors; unchanged content in
+    // the existing space is intentionally served from the validated cache.
+    let mut settings = f.state.rag.settings_for_corpus(&kb.id).unwrap();
+    settings.embedding_model_code = Some("fresh-fixture-embedding".into());
+    f.state.rag.configure_corpus(&kb.id, settings).unwrap();
     let failed = f.service.index(USER, &kb.id, &d.id).await.unwrap();
     assert_eq!(failed.status, "FAILED");
     assert_eq!(failed.active_source_code, ready.active_source_code);

@@ -44,7 +44,7 @@ pub(super) async fn assemble(
         let prefix = context
             .messages
             .iter()
-            .take_while(|m| matches!(m.role.as_str(), "system" | "developer"))
+            .take_while(|m| m.role == "system")
             .cloned()
             .collect::<Vec<_>>();
         crate::application::short_term_memory::PreparedContextSources {
@@ -69,7 +69,7 @@ pub(super) async fn assemble(
     let mut instructions = source
         .prefix
         .iter()
-        .filter(|m| matches!(m.role.as_str(), "system" | "developer"))
+        .filter(|m| m.role == "system")
         .map(messages::encode)
         .collect::<Result<Vec<_>, _>>()
         .map_err(fw::AgentError::InvalidConfiguration)?;
@@ -85,18 +85,15 @@ pub(super) async fn assemble(
     {
         let directory = serde_json::to_string(&context.tool_exposure.visible_domains)
             .map_err(|error| fw::AgentError::InvalidConfiguration(error.to_string()))?;
-        instructions.push(fw::Message::new(
-            fw::Role::Developer,
-            format!(
-                "Current authorized tool domains for this run: {directory}. Use {} to discover tools in these domains. This current directory supersedes any earlier domain listing.",
-                crate::application::agent::DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL,
-            ),
-        ));
+        instructions.push(fw::Message::system(format!(
+            "Current authorized tool domains for this run: {directory}. Use {} to discover tools in these domains. This current directory supersedes any earlier domain listing.",
+            crate::application::agent::DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL,
+        )));
     }
     let mut application = source
         .prefix
         .iter()
-        .filter(|m| !matches!(m.role.as_str(), "system" | "developer"))
+        .filter(|m| m.role != "system")
         .cloned()
         .collect::<Vec<_>>();
     if application.is_empty() {

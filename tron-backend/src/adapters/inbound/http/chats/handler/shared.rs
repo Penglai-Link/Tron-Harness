@@ -205,7 +205,7 @@ pub(super) fn effective_agent_code(session: &ChatSession, request: &SendChatMess
         || session
             .source_code
             .as_deref()
-            .is_some_and(|source| source.starts_with("__dude:"))
+            .is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:"))
     {
         session.agent_code.clone()
     } else {
@@ -223,7 +223,7 @@ pub(crate) fn resolve_chat_agent_runtime(
     let runtime = if session
         .source_code
         .as_deref()
-        .is_some_and(|source| source.starts_with("__dude:"))
+        .is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:"))
     {
         state
             .agent_management

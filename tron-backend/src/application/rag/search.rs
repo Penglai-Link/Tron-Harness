@@ -14,24 +14,38 @@ use std::{
 };
 
 pub trait RagSearchRepository: RagConfigRepository {
+    /// Invalidate reusable computations after an observed provider-model change;
+    /// published evidence and its source pointer remain intact until a rebuild.
+    fn invalidate_vector_cache(&self, query: RagRouteSearchQuery) -> Result<(), RagError>;
+    fn published_graph_generations(
+        &self,
+        query: RagRouteSearchQuery,
+    ) -> Result<Vec<String>, RagError>;
     fn embedding_partitions(
         &self,
         query: RagRouteSearchQuery,
     ) -> Result<Vec<RagEmbeddingPartition>, RagError>;
     fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError>;
     fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError>;
-    fn expand_related_graph(
-        &self,
-        _query: RagGraphExpansionQuery,
-    ) -> Result<Option<Value>, RagError> {
-        Ok(None)
-    }
 }
 
 impl<T> RagSearchRepository for Arc<Mutex<T>>
 where
     T: RagSearchRepository,
 {
+    fn invalidate_vector_cache(&self, query: RagRouteSearchQuery) -> Result<(), RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .invalidate_vector_cache(query)
+    }
+    fn published_graph_generations(
+        &self,
+        query: RagRouteSearchQuery,
+    ) -> Result<Vec<String>, RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .published_graph_generations(query)
+    }
     fn embedding_partitions(
         &self,
         query: RagRouteSearchQuery,
@@ -51,15 +65,6 @@ where
             .expect("RAG repository mutex poisoned")
             .persist_search_trace(trace)
     }
-
-    fn expand_related_graph(
-        &self,
-        query: RagGraphExpansionQuery,
-    ) -> Result<Option<Value>, RagError> {
-        self.lock()
-            .expect("RAG repository mutex poisoned")
-            .expand_related_graph(query)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,19 +82,6 @@ pub struct RagRouteSearchQuery {
     pub policy: Value,
     pub return_fields: Vec<String>,
     pub limit: usize,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RagGraphExpansionQuery {
-    pub corpus_id: String,
-    pub source_code: String,
-    pub source_version: String,
-    pub target_code: String,
-    pub scope_type: String,
-    pub scope_code: String,
-    pub workspace_code: String,
-    pub relationships: Vec<String>,
-    pub policy: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,12 +197,6 @@ pub struct RagSearchRequest {
 pub struct RagSearchContextRequest {
     pub strategy: String,
     pub return_fields: Vec<String>,
-    pub graph_expansion: RagSearchGraphExpansionRequest,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct RagSearchGraphExpansionRequest {
-    pub relationships: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

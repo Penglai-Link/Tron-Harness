@@ -337,6 +337,7 @@ impl AppState {
             &config.database_url,
             llm_runtime.clone(),
             llm_router.clone(),
+            graph_core.clone(),
         )?
         .with_runtime_config(runtime_config.clone());
         crate::application::rag::RagConfigRepository::recover_record_tasks(
@@ -346,6 +347,13 @@ impl AppState {
             database_url: config.database_url.clone(),
             source,
         })?;
+        if tokio::runtime::Handle::try_current().is_ok() {
+            rag.start_graph_maintenance()
+                .map_err(|_| AppBootstrapError::RagInitFailed {
+                    database_url: config.database_url.clone(),
+                    source: crate::domain::rag::RagError::StorageFailure,
+                })?;
+        }
         let knowledge_bases = crate::application::knowledge_base::KnowledgeBaseService::new(
             knowledge_base_repository,
             rag.clone(),
@@ -404,7 +412,7 @@ impl AppState {
             let indexer =
                 crate::application::skill::SkillRagIndexService::new(skills.clone(), rag.clone());
             runtime.spawn(async move {
-                if let Err(error) = indexer.index_all().await {
+                if let Err(error) = indexer.synchronize_all().await {
                     tracing::error!("platform skill index synchronization failed: {error}");
                 }
             });
@@ -477,6 +485,12 @@ impl AppState {
                 knowledge_bases.clone(),
             ))
             .expect("RAG search tool should register");
+        for tool in crate::application::agent::rag_graph_tools(rag.clone(), knowledge_bases.clone())
+        {
+            agent_tool_registry
+                .register(tool)
+                .expect("RAG graph tools should register");
+        }
         let (graphs, ontologies, graph_explorer) = if config.graph_storage_path == ":memory:" {
             if let Some(services) = GLOBAL_GRAPH_SERVICES.get() {
                 services.clone()
@@ -550,6 +564,22 @@ impl AppState {
         dudes.bootstrap().expect("Dude defaults");
         agent_framework.bind_dudes(dudes.clone());
         chats.bind_dudes(dudes.clone());
+        chats.bind_knowledge_quality(knowledge_bases.clone());
+        knowledge_bases
+            .recover_quality_optimizations()
+            .map_err(|e| AppBootstrapError::DatabaseInitFailed {
+                source: std::io::Error::other(e.to_string()),
+            })?;
+        for tool in crate::application::agent::knowledge_quality_tools(
+            crate::application::knowledge_quality::KnowledgeQualityService::new(
+                knowledge_bases.clone(),
+            ),
+            chats.clone(),
+        ) {
+            agent_tool_registry
+                .register(tool)
+                .expect("knowledge evaluation tools should register");
+        }
         crate::application::dude::register_dude_tools(
             agent_tool_registry.as_ref(),
             dudes.clone(),

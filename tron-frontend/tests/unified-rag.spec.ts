@@ -28,9 +28,10 @@ test.beforeAll(async () => { frontend = await startResourceUiFrontend("/settings
 test.afterAll(async () => { await stopResourceUiFrontend(frontend); });
 for (const locale of ["zh-CN", "en-US"] as const) {
   test(`Fixed ingestion and authorized retrieval in ${locale}`, async ({ page }, info) => {
+    test.setTimeout(90_000);
     await routeResourceUiShellApi(page); await seedResourceUiShell(page, locale);
     const zh = locale === "zh-CN";
-    const settings = { fulltext: true, vector: true, graph: false, embeddingModelCode: null, embeddingDimension: 1024, graphModelCode: null, rerankModelCode: null };
+    const settings = { fulltext: true, vector: true, graph: false, embeddingModelCode: "PERSON_AI:ROUTE:EmbeddingAuto", embeddingDimension: 1024, graphModelCode: "PERSON_AI:ROUTE:ChatAuto", rerankModelCode: "PERSON_AI:ROUTE:RerankAuto" };
     const counts = { sourceCount: 1, rebuildSourceCount: 0, chunkCount: 12, vectorCount: 12, graphCount: 0 };
     const corpora = [
       { id: "memory-card", name: "Memory", kind: "builtin", knowledgeBaseId: null, settings, counts: { ...counts, sourceCount: 0, chunkCount: 0, vectorCount: 0 } },
@@ -38,9 +39,9 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       { id: "corpus-evidence", name: "Evidence Library", kind: "knowledgeBase", knowledgeBaseId: "kb-evidence", settings, counts: { ...counts, rebuildSourceCount: 1 } },
     ];
     let taskState = "RUNNING";
+    const deletedTaskIds = new Set<string>();
     const actions: string[] = [];
     const rebuildRequests: unknown[] = [];
-    let rejectRebuild = true;
     let rejectDocument = true;
     let rejectSearch = true;
     let rejectTaskList = false;
@@ -68,9 +69,11 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await page.route("**/api/v1/rag/**", async route => {
       const path = new URL(route.request().url()).pathname;
       let data: unknown;
-      if (path.endsWith("/settings")) {
+      if (route.request().method() === "DELETE") {
+        deletedTaskIds.add(path.split("/").at(-1)!); data = { deleted: true };
+      } else if (path.endsWith("/settings")) {
         const value = route.request().postDataJSON();
-        expect(value).toMatchObject({ embeddingDimension: 1024, fulltext: true, vector: true, graph: false, graphModelCode: "PERSON_AI:ROUTE:ChatAuto" });
+        expect(value).toMatchObject({ embeddingDimension: 1024, fulltext: true, vector: true, graph: false, graphModelCode: "PERSON_AI:ROUTE:ChatAuto", embeddingModelCode: "PERSON_AI:ROUTE:EmbeddingAuto", rerankModelCode: "PERSON_AI:ROUTE:RerankAuto" });
         actions.push("configure"); data = value;
       } else if (path.endsWith("/corpora")) data = corpora;
       else if (path.endsWith("/cancel")) { taskState = "CANCELLED"; actions.push("cancel"); data = {}; }
@@ -78,9 +81,8 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       else if (path.endsWith("/rebuild")) { rebuildRequests.push({ taskId: path.split("/").at(-2) }); data = { accepted: true }; }
       else if (path.endsWith("/tasks") && route.request().method() === "POST") {
         const value = route.request().postDataJSON();
-        expect(value.documentId).toBeTruthy();
+        expect(value.corpusId).toBeTruthy();
         rebuildRequests.push(value);
-        if (value.documentId === "doc-failed" && rejectRebuild) return route.fulfill({ status: 400, json: { code: "REBUILD_FAILED", message: "Synthetic rebuild failure", data: null } });
         data = { accepted: true };
       }
       else if (path.endsWith("/tasks")) {
@@ -88,7 +90,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
           rejectedTaskLists += 1;
           return route.fulfill({ status: 503, json: { code: "UNAVAILABLE", message: "Task list unavailable", data: null } });
         }
-        const task = { fileSizeBytes: null, documentId: null, corpusId: "corpus-evidence", stage: "PARSING", completedUnits: 0, totalUnits: 0, error: null, createdAt: 1, updatedAt: 2 };
+        const task = { isLatest: true, fileSizeBytes: null, documentId: null, corpusId: "corpus-evidence", stage: "PARSING", completedUnits: 0, totalUnits: 0, error: null, createdAt: 1, updatedAt: 2 };
         data = [
           { ...task, id: "queued-first", sourceCode: "queued-first", title: "Queued first", state: "QUEUED", fileSizeBytes: 2048 },
           { ...task, id: "completed-one", documentId: "doc-completed", sourceCode: "completed-one", title: "Completed record", state: "COMPLETED" },
@@ -96,8 +98,9 @@ for (const locale of ["zh-CN", "en-US"] as const) {
           { ...task, id: "cancelled-one", sourceCode: "cancelled-one", title: "Cancelled record", state: "CANCELLED" },
           { ...task, id: "task-one", documentId: "doc-one", sourceCode: "source-one", title: "Guideline.pdf", fileSizeBytes: 1572864, state: taskState, stage: "EMBEDDING", completedUnits: 3, totalUnits: 12 },
           { ...task, id: "queued-second", sourceCode: "queued-second", title: "Queued second", state: "QUEUED", fileSizeBytes: 1024 },
+          { ...task, id: "old-memory-failed", isLatest: false, sourceCode: "memory-failed", corpusId: "memory-card", title: "Old memory attempt", state: "FAILED" },
           { ...task, id: "memory-failed", sourceCode: "memory-failed", corpusId: "memory-card", title: "Failed memory", state: "FAILED" },
-        ];
+        ].filter(task => !deletedTaskIds.has(task.id));
       }
       else if (path.endsWith("/recall")) {
         expect(route.request().postDataJSON()).toEqual({ query: "orchid evidence", limit: 8, corpusIds: [] });
@@ -110,7 +113,11 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       } else throw new Error(`Unexpected RAG endpoint ${path}`);
       await route.fulfill({ json: { code: "0", message: "ok", data } });
     });
-    await page.route("**/api/v1/models/platform**", route => route.fulfill({ json: { code: "0", message: "ok", data: [] } }));
+    await page.route("**/api/v1/model-providers/PersonAi/catalog", route => route.fulfill({ json: { code: "0", message: "ok", data: [
+      { catalogModelType: "Embedding", status: "Available", modelId: "embedding-1", modelCode: "bge-m3", modelName: "BGE-M3" },
+      { catalogModelType: "Rerank", status: "Available", modelId: "rerank-1", modelCode: "bge-reranker", modelName: "BGE Reranker" },
+    ] } }));
+    await page.route("**/api/v1/admin/platform/models**", route => route.fulfill({ json: { code: "0", message: "ok", data: [] } }));
     await page.route("**/api/v1/agents/workspaces/TRON_CORE/internal", route => route.fulfill({ json: { code: "0", message: "ok", data: [{ agentCode: "main-agent", name: "Main Agent" }] } }));
     await page.route("**/api/v1/agents/workspaces/TRON_EMPTY/internal", route => route.fulfill({ json: { code: "0", message: "ok", data: [] } }));
     await page.route("**/api/v1/admin/workspaces/options**", route => route.fulfill({json:{code:"0",message:"ok",data:[{workspaceCode:"TRON_CORE",name:"Tron Core",label:"Tron Core",status:"Active"},{workspaceCode:"TRON_EMPTY",name:"Empty Workspace",label:"Empty Workspace",status:"Active"}]}}));
@@ -134,7 +141,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(page).toHaveURL(/\/settings\/rag\?tab=ingestion&corpus=corpus-evidence$/);
     await expect(page.getByRole("combobox", { name: zh ? "语料库" : "Corpus", exact: true })).toContainText("Evidence Library");
     await expect(page.getByText("Failed memory", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: zh ? "重建索引" : "Rebuild indexes", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: zh ? "重建索引" : "Rebuild indexes", exact: true })).toHaveCount(0);
     expect(rebuildRequests).toEqual([]);
     await page.reload();
     await expect(page.getByRole("combobox", { name: zh ? "语料库" : "Corpus", exact: true })).toContainText("Evidence Library");
@@ -145,8 +152,16 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(page.getByRole("menuitem", { name: zh ? "管理知识库" : "Manage knowledge base", exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath(`unified-rag-definition-${locale}.png`), fullPage: true });
     await page.getByRole("menuitem", { name: zh ? "重建索引" : "Rebuild indexes", exact: true }).click();
-    await expect(page).toHaveURL(/\/settings\/rag\?tab=ingestion&corpus=corpus-evidence$/);
+    const rebuildDialog = page.getByRole("dialog", { name: zh ? "重建索引 · Evidence Library" : "Rebuild indexes · Evidence Library", exact: true });
+    await expect(rebuildDialog).toContainText(zh ? "全部资料" : "all sources");
     expect(rebuildRequests).toEqual([]);
+    await rebuildDialog.getByRole("button", { name: zh ? "取消" : "Cancel", exact: true }).click();
+    expect(rebuildRequests).toEqual([]);
+    await rowActions.click();
+    await page.getByRole("menuitem", { name: zh ? "重建索引" : "Rebuild indexes", exact: true }).click();
+    await rebuildDialog.getByRole("button", { name: zh ? "重建索引" : "Rebuild indexes", exact: true }).click();
+    await expect(page).toHaveURL(/\/settings\/rag\?tab=ingestion&corpus=corpus-evidence$/);
+    expect(rebuildRequests).toEqual([{ corpusId: "corpus-evidence" }]);
     await page.getByRole("tab", { name: zh ? "定义" : "Definition", exact: true }).click();
     await rowActions.click();
     await page.getByRole("menuitem", { name: zh ? "配置索引" : "Configure indexes", exact: true }).click();
@@ -167,11 +182,32 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(page.getByRole("tooltip")).toBeVisible();
     await expect(page.getByRole("tooltip")).toContainText(zh ? "从正文找出实体和关系" : "extracts entities and relations");
     await page.screenshot({ path: info.outputPath(`unified-rag-configuration-${locale}.png`), fullPage: true });
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
     const dimension = dialog.getByLabel(zh ? "向量维度" : "Embedding dimensions", { exact: true });
     await expect(dimension).toHaveValue("1024");
     await expect(dimension).toBeDisabled();
+    const saveButton = dialog.getByRole("button", { name: zh ? "保存" : "Save", exact: true });
+    await expect(saveButton).toBeEnabled();
+    for (const [field, route] of zh ? [["Embedding 模型", "向量自动路由"], ["图谱抽取模型", "对话自动路由"], ["重排模型", "重排自动路由"]] : [["Embedding model", "Embedding Automatic Routing"], ["Graph extraction model", "Conversation Automatic Routing"], ["Reranking model", "Rerank Automatic Routing"]]) {
+      await expect(dialog.getByRole("combobox", { name: field, exact: true })).toContainText(route);
+    }
+    await dialog.getByRole("combobox", { name: zh ? "Embedding 模型" : "Embedding model", exact: true }).click();
+    await expect(page.getByRole("option", { name: zh ? "多模态向量自动路由" : "Multimodal Embedding Automatic Routing", exact: true })).toBeVisible();
+    await page.getByRole("option", { name: zh ? "多模态向量自动路由" : "Multimodal Embedding Automatic Routing", exact: true }).click();
+    await expect(dialog.getByRole("combobox", { name: zh ? "Embedding 模型" : "Embedding model", exact: true })).toContainText(zh ? "多模态向量自动路由" : "Multimodal Embedding Automatic Routing");
+    await dialog.getByRole("combobox", { name: zh ? "Embedding 模型" : "Embedding model", exact: true }).click();
+    await page.getByRole("option", { name: "BGE-M3 · Person-AI", exact: true }).click();
+    await dialog.getByRole("combobox", { name: zh ? "Embedding 模型" : "Embedding model", exact: true }).click();
+    await page.getByRole("option", { name: zh ? "向量自动路由" : "Embedding Automatic Routing", exact: true }).click();
+    await expect(saveButton).toBeEnabled();
+    await dialog.getByRole("combobox", { name: zh ? "重排模型" : "Reranking model", exact: true }).click();
+    await page.getByRole("option", { name: "BGE Reranker · Person-AI", exact: true }).click();
+    await dialog.getByRole("combobox", { name: zh ? "重排模型" : "Reranking model", exact: true }).click();
+    await page.getByRole("option", { name: zh ? "重排自动路由" : "Rerank Automatic Routing", exact: true }).click();
     await dialog.getByRole("combobox", { name: zh ? "图谱抽取模型" : "Graph extraction model", exact: true }).click();
-    await page.getByRole("option", { name: zh ? "自动路由（Auto）" : "Automatic routing (Auto)", exact: true }).click();
+    await page.getByRole("option", { name: zh ? "对话自动路由" : "Conversation Automatic Routing", exact: true }).click();
+    await page.screenshot({ path: info.outputPath(`unified-rag-auto-routes-${locale}.png`), fullPage: true });
     await dialog.getByRole("button", { name: zh ? "保存" : "Save", exact: true }).click();
     await expect.poll(() => actions).toContain("configure");
     await page.getByRole("button", { name: zh ? "查看入库任务" : "View ingestion jobs", exact: true }).click();
@@ -180,7 +216,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await initialCorpusFilter.click();
     await page.getByRole("option", { name: zh ? "全部语料库" : "All corpora", exact: true }).click();
     await expect(page.getByRole("columnheader", { name: zh ? "分块数" : "Chunks", exact: true })).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "Guideline.pdf" }).getByRole("cell", { name: "12", exact: true })).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "Guideline.pdf" }).getByRole("button", { name: `${zh ? "查看分块" : "View chunks"} · Guideline.pdf`, exact: true })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: zh ? "文件大小" : "File size", exact: true })).toBeVisible();
     await expect(page.getByRole("row").filter({ hasText: "Guideline.pdf" })).toContainText("1.5 MB");
     await expect(page.getByRole("row").filter({ hasText: "Queued second" })).toContainText("1 KB");
@@ -188,6 +224,13 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(page.locator("[aria-current=step]")).toHaveCount(0);
     const ingestionFlow = page.getByRole("list", { name: zh ? "统一入库流程" : "Unified ingestion flow", exact: true });
     await expect(ingestionFlow.getByRole("listitem")).toHaveCount(4);
+    await expect(ingestionFlow).toBeVisible();
+    const desktopViewport = page.viewportSize()!;
+    await page.setViewportSize({ width: 779, height: 853 });
+    await expect(ingestionFlow).toBeHidden();
+    await expect(page.getByText(zh ? "默认每份资料只显示最新任务；历史任务可单独查看。" : "Each source shows its latest task by default. Earlier attempts are available in task history.", { exact: true })).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath(`unified-rag-ingestion-small-${locale}.png`), fullPage: true });
+    await page.setViewportSize(desktopViewport);
     await expect(ingestionFlow.getByText(/^[1-4]$/)).toHaveCount(0);
     const statistics = page.getByRole("group", { name: zh ? "入库任务统计" : "Ingestion task statistics", exact: true });
     const expectStatistics = async (values: number[]) => {
@@ -199,9 +242,9 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     const taskNames = page.locator("table tbody tr td:nth-child(2)");
     await expect(taskNames).toHaveText(["Guideline.pdf", "Queued second", "Queued first", "Completed record", "Failed record", "Cancelled record", "Failed memory"]);
     const rebuild = page.getByRole("button", { name: zh ? "重建索引" : "Rebuild indexes", exact: true });
-    await expect(rebuild).toBeDisabled();
-    const toolbar = page.locator("[role=tabpanel] button").filter({ hasText: zh ? /重建索引|刷新/ : /Rebuild indexes|Refresh/ });
-    await expect(toolbar).toHaveText(zh ? ["重建索引", "刷新"] : ["Rebuild indexes", "Refresh"]);
+    await expect(rebuild).toHaveCount(0);
+    const toolbar = page.locator("[role=tabpanel] button").filter({ hasText: zh ? /删除记录|刷新/ : /Delete records|Refresh/ });
+    await expect(toolbar).toHaveText(zh ? ["删除记录", "刷新"] : ["Delete records", "Refresh"]);
     await expect(page.getByRole("button", { name: zh ? "刷新" : "Refresh", exact: true })).toHaveCount(1);
     const selectTask = (name: string) => page.getByRole("checkbox", { name: zh ? `选择 ${name}` : `Select ${name}`, exact: true });
     await expect(selectTask("Guideline.pdf")).toBeDisabled();
@@ -217,12 +260,12 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(taskNames).toHaveText(["Failed record"]);
     await expectStatistics([6, 3, 1]);
     await selectTask("Failed record").check();
-    await expect(rebuild).toBeEnabled();
+    await expect(page.getByRole("button", { name: zh ? "删除记录" : "Delete records", exact: true })).toBeEnabled();
     await corpusFilter.click();
     await page.getByRole("option", { name: "Memory", exact: true }).click();
     await expect(taskNames).toHaveText(["Failed memory"]);
     await expectStatistics([1, 0, 1]);
-    await expect(rebuild).toBeDisabled();
+    await expect(rebuild).toHaveCount(0);
     await stateFilter.click();
     await page.getByRole("option", { name: zh ? "完成" : "Completed", exact: true }).click();
     await expect(page.getByText(zh ? "暂无符合筛选条件的入库任务。" : "No ingestion jobs match these filters.", { exact: true })).toBeVisible();
@@ -232,27 +275,12 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await stateFilter.click();
     await page.getByRole("option", { name: zh ? "全部状态" : "All states", exact: true }).click();
     await expect(taskNames.first()).toHaveText("Guideline.pdf");
-    const selectAll = page.getByRole("checkbox", { name: zh ? "选择当前列表可重建的任务" : "Select rebuildable tasks in this list", exact: true });
+    const selectAll = page.getByRole("checkbox", { name: zh ? "选择当前列表已结束的任务" : "Select finished tasks in this list", exact: true });
     await selectAll.check();
     await expect(selectTask("Completed record")).toBeChecked();
     await expect(selectTask("Guideline.pdf")).not.toBeChecked();
     await selectAll.uncheck();
-    await expect(rebuild).toBeDisabled();
-    await selectTask("Completed record").check();
-    await selectTask("Failed record").check();
-    await selectTask("Failed memory").check();
-    await rebuild.click();
-    await expect(notification("Failed record: Synthetic rebuild failure")).toBeVisible();
-    await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
-    expect(rebuildRequests).toEqual([{ corpusId: "corpus-evidence", documentId: "doc-completed" }, { corpusId: "corpus-evidence", documentId: "doc-failed" }, { taskId: "memory-failed" }]);
-    await expect(selectTask("Completed record")).not.toBeChecked();
-    await expect(selectTask("Failed memory")).not.toBeChecked();
-    await expect(selectTask("Failed record")).toBeChecked();
-    rejectRebuild = false;
-    await rebuild.click();
-    await expect(selectTask("Failed record")).not.toBeChecked();
-    await expect(rebuild).toBeDisabled();
-    expect(rebuildRequests).toHaveLength(4);
+    await expect(rebuild).toHaveCount(0);
     rejectTaskList = true;
     await page.getByRole("button", { name: zh ? "刷新" : "Refresh", exact: true }).click();
     const pollingFailure = notification("Task list unavailable");
@@ -266,7 +294,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await page.screenshot({ path: info.outputPath(`unified-rag-ingestion-${locale}.png`), fullPage: true });
     const taskRow = page.getByRole("row").filter({ hasText: "Guideline.pdf" });
     const taskActions = taskRow.getByRole("button", { name: zh ? "Guideline.pdf的操作" : "Actions for Guideline.pdf", exact: true });
-    await expect(taskRow.getByRole("button")).toHaveCount(1);
+    await expect(taskRow.getByRole("button")).toHaveCount(2);
     const ingestionUrl = page.url();
     await taskActions.click();
     await expect(page.getByRole("menuitem")).toHaveCount(3);
@@ -299,8 +327,38 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await taskActions.click();
     await page.getByRole("menuitem", { name: zh ? "重试" : "Retry", exact: true }).click();
     await expect.poll(() => actions).toContain("retry");
+    // Earlier attempts stay out of the default view and can be cleaned independently.
+    await expect(page.getByText("Old memory attempt", { exact: true })).toHaveCount(0);
+    const taskView = page.getByRole("combobox", { name: zh ? "任务视图" : "Task view", exact: true });
+    await taskView.click();
+    await page.getByRole("option", { name: zh ? "历史任务" : "Task history", exact: true }).click();
+    await expect(taskNames).toHaveText(["Old memory attempt"]);
+    await expect(page.getByRole("columnheader", { name: zh ? "提交时间" : "Submitted at", exact: true })).toBeVisible();
+    await selectTask("Old memory attempt").check();
+    await expect(rebuild).toHaveCount(0);
+    const deleteRecords = page.getByRole("button", { name: zh ? "删除记录" : "Delete records", exact: true });
+    await deleteRecords.click();
+    const deleteDialog = page.getByRole("dialog", { name: zh ? "删除记录" : "Delete records", exact: true });
+    await expect(deleteDialog).toContainText(zh ? "资料和已发布索引会保留" : "Sources and published indexes will be kept");
+    await deleteDialog.getByRole("button", { name: zh ? "取消" : "Cancel", exact: true }).click();
+    expect(deletedTaskIds.size).toBe(0);
+    await deleteRecords.click();
+    await deleteDialog.getByRole("button", { name: zh ? "删除记录" : "Delete records", exact: true }).click();
+    await expect(page.getByText("Old memory attempt", { exact: true })).toHaveCount(0);
+    expect([...deletedTaskIds]).toEqual(["old-memory-failed"]);
+    await taskView.click();
+    await page.getByRole("option", { name: zh ? "最新任务" : "Latest tasks", exact: true }).click();
+    await expect(page.getByText("Failed memory", { exact: true })).toBeVisible();
     await page.getByRole("tab", { name: zh ? "检索" : "Retrieval", exact: true }).click();
-    await expect(page.getByRole("list", { name: zh ? "统一检索流程" : "Unified retrieval flow", exact: true }).getByRole("listitem")).toHaveCount(4);
+    const retrievalFlow = page.getByRole("list", { name: zh ? "统一检索流程" : "Unified retrieval flow", exact: true });
+    await expect(retrievalFlow.getByRole("listitem")).toHaveCount(4);
+    await expect(retrievalFlow).toBeVisible();
+    await page.setViewportSize({ width: 979, height: 853 });
+    await expect(retrievalFlow).toBeHidden();
+    await expect(page.getByLabel(zh ? "检索问题" : "Question", { exact: true })).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`unified-rag-retrieval-small-${locale}.png`), fullPage: true });
+    await page.setViewportSize(desktopViewport);
+    await expect(retrievalFlow).toBeVisible();
     await expect(page.getByRole("combobox", { name: zh ? "智能体" : "Agent", exact: true })).toHaveCount(0);
     await expect(page.getByRole("combobox", { name: zh ? "空间" : "Workspace", exact: true })).toHaveCount(0);
     await page.screenshot({ path: info.outputPath(`unified-rag-retrieval-flow-${locale}.png`), fullPage: true });
@@ -321,5 +379,46 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(page.getByRole("tooltip")).toHaveText("model outage");
     await expect(page.getByRole("button", { name: zh ? "查看分块与原文" : "View chunks and original", exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath(`unified-rag-${locale}.png`), fullPage: true });
+  });
+}
+
+for (const locale of ["zh-CN", "en-US"] as const) {
+  test(`Builtin task chunks can be opened, retried and paged in ${locale}`, async ({ page }, info) => {
+    const zh = locale === "zh-CN";
+    await routeResourceUiShellApi(page); await seedResourceUiShell(page, locale);
+    let rejectChunks = true;
+    const requests: number[] = [];
+    await page.route("**/api/v1/rag/**", async route => {
+      const url = new URL(route.request().url());
+      let data: unknown;
+      if (url.pathname.endsWith("/corpora")) data = [{ id: "skill", name: "Skills", kind: "builtin", knowledgeBaseId: null, settings: {}, counts: {} }];
+      else if (url.pathname.endsWith("/tasks")) data = [{ id: "builtin-one", isLatest: true, corpusId: "skill", sourceCode: "skill-one", documentId: null, title: "skill-one", state: "COMPLETED", stage: "PUBLISHING", totalUnits: 16, completedUnits: 16, createdAt: 1, updatedAt: 2, fileSizeBytes: null, error: null }];
+      else if (url.pathname.endsWith("/chunks")) {
+        expect(url.pathname).toBe("/api/v1/rag/tasks/builtin-one/chunks");
+        expect(url.searchParams.get("size")).toBe("15");
+        const current = Number(url.searchParams.get("current"));
+        requests.push(current);
+        if (rejectChunks) return route.fulfill({ status: 503, json: { code: "101034004", message: "Chunk read unavailable", data: {} } });
+        data = { current, size: 15, total: 16, records: Array.from({ length: current === 1 ? 15 : 1 }, (_, index) => ({ textUnitCode: `unit-${current}-${index}`, ordinal: (current - 1) * 15 + index, text: `published skill chunk ${(current - 1) * 15 + index + 1}`, headingPath: ["Skill heading"], metadata: {} })) };
+      } else throw new Error(`Unexpected endpoint ${url.pathname}`);
+      return route.fulfill({ json: { code: "0", message: "ok", data } });
+    });
+    await page.goto(`${frontend!.baseUrl}/settings/rag?tab=ingestion&corpus=skill`);
+    await page.getByRole("button", { name: `${zh ? "查看分块" : "View chunks"} · skill-one`, exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: `${zh ? "查看分块" : "View chunks"} · skill-one`, exact: true });
+    await expect(dialog.getByRole("alert")).toHaveText("Chunk read unavailable");
+    rejectChunks = false;
+    await dialog.getByRole("button", { name: zh ? "重试" : "Retry", exact: true }).click();
+    await expect(dialog.getByText("published skill chunk 1", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: zh ? "下一页" : "Next page", exact: true }).click();
+    await expect(dialog.getByText("published skill chunk 16", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("published skill chunk 1", { exact: true })).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath(`rag-skill-chunks-${locale}.png`), fullPage: true });
+    await dialog.getByRole("button", { name: zh ? "关闭" : "Close", exact: true }).click();
+    await page.getByRole("button", { name: zh ? "skill-one的操作" : "Actions for skill-one", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: zh ? "查看分块" : "View chunks", exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: zh ? "查看原文" : "View original", exact: true })).toHaveCount(0);
+    expect(requests.at(-1)).toBe(2);
+    expect(requests.filter(current => current === 1).length).toBeGreaterThanOrEqual(2);
   });
 }

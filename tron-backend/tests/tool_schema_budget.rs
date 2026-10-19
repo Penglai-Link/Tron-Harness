@@ -81,7 +81,7 @@ fn context() -> AgentRunContext {
             max_tool_calls: 8,
             max_parallel_tool_calls: 2,
         },
-        messages: vec![AgentMessage::user("exercise tools")],
+        messages: vec![AgentMessage::user("exercise tools")].into(),
         observations: Vec::new(),
         short_term_memory: None,
         started_at: "2026-09-07T00:00:00Z".into(),
@@ -288,7 +288,7 @@ fn schema_cache_reuses_snapshots_and_invalidates_definition_and_protocol_changes
     assert!(!first.payload().to_string().contains("internal-skill"));
     assert_eq!(
         first.estimated_tokens() as usize,
-        first.payload().to_string().len().div_ceil(4)
+        eliteforge_agent_core::estimate_unicode_text_tokens(&first.payload().to_string())
     );
     tools[0].input_schema["properties"]["query"]["description"] = json!("new definition");
     let changed = cache
@@ -371,7 +371,7 @@ fn adapters_send_the_same_payload_that_was_measured_and_ignore_stale_snapshots()
             .prepare(protocol, &context.tools, u32::MAX)
             .unwrap();
         let mut request = ModelRequest {
-            messages: context.messages,
+            messages: context.messages.as_ref().clone(),
             tools: context.tools,
             prepared_tool_schema: Some(schema.clone()),
             system_agent_session_id: None,
@@ -475,9 +475,11 @@ async fn rejected_expansion_preserves_tools_cache_and_call_id() {
 async fn schema_within_its_own_limit_still_counts_toward_total_input_budget() {
     for service in [false, true] {
         let mut context = context();
-        context.model.context_window_tokens = Some(1000);
-        context.tools[0].description = "x".repeat(300);
-        context.messages = vec![AgentMessage::user("x".repeat(700))];
+        // The native host contributes mandatory instructions. Use its ordinary
+        // 32k window and scale both inputs so each fits but their sum cannot.
+        // The real admission and per-block checks remain enabled below.
+        context.tools[0].description = "x".repeat(30_000);
+        context.messages = vec![AgentMessage::user("x".repeat(72_000))].into();
         let input_budget =
             context.model.context_window_tokens.unwrap() - context.model.max_tokens.unwrap();
         let message_tokens =
@@ -499,7 +501,7 @@ async fn schema_within_its_own_limit_still_counts_toward_total_input_budget() {
                 .unwrap();
             let mut isolated = context.clone();
             if tools_only {
-                isolated.messages = vec![AgentMessage::user("small input")];
+                isolated.messages = vec![AgentMessage::user("small input")].into();
             } else {
                 isolated.tools.clear();
             }

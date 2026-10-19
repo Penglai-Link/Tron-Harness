@@ -127,7 +127,31 @@ impl DudeRepository for SqliteDudeRepository {
     }
     fn delete(&mut self, code: &str) -> Result<(), DudeError> {
         let code = code.to_owned();
-        self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let busy:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM dude_events WHERE dude_code=?1 AND status IN ('Queued','Running','AwaitingInput'))",[&code],|r|r.get(0)).map_err(storage)?;if busy{return Err(DudeError::Conflict)}tx.execute("DELETE FROM dude_events WHERE dude_code=?1",[&code]).map_err(storage)?;tx.execute("DELETE FROM dude_sessions WHERE dude_code=?1",[&code]).map_err(storage)?;tx.execute("DELETE FROM dude_souls WHERE dude_code=?1",[&code]).map_err(storage)?;tx.execute("DELETE FROM dudes WHERE dude_code=?1 AND is_main=0",[&code]).map_err(storage)?;tx.commit().map_err(storage)})
+        self.call(move |c| {
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate)
+                .map_err(storage)?;
+            let is_main: Option<bool> = tx
+                .query_row("SELECT is_main FROM dudes WHERE dude_code=?1", [&code], |r| r.get(0))
+                .optional()
+                .map_err(storage)?;
+            if is_main.ok_or(DudeError::NotFound)? {
+                return Err(DudeError::Conflict);
+            }
+            let busy: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM dude_events WHERE dude_code=?1 AND status IN ('Queued','Running','AwaitingInput'))",
+                [&code], |r| r.get(0),
+            ).map_err(storage)?;
+            if busy {
+                return Err(DudeError::Conflict);
+            }
+            super::agent_management_repository::delete_platform_internal_agent_records(&tx, &code)
+                .map_err(storage)?;
+            tx.execute("DELETE FROM dude_events WHERE dude_code=?1", [&code]).map_err(storage)?;
+            tx.execute("DELETE FROM dude_sessions WHERE dude_code=?1", [&code]).map_err(storage)?;
+            tx.execute("DELETE FROM dude_souls WHERE dude_code=?1", [&code]).map_err(storage)?;
+            tx.execute("DELETE FROM dudes WHERE dude_code=?1", [&code]).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
     }
     fn designate_main(&mut self, code: &str) -> Result<(), DudeError> {
         let code = code.to_owned();

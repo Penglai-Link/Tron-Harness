@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { pages } from "@/i18n/locales/en-US/pages";
 import type { ParsingTier } from "../model/KnowledgeLibraryModel";
-const fixture = vi.hoisted(() => ({ workspace: "space-a", user: "user-a", warnings: [] as string[], filename: "policy.md", status: "FAILED", stage: undefined as string | null | undefined, hasArtifact: true, parsingTier: null as ParsingTier | null, fidelityIssues: [] as {kind: string; page: number; blocks: string[]; sourceExcerpt: string; imageResourceCodes: string[]}[], cancel: vi.fn(), reparse: vi.fn(), capabilities: vi.fn(), create: vi.fn(), update: vi.fn(), preview: vi.fn(), index: vi.fn(), grants: vi.fn(), readGrants: vi.fn(), upload: vi.fn(), error: vi.fn(), success: vi.fn() }));
+const fixture = vi.hoisted(() => ({ workspace: "space-a", user: "user-a", warnings: [] as string[], filename: "policy.md", status: "FAILED", stage: undefined as string | null | undefined, hasArtifact: true, parsingTier: null as ParsingTier | null, fidelityIssues: [] as {kind: string; page: number; blocks: string[]; sourceExcerpt: string; imageResourceCodes: string[]}[], cancel: vi.fn(), reparse: vi.fn(), settingsRead: vi.fn(), settingsSave: vi.fn(), libraries: [] as { id: string; name: string; description: string; documentCount: number; authorizedAgentCount: number }[], capabilities: vi.fn(), create: vi.fn(), update: vi.fn(), preview: vi.fn(), index: vi.fn(), grants: vi.fn(), readGrants: vi.fn(), upload: vi.fn(), preflight: vi.fn(), error: vi.fn(), success: vi.fn() }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, args?: Record<string, unknown>) => { const pluralKey = args?.count !== undefined ? `${key}_${args.count === 1 ? "one" : "other"}` : key; const pluralValue = pluralKey.split(".").reduce((node: unknown, item) => (node as Record<string, unknown>)?.[item], pages); const value = pluralValue ?? key.split(".").reduce((node: unknown, item) => (node as Record<string, unknown>)?.[item], pages); return String(value ?? args?.defaultValue ?? key).replace(/{{(\w+)}}/g, (_, k) => String(args?.[k] ?? "")); }, i18n: { resolvedLanguage: "en-US" } }) }));
 vi.mock("@/shared/hooks/useLocaleFormatters", () => ({ useLocaleFormatters: () => ({ formatNumber: (value: number) => String(value) }) }));
 vi.mock("@/store/authStore", () => ({ useAuthStore: (selector: (state: unknown) => unknown) => selector({ session: { user: { userCode: fixture.user } } }) }));
@@ -22,16 +22,20 @@ vi.mock("@/components/ui/dialog", () => ({ Dialog: ({ children, open }: { childr
 vi.mock("@/components/forms", () => ({ Field: ({ label, children }: { label: string; children: ReactNode }) => <label>{label}{children}</label>, TextInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />, TextArea: (props: React.ComponentProps<"textarea">) => <textarea {...props} />, SelectInput: ({ onValueChange, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { onValueChange: (value: string) => void }) => <select {...props} onChange={(event) => onValueChange(event.target.value)} /> }));
 vi.mock("@/components/ui/select", () => ({ SelectItem: ({ value, children }: { value: string; children: ReactNode }) => <option value={value}>{children}</option> }));
 vi.mock("@/components/ui/switch", () => ({ Switch: ({ checked, disabled, onCheckedChange, ...props }: { checked: boolean; disabled?: boolean; onCheckedChange: (checked: boolean) => void }) => <input {...props} type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(event) => onCheckedChange(event.target.checked)} /> }));
+vi.mock("@/domain/model/api/modelApi", () => ({ fetchPlatformModels: vi.fn(async () => []) }));
+vi.mock("@/domain/model/api/modelProviderApi", () => ({ fetchProviderCatalog: vi.fn(async () => []) }));
 vi.mock("@/domain/resource/api/resourceApi", () => ({ downloadResourceBinary: vi.fn() }));
 vi.mock("@/domain/dude/api/dudeApi", () => ({ listDudes: vi.fn(async () => []) }));
 vi.mock("@/domain/agent/api/agentManagementApi", () => ({ fetchWorkspaceInternalAgents: vi.fn(async () => [{ agentCode: "main-agent", name: "Main Agent" }]) }));
 vi.mock("@/domain/admin/api", () => ({ fetchWorkspaceOptions: vi.fn(async () => [{ name: "Space A", label: "Space A" }, { workspaceCode: "space-b", name: "Space B", label: "Space B" }]) }));
+vi.mock("../api/knowledgeQualityApi", () => ({ listChunkingStrategies: vi.fn(async () => ({ strategies: ["auto", "structure", "heading", "fixed"].map(id => ({id,version:"1"})) })) }));
 vi.mock("../api/knowledgeBaseApi", () => ({
- listPlatformKnowledgeLibraries: vi.fn(async () => []), assignKnowledgeLibraryAgents: fixture.grants, getKnowledgeLibraryAgentGrants: fixture.readGrants,
+ getKnowledgeLibrarySettings: fixture.settingsRead, updateKnowledgeLibrarySettings: fixture.settingsSave,
+ listPlatformKnowledgeLibraries: vi.fn(async () => fixture.libraries), assignKnowledgeLibraryAgents: fixture.grants, getKnowledgeLibraryAgentGrants: fixture.readGrants,
  reparseVisualKnowledgeDocument: fixture.reparse, getParsingCapabilities: fixture.capabilities,
  listKnowledgeLibraries: vi.fn(async () => []), createKnowledgeLibrary: fixture.create,
  getKnowledgeLibrary: vi.fn(async () => ({ id: "kb-a", name: "Policies", description: "", documentCount: 1, agentCodes: [], defaultChunkConfig: { mode: "AUTO", maxChars: 1200, overlapChars: 120, headingDepth: 2 }, documents: [{ id: "doc-a", name: "Policy", fileName: fixture.user === "user-a" ? fixture.filename : "other-policy.md", resourceCode: "res-a", resourceRevision: 1, chunkConfig: null, status: fixture.status, stage: fixture.stage !== undefined ? fixture.stage : ["QUEUED", "PARSING", "CHUNKING", "EMBEDDING", "PUBLISHING"].includes(fixture.status) ? ({ QUEUED: "Parsing", PARSING: "Parsing", CHUNKING: "Chunking", EMBEDDING: "Embedding", PUBLISHING: "Publishing" } as Record<string,string>)[fixture.status] : null, error: fixture.status === "REVIEW_REQUIRED" ? "Source review required" : "Embedding unavailable", parsingTier: fixture.parsingTier, parsingArtifact: fixture.hasArtifact ? {effectiveTier: "standard", parserVersion: "4.0.10", resourceCode: "cache-a", imageResourceCodes: [], fidelityIssues: fixture.fidelityIssues} : null, warnings: fixture.warnings, chunkCount: 0, indexRevision: 0 }] })),
- cancelKnowledgeDocument: fixture.cancel, updateKnowledgeDocument: fixture.update, previewKnowledgeDocument: fixture.preview, indexKnowledgeDocument: fixture.index, setKnowledgeLibraryGrants: fixture.grants, uploadKnowledgeDocument: fixture.upload,
+ cancelKnowledgeDocument: fixture.cancel, updateKnowledgeDocument: fixture.update, previewKnowledgeDocument: fixture.preview, indexKnowledgeDocument: fixture.index, setKnowledgeLibraryGrants: fixture.grants, uploadKnowledgeDocument: fixture.upload, preflightKnowledgeDocument: fixture.preflight,
 }));
 import { KnowledgeBasePage } from "./KnowledgeBasePage";
 import { KnowledgeBaseDetailPage } from "./KnowledgeBaseDetailPage";
@@ -53,9 +57,43 @@ function mount(path = "/knowledge-base/kb-a") {
  const view = render(element());
  return { ...view, refresh: () => view.rerender(element()) };
 }
-beforeEach(() => { vi.clearAllMocks(); fixture.workspace = "space-a"; fixture.user = "user-a"; fixture.warnings = []; fixture.filename = "policy.md"; fixture.status="FAILED"; fixture.stage=undefined; fixture.hasArtifact=true; fixture.parsingTier=null; fixture.fidelityIssues=[]; fixture.capabilities.mockResolvedValue({ defaultTier: "standard", availableTiers: ["flash", "standard", "advanced"], parserVersion: "4.0.10", officeTier: "flash" }); fixture.cancel.mockResolvedValue({status:"CANCELLED"});fixture.reparse.mockResolvedValue({status:"UPLOADED"});fixture.create.mockResolvedValue({ id: "kb-a",  }); fixture.update.mockResolvedValue({}); fixture.preview.mockResolvedValue({ chunkCount: 1, chunks: [{ text: "Policy content", title: "Policy", headingPath: ["Policy"], ordinal: 0, location: { heading: "Policy", charStart: 0, charEnd: 14 } }] }); fixture.index.mockResolvedValue({ status: "READY" }); fixture.grants.mockResolvedValue({}); fixture.readGrants.mockResolvedValue({agentCodes:[]}); fixture.upload.mockResolvedValue({}); });
+async function confirmUpload() {
+ const dialog=screen.getByRole("dialog");
+ const button=within(dialog).getByRole("button",{name:/^Upload$/});
+ await waitFor(()=>expect((button as HTMLButtonElement).disabled).toBe(false));
+ fireEvent.click(button);
+}
+beforeEach(() => { vi.clearAllMocks(); fixture.libraries=[];
+ fixture.settingsRead.mockResolvedValue({name:"Policies",description:"Saved description",defaultParsePreference:"Recognition",indexSettings:{fulltext:true,vector:true,graph:false,embeddingDimension:1024,embeddingModelCode:"PERSON_AI:ROUTE:MultimodalEmbeddingAuto",graphModelCode:"PERSON_AI:ROUTE:ChatAuto",rerankModelCode:null,imageDescriptionModelCode:null}});
+ fixture.settingsSave.mockImplementation(async (_id, value) => value);
+ fixture.workspace = "space-a"; fixture.user = "user-a"; fixture.warnings = []; fixture.filename = "policy.md"; fixture.status="FAILED"; fixture.stage=undefined; fixture.hasArtifact=true; fixture.parsingTier=null; fixture.fidelityIssues=[]; fixture.capabilities.mockResolvedValue({ defaultTier: "standard", availableTiers: ["flash", "standard", "advanced"], parserVersion: "4.0.10", officeTier: "flash" }); fixture.cancel.mockResolvedValue({status:"CANCELLED"});fixture.reparse.mockResolvedValue({status:"UPLOADED"});fixture.create.mockResolvedValue({ id: "kb-a",  }); fixture.update.mockResolvedValue({}); fixture.preview.mockResolvedValue({ chunkCount: 1, chunks: [{ text: "Policy content", title: "Policy", headingPath: ["Policy"], ordinal: 0, location: { heading: "Policy", charStart: 0, charEnd: 14 } }] }); fixture.index.mockResolvedValue({ status: "READY" }); fixture.grants.mockResolvedValue({}); fixture.readGrants.mockResolvedValue({agentCodes:[]}); fixture.upload.mockResolvedValue({}); fixture.preflight.mockImplementation(async (_id: string, file: File, preference: string) => { if(file.size > 20*1024*1024 || file.name === "old.doc") throw new Error("Invalid file: " + file.name); return {plan:{ preference, method: "Native", reason:"native_content", rulesVersion:"test", features:{format:file.name.split(".").at(-1),sourceSha256:"synthetic",localText:file.name.endsWith(".md")} }}; }); });
 afterEach(cleanup);
 describe("knowledge base flow", () => {
+ it("opens the full saved library settings from the catalog without starting a task", async () => {
+  fixture.libraries=[{id:"kb-a",name:"Policies",description:"Saved description",documentCount:32,authorizedAgentCount:1}];
+  mount("/knowledge-base"); await screen.findByText("Policies");
+  fireEvent.click(screen.getByRole("menuitem",{name:"Knowledge base settings"}));
+  await screen.findByDisplayValue("Saved description");
+  expect((screen.getByLabelText("Parsing method") as HTMLSelectElement).value).toBe("Recognition");
+  expect((screen.getByRole("button",{name:"Save"}) as HTMLButtonElement).disabled).toBe(true);
+  expect(fixture.settingsSave).not.toHaveBeenCalled(); expect(fixture.index).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Description"),{target:{value:"Updated description"}});
+  fireEvent.click(screen.getByRole("button",{name:"Save"}));
+  await waitFor(()=>expect(fixture.settingsSave).toHaveBeenCalledWith("kb-a",expect.objectContaining({name:"Policies",description:"Updated description",defaultParsePreference:"Recognition",indexSettings:expect.objectContaining({graph:false,rerankModelCode:null,embeddingModelCode:"PERSON_AI:ROUTE:MultimodalEmbeddingAuto"})})));
+  await waitFor(()=>expect(screen.queryByRole("dialog")).toBeNull());
+ });
+ it("exposes settings on the detail page and retains edits after a save failure", async () => {
+  fixture.settingsSave.mockRejectedValueOnce(new Error("Storage unavailable"));
+  mount(); await screen.findByText("policy.md");
+  fireEvent.click(screen.getByRole("button",{name:"Knowledge base settings"}));
+  await screen.findByDisplayValue("Saved description");
+  fireEvent.change(screen.getByLabelText("Name"),{target:{value:"Updated policies"}});
+  fireEvent.click(screen.getByRole("button",{name:"Save"}));
+  await waitFor(()=>expect(fixture.error).toHaveBeenCalledWith("Storage unavailable"));
+  expect(screen.getByDisplayValue("Updated policies")).toBeTruthy(); expect(screen.getByRole("dialog")).toBeTruthy();
+  expect(fixture.index).not.toHaveBeenCalled(); expect(fixture.upload).not.toHaveBeenCalled();
+ });
+
  it.each(["READY", "FAILED", "CANCELLED", "NEEDS_REBUILD"])("shows only %s even if the last task stage was publishing", async (status) => {
   fixture.status=status; fixture.stage="Publishing";
   mount(); await screen.findByText("policy.md");
@@ -81,25 +119,25 @@ describe("knowledge base flow", () => {
   const view=mount(); await screen.findByText("guideline.pdf");
   expect(screen.getByRole("columnheader",{name:"Parsing quality"})).toBeTruthy();
   expect(screen.getByRole("columnheader",{name:"Splitting"})).toBeTruthy();
-  await waitFor(()=>expect(within(screen.getAllByRole("row")[1]).getByText("Standard",{exact:true})).toBeTruthy());
+  await waitFor(()=>expect(within(screen.getAllByRole("row")[1]).getByText("Document parsing",{exact:true})).toBeTruthy());
   expect(within(screen.getAllByRole("row")[1]).getByText("Automatic",{exact:true})).toBeTruthy();
   view.unmount(); fixture.status="READY"; fixture.hasArtifact=true; mount(); await screen.findByText("guideline.pdf");
-  expect(within(screen.getAllByRole("row")[1]).getByText("Standard",{exact:true})).toBeTruthy();
+  expect(within(screen.getAllByRole("row")[1]).getByText("Document parsing",{exact:true})).toBeTruthy();
   expect(within(screen.getAllByRole("row")[1]).getByText("Automatic",{exact:true})).toBeTruthy();
  });
  it("shows the requested PDF tier while parsing and does not guess when defaults are unavailable", async () => {
   fixture.filename="guideline.pdf"; fixture.status="PARSING"; fixture.hasArtifact=false; fixture.parsingTier="advanced";
   const view=mount(); await screen.findByText("guideline.pdf");
-  expect(within(screen.getAllByRole("row")[1]).getByText("Advanced",{exact:true})).toBeTruthy();
+  expect(within(screen.getAllByRole("row")[1]).getByText("Precise parsing",{exact:true})).toBeTruthy();
   view.unmount(); fixture.parsingTier=null; fixture.capabilities.mockRejectedValueOnce(new Error("unavailable"));
   mount(); await screen.findByText("guideline.pdf");
   await waitFor(()=>expect(fixture.capabilities).toHaveBeenCalled());
-  expect(within(screen.getAllByRole("row")[1]).getByText("Default",{exact:true})).toBeTruthy();
-  expect(screen.queryByText("Standard",{exact:true})).toBeNull();
+  expect(within(screen.getAllByRole("row")[1]).getByText("Not determined",{exact:true})).toBeTruthy();
+  expect(screen.queryByText("Document parsing",{exact:true})).toBeNull();
  });
  it.each(["policy.md","policy.docx","policy.xlsx"])("shows native text for %s", async (filename) => {
   fixture.filename=filename; mount(); await screen.findByText(filename);
-  expect(within(screen.getAllByRole("row")[1]).getByText("Native text",{exact:true})).toBeTruthy();
+  expect(within(screen.getAllByRole("row")[1]).getByText("Document parsing",{exact:true})).toBeTruthy();
  });
  it("uploads a batch independently and reports successes and named failures", async () => {
   mount(); await screen.findByText("policy.md");
@@ -110,15 +148,19 @@ describe("knowledge base flow", () => {
   const input=screen.getByLabelText("Upload") as HTMLInputElement;
   expect(input.multiple).toBe(true);
   fireEvent.change(input,{target:{files:[first,new File(["old"],"old.doc"),failed,oversized,last]}});
+  await screen.findByText("Invalid file: old.doc");
+  await screen.findByText("Invalid file: large.pdf");
+  expect(fixture.upload).not.toHaveBeenCalled();
+  await confirmUpload();
   await waitFor(()=>expect(fixture.success).toHaveBeenCalledWith("Uploaded 2 files."));
-  expect(fixture.upload.mock.calls.map(call=>call.slice(0,3))).toEqual([["kb-a",first],["kb-a",failed],["kb-a",last]]);
-  expect(fixture.error).toHaveBeenCalledWith(expect.stringContaining("3 files could not be uploaded."));
-  expect(fixture.error).toHaveBeenCalledWith(expect.stringContaining("old.doc:"));
+  expect(fixture.upload.mock.calls.map(call=>call.slice(0,2))).toEqual([["kb-a",first],["kb-a",failed],["kb-a",last]]);
+  expect(fixture.upload.mock.calls[0][2].preference).toBe("Auto");
+  expect(fixture.error).toHaveBeenCalledWith(expect.stringContaining("1 file could not be uploaded."));
   expect(fixture.error).toHaveBeenCalledWith(expect.stringContaining("failed.pdf: Network unavailable"));
-  expect(fixture.error).toHaveBeenCalledWith(expect.stringContaining("large.pdf:"));
   expect(input.value).toBe("");
   await waitFor(()=>expect(input.disabled).toBe(false));
   fireEvent.change(input,{target:{files:[first]}});
+  await confirmUpload();
   await waitFor(()=>expect(fixture.success).toHaveBeenCalledWith("Uploaded 1 file."));
   expect(fixture.upload).toHaveBeenCalledTimes(4);
  });
@@ -127,6 +169,7 @@ describe("knowledge base flow", () => {
   fixture.upload.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
   const view=mount(); await screen.findByText("policy.md");
   fireEvent.change(screen.getByLabelText("Upload"),{target:{files:[new File(["one"],"one.pdf"),new File(["two"],"two.pdf")]}});
+  await confirmUpload();
   await waitFor(()=>expect(fixture.upload).toHaveBeenCalledTimes(1));
   fixture[scope]=scope==="workspace"?"space-b":"user-b"; view.refresh();
   complete({status:"QUEUED"});
@@ -161,14 +204,27 @@ describe("knowledge base flow", () => {
   expect(screen.queryByText("Source review required; index not published")).toBeNull();expect(fixture.success).not.toHaveBeenCalled();
  });
  it("previews unchanged settings without invalidating the existing index", async () => { mount(); await screen.findByText("policy.md"); await chooseDocumentAction("Settings"); expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true); fireEvent.click(screen.getByRole("button", { name: "Preview" })); await screen.findByText("Policy content"); expect(fixture.preview).toHaveBeenCalledWith("kb-a", "doc-a"); expect(fixture.update).not.toHaveBeenCalled(); expect(fixture.index).not.toHaveBeenCalled(); });
- it("inherits platform Standard and saves explicit per-document parsing quality", async () => { fixture.filename="synthetic.pdf"; mount(); await screen.findByText("synthetic.pdf"); await chooseDocumentAction("Settings"); await screen.findByRole("option",{name:"Advanced"}); expect(screen.getByRole("option",{name:"Use platform default (Standard)"})).toBeTruthy(); fireEvent.change(screen.getByLabelText("Parsing quality"),{target:{value:"advanced"}}); fireEvent.click(screen.getByRole("button",{name:"Save"})); await waitFor(()=>expect(fixture.update).toHaveBeenCalledWith("kb-a","doc-a",null,"advanced",null)); });
+ it("inherits platform Standard and saves explicit per-document parsing quality", async () => { fixture.filename="synthetic.pdf"; mount(); await screen.findByText("synthetic.pdf"); await chooseDocumentAction("Settings"); await screen.findByRole("option",{name:"Precise parsing"}); expect(screen.getByRole("option",{name:"Automatic (recommended)"})).toBeTruthy(); fireEvent.change(screen.getByLabelText("Parsing quality"),{target:{value:"Precise"}}); fireEvent.click(screen.getByRole("button",{name:"Save"})); await waitFor(()=>expect(fixture.update).toHaveBeenCalledWith("kb-a","doc-a",null,"advanced","Text")); });
  it("does not enable parsing preview when capabilities are unavailable", async () => {fixture.filename="synthetic.pdf"; fixture.capabilities.mockRejectedValueOnce(new Error("MinerU is unavailable")); mount(); await screen.findByText("synthetic.pdf");await chooseDocumentAction("Settings");await screen.findByText("MinerU is unavailable");expect((screen.getByRole("button",{name:"Preview"}) as HTMLButtonElement).disabled).toBe(true);});
 
- it("shows parsing limitations on both the document and its preview", async () => { fixture.warnings = ["Spreadsheet formula values use cached results"]; fixture.preview.mockResolvedValueOnce({ chunkCount: 0, chunks: [], warnings: ["Some PDF pages contain no text; OCR is unsupported"] }); mount(); await screen.findByRole("button", { name: "Warnings for policy.md" }); expect(screen.queryByText("Spreadsheet formula values use cached results")).toBeNull(); await chooseDocumentAction("Settings"); fireEvent.click(screen.getByRole("button", { name: "Preview" })); await screen.findByText("Some PDF pages contain no text; OCR is unsupported"); });
+ it("shows parsing limitations on both the document and its preview", async () => { fixture.warnings = ["Spreadsheet formula values use cached results"]; fixture.preview.mockResolvedValueOnce({ chunkCount: 0, chunks: [], warnings: ["Some PDF pages contain no text; OCR is unsupported"] }); mount(); await screen.findByRole("button", { name: "Processing details for policy.md" }); expect(screen.queryByText("Spreadsheet formula values use cached results")).toBeNull(); await chooseDocumentAction("Settings"); fireEvent.click(screen.getByRole("button", { name: "Preview" })); await screen.findByText("Some PDF pages contain no text; OCR is unsupported"); });
  it("does not reuse private document cache after changing accounts", async () => { const view = mount(); await screen.findByText("policy.md"); fixture.user = "user-b"; view.refresh(); expect(screen.queryByText("policy.md")).toBeNull(); await screen.findByText("other-policy.md"); });
  it("does not navigate across accounts after a pending platform create completes", async () => { let complete!: (value: { id: string }) => void; fixture.create.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; })); const view = mount("/knowledge-base"); fireEvent.click(screen.getByRole("button", { name: "Create" })); fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Policies" } }); fireEvent.click(screen.getAllByRole("button", { name: "Create" }).at(-1)!); await waitFor(() => expect(fixture.create).toHaveBeenCalled()); fixture.user = "user-b"; view.refresh(); complete({ id: "kb-a" }); await waitFor(() => expect(screen.getByText("No knowledge bases. Create one to upload documents.")).toBeTruthy()); expect(screen.queryByText("policy.md")).toBeNull(); expect(fixture.success).not.toHaveBeenCalled(); });
- it("creates a product knowledge base and opens its document page", async () => { mount("/knowledge-base"); fireEvent.click(screen.getByRole("button", { name: "Create" })); fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Policies" } }); fireEvent.click(screen.getAllByRole("button", { name: "Create" }).at(-1)!); await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("Policies", "")); await screen.findByText("policy.md"); });
- it("shows indexing errors and retries the document rather than reporting mock success", async () => { mount(); await screen.findByRole("button", { name: "Warnings for policy.md" }); expect(screen.queryByText("Embedding unavailable")).toBeNull(); await chooseDocumentAction("Retry"); await waitFor(() => expect(fixture.index).toHaveBeenCalledWith("kb-a", "doc-a", true)); });
+ it("creates a product knowledge base and opens its document page", async () => { mount("/knowledge-base"); fireEvent.click(screen.getByRole("button", { name: "Create" })); fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Policies" } }); fireEvent.click(screen.getAllByRole("button", { name: "Create" }).at(-1)!); await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("Policies", "", expect.objectContaining({ embeddingModelCode: "PERSON_AI:ROUTE:MultimodalEmbeddingAuto", graphModelCode: "PERSON_AI:ROUTE:ChatAuto", rerankModelCode: "PERSON_AI:ROUTE:RerankAuto" }), "Auto")); await screen.findByText("policy.md"); });
+ it("creates with edited index settings and keeps the dialog open on failure", async () => {
+  fixture.create.mockRejectedValueOnce(new Error("Create failed"));
+  mount("/knowledge-base"); fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Configured" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Vector" }), { target: { value: "disabled" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Graph" }), { target: { value: "enabled" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Reranking model" }), { target: { value: "__none__" } });
+  fireEvent.click(screen.getAllByRole("button", { name: "Create" }).at(-1)!);
+  await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("Configured", "", expect.objectContaining({ vector: false, graph: true, rerankModelCode: null }), "Auto"));
+  await waitFor(() => expect(fixture.error).toHaveBeenCalledWith("Create failed"));
+  expect(screen.getByLabelText("Name").getAttribute("value")).toBe("Configured");
+  expect((screen.getByRole("combobox", { name: "Vector" }) as HTMLSelectElement).value).toBe("disabled");
+ });
+ it("shows indexing errors and retries the document rather than reporting mock success", async () => { mount(); await screen.findByRole("button", { name: "Processing details for policy.md" }); expect(screen.queryByText("Embedding unavailable")).toBeNull(); await chooseDocumentAction("Retry"); await waitFor(() => expect(fixture.index).toHaveBeenCalledWith("kb-a", "doc-a", true)); });
  it.each(["PARTIAL_FAILED", "REVIEW_REQUIRED"])("keeps the legacy %s status localized and retryable", async (status) => { fixture.status = status; mount(); await screen.findByText("policy.md"); expect(screen.getByText("Failed", { exact: true })).toBeTruthy(); await openDocumentActions();expect(screen.getByRole("menuitem", { name: "Retry" }).getAttribute("aria-disabled")).not.toBe("true"); });
  it("persists a document-specific strategy before preview and leaves others untouched", async () => { mount(); await screen.findByText("policy.md"); await chooseDocumentAction("Settings"); fireEvent.click(screen.getByRole("switch")); fireEvent.click(screen.getByText("Adjust chunk parameters")); fireEvent.change(screen.getByLabelText("Maximum characters per chunk"), { target: { value: "600" } }); fireEvent.click(screen.getByRole("button", { name: "Save and preview" })); await screen.findByText("Policy content"); expect(screen.getByText("Chunk 1 · Policy")).toBeTruthy(); expect(fixture.update).toHaveBeenCalledWith("kb-a", "doc-a", { mode: "AUTO", maxChars: 600, overlapChars: 120, headingDepth: 2 }); expect(fixture.preview).toHaveBeenCalledWith("kb-a", "doc-a"); expect(fixture.index).not.toHaveBeenCalled(); });
  it("grants no Agent by default and saves platform authorization without a workspace", async () => {
@@ -194,5 +250,15 @@ describe("knowledge base flow", () => {
   await screen.findByRole("alert"); expect((screen.getByRole("button",{name:"Save"}) as HTMLButtonElement).disabled).toBe(true);
   expect(fixture.grants).not.toHaveBeenCalled();
  });
- it("rejects unsupported files before upload and sends the original accepted file", async () => { mount(); await screen.findByText("policy.md"); const input = screen.getByLabelText("Upload"); fireEvent.change(input, { target: { files: [new File(["old"], "old.doc")] } }); expect(fixture.upload).not.toHaveBeenCalled(); await waitFor(() => expect(fixture.error).toHaveBeenCalled()); const file = new File(["# Policy"], "policy.md"); fireEvent.change(input, { target: { files: [file] } }); await waitFor(() => expect(fixture.upload).toHaveBeenCalledWith("kb-a", file)); });
+ it("rejects unsupported files before upload and sends the original accepted file", async () => {
+  fixture.preflight.mockRejectedValueOnce(new Error("Unsupported file"));
+  mount(); await screen.findByText("policy.md");
+  fireEvent.change(screen.getByLabelText("Upload"), { target: { files: [new File(["a"], "script.js")] } });
+  await screen.findByText("Unsupported file"); expect(fixture.upload).not.toHaveBeenCalled();
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button",{name:"Cancel"}));
+  const file = new File(["original bytes"], "accepted.docx");
+  fireEvent.change(screen.getByLabelText("Upload"), { target: { files: [file] } });
+  await confirmUpload();
+  await waitFor(() => expect(fixture.upload).toHaveBeenCalledWith("kb-a", file, expect.objectContaining({preference:"Auto"})));
+ });
 });

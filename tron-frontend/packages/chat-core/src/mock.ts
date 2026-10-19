@@ -1,6 +1,6 @@
 import {
   buildMockStreamingEvents,
-} from "./transcript";
+} from "@eliteforge/agent-ui-chat-core";
 import type {
   ChatAdapter,
   ChatAguiEvent,
@@ -117,7 +117,8 @@ export function createMockChatAdapter(): ChatAdapter {
           updatedAt: nowIso(),
         },
       };
-      const events = buildMockStreamingEvents(session.sessionCode, runCode, assistantMessage.messageCode, assistantContent);
+      const events: ChatAguiStreamEvent[] = buildMockStreamingEvents(session.sessionCode, runCode, assistantMessage.messageCode, assistantContent)
+        .map(({ result: _result, ...event }) => event);
       for (const event of events) {
         if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
         handlers?.onAguiEvent?.(event);

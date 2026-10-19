@@ -12,6 +12,13 @@ pub struct AgentModelRouter {
 }
 
 impl AgentModelRouter {
+    pub fn with_auto_router(
+        mut self,
+        router: std::sync::Arc<dyn eliteforge_agent_core::ChatAutoRouter>,
+    ) -> Self {
+        self.inner = self.inner.with_router(router);
+        self
+    }
     pub fn new(models: ModelService, providers: ModelProviderService) -> Self {
         Self {
             inner: ChatAutoModelRouter::new(models, providers),
@@ -32,10 +39,16 @@ impl AgentModelRouter {
         if workspace.is_empty() {
             return Ok("");
         }
-        let is_dude = self.management.as_ref().map(|management| {
-            management.is_dude_definition(agent)
-                .map_err(|error| format!("Agent kind lookup failed: {error:?}"))
-        }).transpose()?.unwrap_or(false);
+        let is_dude = self
+            .management
+            .as_ref()
+            .map(|management| {
+                management
+                    .is_dude_definition(agent)
+                    .map_err(|error| format!("Agent kind lookup failed: {error:?}"))
+            })
+            .transpose()?
+            .unwrap_or(false);
         Ok(if is_dude { "" } else { workspace })
     }
 
@@ -52,7 +65,8 @@ impl AgentModelRouter {
             management.platform_internal_agent_policy(agent)
         } else {
             management.workspace_internal_agent_policy(model_workspace, agent)
-        }.map_err(|error| format!("Agent model candidates lookup failed: {error:?}"))?;
+        }
+        .map_err(|error| format!("Agent model candidates lookup failed: {error:?}"))?;
         Ok((model_workspace, policy.candidate_model_codes))
     }
 

@@ -341,6 +341,13 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
 async fn removed_builtin_prompts_are_absent_from_the_global_catalog() {
     let (router, _) = prompt_app("retired-builtins-absent");
     for prompt_code in [
+        "SYS_AGENT_FINAL_OUTPUT",
+        "ROLE_MAIN_AGENT",
+        "ROLE_EXPLORER",
+        "ROLE_PROJECT_MANAGER",
+        "ROLE_PRODUCT_MANAGER",
+        "ROLE_FULL_STACK_DEVELOPER",
+        "ROLE_TESTER",
         "SYS_AGENT_STEER_CONTINUITY",
         "SYS_MEMORY_SESSION_SUMMARY",
         "SYS_MEMORY_COMPACTION",
@@ -359,6 +366,78 @@ async fn removed_builtin_prompts_are_absent_from_the_global_catalog() {
         )
         .await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND, "{prompt_code}");
+    }
+}
+
+#[tokio::test]
+async fn retired_builtin_prompts_and_translations_are_deleted_from_existing_storage() {
+    let database_url = temp_database_url("retired-builtins-existing");
+    let retired = [
+        ("SYS_AGENT_FINAL_OUTPUT", "agent.final-output", "SYSTEM"),
+        ("ROLE_MAIN_AGENT", "agent.role.main", "AGENT_ROLE"),
+        ("ROLE_EXPLORER", "agent.role.explorer", "AGENT_ROLE"),
+        (
+            "ROLE_PROJECT_MANAGER",
+            "agent.role.project-manager",
+            "AGENT_ROLE",
+        ),
+        (
+            "ROLE_PRODUCT_MANAGER",
+            "agent.role.product-manager",
+            "AGENT_ROLE",
+        ),
+        (
+            "ROLE_FULL_STACK_DEVELOPER",
+            "agent.role.full-stack-developer",
+            "AGENT_ROLE",
+        ),
+        ("ROLE_TESTER", "agent.role.tester", "AGENT_ROLE"),
+    ];
+    let config = common::prepared_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let router = common::app_with_state_setup(config, |_| {
+        let connection = Connection::open(&database_url).unwrap();
+        for (index, (code, key, category)) in retired.iter().enumerate() {
+            connection.execute(
+                "INSERT INTO prompts (id,prompt_code,display_name,category,prompt_body,enabled,version,created_at,updated_at,built_in,runtime_required,catalog_key)
+                 VALUES (?1,?2,?2,?3,'Retired guidance',1,1,0,0,1,0,?4)",
+                rusqlite::params![900000000000000001_i64 + index as i64, code, category, key],
+            ).unwrap();
+            for locale in ["zh-CN", "en-US"] {
+                connection.execute(
+                    "INSERT INTO prompt_translations (prompt_code,locale,display_name,prompt_body,updated_at)
+                     VALUES (?1,?2,?1,'Retired guidance',0)",
+                    [code, &locale],
+                ).unwrap();
+            }
+        }
+    });
+    drop(router);
+    // Reopening the application runs the same cleanup as a normal server restart.
+    let router = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let connection = Connection::open(&database_url).unwrap();
+    for (code, _, _) in retired {
+        let response = authenticated_request(
+            &router,
+            Method::POST,
+            "/api/v1/admin/platform/prompts/detail",
+            Some(json!({ "promptCode": code })),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{code}");
+        let translations: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM prompt_translations WHERE prompt_code=?1",
+                [code],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(translations, 0, "{code}");
     }
 }
 

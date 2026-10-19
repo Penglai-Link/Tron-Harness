@@ -75,12 +75,14 @@ impl ChatService {
         self.repository().validate_annotation_sources(session_code, &annotations).map_err(ChatSendError::Chat)?;
         // Session ownership comes from persisted server state, not the caller's requested agent.
         let dude_code = session.source_code.as_deref().and_then(|source| source.strip_prefix("__dude:"));
+        let knowledge_context=self.knowledge_quality_context(&session,user_code.as_deref()).map_err(ChatSendError::Chat)?;
+        let knowledge_bound=knowledge_context.is_some();
         let agent = if let Some(dude_code) = dude_code {
             let service = agent.with_collaboration_owner(crate::domain::agent::AgentCollaborationOwner {
                 kind: "DUDE".into(), code: dude_code.into(), origin_session_code: Some(session.session_code.clone()), task_code: session.task_code.clone(),
             });
             service.with_platform_scope()
-        } else { agent };
+        } else if knowledge_bound {agent.with_platform_scope()} else { agent };
         let (attachments, invocation_attachments) = self
             .prepare_session_attachments(&session, attachments)
             .map_err(ChatSendError::Chat)?;
@@ -89,6 +91,7 @@ impl ChatService {
         } else {
             resume_prompt(&command.resume)
         };
+        let prompt=knowledge_context.map_or_else(||prompt.clone(),|context|format!("{context}\n\n用户请求：\n{prompt}"));
         let transcript_user_content =
             resume_user_message(&command.resume).unwrap_or_else(|| content.clone());
         let should_generate_title = should_generate_manual_session_title(&session);
@@ -103,7 +106,7 @@ impl ChatService {
         } else {
             ChatMessageChannel::MainAgent
         };
-        let effective_agent_code = if session.last_run_code.is_some() || dude_code.is_some() {
+        let effective_agent_code = if session.last_run_code.is_some() || dude_code.is_some() || knowledge_bound {
             session.agent_code.clone()
         } else {
             normalized_optional(command.agent_code.clone()).or(session.agent_code.clone())
@@ -154,7 +157,6 @@ impl ChatService {
             let workspace_code = workspace_code.clone();
             let user_message_content = content.clone();
             let title_run_code = run_code.clone();
-            let title_fallback_model = resolved_model.clone();
             crate::app::telemetry::spawn_traced(async move {
                 chat_service
                     .try_generate_manual_session_title(
@@ -163,7 +165,6 @@ impl ChatService {
                         &user_message_content,
                         &title_run_code,
                         llm_runtime,
-                        title_fallback_model,
                     )
                     .await;
             });

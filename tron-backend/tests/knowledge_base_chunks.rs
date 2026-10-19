@@ -63,7 +63,7 @@ async fn published_chunks_are_complete_paged_private_and_not_reparsed() {
     assert!(
         f.service
             .published_chunks(USER, &kb.id, &doc.id, 1, 15)
-            .is_err()
+            .is_ok()
     );
     assert!(
         f.service

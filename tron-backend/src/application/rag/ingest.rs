@@ -12,6 +12,16 @@ use std::{
 };
 
 pub trait RagIngestRepository: RagConfigRepository {
+    fn cached_vectors(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: usize,
+    ) -> Result<BTreeMap<String, Vec<f32>>, RagError> {
+        Ok(BTreeMap::new())
+    }
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError>;
 }
 
@@ -19,6 +29,18 @@ impl<T> RagIngestRepository for Arc<Mutex<T>>
 where
     T: RagIngestRepository,
 {
+    fn cached_vectors(
+        &self,
+        corpus: &str,
+        source: &str,
+        workspace: &str,
+        fingerprint: &str,
+        dimension: usize,
+    ) -> Result<BTreeMap<String, Vec<f32>>, RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .cached_vectors(corpus, source, workspace, fingerprint, dimension)
+    }
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
         self.lock()
             .expect("RAG repository mutex poisoned")
@@ -39,8 +61,6 @@ pub struct RagPersistIngestCommand {
     pub body_hash: Option<String>,
     pub metadata: Value,
     pub domain_fields: BTreeMap<String, Value>,
-    pub related_graph: Option<Value>,
-    pub graph_write_policy: Value,
     pub text_units: Vec<RagTextUnitWrite>,
     pub tree_nodes: Vec<RagTreeNodeWrite>,
     pub warnings: Vec<RagIngestWarning>,
@@ -122,6 +142,14 @@ pub struct RagEmbeddingBatchCall {
     pub dimensions: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct RagEmbeddingContentBatchCall {
+    pub workspace_code: String,
+    pub model_code: Option<String>,
+    pub inputs: Vec<eliteforge_agent_framework::Content>,
+    pub dimensions: usize,
+}
+
 pub use crate::application::llm::LlmEmbeddingBatchCallResult as RagEmbeddingBatchResult;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,6 +166,41 @@ pub struct RagGraphResult {
 }
 
 pub trait RagEmbeddingRuntime: Clone + Send + Sync + 'static {
+    fn embedding_batch_input_limit(
+        &self,
+        _: &str,
+        _: Option<&str>,
+    ) -> Result<Option<usize>, String> {
+        Ok(None)
+    }
+    fn embed_content_batch<'a>(
+        &'a self,
+        call: RagEmbeddingContentBatchCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingBatchResult, String>> + Send + 'a>> {
+        Box::pin(async move {
+            if call.inputs.iter().any(|input| input.has_media()) {
+                return Err("image embedding is unavailable".into());
+            }
+            self.embed_batch(RagEmbeddingBatchCall {
+                workspace_code: call.workspace_code,
+                model_code: call.model_code,
+                inputs: call
+                    .inputs
+                    .iter()
+                    .map(eliteforge_agent_framework::Content::text)
+                    .collect(),
+                dimensions: call.dimensions,
+            })
+            .await
+        })
+    }
+    fn resolve_index_model(
+        &self,
+        _workspace: &str,
+        model: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        Ok(model.map(str::to_owned))
+    }
     fn embedding_fingerprint(
         &self,
         _workspace: &str,
@@ -164,6 +227,45 @@ pub trait RagGraphRuntime: Send + Sync + 'static {
 }
 
 impl RagEmbeddingRuntime for LlmRuntimeService {
+    fn embedding_batch_input_limit(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+    ) -> Result<Option<usize>, String> {
+        model
+            .map(|model| {
+                LlmRuntimeService::embedding_batch_input_limit(self, workspace, model)
+                    .map_err(|error| error.to_string())
+            })
+            .transpose()
+            .map(Option::flatten)
+    }
+    fn embed_content_batch<'a>(
+        &'a self,
+        call: RagEmbeddingContentBatchCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingBatchResult, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.embedding_content_batch_call(
+                crate::application::llm::LlmEmbeddingContentBatchCallCommand {
+                    workspace_code: call.workspace_code,
+                    model_code: call.model_code,
+                    inputs: call.inputs,
+                    dimensions: call.dimensions,
+                },
+            )
+            .await
+            .map_err(|error| error.to_string())
+        })
+    }
+    fn resolve_index_model(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        self.resolve_embedding_index_model_code(workspace, model)
+            .map(Some)
+            .map_err(|error| error.to_string())
+    }
     fn embedding_fingerprint(
         &self,
         workspace: &str,

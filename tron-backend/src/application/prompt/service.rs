@@ -28,6 +28,13 @@ mod template;
 mod validation;
 
 const RETIRED_BUILTIN_PROMPT_CATALOG_KEYS: &[&str] = &[
+    "agent.final-output",
+    "agent.role.main",
+    "agent.role.explorer",
+    "agent.role.project-manager",
+    "agent.role.product-manager",
+    "agent.role.full-stack-developer",
+    "agent.role.tester",
     "agent.steer-continuity",
     "memory.session-summary-system",
     "memory.compaction-system",
@@ -39,6 +46,13 @@ const RETIRED_BUILTIN_PROMPT_CATALOG_KEYS: &[&str] = &[
     "terminal.command-generate-system",
 ];
 const RETIRED_BUILTIN_PROMPT_CODES: &[&str] = &[
+    "SYS_AGENT_FINAL_OUTPUT",
+    "ROLE_MAIN_AGENT",
+    "ROLE_EXPLORER",
+    "ROLE_PROJECT_MANAGER",
+    "ROLE_PRODUCT_MANAGER",
+    "ROLE_FULL_STACK_DEVELOPER",
+    "ROLE_TESTER",
     "SYS_AGENT_STEER_CONTINUITY",
     "SYS_MEMORY_SESSION_SUMMARY",
     "SYS_MEMORY_COMPACTION",

@@ -1,3 +1,5 @@
+import { INTERNAL_AGENT_DIALOG_CLASS, INTERNAL_AGENT_SECTIONS, InternalAgentProfileFields, InternalAgentRuntimeFields } from "../components/InternalAgentFormFields";
+import { AgentPolicyFields } from "../components/AgentPolicyFields";
 import { AgentActivationSwitch } from "../components/AgentActivationSwitch";
 import { reconcileResourceDraft } from "../model/ResourceAssignmentDraft";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -69,8 +71,6 @@ import {
 import { InternalAgentKnowledgeField } from "../components/InternalAgentKnowledgeField";
 import { AgentWorkspaceField } from "../components/AgentWorkspaceField";
 import { persistAgentWorkspaceGrants } from "../hooks/agentWorkspaceGrants";
-import { AgentRolePromptField } from "../components/AgentRolePromptField";
-import { AgentDescriptionField } from "../components/AgentDescriptionField";
 import {
   InternalAgentAssignmentDialog,
   type InternalAgentAssignmentKind,
@@ -95,7 +95,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
   AgentAvatar,
-  AgentAvatarPicker,
 } from "../components/AgentAvatarPicker";
 import {
   Dialog,
@@ -108,14 +107,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { setAgentKnowledgeLibraries } from "@/domain/knowledge-base/api/knowledgeBaseApi";
 import { InternalAgentBrowseItem } from "../components/InternalAgentBrowseItem";
-import { InternalAgentGroupField } from "../components/InternalAgentGroupField";
 import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
 import {
   groupInternalAgents,
   internalAgentGroupName,
 } from "../model/internalAgentGroups";
-import { AgentCandidateModelsField } from "../components/AgentCandidateModelsField";
-import { AgentLoopField } from "../components/AgentLoopField";
 
 interface InternalAgentDraft {
   description: string;
@@ -384,42 +380,6 @@ export function WorkspaceAgentsPage({
       ? internalPageT("title", "Internal Agents")
       : systemTableT("title", "Inherited System Agents");
 
-  function fieldLabel(
-    key:
-      | "expandedDomainPersistenceMode"
-      | "maxSteps"
-      | "maxToolCalls"
-      | "maxParallelToolCalls"
-      | "mcpAccessMode"
-      | "toolAssignmentMode"
-      | "toolExposureMode",
-    defaultValue: string,
-    align: "end" | "start" = "start"
-  ) {
-    return (
-      <span className="inline-flex items-center gap-1.5">
-        <span>{internalPageT(`labels.${key}`, defaultValue)}</span>
-        <InfoTooltip
-          align={align}
-          ariaLabel={internalPageT(
-            `help.${key}.ariaLabel`,
-            `Explain ${defaultValue}`
-          )}
-        >
-          <p>{internalPageT(`help.${key}.summary`, "")}</p>
-          <div className="space-y-1">
-            <p>
-              <strong>{internalPageT("help.optionLabel", "Options")}</strong>
-            </p>
-            <p>{internalPageT(`help.${key}.optionOne`, "")}</p>
-            <p>{internalPageT(`help.${key}.optionTwo`, "")}</p>
-            {key === "toolAssignmentMode" ? <p>{internalPageT("help.toolAssignmentMode.optionThree", "Select declared read-only tools automatically each run.")}</p> : null}
-          </div>
-        </InfoTooltip>
-      </span>
-    );
-  }
-
   function isBusy(code: string) {
     return Boolean(busyKeys[code]);
   }
@@ -591,24 +551,6 @@ export function WorkspaceAgentsPage({
       agentCode,
       hasDraftChanges(baseRecord, nextDraft) ? "pending" : "idle"
     );
-  }
-
-  function updateLimitDraft(
-    agentCode: string,
-    key: "maxSteps" | "maxToolCalls" | "maxParallelToolCalls",
-    valueAsNumber: number
-  ) {
-    const draft = internalDraftsRef.current[agentCode];
-    if (!draft) {
-      return;
-    }
-
-    const nextValue = Number.isFinite(valueAsNumber)
-      ? Math.max(1, Math.trunc(valueAsNumber))
-      : draft[key];
-    setInternalDraft(agentCode, {
-      [key]: nextValue,
-    } as Partial<InternalAgentDraft>);
   }
 
   function openAssignmentDialog(
@@ -1435,7 +1377,7 @@ export function WorkspaceAgentsPage({
                           }}
                         >
                           <DialogContent
-                            className="flex h-[min(78dvh,48rem)] max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl"
+                            className={INTERNAL_AGENT_DIALOG_CLASS}
                             showCloseButton={!internalBusy}
                             closeLabel={internalPageT(
                               "definition.close",
@@ -1511,12 +1453,7 @@ export function WorkspaceAgentsPage({
                                 }}
                               >
                                 <TabsList variant="line" className="w-full shrink-0 justify-start border-b border-[var(--color-outline-variant)]">
-                                  {[
-                                    ["profile", "Basic"],
-                                    ["runtime", "Runtime"],
-                                    ["resources", "Capabilities"],
-                                    ["advanced", "Advanced"],
-                                  ].map(([value, label]) => (
+                                  {INTERNAL_AGENT_SECTIONS.map(([value, label]) => (
                                     <TabsTrigger key={value} value={value} className="flex-none px-3">
                                       {internalPageT(`definition.tabs.${value}`, label)}
                                     </TabsTrigger>
@@ -1528,384 +1465,22 @@ export function WorkspaceAgentsPage({
                                   ) : null}
                                 </TabsList>
                                 <TabsContent value="profile" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
-                              <div className="space-y-3">
-                                {agent.builtIn && scope !== "platform" ? (
-                                  <AgentAvatar
-                                    avatarId={draft.avatarId}
-                                    className="size-24 rounded-full"
-                                  />
-                                ) : (
-                                  <AgentAvatarPicker
-                                    value={draft.avatarId}
-                                    disabled={editingDisabled}
-                                    onChange={(avatarId) =>
-                                      setInternalDraft(agent.agentCode, {
-                                        avatarId,
-                                      })
-                                    }
-                                  />
-                                )}
-                                <Field
-                                  label={internalPageT(
-                                    "definition.name",
-                                    "Name"
-                                  )}
-                                >
-                                  <TextInput
-                                    aria-label={internalPageT(
-                                      "definition.name",
-                                      "Name"
-                                    )}
-                                    maxLength={100}
-                                    disabled={editingDisabled}
-                                    value={draft.name}
-                                    onChange={(event) =>
-                                      setInternalDraft(agent.agentCode, {
-                                        name: event.target.value,
-                                      })
-                                    }
-                                  />
-                                </Field>
-                                <AgentDescriptionField value={draft.description} disabled={editingDisabled} onChange={(description) => setInternalDraft(agent.agentCode, { description })} />
-                                <InternalAgentGroupField
-                                  workspaceCode={activeWorkspaceCode}
-                                  value={draft.groupName}
-                                  disabled={editingDisabled}
-                                  onChange={(groupName) =>
-                                    setInternalDraft(agent.agentCode, {
-                                      groupName,
-                                    })
-                                  }
-                                />
-                              </div>
-
+                                  <InternalAgentProfileFields code={agent.agentCode} draft={draft} disabled={editingDisabled} workspaceCode={activeWorkspaceCode} onChange={(change) => setInternalDraft(agent.agentCode, change)}
+                                    avatar={agent.builtIn && scope !== "platform" ? <AgentAvatar avatarId={draft.avatarId} className="size-24 rounded-full" /> : undefined} />
                                 </TabsContent>
                                 <TabsContent value="runtime" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
-                                  <AgentLoopField
-                                    value={draft.loopCode}
-                                    disabled={editingDisabled}
-                                    onChange={(loopCode) => setInternalDraft(agent.agentCode, { loopCode })}
-                                  />
-                                  <AgentCandidateModelsField
-                                    workspaceCode={activeWorkspaceCode}
-                                    value={draft.candidateModelCodes}
-                                    disabled={editingDisabled}
-                                    onChange={(candidateModelCodes) => setInternalDraft(agent.agentCode, { candidateModelCodes })}
-                                  />
-                                  <AgentRolePromptField
-                                    key={`${activeWorkspaceCode}:${agent.agentCode}`}
-                                    disabled={editingDisabled}
-                                    value={draft.rolePrompt}
-                                    onChange={(value) => setInternalDraft(agent.agentCode, { rolePrompt: value })}
-                                  />
+                                  <InternalAgentRuntimeFields workspaceCode={activeWorkspaceCode} loopCode={draft.loopCode} candidateModelCodes={draft.candidateModelCodes} disabled={editingDisabled} onChange={(change) => setInternalDraft(agent.agentCode, change)} />
                                 </TabsContent>
-                                <TabsContent value="resources" keepMounted className="tron-scrollbar min-h-0 flex-1 overflow-y-auto px-1 py-3">
-
-                              <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                                <Field
-                                  className="w-full [&>div:first-child]:min-h-[var(--tron-button-height-sm,1.75rem)]"
-                                  label={fieldLabel(
-                                    "mcpAccessMode",
-                                    "MCP access mode"
-                                  )}
-                                  actions={
-                                    draft.mcpAccessMode ===
-                                    "selected_servers" ? (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={resourceEditingDisabled}
-                                        onClick={() =>
-                                          openAssignmentDialog(
-                                            agent.agentCode,
-                                            "mcp"
-                                          )
-                                        }
-                                      >
-                                        {internalPageT(
-                                          "assignmentDialog.editServers",
-                                          "Choose servers ({{count}})",
-                                          {
-                                            count:
-                                              draft.selectedServerCodes.length,
-                                          }
-                                        )}
-                                      </Button>
-                                    ) : undefined
-                                  }
-                                >
-                                  <SelectInput
-                                    disabled={resourceEditingDisabled}
-                                    value={draft.mcpAccessMode}
-                                    onValueChange={(event) => {
-                                      if (event === "selected_servers")
-                                        openAssignmentDialog(
-                                          agent.agentCode,
-                                          "mcp"
-                                        );
-                                      else
-                                        setInternalDraft(agent.agentCode, {
-                                          mcpAccessMode:
-                                            event as WorkspaceInternalAgentRecord["mcpAccessMode"],
-                                        });
-                                    }}
-                                  >
-                                    <SelectItem value="disabled">
-                                      {internalPageT(
-                                        "modes.mcpDisabled",
-                                        "Disabled"
-                                      )}
-                                    </SelectItem>
-                                    <SelectItem value="all_enabled_servers">
-                                      {internalPageT(
-                                        "modes.allEnabledServers",
-                                        "All enabled servers"
-                                      )}
-                                    </SelectItem>
-                                    <SelectItem value="selected_servers">
-                                      {internalPageT(
-                                        "modes.selectedServers",
-                                        "Selected servers"
-                                      )}
-                                    </SelectItem>
-                                  </SelectInput>
-                                </Field>
-                                <Field
-                                  className="w-full [&>div:first-child]:min-h-[var(--tron-button-height-sm,1.75rem)]"
-                                  label={fieldLabel(
-                                    "toolAssignmentMode",
-                                    "Tool assignment mode"
-                                  )}
-                                  actions={
-                                    draft.toolAssignmentMode ===
-                                    "selected_tools" ? (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={resourceEditingDisabled}
-                                        onClick={() =>
-                                          openAssignmentDialog(
-                                            agent.agentCode,
-                                            "tools"
-                                          )
-                                        }
-                                      >
-                                        {internalPageT(
-                                          "assignmentDialog.editTools",
-                                          "Choose tools ({{count}})",
-                                          {
-                                            count:
-                                              draft.selectedToolCodes.length,
-                                          }
-                                        )}
-                                      </Button>
-                                    ) : undefined
-                                  }
-                                >
-                                  <SelectInput
-                                    disabled={resourceEditingDisabled}
-                                    value={draft.toolAssignmentMode}
-                                    onValueChange={(event) => {
-                                      if (event === "selected_tools")
-                                        openAssignmentDialog(
-                                          agent.agentCode,
-                                          "tools"
-                                        );
-                                      else
-                                        setInternalDraft(agent.agentCode, {
-                                          toolAssignmentMode:
-                                            event as WorkspaceInternalAgentRecord["toolAssignmentMode"],
-                                        });
-                                    }}
-                                  >
-                                    <SelectItem value="all_platform_tools">
-                                      {internalPageT(
-                                        "modes.allTools",
-                                        "All platform tools"
-                                      )}
-                                    </SelectItem>
-                                    <SelectItem value="all_read_only_tools">
-                                      {internalPageT("modes.allReadOnlyTools", "All read-only tools")}
-                                    </SelectItem>
-                                    <SelectItem value="selected_tools">
-                                      {internalPageT(
-                                        "modes.selectedTools",
-                                        "Selected tools"
-                                      )}
-                                    </SelectItem>
-                                  </SelectInput>
-                                </Field>
-                                <InternalAgentSkillField
-                                  agentCode={agent.agentCode}
-                                  disabled={resourceEditingDisabled}
-                                  selectedNames={skillDrafts[agent.agentCode]}
-                                  onSelectionChange={(names) =>
-                                    setSkillDrafts((current) => ({
-                                      ...current,
-                                      [agent.agentCode]: names,
-                                    }))
-                                  }
-                                />
-                                <InternalAgentKnowledgeField
-                                  key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`}
-                                  agentCode={agent.agentCode}
-                                  agentName={translateInternalAgentName(t, { ...agent, name: draft.name })}
-                                  disabled={editingDisabled}
-                                  selectedIds={knowledgeDrafts[agent.agentCode]}
-                                  onSelectionChange={
-                                    agent.builtIn
-                                      ? undefined
-                                      : (ids) =>
-                                          setKnowledgeDrafts((current) => ({
-                                            ...current,
-                                            [agent.agentCode]: ids,
-                                          }))
-                                  }
-                                />
-                              </div>
-
-                              </TabsContent>
-                              <TabsContent value="advanced" keepMounted className="tron-scrollbar min-h-0 flex-1 overflow-y-auto px-1 py-3">
-                                <div className="grid gap-3 lg:grid-cols-2">
-                                  <Field
-                                    label={fieldLabel(
-                                      "toolExposureMode",
-                                      "Tool exposure mode",
-                                      "end"
-                                    )}
-                                  >
-                                    <SelectInput
-                                      disabled={editingDisabled}
-                                      value={draft.toolExposureMode}
-                                      onValueChange={(event) => {
-                                        setInternalDraft(agent.agentCode, {
-                                          toolExposureMode:
-                                            event as WorkspaceInternalAgentRecord["toolExposureMode"],
-                                        });
-                                      }}
-                                    >
-                                      <SelectItem value="direct_list">
-                                        {internalPageT(
-                                          "modes.directList",
-                                          "Direct list"
-                                        )}
-                                      </SelectItem>
-                                      <SelectItem value="domain_discovery">
-                                        {internalPageT(
-                                          "modes.domainDiscovery",
-                                          "Domain discovery"
-                                        )}
-                                      </SelectItem>
-                                    </SelectInput>
-                                  </Field>
-                                  <Field
-                                    label={fieldLabel(
-                                      "expandedDomainPersistenceMode",
-                                      "Expanded domain persistence mode"
-                                    )}
-                                  >
-                                    <SelectInput
-                                      disabled={editingDisabled}
-                                      value={
-                                        draft.expandedDomainPersistenceMode
-                                      }
-                                      onValueChange={(event) => {
-                                        setInternalDraft(agent.agentCode, {
-                                          expandedDomainPersistenceMode:
-                                            event as WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"],
-                                        });
-                                      }}
-                                    >
-                                      <SelectItem value="sticky_expanded">
-                                        {internalPageT(
-                                          "modes.stickyExpanded",
-                                          "Sticky expanded"
-                                        )}
-                                      </SelectItem>
-                                      <SelectItem value="ephemeral_expanded">
-                                        {internalPageT(
-                                          "modes.ephemeralExpanded",
-                                          "Ephemeral expanded"
-                                        )}
-                                      </SelectItem>
-                                    </SelectInput>
-                                  </Field>
-                                  <Field
-                                    label={fieldLabel("maxSteps", "Max steps")}
-                                  >
-                                    <TextInput
-                                      aria-label={internalPageT(
-                                        "labels.maxSteps",
-                                        "Max steps"
-                                      )}
-                                      disabled={editingDisabled}
-                                      min={1}
-                                      step={1}
-                                      type="number"
-                                      value={draft.maxSteps}
-                                      onChange={(event) => {
-                                        updateLimitDraft(
-                                          agent.agentCode,
-                                          "maxSteps",
-                                          event.currentTarget.valueAsNumber
-                                        );
-                                      }}
-                                    />
-                                  </Field>
-                                  <Field
-                                    label={fieldLabel(
-                                      "maxToolCalls",
-                                      "Max tool calls"
-                                    )}
-                                  >
-                                    <TextInput
-                                      aria-label={internalPageT(
-                                        "labels.maxToolCalls",
-                                        "Max total tool calls"
-                                      )}
-                                      disabled={editingDisabled}
-                                      min={1}
-                                      step={1}
-                                      type="number"
-                                      value={draft.maxToolCalls}
-                                      onChange={(event) => {
-                                        updateLimitDraft(
-                                          agent.agentCode,
-                                          "maxToolCalls",
-                                          event.currentTarget.valueAsNumber
-                                        );
-                                      }}
-                                    />
-                                  </Field>
-                                  <Field
-                                    label={fieldLabel(
-                                      "maxParallelToolCalls",
-                                      "Max parallel tool calls",
-                                      "end"
-                                    )}
-                                  >
-                                    <TextInput
-                                      aria-label={internalPageT(
-                                        "labels.maxParallelToolCalls",
-                                        "Max parallel tool calls"
-                                      )}
-                                      disabled={editingDisabled}
-                                      min={1}
-                                      step={1}
-                                      type="number"
-                                      value={draft.maxParallelToolCalls}
-                                      onChange={(event) => {
-                                        updateLimitDraft(
-                                          agent.agentCode,
-                                          "maxParallelToolCalls",
-                                          event.currentTarget.valueAsNumber
-                                        );
-                                      }}
-                                    />
-                                  </Field>
-                                </div>
+                                <TabsContent value="resources" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
+                                  <AgentPolicyFields panel="resources" draft={draft} disabled={resourceEditingDisabled} onChange={(change) => setInternalDraft(agent.agentCode, change)} onAssignment={(kind) => openAssignmentDialog(agent.agentCode, kind)}>
+                                    <InternalAgentSkillField agentCode={agent.agentCode} disabled={resourceEditingDisabled} selectedNames={skillDrafts[agent.agentCode]} onSelectionChange={(names) => setSkillDrafts((current) => ({ ...current, [agent.agentCode]: names }))} />
+                                    <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={translateInternalAgentName(t, { ...agent, name: draft.name })} disabled={editingDisabled} selectedIds={knowledgeDrafts[agent.agentCode]}
+                                      onSelectionChange={!agent.builtIn || scope === "platform" ? (ids) => setKnowledgeDrafts((current) => ({ ...current, [agent.agentCode]: ids })) : undefined} />
+                                  </AgentPolicyFields>
+                                </TabsContent>
+                                <TabsContent value="advanced" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
+                                  <AgentPolicyFields panel="advanced" draft={draft} disabled={editingDisabled} onChange={(change) => setInternalDraft(agent.agentCode, change)} />
+                                </TabsContent>
 
                               {assignmentDialog?.workspaceCode ===
                                 activeWorkspaceCode &&
@@ -1945,7 +1520,6 @@ export function WorkspaceAgentsPage({
                                   }}
                                 />
                               ) : null}
-                                </TabsContent>
                                 {scope === "platform" ? (
                                   <TabsContent value="workspace" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
                                     <AgentWorkspaceField

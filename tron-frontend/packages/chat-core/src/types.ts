@@ -20,7 +20,7 @@ export interface ChatModelSelection {
   providerCode?: "PersonAi" | null;
   modelCode?: string | null;
   qualityType?: "High" | "Middle" | "Low" | null;
-  routeCode?: "ChatAuto" | "EmbeddingAuto" | "LlmFallback" | null;
+  routeCode?: "ChatAuto" | "EmbeddingAuto" | "MultimodalEmbeddingAuto" | "RerankAuto" | null;
 }
 
 export interface ChatSession {
@@ -278,11 +278,7 @@ export interface SendChatMessageInput {
   requestedSkills?: string[];
 }
 
-export interface ChatQueuedSubmission {
-  id: string;
-  sessionCode: string;
-  input: SendChatMessageInput;
-}
+
 
 export interface ChatSteerContext {
   expectedRunCode: string;
@@ -394,7 +390,6 @@ export interface ChatAguiStreamEvent {
   [key: string]: unknown;
 }
 
-export type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
 
 export interface ChatStreamHandlers {
   onAguiEvent?: (event: ChatAguiStreamEvent) => void;

@@ -3,6 +3,7 @@ export interface ContextAssemblyBlock {
   position: number;
   sources: string[];
   originalTokens: number | null;
+  configuredTokens: number | null;
   allocatedTokens: number;
   finalTokens: number;
   messageCount: number;
@@ -17,6 +18,12 @@ export interface ContextAssemblySnapshot {
   inputCapacity: number | null;
   toolsDetail?: unknown;
   snapshotSequence?: string;
+  modelCode: string | null;
+  estimatedInputTokens: number | null;
+  stage: string | null;
+  step: number | null;
+  attempt: number | null;
+  budgetBreakdown: Record<string, unknown> | null;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -53,6 +60,7 @@ export function contextAssemblySnapshot(payload: Record<string, unknown> | null)
       originalTokens: count(block.original_tokens),
       // allocated_tokens is the final admission budget; reduction_budget_tokens
       // is a compression target and must not be presented as the block ceiling.
+      configuredTokens: count(block.configured_tokens),
       allocatedTokens,
       finalTokens,
       messageCount,
@@ -79,6 +87,12 @@ export function contextAssemblySnapshot(payload: Record<string, unknown> | null)
     blocks,
     protocolTokens: count(report.protocol_tokens),
     inputCapacity: count(report.input_capacity),
+    modelCode: record(report.model) && typeof report.model.model === "string" ? report.model.model : null,
+    estimatedInputTokens: count(report.estimated_input_tokens),
+    stage: typeof report.stage === "string" ? report.stage : null,
+    step: count(report.step),
+    attempt: count(report.attempt),
+    budgetBreakdown: record(payload.budgetBreakdown) ? payload.budgetBreakdown : null,
     toolsDetail: Array.isArray(payload.tools) ? { tools: payload.tools } : undefined,
     snapshotSequence: typeof payload.snapshotSequence === "string" && /^[1-9]\d*$/.test(payload.snapshotSequence)
       ? payload.snapshotSequence : undefined,

@@ -83,7 +83,7 @@ fn config(code: &str) -> RuntimeModelConfig {
     }
 }
 #[tokio::test]
-async fn unavailable_auxiliary_key_and_invalid_title_fall_back_to_the_selected_chat_model() {
+async fn unavailable_or_invalid_text_generation_never_uses_the_chat_model() {
     for primary in [
         Err("No active provider key configured".into()),
         Ok("New chat".into()),
@@ -96,15 +96,14 @@ async fn unavailable_auxiliary_key_and_invalid_title_fall_back_to_the_selected_c
             calls: Mutex::new(vec![]),
         });
         let runtime = LlmRuntimeService::new(models.clone(), models.clone());
-        let title = generate_title(
-            &runtime,
-            title_model_candidates(Some(config("auxiliary")), config("selected")),
-            "Generate a title",
-        )
-        .await
-        .unwrap();
-        assert_eq!(title, "文档会诊");
-        assert_eq!(*models.calls.lock().unwrap(), vec!["auxiliary", "selected"]);
+        let error = generate_title(&runtime, vec![config("auxiliary")], "Generate a title")
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error.0,
+            "LLM_UPSTREAM_FAILED" | "TITLE_FORMAT_INVALID"
+        ));
+        assert_eq!(*models.calls.lock().unwrap(), vec!["auxiliary"]);
     }
 }
 
@@ -154,22 +153,18 @@ fn plain_titles_keep_existing_formatting_and_length_rules() {
 }
 
 #[tokio::test]
-async fn reasoning_only_from_both_models_is_a_title_format_error() {
+async fn reasoning_only_from_text_generation_is_a_title_format_error() {
     let models = Arc::new(TitleModels {
         primary: Ok("<think>Only reasoning</think>".into()),
         fallback: Ok("<think>Truncated reasoning".into()),
         calls: Mutex::new(vec![]),
     });
     let runtime = LlmRuntimeService::new(models.clone(), models.clone());
-    let error = generate_title(
-        &runtime,
-        title_model_candidates(Some(config("auxiliary")), config("selected")),
-        "Generate a title",
-    )
-    .await
-    .unwrap_err();
+    let error = generate_title(&runtime, vec![config("auxiliary")], "Generate a title")
+        .await
+        .unwrap_err();
     assert_eq!(error.0, "TITLE_FORMAT_INVALID");
-    assert_eq!(*models.calls.lock().unwrap(), vec!["auxiliary", "selected"]);
+    assert_eq!(*models.calls.lock().unwrap(), vec!["auxiliary"]);
 }
 
 #[tokio::test]
@@ -245,35 +240,22 @@ async fn valid_auxiliary_title_does_not_spend_a_second_model_call() {
     });
     let runtime = LlmRuntimeService::new(models.clone(), models.clone());
     assert_eq!(
-        generate_title(
-            &runtime,
-            title_model_candidates(Some(config("auxiliary")), config("selected")),
-            "Generate a title"
-        )
-        .await
-        .unwrap(),
+        generate_title(&runtime, vec![config("auxiliary")], "Generate a title")
+            .await
+            .unwrap(),
         "辅助模型标题"
     );
     assert_eq!(*models.calls.lock().unwrap(), vec!["auxiliary"]);
 }
 #[tokio::test]
-async fn missing_auxiliary_route_uses_the_chat_model_and_total_failure_remains_an_error() {
+async fn missing_text_generation_route_makes_no_model_calls() {
     let models = Arc::new(TitleModels {
         primary: Err("unused".into()),
         fallback: Err("chat model unavailable".into()),
         calls: Mutex::new(vec![]),
     });
     let runtime = LlmRuntimeService::new(models.clone(), models.clone());
-    let result = generate_title(
-        &runtime,
-        title_model_candidates(None, config("selected")),
-        "Generate a title",
-    )
-    .await;
-    assert_eq!(result.unwrap_err().0, "LLM_UPSTREAM_FAILED");
-    assert_eq!(*models.calls.lock().unwrap(), vec!["selected"]);
-    assert_eq!(
-        title_model_candidates(Some(config("selected")), config("selected")).len(),
-        1
-    );
+    let result = generate_title(&runtime, vec![], "Generate a title").await;
+    assert_eq!(result.unwrap_err().0, "LLM_MODEL_UNAVAILABLE");
+    assert!(models.calls.lock().unwrap().is_empty());
 }

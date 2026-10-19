@@ -11,9 +11,10 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const fixture = vi.hoisted(() => ({ list: vi.fn(), save: vi.fn() }));
+const fixture = vi.hoisted(() => ({ list: vi.fn(), catalog: vi.fn(), save: vi.fn() }));
 vi.mock("@/domain/skill/api", () => ({
   fetchAgentSkills: fixture.list,
+  fetchRegistrySkills: fixture.catalog,
   CAPABILITY_RESOURCES_CHANGED: "resource-change",
 }));
 vi.mock("react-i18next", () => ({
@@ -42,6 +43,7 @@ const disabled = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("PointerEvent", MouseEvent);
+  fixture.catalog.mockResolvedValue([active, disabled]);
   fixture.list.mockResolvedValue([
     active,
     disabled,
@@ -52,7 +54,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-function setup(initialNames?: string[]) {
+function setup(initialNames?: string[], agentCode = "main-agent") {
   const change = vi.fn();
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -61,7 +63,7 @@ function setup(initialNames?: string[]) {
     const [names, setNames] = useState(initialNames);
     return (
       <InternalAgentSkillField
-        agentCode="main-agent"
+        agentCode={agentCode}
         disabled={false}
         selectedNames={names}
         onSelectionChange={(next) => {
@@ -230,4 +232,26 @@ describe("Agent skill draft", () => {
     fireEvent.click(screen.getByRole("button", { name: "confirm" }));
     expect(change).toHaveBeenCalledWith([]);
   });
+});
+
+it("uses the skill catalog for a creation draft without inheriting another Agent's assignments", async () => {
+  setup(undefined, "");
+  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "Choose skills (0)" });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+  const dialog = await screen.findByRole("dialog");
+  expect((within(dialog).getByRole("checkbox", { name: "active" }) as HTMLInputElement).checked).toBe(false);
+  expect((within(dialog).getByRole("checkbox", { name: "disabled" }) as HTMLInputElement).disabled).toBe(true);
+  expect(fixture.catalog).toHaveBeenCalled();
+  expect(fixture.list).not.toHaveBeenCalled();
+});
+
+it("previews automatic capability-pack skill grants in the creation draft", async () => {
+  fixture.catalog.mockResolvedValue([{ ...active, providerPackId: "tron.harness", assigned: false }]);
+  setup(undefined, "");
+  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "Choose skills (1)" });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+  expect((within(await screen.findByRole("dialog")).getByRole("checkbox", { name: "active" }) as HTMLInputElement).checked).toBe(true);
+  expect(fixture.list).not.toHaveBeenCalled();
 });

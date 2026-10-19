@@ -74,3 +74,11 @@ pub struct LlmEmbeddingBatchCallResult {
     pub provider_model: Option<String>,
     pub vectors: Vec<eliteforge_agent_framework::EmbeddingVector>,
 }
+
+#[derive(Debug, Clone)]
+pub struct LlmEmbeddingContentBatchCallCommand {
+    pub workspace_code: String,
+    pub model_code: Option<String>,
+    pub inputs: Vec<eliteforge_agent_framework::Content>,
+    pub dimensions: usize,
+}

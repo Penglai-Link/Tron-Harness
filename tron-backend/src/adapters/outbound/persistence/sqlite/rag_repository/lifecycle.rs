@@ -34,7 +34,8 @@ impl RagSourceLifecycleRepository for SqliteRagRepositorySql<'_> {
             &command.scope.scope_type,
             &command.scope.scope_code,
         )?;
-        tx.execute("DELETE FROM rag_graph_evidence WHERE corpus_id=?1 AND source_code=?2 AND source_version=?3 AND scope_type=?4 AND scope_code=?5", params![command.corpus_id,command.source_code,command.source_version,command.scope.scope_type,command.scope.scope_code]).map_err(storage_error)?;
+        let partition=crate::domain::rag::graph::GraphPartition{corpus_id:command.corpus_id.clone(),scope_type:command.scope.scope_type.clone(),scope_code:command.scope.scope_code.clone()};
+        super::super::rag_graph_index::retire_graph_source_version(&tx,&partition,&command.source_code,&command.source_version).map_err(|_|RagError::StorageFailure)?;
         tx.commit().map_err(storage_error)
     }
 }

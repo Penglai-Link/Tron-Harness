@@ -1071,3 +1071,82 @@ async fn composer_goal_steer_is_fenced_and_persists_the_goal_and_original_messag
         2
     );
 }
+
+#[tokio::test]
+async fn skill_startup_sync_skips_unchanged_success_but_manual_rebuild_is_forced() {
+    use tron_backend::application::{rag::RagConfigRepository, skill::SkillRagIndexService};
+    let f = Fixture::new();
+    let indexer = SkillRagIndexService::new(f.state.skills.clone(), f.state.rag.clone());
+    indexer.index_registry_skill("independent").await.unwrap();
+    let repository =
+        tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(
+            &f.state.config.database_url,
+        )
+        .unwrap();
+    let count = || {
+        repository
+            .record_tasks("SYSTEM")
+            .unwrap()
+            .into_iter()
+            .filter(|t| t.source_code == "skill:PLATFORM:independent")
+            .count()
+    };
+    let before = count();
+    indexer.synchronize_all().await.unwrap();
+    assert_eq!(count(), before);
+    indexer.synchronize_all().await.unwrap();
+    assert_eq!(count(), before);
+    let mut settings = f.state.rag.settings_for_corpus("skill").unwrap();
+    settings.embedding_dimension = 512;
+    f.state.rag.configure_corpus("skill", settings).unwrap();
+    indexer.synchronize_all().await.unwrap();
+    assert_eq!(count(), before + 1);
+    indexer.index_registry_skill("independent").await.unwrap();
+    assert_eq!(count(), before + 2);
+    let skill = f.state.skills.get_registry_skill("independent").unwrap();
+    std::fs::write(
+        std::path::Path::new(&skill.registry_path).join("SKILL.md"),
+        "---\nname: independent\ndescription: Updated skill\n---\nUpdated instructions",
+    )
+    .unwrap();
+    indexer.synchronize_all().await.unwrap();
+    assert_eq!(count(), before + 3);
+    indexer.synchronize_all().await.unwrap();
+    assert_eq!(count(), before + 3);
+    // Shared task history is removed only for the requesting user's view.
+    let task = f
+        .state
+        .rag
+        .record_task_views("USR-AUTH-0001")
+        .unwrap()
+        .into_iter()
+        .find(|t| t.source_code == "skill:PLATFORM:independent" && t.is_latest)
+        .unwrap();
+    f.api(
+        Method::DELETE,
+        &format!("/api/v1/rag/tasks/{}", task.id),
+        None,
+    )
+    .await;
+    let visible = f.api(Method::GET, "/api/v1/rag/tasks", None).await;
+    assert!(
+        !visible["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["id"] == task.id)
+    );
+    assert!(
+        repository
+            .deleted_task_history("OTHER-USER")
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        repository
+            .record_task("SYSTEM", &task.id)
+            .unwrap()
+            .is_some()
+    );
+    f.state.agent_framework.close().await;
+}

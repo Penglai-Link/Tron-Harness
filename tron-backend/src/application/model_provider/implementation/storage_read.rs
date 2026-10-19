@@ -242,6 +242,7 @@ pub(super) fn read_chat_catalog_models(
                 provider_code: ModelProviderCode::from_storage(&provider_code)
                     .ok_or(rusqlite::Error::InvalidQuery)?,
                 catalog_model_type: ProviderCatalogModelType::Chat,
+                dimension: None, tags: vec![],
                 model_id: None,
                 model_code: row.get(1)?,
                 model_name: row.get(2)?,
@@ -280,7 +281,7 @@ pub(super) fn read_multimedia_catalog_models(
     let mut statement = connection
         .prepare(
             "SELECT provider_code, model_id, model_code, model_name, media_type, status,
-                    first_seen_at, last_seen_at, updated_at
+                    first_seen_at, last_seen_at, updated_at, dimension, tags_json
              FROM provider_multimedia_catalog_models WHERE provider_code = ?1 AND media_type != 5
              ORDER BY CASE status WHEN 'Available' THEN 0 ELSE 1 END,
                       media_type, model_name COLLATE NOCASE, model_code",
@@ -296,6 +297,8 @@ pub(super) fn read_multimedia_catalog_models(
                     .ok_or(rusqlite::Error::InvalidQuery)?,
                 catalog_model_type: ProviderCatalogModelType::from_person_ai_media_type(media_type)
                     .ok_or(rusqlite::Error::InvalidQuery)?,
+                dimension: row.get(9)?,
+                tags: serde_json::from_str(&row.get::<_, String>(10)?).unwrap_or_default(),
                 model_id: Some(row.get(1)?),
                 model_code: row.get(2)?,
                 model_name: row.get(3)?,

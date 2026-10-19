@@ -22,6 +22,15 @@ pub enum IngestionKind {
     Indexing,
 }
 
+/// A successful late resolution, persisted once before any vector work. Kept
+/// outside the immutable input snapshot so parsing lineage remains unchanged.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngestionEmbeddingIdentity {
+    pub model_code: String,
+    pub fingerprint: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestionTask {
@@ -73,12 +82,22 @@ pub struct IngestionTask {
     pub chunks_resource_code: Option<String>,
     #[serde(default)]
     pub embedding_resource_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_identity: Option<IngestionEmbeddingIdentity>,
     pub error: Option<String>,
     #[serde(default)]
     pub wait_reason: Option<IngestionWaitReason>,
 }
 
 impl IngestionTask {
+    pub fn embedding_model_code(&self) -> Option<&str> {
+        self.embedding_identity.as_ref().map(|identity| identity.model_code.as_str())
+            .or_else(|| self.configuration["embeddingModel"].as_str())
+    }
+    pub fn embedding_fingerprint(&self) -> Option<&str> {
+        self.embedding_identity.as_ref().map(|identity| identity.fingerprint.as_str())
+            .or_else(|| self.configuration["embeddingFingerprint"].as_str())
+    }
     /// Attempt-specific staging prevents a fenced-out writer from replacing a
     /// generation published by the replacement owner of the same task.
     pub fn generation_source_code(&self) -> String {
@@ -128,6 +147,7 @@ impl IngestionTask {
             parsed_resource_code: None,
             chunks_resource_code: None,
             embedding_resource_code: None,
+            embedding_identity: None,
             error: None,
             wait_reason: None,
         }

@@ -97,15 +97,15 @@ test("manages global platform prompts and restores list state after detail", asy
   await expect(page.getByRole("columnheader", { name: "Source" })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "Inheritance" })).toHaveCount(0);
 
-  await search.fill("Main Agent");
-  const mainAgent = page.getByRole("row").filter({ hasText: "ROLE_MAIN_AGENT" });
+  await search.fill("Chat title generation");
+  const mainAgent = page.getByRole("row").filter({ hasText: "SYS_CHAT_SESSION_TITLE" });
   await expect(mainAgent).toBeVisible();
   await mainAgent.click();
-  await expect(page).toHaveURL(/\/settings\/prompts\/detail\?promptCode=ROLE_MAIN_AGENT/);
+  await expect(page).toHaveURL(/\/settings\/prompts\/detail\?promptCode=SYS_CHAT_SESSION_TITLE/);
   await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Platform Prompts" }).click();
   await expect(page).toHaveURL(`${frontendBaseUrl}/settings/prompts`);
-  await expect(page.getByRole("searchbox", { name: "Search prompts" })).toHaveValue("Main Agent");
-  await expect(page.getByRole("row").filter({ hasText: "ROLE_MAIN_AGENT" })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Search prompts" })).toHaveValue("Chat title generation");
+  await expect(page.getByRole("row").filter({ hasText: "SYS_CHAT_SESSION_TITLE" })).toBeVisible();
 });
 
 test("localizes the platform prompt manager without workspace scope controls", async ({ page }) => {
@@ -119,5 +119,5 @@ test("localizes the platform prompt manager without workspace scope controls", a
   await expect(page.getByRole("columnheader", { name: "变量" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "来源" })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "继承方式" })).toHaveCount(0);
-  await expect(page.getByRole("row").filter({ hasText: "ROLE_MAIN_AGENT" })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "SYS_CHAT_SESSION_TITLE" })).toBeVisible();
 });

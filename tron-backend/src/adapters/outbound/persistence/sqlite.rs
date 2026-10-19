@@ -42,6 +42,7 @@ pub use workspace_repository::SqliteWorkspaceRepository;
 mod knowledge_base_repository;
 mod knowledge_ingestion_queue;
 pub use knowledge_base_repository::SqliteKnowledgeBaseRepository;
+pub(crate) use knowledge_base_repository::{StoredChunkContext,OptimizedDocumentPublication,stored_contexts};
 pub use knowledge_ingestion_queue::SqliteKnowledgeIngestionQueue;
 
 pub mod capability_repository;
@@ -50,3 +51,6 @@ mod dude_repository;
 pub use dude_repository::SqliteDudeRepository;
 mod dude_memory_repository;
 pub use dude_memory_repository::SqliteDudeMemoryRepository;
+
+mod rag_graph_index;
+pub use rag_graph_index::SqliteRagGraphIndexRepository;

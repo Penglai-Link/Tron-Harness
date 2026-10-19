@@ -78,6 +78,7 @@ pub enum ProviderCatalogModelStatus {
 pub enum ProviderCatalogModelType {
     Chat,
     Embedding,
+    Rerank,
     Image,
     Video,
     Speech,
@@ -94,6 +95,7 @@ impl ProviderCatalogModelType {
             3 => Some(Self::AigcTextDetection),
             4 => Some(Self::AigcImageDetection),
             6 => Some(Self::Embedding),
+            7 => Some(Self::Rerank),
             _ => None,
         }
     }
@@ -102,6 +104,7 @@ impl ProviderCatalogModelType {
         match self {
             Self::Chat => None,
             Self::Embedding => Some(6),
+            Self::Rerank => Some(7),
             Self::Image => Some(0),
             Self::Video => Some(1),
             Self::Speech => Some(2),
@@ -215,15 +218,25 @@ impl ModelSelectionKind {
 pub enum ProviderRouteCode {
     ChatAuto,
     EmbeddingAuto,
-    LlmFallback,
+    MultimodalEmbeddingAuto,
+    RerankAuto,
 }
 
 impl ProviderRouteCode {
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::ChatAuto => "对话自动路由",
+            Self::EmbeddingAuto => "向量自动路由",
+            Self::MultimodalEmbeddingAuto => "多模态向量自动路由",
+            Self::RerankAuto => "重排自动路由",
+        }
+    }
     pub const fn storage_value(self) -> &'static str {
         match self {
             Self::ChatAuto => "ChatAuto",
             Self::EmbeddingAuto => "EmbeddingAuto",
-            Self::LlmFallback => "LlmFallback",
+            Self::MultimodalEmbeddingAuto => "MultimodalEmbeddingAuto",
+            Self::RerankAuto => "RerankAuto",
         }
     }
 
@@ -231,7 +244,8 @@ impl ProviderRouteCode {
         match value {
             "ChatAuto" => Some(Self::ChatAuto),
             "EmbeddingAuto" => Some(Self::EmbeddingAuto),
-            "LlmFallback" => Some(Self::LlmFallback),
+            "MultimodalEmbeddingAuto" => Some(Self::MultimodalEmbeddingAuto),
+            "RerankAuto" => Some(Self::RerankAuto),
             _ => None,
         }
     }
@@ -312,6 +326,8 @@ pub struct ProviderConnectionView {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderCatalogModelView {
+    pub dimension: Option<usize>,
+    pub tags: Vec<String>,
     pub provider_code: ModelProviderCode,
     pub catalog_model_type: ProviderCatalogModelType,
     pub model_id: Option<String>,

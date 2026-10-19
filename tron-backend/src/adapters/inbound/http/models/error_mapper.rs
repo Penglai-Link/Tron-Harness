@@ -132,6 +132,9 @@ pub fn model_error_response(error: ModelError) -> Response {
         ModelError::VerificationFailed(message) => {
             (StatusCode::BAD_GATEWAY, "MODEL_VERIFY_FAILED", message)
         }
+        ModelError::RuntimeResolutionFailed(message) => {
+            (StatusCode::BAD_GATEWAY, "MODEL_RESOLUTION_FAILED", message)
+        }
         ModelError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "MODEL_STORAGE_FAILED",

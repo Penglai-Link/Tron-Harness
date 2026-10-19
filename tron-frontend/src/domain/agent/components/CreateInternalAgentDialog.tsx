@@ -1,128 +1,91 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Field, TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
-import { createWorkspaceInternalAgent } from "@/domain/agent/api";
-import { createWorkspaceInternalAgentMock } from "@/domain/agent/mock";
+import { createWorkspaceInternalAgent, patchWorkspaceInternalAgentDefinition } from "@/domain/agent/api";
+import { createWorkspaceInternalAgentMock, patchWorkspaceInternalAgentDefinitionMock } from "@/domain/agent/mock";
 import { notifyInternalAgentRegistryChanged } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { AgentRolePromptField } from "./AgentRolePromptField";
-import { AgentDescriptionField } from "./AgentDescriptionField";
-
-import { AgentAvatarPicker } from "./AgentAvatarPicker";
 import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
-import { InternalAgentGroupField } from "./InternalAgentGroupField";
-import { AgentCandidateModelsField } from "./AgentCandidateModelsField";
-import { AgentLoopField } from "./AgentLoopField";
+import { DEFAULT_REACT_LOOP_CODE } from "../model/builtinLoops";
 import { AgentWorkspaceField } from "./AgentWorkspaceField";
+import { AgentActivationSwitch } from "./AgentActivationSwitch";
 import { persistAgentWorkspaceGrants } from "../hooks/agentWorkspaceGrants";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { INTERNAL_AGENT_DIALOG_CLASS, INTERNAL_AGENT_SECTIONS, InternalAgentProfileFields, InternalAgentRuntimeFields } from "./InternalAgentFormFields";
+import { AgentResourcesEditor, type AgentResourcesEditorHandle } from "./AgentResourcesEditor";
 
+const initialDraft = () => ({ name: "", description: "", rolePrompt: "", avatarId: "robot", groupName: "", loopCode: DEFAULT_REACT_LOOP_CODE, candidateModelCodes: [] as string[], enabled: true });
 export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorkspaceAssignment = false }: { workspaceCode: string; onCreated: () => Promise<void>; allowWorkspaceAssignment?: boolean }) {
-  const { t } = useTranslation(["pages"]);
+  const { t } = useTranslation("pages");
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState("profile");
   const [agentCode, setAgentCode] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [loopCode, setLoopCode] = useState("");
-  const [rolePrompt, setRolePrompt] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const { groups, create: createGroup } = useInternalAgentGroups(workspaceCode);
-  const [candidateModelCodes, setCandidateModelCodes] = useState<string[]>([]);
-  const [avatarId, setAvatarId] = useState("robot");
+  const [draft, setDraft] = useState(initialDraft);
   const [saving, setSaving] = useState(false);
-  const [workspaceCodes, setWorkspaceCodes] = useState<string[]>([]);
-  const [createdAgentCode, setCreatedAgentCode] = useState<string | null>(null);
-  const definitionDisabled = saving || Boolean(createdAgentCode);
-  const text = (key: string, fallback: string) => t(`pages:workspaceAgents.internal.definition.${key}`, { defaultValue: fallback });
+  const savingRef = useRef(false);
+  const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const createdCodeRef = useRef<string | null>(null);
+  const enabledBaseline = useRef(true);
+  const [workspaceCodes, setWorkspaceCodes] = useState<string[] | undefined>();
+  const savedWorkspaces = useRef<string | undefined>(undefined);
+  const resources = useRef<AgentResourcesEditorHandle>(null);
+  const { groups, create: createGroup } = useInternalAgentGroups(workspaceCode);
+  const patch = (change: Partial<ReturnType<typeof initialDraft>>) => setDraft((current) => ({ ...current, ...change }));
+  const text = (key: string, fallback: string) => t(`workspaceAgents.internal.definition.${key}`, { defaultValue: fallback });
   const codeValid = /^[a-z][a-z0-9_-]{0,63}$/.test(agentCode.trim());
-  const codeHelp = text("codeHelp", "Use 1–64 characters, starting with a lowercase letter. Lowercase letters, numbers, hyphens and underscores are allowed. The code cannot be changed after creation.");
-
   async function create() {
-    if (!codeValid || !name.trim() || saving) return;
-    setSaving(true);
+    if (!codeValid || !draft.name.trim() || !draft.loopCode || savingRef.current) return;
+    savingRef.current = true; setSaving(true);
     try {
-      if (!loopCode) throw new Error(text("loopRequired", "Select an agent loop"));
-      const payload = { agentCode: agentCode.trim(), name: name.trim(), description: description.trim(), rolePrompt, loopCode, avatarId, groupName, candidateModelCodes };
-      // Keep the created identity if assignment fails so retry cannot create twice.
-      if (!createdAgentCode) {
-        if (groupName && !groups.includes(groupName)) await createGroup(groupName);
-        if (getServiceDataSource("agent") === "api") {
-          await createWorkspaceInternalAgent(workspaceCode, payload);
-        } else {
-          createWorkspaceInternalAgentMock(workspaceCode, payload);
-        }
-        setCreatedAgentCode(payload.agentCode);
+      resources.current?.validate();
+      const code = createdCodeRef.current ?? agentCode.trim();
+      const api = getServiceDataSource("agent") === "api";
+      if (!createdCodeRef.current) {
+        if (draft.groupName && !groups.includes(draft.groupName)) await createGroup(draft.groupName);
+        const { enabled: _enabled, ...definition } = draft;
+        const payload = { ...definition, agentCode: code, name: draft.name.trim(), description: draft.description.trim() };
+        if (api) await createWorkspaceInternalAgent(workspaceCode, payload);
+        else createWorkspaceInternalAgentMock(workspaceCode, payload);
+        createdCodeRef.current = code; setCreatedCode(code);
         notifyInternalAgentRegistryChanged();
       }
-      // Workspace authorization is optional. Leaving the tab untouched keeps
-      // the backend's default policy: the internal agent is available to all workspaces.
-      if (allowWorkspaceAssignment && section === "workspace") {
-        await persistAgentWorkspaceGrants(createdAgentCode ?? payload.agentCode, workspaceCodes);
+      if (draft.enabled !== enabledBaseline.current) {
+        if (api) await patchWorkspaceInternalAgentDefinition(workspaceCode, code, { enabled: draft.enabled });
+        else patchWorkspaceInternalAgentDefinitionMock(workspaceCode, code, { enabled: draft.enabled });
+        enabledBaseline.current = draft.enabled;
+      }
+      await resources.current?.save(code);
+      if (allowWorkspaceAssignment && workspaceCodes !== undefined && savedWorkspaces.current !== JSON.stringify(workspaceCodes)) {
+        await persistAgentWorkspaceGrants(code, workspaceCodes);
+        savedWorkspaces.current = JSON.stringify(workspaceCodes);
       }
       await onCreated();
-      setOpen(false);
-      setAgentCode("");
-      setName("");
-      setDescription("");
-      setRolePrompt("");
-      setLoopCode("");
-      setAvatarId("robot"); setCandidateModelCodes([]);
-      setGroupName("");
-      setWorkspaceCodes([]);
-      setCreatedAgentCode(null);
-      notifyInternalAgentRegistryChanged();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : text("createFailed", "Could not create agent"));
-    } finally {
-      setSaving(false);
-    }
+      setOpen(false); notifyInternalAgentRegistryChanged();
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : text("createFailed", "Could not create agent"));
+    } finally { savingRef.current = false; setSaving(false); }
   }
-
   return <>
-    <Button onClick={() => { setCreatedAgentCode(null); setAgentCode(""); setName(""); setDescription(""); setRolePrompt(""); setAvatarId("robot"); setCandidateModelCodes([]); setLoopCode(""); setWorkspaceCodes([]); setGroupName(""); setSection("profile"); setOpen(true); }}>{text("create", "New")}</Button>
-    <Dialog disablePointerDismissal open={open} onOpenChange={(next, details) => { if (details.reason === "outside-press" || saving) { details.cancel(); return; } setOpen(next); }}>
-      <DialogContent className="flex h-[min(78dvh,48rem)] max-h-[90dvh] flex-col overflow-hidden sm:max-w-3xl" closeLabel={text("close", "Close")} showCloseButton={!saving}>
-        <DialogHeader>
-          <DialogTitle>{text("title", "New internal agent")}</DialogTitle>
-        </DialogHeader>
+    <Button onClick={() => { setAgentCode(""); setDraft(initialDraft()); setSection("profile"); setWorkspaceCodes(undefined); savedWorkspaces.current = undefined; enabledBaseline.current = true; createdCodeRef.current = null; setCreatedCode(null); setOpen(true); }}>{text("create", "New")}</Button>
+    <Dialog disablePointerDismissal open={open} onOpenChange={(next, details) => { if (details.reason === "outside-press" || savingRef.current) { details.cancel(); return; } setOpen(next); }}>
+      <DialogContent className={INTERNAL_AGENT_DIALOG_CLASS} closeLabel={text("close", "Close")} showCloseButton={!saving}>
+        <DialogHeader><div className="flex items-center justify-between gap-4 pr-8"><DialogTitle>{text("title", "New internal agent")}</DialogTitle>{allowWorkspaceAssignment ? <AgentActivationSwitch checked={draft.enabled} disabled={saving} onChange={(enabled) => patch({ enabled })} /> : null}</div></DialogHeader>
         <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={(event) => { event.preventDefault(); void create(); }}>
           <Tabs className="min-h-0 flex-1" value={section} onValueChange={(value) => { if (typeof value === "string") setSection(value); }}>
             <TabsList variant="line" className="w-full shrink-0 justify-start border-b border-[var(--color-outline-variant)]">
-              <TabsTrigger value="profile" className="flex-none px-3">{text("tabs.profile", "Basic")}</TabsTrigger>
-              <TabsTrigger value="runtime" className="flex-none px-3">{text("tabs.runtime", "Runtime")}</TabsTrigger>
+              {INTERNAL_AGENT_SECTIONS.map(([value, label]) => <TabsTrigger key={value} value={value} className="flex-none px-3">{text(`tabs.${value}`, label)}</TabsTrigger>)}
               {allowWorkspaceAssignment ? <TabsTrigger value="workspace" className="flex-none px-3">{text("tabs.workspace", "Workspace")}</TabsTrigger> : null}
             </TabsList>
-            <TabsContent value="profile" keepMounted className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-3">
-              <AgentAvatarPicker value={avatarId} disabled={definitionDisabled} onChange={setAvatarId} />
-              <Field label={text("code", "Code")} required hint={codeHelp} hintAriaLabel={text("codeHelpAria", "Agent code help")}
-                error={agentCode.trim() && !codeValid ? text("codeInvalid", "Use 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter.") : undefined}>
-                <TextInput autoFocus aria-label={text("code", "Code")} maxLength={64} required disabled={definitionDisabled} value={agentCode} onChange={(event) => setAgentCode(event.target.value)} aria-invalid={Boolean(agentCode.trim() && !codeValid)} />
-              </Field>
-              <Field label={text("name", "Name")} required>
-                <TextInput aria-label={text("name", "Name")} maxLength={100} required disabled={definitionDisabled} value={name} onChange={(event) => setName(event.target.value)} />
-              </Field>
-              <AgentDescriptionField value={description} disabled={definitionDisabled} onChange={setDescription} />
-              <InternalAgentGroupField workspaceCode={workspaceCode} value={groupName} disabled={definitionDisabled} onChange={setGroupName} />
-            </TabsContent>
-            <TabsContent value="runtime" keepMounted className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-3">
-              <AgentLoopField value={loopCode} disabled={definitionDisabled} onChange={setLoopCode} />
-              <AgentCandidateModelsField workspaceCode={workspaceCode} value={candidateModelCodes} onChange={setCandidateModelCodes} disabled={definitionDisabled} />
-              <AgentRolePromptField rows={8} disabled={definitionDisabled} value={rolePrompt} onChange={setRolePrompt} />
-            </TabsContent>
-            {allowWorkspaceAssignment ? <TabsContent value="workspace" keepMounted className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-3">
-              <AgentWorkspaceField name={name} disabled={saving} selectedCodes={workspaceCodes} onSelectionChange={setWorkspaceCodes} />
-              {createdAgentCode ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:platformData.createdAssignmentPending")}</p> : null}
-            </TabsContent> : null}
+            <TabsContent value="profile" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"><InternalAgentProfileFields code={agentCode} onCodeChange={setAgentCode} draft={draft} onChange={patch} workspaceCode={workspaceCode} disabled={saving || !!createdCode} /></TabsContent>
+            <TabsContent value="runtime" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"><InternalAgentRuntimeFields workspaceCode={workspaceCode} loopCode={draft.loopCode} candidateModelCodes={draft.candidateModelCodes} disabled={saving || !!createdCode} onChange={patch} /></TabsContent>
+            <AgentResourcesEditor ref={resources} agentName={draft.name} workspaceCode={workspaceCode} disabled={saving} />
+            {allowWorkspaceAssignment ? <TabsContent value="workspace" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"><AgentWorkspaceField name={draft.name} disabled={saving} selectedCodes={workspaceCodes} onSelectionChange={setWorkspaceCodes} /></TabsContent> : null}
           </Tabs>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>{text("cancel", "Cancel")}</Button>
-            <Button type="submit" disabled={saving || !codeValid || !name.trim() || !loopCode}>{saving ? text("saving", "Saving...") : createdAgentCode ? t("pages:platformData.save") : text("create", "New")}</Button>
-          </DialogFooter>
+          {createdCode ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{t("platformData.createdAssignmentPending")}</p> : null}
+          <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>{text("cancel", "Cancel")}</Button><Button type="submit" disabled={saving || !codeValid || !draft.name.trim() || !draft.loopCode}>{saving ? text("saving", "Saving...") : createdCode ? t("pages:platformData.save") : text("create", "New")}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

@@ -55,12 +55,14 @@ const PERSON_AI_CLIENT_NAME: &str = "Tron";
 const PERSON_AI_PRODUCT_CODE: &str = "tron";
 const PERSON_AI_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROVIDER_RUNTIME_PREFIX: &str = "PERSON_AI:";
+const PERSON_AI_RERANK_PREFIX: &str = "PERSON_AI:RERANK:";
 const PERSON_AI_EMBEDDING_PREFIX: &str = "PERSON_AI:EMBEDDING:";
 const TOKEN_REFRESH_LEAD_MILLIS: i64 = 7 * 24 * 60 * 60 * 1000;
 const MAX_PROVIDER_SYNC_RUNS: i64 = 10;
 
 #[derive(Clone)]
 pub struct ModelProviderService {
+    auto_routers: eliteforge_agent_core::AutoRouters,
     model_executor: Arc<eliteforge_agent_framework::ModelClient>,
     model_attempt_salt: Arc<String>,
     connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
@@ -145,6 +147,7 @@ use storage_write::*;
 mod utilities;
 use utilities::*;
 mod authorization;
+mod auto_selection;
 mod credentials;
 mod lifecycle;
 mod selection;
@@ -254,6 +257,7 @@ mod tests {
         let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(":memory:").unwrap();
         let adapter = Arc::new(UnauthorizedOnceAdapter::default());
         let service = ModelProviderService {
+            auto_routers: auto_selection::default_auto_routers(),
             model_executor: Default::default(),
             model_attempt_salt: Arc::new(eliteforge_agent_core::RunId::new_v4().to_string()),
             connection,

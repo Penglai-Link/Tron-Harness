@@ -172,6 +172,9 @@ fn normalize_optional_dimension(value: Option<String>) -> Result<Option<String>,
 }
 
 fn validate_namespace(namespace: &str) -> Result<(), GraphScopeError> {
+    if namespace == "rag-internal" || namespace.starts_with("rag-internal-") {
+        return Err(GraphScopeError::InvalidNamespace);
+    }
     if namespace
         .chars()
         .any(|ch| !(ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-'))

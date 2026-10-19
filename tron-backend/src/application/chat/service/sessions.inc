@@ -22,7 +22,7 @@ impl ChatService {
         command: CreateChatSessionCommand,
         user_code: Option<String>,
     ) -> Result<ChatSession, ChatError> {
-        if command.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:")) {
+        if command.source_code.as_deref().is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:")) {
             return Err(ChatError::WorkspaceForbidden);
         }
         let workspace_code =
@@ -102,7 +102,7 @@ impl ChatService {
         let mut sessions = self.repository().list_sessions()?;
         sessions.retain(|session| {
             session.workspace_code == workspace_code
-                && !session.source_code.as_deref().is_some_and(|s|s.starts_with("__dude:"))
+                && !session.source_code.as_deref().is_some_and(|s|s.starts_with("__dude:") || s.starts_with("__knowledge:"))
                 && session.status == ChatSessionStatus::Active
                 && session.source_type != ChatSessionSourceType::Terminal
         });

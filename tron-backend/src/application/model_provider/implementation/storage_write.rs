@@ -143,12 +143,14 @@ pub(super) fn apply_multimedia_catalog_snapshot(
             .execute(
                 "INSERT INTO provider_multimedia_catalog_models (
                     provider_code, model_id, model_code, model_name, media_type, status,
-                    first_seen_at, last_seen_at, updated_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?7)
+                    first_seen_at, last_seen_at, updated_at, dimension, tags_json
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?7, ?8, ?9)
                  ON CONFLICT(provider_code, model_id) DO UPDATE SET
                     model_code = excluded.model_code,
                     model_name = excluded.model_name,
                     media_type = excluded.media_type,
+                    dimension = excluded.dimension,
+                    tags_json = excluded.tags_json,
                     status = excluded.status,
                     last_seen_at = excluded.last_seen_at,
                     updated_at = excluded.updated_at",
@@ -160,6 +162,8 @@ pub(super) fn apply_multimedia_catalog_snapshot(
                     media_type,
                     ProviderCatalogModelStatus::Available.storage_value(),
                     now,
+                    model.dimension.map(|dimension| dimension as i64),
+                    serde_json::to_string(&model.tags).map_err(|_| ModelProviderError::Storage)?,
                 ],
             )
             .map_err(|_| ModelProviderError::Storage)?;

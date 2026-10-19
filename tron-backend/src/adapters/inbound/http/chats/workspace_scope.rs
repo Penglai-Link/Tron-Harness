@@ -1,4 +1,5 @@
 //! Normal session access is always constrained by the caller's workspace.
+mod knowledge;
 use super::error_mapper::chat_error_response;
 use crate::adapters::inbound::http::auth::RequestAuthContext;
 use crate::{
@@ -25,6 +26,9 @@ pub async fn require_workspace(
     let runs = path.starts_with("/api/v1/agents/runs");
     if !chat && !replay && !runs {
         return next.run(request).await;
+    }
+    if let Some(kb) = request.headers().get("x-knowledge-base-code").and_then(|v|v.to_str().ok()).map(str::to_owned) {
+        return knowledge::require(state,request,next,kb).await;
     }
     // Dude namespace is explicit and verified against durable ownership. A page
     // workspace selection never changes a platform conversation's execution scope.
@@ -263,6 +267,7 @@ pub async fn require_workspace(
                     | "stop-run"
                     | "get-todos"
                     | "get-context-detail"
+                    | "get-context-assembly"
                     | "get-latest-compaction"
                     | "create-compaction"
                     | "get-goal"
@@ -310,6 +315,9 @@ pub async fn require_workspace(
         if state.dudes.session(&session).ok().flatten().is_some() {
             return chat_error_response(ChatError::SessionNotFound);
         }
+        if record.source_code.as_deref().is_some_and(|source|source.starts_with("__knowledge:")) {
+            return chat_error_response(ChatError::SessionNotFound);
+        }
         if record.workspace_code != workspace {
             return chat_error_response(ChatError::SessionNotFound);
         }
@@ -330,6 +338,7 @@ fn is_session_operation(code: &str) -> bool {
             | "stop-run"
             | "get-todos"
             | "get-context-detail"
+                    | "get-context-assembly"
             | "get-latest-compaction"
             | "create-compaction"
             | "get-goal"

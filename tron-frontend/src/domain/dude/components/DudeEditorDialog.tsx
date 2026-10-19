@@ -21,12 +21,13 @@ import { AgentCandidateModelsField } from "@/domain/agent/components/AgentCandid
 import { AgentRolePromptField } from "@/domain/agent/components/AgentRolePromptField";
 import { AgentDescriptionField } from "@/domain/agent/components/AgentDescriptionField";
 import {
-  DudeResourceFields,
-  type DudeResourceFieldsHandle,
-} from "./DudeResourceFields";
+  AgentResourcesEditor,
+  type AgentResourcesEditorHandle,
+} from "@/domain/agent/components/AgentResourcesEditor";
 import {
   createDude,
   updateDude,
+  getDudeResources,
   type Dude,
   type DudeInput,
 } from "../api/dudeApi";
@@ -79,8 +80,7 @@ export function DudeEditorDialog({
     return () => controller.abort();
   }, [dude?.dudeCode]);
   const createdCode = useRef<string | null>(null);
-  const resources = useRef<DudeResourceFieldsHandle>(null);
-  const advancedResources = useRef<DudeResourceFieldsHandle>(null);
+  const resources = useRef<AgentResourcesEditorHandle>(null);
   const [saving, setSaving] = useState(false);
   const field = <K extends keyof DudeInput>(key: K, value: DudeInput[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -101,6 +101,7 @@ export function DudeEditorDialog({
       return;
     setSaving(true);
     try {
+      resources.current?.validate();
       if (dude || createdCode.current) {
         const { dudeCode: _code, kind: _kind, name: _name, ...body } = draft;
         const changes = dude
@@ -118,8 +119,7 @@ export function DudeEditorDialog({
         });
         soulBaseline.current = { name: saved.name, markdown: saved.markdown };
       }
-      await resources.current?.save();
-      await advancedResources.current?.save();
+      await resources.current?.save(dude?.dudeCode ?? createdCode.current!);
       await onSaved();
       onClose();
     } catch (reason) {
@@ -144,8 +144,7 @@ export function DudeEditorDialog({
         <DialogHeader>
           <div className="flex items-center justify-between gap-4">
             <DialogTitle>{t(dude ? "dude.edit" : "dude.create")}</DialogTitle>
-            {dude ? (
-              <div className="flex items-center gap-2 pr-8 text-sm">
+            <div className="flex items-center gap-2 pr-8 text-sm">
                 <span>
                   {t(draft.enabled ? "dude.activated" : "dude.paused")}
                 </span>
@@ -156,7 +155,6 @@ export function DudeEditorDialog({
                   onCheckedChange={(value) => field("enabled", value)}
                 />
               </div>
-            ) : null}
           </div>
           <DialogDescription>{t("dude.costWarning")}</DialogDescription>
         </DialogHeader>
@@ -175,7 +173,7 @@ export function DudeEditorDialog({
               "profile",
               "soul",
               "background",
-              ...(dude ? ["resources", "advanced"] : []),
+              "resources", "advanced",
             ].map((value) => (
               <TabsTrigger key={value} value={value} className="flex-none px-3">
                 {t(`dude.${value}Section`)}
@@ -252,34 +250,7 @@ export function DudeEditorDialog({
                   onSave={() => void save()}
                 />
               </TabsContent>
-              {dude ? (
-                <TabsContent
-                  value="resources"
-                  keepMounted
-                  className="space-y-4 py-2"
-                >
-                  <DudeResourceFields
-                    ref={resources}
-                    dudeCode={dude.dudeCode}
-                    panel="resources"
-                    disabled={saving}
-                  />
-                </TabsContent>
-              ) : null}
-              {dude ? (
-                <TabsContent
-                  value="advanced"
-                  keepMounted
-                  className="space-y-4 py-2"
-                >
-                  <DudeResourceFields
-                    ref={advancedResources}
-                    dudeCode={dude.dudeCode}
-                    panel="advanced"
-                    disabled={saving}
-                  />
-                </TabsContent>
-              ) : null}
+              <AgentResourcesEditor ref={resources} agentCode={dude?.dudeCode} agentName={draft.name} loadRecord={getDudeResources} disabled={saving} />
               <TabsContent
                 value="background"
                 keepMounted

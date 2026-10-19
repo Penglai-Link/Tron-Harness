@@ -193,6 +193,8 @@ impl RagManagementRepository for SqliteRagRepositorySql<'_> {
         let now = current_timestamp_millis();
         let field_mapping_json = serialize_field_mapping(record)?;
         let storage_binding_json = serialize_storage_binding_value(&record.storage_binding)?;
+        let transaction=crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+            self.connection,rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
         self.connection
             .execute(
                 "INSERT INTO rag_corpora (
@@ -231,7 +233,10 @@ impl RagManagementRepository for SqliteRagRepositorySql<'_> {
             )
             .map_err(storage_error)?;
         self.ensure_sqlite_runtime_storage_for_corpus(record)?;
-        Ok(())
+        if !crate::application::rag::RagSettings::from_capabilities(&record.capabilities)?.graph {
+            crate::adapters::outbound::persistence::sqlite::rag_graph_index::retire_graph_corpus(&transaction,&record.corpus_id).map_err(|_|RagError::StorageFailure)?;
+        }
+        transaction.commit().map_err(storage_error)
     }
 
     fn delete_managed_corpus(&self, corpus_id: &str) -> Result<bool, RagError> {
@@ -249,12 +254,7 @@ impl RagManagementRepository for SqliteRagRepositorySql<'_> {
             if deleted_rows == 0 {
                 return Ok(false);
             }
-            self.connection
-                .execute(
-                    "DELETE FROM rag_graph_evidence WHERE corpus_id=?1",
-                    [corpus_id],
-                )
-                .map_err(storage_error)?;
+            crate::adapters::outbound::persistence::sqlite::rag_graph_index::retire_graph_corpus(&transaction,corpus_id).map_err(|_|RagError::StorageFailure)?;
             self.connection
                 .execute(
                     "DELETE FROM rag_record_tasks WHERE corpus_id=?1",
@@ -286,6 +286,9 @@ fn collect_rows<T>(
 }
 
 impl SqliteRagRepository {
+    pub fn graph_index_repository(&self) -> Result<super::rag_graph_index::SqliteRagGraphIndexRepository,String> {
+        super::rag_graph_index::SqliteRagGraphIndexRepository::from_shared(self.connection.clone())
+    }
     pub fn connect(database_url: &str) -> Result<Self, RagError> {
         let connection = crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase::open(database_url).map_err(storage_error)?;
         let database_url = database_url.to_owned();
@@ -320,6 +323,27 @@ impl SqliteRagRepository {
     }
 }
 impl RagConfigRepository for SqliteRagRepository {
+    fn record_task_summary(&self, user: &str, id: &str) -> Result<Option<crate::application::rag::RagRecordTask>, RagError> {
+        let user = user.to_owned();
+        let id = id.to_owned();
+        self.connection.call(move |connection| SqliteRagRepositorySql { connection }.record_task_summary(&user, &id), || RagError::StorageFailure)
+    }
+    fn deleted_task_history(&self, user: &str) -> Result<std::collections::BTreeSet<String>, RagError> {
+        let user = user.to_owned();
+        self.connection.call(move |connection| {
+            let mut query = connection.prepare("SELECT task_id FROM rag_task_history_deletions WHERE user_code=?1").map_err(storage_error)?;
+            query.query_map([user], |row| row.get(0)).map_err(storage_error)?
+                .map(|row| row.map_err(storage_error)).collect()
+        }, || RagError::StorageFailure)
+    }
+    fn delete_task_history(&self, user: &str, id: &str) -> Result<(), RagError> {
+        let user = user.to_owned();
+        let id = id.to_owned();
+        self.connection.call(move |connection| {
+            connection.execute("INSERT OR IGNORE INTO rag_task_history_deletions(user_code,task_id,deleted_at) VALUES (?1,?2,?3)", rusqlite::params![user,id,chrono::Utc::now().timestamp_millis()]).map_err(storage_error)?;
+            Ok(())
+        }, || RagError::StorageFailure)
+    }
     fn record_task_is_latest(
         &self,
         task: &crate::application::rag::RagRecordTask,
@@ -362,6 +386,10 @@ impl RagConfigRepository for SqliteRagRepository {
             move |connection| SqliteRagRepositorySql { connection }.record_tasks(&user),
             || RagError::StorageFailure,
         )
+    }
+    fn record_task_summaries(&self, user: &str) -> Result<Vec<crate::application::rag::RagRecordTask>, RagError> {
+        let user=user.to_owned();
+        self.connection.call(move |connection| SqliteRagRepositorySql {connection}.record_task_summaries(&user), || RagError::StorageFailure)
     }
     fn record_task(
         &self,

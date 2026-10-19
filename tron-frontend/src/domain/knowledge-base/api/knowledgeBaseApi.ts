@@ -1,3 +1,6 @@
+import type { RagSettings } from "@/domain/rag/model/RagModel";
+import type { DocumentParsePreference, DocumentParsePlan } from "../model/KnowledgeLibraryModel";
+import { defaultRagSettings } from "@/domain/rag/model/ragSettings";
 import { requestApi, requestApiBlob } from "@/shared/api/httpClient";
 import type { PublishedChunkPage, ChunkConfig, ChunkPreview, KnowledgeDocument, KnowledgeLibrary, KnowledgeLibrarySummary, KnowledgeLibraryDetail, ParsingTier, OcrMode, ParsingCapabilities, IngestionTask } from "../model/KnowledgeLibraryModel";
 
@@ -11,17 +14,24 @@ export function listKnowledgeLibraries(signal?: AbortSignal) {
 export function deleteKnowledgeLibrary(id: string) {
   return requestApi<Record<string, never>>(`DELETE ${libraryPath}`, { pathParams: { id } });
 }
-export function createKnowledgeLibrary(name: string, description: string) {
-  return requestApi<KnowledgeLibrary>(`POST ${root}`, { body: { name, description } });
+export function createKnowledgeLibrary(name: string, description: string, indexSettings: RagSettings = defaultRagSettings(), defaultParsePreference: DocumentParsePreference = "Auto") {
+  return requestApi<KnowledgeLibrary>(`POST ${root}`, { body: { name, description, indexSettings, defaultParsePreference } });
 }
 export function getKnowledgeLibrary(id: string, signal?: AbortSignal) {
   return requestApi<KnowledgeLibraryDetail>(`GET ${libraryPath}`, { pathParams: { id }, signal });
 }
-export function uploadKnowledgeDocument(id: string, file: File) {
+export function preflightKnowledgeDocument(id: string, file: File, preference: DocumentParsePreference, signal?: AbortSignal) {
+  const body = new FormData();
+  body.set("file", file, file.name);
+  body.set("parsePreference", preference);
+  return requestApi<{ plan: DocumentParsePlan }>(`POST ${libraryPath}/documents/preflight`, { pathParams: { id }, body, signal });
+}
+export function uploadKnowledgeDocument(id: string, file: File, plan?: DocumentParsePlan) {
   const body = new FormData();
   // getRandomValues also works when the web UI is served on a LAN HTTP origin.
   body.set("idempotencyKey", Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join(""));
   body.set("file", file, file.name);
+  if (plan) { body.set("parsePreference", plan.preference); body.set("parsePlan", JSON.stringify(plan)); }
   return requestApi<KnowledgeDocument>(`POST ${libraryPath}/documents`, { pathParams: { id }, body });
 }
 export function updateKnowledgeDocument(id: string, documentId: string, chunkConfig: ChunkConfig | null, parsingTier?: ParsingTier | null, ocrMode?: OcrMode | null) {
@@ -85,4 +95,17 @@ export function assignKnowledgeLibraryAgents(id: string, agentCodes: string[]) {
 
 export function downloadKnowledgeResource(id: string, resourceCode: string, signal?: AbortSignal) {
   return requestApiBlob(`GET ${libraryPath}/resources/{resourceCode}/binary`, { pathParams: { id, resourceCode }, signal });
+}
+
+export interface KnowledgeLibrarySettings {
+  name: string;
+  description: string;
+  defaultParsePreference: DocumentParsePreference;
+  indexSettings: RagSettings;
+}
+export function getKnowledgeLibrarySettings(id: string, signal?: AbortSignal) {
+  return requestApi<KnowledgeLibrarySettings>(`GET ${libraryPath}/settings`, { pathParams: { id }, signal });
+}
+export function updateKnowledgeLibrarySettings(id: string, body: KnowledgeLibrarySettings) {
+  return requestApi<KnowledgeLibrarySettings>(`PUT ${libraryPath}/settings`, { pathParams: { id }, body });
 }

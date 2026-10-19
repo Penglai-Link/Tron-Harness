@@ -16,7 +16,6 @@ import type {
   SystemAgentProfilePayload,
 } from "@/domain/agent/model";
 import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
-import { agentRolePromptSeeds } from "@/domain/prompt/mock/agentRolePromptSeeds";
 import { listPlatformMcpServersMock, listEffectiveEnabledWorkspaceMcpServerCodesMock } from "@/domain/mcp/mock";
 
 const scanBaseMs = Date.parse("2026-05-29T09:30:00Z");
@@ -224,6 +223,7 @@ const toolSeed: ToolSeed[] = [
 ];
 
 type WorkspaceInternalAgentSeed = {
+  enabled?: boolean;
   avatarId?: string;
   candidateModelCodes?: string[];
   groupName?: string | null;
@@ -245,7 +245,7 @@ type WorkspaceInternalAgentSeed = {
 
 const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
   {
-    rolePrompt: agentRolePromptSeeds.find((seed) => seed.promptCode === "ROLE_MAIN_AGENT")?.translations["zh-CN"].promptBody ?? "",
+    rolePrompt: "理解用户目标，推进任务，协调工具和子智能体，并对最终结果负责。",
     loopCode: "",
     agentCode: "main-agent",
     avatarId: "red-blue-pills",
@@ -263,15 +263,15 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     toolExposureMode: "domain_discovery",
   },
   ...[
-    { agentCode: "explore-agent", name: "探索智能体", promptCode: "ROLE_EXPLORER", groupName: "探索", avatarId: "fox" },
-    { agentCode: "fullstack-agent", name: "全栈工程师", promptCode: "ROLE_FULL_STACK_DEVELOPER", groupName: "开发", avatarId: "panda" },
-    { agentCode: "prd-agent", name: "杨布斯", promptCode: "ROLE_PRODUCT_MANAGER", groupName: "设计", avatarId: "astronaut" },
-  ].map(({ agentCode, name, promptCode, groupName, avatarId }) => ({
+    { agentCode: "explore-agent", name: "探索智能体", rolePrompt: "只读探索项目和资料，提供准确、相关、可追溯的上下文。", groupName: "探索", avatarId: "fox" },
+    { agentCode: "fullstack-agent", name: "全栈工程师", rolePrompt: "完成全栈开发任务，并验证实现结果。", groupName: "开发", avatarId: "panda" },
+    { agentCode: "prd-agent", name: "杨布斯", rolePrompt: "分析用户需求，制定清晰、可验证的产品方案。", groupName: "设计", avatarId: "astronaut" },
+  ].map(({ agentCode, name, rolePrompt, groupName, avatarId }) => ({
     agentCode,
     name,
     groupName,
     description: "Platform built-in internal agent.",
-    rolePrompt: agentRolePromptSeeds.find((seed) => seed.promptCode === promptCode)?.translations["zh-CN"].promptBody ?? "",
+    rolePrompt,
     loopCode: "",
     avatarId,
     expandedDomainPersistenceMode: "sticky_expanded" as const,
@@ -455,6 +455,7 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
 
   return {
     agentCode: effective.agentCode,
+    enabled: effective.enabled !== false,
     description: effective.description,
     rolePrompt: effective.rolePrompt,
     loopCode: effective.loopCode,
@@ -544,7 +545,7 @@ export function deleteWorkspaceInternalAgentMock(workspaceCode: string, agentCod
   };
 }
 
-export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { name?: string; description?: string; rolePrompt?: string; loopCode?: string; candidateModelCodes?: string[]; avatarId?: string; groupName?: string | null }) {
+export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { enabled?: boolean; name?: string; description?: string; rolePrompt?: string; loopCode?: string; candidateModelCodes?: string[]; avatarId?: string; groupName?: string | null }) {
   if (buildWorkspaceInternalAgentRecord(workspaceCode, agentCode).builtIn) throw new Error("Built-in agent definitions are read-only");
   const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
   const patch = { ...payload, ...(groupName !== undefined ? { groupName } : {}) };

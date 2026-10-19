@@ -72,7 +72,7 @@ impl fw::ContextPreparationPolicy for TronContext {
             .context
             .messages
             .iter()
-            .take_while(|message| matches!(message.role.as_str(), "system" | "developer"))
+            .take_while(|message| message.role == "system")
             .count();
         let prefix = state.trusted_prefix.clone();
         std::sync::Arc::make_mut(&mut state.context.messages).splice(..old_prefix_len, prefix);

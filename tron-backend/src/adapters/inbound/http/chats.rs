@@ -1,3 +1,4 @@
+mod context_assembly;
 mod application_context;
 pub mod error_mapper;
 pub mod handler;

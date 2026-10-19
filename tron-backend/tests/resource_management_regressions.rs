@@ -110,6 +110,23 @@ fn workspace_override_shadows_platform_resource_and_delete_restores_it() {
     assert_eq!(page.records[0].source_kind, ResourceSourceKind::Override);
     assert_eq!(page.records[0].name, "Shared override");
 
+    let batch = state
+        .resources
+        .download_binary_records(ACTOR, WORKSPACE, &["shared".into(), "shared".into()])
+        .unwrap();
+    assert_eq!(batch.len(), 2);
+    assert!(
+        batch
+            .iter()
+            .all(|record| record.workspace_code == WORKSPACE)
+    );
+    let mut body = Vec::new();
+    state
+        .resources
+        .download_binary_storage(&batch[0], &mut body)
+        .unwrap();
+    assert_eq!(body, b"workspace");
+
     state
         .resources
         .delete_resource(
@@ -123,6 +140,11 @@ fn workspace_override_shadows_platform_resource_and_delete_restores_it() {
     let page = workspace_page(&state);
     assert_eq!(page.total, 1);
     assert_eq!(page.records[0].source_kind, ResourceSourceKind::Inherited);
+    let inherited = state
+        .resources
+        .download_binary_records(ACTOR, WORKSPACE, &["shared".into()])
+        .unwrap();
+    assert_eq!(inherited[0].workspace_code, PARENT_WORKSPACE);
 }
 
 #[test]
@@ -148,6 +170,61 @@ fn non_inheritable_parent_resources_are_hidden_from_child_workspaces() {
         .expect("parent resource should exist");
     let page = workspace_page(&state);
     assert_eq!(page.total, 0);
+    assert!(matches!(
+        state
+            .resources
+            .download_binary_records(ACTOR, WORKSPACE, &["parent-only".into()]),
+        Err(ResourceError::NotFound)
+    ));
+}
+
+#[test]
+fn binary_batch_keeps_order_and_checks_every_resource_privacy() {
+    struct DenySecond;
+    impl tron_backend::application::resource::ResourcePrivacyPolicy for DenySecond {
+        fn can_read(&self, _: &str, _: &str, resource: &str) -> bool {
+            resource != "second"
+        }
+        fn is_protected(&self, _: &str, resource: &str) -> bool {
+            resource == "second"
+        }
+    }
+    let state = resource_state("binary-batch-privacy");
+    create_workspace_file(&state, "first", b"one");
+    create_workspace_file(&state, "second", b"two");
+    let ordered = state
+        .resources
+        .download_binary_records(
+            ACTOR,
+            WORKSPACE,
+            &["second".into(), "first".into(), "second".into()],
+        )
+        .unwrap();
+    assert_eq!(
+        ordered
+            .iter()
+            .map(|r| r.resource_code.as_str())
+            .collect::<Vec<_>>(),
+        ["second", "first", "second"]
+    );
+    let scoped = state
+        .resources
+        .clone()
+        .with_privacy_policy(std::sync::Arc::new(DenySecond));
+    assert!(
+        scoped
+            .download_binary_records(ACTOR, WORKSPACE, &["first".into()])
+            .is_ok()
+    );
+    assert!(
+        scoped
+            .download_binary_records(ACTOR, WORKSPACE, &["first".into(), "second".into()])
+            .is_err()
+    );
+    assert!(matches!(
+        scoped.download_binary_records(ACTOR, "not-a-workspace", &["first".into()]),
+        Err(ResourceError::InvalidWorkspace)
+    ));
 }
 
 #[test]

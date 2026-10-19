@@ -326,7 +326,7 @@ impl ResponsesItemState {
 pub(crate) fn responses_input_items_from_messages(messages: &[AgentMessage]) -> Vec<Value> {
     messages
         .iter()
-        .filter(|message| !matches!(message.role.as_str(), "system" | "developer"))
+        .filter(|message| message.role != "system")
         .flat_map(|message| {
             let function_items = message
                 .parts

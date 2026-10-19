@@ -37,3 +37,18 @@ pub(crate) fn blocked(doc: &KnowledgeBaseDocument) -> bool {
             .as_ref()
             .is_some_and(|p| !p.fidelity_issues.is_empty())
 }
+
+pub(crate) fn failure_reason(doc: &KnowledgeBaseDocument) -> String {
+    doc.parsing_artifact
+        .as_ref()
+        .map(|artifact| {
+            artifact
+                .fidelity_issues
+                .iter()
+                .map(|issue| issue.source_excerpt.as_str())
+                .collect::<Vec<_>>()
+                .join("；")
+        })
+        .filter(|reason| !reason.is_empty())
+        .unwrap_or_else(|| "现有解析产物已记录失败".into())
+}

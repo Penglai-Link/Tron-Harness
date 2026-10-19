@@ -9,11 +9,12 @@ export type ModelType = "TEXT" | "EMBEDDING" | "RERANK" | "IMAGE";
 export type ModelVerifyStatus = "SUCCEEDED" | "FAILED";
 export type ModelProviderCode = "PersonAi";
 export type ModelSelectionKind = "Fixed" | "ProviderRoute" | "Auto";
-export type ProviderRouteCode = "ChatAuto" | "EmbeddingAuto" | "LlmFallback";
+export type ProviderRouteCode = "ChatAuto" | "EmbeddingAuto" | "MultimodalEmbeddingAuto" | "RerankAuto";
 export type ProviderCatalogModelStatus = "Available" | "Unavailable";
 export type ProviderCatalogModelType =
   | "Chat"
   | "Embedding"
+  | "Rerank"
   | "Image"
   | "Video"
   | "Speech"

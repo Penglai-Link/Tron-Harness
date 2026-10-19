@@ -55,6 +55,7 @@ static CHAT_SERVICE_COORDINATOR_NAMESPACE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct ChatService {
+    knowledge_quality: Arc<OnceLock<crate::application::knowledge_base::KnowledgeBaseService>>,
     dudes: Arc<std::sync::OnceLock<crate::application::dude::DudeService>>,
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
     pub(super) prompt_service: Option<PromptService>,
@@ -106,6 +107,7 @@ impl ChatService {
         id_provider: Arc<dyn SnowflakeIdProvider>,
     ) -> Self {
         Self {
+            knowledge_quality: Arc::new(OnceLock::new()),
             dudes: Arc::new(std::sync::OnceLock::new()),
             repository: Arc::new(Mutex::new(Box::new(repository))),
             prompt_service: None,
@@ -124,6 +126,7 @@ impl ChatService {
 
     pub fn clone_with_id_provider(&self, id_provider: Arc<dyn SnowflakeIdProvider>) -> Self {
         Self {
+            knowledge_quality: self.knowledge_quality.clone(),
             dudes: self.dudes.clone(),
             repository: self.repository.clone(),
             prompt_service: self.prompt_service.clone(),

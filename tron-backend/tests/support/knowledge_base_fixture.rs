@@ -31,6 +31,9 @@ pub struct Fixture {
 }
 impl Fixture {
     pub fn new() -> Self {
+        Self::with_resolver(Arc::new(EmbeddingResolver))
+    }
+    pub fn with_resolver(resolver: Arc<dyn LlmRuntimeModelResolver>) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let mut config = AppConfig::default();
         config.database_url = directory.path().join("kb.sqlite").display().to_string();
@@ -66,13 +69,10 @@ impl Fixture {
             .agent_code
             .clone();
         let client = FakeEmbedding::default();
-        let llm = LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(client.clone()));
+        let llm = LlmRuntimeService::new(resolver, Arc::new(client.clone()));
         let service = KnowledgeBaseService::new(
             SqliteKnowledgeBaseRepository::connect(&state.config.database_url).unwrap(),
-            tron_backend::application::rag::RagService::new(
-                Arc::new(Mutex::new(tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(&state.config.database_url).unwrap())),
-                tron_backend::application::rag::DefaultRagRuntime::new(llm.clone(),state.llm_router.clone()),
-            ),
+            state.rag.with_runtime(tron_backend::application::rag::DefaultRagRuntime::new(llm.clone(),FixtureGraphRouter)),
             state.resources.clone(),
             state.agent_management.clone(),
             llm,
@@ -202,9 +202,12 @@ impl LlmRuntimeClient for FakeEmbedding {
     fn generate<'a>(
         &'a self,
         _: &'a RuntimeModelConfig,
-        _: &'a str,
+        prompt: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
-        Box::pin(async { Err("unused".into()) })
+        Box::pin(async move {if prompt.contains("从下述正文抽取实体和关系") {
+            if prompt.contains("Alpha calls Beta.") { Ok(r#"{"nodes":[{"ref":"alpha","name":"Alpha","type":"Service","evidence":"Alpha calls Beta."},{"ref":"beta","name":"Beta","type":"Service","evidence":"Alpha calls Beta."}],"edges":[{"from":"alpha","to":"beta","relationship":"CALLS","evidence":"Alpha calls Beta."}]}"#.into()) }
+            else { Ok("{\"nodes\":[],\"edges\":[]}".into()) }
+        } else {Err("unused".into())}})
     }
     fn embed<'a>(
         &'a self,
@@ -240,7 +243,10 @@ impl LlmRuntimeModelResolver for EmbeddingResolver {
         code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
         Ok(Some(RuntimeModelConfig {
-            model_code: code.unwrap_or("fixture-embedding").into(),
+            model_code: code
+                .filter(|code| !matches!(*code,"PERSON_AI:ROUTE:EmbeddingAuto"|"PERSON_AI:ROUTE:MultimodalEmbeddingAuto"))
+                .unwrap_or("fixture-embedding")
+                .into(),
             protocol: ModelProtocol::OpenAiCompatible,
             model_type: ModelType::Embedding,
             base_url: "http://fixture.invalid/v1".into(),
@@ -263,6 +269,13 @@ impl LlmRuntimeModelResolver for EmbeddingResolver {
         _: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
         Ok(None)
+    }
+}
+pub struct FixtureGraphRouter;
+impl tron_backend::application::model_router::TextModelRouter for FixtureGraphRouter {
+    fn route_text(&self,workspace:&str,_:Option<&str>)->Result<RuntimeModelConfig,String>{
+        let mut model=EmbeddingResolver.embedding_runtime_model_config(workspace,Some("fixture-graph")).map_err(|e|e.to_string())?.unwrap();
+        model.model_type=ModelType::Text;Ok(model)
     }
 }
 pub fn office() -> Vec<u8> {
@@ -326,6 +339,15 @@ impl tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser
 {
     fn default_tier(&self) -> tron_backend::application::knowledge_base::parsing::ParsingTier {
         Default::default()
+    }
+    fn with_ocr_mode(
+        &self,
+        _: tron_backend::application::knowledge_base::parsing::OcrMode,
+    ) -> Result<
+        Arc<dyn tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser>,
+        tron_backend::application::knowledge_base::KnowledgeBaseError,
+    > {
+        Ok(Arc::new(FixtureDocumentParser))
     }
     async fn capabilities(
         &self,

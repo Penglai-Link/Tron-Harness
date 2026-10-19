@@ -7,7 +7,7 @@ import { AgentWorkspaceField } from "./AgentWorkspaceField";
 const fixture = vi.hoisted(() => ({ fetch: vi.fn(), refetch: vi.fn() }));
 vi.mock("../hooks/agentWorkspaceGrants", () => ({ loadAgentWorkspaceGrants: fixture.fetch }));
 vi.mock("@/store/authStore", () => ({ useAuthStore: (select: (state: unknown) => unknown) => select({ session: { user: { userCode: "user-1" } } }) }));
-vi.mock("@/domain/settings/components/PlatformWorkspaceScope", () => ({ usePlatformWorkspaces: () => ({ data: [{ workspaceCode: "A", label: "Space A" }, { workspaceCode: "B", label: "Space B" }], isPending: false, error: null, refetch: fixture.refetch }) }));
+vi.mock("@/domain/settings/components/PlatformWorkspaceScope", () => ({ usePlatformWorkspaces: () => ({ data: [{ workspaceCode: "A", label: "Space A", status: "Active" }, { workspaceCode: "B", label: "Space B", status: "Active" }], isPending: false, error: null, refetch: fixture.refetch }) }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, options?: { count?: number }) => options?.count !== undefined ? `${key} (${options.count})` : key }) }));
 
 function renderField(code = "reviewer") {
@@ -46,5 +46,12 @@ it("keeps the main agent available everywhere without an assignment request", ()
   renderField("main-agent");
   expect(screen.getByText("platformData.builtinAgent")).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();
+  expect(fixture.fetch).not.toHaveBeenCalled();
+});
+
+it("previews the default active-workspace grants before an Agent exists", () => {
+  renderField("");
+  expect(screen.getByRole("button", { name: "platformData.chooseWorkspaces (2)" })).toBeTruthy();
+  expect(screen.getByText("Space A · Space B")).toBeTruthy();
   expect(fixture.fetch).not.toHaveBeenCalled();
 });

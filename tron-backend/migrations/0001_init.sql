@@ -172,6 +172,26 @@ CREATE TABLE memory_work_domains (
     updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE knowledge_evaluation_datasets (
+ knowledge_base_id TEXT PRIMARY KEY REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+ owner_user_code TEXT NOT NULL, revision INTEGER NOT NULL, payload_json TEXT NOT NULL
+);
+CREATE TABLE knowledge_quality_runs (
+ id TEXT PRIMARY KEY, knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+ owner_user_code TEXT NOT NULL, request_id TEXT NOT NULL, state TEXT NOT NULL,
+ created_at INTEGER NOT NULL, payload_json TEXT NOT NULL,
+ UNIQUE(owner_user_code,knowledge_base_id,request_id)
+);
+CREATE UNIQUE INDEX idx_knowledge_quality_active ON knowledge_quality_runs(knowledge_base_id)
+ WHERE state IN ('QUEUED','RUNNING','PUBLISHING','CANCEL_REQUESTED');
+CREATE INDEX idx_knowledge_quality_owner ON knowledge_quality_runs(owner_user_code,knowledge_base_id,created_at DESC);
+CREATE TABLE knowledge_chunk_contexts (
+ knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+ document_id TEXT NOT NULL REFERENCES knowledge_base_documents(id) ON DELETE CASCADE,
+ source_code TEXT NOT NULL, context_id TEXT NOT NULL, payload_json TEXT NOT NULL,
+ PRIMARY KEY(knowledge_base_id,source_code,context_id)
+);
+
 CREATE TABLE models (
     id INTEGER PRIMARY KEY,
     scope_kind TEXT NOT NULL,
@@ -497,6 +517,8 @@ CREATE TABLE provider_model_run_snapshots (
 );
 
 CREATE TABLE provider_multimedia_catalog_models (
+    dimension INTEGER NULL CHECK (dimension IS NULL OR dimension > 0),
+    tags_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags_json) AND json_type(tags_json)='array'),
     provider_code TEXT NOT NULL,
     model_id TEXT NOT NULL,
     model_code TEXT NOT NULL,
@@ -562,12 +584,92 @@ CREATE TABLE rag_diagnostics (
     )
 );
 
-CREATE TABLE rag_graph_evidence (
-            id INTEGER PRIMARY KEY, corpus_id TEXT NOT NULL, source_code TEXT NOT NULL,
-            source_version TEXT NOT NULL, scope_type TEXT NOT NULL, scope_code TEXT NOT NULL,
-            target_code TEXT NOT NULL, text TEXT NOT NULL, metadata TEXT NOT NULL,
-            UNIQUE(corpus_id, source_code, source_version, scope_type, scope_code, target_code)
-        );
+-- Grafeo owns graph facts; these tables control visibility and rebuildable node indexes.
+CREATE TABLE rag_graph_generations (
+    generation_id TEXT PRIMARY KEY,
+    partition_key TEXT NOT NULL,
+    corpus_id TEXT NOT NULL,
+    scope_type TEXT NOT NULL,
+    scope_code TEXT NOT NULL,
+    logical_source_code TEXT NOT NULL,
+    source_code TEXT NOT NULL,
+    source_version TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    configuration_hash TEXT NOT NULL,
+    model_code TEXT NOT NULL,
+    model_fingerprint TEXT NOT NULL,
+    provider_model TEXT,
+    vector_cache_invalidated INTEGER NOT NULL DEFAULT 0 CHECK(vector_cache_invalidated IN (0,1)),
+    dimension INTEGER NOT NULL CHECK (dimension BETWEEN 1 AND 8192),
+    state TEXT NOT NULL CHECK (state IN ('Staging','Ready','Active','Retired','Failed','Cleaning')),
+    expected_projections INTEGER NOT NULL CHECK (expected_projections >= 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_rag_graph_generation_source
+    ON rag_graph_generations(partition_key, logical_source_code, state);
+
+CREATE TABLE rag_graph_active_sources (
+    partition_key TEXT NOT NULL,
+    logical_source_code TEXT NOT NULL,
+    generation_id TEXT NOT NULL REFERENCES rag_graph_generations(generation_id),
+    publication_epoch INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (partition_key, logical_source_code)
+);
+
+CREATE TABLE rag_graph_node_projections (
+    id INTEGER PRIMARY KEY,
+    entity_id TEXT NOT NULL,
+    generation_id TEXT NOT NULL REFERENCES rag_graph_generations(generation_id),
+    chunk_codes_json TEXT NOT NULL,
+    text TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    UNIQUE (entity_id, generation_id)
+);
+CREATE INDEX idx_rag_graph_projection_generation ON rag_graph_node_projections(generation_id);
+
+CREATE TABLE rag_graph_cleanup_jobs (
+    generation_id TEXT PRIMARY KEY REFERENCES rag_graph_generations(generation_id),
+    not_before INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    lease_token TEXT,
+    lease_until INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_rag_graph_cleanup_due ON rag_graph_cleanup_jobs(not_before,lease_until);
+
+-- Resumable computation, not graph facts. Published-source cache reuse stays scoped.
+CREATE TABLE rag_graph_task_checkpoints (
+    task_id TEXT NOT NULL,
+    cache_scope TEXT NOT NULL,
+    checkpoint_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (task_id, cache_scope, checkpoint_key)
+);
+CREATE INDEX idx_rag_graph_checkpoint_scope
+    ON rag_graph_task_checkpoints(cache_scope, checkpoint_key, updated_at);
+
+CREATE TABLE rag_graph_query_snapshots (
+    snapshot_id TEXT PRIMARY KEY,
+    owner_hash TEXT NOT NULL,
+    identity_hash TEXT NOT NULL,
+    request_json TEXT NOT NULL,
+    traversal_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+CREATE INDEX idx_rag_graph_snapshot_expiry ON rag_graph_query_snapshots(expires_at);
+CREATE INDEX idx_rag_graph_snapshot_identity ON rag_graph_query_snapshots(identity_hash, expires_at);
+CREATE INDEX idx_rag_graph_snapshot_owner ON rag_graph_query_snapshots(owner_hash, created_at);
+CREATE TABLE rag_graph_snapshot_generations (
+    snapshot_id TEXT NOT NULL REFERENCES rag_graph_query_snapshots(snapshot_id) ON DELETE CASCADE,
+    generation_id TEXT NOT NULL REFERENCES rag_graph_generations(generation_id),
+    PRIMARY KEY (snapshot_id, generation_id)
+);
+CREATE INDEX idx_rag_graph_snapshot_generation ON rag_graph_snapshot_generations(generation_id);
 
 CREATE TABLE rag_memory_text_units (
     id INTEGER PRIMARY KEY,
@@ -622,6 +724,14 @@ CREATE TABLE rag_record_tasks (
             id TEXT PRIMARY KEY, user_code TEXT NOT NULL, corpus_id TEXT NOT NULL,
             state TEXT NOT NULL, payload_json TEXT NOT NULL, updated_at INTEGER NOT NULL
         );
+
+-- History visibility is user-scoped. Task rows remain as publication/checkpoint fences.
+CREATE TABLE rag_task_history_deletions (
+    user_code TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    deleted_at INTEGER NOT NULL,
+    PRIMARY KEY (user_code, task_id)
+);
 
 CREATE TABLE rag_skill_text_units (
     id INTEGER PRIMARY KEY,
@@ -1096,7 +1206,6 @@ CREATE INDEX idx_provider_sync_runs_provider_started
 CREATE INDEX "idx_rag_diagnostics_source_scope"
                 ON "rag_diagnostics" (source_code, source_version, scope_type, scope_code, stage);
 
-CREATE INDEX idx_rag_graph_evidence_source ON rag_graph_evidence(corpus_id, source_code, scope_type, scope_code);
 
 CREATE INDEX "idx_rag_memory_text_units_source_scope"
                 ON "rag_memory_text_units" (source_code, source_version, scope_type, scope_code, ordinal);
@@ -1187,6 +1296,7 @@ CREATE INDEX idx_workspaces_status
     ON workspaces(status);
 
 CREATE INDEX workspace_session_links_workspace ON workspace_session_links(workspace_code);
+CREATE INDEX workspace_session_links_owner_source ON workspace_session_links(json_extract(business_json,'$.user_code'),json_extract(business_json,'$.source_code'));
 
 CREATE TRIGGER platform_agent_loop_insert BEFORE INSERT ON platform_internal_agent_configs
 WHEN COALESCE(json_extract(NEW.config_json, '$.loopCode'), '') != ''
@@ -1379,8 +1489,8 @@ INSERT INTO task_flow_statuses (flow_code, status_code, name, position, required
 
 -- rag_corpora
 INSERT INTO rag_corpora (corpus_id, display_name, status, description, capabilities_json, filter_schema_json, field_mapping_json, storage_binding_json, created_at, updated_at) VALUES
-    ('memory-card', '记忆', 'enabled', 'User, agent, and space scoped memory cards.', '{"fulltext":true,"vector":true,"metadataGroups":[{"name":"memory","fields":["memoryType","memoryStatus","reviewStatus","version","supersededBy","conflictGroup","duplicateGroup","injectable","importanceScore","confidenceScore","qualityScore","pinLevel","expiresAt","derivedSourceType","derivedSourceCode"]}],"settings":{"fulltext":true,"vector":true,"graph":false,"embeddingModelCode":null,"rerankModelCode":null,"graphModelCode":null},"graph":false}', '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"memoryType":{"type":"string","column":"memory_type"},"memoryStatus":{"type":"string","column":"memory_status"},"reviewStatus":{"type":"string","column":"review_status"},"version":{"type":"string","column":"version"},"supersededBy":{"type":"string","column":"superseded_by"},"conflictGroup":{"type":"string","column":"conflict_group"},"duplicateGroup":{"type":"string","column":"duplicate_group"},"injectable":{"type":"boolean","column":"injectable"},"importanceScore":{"type":"integer","column":"importance_score","operators":["eq","in","gt","gte","lt","lte"]},"confidenceScore":{"type":"integer","column":"confidence_score","operators":["eq","in","gt","gte","lt","lte"]},"qualityScore":{"type":"integer","column":"quality_score","operators":["eq","in","gt","gte","lt","lte"]},"pinLevel":{"type":"integer","column":"pin_level","operators":["eq","in","gt","gte","lt","lte"]},"expiresAt":{"type":"integer","column":"expires_at","operators":["eq","in","gt","gte","lt","lte","gtOrNull"]},"derivedSourceType":{"type":"string","column":"derived_source_type"},"derivedSourceCode":{"type":"string","column":"derived_source_code"}}}', '{"source":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","memoryType":"memory_type","memoryStatus":"memory_status","reviewStatus":"review_status","version":"version","supersededBy":"superseded_by","conflictGroup":"conflict_group","duplicateGroup":"duplicate_group","injectable":"injectable","importanceScore":"importance_score","confidenceScore":"confidence_score","qualityScore":"quality_score","pinLevel":"pin_level","expiresAt":"expires_at","derivedSourceType":"derived_source_type","derivedSourceCode":"derived_source_code","sourceCreatedAt":"source_created_at","sourceUpdatedAt":"source_updated_at"},"textUnit":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","textUnitStatus":"status","text":"text"}}', '{"mode":"TARGETED","bindings":{"source":"memory-store","textUnit":"memory-store","fulltext":"memory-store","vector":"memory-store","diagnostics":"diagnostics-store"},"targets":[{"id":"memory-store","backend":"SQLITE","layout":"TABLE","table":"rag_memory_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}', 1772294400000, 1781568000000),
-    ('skill', '技能', 'enabled', 'Platform-shared skill content filtered by Agent assignment and source-linked graph evidence.', '{"fulltext":true,"vector":true,"metadataGroups":[{"name":"skill","fields":["skillName","skillDescription"]}],"settings":{"fulltext":true,"vector":true,"graph":true,"embeddingModelCode":null,"rerankModelCode":null,"graphModelCode":null},"graph":true}', '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"skillName":{"type":"string","column":"skill_name"}}}', '{"source":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","skillName":"skill_name","skillDescription":"skill_description"},"textUnit":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","textUnitStatus":"status","text":"text"}}', '{"mode":"TARGETED","bindings":{"source":"skill-store","textUnit":"skill-store","fulltext":"skill-store","vector":"skill-store","diagnostics":"diagnostics-store"},"targets":[{"id":"skill-store","backend":"SQLITE","layout":"TABLE","table":"rag_skill_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}', 1780339200000, 1780339200000);
+    ('memory-card', '记忆', 'enabled', 'User, agent, and space scoped memory cards.', '{"fulltext":true,"vector":true,"metadataGroups":[{"name":"memory","fields":["memoryType","memoryStatus","reviewStatus","version","supersededBy","conflictGroup","duplicateGroup","injectable","importanceScore","confidenceScore","qualityScore","pinLevel","expiresAt","derivedSourceType","derivedSourceCode"]}],"settings":{"fulltext":true,"vector":true,"graph":false,"embeddingModelCode":"PERSON_AI:ROUTE:EmbeddingAuto","rerankModelCode":"PERSON_AI:ROUTE:RerankAuto","graphModelCode":"PERSON_AI:ROUTE:ChatAuto"},"graph":false}', '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"memoryType":{"type":"string","column":"memory_type"},"memoryStatus":{"type":"string","column":"memory_status"},"reviewStatus":{"type":"string","column":"review_status"},"version":{"type":"string","column":"version"},"supersededBy":{"type":"string","column":"superseded_by"},"conflictGroup":{"type":"string","column":"conflict_group"},"duplicateGroup":{"type":"string","column":"duplicate_group"},"injectable":{"type":"boolean","column":"injectable"},"importanceScore":{"type":"integer","column":"importance_score","operators":["eq","in","gt","gte","lt","lte"]},"confidenceScore":{"type":"integer","column":"confidence_score","operators":["eq","in","gt","gte","lt","lte"]},"qualityScore":{"type":"integer","column":"quality_score","operators":["eq","in","gt","gte","lt","lte"]},"pinLevel":{"type":"integer","column":"pin_level","operators":["eq","in","gt","gte","lt","lte"]},"expiresAt":{"type":"integer","column":"expires_at","operators":["eq","in","gt","gte","lt","lte","gtOrNull"]},"derivedSourceType":{"type":"string","column":"derived_source_type"},"derivedSourceCode":{"type":"string","column":"derived_source_code"}}}', '{"source":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","memoryType":"memory_type","memoryStatus":"memory_status","reviewStatus":"review_status","version":"version","supersededBy":"superseded_by","conflictGroup":"conflict_group","duplicateGroup":"duplicate_group","injectable":"injectable","importanceScore":"importance_score","confidenceScore":"confidence_score","qualityScore":"quality_score","pinLevel":"pin_level","expiresAt":"expires_at","derivedSourceType":"derived_source_type","derivedSourceCode":"derived_source_code","sourceCreatedAt":"source_created_at","sourceUpdatedAt":"source_updated_at"},"textUnit":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","textUnitStatus":"status","text":"text"}}', '{"mode":"TARGETED","bindings":{"source":"memory-store","textUnit":"memory-store","fulltext":"memory-store","vector":"memory-store","diagnostics":"diagnostics-store"},"targets":[{"id":"memory-store","backend":"SQLITE","layout":"TABLE","table":"rag_memory_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}', 1772294400000, 1781568000000),
+    ('skill', '技能', 'enabled', 'Platform-shared skill content filtered by Agent assignment and source-linked graph evidence.', '{"fulltext":true,"vector":true,"metadataGroups":[{"name":"skill","fields":["skillName","skillDescription"]}],"settings":{"fulltext":true,"vector":true,"graph":true,"embeddingModelCode":"PERSON_AI:ROUTE:EmbeddingAuto","rerankModelCode":"PERSON_AI:ROUTE:RerankAuto","graphModelCode":"PERSON_AI:ROUTE:ChatAuto"},"graph":true}', '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"skillName":{"type":"string","column":"skill_name"}}}', '{"source":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","skillName":"skill_name","skillDescription":"skill_description"},"textUnit":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","textUnitStatus":"status","text":"text"}}', '{"mode":"TARGETED","bindings":{"source":"skill-store","textUnit":"skill-store","fulltext":"skill-store","vector":"skill-store","diagnostics":"diagnostics-store"},"targets":[{"id":"skill-store","backend":"SQLITE","layout":"TABLE","table":"rag_skill_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}', 1780339200000, 1780339200000);
 
 CREATE TABLE IF NOT EXISTS tron_schema_initialized (scope TEXT PRIMARY KEY);
 INSERT INTO tron_schema_initialized (scope) VALUES ('business');

@@ -20,6 +20,79 @@ struct StoredParse {
     rendered_sections: Vec<super::local_documents::LocatedSection>,
 }
 impl KnowledgeBaseService {
+    /// Read only existing extraction output. Evaluation never creates a parsing job.
+    pub(crate) fn existing_parsed_document(
+        &self,
+        user: &str,
+        doc: &KnowledgeBaseDocument,
+    ) -> Result<ParsedDocument, KnowledgeBaseError> {
+        if super::fidelity::blocked(doc) {
+            return Err(KnowledgeBaseError::Invalid(format!(
+                "解析质量校验失败，索引未发布：{}；请核对原件及图片",
+                super::fidelity::failure_reason(doc)
+            )));
+        }
+        let (_, original) = self.resources.download_binary_to_file(
+            user,
+            ResourceBinaryDownloadCommand {
+                workspace_code: "PLATFORM".into(),
+                resource_code: doc.resource_code.clone(),
+            },
+        )?;
+        if original.revision != doc.resource_revision {
+            return Err(KnowledgeBaseError::Conflict);
+        }
+        let mut bytes = Vec::new();
+        self.resources
+            .download_binary_storage(&original, &mut bytes)?;
+        if doc
+            .parse_plan
+            .as_ref()
+            .is_some_and(|plan| plan.features.local_text)
+            || doc.file_name.to_ascii_lowercase().ends_with(".md")
+        {
+            return parse_local_document(&doc.file_name, &bytes)
+                .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()));
+        }
+        let artifact = doc.parsing_artifact.as_ref().ok_or_else(|| {
+            KnowledgeBaseError::Invalid("请先完成资料解析和入库；评测不会重新提交解析任务".into())
+        })?;
+        let (_, record) = self.resources.download_binary_to_file(
+            user,
+            ResourceBinaryDownloadCommand {
+                workspace_code: "PLATFORM".into(),
+                resource_code: artifact.resource_code.clone(),
+            },
+        )?;
+        if record.byte_size > super::local_documents::MAX_EXPANDED_BYTES as u64 {
+            return Err(KnowledgeBaseError::Invalid(
+                "单份解析缓存超过读取上限".into(),
+            ));
+        }
+        let mut data = Vec::new();
+        self.resources.download_binary_storage(&record, &mut data)?;
+        let cached: StoredParse = serde_json::from_slice(&data).map_err(invalid_storage)?;
+        let mut document = if super::parsing::has_structured_middle(&cached.middle) {
+            let paths = cached.image_resources.keys().cloned().collect();
+            let mut document = super::parsing::normalize_parse_middle(&cached.middle, &paths)?;
+            super::source_locations::apply(&mut document, &bytes, &cached.middle)?;
+            map_image_resources(&mut document, &cached.image_resources)?;
+            document
+        } else {
+            let mut document = cached.document;
+            if document.sections.iter().any(|s| {
+                s.location
+                    .image_resource_codes
+                    .iter()
+                    .any(|code| cached.image_resources.contains_key(code))
+            }) {
+                map_image_resources(&mut document, &cached.image_resources)?;
+            }
+            document
+        };
+        super::office_visuals::append_rendered_sections(&mut document, cached.rendered_sections)?;
+        Ok(document)
+    }
     pub(crate) fn derived_resource(
         &self,
         user: &str,
@@ -63,23 +136,17 @@ impl KnowledgeBaseService {
         bytes: &[u8],
     ) -> Result<(ParsedDocument, KnowledgeBaseDocument), KnowledgeBaseError> {
         if super::fidelity::blocked(doc) {
-            let reason = doc
-                .parsing_artifact
-                .as_ref()
-                .map(|artifact| {
-                    artifact
-                        .fidelity_issues
-                        .iter()
-                        .map(|issue| issue.source_excerpt.as_str())
-                        .collect::<Vec<_>>()
-                        .join("；")
-                })
-                .unwrap_or_default();
+            let reason = super::fidelity::failure_reason(doc);
             return Err(KnowledgeBaseError::Invalid(format!(
                 "解析质量校验失败，索引未发布：{reason}；请核对原件及图片"
             )));
         }
-        if doc.file_name.to_ascii_lowercase().ends_with(".md") {
+        if doc
+            .parse_plan
+            .as_ref()
+            .is_some_and(|p| p.features.local_text)
+            || doc.file_name.to_ascii_lowercase().ends_with(".md")
+        {
             let mut parsed = parse_local_document(&doc.file_name, bytes)
                 .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
             // Keep Markdown references intact; remote or filesystem links are never fetched.
@@ -98,11 +165,7 @@ impl KnowledgeBaseService {
         let parser = snapshot.as_ref().unwrap_or(&parser);
         let office = doc.file_name.to_ascii_lowercase().ends_with(".docx")
             || doc.file_name.to_ascii_lowercase().ends_with(".xlsx");
-        let tier = if office {
-            super::ParsingTier::Flash
-        } else {
-            doc.parsing_tier.unwrap_or(parser.default_tier())
-        };
+        let tier = doc.parsing_tier.unwrap_or(parser.default_tier());
         // Preflight native charts before the local parser/renderer handles any active content.
         let chart_plan = if office {
             let mut zip =
@@ -131,7 +194,9 @@ impl KnowledgeBaseService {
             identity["provider"].as_str(),
             chart_plan.as_ref().is_some_and(|plan| plan.has_charts()),
         ) {
-            (Some("person-ai-document-parse"), true) => "person-ai-document-parse-v1:office-chart-v1",
+            (Some("person-ai-document-parse"), true) => {
+                "person-ai-document-parse-v1:office-chart-v1"
+            }
             (Some("person-ai-document-parse"), false) => "person-ai-document-parse-v1",
             (_, true) => "mineru-v1-middle-v2:office-chart-v1",
             (_, false) => "mineru-v1-middle-v2",
@@ -170,9 +235,9 @@ impl KnowledgeBaseService {
                 return Err(KnowledgeBaseError::Invalid("解析缓存超过上限".into()));
             }
             let parsed: StoredParse = serde_json::from_slice(&data).map_err(invalid_storage)?;
-            let mut document = if parsed.middle["schema"] == "docvortex.middle" {
+            let mut document = if super::parsing::has_structured_middle(&parsed.middle) {
                 let paths = parsed.image_resources.keys().cloned().collect();
-                let mut document = super::parsing::normalize_middle(&parsed.middle, &paths)?;
+                let mut document = super::parsing::normalize_parse_middle(&parsed.middle, &paths)?;
                 super::source_locations::apply(&mut document, bytes, &parsed.middle)?;
                 document
             } else {
@@ -187,11 +252,11 @@ impl KnowledgeBaseService {
         }
         let mut result = if let Some(checkpoint) = &self.parse_checkpoint {
             parser
-                .parse_durable(&doc.file_name, bytes, doc.parsing_tier, checkpoint.clone())
+                .parse_durable(&doc.file_name, bytes, Some(tier), checkpoint.clone())
                 .await?
         } else {
             parser
-                .parse_for_user(user, &doc.file_name, bytes, doc.parsing_tier)
+                .parse_for_user(user, &doc.file_name, bytes, Some(tier))
                 .await?
         };
         if result.middle["schema"] == "docvortex.middle" {
@@ -378,6 +443,16 @@ fn map_image_resources(
     resources: &BTreeMap<String, String>,
 ) -> Result<(), KnowledgeBaseError> {
     for section in &mut document.sections {
+        for annotation in &mut section.location.image_annotations {
+            if let Some(path) = &annotation.resource_code {
+                annotation.resource_code = Some(
+                    resources
+                        .get(path)
+                        .ok_or_else(|| KnowledgeBaseError::Invalid("解析图片文本引用缺失".into()))?
+                        .clone(),
+                );
+            }
+        }
         for path in &mut section.location.image_resource_codes {
             *path = resources
                 .get(path)

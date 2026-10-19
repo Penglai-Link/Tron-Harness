@@ -41,6 +41,31 @@ pub(super) fn retire_indexes(
     if source.is_empty() {
         return Ok(());
     }
+    let scopes = {
+        let mut statement=tx.prepare(&format!("SELECT DISTINCT scope_type,scope_code,source_version FROM \"rag_{kb}_units\" WHERE source_code=?1")).map_err(storage)?;
+        statement
+            .query_map([source], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(storage)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage)?
+    };
+    for (scope_type, scope_code, version) in scopes {
+        let partition = crate::domain::rag::graph::GraphPartition {
+            corpus_id: kb.into(),
+            scope_type,
+            scope_code,
+        };
+        super::super::rag_graph_index::retire_graph_source_version(
+            tx, &partition, source, &version,
+        )
+        .map_err(storage)?;
+    }
     let mut stmt = tx
         .prepare(&format!(
             "SELECT rowid FROM \"rag_{kb}_units\" WHERE source_code=?1"
@@ -62,7 +87,7 @@ pub(super) fn retire_indexes(
         }
     }
     tx.execute(
-        "DELETE FROM rag_graph_evidence WHERE corpus_id=?1 AND source_code=?2",
+        "DELETE FROM knowledge_chunk_contexts WHERE knowledge_base_id=?1 AND source_code=?2",
         params![kb, source],
     )
     .map_err(storage)?;

@@ -34,10 +34,10 @@ export function graphNodePropertyOptions(nodes: GraphNodeView[]) {
 export function resolveGraphNodeLabel(node: GraphNodeView, preferredProperty: string) {
   const normalizedProperty = preferredProperty.trim() || defaultGraphNodeLabelProperty;
   const preferredValue = graphPropertyValueText(node.properties[normalizedProperty]);
-  if (preferredValue) return `${normalizedProperty}：${preferredValue}`;
+  if (preferredValue) return ["name", "title"].includes(normalizedProperty) ? preferredValue : `${normalizedProperty}：${preferredValue}`;
 
   const titleValue = graphPropertyValueText(node.properties[defaultGraphNodeLabelProperty]);
-  if (titleValue) return `${defaultGraphNodeLabelProperty}：${titleValue}`;
+  if (titleValue) return titleValue;
 
   return `nodeCode：${node.nodeCode}`;
 }

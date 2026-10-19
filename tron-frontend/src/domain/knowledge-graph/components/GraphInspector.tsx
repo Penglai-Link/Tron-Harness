@@ -1,3 +1,4 @@
+import { RagGraphInspector, type RagGraphInspectorProps } from "./RagGraphInspector";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -11,7 +12,7 @@ import { InspectorPanel } from "@/components/inspector";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-interface GraphInspectorProps {
+interface BusinessGraphInspectorProps {
   edges: GraphEdgeView[];
   node: GraphNodeView;
   onClose: () => void;
@@ -42,7 +43,7 @@ function KeyValueRows({ rows }: { rows: Array<[string, unknown]> }) {
   );
 }
 
-export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: GraphInspectorProps) {
+function BusinessGraphInspector({ edges, node, onClose, onExpandNode, scope }: BusinessGraphInspectorProps) {
   const { t } = useTranslation(["pages"]);
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:knowledgeGraph.${key}`, { defaultValue, ...options })
@@ -162,4 +163,8 @@ export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: Gr
       </div>
     </InspectorPanel>
   );
+}
+
+export function GraphInspector(props: BusinessGraphInspectorProps | RagGraphInspectorProps) {
+  return "ragNode" in props ? <RagGraphInspector {...props} /> : <BusinessGraphInspector {...props} />;
 }

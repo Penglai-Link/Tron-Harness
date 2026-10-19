@@ -45,17 +45,33 @@ impl<R: RagConfigRepository + Clone, E: Clone> RagService<R, E> {
             .collect()
     }
     pub fn record_task_views(&self, user: &str) -> Result<Vec<RagTaskView>, RagError> {
-        let mut tasks = self.repository.record_tasks(user)?;
+        let mut tasks = self.repository.record_task_summaries(user)?;
         if user != "SYSTEM" {
             tasks.extend(
                 self.repository
-                    .record_tasks("SYSTEM")?
+                    .record_task_summaries("SYSTEM")?
                     .into_iter()
                     .filter(|task| task.corpus_id == "skill"),
             );
         }
-        tasks.sort_by_key(|task| std::cmp::Reverse(task.created_at));
-        Ok(tasks.into_iter().map(Into::into).collect())
+        // Repository order is creation order, independent of later checkpoint updates.
+        let mut seen = BTreeSet::new();
+        Ok(tasks
+            .into_iter()
+            .map(|task| {
+                let is_latest = seen.insert((
+                    task.user_code.clone(),
+                    task.corpus_id.clone(),
+                    task.workspace_code.clone(),
+                    task.source_code.clone(),
+                    task.scope_type.clone(),
+                    task.scope_code.clone(),
+                ));
+                let mut view: RagTaskView = task.into();
+                view.is_latest = is_latest;
+                view
+            })
+            .collect())
     }
     pub fn cancel_record_task(&self, user: &str, id: &str) -> Result<RagTaskView, RagError> {
         let mut task = self
@@ -86,5 +102,26 @@ impl<R: RagManagementRepository + RagConfigRepository + Clone, E: Clone> RagServ
             serde_json::to_value(&settings).map_err(|_| RagError::StorageFailure)?;
         self.repository.save_managed_corpus(&corpus)?;
         Ok(settings)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum RagTaskHistoryError {
+    NotFound,
+    Active,
+    StorageFailure,
+}
+pub struct TaskHistoryErrorDescriptor {
+    pub code: &'static str,
+    pub message_key: &'static str,
+}
+impl RagTaskHistoryError {
+    pub fn descriptor(self) -> TaskHistoryErrorDescriptor {
+        let (code, message_key) = match self {
+            Self::NotFound => ("101033001", "tron.rag.task_history_not_found"),
+            Self::Active => ("101033002", "tron.rag.task_history_active"),
+            Self::StorageFailure => ("101033003", "tron.rag.task_history_storage_failed"),
+        };
+        TaskHistoryErrorDescriptor { code, message_key }
     }
 }

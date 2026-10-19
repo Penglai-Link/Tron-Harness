@@ -17,6 +17,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 #[derive(Clone)]
 pub struct HttpLlmRuntimeClient {
     models: Arc<HttpModelClient>,
+    auto_routers: fw::AutoRouters,
 }
 impl HttpLlmRuntimeClient {
     pub fn new(client: sdk::ModelHttpClient) -> Self {
@@ -24,10 +25,41 @@ impl HttpLlmRuntimeClient {
             models: Arc::new(HttpModelClient::new(Arc::new(
                 HttpModelProviderClient::new(client),
             ))),
+            auto_routers: default_auto_routers(),
         }
     }
     pub fn with_model_client(models: Arc<HttpModelClient>) -> Self {
-        Self { models }
+        Self {
+            models,
+            auto_routers: default_auto_routers(),
+        }
+    }
+    pub fn with_auto_routers(mut self, routers: fw::AutoRouters) -> Self {
+        self.auto_routers = routers;
+        self
+    }
+    fn routing_for(&self, model: &AgentModelConfig, reference: &fw::ModelRef) -> fw::AutoRouters {
+        let mut routers = self.auto_routers.clone();
+        if routers.source.is_none() {
+            let mut candidate = fw::AutoRouteCandidate::new(reference.clone());
+            candidate.metadata.insert(
+                eliteforge_agent_capability_personai::PERSONAI_PROVIDER.into(),
+                model.model_code.starts_with("PERSON_AI:").into(),
+            );
+            candidate.context_window_tokens = model.context_window_tokens.map(|v| v as usize);
+            routers.source = Some(Arc::new(
+                crate::application::model_router::TronAutoRouteDataSource(vec![candidate]),
+            ));
+        }
+        routers
+    }
+}
+fn default_auto_routers() -> fw::AutoRouters {
+    let policy = Arc::new(eliteforge_agent_capability_personai::PersonAiAutoRouter::default());
+    fw::AutoRouters {
+        embedding: Some(policy.clone()),
+        rerank: Some(policy),
+        ..Default::default()
     }
 }
 pub(crate) fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> AgentModelConfig {
@@ -57,6 +89,26 @@ mod in_run;
 #[path = "http_llm_observed.rs"]
 mod observed;
 impl LlmRuntimeClient for HttpLlmRuntimeClient {
+    fn embed_content_batch_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        inputs: &'a [fw::Content],
+        dimensions: usize,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<(Vec<fw::EmbeddingVector>, Option<String>), String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            self.observed_embed_content_batch(config, inputs, Some(dimensions))
+                .await
+                .into_result()
+                .map(|response| (response.vectors, response.provider_model))
+                .map_err(error)
+        })
+    }
     fn model_authorization_scope(
         &self,
         config: &RuntimeModelConfig,
@@ -270,6 +322,98 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test]
+    async fn embedding_media_uses_declared_adapter_capabilities_before_dispatch() {
+        struct MediaFactory {
+            inner: HttpModelProviderClient,
+            enabled: bool,
+        }
+        #[async_trait::async_trait]
+        impl sdk::ModelTransportFactory for MediaFactory {
+            fn embedding_input_modalities(
+                &self,
+                _: &sdk::AgentModelConfig,
+            ) -> Result<Vec<fw::Modality>, fw::ModelError> {
+                Ok(if self.enabled {
+                    vec![fw::Modality::Text, fw::Modality::Image]
+                } else {
+                    vec![fw::Modality::Text]
+                })
+            }
+            fn embedding_body(
+                &self,
+                config: &sdk::AgentModelConfig,
+                request: &fw::EmbeddingRequest,
+            ) -> Result<Value, fw::ModelError> {
+                eliteforge_agent_capability_personai::personai_embedding_request_body(
+                    &config.model_name,
+                    request,
+                )
+            }
+            async fn create(
+                &self,
+                config: &sdk::AgentModelConfig,
+            ) -> Result<Arc<dyn sdk::ModelTransport>, fw::ModelError> {
+                sdk::ModelTransportFactory::create(&self.inner, config).await
+            }
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let app = Router::new().route(
+            "/embeddings",
+            post(move |Json(body): Json<Value>| {
+                let seen = seen.clone();
+                async move {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                    assert_eq!(body["input"][0]["image_base64"], "AQID");
+                    Json(json!({"model":"fixture", "data":[{"index":0,"embedding":[0.25,0.75]}]}))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let config = RuntimeModelConfig {
+            model_code: "fixture".into(),
+            protocol: ModelProtocol::OpenAiCompatibleEmbedding,
+            model_type: ModelType::Embedding,
+            base_url: url,
+            api_path: None,
+            api_key: "fixture".into(),
+            model_name: "fixture".into(),
+            thinking_enabled: false,
+            reasoning_effort: None,
+            responses_stateful_enabled: false,
+            temperature: None,
+            max_tokens: None,
+            context_window_tokens: None,
+            top_p: None,
+            max_retries: Some(0),
+        };
+        let content = fw::Content(vec![fw::ContentBlock::Media {
+            media: fw::MediaContent {
+                mime_type: "image/png".into(),
+                source: fw::MediaSource::Base64("AQID".into()),
+                name: None,
+                estimated_tokens: Some(8),
+            },
+        }]);
+        for enabled in [false, true] {
+            let models = Arc::new(HttpModelClient::new(Arc::new(MediaFactory {
+                inner: HttpModelProviderClient::new(sdk::ModelHttpClient::new()),
+                enabled,
+            })));
+            let client = HttpLlmRuntimeClient::with_model_client(models.clone());
+            let result = client
+                .embed_content_batch_with_model(&config, std::slice::from_ref(&content), 2)
+                .await;
+            assert_eq!(result.is_ok(), enabled, "{result:?}");
+            assert_eq!(calls.load(Ordering::SeqCst), usize::from(enabled));
+            models.close().await;
+        }
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn embedding_batch_dispatches_one_http_array_and_rejects_invalid_indices() {
         use crate::application::llm::{
             LlmEmbeddingBatchCallCommand, LlmRuntimeModelResolver, LlmRuntimeService,
@@ -377,6 +521,107 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn native_rerank_batches_capacity_and_merges_global_indices_and_unknown_usage() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let sizes = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let body_sizes = sizes.clone();
+        let app = Router::new().route(
+            "/rerank",
+            post(move |Json(body): Json<Value>| {
+                let seen = seen.clone();
+                let body_sizes = body_sizes.clone();
+                async move {
+                    let attempt = seen.fetch_add(1, Ordering::SeqCst);
+                    assert!(body.to_string().len() <= 300);
+                    body_sizes.lock().unwrap().push(body.to_string().len());
+                    let docs = body["documents"].as_array().unwrap();
+                    let results = docs
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| {
+                            let score = match value.as_str().unwrap().chars().next().unwrap() {
+                                'A' => 0.1,
+                                'B' => 0.8,
+                                'C' => 0.9,
+                                _ => 0.6,
+                            };
+                            json!({"index":index,"relevance_score":score})
+                        })
+                        .collect::<Vec<_>>();
+                    let mut response = json!({"results":results});
+                    if attempt == 0 {
+                        response["usage"] = json!({"total_tokens":10});
+                    }
+                    Json(response)
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let config = RuntimeModelConfig {
+            model_code: "fixture".into(),
+            protocol: ModelProtocol::Rerank,
+            model_type: ModelType::Rerank,
+            base_url: url,
+            api_path: None,
+            api_key: "fixture".into(),
+            model_name: "fixture".into(),
+            thinking_enabled: false,
+            reasoning_effort: None,
+            responses_stateful_enabled: false,
+            temperature: None,
+            max_tokens: None,
+            context_window_tokens: Some(300),
+            top_p: None,
+            max_retries: Some(0),
+        };
+        let client = HttpLlmRuntimeClient::new(sdk::ModelHttpClient::new());
+        let docs = ['A', 'B', 'C', 'D'].map(|c| c.to_string().repeat(90));
+        let observed = client.observed_rerank(&config, "q", &docs, Some(2)).await;
+        let hits = observed.result.unwrap();
+        assert_eq!(
+            hits.iter().map(|h| h.document_index).collect::<Vec<_>>(),
+            [2, 1]
+        );
+        assert_eq!(observed.report.calls, 2);
+        assert_eq!(
+            observed.report.ledger_usage.input_tokens,
+            10 + sizes.lock().unwrap()[1] as u64,
+            "cumulative budget snapshots must not be double-counted"
+        );
+        assert!(
+            observed.report.provider_usage.is_none(),
+            "one batch did not report usage"
+        );
+        assert_eq!(
+            observed
+                .report
+                .provider_usage_subtotal
+                .unwrap()
+                .input_tokens,
+            10
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        let oversized = ["A".repeat(90), "X".repeat(1000)];
+        assert!(
+            client
+                .observed_rerank(&config, "q", &oversized, Some(2))
+                .await
+                .result
+                .is_err()
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            2,
+            "all inputs are checked before paid dispatch"
+        );
+        client.models.close().await;
+        server.abort();
     }
 
     #[tokio::test]

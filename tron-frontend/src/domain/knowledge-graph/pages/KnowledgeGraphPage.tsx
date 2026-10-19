@@ -1,3 +1,6 @@
+import { useSearchParams } from "react-router";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { RagGraphPanel } from "../components/RagGraphPanel";
 import { Minimize2 } from "lucide-react";
 import {
   useEffect,
@@ -36,10 +39,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 const defaultGraphLayoutMode: GraphLayoutMode = "Radial";
-const preferredGraphNamespace = "rag_skill";
 
 function pickGraphNamespace(namespaces: string[]) {
-  if (namespaces.includes(preferredGraphNamespace)) return preferredGraphNamespace;
   return namespaces[0] ?? "";
 }
 
@@ -62,7 +63,7 @@ function graphLabelFacets(nodes: GraphNodeView[]): GraphFacet[] {
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
-export function GraphPage() {
+function BusinessGraphPage() {
   const { t } = useTranslation(["pages"]);
   const pageT = (key: string, defaultValue: string) => t(`pages:knowledgeGraph.${key}`, { defaultValue });
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -182,7 +183,7 @@ export function GraphPage() {
   }
 
   function changeCameraZoom(delta: number) {
-    setZoom((current) => Math.min(220, Math.max(60, current + delta)));
+    setZoom((current) => Math.min(220, Math.max(5, current + delta)));
   }
 
   function changeGraphLayoutMode(layoutMode: GraphLayoutMode) {
@@ -300,6 +301,16 @@ export function GraphPage() {
       )}
     </div>
   );
+}
+
+export function GraphPage({ defaultMode = "rag" }: { defaultMode?: "rag" | "business" }) {
+  const { t } = useTranslation("pages"); const [params, setParams] = useSearchParams();
+  const mode = (params.get("mode") ?? defaultMode) === "business" ? "business" : "rag";
+  return <Tabs value={mode} className="flex h-full min-h-0 flex-col" onValueChange={(value) => setParams((current) => { const next = new URLSearchParams(current); next.set("mode", String(value)); return next; })}>
+    <TabsList><TabsTrigger value="rag">{t("knowledgeGraph.ragTab")}</TabsTrigger><TabsTrigger value="business">{t("knowledgeGraph.businessTab")}</TabsTrigger></TabsList>
+    <TabsContent value="rag" className="flex min-h-0 flex-1 flex-col">{mode === "rag" ? <RagGraphPanel /> : null}</TabsContent>
+    <TabsContent value="business" className="flex min-h-0 flex-1 flex-col">{mode === "business" ? <BusinessGraphPage /> : null}</TabsContent>
+  </Tabs>;
 }
 
 export function KnowledgeGraphPage() {

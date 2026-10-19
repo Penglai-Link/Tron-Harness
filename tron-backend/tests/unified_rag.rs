@@ -13,6 +13,14 @@ struct Runtime {
     fail: bool,
 }
 impl RagEmbeddingRuntime for Runtime {
+    fn embedding_fingerprint(
+        &self,
+        _: &str,
+        model: Option<&str>,
+        _: usize,
+    ) -> Result<Option<String>, String> {
+        Ok(Some(format!("space:{}", model.unwrap_or("embedding-a"))))
+    }
     fn embed_batch<'a>(
         &'a self,
         call: RagEmbeddingBatchCall,
@@ -74,6 +82,14 @@ impl RagGraphRuntime for Runtime {
     }
 }
 impl RagSearchRuntime for Runtime {
+    fn embedding_fingerprint(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+        dimension: usize,
+    ) -> Result<Option<String>, String> {
+        RagEmbeddingRuntime::embedding_fingerprint(self, workspace, model, dimension)
+    }
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
@@ -88,8 +104,39 @@ impl RagSearchRuntime for Runtime {
     }
 }
 fn repository() -> Arc<Mutex<SqliteRagRepository>> {
-    Arc::new(Mutex::new(
+    let repo = Arc::new(Mutex::new(
         SqliteRagRepository::connect(":memory:").unwrap(),
+    ));
+    // Ingestion requires an explicit fixed model or automatic route selection.
+    RagService::new(repo.clone(), Runtime { fail: false })
+        .configure_corpus(
+            "skill",
+            RagSettings {
+                embedding_model_code: Some("embedding-a".into()),
+                rerank_model_code: None,
+                graph: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    repo
+}
+fn service(
+    repo: Arc<Mutex<SqliteRagRepository>>,
+    runtime: Runtime,
+) -> RagService<Arc<Mutex<SqliteRagRepository>>, Runtime> {
+    use tron_backend::adapters::outbound::persistence::{
+        GrafeoAdapterConfig, GrafeoRagStore, GrafeoStoreCore,
+    };
+    use tron_backend::application::rag::graph::GraphInfrastructure;
+    let index = Arc::new(repo.lock().unwrap().graph_index_repository().unwrap());
+    let core = GrafeoStoreCore::connect(GrafeoAdapterConfig {
+        storage_path: ":memory:".into(),
+    })
+    .unwrap();
+    RagService::new(repo, runtime).with_graph_infrastructure(GraphInfrastructure::new(
+        Arc::new(GrafeoRagStore::new(core)),
+        index,
     ))
 }
 fn request(text: &str) -> RagIngestRequest {
@@ -109,7 +156,7 @@ fn request(text: &str) -> RagIngestRequest {
             code: "skill-evidence".into(),
             version: "v1".into(),
         },
-        payload: json!({"text":text,"title":"Orchid","domainFields":{"skillName":"orchid","skillDescription":"flower evidence"},"relatedGraph":{"nodes":[{"ref":"orchid","name":"orchid","evidence":"orchid"}],"edges":[{"from":"orchid","to":"orchid","relationship":"HAS_EVIDENCE","evidence":"orchid"}]}}),
+        payload: json!({"text":text,"title":"Orchid","domainFields":{"skillName":"orchid","skillDescription":"flower evidence"},"relatedGraph":{"nodes":[{"ref":"orchid","name":"orchid","type":"Plant","evidence":"orchid"}],"edges":[{"from":"orchid","to":"orchid","relationship":"HAS_EVIDENCE","evidence":"orchid"}]}}),
     }
 }
 fn range(scope: &str) -> AuthorizedRagRange {
@@ -146,7 +193,7 @@ fn fresh_schema_initializes_only_two_corpora() {
 #[tokio::test]
 async fn one_ingest_publishes_all_channels_with_original_evidence_and_scope_filtering() {
     let repo = repository();
-    let rag = RagService::new(repo.clone(), Runtime { fail: false });
+    let rag = service(repo.clone(), Runtime { fail: false });
     rag.ingest(request("orchid original evidence"))
         .await
         .unwrap();
@@ -196,11 +243,11 @@ async fn one_ingest_publishes_all_channels_with_original_evidence_and_scope_filt
 #[tokio::test]
 async fn failed_rebuild_keeps_old_version_and_returns_explicit_channel_failures() {
     let repo = repository();
-    let rag = RagService::new(repo.clone(), Runtime { fail: false });
+    let rag = service(repo.clone(), Runtime { fail: false });
     rag.ingest(request("orchid published evidence"))
         .await
         .unwrap();
-    let failing = RagService::new(repo.clone(), Runtime { fail: true });
+    let failing = rag.with_runtime(Runtime { fail: true });
     assert!(
         failing
             .ingest(request("replacement must not publish"))
@@ -237,7 +284,7 @@ async fn failed_rebuild_keeps_old_version_and_returns_explicit_channel_failures(
 #[tokio::test]
 async fn published_models_and_dimensions_are_separate_query_spaces() {
     let repo = repository();
-    let rag = RagService::new(repo.clone(), Runtime { fail: false });
+    let rag = service(repo.clone(), Runtime { fail: false });
     let mut settings = RagSettings::default();
     settings.graph = false;
     settings.embedding_model_code = Some("embedding-a".into());
@@ -307,6 +354,129 @@ fn query() -> RagQueryInput {
         limit: 8,
     }
 }
+
+#[derive(Clone)]
+struct ContextRankRuntime(Arc<Mutex<Vec<String>>>);
+impl RagSearchRuntime for ContextRankRuntime {
+    fn embedding_fingerprint(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+        dimension: usize,
+    ) -> Result<Option<String>, String> {
+        RagSearchRuntime::embedding_fingerprint(
+            &Runtime { fail: false },
+            workspace,
+            model,
+            dimension,
+        )
+    }
+    fn embed<'a>(
+        &'a self,
+        call: RagEmbeddingCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
+        Box::pin(async move { RagEmbeddingRuntime::embed(&Runtime { fail: false }, call).await })
+    }
+    fn rerank<'a>(
+        &'a self,
+        call: RagRerankCall,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<(usize, f64)>, String>> + Send + 'a>> {
+        Box::pin(async move {
+            *self.0.lock().unwrap() = call.documents.clone();
+            let mut order = call
+                .documents
+                .iter()
+                .enumerate()
+                .map(|(i, text)| {
+                    (
+                        i,
+                        if text == "Complete stronger source context" {
+                            1.
+                        } else {
+                            0.
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+            order.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            order.truncate(call.top_n.unwrap_or(order.len()));
+            Ok(order)
+        })
+    }
+}
+struct ContextAccess;
+impl RagAccessResolver for ContextAccess {
+    fn resolve(&self, _: &RagIdentity) -> Result<Vec<AuthorizedRagRange>, RagError> {
+        Ok(vec![range("SPACE-A")])
+    }
+    fn recheck(&self, _: &RagIdentity, _: &mut RagEvidenceResult) -> Result<(), RagError> {
+        Ok(())
+    }
+    fn assemble_context(
+        &self,
+        _: &RagIdentity,
+        result: &mut RagEvidenceResult,
+    ) -> Result<(), RagError> {
+        for hit in &mut result.hits {
+            hit.context_text = Some(
+                if hit.row.text.contains("stronger") {
+                    "Complete stronger source context"
+                } else {
+                    "Complete weaker source context"
+                }
+                .into(),
+            );
+        }
+        Ok(())
+    }
+}
+#[tokio::test]
+async fn context_is_assembled_before_rerank_and_top_n_without_mutating_publication_rows() {
+    let repo = repository();
+    let rag = service(repo.clone(), Runtime { fail: false });
+    rag.ingest(request("orchid weaker source")).await.unwrap();
+    let mut stronger = request("orchid stronger source");
+    stronger.source.code = "skill-stronger".into();
+    rag.ingest(stronger).await.unwrap();
+    rag.configure_corpus(
+        "skill",
+        RagSettings {
+            embedding_model_code: Some("embedding-a".into()),
+            rerank_model_code: Some("ranker".into()),
+            graph: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let recorded = Arc::new(Mutex::new(Vec::new()));
+    let mut input = query();
+    input.limit = 1;
+    let result = rag
+        .with_runtime(ContextRankRuntime(recorded.clone()))
+        .search(&ContextAccess, &identity(), input, None)
+        .await
+        .unwrap();
+    let documents = recorded.lock().unwrap();
+    assert!(
+        documents
+            .iter()
+            .any(|text| text == "Complete weaker source context")
+    );
+    assert!(
+        documents
+            .iter()
+            .any(|text| text == "Complete stronger source context")
+    );
+    assert_eq!(result.evidence.len(), 1);
+    assert_eq!(result.evidence[0].text, "Complete stronger source context");
+    assert_eq!(result.evidence[0].source_code, "skill-stronger");
+    assert!(
+        result
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("撤销发布"))
+    );
+}
 #[derive(Clone)]
 struct RevokingRuntime {
     revoked: Arc<std::sync::atomic::AtomicBool>,
@@ -333,7 +503,7 @@ impl RagSearchRuntime for RevokingRuntime {
 #[tokio::test]
 async fn client_filters_cannot_widen_scope_and_revocation_is_rechecked_after_recall() {
     let repo = repository();
-    let rag = RagService::new(repo.clone(), Runtime { fail: false });
+    let rag = service(repo.clone(), Runtime { fail: false });
     rag.ingest(request("orchid original evidence"))
         .await
         .unwrap();
@@ -360,12 +530,24 @@ async fn client_filters_cannot_widen_scope_and_revocation_is_rechecked_after_rec
         serde_json::from_value::<RagQueryInput>(json!({"query":"orchid","userCode":"OTHER-USER"}))
             .is_err()
     );
-    let revoking = RagService::new(repo, RevokingRuntime { revoked });
+    let revoking = rag.with_runtime(RevokingRuntime { revoked });
     let result = revoking
         .search(&access, &identity(), query(), None)
         .await
         .unwrap();
     assert!(result.evidence.is_empty());
+    assert!(
+        result.graph_context.is_empty(),
+        "revoked graph aliases and relationship evidence must not escape"
+    );
+    assert!(
+        result
+            .stages
+            .iter()
+            .filter(|s| s.channel.starts_with("graph"))
+            .all(|s| s.hit_count == 0),
+        "revoked sources must not escape through graph diagnostic counts"
+    );
     assert!(!result.warnings.is_empty());
 }
 #[derive(Clone)]
@@ -406,19 +588,16 @@ impl RagGraphRuntime for SlowRuntime {
 #[tokio::test]
 async fn cancellation_fences_publication_and_cancelled_task_can_be_retried() {
     let repo = repository();
-    let fast = RagService::new(repo.clone(), Runtime { fail: false });
+    let fast = service(repo.clone(), Runtime { fail: false });
     fast.ingest(request("orchid prior published evidence"))
         .await
         .unwrap();
     let started = Arc::new(tokio::sync::Notify::new());
     let release = Arc::new(tokio::sync::Notify::new());
-    let slow = RagService::new(
-        repo.clone(),
-        SlowRuntime {
-            started: started.clone(),
-            release: release.clone(),
-        },
-    );
+    let slow = fast.with_runtime(SlowRuntime {
+        started: started.clone(),
+        release: release.clone(),
+    });
     let work =
         tokio::spawn(async move { slow.ingest(request("orchid replacement evidence")).await });
     started.notified().await;
@@ -460,19 +639,19 @@ async fn cancellation_fences_publication_and_cancelled_task_can_be_retried() {
 
 #[tokio::test]
 async fn chinese_question_uses_segmented_fulltext_and_source_graph_evidence() {
-    let rag = RagService::new(repository(), Runtime { fail: false });
+    let rag = service(repository(), Runtime { fail: false });
     rag.configure_corpus(
         "skill",
         RagSettings {
             vector: false,
             graph: true,
+            embedding_model_code: Some("embedding-a".into()),
             ..Default::default()
         },
     )
     .unwrap();
     let mut input = request("术后胸痛需要评估，警惕严重并发症。");
-    input.payload["relatedGraph"] =
-        json!({"nodes":[{"ref":"胸痛","name":"胸痛","evidence":"术后胸痛"}],"edges":[]});
+    input.payload["relatedGraph"] = json!({"nodes":[{"ref":"胸痛","name":"胸痛","type":"Symptom","evidence":"术后胸痛"}],"edges":[]});
     rag.ingest(input).await.unwrap();
     let mut authorized = range("SPACE-A");
     authorized.vector = false;

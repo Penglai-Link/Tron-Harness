@@ -52,7 +52,7 @@ pub async fn suggestions(
             || session
                 .source_code
                 .as_deref()
-                .is_some_and(|source| source.starts_with("__dude:"))
+                .is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:"))
     });
     let agent = if pinned {
         session

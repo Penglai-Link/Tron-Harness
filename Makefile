@@ -218,6 +218,7 @@ help:
 	@echo "  make be-check     Compile backend"
 	@echo "  make be-test      Run backend tests"
 	@echo "  make be-clean     Remove backend build artifacts and scratch files"
+	@echo "  make be-clean-package Remove backend crate artifacts; retain dependency caches"
 	@echo "  make be-dev       Run backend server"
 	@echo "                    Sources $(BACKEND_ENV_FILE) when present"
 	@echo "                    Example: make be-dev PORT=8081"
@@ -347,6 +348,11 @@ be-check:
 .PHONY: be-test
 be-test:
 	$(CARGO) test --manifest-path "$(BACKEND_MANIFEST)" $(TEST)
+
+.PHONY: be-clean-package
+# Retain dependency caches and running development data when reclaiming local artifacts.
+be-clean-package:
+	$(CARGO) clean --manifest-path "$(BACKEND_MANIFEST)" --package tron-backend
 
 .PHONY: be-clean
 ifeq ($(HOST_OS),windows)

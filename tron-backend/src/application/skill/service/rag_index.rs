@@ -46,13 +46,57 @@ where
     }
 
     pub async fn index_all(&self) -> Result<SkillRagIndexBatchSummary, SkillError> {
+        self.index_all_inner(false).await
+    }
+    pub async fn synchronize_all(&self) -> Result<SkillRagIndexBatchSummary, SkillError> {
+        self.index_all_inner(true).await
+    }
+    async fn index_all_inner(
+        &self,
+        skip_unchanged: bool,
+    ) -> Result<SkillRagIndexBatchSummary, SkillError> {
         let _guard = self.skills.index_lock.lock().await;
+        let settings = self
+            .rag
+            .settings_for_corpus("skill")
+            .map_err(|_| SkillError::StorageFailure)?;
+        let mut latest_tasks = BTreeMap::new();
+        if skip_unchanged {
+            for task in self
+                .rag
+                .repository_handle()
+                .record_task_summaries("SYSTEM")
+                .map_err(|_| SkillError::StorageFailure)?
+            {
+                if task.corpus_id == "skill" {
+                    latest_tasks.entry(task.source_code.clone()).or_insert(task);
+                }
+            }
+        }
         let skills = self.registry_skill_map()?;
         let states = self.list_index_states()?;
         let mut batch = SkillRagIndexBatchSummary::default();
         for skill in skills.values() {
             let summary = if skill.available {
-                self.index_skill("PLATFORM", skill).await?
+                let previous = states
+                    .iter()
+                    .find(|state| state.skill_name == skill.skill_name);
+                let task = latest_tasks.get(&source_code("PLATFORM", &skill.skill_name));
+                self.index_skill(
+                    "PLATFORM",
+                    skill,
+                    previous
+                        .zip(task)
+                        .filter(|(_, task)| {
+                            task.state == "COMPLETED"
+                                && task
+                                    .checkpoint
+                                    .as_ref()
+                                    .is_some_and(|checkpoint| checkpoint.settings == settings)
+                        })
+                        .map(|(state, _)| state),
+                )
+                .await?
             } else {
                 self.disable_skill_inner(&skill.skill_name).await?
             };
@@ -85,7 +129,7 @@ where
         if !skill.available {
             return self.disable_skill_inner(name).await;
         }
-        self.index_skill("PLATFORM", skill).await
+        self.index_skill("PLATFORM", skill, None).await
     }
 
     pub async fn disable_skill(
@@ -182,6 +226,7 @@ where
         &self,
         workspace_code: &str,
         skill: &RegistrySkill,
+        previous: Option<&SkillRagIndexRecord>,
     ) -> Result<crate::domain::skill::SkillRagIndexSummary, SkillError> {
         let skill_dir = Path::new(&skill.registry_path);
         let markdown = match read_skill_markdown(skill_dir) {
@@ -232,6 +277,22 @@ where
         );
         let content_hash = stable_hash(&text);
         let structure_hash = stable_structure_hash(&files);
+        if let Some(previous) = previous.filter(|state| {
+            state.desired_enabled
+                && state.source_version == SKILL_SOURCE_VERSION
+                && state.content_hash.as_deref() == Some(&content_hash)
+                && state.structure_hash.as_deref() == Some(&structure_hash)
+                && matches!(
+                    state.vector_status,
+                    SkillRagIndexStatus::Indexed | SkillRagIndexStatus::Disabled
+                )
+                && matches!(
+                    state.graph_status,
+                    SkillRagIndexStatus::Indexed | SkillRagIndexStatus::Disabled
+                )
+        }) {
+            return Ok(previous.summary());
+        }
         let mut warnings = Vec::new();
         if description.trim().is_empty() {
             warnings.push("SKILL.md frontmatter description is empty".to_string());

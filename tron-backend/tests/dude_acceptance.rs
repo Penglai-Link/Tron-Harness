@@ -398,3 +398,117 @@ async fn dude_avatar_editor_saves_every_shipped_avatar_without_changing_soul() {
         assert_eq!(data(&fixture.router, Method::GET, &soul_uri, None).await, before);
     }
 }
+
+#[tokio::test]
+async fn custom_dude_deletion_is_atomic_with_its_agent_definition_and_grants() {
+    let mut fixture = Fixture::new();
+    let main = dudes(&fixture.router)
+        .await
+        .into_iter()
+        .find(|d| d["isMain"] == true)
+        .unwrap();
+    let code = "delete-atomic-dude";
+    data(
+        &fixture.router,
+        Method::POST,
+        "/api/v1/dudes",
+        Some(json!({
+            "dudeCode":code, "name":"Atomic Delete Dude", "loopCode":main["loopCode"],
+            "rolePrompt":"Deletion acceptance only.", "enabled":false
+        })),
+    )
+    .await;
+    let library = data(
+        &fixture.router,
+        Method::POST,
+        "/api/v1/knowledge-bases",
+        Some(json!({
+            "name":"Deletion grant test", "description":""
+        })),
+    )
+    .await;
+    data(
+        &fixture.router,
+        Method::PUT,
+        &format!("/api/v1/knowledge-bases/agent-grants/{code}"),
+        Some(json!({"libraryIds":[library["id"]]})),
+    )
+    .await;
+    let connection = rusqlite::Connection::open(&fixture.config.database_url).unwrap();
+    let grant_count = || {
+        connection
+            .query_row(
+                "SELECT count(*) FROM knowledge_base_grants WHERE agent_code=?1",
+                [code],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(grant_count(), 1);
+    // A late storage failure must roll back configuration and soul deletion together.
+    connection.execute_batch("CREATE TRIGGER fail_test_dude_delete BEFORE DELETE ON dudes
+        WHEN OLD.dude_code='delete-atomic-dude' BEGIN SELECT RAISE(ABORT,'test deletion failure'); END;").unwrap();
+    let failed = authenticated_request(
+        &fixture.router,
+        Method::DELETE,
+        &format!("/api/v1/dudes/{code}"),
+        None,
+    )
+    .await;
+    assert_eq!(failed.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(grant_count(), 1);
+    assert!(
+        dudes(&fixture.router)
+            .await
+            .iter()
+            .any(|d| d["dudeCode"] == code && d["name"] == "Atomic Delete Dude")
+    );
+    data(
+        &fixture.router,
+        Method::GET,
+        "/api/v1/agents/registry/internal",
+        None,
+    )
+    .await;
+    connection
+        .execute_batch("DROP TRIGGER fail_test_dude_delete;")
+        .unwrap();
+    data(
+        &fixture.router,
+        Method::DELETE,
+        &format!("/api/v1/dudes/{code}"),
+        None,
+    )
+    .await;
+    for (table, key) in [
+        ("dudes", "dude_code"),
+        ("dude_souls", "dude_code"),
+        ("platform_internal_agent_configs", "agent_code"),
+        ("knowledge_base_grants", "agent_code"),
+        ("agent_skill_assignments", "agent_code"),
+        ("agent_workspace_grant_policies", "agent_code"),
+    ] {
+        let count: i64 = connection
+            .query_row(
+                &format!("SELECT count(*) FROM {table} WHERE {key}=?1"),
+                [code],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "leftover {table}");
+    }
+    fixture.restart();
+    assert!(
+        !dudes(&fixture.router)
+            .await
+            .iter()
+            .any(|d| d["dudeCode"] == code)
+    );
+    data(
+        &fixture.router,
+        Method::GET,
+        "/api/v1/agents/registry/internal",
+        None,
+    )
+    .await;
+}

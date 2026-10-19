@@ -4,7 +4,7 @@ use serde_json::{Map, Value, json};
 
 use crate::application::rag::{
     RagDiagnosticsRepository, RagEmbeddingRuntime, RagIngestRepository, RagIngestRequest,
-    RagIngestScope, RagIngestSource, RagSearchContextRequest, RagSearchGraphExpansionRequest,
+    RagIngestScope, RagIngestSource, RagSearchContextRequest,
     RagSearchRepository, RagSearchRequest, RagSearchRuntime, RagSearchTraceRequest, RagService,
 };
 
@@ -381,7 +381,6 @@ where
                         .iter()
                         .map(|field| (*field).to_string())
                         .collect(),
-                    graph_expansion: RagSearchGraphExpansionRequest::default(),
                 },
                 trace: RagSearchTraceRequest { enabled: false },
             })

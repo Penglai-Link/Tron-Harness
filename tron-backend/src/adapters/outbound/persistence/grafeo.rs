@@ -19,3 +19,7 @@ pub use grafeo_core::{
 pub use grafeo_graph_explorer_store::GrafeoGraphExplorerStore;
 pub use grafeo_graph_store::GrafeoGraphStore;
 pub use grafeo_ontology_store::GrafeoOntologyStore;
+
+#[path = "grafeo_rag_store.rs"]
+mod grafeo_rag_store;
+pub use grafeo_rag_store::GrafeoRagStore;

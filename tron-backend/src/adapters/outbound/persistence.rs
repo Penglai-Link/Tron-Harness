@@ -4,6 +4,7 @@ pub mod sqlite;
 pub use grafeo::GrafeoAdapterConfig;
 pub use grafeo::GrafeoGraphExplorerStore;
 pub use grafeo::GrafeoGraphStore;
+pub use grafeo::GrafeoRagStore;
 pub use grafeo::GrafeoOntologyStore;
 pub use grafeo::GrafeoStoreCore;
 pub use grafeo::encode_graph_name;
@@ -26,3 +27,5 @@ pub use sqlite::SqliteSkillRegistryRepository;
 pub use sqlite::SqliteTaskRepository;
 pub use sqlite::SqliteVariableRepository;
 pub use sqlite::SqliteWorkspaceRepository;
+
+pub use sqlite::SqliteRagGraphIndexRepository;

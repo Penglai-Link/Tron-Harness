@@ -755,41 +755,10 @@ impl ShortTermMemoryService {
     ) -> Result<Option<Value>, ShortTermMemoryError> {
         self.ensure_session(id)?;
         blocking(async {
-            let events = self
-                .framework()
+            let last = self
+                .context_snapshot_event(id, snapshot_sequence)
                 .await?
-                .events()
-                .map_err(|_| ShortTermMemoryError::StorageFailure)?;
-            let last = if let Some(sequence) = snapshot_sequence {
-                if sequence == 0 {
-                    return Err(ShortTermMemoryError::GoalInvalid);
-                }
-                // Session and sequence use the Framework event index. Fetch only
-                // this request's snapshot, never a newer request or full history.
-                events
-                    .list(id, sequence - 1, 1)
-                    .await
-                    .map_err(error)?
-                    .into_iter()
-                    .find(|event| event.sequence == sequence && event.kind == "tron.context-view")
-                    .map(|event| event.payload)
-            } else {
-                let mut after = 0;
-                let mut last = None;
-                loop {
-                    let page = events.list(id, after, 1000).await.map_err(error)?;
-                    if page.is_empty() {
-                        break;
-                    }
-                    after = page.last().unwrap().sequence;
-                    for event in page {
-                        if event.kind == "tron.context-view" {
-                            last = Some(event.payload);
-                        }
-                    }
-                }
-                last
-            };
+                .map(|event| event.payload);
             let Some(view) = last else { return Ok(None) };
             if block == "toolSchema" {
                 return Ok(Some(json!({"blockCode":block,"tools":view["tools"]})));

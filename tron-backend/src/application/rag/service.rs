@@ -3,6 +3,15 @@ use std::sync::{Arc, Mutex};
 use crate::domain::rag::{RagCorpusRecord, RagError};
 
 pub trait RagConfigRepository {
+    fn deleted_task_history(
+        &self,
+        _user: &str,
+    ) -> Result<std::collections::BTreeSet<String>, RagError> {
+        Ok(Default::default())
+    }
+    fn delete_task_history(&self, _user: &str, _id: &str) -> Result<(), RagError> {
+        Err(RagError::StorageFailure)
+    }
     fn recover_record_tasks(&self) -> Result<(), RagError> {
         Ok(())
     }
@@ -12,11 +21,18 @@ pub trait RagConfigRepository {
     fn record_tasks(&self, _user: &str) -> Result<Vec<super::RagRecordTask>, RagError> {
         Err(RagError::StorageFailure)
     }
+    /// List metadata without loading document bodies or vector checkpoints.
+    fn record_task_summaries(&self, user: &str) -> Result<Vec<super::RagRecordTask>, RagError> {
+        self.record_tasks(user)
+    }
     fn record_task(&self, user: &str, id: &str) -> Result<Option<super::RagRecordTask>, RagError> {
         Ok(self
             .record_tasks(user)?
             .into_iter()
             .find(|task| task.id == id))
+    }
+    fn record_task_summary(&self, user: &str, id: &str) -> Result<Option<super::RagRecordTask>, RagError> {
+        self.record_task(user, id)
     }
     fn record_task_is_latest(&self, task: &super::RagRecordTask) -> Result<bool, RagError> {
         Ok(!self.record_tasks(&task.user_code)?.iter().any(|other| {
@@ -49,6 +65,22 @@ impl<T> RagConfigRepository for Arc<Mutex<T>>
 where
     T: RagConfigRepository,
 {
+    fn record_task_summary(&self, user: &str, id: &str) -> Result<Option<super::RagRecordTask>, RagError> {
+        self.lock().map_err(|_| RagError::StorageFailure)?.record_task_summary(user, id)
+    }
+    fn deleted_task_history(
+        &self,
+        user: &str,
+    ) -> Result<std::collections::BTreeSet<String>, RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .deleted_task_history(user)
+    }
+    fn delete_task_history(&self, user: &str, id: &str) -> Result<(), RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .delete_task_history(user, id)
+    }
     fn recover_record_tasks(&self) -> Result<(), RagError> {
         self.lock()
             .map_err(|_| RagError::StorageFailure)?
@@ -63,6 +95,11 @@ where
         self.lock()
             .map_err(|_| RagError::StorageFailure)?
             .record_tasks(user)
+    }
+    fn record_task_summaries(&self, user: &str) -> Result<Vec<super::RagRecordTask>, RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .record_task_summaries(user)
     }
     fn record_task(&self, user: &str, id: &str) -> Result<Option<super::RagRecordTask>, RagError> {
         self.lock()

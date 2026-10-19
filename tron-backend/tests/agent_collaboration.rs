@@ -61,6 +61,18 @@ impl ModelClient for Script {
                 .filter_map(|m| m.tool_result.as_ref().map(|_| m.content.text()))
                 .collect();
             Ok(match root.as_deref() {
+                Some("root:discovery") => match results.len() {
+                    0 => ModelResponse::tool_call(
+                        "discovery_expand_tool_domain",
+                        json!({"domainCode":"native"}),
+                    ),
+                    1 => ModelResponse::tool_call("agent_get", json!({"agentCode":"reviewer"})),
+                    2 => ModelResponse::tool_call(
+                        "discovery_expand_tool_domain",
+                        json!({"domainCode":"skill"}),
+                    ),
+                    _ => ModelResponse::final_output("discovery complete"),
+                },
                 Some("root:revoke-during-run") if results.is_empty() => {
                     self.management
                         .as_ref()
@@ -360,6 +372,79 @@ impl ModelClient for Script {
     > {
         Box::pin(async { Ok(Default::default()) })
     }
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn domain_discovery_hides_native_schemas_until_their_domain_is_expanded() {
+    use tron_backend::domain::agent::{ExpandedDomainPersistenceMode, ToolExposureMode};
+    let f = Fixture::new();
+    reviewer(&f);
+    let host = f.state.agent_framework.clone();
+    let script = Arc::new(Script::default());
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let mut root = context("root:discovery");
+    root.tools = vec![
+        tron_backend::application::agent::discovery_expand_tool_definition("en-US"),
+        tron_backend::application::agent::ask_user_definition("en-US"),
+    ];
+    root.tool_exposure.tool_exposure_mode = Some(ToolExposureMode::DomainDiscovery);
+    root.tool_exposure.expanded_domain_persistence_mode =
+        Some(ExpandedDomainPersistenceMode::StickyExpanded);
+    let result = agent.run(root).await.unwrap();
+    assert_eq!(result.final_output, "discovery complete");
+    let requests = script.requests.lock().unwrap();
+    assert_eq!(requests.len(), 4);
+    let names = |index: usize| {
+        requests[index]
+            .tools
+            .iter()
+            .map(|tool| tool.call_name.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(0), vec!["discovery_expand_tool_domain"]);
+    let directory = requests[0]
+        .messages
+        .iter()
+        .map(|m| m.content.text())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        directory.contains("agent_spawn"),
+        "native tools must remain discoverable"
+    );
+    assert!(
+        directory.contains("skill_load"),
+        "skill tools must remain discoverable"
+    );
+    assert!(names(1).contains(&"agent_get"));
+    assert!(names(1).contains(&"agent_spawn"));
+    assert!(names(1).contains(&"child_wait"));
+    assert!(names(1).contains(&"thread_create"));
+    assert!(
+        !names(1).contains(&"skill_load"),
+        "another domain must remain hidden"
+    );
+    assert!(
+        !names(2).contains(&"skill_load"),
+        "ordinary calls must not expose other domains"
+    );
+    assert!(names(3).contains(&"skill_load"));
+    assert!(names(3).contains(&"skill_read_resource"));
+    assert!(
+        requests[3]
+            .messages
+            .iter()
+            .filter_map(|m| m.tool_result.as_ref())
+            .all(|result| !result.is_error)
+    );
+    drop(requests);
+    assert!(host.close().await.is_success());
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn delegated_child_uses_its_definition_limits_and_stops_at_them() {

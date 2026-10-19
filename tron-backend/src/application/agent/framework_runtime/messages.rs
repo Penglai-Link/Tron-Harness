@@ -8,7 +8,6 @@ use eliteforge_agent_core::{
 pub(super) fn encode(message: &AgentMessage) -> Result<Message, String> {
     let role = match message.role.to_ascii_lowercase().as_str() {
         "system" => Role::System,
-        "developer" => Role::Developer,
         "user" => Role::User,
         "assistant" => Role::Assistant,
         "tool" => Role::Tool,
@@ -94,7 +93,6 @@ pub(super) fn encode(message: &AgentMessage) -> Result<Message, String> {
 pub(crate) fn decode(message: &Message) -> Result<AgentMessage, String> {
     let role = match message.role {
         Role::System => "system",
-        Role::Developer => "developer",
         Role::User => "user",
         Role::Assistant => "assistant",
         Role::Tool => "tool",

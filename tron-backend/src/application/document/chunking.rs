@@ -1,156 +1,356 @@
-//! One source-located splitter for normalized documents and structured records.
-use super::{
-    ChunkConfig, ChunkMode, LocalDocumentError, LocatedChunk, LocatedSection, MAX_CHUNKS,
-    MAX_TEXT_BYTES, ParsedDocument,
+//! Tron maps normalized source facts to Framework strategies and restores product citations.
+use super::*;
+use eliteforge_agent_core::{
+    ChunkBlock, ChunkBlockKind, ChunkDocument, ChunkPlan, ChunkSourceSpan, ChunkStrategies,
+    ChunkTable, ChunkTextRange, ChunkingOptions,
 };
-fn failed(message: impl std::fmt::Display) -> LocalDocumentError {
-    LocalDocumentError(message.to_string())
+
+pub struct ChunkedDocument {
+    pub chunks: Vec<LocatedChunk>,
+    pub contexts: Vec<eliteforge_agent_core::ChunkContext>,
+    pub warnings: Vec<String>,
 }
-/// Split canonical text on heading/page/sheet boundaries and enforce a hard Unicode character bound.
-/// Fixed mode ignores headings but still preserves page/sheet boundaries for reliable citations.
-pub fn split_document(
+
+pub fn chunk_document_input(
+    document: &ParsedDocument,
+    id: &str,
+    title: &str,
+    depth: u8,
+) -> ChunkDocument {
+    let source_locations = source_fact_locations(document);
+    let mut headings: Vec<(u8, String)> = Vec::new();
+    let blocks = document
+        .sections
+        .iter()
+        .enumerate()
+        .map(|(index, section)| {
+            if let Some(level) = section.heading_level {
+                headings.retain(|(previous, _)| *previous < level);
+                headings.push((
+                    level,
+                    section.location.heading.clone().unwrap_or_else(|| {
+                        section
+                            .text
+                            .lines()
+                            .next()
+                            .unwrap_or_default()
+                            .trim_matches('#')
+                            .trim()
+                            .to_owned()
+                    }),
+                ));
+            }
+            let kind = if section.heading_level.is_some() {
+                ChunkBlockKind::Heading
+            } else {
+                match section.location.block_kind.as_deref() {
+                    Some("table") => ChunkBlockKind::Table,
+                    Some("list" | "list_item") => ChunkBlockKind::List,
+                    Some("image") => ChunkBlockKind::Image,
+                    Some("code") => ChunkBlockKind::Code,
+                    _ if section
+                        .text
+                        .lines()
+                        .take(3)
+                        .any(|line| line.trim_start().starts_with('|')) =>
+                    {
+                        ChunkBlockKind::Table
+                    }
+                    _ => ChunkBlockKind::Paragraph,
+                }
+            };
+            ChunkBlock {
+                id: format!("block-{index}"),
+                text: section.text.clone(),
+                kind,
+                heading_path: if section
+                    .location
+                    .source_block_id
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with("unmapped-asset/"))
+                {
+                    vec![]
+                } else {
+                    headings
+                        .iter()
+                        .filter(|(level, _)| *level <= depth)
+                        .map(|(_, title)| title.clone())
+                        .collect()
+                },
+                // An unlinked image must never inherit a neighbouring paragraph's context.
+                boundary: if kind == ChunkBlockKind::Image {
+                    Some(
+                        section
+                            .location
+                            .source_block_id
+                            .clone()
+                            .unwrap_or_else(|| format!("image-{index}")),
+                    )
+                } else {
+                    section.location.sheet.clone()
+                },
+                table: if kind == ChunkBlockKind::Table {
+                    table_ranges(&section.text)
+                } else {
+                    None
+                },
+                location: source_locations[index].clone(),
+            }
+        })
+        .collect();
+    ChunkDocument {
+        id: id.into(),
+        title: title.into(),
+        blocks,
+    }
+}
+
+fn table_ranges(text: &str) -> Option<ChunkTable> {
+    if text.to_ascii_lowercase().contains("<table") {
+        return html_table_ranges(text);
+    }
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    for line in text.split_inclusive('\n') {
+        let end = start + line.chars().count();
+        if !line.trim().is_empty() {
+            ranges.push((ChunkTextRange { start, end }, line.trim()));
+        }
+        start = end;
+    }
+    let first = ranges.iter().position(|(_, line)| line.starts_with('|'))?;
+    let last = ranges.iter().rposition(|(_, line)| line.starts_with('|'))?;
+    if first >= last {
+        return None;
+    }
+    let header_end = ranges
+        .get(first + 1)
+        .filter(|(_, line)| line.chars().all(|c| "|:- \t".contains(c)))
+        .map(|(r, _)| r.end)
+        .unwrap_or(ranges[first].0.end);
+    let rows = ranges
+        .iter()
+        .skip(first + 1)
+        .take(last - first)
+        .filter(|(r, _)| r.start >= header_end)
+        .map(|(r, _)| *r)
+        .collect::<Vec<_>>();
+    if rows.is_empty() {
+        return None;
+    }
+    Some(ChunkTable {
+        header: ChunkTextRange {
+            start: 0,
+            end: header_end,
+        },
+        rows,
+        footer: (ranges[last].0.end < text.chars().count()).then_some(ChunkTextRange {
+            start: ranges[last].0.end,
+            end: text.chars().count(),
+        }),
+    })
+}
+
+pub fn split_document_with_strategies(
     document: &ParsedDocument,
     config: &ChunkConfig,
-) -> Result<Vec<LocatedChunk>, LocalDocumentError> {
+    strategies: &ChunkStrategies,
+    id: &str,
+    title: &str,
+) -> Result<ChunkedDocument, LocalDocumentError> {
     config.validate()?;
-    let mut chunks = Vec::new();
-    let mut group: Vec<&LocatedSection> = Vec::new();
-    let mut group_path = Vec::new();
-    let mut heading_stack: Vec<(u8, String)> = Vec::new();
-    for current in &document.sections {
-        let source_boundary = group.last().is_some_and(|previous| {
-            previous.location.page != current.location.page
-                || previous.location.sheet != current.location.sheet
-                || previous.location.rendered_page != current.location.rendered_page
-        });
-        let heading_boundary = config.mode != ChunkMode::Fixed
-            && current
-                .heading_level
-                .is_some_and(|level| level <= config.heading_depth);
-        if (source_boundary || heading_boundary) && !group.is_empty() {
-            emit_group(&group, &group_path, config, &mut chunks)?;
-            group.clear();
-        }
-        if let Some(level) = current.heading_level {
-            heading_stack.retain(|(previous, _)| *previous < level);
-            heading_stack.push((level, current.location.heading.clone().unwrap_or_default()));
-        }
-        if group.is_empty() {
-            group_path = heading_stack.iter().map(|(_, text)| text.clone()).collect();
-        }
-        group.push(current);
-    }
-    if !group.is_empty() {
-        emit_group(&group, &group_path, config, &mut chunks)?;
-    }
-    Ok(chunks)
-}
-fn emit_group(
-    group: &[&LocatedSection],
-    path: &[String],
-    config: &ChunkConfig,
-    chunks: &mut Vec<LocatedChunk>,
-) -> Result<(), LocalDocumentError> {
-    let text = group
+    let size: usize = document
+        .sections
         .iter()
-        .map(|s| s.text.as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    if text.len() > MAX_TEXT_BYTES {
-        return Err(failed("normalized document text exceeds 2 MiB"));
+        .map(|section| section.text.len())
+        .sum();
+    if size > MAX_PARSED_TEXT_BYTES {
+        return Err(failed("normalized document text exceeds 16 MiB"));
     }
-    let chars: Vec<char> = text.chars().collect();
-    let mut source_ranges = Vec::new();
-    let mut offset = 0;
-    for section in group {
-        let end = offset + section.text.chars().count();
-        source_ranges.push((offset, end, *section));
-        offset = end + 1;
-    }
-    let mut start = 0;
-    while start < chars.len() {
-        if chunks.len() >= MAX_CHUNKS {
-            return Err(failed(
-                "document exceeds 2000 chunks; increase maxChars or split the document",
-            ));
-        }
-        let mut end = (start + config.max_chars).min(chars.len());
-        if config.mode != ChunkMode::Fixed && end < chars.len() {
-            // Prefer a natural boundary in the final quarter without risking tiny chunks.
-            if let Some(boundary) = ((start + config.max_chars * 3 / 4)..end)
-                .rev()
-                .find(|&index| chars[index] == '\n')
-            {
-                end = boundary + 1;
-            }
-        }
-        let text: String = chars[start..end].iter().collect();
-        if !text.trim().is_empty() {
-            let covered: Vec<_> = source_ranges
+    let input = chunk_document_input(document, id, title, config.heading_depth);
+    let options = ChunkingOptions {
+        max_chars: config.max_chars,
+        overlap_chars: config.overlap_chars,
+        max_chunks: if size > MAX_TEXT_BYTES {
+            10_000
+        } else {
+            MAX_CHUNKS
+        },
+        max_context_chars: (config.max_chars * 4).min(32000),
+    };
+    let plan = strategies
+        .split(config.mode.strategy_id(), &input, &options)
+        .map_err(failed)?;
+    located_plan(document, plan)
+}
+
+fn located_plan(
+    document: &ParsedDocument,
+    plan: ChunkPlan,
+) -> Result<ChunkedDocument, LocalDocumentError> {
+    let source_locations = source_fact_locations(document);
+    let chunks = plan
+        .chunks
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, chunk)| {
+            let indexes = chunk
+                .spans
                 .iter()
-                .filter(|(begin, finish, _)| *finish > start && *begin < end)
-                .collect();
-            let first = covered
+                .filter_map(|span| span.block_id.strip_prefix("block-")?.parse::<usize>().ok())
+                .collect::<Vec<_>>();
+            let first_index = *indexes
                 .first()
-                .map(|(_, _, section)| *section)
-                .unwrap_or(group[0]);
-            let last = covered
-                .last()
-                .map(|(_, _, section)| *section)
-                .unwrap_or(first);
+                .ok_or_else(|| failed("chunk source is missing"))?;
+            let first = document
+                .sections
+                .get(first_index)
+                .ok_or_else(|| failed("chunk source is invalid"))?;
+            let last = &document.sections[*indexes.last().unwrap()];
             let mut location = first.location.clone();
-            location.char_start = group[0].location.char_start + start;
-            location.char_end = group[0].location.char_start + end;
-            location.blocks = covered
+            location.char_start += chunk.spans.first().map_or(0, |span| span.start);
+            location.char_end =
+                last.location.char_start + chunk.spans.last().map_or(0, |span| span.end);
+            location.pages = indexes
                 .iter()
-                .flat_map(|(_, _, section)| section.location.blocks.iter().cloned())
+                .filter_map(|&i| document.sections[i].location.page)
+                .collect();
+            location.pages.sort_unstable();
+            location.pages.dedup();
+            location.blocks = indexes
+                .iter()
+                .flat_map(|&i| document.sections[i].location.blocks.clone())
                 .collect();
             location.blocks.sort();
             location.blocks.dedup();
-            location.image_resource_codes = covered
+            location.image_resource_codes = indexes
                 .iter()
-                .flat_map(|(_, _, section)| section.location.image_resource_codes.iter().cloned())
+                .flat_map(|&i| document.sections[i].location.image_resource_codes.clone())
                 .collect();
-            location.cell_ranges = covered
+            location.image_resource_codes.sort();
+            location.image_resource_codes.dedup();
+            location.cell_ranges = indexes
                 .iter()
-                .flat_map(|(_, _, section)| section.location.cell_ranges.iter().cloned())
+                .flat_map(|&i| document.sections[i].location.cell_ranges.clone())
                 .collect();
             location.cell_ranges.sort();
             location.cell_ranges.dedup();
-            location.image_resource_codes.sort();
-            location.image_resource_codes.dedup();
-            location.image_annotations = covered
+            location.image_annotations = indexes
                 .iter()
-                .flat_map(|(_, _, section)| section.location.image_annotations.iter().cloned())
+                .flat_map(|&i| document.sections[i].location.image_annotations.clone())
                 .collect();
-            let mut unique = Vec::new();
-            for annotation in location.image_annotations.drain(..) {
-                if !unique.contains(&annotation) {
-                    unique.push(annotation);
-                }
-            }
-            location.image_annotations = unique;
             location.row_end = last.location.row_end;
             location.paragraph_end = last.location.paragraph_end;
             location.line_end = last.location.line_end;
-            let title = path
+            let source_locations = chunk
+                .spans
+                .iter()
+                .map(|span| span_location_from(document, &source_locations, span))
+                .collect::<Result<Vec<_>, _>>()?;
+            let title = chunk
+                .heading_path
                 .last()
                 .cloned()
                 .or_else(|| location.sheet.clone())
                 .or_else(|| location.page.map(|page| format!("Page {page}")))
                 .unwrap_or_else(|| "Document".into());
-            chunks.push(LocatedChunk {
-                text,
+            Ok(LocatedChunk {
+                text: chunk.text,
                 title,
-                heading_path: path.to_vec(),
+                heading_path: chunk.heading_path,
                 location,
-                ordinal: chunks.len(),
-            });
-        }
-        if end == chars.len() {
-            break;
-        }
-        start = end - config.overlap_chars;
+                ordinal,
+                index_text: chunk.index_text,
+                source_spans: chunk.spans,
+                source_locations,
+                context_id: chunk.context_id,
+            })
+        })
+        .collect::<Result<Vec<_>, LocalDocumentError>>()?;
+    Ok(ChunkedDocument {
+        chunks,
+        contexts: plan.contexts,
+        warnings: plan.warnings,
+    })
+}
+
+pub fn span_location(
+    document: &ParsedDocument,
+    span: &ChunkSourceSpan,
+) -> Result<serde_json::Value, LocalDocumentError> {
+    span_location_from(document, &source_fact_locations(document), span)
+}
+fn span_location_from(
+    document: &ParsedDocument,
+    locations: &[serde_json::Value],
+    span: &ChunkSourceSpan,
+) -> Result<serde_json::Value, LocalDocumentError> {
+    let index = span
+        .block_id
+        .strip_prefix("block-")
+        .and_then(|id| id.parse::<usize>().ok())
+        .ok_or_else(|| failed("invalid source block"))?;
+    let section = document
+        .sections
+        .get(index)
+        .ok_or_else(|| failed("source block is absent"))?;
+    let mut location = locations
+        .get(index)
+        .cloned()
+        .ok_or_else(|| failed("source block location is absent"))?;
+    location["charStart"] = (section.location.char_start + span.start).into();
+    location["charEnd"] = (section.location.char_start + span.end).into();
+    Ok(location)
+}
+
+pub fn split_document(
+    document: &ParsedDocument,
+    config: &ChunkConfig,
+) -> Result<Vec<LocatedChunk>, LocalDocumentError> {
+    split_document_with_strategies(
+        document,
+        config,
+        &eliteforge_agent_capability_chunking::built_in_chunk_strategies(),
+        "document",
+        "",
+    )
+    .map(|plan| plan.chunks)
+}
+
+// HTML remains original source text. Ranges refer to complete rows, preserving
+// captions, units and footnotes without inventing or re-parsing provider content.
+fn html_table_ranges(text: &str) -> Option<ChunkTable> {
+    let lower = text.to_ascii_lowercase();
+    let mut rows = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative) = lower[cursor..].find("<tr") {
+        let begin = cursor + relative;
+        let end = begin + lower[begin..].find("</tr>")? + 5;
+        rows.push(ChunkTextRange {
+            start: text[..begin].chars().count(),
+            end: text[..end].chars().count(),
+        });
+        cursor = end;
     }
-    Ok(())
+    if rows.len() < 2 {
+        return None;
+    }
+    let header_end = if let Some(end) = lower.find("</thead>") {
+        text[..end + 8].chars().count()
+    } else {
+        rows[0].end
+    };
+    rows.retain(|row| row.start >= header_end);
+    let last = rows.last()?.end;
+    Some(ChunkTable {
+        header: ChunkTextRange {
+            start: 0,
+            end: header_end,
+        },
+        rows,
+        footer: (last < text.chars().count()).then_some(ChunkTextRange {
+            start: last,
+            end: text.chars().count(),
+        }),
+    })
 }

@@ -12,16 +12,16 @@ pub struct RagSettings {
     pub vector: bool,
     #[serde(default)]
     pub graph: bool,
-    #[serde(default)]
+    #[serde(default = "default_embedding_model")]
     pub embedding_model_code: Option<String>,
     #[serde(default = "default_dimension")]
     pub embedding_dimension: usize,
-    #[serde(default)]
+    #[serde(default = "default_rerank_model")]
     pub rerank_model_code: Option<String>,
-    #[serde(default)]
+    #[serde(default = "default_graph_model")]
     pub graph_model_code: Option<String>,
-    /// None indexes only source captions/OCR; Some generates image descriptions
-    /// with this vision model before the existing text Embedding step.
+    /// Optional internal override. None selects an available vision model automatically.
+    /// Knowledge bases generate descriptions independently of the embedding input modality.
     #[serde(default)]
     pub image_description_model_code: Option<String>,
 }
@@ -31,21 +31,33 @@ fn enabled() -> bool {
 fn default_dimension() -> usize {
     1024
 }
+fn default_embedding_model() -> Option<String> {
+    Some("PERSON_AI:ROUTE:EmbeddingAuto".into())
+}
+fn default_graph_model() -> Option<String> {
+    Some("PERSON_AI:ROUTE:ChatAuto".into())
+}
+fn default_rerank_model() -> Option<String> {
+    Some("PERSON_AI:ROUTE:RerankAuto".into())
+}
 impl Default for RagSettings {
     fn default() -> Self {
         Self {
             fulltext: true,
             vector: true,
             graph: false,
-            embedding_model_code: None,
+            embedding_model_code: default_embedding_model(),
             embedding_dimension: 1024,
-            rerank_model_code: None,
-            graph_model_code: None,
+            rerank_model_code: default_rerank_model(),
+            graph_model_code: default_graph_model(),
             image_description_model_code: None,
         }
     }
 }
 impl RagSettings {
+    pub fn knowledge_base_default() -> Self {
+        Self {graph:true,embedding_model_code:Some("PERSON_AI:ROUTE:MultimodalEmbeddingAuto".into()),..Self::default()}
+    }
     pub fn from_capabilities(value: &Value) -> Result<Self, RagError> {
         value
             .get("settings")
@@ -62,13 +74,15 @@ impl RagSettings {
         if !self.fulltext && !self.vector && !self.graph {
             return Err(RagError::SearchRequestInvalid);
         }
-        if self.vector
-            && self.embedding_model_code.as_deref().is_none_or(|code| {
-                code.trim().is_empty()
-                    || code == "PERSON_AI:ROUTE:EmbeddingAuto"
-                    || code == "PERSON_AI:EMBEDDING:"
-            })
+        if (self.vector || self.graph)
+            && self
+                .embedding_model_code
+                .as_deref()
+                .is_none_or(|code| code.trim().is_empty() || code == "PERSON_AI:EMBEDDING:")
         {
+            return Err(RagError::SearchRequestInvalid);
+        }
+        if self.graph && self.graph_model_code.as_deref().is_none_or(|code| code.trim().is_empty()) {
             return Err(RagError::SearchRequestInvalid);
         }
         for value in [
@@ -93,16 +107,60 @@ mod tests {
     use super::RagSettings;
 
     #[test]
-    fn vector_index_requires_a_concrete_embedding_model() {
+    fn knowledge_bases_enable_graph_and_graph_only_still_requires_embedding_geometry() {
+        let mut settings = RagSettings::knowledge_base_default();
+        assert!(settings.graph);
+        settings.vector = false;
+        assert!(settings.validate().is_ok());
+        settings.embedding_model_code = None;
+        assert!(settings.validate().is_err());
+        settings.embedding_model_code = Some("model".into());
+        settings.graph_model_code = None;
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn vector_index_accepts_a_fixed_model_or_an_automatic_route() {
         let mut settings = RagSettings::default();
-        assert!(settings.validate().is_err());
+        assert!(settings.validate().is_ok());
         settings.embedding_model_code = Some("PERSON_AI:ROUTE:EmbeddingAuto".into());
-        assert!(settings.validate().is_err());
+        assert!(settings.validate().is_ok());
         settings.embedding_model_code = Some("PERSON_AI:EMBEDDING:bge-m3".into());
         assert!(settings.validate().is_ok());
         settings.embedding_model_code = None;
+        assert!(settings.validate().is_err());
         settings.vector = false;
         assert!(settings.validate().is_ok());
+    }
+    #[test]
+    fn omitted_models_default_to_routes_and_explicit_choices_are_preserved() {
+        let defaults = RagSettings::default();
+        let omitted: RagSettings = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(defaults, omitted);
+        assert_eq!(
+            defaults.embedding_model_code.as_deref(),
+            Some("PERSON_AI:ROUTE:EmbeddingAuto")
+        );
+        assert_eq!(
+            defaults.graph_model_code.as_deref(),
+            Some("PERSON_AI:ROUTE:ChatAuto")
+        );
+        assert_eq!(
+            defaults.rerank_model_code.as_deref(),
+            Some("PERSON_AI:ROUTE:RerankAuto")
+        );
+        let explicit: RagSettings = serde_json::from_value(serde_json::json!({"embeddingModelCode":"fixed-embedding", "graphModelCode":"fixed-chat", "rerankModelCode":null})).unwrap();
+        assert_eq!(
+            explicit.embedding_model_code.as_deref(),
+            Some("fixed-embedding")
+        );
+        assert_eq!(explicit.graph_model_code.as_deref(), Some("fixed-chat"));
+        assert!(explicit.rerank_model_code.is_none());
+        assert_eq!(
+            serde_json::from_value::<RagSettings>(serde_json::to_value(&explicit).unwrap())
+                .unwrap(),
+            explicit
+        );
     }
 }
 
@@ -141,6 +199,7 @@ pub struct RagRecordTask {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RagTaskView {
+    pub is_latest: bool,
     pub file_size_bytes: Option<u64>,
     pub document_id: Option<String>,
     pub id: String,
@@ -158,6 +217,7 @@ pub struct RagTaskView {
 impl From<RagRecordTask> for RagTaskView {
     fn from(task: RagRecordTask) -> Self {
         Self {
+            is_latest: true,
             file_size_bytes: None,
             document_id: None,
             title: task.payload["title"]

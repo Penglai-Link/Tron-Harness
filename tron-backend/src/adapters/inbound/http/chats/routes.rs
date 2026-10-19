@@ -43,6 +43,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/chats/sessions/stop-run", post(stop_run))
         .route("/api/v1/chats/sessions/get-todos", get(get_todos))
         .route("/api/v1/chats/sessions/get-context-detail", get(get_context_detail))
+        .route("/api/v1/chats/sessions/get-context-assembly", get(super::context_assembly::read))
         .route(
             "/api/v1/chats/sessions/get-latest-compaction",
             get(get_latest_compaction),

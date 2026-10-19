@@ -77,7 +77,7 @@ export function availableAutomationAgents(
 export function automationModelOptionsForAgent(
   workspaceModels: ModelSelectOption[],
   agent: AutomationAgentOption,
-  automaticModelLabel = "Automatic",
+  automaticModelLabel = "Conversation Automatic Routing",
 ): AutomationModelOption[] {
   if (agent.modelOptionSource === "workspace" || isMainAutomationAgent(agent.agentCode)) {
     return [{

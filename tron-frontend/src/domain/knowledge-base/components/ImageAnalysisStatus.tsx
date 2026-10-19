@@ -2,6 +2,13 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { ImageAnalysisSummary } from "../model/KnowledgeLibraryModel";
 
+// Parse artifacts retain their historical notices. Current image provenance
+// determines whether a former missing-description notice still applies.
+export function currentImageWarnings(warnings: string[], summary?: ImageAnalysisSummary | null): string[] {
+  const resolved = summary && (summary.imageCount === 0 || (summary.originalsOnly === 0 && summary.supplementStatus === "ready"));
+  return warnings.filter((warning) => !(resolved && /^\d+ 张图片没有可用描述或 OCR 文字，已保留解析产物但未建立图像语义索引$/.test(warning)));
+}
+
 export function imageAnalysisMessages(summary: ImageAnalysisSummary | null | undefined, t: TFunction<"pages">): string[] {
   if (!summary?.imageCount) return [];
   const messages: string[] = [];

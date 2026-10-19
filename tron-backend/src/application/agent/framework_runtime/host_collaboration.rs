@@ -372,18 +372,19 @@ impl Runtime {
             .map(|resume| resume.run_id.to_string());
         command.execution_scope_override = Some(base.execution_scope.clone());
         // Collaboration uses native sessions; no product chat or checkpoint is fabricated.
+        let collaboration_owner = threads::owner(base);
         let mut prepared = self
             .builder
             .clone()
             .with_execution_identity(
                 base.workspace_code.is_empty(),
-                caller_context.collaboration_owner.clone(),
+                Some(collaboration_owner.clone()),
             )
             .prepare(command, base.user_code.clone(), Some(base.locale.clone()))
             .await
             .map_err(|error| failure(error.message()))?;
         let context = &mut prepared.context;
-        context.collaboration_owner = caller_context.collaboration_owner.clone();
+        context.collaboration_owner = Some(collaboration_owner);
         context.conversation_code = Some(session.clone());
         context.stream_key = Some(session.clone());
         context.model = crate::adapters::outbound::model::with_person_ai_conversation(

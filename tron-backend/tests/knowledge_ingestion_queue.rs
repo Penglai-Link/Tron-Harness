@@ -116,6 +116,33 @@ fn parsing_and_indexing_have_separate_durable_tasks_and_retries() {
     assert_eq!(queue.get(&parse.id).unwrap().state, "COMPLETED");
     assert_eq!(queue.for_document("a").unwrap().len(), 2);
 }
+
+#[test]
+fn late_embedding_identity_is_durable_once_and_cannot_change_after_retry() {
+    let (dir, queue) = fixture();
+    queue.enqueue(queued("a", "late-model")).unwrap();
+    let parsing = queue.claim(claim(IngestionStage::Parsing, "parser", 1, 1)).unwrap().unwrap();
+    complete_parse(&queue, parsing, 2);
+    let mut index = queue.claim(claim(IngestionStage::Embedding, "indexer", 3, 1)).unwrap().unwrap();
+    let original = index.configuration.clone();
+    let original_hash = index.input_config_hash.clone();
+    index.embedding_identity = Some(IngestionEmbeddingIdentity {
+        model_code: "resolved-model".into(), fingerprint: "space-a".into(),
+    });
+    queue.checkpoint(&index, &lease(&index), 4).unwrap();
+    queue.fail(&lease(&index), 5, "temporary provider failure", None).unwrap();
+    queue.retry(&index.id, 6).unwrap();
+    let reopened = SqliteKnowledgeIngestionQueue::connect(dir.path().join("queue.sqlite").to_str().unwrap()).unwrap();
+    let mut retried = reopened.claim(claim(IngestionStage::Embedding, "retry", 7, 1)).unwrap().unwrap();
+    assert_eq!(retried.embedding_identity, index.embedding_identity);
+    assert_eq!(retried.configuration, original);
+    assert_eq!(retried.input_config_hash, original_hash);
+    retried.embedding_identity.as_mut().unwrap().model_code = "different-model".into();
+    assert!(matches!(reopened.checkpoint(&retried, &lease(&retried), 8), Err(IngestionQueueError::Conflict)));
+    retried.embedding_identity = None;
+    assert!(matches!(reopened.checkpoint(&retried, &lease(&retried), 8), Err(IngestionQueueError::Conflict)));
+    assert_eq!(reopened.get(&index.id).unwrap().embedding_model_code(), Some("resolved-model"));
+}
 fn doc(dir: &tempfile::TempDir, id: &str) -> Value {
     let conn = Connection::open(dir.path().join("queue.sqlite")).unwrap();
     let raw: String = conn

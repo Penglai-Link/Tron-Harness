@@ -85,6 +85,8 @@ impl parsing::ParseCheckpoint for RemoteCheckpoint {
 pub(crate) struct StoredChunks {
     pub(crate) document: KnowledgeBaseDocument,
     pub(crate) chunks: Vec<LocatedChunk>,
+    #[serde(default)]
+    pub(crate) contexts: Vec<eliteforge_agent_core::ChunkContext>,
     pub(crate) warnings: Vec<String>,
 }
 #[derive(Default, Serialize, Deserialize)]
@@ -120,10 +122,27 @@ impl KnowledgeBaseService {
         bytes: &[u8],
         key: Option<&str>,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        self.upload_with_parsing_options(user, kb, name, bytes, key, None, None)
+    }
+    pub fn upload_with_parsing_options(
+        &self,
+        user: &str,
+        kb: &str,
+        name: &str,
+        bytes: &[u8],
+        key: Option<&str>,
+        preference: Option<DocumentParsePreference>,
+        confirmed: Option<&DocumentParsePlan>,
+    ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
         let workspace = "PLATFORM";
-        self.owned(user, kb)?;
+        let plan = self.preflight_document(user, kb, name, bytes, preference)?;
+        if confirmed.is_some_and(|confirmed| confirmed != &plan) {
+            return Err(KnowledgeBaseError::Invalid(
+                "文件或解析选择已改变，请重新检查后上传".into(),
+            ));
+        }
         let identity = hash(
-            &serde_json::to_string(&(name, format!("{:x}", Sha256::digest(bytes))))
+            &serde_json::to_string(&(name, format!("{:x}", Sha256::digest(bytes)), &plan))
                 .map_err(invalid_storage)?,
         );
         let scoped = key
@@ -169,7 +188,16 @@ impl KnowledgeBaseService {
             self.repository
                 .remember_upload_request(key, &identity, kb, &document_id)?;
         }
-        let doc = self.upload_original(user, workspace, kb, name, bytes, true)?;
+        let doc = self.upload_original_with_plan(
+            user,
+            workspace,
+            kb,
+            name,
+            bytes,
+            true,
+            Some(plan.preference),
+            Some(&plan),
+        )?;
         if let Some(key) = &scoped {
             self.repository
                 .remember_upload_request(key, &identity, kb, &doc.id)?;
@@ -381,10 +409,11 @@ impl KnowledgeBaseService {
                 .embedding_space_fingerprint(workspace, Some(m), settings.embedding_dimension)
                 .ok()
         });
-        let parser = self
-            .document_parser(&doc)?
-            .as_ref()
-            .map(|parser| parser.snapshot().unwrap_or_else(|| parser.clone()));
+        let reuse_parsed_only = doc.parsing_artifact.is_some();
+        let embedding_images = model.as_ref().ok().map(|model| self.llm.embedding_accepts_images(workspace, model))
+            .transpose().map_err(|error|KnowledgeBaseError::Invalid(error.to_string()))?;
+        let parser = if reuse_parsed_only { None } else { self.document_parser(&doc)?
+            .as_ref().map(|parser| parser.snapshot().unwrap_or_else(|| parser.clone())) };
         let parser_identity = parser
             .as_ref()
             .map(|p| p.profile_identity())
@@ -403,7 +432,14 @@ impl KnowledgeBaseService {
         self.resources
             .download_binary_storage(&original, &mut bytes)?;
         let original_sha = format!("{:x}", Sha256::digest(&bytes));
-        let endpoint_ids = if doc.file_name.to_ascii_lowercase().ends_with(".md") {
+        let endpoint_ids = if reuse_parsed_only {
+            vec!["cached-document-index".into()]
+        } else if doc
+            .parse_plan
+            .as_ref()
+            .is_some_and(|plan| plan.features.local_text)
+            || doc.file_name.to_ascii_lowercase().ends_with(".md")
+        {
             vec!["local-markdown".into()]
         } else {
             parser
@@ -411,18 +447,19 @@ impl KnowledgeBaseService {
                 .map(|p| p.endpoint_ids())
                 .unwrap_or_default()
         };
-        let office = doc.file_name.to_ascii_lowercase().ends_with(".docx")
-            || doc.file_name.to_ascii_lowercase().ends_with(".xlsx");
-        let tier = if office {
-            Some(ParsingTier::Flash)
-        } else {
-            doc.parsing_tier
-                .or_else(|| parser.as_ref().map(|p| p.default_tier()))
-        };
+        let tier = doc
+            .parsing_tier
+            .or_else(|| parser.as_ref().map(|p| p.default_tier()));
         let mut image_description = self.image_description_config();
-        image_description.enabled = settings.image_description_model_code.is_some();
-        image_description.model_code = settings.image_description_model_code.clone().unwrap_or_default();
-        let config = json!({"ragSettings":settings,"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": image_description});
+        image_description.enabled = true;
+        image_description.model_code = settings
+            .image_description_model_code
+            .clone()
+            .unwrap_or_default();
+        let chunk_config = doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config);
+        let strategy = self.chunk_strategies.descriptors().into_iter().find(|s|s.id==chunk_config.mode.strategy_id())
+            .ok_or_else(|| KnowledgeBaseError::Invalid("切片策略未注册".into()))?;
+        let config = json!({"indexPipelineVersion":"source-graph-image-bindings-v2", "reuseParsedOnly":reuse_parsed_only, "embeddingImages":embedding_images, "chunkStrategy":strategy,"ragSettings":settings,"originalSha256":original_sha,"chunkConfig": doc.chunk_config.as_ref().unwrap_or(&kb.default_chunk_config), "parsingTier": tier, "ocrMode": doc.ocr_mode, "parsePlan":doc.parse_plan, "parser": parser_identity, "endpointIds": endpoint_ids, "embeddingModel": model.as_ref().ok(), "embeddingError": model.as_ref().err().map(ToString::to_string), "embeddingFingerprint": fingerprint, "imageDescription": image_description});
         let identity = hash(&format!(
             "{}:{}:{config}",
             doc.resource_code, doc.resource_revision
@@ -487,6 +524,12 @@ impl KnowledgeBaseService {
             resource_group_capacity: self.active_ingestion_config().parse_capacity,
             weight: 1,
         }];
+        endpoints.push(ParseEndpointCapacity {
+            supported_tiers: vec![],endpoint_id:"cached-document-index".into(),
+            capacity:self.active_ingestion_config().parse_capacity,
+            resource_group:"cached-document-index".into(),
+            resource_group_capacity:self.active_ingestion_config().parse_capacity,weight:1,
+        });
         if self
             .queue
             .pending(IngestionStage::Parsing, now_ms())
@@ -514,8 +557,15 @@ impl KnowledgeBaseService {
         let initial = self.queue.get(id).map_err(queue_error)?;
         let mut index_id = id.to_owned();
         for stage in [IngestionStage::Parsing, IngestionStage::Embedding] {
-            let selected = if stage == IngestionStage::Parsing { id } else { &index_id };
-            let Some(task) = self.claim_task(stage, &owner, Some(selected.into())).await? else {
+            let selected = if stage == IngestionStage::Parsing {
+                id
+            } else {
+                &index_id
+            };
+            let Some(task) = self
+                .claim_task(stage, &owner, Some(selected.into()))
+                .await?
+            else {
                 continue;
             };
             let mut guard = InlineAttempt {
@@ -526,7 +576,9 @@ impl KnowledgeBaseService {
             self.execute_claimed(task, false).await;
             guard.finished = true;
             if stage == IngestionStage::Parsing {
-                if let Some(index) = self.queue.for_document(&initial.document_id)
+                if let Some(index) = self
+                    .queue
+                    .for_document(&initial.document_id)
                     .map_err(queue_error)?
                     .into_iter()
                     .find(|candidate| candidate.parsing_task_id.as_deref() == Some(id))
@@ -565,7 +617,15 @@ impl KnowledgeBaseService {
             }
         };
         if let Err(error) = result {
-            let retry = automatic_retry
+            // A configuration change during parsing must not strand the document
+            // on the old immutable snapshot. Preserve completed parse artifacts,
+            // then schedule a fresh supplement after fencing this failed lease.
+            let superseded = self.rag.settings_for_corpus(&task.knowledge_base_id)
+                .ok().and_then(|settings| serde_json::to_value(settings).ok())
+                .is_some_and(|settings| settings != task.configuration["ragSettings"])
+                && self.repository.document(&task.knowledge_base_id, &task.document_id)
+                    .is_ok_and(|doc| doc.revision == task.document_revision && doc.parsing_artifact.is_some());
+            let retry = !superseded && automatic_retry
                 && matches!(error, KnowledgeBaseError::Storage(_))
                 && task.failures.saturating_add(1) < config.max_attempts;
             let after = retry.then(|| {
@@ -575,7 +635,9 @@ impl KnowledgeBaseService {
                         .saturating_mul(1i64 << task.failures.min(10)),
                 )
             });
-            let _ = self.queue.fail(&owned, now_ms(), &error.to_string(), after);
+            if self.queue.fail(&owned, now_ms(), &error.to_string(), after).is_ok() && superseded {
+                let _ = self.enqueue_index(&task.user_code, &task.workspace_code, &task.knowledge_base_id, &task.document_id);
+            }
         }
     }
 }

@@ -5,8 +5,7 @@ use crate::application::{
         KnowledgeBaseError,
         ingestion::{IngestionTask, ParseEndpointCapacity},
         local_documents::{
-            DocumentLocation, ImageAnalysisSummary, ImageAnnotation, LocatedSection,
-            MAX_EXPANDED_BYTES, MAX_TEXT_BYTES, parse_local_document,
+            MAX_EXPANDED_BYTES,
         },
         parsing::{
             KnowledgeDocumentParser, OcrMode, ParseCheckpoint, ParsedAsset, ParsingCapabilities,
@@ -16,11 +15,7 @@ use crate::application::{
     model_provider::ModelProviderService,
 };
 use async_trait::async_trait;
-use crab_serverapi_parse::{
-    base::AuthorizedClientApi,
-    document_parse::{CreateParseTask, DocumentParseClient, ParseMode, ParseTask},
-};
-use reqwest::Method;
+use crab_serverapi::document_parse::{CreateParseTask, DocumentParseClient, ParseMode, ParseTask};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -30,6 +25,9 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+
+mod lifecycle;
+use lifecycle::{ParseSubmission, TaskProgress};
 
 const PARSER_VERSION: &str = "person-ai-document-parse-v1";
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
@@ -49,13 +47,14 @@ impl PersonAiDocumentParser {
     }
 
     fn mode(&self, tier: Option<ParsingTier>) -> ParseMode {
-        if self.ocr_mode == OcrMode::Ocr {
-            ParseMode::Ocr
-        } else if tier == Some(ParsingTier::Advanced) {
-            ParseMode::Precise
+        use eliteforge_agent_capability_personai::{PersonAiDocumentParsingIntent as Intent, personai_document_parse_mode};
+        personai_document_parse_mode(if tier == Some(ParsingTier::Advanced) {
+            Intent::Layout
+        } else if self.ocr_mode == OcrMode::Ocr {
+            Intent::Recognition
         } else {
-            ParseMode::Text
-        }
+            Intent::Native
+        })
     }
 
     async fn run(
@@ -76,7 +75,7 @@ impl PersonAiDocumentParser {
             .as_ref()
             .map(|checkpoint| checkpoint.task())
             .transpose()?;
-        let request_id = prior.as_ref().map(|task| task.id.clone());
+        let mut submission = ParseSubmission::new(filename, bytes, mode, prior.as_ref());
         let (credentials, base_url) =
             self.providers
                 .document_parse_session(user)
@@ -86,35 +85,11 @@ impl PersonAiDocumentParser {
                 })?;
         let context = parse_context(credentials);
         let client = DocumentParseClient::new(base_url).map_err(platform_error)?;
-        let task = if let Some(id) = prior
-            .as_ref()
-            .and_then(|task| task.remote_job_id.as_deref())
-        {
-            client
-                .get_task(&context, id)
-                .await
-                .map_err(platform_error)?
-        } else {
-            let mut request = CreateParseTask::new(filename, bytes.to_vec(), mode);
-            if let Some(id) = request_id {
-                request.request_id = id;
-            }
-            // This checkpoint is written before POST. A lost response is retried
-            // with the same request_id, file bytes and mode.
-            if let Some(checkpoint) = &checkpoint {
-                checkpoint.save(Some(request.request_id.clone()), None, true)?;
-            }
-            let created = client
-                .create_task(&context, &request)
-                .await
-                .map_err(platform_error)?;
-            if let Some(checkpoint) = &checkpoint {
-                checkpoint.save(Some(request.request_id), Some(created.id.clone()), false)?;
-            }
-            created
-        };
+        let task = submission
+            .load(&client, &context, checkpoint.as_ref())
+            .await?;
         let task = self
-            .wait_for_settlement(user, task, checkpoint.as_ref())
+            .wait_for_settlement(user, task, checkpoint.as_ref(), &mut submission)
             .await?;
         self.result(user, filename, bytes, tier, task).await
     }
@@ -124,27 +99,23 @@ impl PersonAiDocumentParser {
         user: &str,
         mut task: ParseTask,
         checkpoint: Option<&Arc<dyn ParseCheckpoint>>,
+        submission: &mut ParseSubmission<'_>,
     ) -> Result<ParseTask, KnowledgeBaseError> {
         loop {
-            if task.status == "submission_unknown" {
-                return Err(KnowledgeBaseError::Invalid(
-                    "平台未确认解析提交；请核查原任务，不能自动重新提交".into(),
-                ));
-            }
-            if task.billing_status == "balance_insufficient" {
-                return Err(KnowledgeBaseError::Storage(
-                    "解析结果待结算：积分不足，请充值后重试原任务".into(),
-                ));
-            }
-            if task.is_settled() {
-                if task.status != "completed" {
-                    return Err(KnowledgeBaseError::Invalid(format!(
-                        "解析任务{}，未发布不完整的索引：{}",
-                        task.status,
-                        task.error_message.as_deref().unwrap_or("请检查解析结果")
-                    )));
+            match lifecycle::progress(&task)? {
+                TaskProgress::Ready => return Ok(task),
+                TaskProgress::Replace => {
+                    let (credentials, base_url) = self
+                        .providers
+                        .document_parse_session(user)
+                        .await
+                        .map_err(platform_error)?;
+                    let context = parse_context(credentials);
+                    let client = DocumentParseClient::new(base_url).map_err(platform_error)?;
+                    task = submission.replace(&client, &context, checkpoint).await?;
+                    continue;
                 }
-                return Ok(task);
+                TaskProgress::Wait => {}
             }
             if let Some(checkpoint) = checkpoint {
                 checkpoint.task()?;
@@ -159,10 +130,9 @@ impl PersonAiDocumentParser {
                 })?;
             let context = parse_context(credentials);
             let client = DocumentParseClient::new(base_url).map_err(platform_error)?;
-            task = client
-                .get_task(&context, &task.id)
-                .await
-                .map_err(platform_error)?;
+            task = submission
+                .poll(&client, &context, &task.id, checkpoint)
+                .await?;
         }
     }
 
@@ -174,9 +144,7 @@ impl PersonAiDocumentParser {
         tier: Option<ParsingTier>,
         task: ParseTask,
     ) -> Result<StructuredParse, KnowledgeBaseError> {
-        let result = task.result.as_ref().ok_or_else(|| {
-            KnowledgeBaseError::Storage("平台已结算，但未返回解析产物清单".into())
-        })?;
+        let result = lifecycle::result_manifest(&task)?;
         let files = result["files"]
             .as_array()
             .ok_or_else(|| KnowledgeBaseError::Storage("平台解析产物缺少文件列表".into()))?;
@@ -216,7 +184,10 @@ impl PersonAiDocumentParser {
                 })?;
         let context = parse_context(credentials);
         let client = DocumentParseClient::new(base_url).map_err(platform_error)?;
-        let markdown = download(&client, &context, &task.id, markdown_id, MAX_TEXT_BYTES).await?;
+        // Supplier Markdown may include large inline image data. The artifact
+        // budget bounds those bytes; the separate text budget applies after
+        // image payloads are removed, before chunking/embedding.
+        let markdown = download(&client, &context, &task.id, markdown_id, MAX_EXPANDED_BYTES).await?;
         let middle = download(&client, &context, &task.id, middle_id, MAX_EXPANDED_BYTES).await?;
         let assets = if let Ok(zip_id) = output_id(file, "zip") {
             let archive = download_to_temp(&client, &context, &task.id, zip_id).await?;
@@ -224,60 +195,13 @@ impl PersonAiDocumentParser {
         } else {
             Vec::new()
         };
-        let middle: Value = serde_json::from_slice(&middle)
+        let mut middle: Value = serde_json::from_slice(&middle)
             .map_err(|_| KnowledgeBaseError::Storage("平台解析结构化结果无效".into()))?;
         let markdown_text = String::from_utf8(markdown)
             .map_err(|_| KnowledgeBaseError::Storage("平台 Markdown 结果不是 UTF-8".into()))?;
-        let (image_text, skipped_images) = image_text_for_index(&markdown_text);
-        let index_text = table_text_for_index(&image_text);
-        let mut document = parse_local_document("platform-result.md", index_text.as_bytes())
-            .map_err(|error| KnowledgeBaseError::Invalid(error.to_string()))?;
-        if skipped_images > 0 {
-            document.warnings.push(format!(
-                "{skipped_images} 张图片没有可用描述或 OCR 文字，已保留解析产物但未建立图像语义索引"
-            ));
-        }
-        if !assets.is_empty() {
-            let descriptions = image_references(&markdown_text);
-            let mut source_annotations = 0;
-            for asset in &assets {
-                let alt = descriptions.get(&asset.path).cloned().unwrap_or_default();
-                let annotations = if alt.is_empty() {
-                    Vec::new()
-                } else {
-                    source_annotations += 1;
-                    vec![ImageAnnotation {
-                        kind: "source_caption".into(),
-                        source: "person-ai.markdown.alt".into(),
-                        text: alt,
-                        page: None,
-                        block: asset.path.clone(),
-                        model_code: None,
-                        artifact_resource_code: None,
-                    }]
-                };
-                document.sections.push(LocatedSection {
-                    text: String::new(),
-                    heading_level: None,
-                    location: DocumentLocation {
-                        image_resource_codes: vec![asset.path.clone()],
-                        image_annotations: annotations,
-                        block_kind: Some("image".into()),
-                        blocks: vec![asset.path.clone()],
-                        ..Default::default()
-                    },
-                });
-            }
-            document.image_analysis = Some(ImageAnalysisSummary {
-                image_count: assets.len(),
-                originals_only: assets.len() - source_annotations,
-                with_source_annotations: source_annotations,
-                with_generated_descriptions: 0,
-                with_unattributed_body_text: 0,
-                generation_mode: "parser_controlled".into(),
-                supplement_status: None,
-            });
-        }
+        attach_segment_source_ranges(&mut middle, file)?;
+        let paths = assets.iter().map(|asset| asset.path.clone()).collect();
+        let mut document = crate::application::knowledge_base::parsing::normalize_parse_middle(&middle, &paths)?;
         document.format = Path::new(filename)
             .extension()
             .and_then(|extension| extension.to_str())
@@ -299,6 +223,29 @@ impl PersonAiDocumentParser {
             vendor_job_id: task.id,
         })
     }
+}
+
+/// Person-AI declares zero-based source ranges in the settled result manifest.
+/// Preserve them in the cached middle artifact; segment size is never a page offset.
+fn attach_segment_source_ranges(middle: &mut Value, file: &Value) -> Result<(), KnowledgeBaseError> {
+    let Some(parts) = middle.as_array_mut() else { return Ok(()); };
+    let Some(segments) = file["segments"].as_array() else { return Ok(()); };
+    for part in parts {
+        if part["data"]["metadata"]["file_suffix"] != "pdf" { continue; }
+        let seq = part["seq"].as_u64().ok_or_else(|| KnowledgeBaseError::Invalid("解析分段序号无效".into()))?;
+        let matches = segments.iter().filter(|segment| segment["seq"].as_u64() == Some(seq)).collect::<Vec<_>>();
+        if matches.len() != 1 { return Err(KnowledgeBaseError::Invalid("解析分段来源范围缺失或重复".into())); }
+        let range = matches[0]["page_range"].as_array().filter(|range| range.len() == 2)
+            .ok_or_else(|| KnowledgeBaseError::Invalid("解析分段来源范围无效".into()))?;
+        let start = range[0].as_u64().ok_or_else(|| KnowledgeBaseError::Invalid("解析分段起始页无效".into()))?;
+        let end = range[1].as_u64().ok_or_else(|| KnowledgeBaseError::Invalid("解析分段结束页无效".into()))?;
+        let pages = part["data"]["pages"].as_array().ok_or_else(|| KnowledgeBaseError::Invalid("解析分段页信息缺失".into()))?;
+        if end <= start || end - start != pages.len() as u64 || pages.iter().enumerate().any(|(i,page)|page["page_idx"].as_u64()!=Some(i as u64)) {
+            return Err(KnowledgeBaseError::Invalid("解析分段与原始页范围不一致".into()));
+        }
+        part["source_page_start"] = start.into();
+    }
+    Ok(())
 }
 
 fn images_from_result_zip(
@@ -388,7 +335,7 @@ fn images_from_result_zip(
 
 async fn download_to_temp(
     client: &DocumentParseClient,
-    context: &crab_serverapi_parse::AuthorizedClientContext,
+    context: &crab_serverapi::AuthorizedClientContext,
     task_id: &str,
     file_id: &str,
 ) -> Result<tempfile::NamedTempFile, KnowledgeBaseError> {
@@ -418,146 +365,6 @@ async fn download_to_temp(
     Ok(archive)
 }
 
-fn image_references(markdown: &str) -> BTreeMap<String, String> {
-    let mut references = BTreeMap::new();
-    let mut remaining = markdown;
-    while let Some(start) = remaining.find("![") {
-        let image = &remaining[start + 2..];
-        let Some(end_alt) = image.find("](") else {
-            break;
-        };
-        let Some(end_link) = image[end_alt + 2..].find(')') else {
-            break;
-        };
-        let path = image[end_alt + 2..end_alt + 2 + end_link].trim();
-        let alt = image[..end_alt].trim();
-        if !alt.is_empty()
-            && !matches!(
-                alt.to_ascii_lowercase().as_str(),
-                "image" | "图片" | "figure"
-            )
-        {
-            references.insert(path.to_string(), alt.to_string());
-        }
-        remaining = &image[end_alt + 2 + end_link + 1..];
-    }
-    references
-}
-
-/// Embedding receives only words from image references. The raw Markdown is
-/// retained separately for provenance and display.
-fn image_text_for_index(markdown: &str) -> (String, usize) {
-    let mut output = String::with_capacity(markdown.len());
-    let mut remaining = markdown;
-    let mut skipped = 0;
-    while let Some(start) = remaining.find("![") {
-        output.push_str(&remaining[..start]);
-        let image = &remaining[start + 2..];
-        let Some(end_alt) = image.find("](") else {
-            output.push_str(&remaining[start..]);
-            return (output, skipped);
-        };
-        let Some(end_link) = image[end_alt + 2..].find(')') else {
-            output.push_str(&remaining[start..]);
-            return (output, skipped);
-        };
-        let alt = image[..end_alt].trim();
-        let looks_like_file = alt.contains('/')
-            || alt.contains('\\')
-            || [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]
-                .iter()
-                .any(|suffix| alt.to_ascii_lowercase().ends_with(suffix));
-        if !alt.is_empty()
-            && !looks_like_file
-            && !matches!(
-                alt.to_ascii_lowercase().as_str(),
-                "image" | "图片" | "figure"
-            )
-        {
-            output.push_str("图片描述：");
-            output.push_str(alt);
-        } else {
-            skipped += 1;
-        }
-        remaining = &image[end_alt + 2 + end_link + 1..];
-    }
-    output.push_str(remaining);
-    (output, skipped)
-}
-
-/// Render Markdown table rows with their column names so a text embedding
-/// retains row/column relationships when the chunker splits a large table.
-fn table_text_for_index(markdown: &str) -> String {
-    fn cells(line: &str) -> Vec<&str> {
-        line.trim()
-            .trim_matches('|')
-            .split('|')
-            .map(str::trim)
-            .collect()
-    }
-    fn separator(line: &str, width: usize) -> bool {
-        let parts = cells(line);
-        parts.len() == width
-            && parts.iter().all(|part| {
-                let part = part.trim_matches(':');
-                part.len() >= 3 && part.bytes().all(|byte| byte == b'-')
-            })
-    }
-    let lines = markdown.lines().collect::<Vec<_>>();
-    let mut result = String::with_capacity(markdown.len());
-    let mut index = 0;
-    let mut fence = false;
-    while index < lines.len() {
-        let line = lines[index];
-        if line.trim_start().starts_with("```") {
-            fence = !fence;
-        }
-        let headers = cells(line);
-        if !fence
-            && line.contains('|')
-            && headers.len() > 1
-            && index + 1 < lines.len()
-            && separator(lines[index + 1], headers.len())
-        {
-            result.push_str("表格列：");
-            result.push_str(&headers.join("；"));
-            result.push('\n');
-            result.push('\n');
-            index += 2;
-            let mut row = 1;
-            while index < lines.len() && lines[index].contains('|') {
-                let values = cells(lines[index]);
-                if values.len() != headers.len() {
-                    break;
-                }
-                result.push_str(&format!("表格第{row}行："));
-                for (position, (header, value)) in headers.iter().zip(values).enumerate() {
-                    if position > 0 {
-                        result.push_str("；");
-                    }
-                    result.push_str(header);
-                    result.push('：');
-                    result.push_str(value);
-                }
-                result.push('\n');
-                if result.len() > MAX_TEXT_BYTES {
-                    return markdown.to_owned();
-                }
-                row += 1;
-                index += 1;
-            }
-            continue;
-        }
-        result.push_str(line);
-        result.push('\n');
-        if result.len() > MAX_TEXT_BYTES {
-            return markdown.to_owned();
-        }
-        index += 1;
-    }
-    result
-}
-
 fn output_id<'a>(file: &'a Value, kind: &str) -> Result<&'a str, KnowledgeBaseError> {
     let output = &file["outputs"][kind];
     output
@@ -569,7 +376,7 @@ fn output_id<'a>(file: &'a Value, kind: &str) -> Result<&'a str, KnowledgeBaseEr
 
 async fn download(
     client: &DocumentParseClient,
-    context: &crab_serverapi_parse::AuthorizedClientContext,
+    context: &crab_serverapi::AuthorizedClientContext,
     task_id: &str,
     file_id: &str,
     limit: usize,
@@ -600,8 +407,8 @@ fn platform_error(error: impl std::fmt::Display) -> KnowledgeBaseError {
 
 fn parse_context(
     context: crab_serverapi::AuthorizedClientContext,
-) -> crab_serverapi_parse::AuthorizedClientContext {
-    crab_serverapi_parse::AuthorizedClientContext {
+) -> crab_serverapi::AuthorizedClientContext {
+    crab_serverapi::AuthorizedClientContext {
         token: context.token,
         refresh_token: context.refresh_token,
         client_id: context.client_id,
@@ -726,34 +533,43 @@ impl KnowledgeDocumentParser for PersonAiDocumentParser {
             .await
             .map_err(platform_error)?;
         let context = parse_context(credentials);
-        let client = DocumentParseClient::new(base_url.clone()).map_err(platform_error)?;
-        let current = client
-            .get_task(&context, id)
-            .await
-            .map_err(platform_error)?;
-        if matches!(
-            current.status.as_str(),
-            "completed" | "failed" | "partial" | "canceled"
-        ) {
+        let client = DocumentParseClient::new(base_url).map_err(platform_error)?;
+        let current = match client.get_task(&context, id).await {
+            Ok(task) => task,
+            Err(error) if lifecycle::task_not_found(&error) => return Ok(Some(id.into())),
+            Err(error) => return Err(platform_error(error)),
+        };
+        if current.deleted
+            || current.deletion_pending
+            || matches!(
+                current.status.as_str(),
+                "completed" | "failed" | "partial" | "canceled"
+            )
+        {
             return Ok(Some(id.into()));
         }
-        let api = AuthorizedClientApi::new(base_url).map_err(platform_error)?;
-        let request = api
-            .new_authorized_request(Method::POST, "/document-parsing/cancel-task", &context)
-            .map_err(platform_error)?
-            .json(&json!({"id":id}));
-        let _: ParseTask = api
-            .execute_for_object(request, Some(&context), "取消文件解析任务")
-            .await
-            .map_err(platform_error)?;
-        Ok(Some(id.into()))
+        match client.cancel_task(&context, id).await {
+            Ok(_) => Ok(Some(id.into())),
+            Err(error) if lifecycle::task_not_found(&error) => Ok(Some(id.into())),
+            Err(error) => Err(platform_error(error)),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::document::{MAX_TEXT_BYTES, parse_normalized_markdown};
     use zip::{ZipWriter, write::SimpleFileOptions};
+
+    #[test]
+    fn original_page_ranges_come_from_the_settled_manifest() {
+        let mut middle = json!([{"seq":0,"data":{"metadata":{"file_suffix":"pdf"},"pages":[{"page_idx":0}]}},
+            {"seq":1,"data":{"metadata":{"file_suffix":"pdf"},"pages":[{"page_idx":0},{"page_idx":1}]}}]);
+        attach_segment_source_ranges(&mut middle,&json!({"segments":[{"seq":0,"page_range":[0,1]},{"seq":1,"page_range":[1,3]}]})).unwrap();
+        assert_eq!(middle[1]["source_page_start"],json!(1));
+        assert!(attach_segment_source_ranges(&mut middle,&json!({"segments":[{"seq":0,"page_range":[0,1]},{"seq":1,"page_range":[1,8]}]})).is_err());
+    }
 
     #[test]
     fn selects_only_platform_result_ids_from_the_requested_file() {
@@ -764,20 +580,20 @@ mod tests {
     }
 
     #[test]
-    fn image_links_never_become_text_embeddings() {
-        let (index, skipped) = image_text_for_index(
-            "表格 | 数量\n![折线图：收入增长](images/chart.png) ![image](images/raw.png)",
-        );
-        assert_eq!(index, "表格 | 数量\n图片描述：折线图：收入增长 ");
-        assert_eq!(skipped, 1);
-    }
-
-    #[test]
-    fn table_rows_keep_column_relationships_for_text_embedding() {
-        let text = "| 产品 | 数量 |\n| --- | ---: |\n| A | 3 |\n| B | 5 |";
-        let index = table_text_for_index(text);
-        assert!(index.contains("表格第1行：产品：A；数量：3"));
-        assert!(index.contains("表格第2行：产品：B；数量：5"));
+    fn long_supplier_text_keeps_last_page_and_more_than_two_thousand_chunks() {
+        use crate::application::document::{ChunkConfig, split_document};
+        let paragraph = "Clinical evidence and conditions remain together. ".repeat(22);
+        let mut markdown = (0..2600)
+            .map(|page| format!("# Page {page}\n\n{paragraph}\n\n"))
+            .collect::<String>();
+        markdown.push_str("# Final page\n\nFINAL_PAGE_EVIDENCE");
+        assert!(markdown.len() > MAX_TEXT_BYTES);
+        assert!(crate::application::document::parse_local_document("upload.md", markdown.as_bytes()).is_err());
+        let document = parse_normalized_markdown(markdown.as_bytes()).unwrap();
+        let chunks = split_document(&document, &ChunkConfig::default()).unwrap();
+        assert!(chunks.len() > 2000);
+        assert!(chunks.last().unwrap().text.contains("FINAL_PAGE_EVIDENCE"));
+        assert!(parse_normalized_markdown(&vec![b'a'; crate::application::document::MAX_PARSED_TEXT_BYTES + 1]).is_err());
     }
 
     #[test]

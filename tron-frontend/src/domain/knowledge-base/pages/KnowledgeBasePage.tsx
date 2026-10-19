@@ -1,3 +1,5 @@
+import { RagSettingsFields } from "@/domain/rag/components/RagSettingsFields";
+import { defaultRagSettings, canSaveRagSettings } from "@/domain/rag/model/ragSettings";
 import { MoreHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +16,10 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { createKnowledgeLibrary, deleteKnowledgeLibrary, listPlatformKnowledgeLibraries, type PlatformKnowledgeLibrarySummary } from "../api/knowledgeBaseApi";
+import { KnowledgeLibrarySettingsDialog } from "../components/KnowledgeLibrarySettingsDialog";
 import { KnowledgeGrantsDialog } from "../components/KnowledgeGrantsDialog";
+import { DocumentParsingPreferenceField } from "../components/DocumentParsingPreferenceField";
+import type { DocumentParsePreference } from "../model/KnowledgeLibraryModel";
 import { useKnowledgeUser, useKnowledgeViewActive } from "../hooks/useKnowledgeLibraries";
 
 export function KnowledgeBasePage() {
@@ -35,10 +40,13 @@ function KnowledgeCatalog() {
   const [agentAssignment, setAgentAssignment] = useState<PlatformKnowledgeLibrarySummary | null>(null);
   const refresh = () => cache.invalidateQueries({ queryKey: ["platform-knowledge-bases", user] });
   const detailPath = (library: { id: string }) => `/settings/knowledge-base/${encodeURIComponent(library.id)}`;
+  const [settingsLibraryId, setSettingsLibraryId] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [indexSettings, setIndexSettings] = useState(defaultRagSettings);
+  const [parsePreference, setParsePreference] = useState<DocumentParsePreference>("Auto");
   const [deleteTarget, setDeleteTarget] = useState<PlatformKnowledgeLibrarySummary | null>(null);
   const deletion = useMutation({
     mutationFn: (library: PlatformKnowledgeLibrarySummary) => deleteKnowledgeLibrary( library.id),
@@ -51,8 +59,8 @@ function KnowledgeCatalog() {
     },
     onError: (error) => { if (active.current) toast.error(error.message); },
   });
-  const create = useMutation({ mutationFn: () => createKnowledgeLibrary( name.trim(), description.trim()),
-    onSuccess: (library) => { void refresh(); if (!active.current) return; toast.success(text("created")); navigate(detailPath(library)); },
+  const create = useMutation({ mutationFn: () => createKnowledgeLibrary(name.trim(), description.trim(), indexSettings, parsePreference),
+    onSuccess: (library) => { void refresh(); void cache.invalidateQueries({ queryKey: ["rag-corpora", user] }); if (!active.current) return; setOpen(false); toast.success(text("created")); navigate(detailPath(library)); },
     onError: (error) => { if (active.current) toast.error(error.message); },
   });
   const libraries = useMemo(() => (query.data ?? []).filter((item) => item.name.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())), [query.data, filter]);
@@ -60,7 +68,7 @@ function KnowledgeCatalog() {
   return <>
     <PageHeader title={text("title")} actions={<>
       <Button variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>{text("refresh")}</Button>
-      <Button disabled={!user} onClick={() => setOpen(true)}>{text("create")}</Button>
+      <Button disabled={!user} onClick={() => { setName(""); setDescription(""); setIndexSettings(defaultRagSettings()); setParsePreference("Auto"); setOpen(true); }}>{text("create")}</Button>
     </>} />
     <SurfaceCard>
       <div className="mb-4 flex flex-wrap gap-3">
@@ -77,6 +85,7 @@ function KnowledgeCatalog() {
           <TableCell className="text-right" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon" disabled={deletion.isPending} aria-label={t("knowledgeLibrary.libraryActions", { name: item.name })}><MoreHorizontal size={16} aria-hidden="true" /></Button>} />
             <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+              <DropdownMenuItem onClick={() => setSettingsLibraryId(item.id)}>{text("librarySettings")}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setAgentAssignment(item)}>{text("grants")}</DropdownMenuItem>
               {item.documentCount > 0 ? <Tooltip><TooltipTrigger render={<span className="block cursor-not-allowed" />}><DropdownMenuItem disabled variant="destructive" className="data-disabled:opacity-35">{text("deleteAction")}</DropdownMenuItem></TooltipTrigger><TooltipContent side="left">{text("libraryDeleteRequiresEmpty")}</TooltipContent></Tooltip> : <DropdownMenuItem variant="destructive" onClick={(event) => { event.stopPropagation(); setDeleteTarget(item); }}>{text("deleteAction")}</DropdownMenuItem>}
             </DropdownMenuContent>
@@ -85,14 +94,20 @@ function KnowledgeCatalog() {
       </TableBody></Table>
       {!libraries.length && !query.error ? <p role="status" className="py-8 text-center text-[var(--color-on-surface-variant)]">{text(query.isLoading ? "loading" : "empty")}</p> : null}
     </SurfaceCard>
+    {settingsLibraryId ? <KnowledgeLibrarySettingsDialog key={settingsLibraryId} libraryId={settingsLibraryId} onClose={() => setSettingsLibraryId(null)} /> : null}
     {agentAssignment ? <KnowledgeGrantsDialog libraryId={agentAssignment.id} onClose={() => setAgentAssignment(null)} onChanged={refresh} /> : null}
     <ConfirmDialog open={Boolean(deleteTarget)} title={text("libraryDeleteTitle")} description={t("knowledgeLibrary.libraryDeleteDescription", { name: deleteTarget?.name ?? "" })} cancelText={text("cancel")} confirmText={text("deleteAction")} pending={deletion.isPending} onCancel={() => setDeleteTarget(null)} onConfirm={() => { if (deleteTarget) deletion.mutate(deleteTarget); }} />
     <Dialog open={open} onOpenChange={(value) => { if (!create.isPending) setOpen(value); }}>
-      <DialogContent closeLabel={text("cancel")}><DialogHeader><DialogTitle>{text("create")}</DialogTitle></DialogHeader>
-        <form onSubmit={(event) => { event.preventDefault(); if (name.trim()) create.mutate(); }} className="grid gap-4">
-          <Field label={text("name")} required><TextInput value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required disabled={create.isPending} /></Field>
-          <Field label={text("description")}><TextArea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} disabled={create.isPending} /></Field>
-          <DialogFooter><Button type="button" variant="outline" disabled={create.isPending} onClick={() => setOpen(false)}>{text("cancel")}</Button><Button type="submit" disabled={!name.trim() || create.isPending}>{text(create.isPending ? "saving" : "create")}</Button></DialogFooter>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl" closeLabel={text("cancel")}><DialogHeader><DialogTitle>{text("create")}</DialogTitle></DialogHeader>
+        <form onSubmit={(event) => { event.preventDefault(); if (name.trim() && canSaveRagSettings(indexSettings)) create.mutate(); }} className="grid gap-4">
+          <Field label={text("name")} required><TextInput aria-label={text("name")} value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required disabled={create.isPending} /></Field>
+          <Field label={text("description")}><TextArea aria-label={text("description")} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} disabled={create.isPending} /></Field>
+          <DocumentParsingPreferenceField value={parsePreference} onChange={setParsePreference} disabled={create.isPending} />
+          <section aria-labelledby="knowledge-create-index-settings" className="grid gap-4 border-t pt-4">
+            <h3 id="knowledge-create-index-settings" className="font-medium">{text("indexSettings")}</h3>
+            <RagSettingsFields settings={indexSettings} setSettings={setIndexSettings} knowledgeBase disabled={create.isPending} idPrefix="knowledge-create-rag" className="sm:grid-cols-2" />
+          </section>
+          <DialogFooter><Button type="button" variant="outline" disabled={create.isPending} onClick={() => setOpen(false)}>{text("cancel")}</Button><Button type="submit" disabled={!name.trim() || !canSaveRagSettings(indexSettings) || create.isPending}>{text(create.isPending ? "saving" : "create")}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

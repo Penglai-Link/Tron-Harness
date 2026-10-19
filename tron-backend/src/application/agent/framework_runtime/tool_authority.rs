@@ -186,6 +186,69 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         {
             return Ok(fw::ToolBindingAdmission::Exclude);
         }
+        if !control_tool
+            && state.context.tool_exposure.tool_exposure_mode
+                == Some(crate::domain::agent::ToolExposureMode::DomainDiscovery)
+        {
+            let intrinsic = (self.skills.is_some() && native_skill_descriptor(&binding.descriptor))
+                || framework_a2ui_binding(&run.extensions, &binding.descriptor);
+            // A plugin may have its own nested discovery (for example A2UI).
+            // Do not promote its deliberately hidden schemas into a domain.
+            if intrinsic && !binding.exposed {
+                return Ok(fw::ToolBindingAdmission::Hidden);
+            }
+            let mut tool =
+                map_authorized_descriptor(&state.context, &binding.descriptor, &run.extensions)?;
+            if let Some(management) = &self.management {
+                let record = management
+                    .describe_tool_descriptor(&binding.descriptor)
+                    .map_err(fw::AgentError::ToolSetup)?;
+                tool.domain_code.get_or_insert(record.domain_code);
+                if !state.pending_tool_descriptors.contains(&binding.descriptor) {
+                    state
+                        .pending_tool_descriptors
+                        .push(binding.descriptor.clone());
+                }
+            }
+            tool.domain_code.get_or_insert_with(|| "native".into());
+            let expanded = state
+                .context
+                .tool_exposure
+                .expanded_domain_codes
+                .iter()
+                .any(|code| {
+                    tool.domain_code
+                        .as_deref()
+                        .is_some_and(|domain| domain.eq_ignore_ascii_case(code))
+                });
+            if !state
+                .context
+                .effective_tools
+                .iter()
+                .any(|entry| entry.tool_name == *name)
+            {
+                state.context.effective_tools.push(tool.clone());
+            }
+            if !state
+                .context
+                .tool_exposure
+                .hidden_tools
+                .iter()
+                .any(|entry| entry.tool_name == *name)
+            {
+                state.context.tool_exposure.hidden_tools.push(tool);
+            }
+            if !expanded {
+                // Native collaboration, interaction and skill tools obey the same
+                // exposure mode as business tools. Authority remains unchanged.
+                state.context.tools.retain(|entry| entry.tool_name != *name);
+            }
+            return Ok(if expanded {
+                fw::ToolBindingAdmission::Allow
+            } else {
+                fw::ToolBindingAdmission::Hidden
+            });
+        }
         if (self.skills.is_some() && native_skill_descriptor(&binding.descriptor))
             || framework_a2ui_binding(&run.extensions, &binding.descriptor)
         {

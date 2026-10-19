@@ -45,8 +45,8 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     expect(memoryRequests).toBe(0);
     await page.screenshot({ path: info.outputPath(`memory-empty-${locale}.png`), fullPage: true });
 
-    await page.goto(`${frontend!.baseUrl}/settings/knowledge-graph`);
-    const canvas = page.getByRole("region", { name: zh ? "G6 语义知识图谱画布" : "G6 semantic knowledge graph canvas", exact: true });
+    await page.goto(`${frontend!.baseUrl}/settings/knowledge-graph?mode=business`);
+    const canvas = page.getByRole("region", { name: zh ? "知识图谱" : "Knowledge graph", exact: true });
     await expect(canvas).toBeVisible();
     await expect(canvas.getByText(zh ? "0 个节点" : "0 nodes", { exact: true })).toBeVisible();
     await expect(canvas.getByText(zh ? "0 条边" : "0 edges", { exact: true })).toBeVisible();
@@ -69,7 +69,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect.poll(() => memoryRequests).toBeGreaterThan(0);
     await expect(page.getByRole("table")).toBeVisible();
 
-    await page.goto(`${frontend!.baseUrl}/settings/knowledge-graph?workspaceCode=TRON_CORE`);
+    await page.goto(`${frontend!.baseUrl}/settings/knowledge-graph?workspaceCode=TRON_CORE&mode=business`);
     await expect(canvas).toBeVisible();
     await expect.poll(() => graphRequests).toBeGreaterThan(0);
     await expect(canvas.getByText(zh ? "0 个节点" : "0 nodes", { exact: true })).toBeVisible();

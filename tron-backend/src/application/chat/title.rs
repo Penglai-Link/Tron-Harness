@@ -29,7 +29,6 @@ impl ChatService {
         user_message: &str,
         run_code: &str,
         llm_runtime: LlmRuntimeService,
-        fallback_model: crate::domain::agent::AgentModelConfig,
     ) {
         let Some(prompt) = manual_session_title_prompt(self.prompt_service.as_ref(), user_message)
         else {
@@ -41,13 +40,25 @@ impl ChatService {
             );
             return;
         };
-        let fallback = crate::application::model_router::runtime_from_agent(fallback_model);
-        let preferred = self
+        let preferred = match self
             .llm_router
             .as_ref()
-            .and_then(|router| router.route_text(workspace_code, None).ok());
-        let candidates = title_model_candidates(preferred, fallback);
-        let title = match generate_title(&llm_runtime, candidates, &prompt).await {
+            .ok_or_else(|| "文本生成自动路由未配置".to_string())
+            .and_then(|router| {
+                router.route_text(workspace_code, Some("PERSON_AI:ROUTE:TextGenerationAuto"))
+            }) {
+            Ok(model) => model,
+            Err(message) => {
+                self.publish_title_generation_failure(
+                    session_code,
+                    run_code,
+                    "LLM_MODEL_ROUTING_FAILED",
+                    message,
+                );
+                return;
+            }
+        };
+        let title = match generate_title(&llm_runtime, vec![preferred], &prompt).await {
             Ok(title) => title,
             Err((code, message)) => {
                 self.publish_title_generation_failure(session_code, run_code, code, message);
@@ -105,18 +116,6 @@ impl ChatService {
             .payload_field("message", message),
         );
     }
-}
-
-fn title_model_candidates(
-    preferred: Option<crate::application::model::RuntimeModelConfig>,
-    fallback: crate::application::model::RuntimeModelConfig,
-) -> Vec<crate::application::model::RuntimeModelConfig> {
-    let mut candidates = Vec::new();
-    if let Some(preferred) = preferred.filter(|model| model.model_code != fallback.model_code) {
-        candidates.push(preferred);
-    }
-    candidates.push(fallback);
-    candidates
 }
 
 async fn generate_title(

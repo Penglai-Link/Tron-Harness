@@ -520,8 +520,15 @@ async fn memory_search_enforces_source_scope_governance_expiry_and_latest_retry(
     let rows = rag.corpus_summaries(&Default::default()).unwrap();
     let memory = rows.iter().find(|r| r.id == "memory-card").unwrap();
     assert_eq!(memory.counts.rebuild_source_count, 0);
-    rag.configure_corpus("memory-card", RagSettings { vector: false, ..Default::default() })
-        .unwrap();
+    rag.configure_corpus(
+        "memory-card",
+        RagSettings {
+            vector: true,
+            embedding_model_code: Some("PERSON_AI:ROUTE:EmbeddingAuto".into()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
     assert!(
         rag.corpus_summaries(&Default::default())
             .unwrap()
@@ -532,5 +539,611 @@ async fn memory_search_enforces_source_scope_governance_expiry_and_latest_retry(
             .rebuild_source_count
             > 0
     );
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
+async fn corpus_automatic_routes_are_saved_and_read_back() {
+    let f = Fixture::new();
+    let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
+    let settings = json!({"fulltext":true,"vector":true,"graph":true,"embeddingDimension":1024,
+        "embeddingModelCode":"PERSON_AI:ROUTE:EmbeddingAuto", "graphModelCode":"PERSON_AI:ROUTE:ChatAuto", "rerankModelCode":"PERSON_AI:ROUTE:RerankAuto"});
+    let response = common::authenticated_request(
+        &app,
+        Method::PUT,
+        "/api/v1/rag/corpora/memory-card/settings",
+        Some(settings.clone()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response =
+        common::authenticated_request(&app, Method::GET, "/api/v1/rag/corpora", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = common::response_json(response).await;
+    let corpus = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|corpus| corpus["id"] == "memory-card")
+        .unwrap();
+    for key in ["embeddingModelCode", "graphModelCode", "rerankModelCode"] {
+        assert_eq!(corpus["settings"][key], settings[key]);
+    }
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
+async fn shared_model_picker_exposes_four_typed_automatic_routes() {
+    let f = Fixture::new();
+    rusqlite::Connection::open(&f.state.config.database_url).unwrap().execute_batch(
+        "INSERT INTO provider_connections(provider_code,server_base_url,status,created_at,updated_at) VALUES('PersonAi','https://synthetic.invalid','Connected',1,1) ON CONFLICT(provider_code) DO UPDATE SET status='Connected';"
+    ).unwrap();
+    let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
+    let response = common::authenticated_request(
+        &app,
+        Method::GET,
+        &format!("/api/v1/models/workspaces/{WORKSPACE}/select-options"),
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = common::response_json(response).await;
+    let options = body["data"].as_array().unwrap();
+    for (route, model_type, name) in [
+        ("ChatAuto", "TEXT", "对话自动路由"),
+        ("EmbeddingAuto", "EMBEDDING", "向量自动路由"),
+        ("MultimodalEmbeddingAuto", "EMBEDDING", "多模态向量自动路由"),
+        ("RerankAuto", "RERANK", "重排自动路由"),
+    ] {
+        let option = options
+            .iter()
+            .find(|option| option["modelCode"] == format!("PERSON_AI:ROUTE:{route}"))
+            .unwrap();
+        assert_eq!(option["modelType"], model_type);
+        assert_eq!(option["displayName"], name);
+        assert_eq!(option["modelSelection"]["routeCode"], route);
+        assert_eq!(option["enabled"], true);
+    }
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
+async fn builtins_and_new_library_persist_automatic_model_defaults() {
+    let f = Fixture::new();
+    let kb = f.service.create(USER, "Automatic defaults", "").unwrap();
+    let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
+    let response =
+        common::authenticated_request(&app, Method::GET, "/api/v1/rag/corpora", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = common::response_json(response).await;
+    let connection = rusqlite::Connection::open(&f.state.config.database_url).unwrap();
+    for id in ["memory-card", "skill", kb.id.as_str()] {
+        let corpus = body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|corpus| corpus["id"] == id)
+            .unwrap();
+        let saved: String = connection
+            .query_row(
+                "SELECT capabilities_json FROM rag_corpora WHERE corpus_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let saved: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        if id == kb.id {
+            assert_eq!(corpus["settings"]["graph"], true);
+            assert_eq!(saved["settings"]["graph"], true);
+        }
+        for (field, route) in [
+            (
+                "embeddingModelCode",
+                if id == kb.id {
+                    "MultimodalEmbeddingAuto"
+                } else {
+                    "EmbeddingAuto"
+                },
+            ),
+            ("graphModelCode", "ChatAuto"),
+            ("rerankModelCode", "RerankAuto"),
+        ] {
+            assert_eq!(
+                corpus["settings"][field],
+                format!("PERSON_AI:ROUTE:{route}")
+            );
+            assert_eq!(saved["settings"][field], corpus["settings"][field]);
+        }
+    }
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
+async fn deleting_task_history_preserves_publication_and_latest_fences() {
+    let f = Fixture::new();
+    let rag = f.state.rag.clone();
+    rag.configure_corpus(
+        "memory-card",
+        RagSettings {
+            vector: false,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let request = |owner: &str, code: &str| RagIngestRequest {
+        corpus_id: "memory-card".into(),
+        workspace_code: WORKSPACE.into(),
+        access_context: RagIngestAccessContext {
+            user_code: owner.into(),
+            workspace_code: WORKSPACE.into(),
+            agent_code: f.agent.clone(),
+        },
+        target_scope: RagIngestScope {
+            scope_type: "USER".into(),
+            scope_code: owner.into(),
+        },
+        source: RagIngestSource {
+            code: code.into(),
+            version: "v1".into(),
+        },
+        payload: json!({"title":code,"text":"orchid history evidence","domainFields":{"memoryStatus":"ACTIVE","reviewStatus":"APPROVED","injectable":true}}),
+    };
+    rag.ingest(request(USER, "history-source")).await.unwrap();
+    let old = rag
+        .record_task_views(USER)
+        .unwrap()
+        .into_iter()
+        .find(|t| t.source_code == "history-source")
+        .unwrap();
+    rag.ingest(request(USER, "history-source")).await.unwrap();
+    rag.ingest(request("FOREIGN", "private-history"))
+        .await
+        .unwrap();
+    let repository = SqliteRagRepository::connect(&f.state.config.database_url).unwrap();
+    let foreign = repository.record_tasks("FOREIGN").unwrap().remove(0);
+    let latest = rag
+        .record_task_views(USER)
+        .unwrap()
+        .into_iter()
+        .find(|t| t.source_code == "history-source" && t.is_latest)
+        .unwrap();
+    assert_ne!(latest.id, old.id);
+    let mut active = repository.record_task(USER, &latest.id).unwrap().unwrap();
+    active.id = "active-history-task".into();
+    active.source_code = "active-history".into();
+    active.state = "QUEUED".into();
+    repository.save_record_task(&active).unwrap();
+    let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
+    for (id, status) in [
+        (&foreign.id, StatusCode::NOT_FOUND),
+        (&active.id, StatusCode::CONFLICT),
+    ] {
+        assert_eq!(
+            common::authenticated_request(
+                &app,
+                Method::DELETE,
+                &format!("/api/v1/rag/tasks/{id}"),
+                None
+            )
+            .await
+            .status(),
+            status
+        );
+    }
+    for (locale, message) in [
+        ("zh-CN", "请先取消运行中的任务，再删除记录"),
+        ("en-US", "Cancel the active task before deleting its record"),
+    ] {
+        use tower::ServiceExt;
+        let request = axum::http::Request::builder()
+            .method(Method::DELETE)
+            .uri(format!("/api/v1/rag/tasks/{}", active.id))
+            .header("authorization", "Bearer profile-test-token")
+            .header("accept-language", locale)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let error = common::response_json(response).await;
+        assert_eq!(error["code"], "101033002");
+        assert_eq!(error["message"], message);
+        assert_eq!(error["data"], json!({}));
+    }
+    let before = repository.index_counts("memory-card").unwrap();
+    for _ in 0..2 {
+        assert_eq!(
+            common::authenticated_request(
+                &app,
+                Method::DELETE,
+                &format!("/api/v1/rag/tasks/{}", latest.id),
+                None
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+    }
+    let response =
+        common::authenticated_request(&app, Method::GET, "/api/v1/rag/tasks", None).await;
+    let data = common::response_json(response).await;
+    let visible = data["data"].as_array().unwrap();
+    assert!(!visible.iter().any(|t| t["id"] == latest.id));
+    assert_eq!(
+        visible.iter().find(|t| t["id"] == old.id).unwrap()["isLatest"],
+        false
+    );
+    assert!(repository.record_task(USER, &latest.id).unwrap().is_some());
+    assert!(
+        repository
+            .deleted_task_history("FOREIGN")
+            .unwrap()
+            .is_empty()
+    );
+    assert!(rag.prepare_retry_record_task(USER, &old.id, false).is_err());
+    assert_eq!(
+        repository.index_counts("memory-card").unwrap().chunk_count,
+        before.chunk_count
+    );
+    let response = common::authenticated_request(
+        &app,
+        Method::POST,
+        "/api/v1/rag/recall",
+        Some(json!({"query":"orchid","corpusIds":["memory-card"]})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        !common::response_json(response).await["data"]["evidence"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    // A knowledge-base task is execution state for the published document as well.
+    let kb = f.service.create(USER, "History library", "").unwrap();
+    f.state
+        .rag
+        .configure_corpus(
+            &kb.id,
+            RagSettings {
+                vector: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let doc = f
+        .service
+        .upload(USER, &kb.id, "history.md", b"orchid published document")
+        .unwrap();
+    f.service.index(USER, &kb.id, &doc.id).await.unwrap();
+    let task = f
+        .service
+        .rag_task_views(USER)
+        .unwrap()
+        .into_iter()
+        .find(|t| t.document_id.as_deref() == Some(&doc.id))
+        .unwrap();
+    assert_eq!(
+        common::authenticated_request(
+            &app,
+            Method::DELETE,
+            &format!("/api/v1/rag/tasks/{}", task.id),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(f.service.detail(USER, &kb.id).unwrap().documents.len(), 1);
+    assert!(
+        !f.service
+            .ingestion_tasks(USER, &kb.id, &doc.id)
+            .unwrap()
+            .is_empty()
+    );
+    let reopened = SqliteRagRepository::connect(&f.state.config.database_url).unwrap();
+    assert!(
+        reopened
+            .deleted_task_history(USER)
+            .unwrap()
+            .contains(&task.id)
+    );
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
+async fn task_summaries_keep_latest_sources_outside_recent_history_without_loading_vectors() {
+    let f = Fixture::new();
+    let rag = f.state.rag.clone();
+    rag.configure_corpus(
+        "memory-card",
+        RagSettings {
+            vector: false,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    rag.ingest(RagIngestRequest {
+        corpus_id: "memory-card".into(),
+        workspace_code: WORKSPACE.into(),
+        access_context: RagIngestAccessContext {
+            user_code: USER.into(),
+            workspace_code: WORKSPACE.into(),
+            agent_code: f.agent.clone(),
+        },
+        target_scope: RagIngestScope {
+            scope_type: "USER".into(),
+            scope_code: USER.into(),
+        },
+        source: RagIngestSource {
+            code: "quiet-source".into(),
+            version: "v1".into(),
+        },
+        payload: json!({"title":"same title","text":"orchid summary"}),
+    })
+    .await
+    .unwrap();
+    let repository = SqliteRagRepository::connect(&f.state.config.database_url).unwrap();
+    let mut task = repository.record_tasks(USER).unwrap().remove(0);
+    // Many attempts of another source must not displace this source's latest record.
+    for i in 0..205 {
+        task.id = format!("summary-test-{i}");
+        task.source_code = "busy-source".into();
+        task.created_at = i;
+        task.updated_at = 205 - i;
+        task.checkpoint.as_mut().unwrap().vectors.vectors = vec![vec![1.0; 1024]];
+        repository.save_record_task(&task).unwrap();
+    }
+    let views = rag.record_task_views(USER).unwrap();
+    assert_eq!(views.iter().filter(|t| t.is_latest).count(), 2);
+    assert!(
+        views
+            .iter()
+            .any(|t| t.source_code == "quiet-source" && t.is_latest)
+    );
+    assert!(
+        views
+            .iter()
+            .any(|t| t.id == "summary-test-204" && t.is_latest)
+    );
+    let summaries = repository.record_task_summaries(USER).unwrap();
+    assert!(summaries.len() <= 201);
+    assert!(summaries.iter().all(|t| t.payload.get("text").is_none()
+        && t.checkpoint.as_ref().unwrap().vectors.vectors.is_empty()));
+    assert_eq!(
+        repository
+            .record_task(USER, "summary-test-204")
+            .unwrap()
+            .unwrap()
+            .checkpoint
+            .unwrap()
+            .vectors
+            .vectors
+            .len(),
+        1
+    );
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
+async fn knowledge_library_create_persists_selected_settings_before_first_ingestion() {
+    let f = Fixture::new();
+    let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
+    let settings = RagSettings {
+        vector: false,
+        graph: true,
+        graph_model_code: Some("selected-chat".into()),
+        rerank_model_code: None,
+        ..Default::default()
+    };
+    let response=common::authenticated_request(&app,Method::POST,"/api/v1/knowledge-bases",Some(json!({"name":"Created with settings","description":"Direct setup","indexSettings":settings}))).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let created = common::response_json(response).await;
+    assert_eq!(created["code"], "0");
+    let id = created["data"]["id"].as_str().unwrap();
+    assert_eq!(created["data"]["documentCount"], 0);
+    assert_eq!(f.state.rag.settings_for_corpus(id).unwrap(), settings);
+    let response =
+        common::authenticated_request(&app, Method::GET, "/api/v1/rag/corpora", None).await;
+    let listed = common::response_json(response).await;
+    assert_eq!(
+        listed["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == id)
+            .unwrap()["settings"],
+        json!(settings)
+    );
+    let doc = f
+        .service
+        .upload(USER, id, "first.md", b"orchid first document")
+        .unwrap();
+    f.service.start_index(USER, id, &doc.id).unwrap();
+    let task = f
+        .service
+        .ingestion_tasks(USER, id, &doc.id)
+        .unwrap()
+        .remove(0);
+    assert_eq!(task.configuration["ragSettings"], json!(settings));
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
+async fn invalid_creation_index_settings_leave_no_library_or_corpus() {
+    let f = Fixture::new();
+    let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
+    let before = f.service.platform_libraries(USER).unwrap().len();
+    for invalid in [
+        RagSettings {
+            fulltext: false,
+            vector: false,
+            graph: false,
+            ..Default::default()
+        },
+        RagSettings {
+            vector: true,
+            embedding_model_code: None,
+            ..Default::default()
+        },
+        RagSettings {
+            graph: true,
+            graph_model_code: None,
+            ..Default::default()
+        },
+        RagSettings {
+            embedding_dimension: 0,
+            ..Default::default()
+        },
+    ] {
+        let response = common::authenticated_request(
+            &app,
+            Method::POST,
+            "/api/v1/knowledge-bases",
+            Some(json!({"name":"Invalid draft","indexSettings":invalid})),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error = common::response_json(response).await;
+        assert_eq!(error["code"], "101027005");
+        assert_eq!(error["data"], json!({}));
+        assert_eq!(f.service.platform_libraries(USER).unwrap().len(), before);
+    }
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
+async fn builtin_task_chunks_are_paged_private_and_exclude_obsolete_attempts() {
+    let f = Fixture::new();
+    let rag = &f.state.rag;
+    for corpus in ["memory-card", "skill"] {
+        rag.configure_corpus(
+            corpus,
+            RagSettings {
+                vector: false,
+                graph: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    let request = |owner: &str, corpus: &str, code: &str| RagIngestRequest {
+        corpus_id: corpus.into(),
+        workspace_code: WORKSPACE.into(),
+        access_context: RagIngestAccessContext {
+            user_code: owner.into(),
+            workspace_code: WORKSPACE.into(),
+            agent_code: f.agent.clone(),
+        },
+        target_scope: RagIngestScope {
+            scope_type: "USER".into(),
+            scope_code: owner.into(),
+        },
+        source: RagIngestSource {
+            code: code.into(),
+            version: "v1".into(),
+        },
+        payload: json!({"title":code,"text":"orchid chunk evidence","domainFields":if corpus == "skill" { json!({"skillName":code,"skillDescription":"fixture"}) } else { json!({"memoryStatus":"ACTIVE","reviewStatus":"APPROVED","injectable":true}) }}),
+    };
+    rag.ingest(request(USER, "memory-card", "memory-chunks"))
+        .await
+        .unwrap();
+    let old = rag
+        .record_task_views(USER)
+        .unwrap()
+        .into_iter()
+        .find(|t| t.source_code == "memory-chunks")
+        .unwrap();
+    rag.ingest(request(USER, "memory-card", "memory-chunks"))
+        .await
+        .unwrap();
+    rag.ingest(request("SYSTEM", "skill", "shared-skill-chunks"))
+        .await
+        .unwrap();
+    rag.ingest(request("FOREIGN", "memory-card", "private-memory-chunks"))
+        .await
+        .unwrap();
+    let repository = SqliteRagRepository::connect(&f.state.config.database_url).unwrap();
+    let foreign = repository
+        .record_task_summaries("FOREIGN")
+        .unwrap()
+        .remove(0);
+    let tasks = rag.record_task_views(USER).unwrap();
+    let latest = tasks
+        .iter()
+        .find(|t| t.source_code == "memory-chunks" && t.is_latest)
+        .unwrap();
+    let skill = tasks
+        .iter()
+        .find(|t| t.source_code == "shared-skill-chunks")
+        .unwrap();
+    let summary = repository
+        .record_task_summary(USER, &latest.id)
+        .unwrap()
+        .unwrap();
+    assert!(summary.checkpoint.is_none());
+    assert!(summary.payload.get("text").is_none());
+    let app = tron_backend::app::build_router_with_state(f.state.clone()).unwrap();
+    for task in [latest, skill] {
+        let response = common::authenticated_request(
+            &app,
+            Method::GET,
+            &format!("/api/v1/rag/tasks/{}/chunks?current=1&size=1", task.id),
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = common::response_json(response).await;
+        assert_eq!(body["code"], "0");
+        assert_eq!(body["data"]["current"], 1);
+        assert_eq!(body["data"]["size"], 1);
+        assert_eq!(body["data"]["records"][0]["text"], "orchid chunk evidence");
+        assert!(body["data"]["records"][0].get("embedding").is_none());
+        let response = common::authenticated_request(
+            &app,
+            Method::GET,
+            &format!("/api/v1/rag/tasks/{}/chunks?current=2&size=100", task.id),
+            None,
+        )
+        .await;
+        assert!(
+            common::response_json(response).await["data"]["records"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+    for (id, paging, status) in [
+        (
+            foreign.id.as_str(),
+            "current=1&size=15",
+            StatusCode::NOT_FOUND,
+        ),
+        (old.id.as_str(), "current=1&size=15", StatusCode::CONFLICT),
+        (
+            latest.id.as_str(),
+            "current=0&size=15",
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            latest.id.as_str(),
+            "current=1&size=101",
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            latest.id.as_str(),
+            "current=invalid&size=15",
+            StatusCode::BAD_REQUEST,
+        ),
+    ] {
+        let response = common::authenticated_request(
+            &app,
+            Method::GET,
+            &format!("/api/v1/rag/tasks/{id}/chunks?{paging}"),
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), status);
+        assert_eq!(common::response_json(response).await["data"], json!({}));
+    }
     f.state.agent_framework.close().await;
 }

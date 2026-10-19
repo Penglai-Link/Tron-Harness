@@ -1,4 +1,5 @@
-import { toolCommandLinePreview, toolDisplayName, type ChatWorkRailLabels } from "@tron/chat-core";
+import { toolCommandLinePreview, toolDisplayName } from "@eliteforge/agent-ui-chat-core";
+import type { ChatWorkRailLabels } from "@tron/chat-core";
 import { fetchToolDomains, listTools } from "@/domain/agent/api";
 import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";

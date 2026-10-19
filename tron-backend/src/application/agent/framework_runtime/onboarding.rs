@@ -62,7 +62,7 @@ pub(super) fn narrow(context: &mut AgentRunContext) {
     context.tool_exposure = Default::default();
     context.skills.clear();
     std::sync::Arc::make_mut(&mut context.messages)
-        .retain(|m| !matches!(m.role.as_str(), "system" | "developer"));
+        .retain(|m| m.role != "system");
 }
 
 pub(super) async fn assemble(

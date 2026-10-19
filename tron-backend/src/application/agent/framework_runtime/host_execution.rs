@@ -85,7 +85,7 @@ impl FrameworkHost {
             || {
                 history
                     .iter()
-                    .take_while(|message| matches!(message.role.as_str(), "system" | "developer"))
+                    .take_while(|message| message.role == "system")
                     .count()
             },
             |memory| memory.prompt_prefix.len().min(history.len()),

@@ -10,6 +10,38 @@ pub struct VisionModelBinding {
     authorization_scope: String,
 }
 impl LlmRuntimeService {
+    pub fn embedding_batch_input_limit(
+        &self,
+        workspace: &str,
+        model: &str,
+    ) -> Result<Option<usize>, LlmRuntimeError> {
+        self.model_resolver
+            .embedding_batch_input_limit(workspace, model)
+            .map_err(|error| LlmRuntimeError::model_resolution(error.to_string()))
+    }
+    pub fn embedding_accepts_images(
+        &self,
+        workspace: &str,
+        model: &str,
+    ) -> Result<bool, LlmRuntimeError> {
+        self.model_resolver
+            .embedding_accepts_images(workspace, model)
+            .map_err(|error| LlmRuntimeError::model_resolution(error.to_string()))
+    }
+    pub async fn auto_vision_model_binding(
+        &self,
+        workspace: &str,
+    ) -> Result<VisionModelBinding, LlmRuntimeError> {
+        let model = self
+            .model_resolver
+            .auto_vision_runtime_model_config(workspace)
+            .await
+            .map_err(|e| LlmRuntimeError::model_resolution(e.to_string()))?
+            .ok_or_else(|| {
+                LlmRuntimeError::model_resolution("默认图片说明没有可用的视觉对话模型")
+            })?;
+        self.vision_model_binding(workspace, &model.model_code)
+    }
     pub fn vision_model_binding(
         &self,
         workspace: &str,

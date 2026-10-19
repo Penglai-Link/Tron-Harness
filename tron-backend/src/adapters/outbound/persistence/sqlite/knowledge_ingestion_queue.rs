@@ -7,6 +7,23 @@ mod publication;
 mod publication_cleanup;
 mod publication_indexes;
 
+pub(crate) fn retire_knowledge_index(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,kb:&str,source:&str,
+)->Result<(),IngestionQueueError>{
+    publication_indexes::retire_indexes(tx,kb,source)?;
+    tx.execute(&format!("DELETE FROM \"rag_{kb}_units\" WHERE source_code=?1"),[source]).map_err(storage)?;
+    Ok(())
+}
+pub(crate) fn validate_knowledge_vectors(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,kb:&str,source:&str,count:usize,dimension:usize,
+)->Result<(),IngestionQueueError>{publication_indexes::validate_vectors(tx,kb,source,count,dimension)}
+pub(crate) fn optimized_publication_cleanup(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,task:&IngestionTask,current:&Value,ready:&Value,
+)->Result<PublicationCleanup,IngestionQueueError>{
+    publication_cleanup::remove_old_generations(tx,task,current,ready["activeSourceCode"].as_str().ok_or(IngestionQueueError::Conflict)?)?;
+    publication_cleanup::detach_optimization_resources(tx,task,ready)
+}
+
 struct SqliteKnowledgeIngestionQueueSql<'a> {
     connection: &'a mut Connection,
 }
@@ -482,6 +499,21 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         }
         if update.completed_units > update.total_units {
             return Err(IngestionQueueError::Conflict);
+        }
+        if update.embedding_identity != task.embedding_identity {
+            let identity = update.embedding_identity.as_ref().ok_or(IngestionQueueError::Conflict)?;
+            if task.embedding_identity.is_some()
+                || task.stage != IngestionStage::Embedding
+                || task.embedding_resource_code.is_some()
+                || task.completed_units != 0
+                || identity.model_code.trim().is_empty()
+                || identity.fingerprint.trim().is_empty()
+                || task.embedding_model_code().is_some_and(|code| code != identity.model_code)
+                || task.embedding_fingerprint().is_some_and(|fingerprint| fingerprint != identity.fingerprint)
+            {
+                return Err(IngestionQueueError::Conflict);
+            }
+            task.embedding_identity = update.embedding_identity.clone();
         }
         task.stage = update.stage;
         task.index_stage = update.index_stage.clone();

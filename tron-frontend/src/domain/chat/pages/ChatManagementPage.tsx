@@ -1,62 +1,37 @@
 import {
   BookmarkPlus,
   Copy,
-  Ellipsis,
-  Pencil,
-  AlarmClock,
-  Bot,
   CheckCircle2,
   CircleAlert,
   CircleDot,
-  ListTodo,
   LoaderCircle,
-  MessageCircleQuestionMark,
-  MessageSquareText,
   Pause,
-  Paperclip,
   Plus,
-  UserRound,
-  type LucideIcon,
   Check,
   ChevronDown,
-  ChevronRight,
-  X,
 } from "lucide-react";
-import { getUserTimeZone } from "@/shared/lib/userTimeZone";
 import { ShinyText } from "@/shared/motion";
 import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
-import { historyMessages } from "@eliteforge/agent-ui-chat-core";
 import { ChatSubagentsPanel } from "../components/ChatSubagentsPanel";
 import { useChatSubagents } from "../hooks/useChatSubagents";
 import { useTabPanelScopeId } from "@/shared/layout/content/TabPanelRegistry";
-import { AgentTerminalToolCard, AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
-import { openAgentTerminalFromLiveResult } from "../terminal/store";
+import { AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
 import { SessionApplicationsPanel } from "@/domain/chat/components/SessionApplicationsPanel";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { MarkdownContent } from "@/components/markdown-content";
-import { useWorkspaceSpaces, useTabPanelConfig, useDismissibleLayer, useOpenRightSidebar, useTheme, type TargetPageFrameInspectionResult, useRightPanelTabs } from "@/shared";
+import { useWorkspaceSpaces, useTabPanelConfig, useOpenRightSidebar, useTheme, type TargetPageFrameInspectionResult, useRightPanelTabs } from "@/shared";
 
 import { useToast } from "@/components/ui/toast";
 import { MarkdownLink } from "@/components/markdown-link";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { cn } from "@/shared/lib/utils";
 import {
-  archiveChatSession,
   createChatSession,
-  listChatUserInputRequests,
-  stopChatRun,
-  steerChatMessage,
-  streamChatUserInputAnswer,
-  streamChatMessage,
-  updateChatSession,
   useChatAguiEvents,
   useChatAguiProtocolEvents,
-  useChatActiveRunState,
   createChatCompaction,
   cancelChatSessionGoal,
   clearChatSessionGoal,
@@ -92,39 +67,25 @@ import {
   formatReasoningEffort,
   reasoningEffortOptions,
 } from "@/domain/model/constants/modelPageOptions";
-import { getApiAccessToken, isApiError, requestApi } from "@/shared/api/httpClient";
+import { getApiAccessToken, requestApi } from "@/shared/api/httpClient";
 import { chatApiEndpoints } from "@/domain/chat/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
-import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
+import { AgentChatWindow, type AgentChatSubmitter } from "@/domain/chat/components/AgentChatWindow";
 import { ChatDraftResources } from "../model/chatDraftResources";
 import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
 import { ContextDetailPreview, contextDetailRawValue, type ContextDetailBlock } from "@/domain/chat/components/ContextDetailPreview";
+import { useSavedContextAssembly } from "../hooks/useSavedContextAssembly";
 import { contextAssemblySnapshot, type ContextAssemblySnapshot } from "../model/contextAssemblyReport";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
-  enqueueChatSubmission,
-  isSteerQueueFallbackCode,
-  mergeChatMessagesChronologically,
-  removeQueuedChatSubmission,
-  reasoningLastSentence,
-  takeNextQueuedChatSubmission,
-  toolCommandLinePreview,
-  type ChatQueuedSubmission,
   type ChatAttachmentLabels,
-  type ChatSubmitMode,
   type ChatUserInputLabels,
   type ChatRuntimeRunState,
   type ChatSession as RuntimeChatSession,
 } from "@tron/chat-core";
-import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
-import {
-  isChatReplayRunTerminal,
-  resolveLatestOpenChatReplayRun,
-} from "../model/chatReplayRun";
-import { resolveChatRunUiState } from "../model/chatRunUiState";
+import { truncateLabel } from "@eliteforge/agent-ui-chat-core";
 import { inferChatAgentCodeFromModel } from "../model/chatAgentCode";
-import { parseGoalCommand } from "../model/goalCommand";
 import {
   canClearGoalStatus,
   canStartNewGoalFromStatus,
@@ -149,8 +110,6 @@ import type {
   ChatTokenUsage,
   ChatUsageAuditSnapshot,
   SendChatMessageInput,
-  ChatUserInputAnswer,
-  ChatUserInputRequest,
   SetChatSessionGoalInput,
   UpdateChatSessionGoalInput,
 } from "@/domain/chat/model";
@@ -160,7 +119,6 @@ import {
   downloadChatSessionAttachment,
   uploadChatSessionAttachment,
 } from "../api/chatAttachmentApi";
-import DraggleLine from "@/components/draggle-line";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -171,17 +129,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { throttle } from "lodash-es";
 
-function formatTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", { timeZone: getUserTimeZone(),
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(date);
-}
 
 function useStableCallback<TArgs extends unknown[], TResult>(
   callback: (...args: TArgs) => TResult,
@@ -238,114 +186,13 @@ function shouldAutoFocusChatComposer() {
     || window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 }
 
-function sessionAgentTagLabel(agentCode: string | null | undefined) {
-  const normalized = agentCode?.trim().toLowerCase();
-  if (!normalized || normalized === "main-agent") return "MAIN";
-  return normalized.toUpperCase();
-}
 
-function sessionAgentTagTone(_agentCode: string | null | undefined) {
-  return "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
-}
 
-function sessionAgentIconTone(_agentCode: string | null | undefined) {
-  return "text-[var(--color-on-surface-variant)]";
-}
 
 type ChatSessionSourceTab = "chat" | "automation" | "task";
 
-const chatSessionSourceTabs: { id: ChatSessionSourceTab; icon: LucideIcon; labelKey: string }[] = [
-  { id: "chat", icon: MessageSquareText, labelKey: "chat.management.sourceTabs.chat" },
-  { id: "automation", icon: AlarmClock, labelKey: "chat.management.sourceTabs.automation" },
-  { id: "task", icon: ListTodo, labelKey: "chat.management.sourceTabs.task" },
-];
 const defaultChatSessionSourceTab: ChatSessionSourceTab = "chat";
 const chatSessionSourceTabStorageKey = "tron.chat.activeSourceTab";
-const emptyLiveAguiEvents: ChatAguiStreamEvent[] = [];
-const emptyLiveAguiAnchorMessageCodes: Record<string, string> = {};
-
-function ChatAttachmentChip({
-  attachment,
-  downloadAttachment,
-  onRemove,
-}: {
-  attachment: ChatMessageAttachment;
-  downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
-  onRemove: () => void;
-}) {
-  const { t } = useTranslation("pages");
-  const label = attachment.fileName || attachment.title || attachment.summary || attachment.id;
-  const contentType = attachment.contentType?.toLowerCase();
-  const isImage = attachment.kind === "image"
-    || Boolean(attachment.imageUrl)
-    || contentType?.startsWith("image/");
-  const [imageSource, setImageSource] = useState<string | null>(attachment.imageUrl ?? null);
-
-  useEffect(() => {
-    if (!isImage || attachment.imageUrl || !downloadAttachment) {
-      setImageSource(attachment.imageUrl ?? null);
-      return;
-    }
-    let active = true;
-    let objectUrl: string | null = null;
-    void downloadAttachment(attachment)
-      .then((blob) => {
-        const nextObjectUrl = URL.createObjectURL(blob);
-        if (!active) {
-          URL.revokeObjectURL(nextObjectUrl);
-          return;
-        }
-        objectUrl = nextObjectUrl;
-        setImageSource(nextObjectUrl);
-      })
-      .catch(() => {
-        if (active) setImageSource(null);
-      });
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [attachment, downloadAttachment, isImage]);
-
-  if (isImage) {
-    return (
-      <div className="group relative h-16 w-16 overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)]">
-        {imageSource ? (
-          <img alt={label} className="h-full w-full object-cover" src={imageSource} />
-        ) : null}
-        <Button
-          aria-label={t("chat.management.composer.removeAttachment", { label })}
-          size="icon"
-          variant="outline"
-          className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
-          onClick={onRemove}
-        ><X aria-hidden="true" size={14} /></Button>
-      </div>
-    );
-  }
-
-  const fileName = attachment.fileName || attachment.title || label;
-  const extension = fileName.includes(".") ? fileName.split(".").pop() : undefined;
-  const typeLabel = (extension || contentType?.split("/").pop() || "FILE").toUpperCase();
-  return (
-    <div className="relative flex h-16 w-[min(280px,100%)] min-w-0 items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] px-2.5 py-2 pr-10">
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)]">
-        <Paperclip aria-hidden="true" size={20} />
-      </span>
-      <span className="flex min-w-0 flex-col gap-0.5 text-left">
-        <span className="truncate text-sm font-semibold text-[var(--color-on-surface)]" title={label}>{label}</span>
-        <span className="truncate text-xs text-[var(--color-on-surface-variant)]">{typeLabel}</span>
-      </span>
-      <Button
-        aria-label={t("chat.management.composer.removeAttachment", { label })}
-        size="icon"
-        variant="outline"
-        className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
-        onClick={onRemove}
-      ><X aria-hidden="true" size={14} /></Button>
-    </div>
-  );
-}
 
 function normalizedSessionSource(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? "";
@@ -505,33 +352,7 @@ function replaceSession(groups: ChatSessionGroup[], session: ChatSession): ChatS
   })));
 }
 
-function removeSession(groups: ChatSessionGroup[], sessionCode: string): ChatSessionGroup[] {
-  return orderSessionGroups(groups
-    .map((group) => ({
-      ...group,
-      sessions: group.sessions.filter((session) => session.sessionCode !== sessionCode),
-    }))
-    .filter((group) => group.sessions.length > 0));
-}
 
-/**
- * Clear MainAgentChatWindow's persisted session from localStorage if its sessionCode
- * matches the one that was just deleted. This prevents the floating agent chat window
- * from restoring a stale (deleted) session on next open.
- */
-function forgetMainAgentPersistedSession(workspaceCode: string, sessionCode: string) {
-  const storageKey = `tron.main-agent.session:${workspaceCode.trim() || "__default__"}`;
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return;
-    const persisted = JSON.parse(raw) as { sessionCode?: string };
-    if (persisted?.sessionCode === sessionCode) {
-      localStorage.removeItem(storageKey);
-    }
-  } catch {
-    // Ignore parse errors from corrupt localStorage data
-  }
-}
 
 type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
 
@@ -555,10 +376,6 @@ function contextValue(value: string | null | undefined) {
   return trimmed && trimmed !== "unavailable" ? trimmed : null;
 }
 
-function formatTokenCount(value: number | null | undefined) {
-  if (value == null) return "-";
-  return new Intl.NumberFormat("en-US").format(value);
-}
 
 function tokenField(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -825,15 +642,6 @@ function chatTokenUsage(messages: ChatMessage[]) {
   };
 }
 
-function insertNewlineAtCursor(textarea: HTMLTextAreaElement) {
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
-  const nextValue = `${textarea.value.slice(0, start)}\n${textarea.value.slice(end)}`;
-  textarea.value = nextValue;
-  textarea.selectionStart = start + 1;
-  textarea.selectionEnd = start + 1;
-  return nextValue;
-}
 
 function formatCompactTokenCount(value: number | null | undefined) {
   if (value == null) return "-";
@@ -863,10 +671,6 @@ function formatPercent(value: number | null | undefined) {
   return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)}%`;
 }
 
-function safeSubtract(minuend: number | null | undefined, subtrahend: number | null | undefined) {
-  if (minuend == null || subtrahend == null) return null;
-  return Math.max(0, minuend - subtrahend);
-}
 
 function contextStatusTone(estimate: ChatTokenEstimateSnapshot | null, breakdown: ChatContextBudgetBreakdown | null): BadgeToneName {
   if (estimate?.overBudget || breakdown?.inputBudgetExceeded) return "error";
@@ -894,128 +698,6 @@ function contextWindowLimitFromSources(
   return model?.contextWindowTokens ?? selectedModel?.contextWindowTokens ?? metadataWindow ?? null;
 }
 
-export interface ChatStreamOwner {
-  controller: AbortController;
-  generation: number;
-  sessionCode: string;
-}
-
-export class ChatStreamOwnershipRegistry {
-  private activeOwner: ChatStreamOwner | null = null;
-  private nextGeneration = 0;
-
-  get current() {
-    return this.activeOwner;
-  }
-
-  acquire(sessionCode: string, controller: AbortController) {
-    this.nextGeneration += 1;
-    const owner: ChatStreamOwner = {
-      controller,
-      generation: this.nextGeneration,
-      sessionCode,
-    };
-    this.activeOwner = owner;
-    return owner;
-  }
-
-  owns(owner: ChatStreamOwner) {
-    return this.activeOwner === owner;
-  }
-
-  detach(sessionCode?: string) {
-    const owner = this.activeOwner;
-    if (!owner || (sessionCode && owner.sessionCode !== sessionCode)) {
-      return null;
-    }
-    this.activeOwner = null;
-    return owner;
-  }
-
-  release(owner: ChatStreamOwner) {
-    if (!this.owns(owner)) return false;
-    this.activeOwner = null;
-    return true;
-  }
-}
-
-export interface ChatStreamSettlement {
-  canCommit: boolean;
-  restoreSourceSubmission: boolean;
-}
-
-export function resolveChatStreamSettlement(args: {
-  activeSessionCode: string;
-  detached: boolean;
-  owner: ChatStreamOwner;
-  registry: ChatStreamOwnershipRegistry;
-  stopped: boolean;
-}): ChatStreamSettlement {
-  if (args.stopped) {
-    return { canCommit: false, restoreSourceSubmission: false };
-  }
-  const canCommit = !args.detached
-    && args.registry.owns(args.owner)
-    && args.activeSessionCode === args.owner.sessionCode;
-  return {
-    canCommit,
-    restoreSourceSubmission: false,
-  };
-}
-
-const chatScrollBottomThreshold = 96;
-const chatScrollJumpButtonThreshold = 160;
-const liveAguiStartToleranceMs = 5_000;
-const activeChatReplayPollIntervalMs = 1_000;
-
-export function shouldPollChatRunRecovery({
-  currentRunActive,
-  hasQueuedSubmission,
-  sessionCode,
-  shouldPollData,
-}: {
-  currentRunActive: boolean;
-  hasQueuedSubmission: boolean;
-  sessionCode: string;
-  shouldPollData: boolean;
-}) {
-  return Boolean(
-    sessionCode
-    && (currentRunActive || hasQueuedSubmission || shouldPollData),
-  );
-}
-
-export function shouldPollChatRecoveryData({
-  activeRunConfirmedIdle,
-  hasActiveRun,
-  hasOpenReplayRun,
-  hasPendingUserInput,
-  hasQueuedSubmission,
-}: {
-  activeRunConfirmedIdle: boolean;
-  hasActiveRun: boolean;
-  hasOpenReplayRun: boolean;
-  hasPendingUserInput: boolean;
-  hasQueuedSubmission: boolean;
-}) {
-  return hasActiveRun
-    || (hasOpenReplayRun && !activeRunConfirmedIdle)
-    || hasQueuedSubmission
-    || hasPendingUserInput;
-}
-
-export function claimChatRunTerminalDrain(
-  drainedRunKeys: Set<string>,
-  sessionCode: string,
-  runCode: string,
-) {
-  if (!sessionCode || !runCode) return false;
-  const drainKey = `${sessionCode}:${runCode}`;
-  if (drainedRunKeys.has(drainKey)) return false;
-  drainedRunKeys.add(drainKey);
-  return true;
-}
-
 function aguiEventType(event: TranscriptAguiEvent) {
   if (typeof event.type === "string") return event.type;
   if ("eventName" in event && typeof event.eventName === "string") return event.eventName;
@@ -1034,9 +716,6 @@ function aguiEventRunCode(event: TranscriptAguiEvent) {
   return "stream";
 }
 
-function aguiEventThreadId(event: TranscriptAguiEvent) {
-  return "threadId" in event && typeof event.threadId === "string" ? event.threadId : "";
-}
 
 function aguiEventSummary(event: TranscriptAguiEvent) {
   if ("delta" in event && typeof event.delta === "string" && event.delta.trim()) return event.delta;
@@ -1176,179 +855,20 @@ export function latestShortTermMemoryRuntimeNotice(
     : compactionNotice;
 }
 
-export function latestTerminalChatRunCode(
-  events: TranscriptAguiEvent[],
-  sessionCode: string,
-) {
-  const terminalEvents = events
-    .map((event, index) => {
-      const occurredAt = "occurredAt" in event && typeof event.occurredAt === "string"
-        ? Date.parse(event.occurredAt)
-        : Number.NaN;
-      return {
-        event,
-        index,
-        timestamp: "timestamp" in event
-          && typeof event.timestamp === "number"
-          && Number.isFinite(event.timestamp)
-          ? event.timestamp
-          : (Number.isNaN(occurredAt) ? null : occurredAt),
-      };
-    })
-    .filter(({ event }) => {
-      const threadId = aguiEventThreadId(event);
-      if (threadId && threadId !== sessionCode) return false;
-      const runCode = aguiEventRunCode(event);
-      if (!runCode || runCode === "stream") return false;
-      const type = aguiEventType(event).toUpperCase();
-      return type === "RUN_FINISHED" || type === "RUN_ERROR";
-    });
-  if (!terminalEvents.length) return "";
-  const ordered = terminalEvents.every(({ timestamp }) => timestamp !== null)
-    ? terminalEvents.sort((left, right) => (
-      (left.timestamp as number) - (right.timestamp as number)
-      || left.index - right.index
-    ))
-    : terminalEvents;
-  return aguiEventRunCode(ordered[ordered.length - 1].event);
-}
 
-function terminalAguiEvent(events: TranscriptAguiEvent[]) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const normalized = aguiEventType(events[index]).toUpperCase();
-    if (normalized.includes("RUN_FINISHED") || normalized.includes("RUN_ERROR")) return events[index];
-  }
-  return null;
-}
 
-function latestAguiRunCode(events: TranscriptAguiEvent[]) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const runCode = aguiEventRunCode(events[index]);
-    if (runCode) return runCode;
-  }
-  return "";
-}
 
-function formatAguiDuration(milliseconds: number) {
-  if (milliseconds < 1000) return "<1s";
-  const totalSeconds = Math.max(1, Math.round(milliseconds / 1000));
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (totalMinutes < 60) return seconds ? `${totalMinutes}m ${seconds}s` : `${totalMinutes}m`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-}
 
-function aguiWorkDuration(events: TranscriptAguiEvent[]) {
-  const times = events
-    .map(aguiEventMillis)
-    .filter((value): value is number => typeof value === "number");
-  if (times.length < 2) return "<1s";
-  return formatAguiDuration(Math.max(...times) - Math.min(...times));
-}
 
-interface AguiWorkRun {
-  events: TranscriptAguiEvent[];
-  firstMillis: number;
-  runCode: string;
-}
 
-function aguiRunsWithWorkDetails(events: TranscriptAguiEvent[], limit: number) {
-  const runs = new Map<string, AguiWorkRun>();
-  events.forEach((event) => {
-    const runCode = aguiEventRunCode(event);
-    if (!runCode) return;
-    const firstMillis = aguiEventMillis(event) ?? Date.now();
-    const existing = runs.get(runCode);
-    if (existing) {
-      existing.events.push(event);
-      existing.firstMillis = Math.min(existing.firstMillis, firstMillis);
-      return;
-    }
-    runs.set(runCode, {
-      events: [event],
-      firstMillis,
-      runCode,
-    });
-  });
 
-  return Array.from(runs.values())
-    .filter((run) => buildAguiUserWorkCards(run.events).length > 0)
-    .sort((left, right) => left.firstMillis - right.firstMillis)
-    .slice(-limit);
-}
 
-function userMessageCodeBeforeIndex(messages: ChatMessage[], startIndex: number) {
-  for (let index = startIndex; index >= 0; index -= 1) {
-    if (messages[index].role === "USER") return messages[index].messageCode;
-  }
-  return "";
-}
 
-function anchorMessageCodeForAguiRun(
-  messages: ChatMessage[],
-  runCode: string,
-  liveAnchorMessageCodes: Record<string, string>,
-) {
-  const assistantIndex = messages.findIndex((message) => (
-    message.role === "ASSISTANT" && message.runCode === runCode
-  ));
-  if (assistantIndex > 0) {
-    return userMessageCodeBeforeIndex(messages, assistantIndex - 1);
-  }
-  const liveAnchorMessageCode = liveAnchorMessageCodes[runCode] ?? "";
-  if (liveAnchorMessageCode && messages.some((message) => message.messageCode === liveAnchorMessageCode)) {
-    return liveAnchorMessageCode;
-  }
-  return userMessageCodeBeforeIndex(messages, messages.length - 1);
-}
 
-function aguiWorkRailsByMessageCode(
-  messages: ChatMessage[],
-  events: TranscriptAguiEvent[],
-  liveAnchorMessageCodes: Record<string, string>,
-  recentWorkRunLimit: number,
-) {
-  const rails = new Map<string, AguiWorkRun[]>();
-  aguiRunsWithWorkDetails(events, recentWorkRunLimit).forEach((run) => {
-    const messageCode = anchorMessageCodeForAguiRun(messages, run.runCode, liveAnchorMessageCodes);
-    if (!messageCode) return;
-    const current = rails.get(messageCode) ?? [];
-    current.push(run);
-    rails.set(messageCode, current);
-  });
-  return rails;
-}
 
-function aguiEventMessageId(event: TranscriptAguiEvent) {
-  return "messageId" in event && typeof event.messageId === "string" ? event.messageId : "";
-}
 
-function aguiEventToolCallId(event: TranscriptAguiEvent) {
-  return "toolCallId" in event && typeof event.toolCallId === "string" ? event.toolCallId : "";
-}
 
-function aguiEventToolName(event: TranscriptAguiEvent) {
-  return explicitAguiEventToolName(event) ?? "tool";
-}
 
-function explicitAguiEventToolName(event: TranscriptAguiEvent) {
-  if ("toolCallName" in event && typeof event.toolCallName === "string" && event.toolCallName.trim()) {
-    return event.toolCallName;
-  }
-  return null;
-}
-
-function updateToolCardName(card: ToolWorkCard, event: TranscriptAguiEvent) {
-  const toolName = explicitAguiEventToolName(event);
-  if (toolName) card.toolName = toolName;
-}
-
-function aguiEventToolArgs(event: TranscriptAguiEvent) {
-  return "toolCallArgs" in event ? event.toolCallArgs : undefined;
-}
 
 function aguiEventStableKey(event: TranscriptAguiEvent) {
   const messageId = "messageId" in event && typeof event.messageId === "string" ? event.messageId : "";
@@ -1375,516 +895,38 @@ function mergeTranscriptAguiEvents<T extends TranscriptAguiEvent>(...sources: T[
   return merged.sort((left, right) => (aguiEventMillis(left) ?? 0) - (aguiEventMillis(right) ?? 0));
 }
 
-function latestChatMessage(messages: ChatMessage[]) {
-  return messages.length ? messages[messages.length - 1] : null;
-}
 
-function messageCreatedMillis(message: ChatMessage) {
-  const parsed = Date.parse(message.createdAt);
-  return Number.isNaN(parsed) ? null : parsed;
-}
 
-function replayRunCodesForPendingUserTurn(
-  events: TranscriptAguiEvent[],
-  sessionCode: string,
-  messages: ChatMessage[],
-) {
-  const runCodes = new Set<string>();
-  const latestMessage = latestChatMessage(messages);
-  if (!latestMessage || latestMessage.role !== "USER") return runCodes;
-  const latestUserMillis = messageCreatedMillis(latestMessage);
-  const firstEventMillisByRun = new Map<string, number>();
 
-  events.forEach((event) => {
-    const threadId = aguiEventThreadId(event);
-    if (threadId && threadId !== sessionCode) return;
-    const runCode = aguiEventRunCode(event);
-    if (!runCode || runCode === "stream") return;
-    const eventMillis = aguiEventMillis(event);
-    if (eventMillis === null) return;
-    const currentFirstMillis = firstEventMillisByRun.get(runCode);
-    if (currentFirstMillis === undefined || eventMillis < currentFirstMillis) {
-      firstEventMillisByRun.set(runCode, eventMillis);
-    }
-  });
 
-  firstEventMillisByRun.forEach((firstEventMillis, runCode) => {
-    if (latestUserMillis === null || firstEventMillis >= latestUserMillis - liveAguiStartToleranceMs) {
-      runCodes.add(runCode);
-    }
-  });
-  return runCodes;
-}
 
-function openAguiProtocolRunCodes(events: TranscriptAguiEvent[], sessionCode: string) {
-  const terminalByRun = new Map<string, boolean>();
-  events.forEach((event) => {
-    const threadId = aguiEventThreadId(event);
-    if (threadId && threadId !== sessionCode) return;
-    const runCode = aguiEventRunCode(event);
-    if (!runCode || runCode === "stream") return;
-    const type = aguiEventType(event).toUpperCase();
-    if (!terminalByRun.has(runCode)) terminalByRun.set(runCode, false);
-    if (type.includes("RUN_FINISHED") || type.includes("RUN_ERROR")) {
-      terminalByRun.set(runCode, true);
-    }
-  });
-  return new Set(
-    Array.from(terminalByRun.entries())
-      .filter(([, terminal]) => !terminal)
-      .map(([runCode]) => runCode),
-  );
-}
 
-function knownTranscriptRunCodes(
-  messages: ChatMessage[],
-  liveAnchorMessageCodes: Record<string, string>,
-  replayRunCodes: Set<string>,
-) {
-  const runCodes = new Set<string>();
-  messages.forEach((message) => {
-    if (message.runCode) runCodes.add(message.runCode);
-  });
-  Object.keys(liveAnchorMessageCodes).forEach((runCode) => {
-    if (runCode && runCode !== "stream") runCodes.add(runCode);
-  });
-  replayRunCodes.forEach((runCode) => runCodes.add(runCode));
-  return runCodes;
-}
 
-function filterTranscriptAguiEventsForSession(
-  events: TranscriptAguiEvent[],
-  sessionCode: string,
-  messages: ChatMessage[],
-  liveAnchorMessageCodes: Record<string, string>,
-) {
-  const runCodes = knownTranscriptRunCodes(
-    messages,
-    liveAnchorMessageCodes,
-    replayRunCodesForPendingUserTurn(events, sessionCode, messages),
-  );
-  if (!sessionCode || !runCodes.size) return [];
-  return events.filter((event) => {
-    const threadId = aguiEventThreadId(event);
-    if (threadId && threadId !== sessionCode) return false;
-    return runCodes.has(aguiEventRunCode(event));
-  });
-}
 
-function stringifyPreview(value: unknown) {
-  if (value == null || value === "") return "";
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
 
-function formatJsonBlockValue(value: unknown) {
-  if (typeof value === "string") {
-    try {
-      return JSON.stringify(JSON.parse(value), null, 2);
-    } catch {
-      return value;
-    }
-  }
-  return stringifyPreview(value);
-}
 
-function hasToolParameterPayload(value: unknown) {
-  if (value == null) return false;
-  if (typeof value === "string") return Boolean(value.trim());
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") return true;
-  return true;
-}
 
-function appendReasoningDelta(content: string, delta: string) {
-  if (!content) return delta;
-  if (!delta) return content;
-  if (/\s$/.test(content) || /^[\s.,;:!?)]/.test(delta)) return `${content}${delta}`;
-  return `${content} ${delta}`;
-}
 
-const toolTargetKeys = ["command", "cmd", "file", "fileName", "filePath", "path", "target", "query", "pattern", "url", "uri"];
 
-function valueAtKnownKey(value: unknown, depth = 0): string {
-  if (depth > 3 || value == null) return "";
-  if (typeof value === "string") return value;
-  if (typeof value !== "object") return "";
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = valueAtKnownKey(item, depth + 1);
-      if (found) return found;
-    }
-    return "";
-  }
 
-  const record = value as Record<string, unknown>;
-  for (const key of toolTargetKeys) {
-    const direct = record[key];
-    if (typeof direct === "string" && direct.trim()) return direct;
-  }
-  for (const child of Object.values(record)) {
-    const found = valueAtKnownKey(child, depth + 1);
-    if (found) return found;
-  }
-  return "";
-}
 
-function toolActionLabel(toolName: string, args: unknown, t: (key: string) => string) {
-  const normalizedTool = toolName.toLowerCase();
-  const target = valueAtKnownKey(args).toLowerCase();
-  if (normalizedTool.includes("edit") || normalizedTool.includes("write") || normalizedTool.includes("patch")) return t("chat.management.tool.actionEdit");
-  if (target.includes("/") || target.includes(".")) {
-    if (!normalizedTool.includes("exec") && !normalizedTool.includes("run") && !normalizedTool.includes("shell")) return t("chat.management.tool.actionEdit");
-  }
-  return t("chat.management.tool.actionRun");
-}
 
-function toolSummaryLabel(toolName: string, args: unknown, t: (key: string) => string) {
-  const displayName = toolDisplayName(toolName, args);
-  return `${toolActionLabel(displayName, args, t)} ${displayName}`;
-}
 
-function toolDisplayName(toolName: string, args: unknown) {
-  const normalizedName = toolName.trim();
-  const domainCode = domainCodeFromToolPayload(normalizedName) || domainCodeFromToolPayload(args);
-  if (normalizedName === "discovery_expand_tool_domain" || domainCode) {
-    return humanizeToolName(domainCode || normalizedName);
-  }
-  return humanizeToolName(normalizedName);
-}
 
-function domainCodeFromToolPayload(value: unknown) {
-  const payload = parseToolPayload(value);
-  return payload && typeof payload.domainCode === "string" ? payload.domainCode.trim() : "";
-}
 
-function parseToolPayload(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
-  if (typeof value !== "string") return null;
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : null;
-  } catch {
-    return null;
-  }
-}
 
-function humanizeToolName(value: string) {
-  return value
-    .trim()
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
-    .join(" ") || "tool";
-}
 
-function isStructuredWorkEvent(event: ChatAguiStreamEvent) {
-  const type = (event.type ?? "").toUpperCase();
-  return type.startsWith("REASONING") || type.startsWith("TOOL_CALL") || type === "ACTIVITY_DELTA";
-}
 
-function terminalRunSummary(event: TranscriptAguiEvent) {
-  const type = aguiEventType(event).toUpperCase();
-  if (type !== "RUN_ERROR") return "";
-  if ("message" in event && typeof event.message === "string" && event.message.trim()) return event.message.trim();
-  if ("code" in event && typeof event.code === "string" && event.code.trim()) return event.code.trim();
-  return "Run stopped.";
-}
 
-function closeRunWorkCards(
-  reasoningCards: Map<string, ReasoningWorkCard>,
-  activeCardIdsByRun: Map<string, string>,
-  toolCards: Map<string, ToolWorkCard>,
-  event: TranscriptAguiEvent,
-) {
-  const runCode = aguiEventRunCode(event);
-  if (!runCode) return;
-  const endMillis = aguiEventMillis(event) ?? Date.now();
-  const summary = terminalRunSummary(event);
-  Array.from(reasoningCards.values())
-    .filter((card) => card.runCode === runCode && !card.ended)
-    .forEach((card) => {
-      card.ended = true;
-      card.endMillis = endMillis;
-      if (summary && !card.content.trim()) card.content = summary;
-    });
-  Array.from(toolCards.values())
-    .filter((card) => card.runCode === runCode && !card.ended)
-    .forEach((card) => {
-      card.ended = true;
-      if (summary && !card.result.trim()) card.result = summary;
-    });
-  activeCardIdsByRun.delete(runCode);
-}
 
-function activityLines(event: TranscriptAguiEvent) {
-  const delta = "delta" in event ? event.delta : undefined;
-  if (typeof delta === "string") return delta.trim() ? [delta] : [];
-  if (!Array.isArray(delta)) return [];
 
-  return delta
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (item && typeof item === "object") {
-        const value = (item as { value?: unknown }).value;
-        return typeof value === "string" ? value : stringifyPreview(value);
-      }
-      return stringifyPreview(item);
-    })
-    .filter(Boolean);
-}
 
-interface ReasoningWorkCard {
-  content: string;
-  ended: boolean;
-  endMillis: number | null;
-  firstMillis: number;
-  id: string;
-  runCode: string;
-  summary: string;
-  toolCards: ToolWorkCard[];
-}
 
-interface ToolWorkCard {
-  args: unknown;
-  ended: boolean;
-  firstMillis: number;
-  id: string;
-  logs: string[];
-  parentReasoningId: string | null;
-  result: string;
-  runCode: string;
-  started: boolean;
-  toolCallId: string;
-  toolName: string;
-}
 
-interface ToolGroupWorkCard {
-  firstMillis: number;
-  id: string;
-  runCode: string;
-  toolCards: ToolWorkCard[];
-}
 
-type AguiUserWorkCard =
-  | { kind: "reasoning"; value: ReasoningWorkCard }
-  | { kind: "toolGroup"; value: ToolGroupWorkCard }
-  | { kind: "tool"; value: ToolWorkCard };
 
-function reasoningCardKey(event: TranscriptAguiEvent) {
-  return `${aguiEventRunCode(event)}:reasoning`;
-}
 
-function createReasoningCard(
-  cards: Map<string, ReasoningWorkCard>,
-  activeCardIdsByRun: Map<string, string>,
-  latestCardIdsByRun: Map<string, string>,
-  sequenceByRun: Map<string, number>,
-  event: TranscriptAguiEvent,
-) {
-  const runCode = aguiEventRunCode(event);
-  const sequence = (sequenceByRun.get(runCode) ?? 0) + 1;
-  sequenceByRun.set(runCode, sequence);
-  const key = `${reasoningCardKey(event)}:${sequence}`;
-  const card = {
-    content: "",
-    ended: false,
-    endMillis: null,
-    firstMillis: aguiEventMillis(event) ?? Date.now(),
-    id: key,
-    runCode,
-    summary: "",
-    toolCards: [],
-  };
-  cards.set(key, card);
-  activeCardIdsByRun.set(runCode, key);
-  latestCardIdsByRun.set(runCode, key);
-  return card;
-}
 
-function activeReasoningCard(
-  cards: Map<string, ReasoningWorkCard>,
-  activeCardIdsByRun: Map<string, string>,
-  event: TranscriptAguiEvent,
-) {
-  const activeCardId = activeCardIdsByRun.get(aguiEventRunCode(event));
-  if (!activeCardId) return null;
-  return cards.get(activeCardId) ?? null;
-}
-
-function ensureReasoningCard(
-  cards: Map<string, ReasoningWorkCard>,
-  activeCardIdsByRun: Map<string, string>,
-  latestCardIdsByRun: Map<string, string>,
-  sequenceByRun: Map<string, number>,
-  event: TranscriptAguiEvent,
-  options?: { forceNew?: boolean },
-) {
-  if (!options?.forceNew) {
-    const existing = activeReasoningCard(cards, activeCardIdsByRun, event);
-    if (existing) return existing;
-  }
-  return createReasoningCard(cards, activeCardIdsByRun, latestCardIdsByRun, sequenceByRun, event);
-}
-
-function endReasoningCard(
-  cards: Map<string, ReasoningWorkCard>,
-  activeCardIdsByRun: Map<string, string>,
-  latestCardIdsByRun: Map<string, string>,
-  sequenceByRun: Map<string, number>,
-  event: TranscriptAguiEvent,
-) {
-  const card = ensureReasoningCard(cards, activeCardIdsByRun, latestCardIdsByRun, sequenceByRun, event);
-  card.ended = true;
-  card.endMillis = aguiEventMillis(event) ?? card.endMillis;
-  if (aguiEventType(event).toUpperCase() === "REASONING_END") {
-    activeCardIdsByRun.delete(aguiEventRunCode(event));
-  }
-  return card;
-}
-
-function ensureToolCard(
-  cards: Map<string, ToolWorkCard>,
-  reasoningCards: Map<string, ReasoningWorkCard>,
-  latestReasoningCardIdsByRun: Map<string, string>,
-  event: TranscriptAguiEvent,
-) {
-  const toolCallId = aguiEventToolCallId(event);
-  if (!toolCallId) return null;
-  const key = `${aguiEventRunCode(event)}:${toolCallId}`;
-  const existing = cards.get(key);
-  if (existing) return existing;
-  const toolName = aguiEventToolName(event);
-  const parentReasoningId = latestReasoningCardIdsByRun.get(aguiEventRunCode(event)) ?? null;
-  const card = {
-    args: aguiEventToolArgs(event),
-    ended: false,
-    firstMillis: aguiEventMillis(event) ?? Date.now(),
-    id: key,
-    logs: [],
-    parentReasoningId,
-    result: "",
-    runCode: aguiEventRunCode(event),
-    started: false,
-    toolCallId,
-    toolName,
-  };
-  cards.set(key, card);
-  if (parentReasoningId) {
-    const reasoningCard = reasoningCards.get(parentReasoningId);
-    if (reasoningCard) reasoningCard.toolCards.push(card);
-  }
-  return card;
-}
-
-function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard[] {
-  const reasoningCards = new Map<string, ReasoningWorkCard>();
-  const activeReasoningCardIdsByRun = new Map<string, string>();
-  const latestReasoningCardIdsByRun = new Map<string, string>();
-  const reasoningSequenceByRun = new Map<string, number>();
-  const toolCards = new Map<string, ToolWorkCard>();
-
-  events.forEach((event) => {
-    const type = aguiEventType(event).toUpperCase();
-
-    if (type === "REASONING_START") {
-      ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event, { forceNew: true });
-      return;
-    }
-    if (type === "REASONING_MESSAGE_START") {
-      ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
-      return;
-    }
-    if (type === "REASONING_MESSAGE_CONTENT") {
-      const card = ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
-      const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
-      card.summary = appendReasoningDelta(card.summary, delta);
-      return;
-    }
-    if (type === "REASONING_TEXT_CONTENT") {
-      const card = ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
-      const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
-      card.content = appendReasoningDelta(card.content, delta);
-      return;
-    }
-    if (type === "REASONING_END" || type === "REASONING_MESSAGE_END") {
-      endReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
-      return;
-    }
-
-    if (type === "TOOL_CALL_START" || type === "TOOL_CALL_ARGS") {
-      const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
-      if (!card) return;
-      card.started = card.started || type === "TOOL_CALL_START";
-      updateToolCardName(card, event);
-      const args = aguiEventToolArgs(event);
-      if (args !== undefined) card.args = args;
-      return;
-    }
-    if (type === "ACTIVITY_DELTA") {
-      const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
-      if (!card) return;
-      card.logs.push(...activityLines(event));
-      return;
-    }
-    if (type === "TOOL_CALL_RESULT") {
-      const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
-      if (!card) return;
-      updateToolCardName(card, event);
-      const result = "content" in event && typeof event.content === "string" ? event.content : "";
-      card.result = result || aguiEventSummary(event);
-      return;
-    }
-    if (type === "TOOL_CALL_END") {
-      const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
-      if (card) card.ended = true;
-      return;
-    }
-    if (type === "RUN_ERROR" || type === "RUN_FINISHED") {
-      closeRunWorkCards(reasoningCards, activeReasoningCardIdsByRun, toolCards, event);
-    }
-  });
-
-  const toolGroupCards = new Map<string, ToolGroupWorkCard>();
-  Array.from(toolCards.values())
-    .filter((value) => value.started)
-    .forEach((toolCard) => {
-      const groupKey = `${toolCard.runCode}:tool-group:${toolCard.parentReasoningId ?? "unassigned"}`;
-      const existing = toolGroupCards.get(groupKey);
-      if (existing) {
-        existing.toolCards.push(toolCard);
-        existing.firstMillis = Math.min(existing.firstMillis, toolCard.firstMillis);
-        return;
-      }
-      toolGroupCards.set(groupKey, {
-        firstMillis: toolCard.firstMillis,
-        id: groupKey,
-        runCode: toolCard.runCode,
-        toolCards: [toolCard],
-      });
-    });
-
-  return [
-    ...Array.from(reasoningCards.values())
-      .filter((value) => value.content.trim() || value.summary.trim() || !value.ended)
-      .map((value) => ({ kind: "reasoning" as const, value })),
-    ...Array.from(toolGroupCards.values())
-      .map((value) => ({
-        kind: value.toolCards.length === 1 && value.toolCards[0].parentReasoningId === null
-          ? "tool"
-          : "toolGroup",
-        value: value.toolCards.length === 1 && value.toolCards[0].parentReasoningId === null
-          ? value.toolCards[0]
-          : value,
-      } as AguiUserWorkCard)),
-  ].sort((left, right) => left.value.firstMillis - right.value.firstMillis);
-}
 
 function availableChatModels(models: ModelSelectOption[]) {
   // Keep unavailable fixed models in this list. A persisted session selection
@@ -2048,7 +1090,7 @@ function autoChatModelOption(agentCode: string): ChatModelOption {
     cacheHitCoefficient: null,
     contextWindowTokens: null,
     defaultReasoningEffort: null,
-    displayName: "Auto",
+    displayName: "Conversation Automatic Routing",
     enabled: true,
     inputCoefficient: null,
     isDefault: true,
@@ -2136,37 +1178,9 @@ function formatModelMultiplier(value: number | null) {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 }).format(value);
 }
 
-function chatSendErrorToastMessage(message: string) {
-  const normalized = message.trim().toLowerCase();
-  if (!normalized) return "Chat send failed";
-  if (normalized.includes("missing field `content`") || normalized.includes("missing field \"content\"")) {
-    return "Model request format was rejected by provider. Check model protocol config or switch model.";
-  }
-  return message;
-}
 
-function isAbortError(error: unknown) {
-  if (error instanceof DOMException && error.name === "AbortError") return true;
-  return error instanceof Error && error.name === "AbortError";
-}
 
-function isChatRunAlreadyActiveError(error: unknown) {
-  return isApiError(error) && error.code === "CHAT_RUN_ALREADY_ACTIVE";
-}
 
-function stoppedAguiEvents(sessionCode: string, runCodes: Iterable<string>): ChatAguiStreamEvent[] {
-  const stoppedAt = Date.now();
-  return Array.from(runCodes)
-    .filter((runCode) => runCode && runCode !== "stream")
-    .map((runCode, index) => ({
-      type: "RUN_ERROR",
-      threadId: sessionCode,
-      runId: runCode,
-      code: "CHAT_STREAM_STOPPED",
-      message: "Stopped.",
-      timestamp: stoppedAt + index,
-    }));
-}
 
 function iconButtonClass(active = false) {
   return cn(
@@ -2217,107 +1231,7 @@ function QueryStatusLine({
   return null;
 }
 
-function SessionActionMenu({
-  disabled,
-  archiveDisabled,
-  onArchive,
-  onRename,
-  session,
-}: {
-  disabled: boolean;
-  archiveDisabled: boolean;
-  onArchive: (session: ChatSession) => void;
-  onRename: (session: ChatSession) => void;
-  session: ChatSession;
-}) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const { t } = useTranslation("pages");
 
-  useDismissibleLayer({
-    onDismiss: () => setOpen(false),
-    open,
-    popupRef: menuRef,
-    triggerElement: triggerRef.current,
-  });
-
-  function select(action: (session: ChatSession) => void) {
-    action(session);
-    setOpen(false);
-  }
-
-  return (
-    <div className="relative">
-      <button
-        ref={triggerRef}
-        className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
-        type="button"
-        aria-label={t("chat.management.sidebar.openActionsAria", { title: session.title })}
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          setOpen((value) => !value);
-        }}
-      >
-        <Ellipsis size={16} />
-      </button>
-      {open ? (
-        <div
-          ref={menuRef}
-          className="absolute right-0 top-full z-30 mt-1 w-32 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-1 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
-          role="menu"
-          aria-label={t("chat.management.sidebar.actionsAria", { title: session.title })}
-        >
-          <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => select(onRename)}>
-            {t("chat.management.actions.rename")}
-          </button>
-          <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)] disabled:opacity-50" type="button" role="menuitem" disabled={archiveDisabled} onClick={() => select(onArchive)}>
-            {t("chat.management.actions.archive")}
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function SessionRunIndicator({
-  needsUserInput,
-  running,
-  unseen,
-}: {
-  needsUserInput: boolean;
-  running: boolean;
-  unseen: boolean;
-}) {
-  const { t } = useTranslation("pages");
-  if (running) {
-    return (
-      <span className="inline-flex size-5 items-center justify-center" aria-label={t("chat.management.runIndicator.running")} title={t("chat.management.runIndicator.running")}>
-        <LoaderCircle className="animate-spin text-[var(--color-focus-ring)]" size={15} />
-      </span>
-    );
-  }
-
-  if (needsUserInput) {
-    return (
-      <span className="inline-flex size-5 items-center justify-center" aria-label={t("chat.management.runIndicator.waitingAnswer")} title={t("chat.management.runIndicator.waitingAnswer")}>
-        <MessageCircleQuestionMark className="text-[var(--color-focus-ring)]" size={15} />
-      </span>
-    );
-  }
-
-  if (unseen) {
-    return (
-      <span className="inline-flex size-5 items-center justify-center" aria-label={t("chat.management.runIndicator.unread")} title={t("chat.management.runIndicator.unread")}>
-        <span className="size-2 rounded-full bg-[var(--color-focus-ring)]" />
-      </span>
-    );
-  }
-
-  return <span className="size-5" aria-hidden="true" />;
-}
 
 type BadgeToneName = "secondary" | "info" | "success" | "warning" | "error";
 
@@ -2454,11 +1368,12 @@ interface ContextMemoryBlockItem {
   detailCode?: ContextDetailBlock;
   detailValue?: unknown;
   snapshotSequence?: string;
-  order?: number;
+  order: number;
   sources?: { id: string; name: string }[];
   status?: string;
   statusTone?: "warning" | "error";
   limitDescription?: string;
+  allocationTokens?: number | null;
   limitTokens: number | null;
   name: string;
   stat: string;
@@ -2482,7 +1397,7 @@ const contributorLabelKeys: Record<string, string> = {
   dude_wakeup: "dudeWakeupName",
 };
 
-function buildReportedContextMemoryBlocks(
+export function buildReportedContextMemoryBlocks(
   snapshot: ContextAssemblySnapshot,
   translate: (key: string, options?: Record<string, unknown>) => string,
 ): ContextMemoryBlockItem[] {
@@ -2492,7 +1407,7 @@ function buildReportedContextMemoryBlocks(
     "framework.instructions": "systemPrompt", seed_prompt_prefix: "systemPrompt",
     application_context: "applicationContext", "framework.history": "history",
   };
-  const blocks: ContextMemoryBlockItem[] = snapshot.blocks.map((block, index) => ({
+  const blocks: ContextMemoryBlockItem[] = [...snapshot.blocks].sort((left,right) => left.position-right.position).map((block, index) => ({
     code: block.id,
     color: block.id === "framework.history" ? "history" : "seed",
     detailCode: block.detailValue !== undefined || snapshot.snapshotSequence ? detailAliases[block.id] ?? block.id : undefined,
@@ -2501,7 +1416,8 @@ function buildReportedContextMemoryBlocks(
     order: index + 1,
     sources: block.sources.length > 1 || block.sources.some((id) => id !== block.id)
       ? block.sources.map((id) => ({ id, name: id === "framework.instructions" ? translate(prefix + "baseInstructionsName") : label(id) })) : undefined,
-    limitTokens: block.allocatedTokens,
+    allocationTokens: block.allocatedTokens,
+    limitTokens: block.configuredTokens,
     name: label(block.id),
     tokens: block.finalTokens,
     stat: translate(prefix + "messageCount", { count: block.messageCount }),
@@ -2510,15 +1426,19 @@ function buildReportedContextMemoryBlocks(
     limitDescription: block.reason || (block.originalTokens !== null && block.originalTokens !== block.finalTokens
       ? translate(prefix + "reductionStat", { original: formatCompactTokenCount(block.originalTokens), final: formatCompactTokenCount(block.finalTokens) }) : undefined),
   }));
+  const protocolLimit = snapshot.budgetBreakdown?.toolSchemaBudgetTokens;
   if (snapshot.protocolTokens !== null) blocks.push({
     code: "protocol",
+    order: blocks.length + 1,
     color: "tool",
     detailCode: snapshot.toolsDetail !== undefined || snapshot.snapshotSequence ? "toolSchema" : undefined,
     detailValue: snapshot.toolsDetail,
     snapshotSequence: snapshot.snapshotSequence,
     name: translate(prefix + "protocolName"),
     stat: "",
-    limitTokens: snapshot.inputCapacity,
+    allocationTokens: null,
+    limitTokens: typeof protocolLimit === "number" && Number.isSafeInteger(protocolLimit) && protocolLimit >= 0
+      ? protocolLimit : null,
     tokens: snapshot.protocolTokens,
     limitDescription: translate(prefix + "protocolNote"),
   });
@@ -2538,125 +1458,27 @@ const contextBlockColorClasses: Record<ContextBlockColor, { dot: string; fill: s
   tool: mutedContextBlockColor,
 };
 
-export function buildContextMemoryBlocks({
-  breakdown,
-  goal,
-  latestCompaction,
-  requestEstimate,
-  todos,
-  translate,
-}: {
-  breakdown: ChatContextBudgetBreakdown | null;
-  goal?: ChatSessionGoalView | null;
-  latestCompaction?: ChatSessionCompaction | null;
-  requestEstimate: ChatTokenEstimateSnapshot | null;
-  todos?: ChatSessionTodo[];
-  translate: (key: string, options?: Record<string, unknown>) => string;
-}): ContextMemoryBlockItem[] {
-  const activeTodoCount = (todos ?? []).filter((todo) => !isFoldedTodo(todo)).length;
-  const activeGoalCount = goal && isEditableGoalStatus(goal.goal.status) ? 1 : 0;
-  const historyMessageCount = breakdown?.rawTailMessageCount
-    ?? breakdown?.historySourceMessageCount
-    ?? 0;
-  const checkpointTokens = breakdown?.checkpointTokens ?? 0;
-  const checkpointCode = contextValue(requestEstimate?.checkpointCode);
-  const hasCheckpointInRequest = Boolean(latestCompaction || checkpointCode || checkpointTokens > 0);
-  const checkpointStat = latestCompaction || checkpointCode
-    ? translate("chat.shortTermMemory.contextPanel.checkpointStat")
-    : checkpointTokens > 0
-      ? translate("chat.shortTermMemory.contextPanel.loaded")
-      : translate("chat.shortTermMemory.contextPanel.none");
-  const sharedInputBudget = breakdown?.effectiveInputBudget ?? requestEstimate?.effectiveInputBudget ?? null;
-  const toolSchemaTokens = breakdown?.toolSchemaTokens ?? requestEstimate?.toolSchemaTokenEstimate ?? 0;
-  const toolSchemaLimit = breakdown?.toolSchemaBudgetTokens ?? sharedInputBudget ?? breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? null;
-  return [
-    {
-      code: "01",
-      color: "seed",
-      detailCode: "systemPrompt",
-      limitTokens: breakdown?.promptPrefixBudgetTokens == null ? null : Math.max(0, breakdown.promptPrefixBudgetTokens - (breakdown.applicationContextTokens ?? 0)),
-      limitDescription: breakdown?.promptPrefixMaxRatioBps != null && breakdown?.promptPrefixMaxTokens != null
-        ? translate("chat.shortTermMemory.contextPanel.seedBudgetNote", { ratio: formatPercent(breakdown.promptPrefixMaxRatioBps / 100), limit: formatCompactTokenCount(breakdown.promptPrefixMaxTokens) })
-        : undefined,
-      name: translate("chat.shortTermMemory.contextPanel.systemPromptName"),
-      stat: translate("chat.shortTermMemory.contextPanel.messageCount", {
-        count: Math.max(0, (breakdown?.promptPrefixMessageCount ?? 0) - (breakdown?.applicationContextMessageCount ?? 0)),
-      }),
-      tokens: Math.max(0, (breakdown?.promptPrefixTokens ?? 0) - (breakdown?.applicationContextTokens ?? 0)),
-    },
-    {
-      code: "applicationContext",
-      color: "seed",
-      detailCode: "applicationContext",
-      limitTokens: null,
-      name: translate("chat.applications.contextName"),
-      stat: breakdown?.applicationContextTokens ? translate("chat.applications.required") : translate("chat.shortTermMemory.contextPanel.none"),
-      tokens: breakdown?.applicationContextTokens ?? 0,
-    },
-    {
-      code: "02",
-      color: "tool",
-      detailCode: "toolSchema",
-      limitTokens: toolSchemaLimit,
-      name: translate("chat.shortTermMemory.contextPanel.toolSchemaName"),
-      stat: "",
-      tokens: toolSchemaTokens,
-    },
-    {
-      code: "03",
-      color: "checkpoint",
-      limitTokens: breakdown?.checkpointBudgetTokens ?? null,
-      name: translate("chat.shortTermMemory.contextPanel.checkpointName"),
-      stat: hasCheckpointInRequest ? checkpointStat : translate("chat.shortTermMemory.contextPanel.none"),
-      tokens: checkpointTokens,
-    },
-    {
-      code: "04",
-      color: "state",
-      limitTokens: breakdown?.workingStateBudgetTokens ?? null,
-      name: translate("chat.shortTermMemory.contextPanel.workingStateName"),
-      stat: translate("chat.shortTermMemory.contextPanel.workingStateStat", {
-        goals: activeGoalCount,
-        todos: activeTodoCount,
-      }),
-      tokens: breakdown?.workingStateTokens ?? 0,
-    },
-    {
-      code: "06",
-      color: "history",
-      detailCode: "history",
-      limitTokens: breakdown?.currentSessionHistoryBudgetTokens ?? null,
-      name: translate("chat.shortTermMemory.contextPanel.sessionHistoryName"),
-      stat: translate("chat.shortTermMemory.contextPanel.messageCount", { count: historyMessageCount }),
-      tokens: breakdown?.recentTranscriptTokens ?? requestEstimate?.messageTokenEstimate ?? 0,
-    },
-  ];
-}
 
 function ContextOverviewPanel({
   breakdown,
   compactionBusy,
-  fallbackWindowLimit,
-  modelLabel,
+  snapshot,
   onCreateCompaction,
-  requestEstimate,
   session,
 }: {
   breakdown: ChatContextBudgetBreakdown | null;
   compactionBusy?: boolean;
-  fallbackWindowLimit?: number | null;
-  modelLabel: string;
+  snapshot: ContextAssemblySnapshot | null;
   onCreateCompaction?: () => void;
-  requestEstimate: ChatTokenEstimateSnapshot | null;
   session?: ChatSession;
 }) {
   const { t } = useTranslation("pages");
-  const usedTokens = breakdown?.estimatedInputTokens ?? requestEstimate?.estimatedInputTokens ?? (fallbackWindowLimit ? 0 : null);
-  const inputBudget = breakdown?.effectiveInputBudget ?? requestEstimate?.effectiveInputBudget ?? fallbackWindowLimit ?? null;
-  const windowLimit = breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? fallbackWindowLimit ?? null;
-  const percent = contextPercent(usedTokens, inputBudget ?? windowLimit);
-  const statusLabel = contextStatusLabel(requestEstimate, breakdown, (key) => t(key));
-  const statusTone = contextStatusTone(requestEstimate, breakdown);
+  const usedTokens = snapshot?.estimatedInputTokens ?? null;
+  const inputBudget = snapshot?.inputCapacity ?? null;
+  const windowLimit = breakdown?.contextWindowLimit ?? null;
+  const percent = contextPercent(usedTokens, inputBudget);
+  const statusLabel = contextStatusLabel(null, breakdown, (key) => t(key));
+  const statusTone = contextStatusTone(null, breakdown);
 
   return (
     <div className="min-w-0 space-y-3">
@@ -2667,25 +1489,14 @@ function ContextOverviewPanel({
               {t("chat.shortTermMemory.contextPanel.shortTermMemory")}
             </h3>
             <InfoTooltip ariaLabel={t("chat.shortTermMemory.contextPanel.budgetFormulaAria")} align="start">
-              <div className="max-w-[18rem] space-y-1 whitespace-normal leading-5">
-                <p className="font-medium">{t("chat.shortTermMemory.contextPanel.budgetFormulaTitle")}</p>
-                <p>{t("chat.shortTermMemory.contextPanel.effectiveInputFormula")}</p>
-                <p className="whitespace-pre-line">
-                  {t("chat.shortTermMemory.contextPanel.historyFormula", {
-                    systemPrompt: t("chat.shortTermMemory.contextPanel.systemPromptName"),
-                    checkpoint: t("chat.shortTermMemory.contextPanel.checkpointName"),
-                    workingState: t("chat.shortTermMemory.contextPanel.workingStateName"),
-                    toolSchema: t("chat.shortTermMemory.contextPanel.toolSchemaName"),
-                  })}
-                </p>
-                <p className="text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.budgetFormulaNote")}</p>
-              </div>
+              <p className="max-w-[18rem] whitespace-normal leading-5">{t("chat.shortTermMemory.contextPanel.savedReportHelp")}</p>
             </InfoTooltip>
           </div>
           <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]">
-            {requestEstimate?.modelName || requestEstimate?.modelCode || modelLabel}
+            {snapshot?.modelCode ?? "—"}
             {windowLimit ? ` · ${formatCompactTokenCount(windowLimit)} ${t("chat.shortTermMemory.contextPanel.windowSuffix")}` : ""}
           </p>
+          {snapshot?.snapshotSequence ? <p className="text-[10px] text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.reportIdentity", {sequence:snapshot.snapshotSequence,step:snapshot.step ?? "—",attempt:snapshot.attempt ?? "—"})}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
@@ -2787,11 +1598,9 @@ function ContextStructurePanel({
 }) {
   return (
     <div>
-      <div>
-        {blocks.map((block) => (
-          <ContextMemoryBlockRow block={block} key={block.code} sessionCode={sessionCode} />
-        ))}
-      </div>
+      {blocks.map((block) => (
+        <ContextMemoryBlockRow block={block} key={block.code} sessionCode={sessionCode} />
+      ))}
     </div>
   );
 }
@@ -2806,7 +1615,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
   const [loadError, setLoadError] = useState(false);
   const colors = contextBlockColorClasses[block.color];
   const percent = contextPercent(block.tokens, block.limitTokens);
-  const fallbackPercent = block.limitTokens == null && block.tokens > 0 ? 40 : percent;
+  const hasCapacity = block.limitTokens != null && block.limitTokens > 0;
   useEffect(() => {
     if (!dialogOpen || !block.detailCode) return;
     if (block.detailValue !== undefined) {
@@ -2875,13 +1684,17 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
             </InfoTooltip>
           ) : null}
         </div>
-        <div className="shrink-0 font-mono text-[11px] text-[var(--color-on-surface)]">
+        <span
+          className="shrink-0 font-mono text-[11px]"
+          data-testid={`context-budget-${block.code}`}
+          title={`${block.tokens} / ${block.limitTokens ?? "-"}`}
+        >
           {formatTokenLimit(block.tokens, block.limitTokens)}
-        </div>
+        </span>
       </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-        <div className={cn("h-full rounded-full", colors.fill)} style={{ width: `${fallbackPercent}%` }} />
-      </div>
+      {hasCapacity ? <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]" role="progressbar" aria-label={block.name} aria-valuenow={Math.min(block.tokens, block.limitTokens!)} aria-valuemin={0} aria-valuemax={block.limitTokens!}>
+        <div className={cn("h-full rounded-full", colors.fill)} style={{ width: `${percent}%` }} />
+      </div> : null}
     </>
   );
   return (
@@ -3382,18 +2195,12 @@ function RightWorkspaceSidebar({
 
 function RightContextSidebar({
   events,
-  goal,
-  latestCompaction,
   latestCompactionStatus,
-  latestRequestEstimate,
   latestUsageAudit,
   messages,
-  model,
   onCreateCompaction,
   compactionBusy,
-  selectedModel,
   session,
-  todos,
 }: {
   events: TranscriptAguiEvent[];
   goal?: ChatSessionGoalView | null;
@@ -3410,48 +2217,30 @@ function RightContextSidebar({
   todos?: ChatSessionTodo[];
 }) {
   const { t } = useTranslation("pages");
-  const modelLabel = (
-    contextValue(model?.displayName)
-    ?? contextValue(model?.modelName)
-    ?? contextValue(selectedModel?.displayName)
-    ?? contextValue(selectedModel?.modelName)
-    ?? contextValue(latestEventValue(events, "modelName"))
-    ?? contextValue(latestEventValue(events, "model_name"))
-    ?? "-"
-  );
   const usage = chatTokenUsage(messages);
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
-  const requestEstimate = latestRequestEstimate ?? usageAudit?.requestEstimate ?? latestUsageEstimateFromEvents(events);
-  const contextAssembly = useMemo(() => latestContextAssemblyFromEvents(events), [events]);
-  const budgetBreakdown = contextAssembly.breakdown;
+  const liveAssembly = useMemo(() => latestContextAssemblyFromEvents(events), [events]);
+  const assembly = useSavedContextAssembly(session?.sessionCode ?? "", liveAssembly.snapshot?.snapshotSequence ? liveAssembly.snapshot : null);
+  const budgetBreakdown = assembly.snapshot ? normalizeContextBudgetBreakdown({
+    ...assembly.snapshot.budgetBreakdown,
+    estimatedInputTokens: assembly.snapshot.estimatedInputTokens ?? undefined,
+    effectiveInputBudget: assembly.snapshot.inputCapacity ?? undefined,
+  }) : null;
   const runtimeNotice = latestShortTermMemoryRuntimeNotice(events);
-  const fallbackWindowLimit = contextWindowLimitFromSources(model, selectedModel, events);
-  const reportedBlocks = useMemo(() => contextAssembly.snapshot
-    ? buildReportedContextMemoryBlocks(contextAssembly.snapshot, (key, options) => t(key, options)) : null,
-  [contextAssembly.snapshot, t]);
-  const contextBlocks = reportedBlocks ?? buildContextMemoryBlocks({
-    breakdown: budgetBreakdown,
-    goal,
-    latestCompaction,
-    requestEstimate,
-    todos,
-    translate: (key, options) => t(key, options),
-  });
+  const contextBlocks = useMemo(() => assembly.snapshot ? buildReportedContextMemoryBlocks(assembly.snapshot, (key, options) => t(key, options)) : [], [assembly.snapshot,t]);
   return (
     <section className="space-y-3 text-sm">
       <div className="space-y-2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3" data-testid="context-short-term-memory-card">
         <ContextOverviewPanel
           breakdown={budgetBreakdown}
           compactionBusy={compactionBusy || latestCompactionStatus?.loading}
-          fallbackWindowLimit={fallbackWindowLimit}
-          modelLabel={modelLabel}
+          snapshot={assembly.snapshot}
           onCreateCompaction={onCreateCompaction}
-          requestEstimate={requestEstimate}
           session={session}
         />
         <div className="pt-2">
           {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
-          <ContextStructurePanel blocks={contextBlocks} sessionCode={session?.sessionCode ?? ""} />
+          {assembly.loading ? <p role="status">{t("chat.shortTermMemory.contextPanel.loadingReport")}</p> : assembly.error ? <div role="alert"><p>{assembly.error.message}</p><button type="button" onClick={() => void assembly.retry()}>{t("chat.shortTermMemory.retry")}</button></div> : assembly.snapshot ? <ContextStructurePanel blocks={contextBlocks} sessionCode={session?.sessionCode ?? ""} /> : <p>{t("chat.shortTermMemory.contextPanel.noReport")}</p>}
         </div>
       </div>
       {latestCompactionStatus?.error ? (
@@ -3516,15 +2305,46 @@ function ContextBlock({
   );
 }
 
-function ContextRow({ icon, label, value }: { icon?: React.ReactNode; label: string; value: React.ReactNode }) {
+
+function CopyValueButton({
+  ariaLabel,
+  title,
+  value,
+}: {
+  ariaLabel: string;
+  title: string;
+  value: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  async function handleCopy() {
+    if (!value.trim()) return;
+    try {
+      await copyPlainText(value);
+      setCopied(true);
+      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
-    <div className="grid grid-cols-[72px_minmax(0,1fr)] items-start gap-3">
-      <span className="text-[var(--color-on-surface-variant)]">{label}</span>
-      <span className="flex min-w-0 items-start gap-1.5 break-all font-mono text-xs text-[var(--color-on-surface)]">
-        {icon}
-        {value}
-      </span>
-    </div>
+    <button
+      aria-label={ariaLabel}
+      className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
+      disabled={!value.trim()}
+      title={title}
+      type="button"
+      onClick={() => void handleCopy()}
+    >
+      {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+    </button>
   );
 }
 
@@ -3764,735 +2584,6 @@ function ChatAgentSelector({
   );
 }
 
-function SessionSidebar({
-  activeSessionCode,
-  activeSourceTab,
-  collapsed,
-  creatingSession,
-  groups,
-  onCollapseToggle,
-  onArchiveSession,
-  onCreateSession,
-  onRenameSession,
-  onSessionSelect,
-  onSourceTabSelect,
-  runningSessionCode,
-  sessionActionPendingCode,
-  pendingUserInputSessionCodes,
-  unseenSessionCodes,
-}: {
-  activeSessionCode: string;
-  activeSourceTab: ChatSessionSourceTab;
-  collapsed: boolean;
-  creatingSession: boolean;
-  groups: ChatSessionGroup[];
-  onCollapseToggle: () => void;
-  onArchiveSession: (session: ChatSession) => void;
-  onCreateSession: () => void;
-  onRenameSession: (session: ChatSession, title: string) => Promise<void>;
-  onSessionSelect: (session: ChatSession, sourceTab?: ChatSessionSourceTab) => void;
-  onSourceTabSelect: (sourceTab: ChatSessionSourceTab) => void;
-  runningSessionCode: string;
-  sessionActionPendingCode: string;
-  pendingUserInputSessionCodes: Set<string>;
-  unseenSessionCodes: Set<string>;
-}) {
-  const [closedGroups, setClosedGroups] = useState<Set<string>>(() => new Set());
-  const [editingSessionCode, setEditingSessionCode] = useState("");
-  const [renameDraft, setRenameDraft] = useState("");
-  const { t } = useTranslation("pages");
-  function startInlineRename(session: ChatSession) {
-    setEditingSessionCode(session.sessionCode);
-    setRenameDraft(session.title);
-  }
-
-  function cancelInlineRename() {
-    setEditingSessionCode("");
-    setRenameDraft("");
-  }
-
-  async function submitInlineRename(session: ChatSession) {
-    const title = renameDraft.trim();
-    if (!title || title === session.title) {
-      cancelInlineRename();
-      return;
-    }
-
-    await onRenameSession(session, title);
-    cancelInlineRename();
-  }
-
-  const activeGroups = useMemo(
-    () => groups.filter((group) => sourceTabForGroup(group) === activeSourceTab),
-    [activeSourceTab, groups],
-  );
-  const activeFlatSessions = useMemo(
-    () => activeGroups.flatMap((group) => group.sessions),
-    [activeGroups],
-  );
-  const sourceTabsBySessionCode = useMemo(() => {
-    const items = new Map<string, ChatSessionSourceTab>();
-    groups.forEach((group) => {
-      const sourceTab = sourceTabForGroup(group);
-      group.sessions.forEach((session) => {
-        items.set(session.sessionCode, sourceTab);
-      });
-    });
-    return items;
-  }, [groups]);
-
-
-
-  function renderSessionRow(session: ChatSession) {
-    const editing = editingSessionCode === session.sessionCode;
-    const pending = sessionActionPendingCode === session.sessionCode;
-    const sourceTab = sourceTabsBySessionCode.get(session.sessionCode) ?? activeSourceTab;
-
-    return (
-      <div
-        className={cn(
-          "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-[12px] rounded-md px-3 py-2 text-left transition",
-          activeSessionCode === session.sessionCode
-            ? "bg-[var(--color-surface-container-high)]"
-            : "hover:bg-[var(--color-surface-container-high)]",
-        )}
-        key={session.sessionCode}
-      >
-        {editing ? (
-          <input
-            autoFocus
-            aria-label={t("chat.management.sidebar.renameAria", { title: session.title })}
-            className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-[var(--color-elevated-surface)] px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
-            disabled={pending}
-            value={renameDraft}
-            onBlur={() => {
-              if (!pending) void submitInlineRename(session);
-            }}
-            onChange={(event) => setRenameDraft(event.target.value)}
-            onClick={(event) => event.stopPropagation()}
-            onFocus={(event) => event.currentTarget.select()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void submitInlineRename(session);
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                cancelInlineRename();
-              }
-            }}
-          />
-        ) : (
-          <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session, sourceTab)}>
-            <span className="block truncate text-sm font-medium">{session.title}</span>
-            <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
-              <span
-                className={cn(
-                  "inline-flex h-4 items-center rounded border px-1 font-mono text-[10px] leading-none",
-                  sessionAgentTagTone(session.agentCode),
-                )}
-              >
-                {sessionAgentTagLabel(session.agentCode)}
-              </span>
-              <span>{formatTime(session.updatedAt)}</span>
-            </span>
-          </button>
-        )}
-        <SessionRunIndicator
-          needsUserInput={pendingUserInputSessionCodes.has(session.sessionCode)}
-          running={runningSessionCode === session.sessionCode}
-          unseen={unseenSessionCodes.has(session.sessionCode)}
-        />
-        <SessionActionMenu
-          disabled={pending}
-          archiveDisabled={runningSessionCode === session.sessionCode}
-          session={session}
-          onArchive={onArchiveSession}
-          onRename={startInlineRename}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <aside
-      data-testid="chat-session-sidebar"
-      className={cn(
-        "relative h-full shrink-0 overflow-visible bg-[var(--color-surface-container-lowest)] shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200",
-        collapsed ? "w-[64px]" : "w-[286px]",
-      )}
-    >
-      {collapsed ? (
-        <div className="flex h-full flex-col overflow-y-auto py-3">
-          <div className="flex items-center justify-center">
-            <button
-              className={iconButtonClass()}
-              type="button"
-              aria-label={t("chat.management.sidebar.newSession")}
-              title={t("chat.management.sidebar.newSession")}
-              disabled={creatingSession}
-              onClick={onCreateSession}
-            ><Plus aria-hidden="true" size={17} /></button>
-          </div>
-          <div className="mx-auto mt-4 h-px w-6 bg-[rgba(15,23,42,0.06)]" />
-          <div className="mt-3 flex flex-1 flex-col items-center gap-1 overflow-y-auto">
-            {activeFlatSessions.map((session) => (
-              <Tooltip key={session.sessionCode}>
-                <TooltipTrigger
-                  render={<button type="button" />}
-                  className={iconButtonClass(activeSessionCode === session.sessionCode)}
-                  aria-label={t("chat.management.sidebar.openAria", { title: session.title })}
-                  onClick={() => onSessionSelect(session, activeSourceTab)}
-                >
-                  {pendingUserInputSessionCodes.has(session.sessionCode) ? (
-                    <MessageCircleQuestionMark aria-hidden="true" className="text-[var(--color-focus-ring)]" size={17} />
-                  ) : (
-                    <MessageSquareText aria-hidden="true" className={sessionAgentIconTone(session.agentCode)} size={17} />
-                  )}
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide">{sessionAgentTagLabel(session.agentCode)}</p>
-                    <p className="max-w-[220px] break-words">{session.title}</p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            ))}
-          </div>
-
-        </div>
-      ) : (
-        <>
-          <div className="flex h-14 items-center justify-between px-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
-            <div className="flex items-center gap-[12px]">
-              <MessageSquareText size={17} />
-              <h2 className="text-sm font-semibold">{t("chat.management.sidebar.sessions")}</h2>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                className={iconButtonClass()}
-                type="button"
-                aria-label={t("chat.management.sidebar.newSession")}
-                title={t("chat.management.sidebar.newSession")}
-                disabled={creatingSession}
-                onClick={onCreateSession}
-              ><Plus aria-hidden="true" size={17} /></button>
-            </div>
-          </div>
-          <div className="h-[calc(100%-3.5rem)] overflow-y-auto px-3 py-4">
-            <div className="mb-4 grid grid-cols-3 gap-1 rounded-md bg-[var(--color-surface-container)] p-1" role="tablist" aria-label={t("chat.management.sourceTabs.aria")}>
-              {chatSessionSourceTabs.map((tab) => {
-                const TabIcon = tab.icon;
-                return (
-                  <button
-                    className={cn(
-                      "flex h-9 min-w-0 items-center justify-center rounded px-2 text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)]",
-                      activeSourceTab === tab.id
-                        ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-[0_1px_4px_rgba(15,23,42,0.08)]"
-                        : "hover:bg-[var(--color-hover-surface)]",
-                    )}
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    aria-label={t(tab.labelKey)}
-                    aria-selected={activeSourceTab === tab.id}
-                    title={t(tab.labelKey)}
-                    onClick={() => onSourceTabSelect(tab.id)}
-                  >
-
-                    <span className="">{t(tab.labelKey)}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {activeSourceTab !== "task" ? (
-              <div className="space-y-1">
-                {activeFlatSessions.length > 0 ? (
-                  activeFlatSessions.map((session) => renderSessionRow(session))
-                ) : (
-                  <p className="px-2 py-6 text-center text-xs text-[var(--color-on-surface-variant)]">
-                    {t("chat.management.sidebar.noSessions")}
-                  </p>
-                )}
-              </div>
-            ) : activeGroups.map((group) => {
-              const groupKey = sessionGroupKey(group);
-              const closed = closedGroups.has(groupKey);
-              return (
-                <section className="mb-4" key={groupKey}>
-                  <button
-                    className="mb-2 flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs font-semibold uppercase text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
-                    type="button"
-                    onClick={() => {
-                      setClosedGroups((current) => {
-                        const next = new Set(current);
-                        if (next.has(groupKey)) next.delete(groupKey);
-                        else next.add(groupKey);
-                        return next;
-                      });
-                    }}
-                  >
-                    <span>{group.taskTitle}</span>
-                    {closed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                  </button>
-                  {!closed ? (
-                    <div className="space-y-1">
-                      {group.sessions.map((session) => renderSessionRow(session))}
-                    </div>
-                  ) : null}
-                </section>
-              );
-            })}
-            {activeSourceTab === "task" && activeGroups.length === 0 ? (
-              <p className="px-2 py-6 text-center text-xs text-[var(--color-on-surface-variant)]">
-                {t("chat.management.sidebar.noSessions")}
-              </p>
-            ) : null}
-          </div>
-        </>
-      )}
-      <DraggleLine
-        ariaLabel={collapsed ? t("chat.management.sidebar.expandHistory") : t("chat.management.sidebar.collapseHistory")}
-        onClick={onCollapseToggle}
-        className="absolute right-0 top-0 z-10 h-full"
-      />
-    </aside>
-  );
-}
-
-function ChatBubble({
-  currentUserDisplayName,
-  message,
-  onEditMessage,
-}: {
-  currentUserDisplayName: string;
-  message: ChatMessage;
-  onEditMessage?: (content: string) => void;
-}) {
-  const isUser = message.role === "USER";
-  const actorName = isUser ? (currentUserDisplayName || message.actor) : message.actor;
-  const { t } = useTranslation("pages");
-  async function handleEditMessage() {
-    if (!isUser || !message.content || !onEditMessage) return;
-    onEditMessage(message.content);
-  }
-
-  return (
-    <article className={cn("max-w-[920px] rounded-md bg-[var(--color-elevated-surface)] px-4 py-3 shadow-[0_8px_22px_rgba(15,23,42,0.06)]", isUser ? "ml-auto bg-[var(--color-surface-container-lowest)]" : "")}>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-[12px]">
-          {isUser ? <UserRound size={16} /> : <Bot size={16} />}
-          <span className="truncate text-sm font-semibold">{actorName}</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {!isUser ? (
-            <CopyValueButton
-              ariaLabel={t("chat.management.bubble.copyRaw")}
-              title={t("chat.management.bubble.copyRaw")}
-              value={message.content}
-            />
-          ) : null}
-          {isUser ? (
-            <>
-              <CopyValueButton
-                ariaLabel={t("chat.management.bubble.copyRaw")}
-                title={t("chat.management.bubble.copyRaw")}
-                value={message.content}
-              />
-              <button
-                aria-label={t("chat.management.bubble.editMessage")}
-                className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
-                disabled={!message.content || !onEditMessage}
-                title={t("chat.management.bubble.editMessage")}
-                type="button"
-                onClick={() => void handleEditMessage()}
-              >
-                <Pencil size={14} />
-              </button>
-            </>
-          ) : null}
-          <span className="text-xs text-[var(--color-on-surface-variant)]">{formatTime(message.createdAt)}</span>
-        </div>
-      </div>
-      {isUser ? (
-        <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--color-on-surface)]">{message.content}</p>
-      ) : (
-        <MarkdownContent
-          ariaLabel={t("chat.management.bubble.streamingAria")}
-          className="py-0"
-          content={message.content}
-          emptyMessage={t("chat.management.bubble.waitingOutput")}
-        />
-      )}
-    </article>
-  );
-}
-
-function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
-  const { t } = useTranslation("pages");
-  const detail = card.content || card.summary;
-  const hasContent = detail.trim().length > 0;
-  const initializingHint = !card.ended && !hasContent && card.runCode === "pending"
-    ? t("chat.management.reasoning.initializing")
-    : "";
-  const [expanded, setExpanded] = useState(() => !card.ended);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const nestedToolCards = card.toolCards.filter((toolCard) => toolCard.started);
-  const hasRunningTool = nestedToolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
-  const shouldStayExpanded = !card.ended || hasRunningTool;
-  const reasoningPreview = deriveReasoningPreview(
-    card.summary || reasoningLastSentence(card.content),
-  );
-  const headerSummary = initializingHint || reasoningPreview || (card.ended ? t("chat.management.reasoning.captured") : t("chat.management.reasoning.thinking"));
-
-  useEffect(() => {
-    if (shouldStayExpanded) {
-      setExpanded(true);
-    } else {
-      setExpanded(false);
-    }
-  }, [shouldStayExpanded]);
-
-  useEffect(() => {
-    if (!expanded || !detail) return;
-    const element = contentRef.current;
-    if (!element) return;
-    const frame = window.requestAnimationFrame(() => {
-      element.scrollTop = element.scrollHeight;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [detail, expanded]);
-
-  return (
-    <article
-      aria-label={t("chat.management.reasoning.aria")}
-      className="text-sm"
-    >
-      <button
-        className="group flex w-full items-start justify-between gap-3 rounded-md py-1 text-left text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <div className="flex min-w-0 items-start gap-[12px]">
-          <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] transition group-hover:bg-[var(--color-surface-container-low)] group-hover:text-[var(--color-on-surface)]">
-
-          </span>
-          <span className={cn("min-w-0 flex-1 line-clamp-2 text-sm leading-5", card.ended ? undefined : "animate-pulse")}>
-            {headerSummary}
-          </span>
-        </div>
-        <span className="mt-0.5 shrink-0 text-[var(--color-on-surface-variant)]">
-          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </span>
-      </button>
-      {expanded ? (
-        <div className="mt-1 space-y-3 pb-2 pl-7">
-          {detail ? (
-            <div
-              ref={contentRef}
-              className="max-h-36 overflow-y-auto overscroll-contain pr-2"
-            >
-              <MarkdownContent
-                ariaLabel={t("chat.management.reasoning.streamingAria")}
-                className="min-h-0 py-0 text-sm leading-6 text-[var(--color-on-surface)]"
-                content={detail}
-              />
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function JsonBlock({ value }: { value: unknown }) {
-  const preview = formatJsonBlockValue(value);
-  if (!preview) return null;
-
-  return (
-    <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)] [overflow-wrap:anywhere]">
-      {preview}
-    </pre>
-  );
-}
-
-function CopyValueButton({
-  ariaLabel,
-  title,
-  value,
-}: {
-  ariaLabel: string;
-  title: string;
-  value: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const resetTimerRef = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
-  }, []);
-
-  async function handleCopy() {
-    if (!value.trim()) return;
-    try {
-      await copyPlainText(value);
-      setCopied(true);
-      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
-      resetTimerRef.current = window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      setCopied(false);
-    }
-  }
-
-  return (
-    <button
-      aria-label={ariaLabel}
-      className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
-      disabled={!value.trim()}
-      title={title}
-      type="button"
-      onClick={() => void handleCopy()}
-    >
-      {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
-    </button>
-  );
-}
-
-function CompactToolRow({
-  card,
-  nested = false,
-  stepNumber,
-}: {
-  card: ToolWorkCard;
-  nested?: boolean;
-  stepNumber?: number;
-}) {
-  const { t } = useTranslation("pages");
-  const complete = card.ended || Boolean(card.result);
-  const hasResultPayload = Boolean(card.result);
-  const result = card.result || (complete ? t("chat.management.tool.noResult") : "");
-  const [expanded, setExpanded] = useState(() => !complete);
-  const logRef = useRef<HTMLDivElement | null>(null);
-  const running = card.started && !complete;
-  const hasParameters = hasToolParameterPayload(card.args);
-  const parametersText = hasParameters ? formatJsonBlockValue(card.args) : "";
-  const resultText = hasResultPayload ? formatJsonBlockValue(card.result) : "";
-  const toolLabel = toolSummaryLabel(card.toolName, card.args, t);
-  const commandLine = toolCommandLinePreview(card.toolName, card.args);
-  const nestedToolLabel = commandLine
-    ? t("chat.management.tool.commandSummary", { command: commandLine })
-    : `${complete ? t("chat.management.tool.ranPrefix") : t("chat.management.tool.runningPrefix")} ${toolLabel.replace(/^(Run|Edit|运行|编辑)\s+/i, "")}`;
-  const [parametersExpanded, setParametersExpanded] = useState(false);
-
-  useEffect(() => {
-    if (running) {
-      setExpanded(true);
-    } else if (complete) {
-      setExpanded(false);
-    }
-  }, [complete, running]);
-
-  useEffect(() => {
-    if (!expanded || complete || !card.logs.length) return;
-    const element = logRef.current;
-    if (!element) return;
-    const frame = window.requestAnimationFrame(() => {
-      element.scrollTop = element.scrollHeight;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [card.logs.length, complete, expanded]);
-
-  return (
-    <div className={cn(
-      nested ? "text-sm" : "rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1.5",
-    )}>
-      <button
-        className={cn(
-          "flex w-full items-center justify-between gap-3 rounded-md text-left transition",
-          nested ? "py-1 text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]" : "px-1 py-1.5 hover:bg-[var(--color-hover-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
-        )}
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <div className="flex min-w-0 items-center gap-[12px]">
-          <span className={cn(
-            "inline-flex shrink-0 items-center justify-center text-[11px] font-semibold text-[var(--color-on-surface-variant)]",
-            nested ? "size-4" : "size-6 rounded-md bg-[var(--color-surface-container-low)]",
-          )}>
-            {typeof stepNumber === "number"
-              ? stepNumber
-              : complete
-                ? null
-                : null}
-          </span>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-[12px]">
-              <span className={cn("truncate", nested ? "font-normal" : "font-semibold")}>
-                {nested ? nestedToolLabel : toolLabel}
-              </span>
-              {nested ? null : <Badge variant={complete ? "info" : "success"}>{complete ? t("chat.management.tool.badgeDone") : t("chat.management.tool.badgeRunning")}</Badge>}
-            </div>
-          </div>
-        </div>
-        <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </span>
-      </button>
-      {expanded ? (
-        <div className={cn(
-          "mt-1 border-t border-[var(--color-outline-variant)]",
-          nested ? "ml-6 py-2" : "px-1 py-2",
-        )}>
-          <div className="space-y-2">
-            {hasParameters ? (
-              <section className="flex min-h-0 flex-col gap-1">
-                <div className="flex items-center justify-between gap-[12px]">
-                  <button
-                    aria-expanded={parametersExpanded}
-                    className="inline-flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
-                    type="button"
-                    onClick={() => setParametersExpanded((current) => !current)}
-                  >
-
-                    <span>{t("chat.management.tool.parameters")}</span>
-                  </button>
-                  <CopyValueButton ariaLabel={t("chat.management.tool.copyParameters")} title={t("chat.management.tool.copyParameters")} value={parametersText} />
-                </div>
-                {parametersExpanded ? (
-                  <div className="max-h-40 overflow-y-auto">
-                    <JsonBlock value={card.args} />
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
-            {complete ? (
-              <section className="flex min-h-0 flex-col gap-1">
-                <div className="flex items-center justify-between gap-[12px]">
-                  <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{t("chat.management.tool.result")}</h3>
-                  <CopyValueButton ariaLabel={t("chat.management.tool.copyResult")} title={t("chat.management.tool.copyResult")} value={resultText} />
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {result ? <JsonBlock value={result} /> : (
-                    <div className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
-                      {t("chat.management.tool.noResult")}
-                    </div>
-                  )}
-                </div>
-              </section>
-            ) : (
-              <section className="flex min-h-0 flex-col gap-1">
-                <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{t("chat.management.tool.log")}</h3>
-                <div
-                  ref={logRef}
-                  className="max-h-64 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]"
-                >
-                  {card.logs.length ? card.logs.map((line, index) => (
-                    <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
-                  )) : <p className="text-[var(--color-on-surface-variant)]">{t("chat.management.tool.waitingActivity")}</p>}
-                </div>
-              </section>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ToolUserCard({
-  card,
-  nested = false,
-  stepNumber,
-}: {
-  card: ToolWorkCard;
-  nested?: boolean;
-  stepNumber?: number;
-}) {
-  if (["terminal_start", "terminal_read", "terminal_write", "terminal_stop", "terminal_list"].includes(card.toolName)) return <AgentTerminalToolCard card={card} />;
-  return <CompactToolRow card={card} nested={nested} stepNumber={stepNumber} />;
-}
-
-function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
-  const { t } = useTranslation("pages");
-  const toolCards = card.toolCards.filter((toolCard) => toolCard.started);
-  const hasRunningTool = toolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
-  const toolCount = toolCards.length;
-  const [expanded, setExpanded] = useState(() => hasRunningTool);
-
-  useEffect(() => {
-    setExpanded(hasRunningTool);
-  }, [hasRunningTool]);
-
-  if (!toolCount) return null;
-
-  return (
-    <section className="text-sm" aria-label={t("chat.management.tool.stepsAria")}>
-      <button
-        aria-expanded={expanded}
-        className="group flex w-full items-center justify-between gap-3 rounded-md py-1 text-left text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <span className="flex min-w-0 items-center gap-[12px]">
-          <span className="inline-flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] transition group-hover:bg-[var(--color-surface-container-low)] group-hover:text-[var(--color-on-surface)]">
-
-          </span>
-          <span className="truncate font-medium">
-            {t("chat.management.tool.ranCommands", { count: toolCount })}
-          </span>
-        </span>
-        <span className="shrink-0 text-[var(--color-on-surface-variant)]">
-          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </span>
-      </button>
-      {expanded ? (
-        <ol className="mt-1 space-y-1 pb-2 pl-7">
-          {toolCards.map((toolCard, index) => (
-            <li key={toolCard.id}>
-              <ToolUserCard card={toolCard} nested stepNumber={index + 1} />
-            </li>
-          ))}
-        </ol>
-      ) : null}
-    </section>
-  );
-}
-
-function AguiUserWorkRail({ cards }: { cards: AguiUserWorkCard[] }) {
-  const { t } = useTranslation("pages");
-  if (!cards.length) return null;
-
-  return (
-    <section className="space-y-2 py-1" aria-label={t("chat.workRail.ariaLabel")}>
-      {cards.map((card) => (
-        card.kind === "reasoning"
-          ? <ReasoningUserCard card={card.value} key={`reasoning-${card.value.id}`} />
-          : card.kind === "toolGroup"
-            ? <ToolGroupUserCard card={card.value} key={`tool-group-${card.value.id}`} />
-            : <ToolUserCard card={card.value} key={`tool-${card.value.id}`} />
-      ))}
-    </section>
-  );
-}
-
-function AguiWaitingForModelRail() {
-  const { t } = useTranslation("pages");
-  return (
-    <section className="max-w-[920px]" aria-label={t("chat.management.rail.waitingModelAria")}>
-      <div className="flex w-full items-center gap-3 py-1 text-xs font-medium text-[var(--color-on-surface-variant)]">
-        <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          <LoaderCircle className="animate-spin" size={14} />
-          {t("chat.management.rail.waitingModel")}
-        </span>
-        <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
-      </div>
-    </section>
-  );
-}
-
 export function ChatManagementPage() {
   const scopeTabId = useTabPanelScopeId();
   const contextPanelOpen = useTabStore((state) => state.tabs.find((tab) => tab.id === scopeTabId)?.rightPanelOpen ?? false);
@@ -4534,7 +2625,7 @@ export function ChatManagementPage() {
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
-  const { create: openDraftChatTab } = useCreateChatTab(activeWorkspaceCode, draftProjectCode);
+  useCreateChatTab(activeWorkspaceCode,draftProjectCode);
   const promoteDraftSession = useStableCallback((session: ChatSession) => {
     setOptimisticActiveSession(session);
     setSessionGroups((current) => insertSession(current, session));
@@ -4578,42 +2669,15 @@ export function ChatManagementPage() {
         }),
     [activeWorkspaceCode],
   );
-  const [historyPreviewMessages, setHistoryPreviewMessages] = useState<ChatMessage[]>([]);
   const chatRuntimeAdapter = useMemo(() => draftResources.adapt({
-    ...chatTransportAdapter,
-    createSession: createRuntimeSession,
-    loadHistory: chatTransportAdapter.loadHistory ? async (...args: Parameters<NonNullable<typeof chatTransportAdapter.loadHistory>>) => {
-      const page = await chatTransportAdapter.loadHistory!(...args);
-      if (!args[1]?.cursor && !args[2]?.aborted && activeSessionCodeRef.current === page.sessionId) setHistoryPreviewMessages(historyMessages(page).map((message) => ({
-        id: message.messageId, messageCode: message.messageId, sessionCode: page.sessionId, runCode: message.runId,
-        actor: message.actor, role: message.role, channel: "MAIN_AGENT" as const, content: message.content,
-        inputTokens: message.inputTokens, outputTokens: message.outputTokens, totalTokens: message.totalTokens,
-        createdAt: message.createdAt,
-      })));
-      return page;
-    } : undefined,
+    ...chatTransportAdapter, createSession: createRuntimeSession,
   }), [chatTransportAdapter, createRuntimeSession, draftResources]);
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
   const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);
-  const [activeRunRefreshKey, setActiveRunRefreshKey] = useState(0);
   const [shortTermMemoryRefreshKey, setShortTermMemoryRefreshKey] = useState(0);
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>(() => orderSessionGroups(groups));
-  const pendingUserInputSessionCodes = useMemo(
-    () => new Set(
-      sessionGroups.flatMap((group) => group.pendingUserInputSessionCodes ?? []),
-    ),
-    [sessionGroups],
-  );
   const [activeSessionCode, setActiveSessionCode] = useState("");
-  const titleFailureNoticeKeysRef = useRef(new Set<string>());
-  const [activeSourceTab, setActiveSourceTab] = useState<ChatSessionSourceTab>(() => (
-    requestedSourceTab ?? defaultChatSessionSourceTab
-  ));
-  const [userSidebarCollapsed, setUserSidebarCollapsed] = useState(false);
-  const [autoSidebarCollapsed, setAutoSidebarCollapsed] = useState(false);
-  const sidebarCollapsed = userSidebarCollapsed || autoSidebarCollapsed;
-  const mainRef = useRef<HTMLDivElement>(null);
   const [composerDraftsBySessionCode, setComposerDraftsBySessionCode] = useState<Record<string, string>>({});
   const [optimisticActiveSession, setOptimisticActiveSession] = useState<ChatSession | null>(null);
   const requestedSession = requestedSessionCode ? findSession(sessionGroups, requestedSessionCode) : undefined;
@@ -4630,18 +2694,11 @@ export function ChatManagementPage() {
       ? firstSessionForSourceTab(sessionGroups, defaultChatSessionSourceTab)
       : undefined
   );
-  const legacySessionCode = chatRuntimeAdapter.loadHistory ? "" : activeSession?.sessionCode ?? "";
-  const legacyMessages = useChatMessageListBySession(legacySessionCode, activeChatDataRefreshKey);
-  const messages = chatRuntimeAdapter.loadHistory ? historyPreviewMessages : legacyMessages;
   useChatGeneratedTitle(activeSession, useStableCallback((updated: ChatSession) => {
     setSessionGroups((current) => replaceSession(current, updated));
     setOptimisticActiveSession((current) => current?.sessionCode === updated.sessionCode ? updated : current);
     window.dispatchEvent(new Event("tron:chat-session-updated"));
   }));
-  const activeRunState = useChatActiveRunState(
-    legacySessionCode,
-    activeRunRefreshKey,
-  );
   const shortTermMemoryTodosState = useChatSessionTodosState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
   const latestCompactionState = useChatLatestCompactionState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
   const activeGoalState = useChatSessionLatestGoalState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
@@ -4664,41 +2721,10 @@ export function ChatManagementPage() {
     retry: activeGoalState.retry,
   }), [activeGoalState.error, activeGoalState.loading, activeGoalState.retry]);
   // Context inspection is an explicit, separate read from ordinary public history.
-  const contextInspectionSessionCode = contextPanelOpen ? activeSession?.sessionCode ?? "" : legacySessionCode;
+  const contextInspectionSessionCode = contextPanelOpen ? activeSession?.sessionCode ?? "" : "";
   const aguiEvents = useChatAguiEvents(contextInspectionSessionCode, activeChatDataRefreshKey + shortTermMemoryRefreshKey);
   const aguiProtocolEvents = useChatAguiProtocolEvents(contextInspectionSessionCode, activeChatReplayRefreshKey);
-  const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
-  const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
-  const openedLiveTerminalCallsRef = useRef(new Set<string>());
-  const [liveAguiAnchorMessageCodesBySessionCode, setLiveAguiAnchorMessageCodesBySessionCode] = useState<Record<string, Record<string, string>>>({});
-
-  function handleTitleGenerationFailureEvent(event: ChatAguiStreamEvent, sessionCode: string) {
-    if (String(event.type).toUpperCase() !== "CUSTOM") return;
-    if (event.name !== "tron.session.title_generation_failed") return;
-    const value = event.value && typeof event.value === "object"
-      ? event.value as Record<string, unknown>
-      : {};
-    const code = typeof value.code === "string" ? value.code : "LLM_TITLE_GENERATION_FAILED";
-    const runCode = typeof value.runCode === "string" ? value.runCode : (event.runId ?? "");
-    const message = typeof value.message === "string" && value.message.trim()
-      ? value.message
-      : "会话标题生成失败";
-    const noticeKey = `${sessionCode}:${runCode}:${code}`;
-    if (titleFailureNoticeKeysRef.current.has(noticeKey)) return;
-    titleFailureNoticeKeysRef.current.add(noticeKey);
-    toast.error(message, { title: "标题生成失败" });
-  }
-  const [liveAguiPendingAnchorMessageCodesBySessionCode, setLiveAguiPendingAnchorMessageCodesBySessionCode] = useState<Record<string, string>>({});
-  const [latestRequestEstimatesBySessionCode, setLatestRequestEstimatesBySessionCode] = useState<Record<string, ChatTokenEstimateSnapshot>>({});
-  const [latestUsageAuditsBySessionCode, setLatestUsageAuditsBySessionCode] = useState<Record<string, ChatUsageAuditSnapshot>>({});
-  const [sending, setSending] = useState(false);
-  const [userInputRequests, setUserInputRequests] = useState<ChatUserInputRequest[]>([]);
-  const [userInputRequest, setUserInputRequest] = useState<ChatUserInputRequest | null>(null);
-  const [userInputAnswerPending, setUserInputAnswerPending] = useState(false);
-  const [steering, setSteering] = useState(false);
-  const [activeRunCode, setActiveRunCode] = useState("");
-  const [activeRunSupportsSteer, setActiveRunSupportsSteer] = useState<boolean | null>(null);
-  const [queuedSubmissions, setQueuedSubmissions] = useState<ChatQueuedSubmission[]>([]);
+  const visibleMessages = useChatMessageListBySession(contextInspectionSessionCode, activeChatDataRefreshKey, { suppressErrorToast: true });
   const [creatingSession, setCreatingSession] = useState(false);
   const [chatModels, setChatModels] = useState<ModelSelectOption[]>([]);
   const [selectedModelCode, setSelectedModelCode] = useState("");
@@ -4709,12 +2735,8 @@ export function ChatManagementPage() {
   const [selectedAgentCode, setSelectedAgentCode] = useState(mainChatAgentOption.agentCode);
   const agentSelectionSessionRef = useRef("");
   const [agentsLoading, setAgentsLoading] = useState(false);
-  const [runningSessionCode, setRunningSessionCode] = useState("");
   const [compactingSessionCode, setCompactingSessionCode] = useState("");
   const [goalActionSessionCode, setGoalActionSessionCode] = useState("");
-  const [sessionActionPendingCode, setSessionActionPendingCode] = useState("");
-  const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [pendingAttachmentsBySessionCode, setPendingAttachmentsBySessionCode] = useState<
     Record<string, ChatMessageAttachment[]>
   >({});
@@ -4787,33 +2809,10 @@ export function ChatManagementPage() {
 
   const activeSessionCodeRef = useRef("");
   const modelSelectionSessionRef = useRef("");
-  const streamOwnershipRegistryRef = useRef(new ChatStreamOwnershipRegistry());
-  const detachedStreamControllersRef = useRef(new WeakSet<AbortController>());
-  const stopRequestedStreamControllersRef = useRef(new WeakSet<AbortController>());
-  const steerAbortControllerRef = useRef<AbortController | null>(null);
-  const stopAbortControllerRef = useRef<AbortController | null>(null);
-  const sendingRef = useRef(false);
-  const steeringRef = useRef(false);
-  const steeringSessionCodeRef = useRef("");
-  const stoppingRunRef = useRef(false);
-  const activeRunCodeRef = useRef("");
-  const activeRunSupportsSteerRef = useRef<boolean | null>(null);
-  const autoDrainEpochRef = useRef(0);
-  const runningSessionCodeRef = useRef("");
-  const queuedSubmissionsRef = useRef<ChatQueuedSubmission[]>([]);
-  const queuedSubmissionSequenceRef = useRef(0);
-  const invalidatedQueueSessionCodesRef = useRef<Set<string>>(new Set());
-  const observedRecoveredRunCodesRef = useRef<Map<string, string>>(new Map());
-  const drainedRecoveredRunKeysRef = useRef<Set<string>>(new Set());
   const requestedSessionCodeSyncedRef = useRef("");
-  const autoStickToBottomRef = useRef(true);
-  const messageScrollRef = useRef<HTMLElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const submitterRef = useRef<AgentChatSubmitter | null>(null);
   const attachmentFileInputRef = useRef<HTMLInputElement | null>(null);
-  const scrollFrameRef = useRef<number | null>(null);
-  const visibleSessionCodeRef = useRef("");
-  const liveAssistantDraftRef = useRef("");
-  const liveAguiObservedRef = useRef(false);
   const selectedAgent = chatAgents.find((agent) => agent.agentCode === selectedAgentCode) ?? null;
   const agentScopedModels = useMemo(
     () => modelsForAgent(chatModels, selectedAgent),
@@ -4847,93 +2846,13 @@ export function ChatManagementPage() {
     ?? selectedModelDefaultReasoningEffort
     ?? modelDefaultReasoningEffortValue;
   const hasActiveSession = Boolean(activeSession);
-  const sessionStarted = Boolean(activeSession?.lastRunCode || visibleMessages.length > 0);
+  const sessionStarted = Boolean(activeSession?.lastRunCode);
   const agentSelectionLocked = Boolean(activeSession && sessionStarted);
   const modelEmptyLabel = isMainChatAgent(effectiveAgentCode)
     ? t("chat.management.modelEmpty.noTextModel")
     : t("chat.management.modelEmpty.noneForAgent", { name: selectedAgent?.name ?? effectiveAgentCode });
   const currentUserDisplayName = authSession?.user.displayName || authSession?.user.username || "";
   const { createInspectionAttachmentUpload } = useInspection();
-
-  useEffect(() => {
-    let active = true;
-    const sessionCode = legacySessionCode;
-    if (!sessionCode) {
-      setUserInputRequests([]);
-      setUserInputRequest(null);
-      return () => {
-        active = false;
-      };
-    }
-    void listChatUserInputRequests(sessionCode)
-      .then((requests) => {
-        if (!active || activeSessionCodeRef.current !== sessionCode) return;
-        setUserInputRequests(requests);
-        setUserInputRequest(
-          requests.find((request) => request.status === "Pending") ?? null,
-        );
-      })
-      .catch(() => {
-        if (active && activeSessionCodeRef.current === sessionCode) {
-          setUserInputRequests([]);
-          setUserInputRequest(null);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [activeChatDataRefreshKey, legacySessionCode]);
-
-  function setSendingState(value: boolean) {
-    sendingRef.current = value;
-    setSending(value);
-  }
-
-  function replaceQueuedSubmissions(next: ChatQueuedSubmission[]) {
-    queuedSubmissionsRef.current = next;
-    setQueuedSubmissions(next);
-  }
-
-  function enqueueSubmission(
-    session: ChatSession,
-    input: SendChatMessageInput,
-    position: "front" | "back" = "back",
-  ) {
-    if (invalidatedQueueSessionCodesRef.current.has(session.sessionCode)) {
-      return null;
-    }
-    queuedSubmissionSequenceRef.current += 1;
-    const submission: ChatQueuedSubmission = {
-      id: `QUEUED-${Date.now()}-${queuedSubmissionSequenceRef.current}`,
-      input,
-      sessionCode: session.sessionCode,
-    };
-    replaceQueuedSubmissions(
-      position === "front"
-        ? [submission, ...queuedSubmissionsRef.current]
-        : enqueueChatSubmission(queuedSubmissionsRef.current, submission),
-    );
-    return submission;
-  }
-
-  function takeNextQueuedSubmission(sessionCode: string) {
-    if (invalidatedQueueSessionCodesRef.current.has(sessionCode)) return null;
-    const result = takeNextQueuedChatSubmission(
-      queuedSubmissionsRef.current,
-      sessionCode,
-    );
-    replaceQueuedSubmissions(result.remaining);
-    return result.submission;
-  }
-
-  function invalidateQueuedSession(sessionCode: string) {
-    invalidatedQueueSessionCodesRef.current.add(sessionCode);
-    replaceQueuedSubmissions(
-      queuedSubmissionsRef.current.filter((submission) => (
-        submission.sessionCode !== sessionCode
-      )),
-    );
-  }
 
   function createSendInput(
     session: ChatSession,
@@ -4983,19 +2902,20 @@ export function ChatManagementPage() {
     }
     setActiveChatDataRefreshKey((current) => current + 1);
     setActiveChatReplayRefreshKey((current) => current + 1);
-    setActiveRunRefreshKey((current) => current + 1);
   }, []);
 
+  const [runtimeRunState, setRuntimeRunState] = useState<ChatRuntimeRunState | null>(null);
+  const currentSessionRunActive = Boolean(runtimeRunState?.active && runtimeRunState.sessionCode === activeSession?.sessionCode);
+  const sending = currentSessionRunActive;
   const handleRuntimeRunStateChange = useCallback((state: ChatRuntimeRunState) => {
-    if (!state.sessionCode) return;
-    setSending(state.active);
-    setRunningSessionCode((current) => {
-      if (state.active) return state.sessionCode;
-      return current === state.sessionCode ? "" : current;
-    });
-    setActiveRunCode(state.active ? state.runCode : "");
-    setActiveRunSupportsSteer(state.active ? state.supportsSteer : null);
-    setActiveRunRefreshKey((current) => current + 1);
+    setRuntimeRunState(state);
+    if (state.sessionCode) {
+      window.dispatchEvent(new CustomEvent("tron:chat-session-run-state", {
+        detail: { sessionCode: state.active ? state.sessionCode : "" },
+      }));
+      setActiveChatDataRefreshKey((current) => current + 1);
+      setShortTermMemoryRefreshKey((current) => current + 1);
+    }
   }, []);
 
   async function uploadAttachmentForActiveSession(
@@ -5058,8 +2978,8 @@ export function ChatManagementPage() {
 
       const content = inspectionMessageContent(result);
       if (inspectionSubmitMode(result) === "send" && selectedModel) {
-        await handleSend(content, [attachment]);
-        return;
+        const accepted = await submitterRef.current?.submit({ content, attachments: [attachment] });
+        if (accepted) return;
       }
       if (content) setComposer(content);
       setPendingAttachments((current) => [...current, attachment]);
@@ -5094,29 +3014,8 @@ export function ChatManagementPage() {
     setCurrentSearchText(routerSearchText);
   }, [routerSearchText]);
 
-  function scrollToLatestMessage(behavior: ScrollBehavior = "auto") {
-    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
-    scrollFrameRef.current = window.requestAnimationFrame(() => {
-      const element = messageScrollRef.current;
-      if (!element) return;
-      element.scrollTo({ behavior, top: element.scrollHeight });
-      autoStickToBottomRef.current = true;
-      setShowScrollToBottom(false);
-      scrollFrameRef.current = null;
-    });
-  }
-
   function selectSourceTab(sourceTab: ChatSessionSourceTab) {
-    setActiveSourceTab(sourceTab);
     writeStoredChatSessionSourceTab(sourceTab);
-  }
-
-  function handleTranscriptScroll() {
-    const element = messageScrollRef.current;
-    if (!element) return;
-    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
-    autoStickToBottomRef.current = distanceFromBottom <= chatScrollBottomThreshold;
-    setShowScrollToBottom(distanceFromBottom > chatScrollJumpButtonThreshold);
   }
 
   useEffect(() => {
@@ -5165,7 +3064,6 @@ export function ChatManagementPage() {
     }
     if (requestedSessionCodeSyncedRef.current === requestedSessionCode && activeSessionCode === requestedSessionCode) return;
     if (!findSession(sessionGroups, requestedSessionCode)) return;
-    if (activeSessionCodeRef.current !== requestedSessionCode) setVisibleMessages([]);
     activeSessionCodeRef.current = requestedSessionCode;
     setActiveSessionCode(requestedSessionCode);
     const sourceTab = sourceTabForSessionCode(sessionGroups, requestedSessionCode);
@@ -5190,7 +3088,6 @@ export function ChatManagementPage() {
 
     const nextSession = firstSessionForSourceTab(sessionGroups, requestedSourceTab);
     if (nextSession) {
-      if (activeSessionCodeRef.current !== nextSession.sessionCode) setVisibleMessages([]);
       activeSessionCodeRef.current = nextSession.sessionCode;
       setActiveSessionCode(nextSession.sessionCode);
       replaceChatSearchParams((next) => {
@@ -5203,7 +3100,6 @@ export function ChatManagementPage() {
     if (!requestedSessionCode && !activeSessionCodeRef.current) return;
     activeSessionCodeRef.current = "";
     setActiveSessionCode("");
-    setVisibleMessages([]);
     replaceChatSearchParams((next) => {
       next.delete("sessionCode");
       next.set("sourceTab", requestedSourceTab);
@@ -5403,215 +3299,9 @@ export function ChatManagementPage() {
     };
   }, []);
 
-  useEffect(() => () => {
-    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
-    const owner = streamOwnershipRegistryRef.current.current;
-    if (owner) {
-      autoDrainEpochRef.current += 1;
-      detachedStreamControllersRef.current.add(owner.controller);
-      streamOwnershipRegistryRef.current.release(owner);
-      sendingRef.current = false;
-      runningSessionCodeRef.current = "";
-      owner.controller.abort();
-    }
-    steerAbortControllerRef.current?.abort();
-  }, []);
-
-  useEffect(() => {
-    const owner = streamOwnershipRegistryRef.current.current;
-    if (
-      owner
-      && owner.sessionCode !== (activeSession?.sessionCode ?? "")
-    ) {
-      detachLocalRunObserver(owner.sessionCode);
-    }
-  }, [activeSession?.sessionCode]);
-
-  useEffect(() => {
-    autoStickToBottomRef.current = true;
-    setShowScrollToBottom(false);
-    scrollToLatestMessage("auto");
-  }, [activeSession?.sessionCode]);
-
-  useEffect(() => {
-    if (!activeSession?.sessionCode || !shouldAutoFocusChatComposer()) {
-      return;
-    }
-    const composerElement = composerRef.current;
-    if (!composerElement) return;
-    const focusId = window.requestAnimationFrame(() => {
-      composerElement.focus();
-    });
-    return () => {
-      window.cancelAnimationFrame(focusId);
-    };
-  }, [activeSession?.sessionCode]);
-
-  useEffect(() => {
-    const sessionCode = activeSession?.sessionCode ?? "";
-    const nextMessages = sessionCode ? messages.filter((message) => message.sessionCode === sessionCode) : [];
-    setVisibleMessages((current) => {
-      if (
-        current.length === nextMessages.length
-        && current.every((message, index) => message === nextMessages[index])
-      ) {
-        return current;
-      }
-      return nextMessages;
-    });
-    if (visibleSessionCodeRef.current !== sessionCode) {
-      visibleSessionCodeRef.current = sessionCode;
-    }
-  }, [activeSession?.sessionCode, messages]);
-
-  const liveAguiEvents = activeSession?.sessionCode
-    ? liveAguiEventsBySessionCode[activeSession.sessionCode] ?? emptyLiveAguiEvents
-    : emptyLiveAguiEvents;
-  const liveAguiAnchorMessageCodes = activeSession?.sessionCode
-    ? liveAguiAnchorMessageCodesBySessionCode[activeSession.sessionCode] ?? emptyLiveAguiAnchorMessageCodes
-    : emptyLiveAguiAnchorMessageCodes;
-  const liveAguiPendingAnchorMessageCode = activeSession?.sessionCode
-    ? liveAguiPendingAnchorMessageCodesBySessionCode[activeSession.sessionCode] ?? ""
-    : "";
   const contextAguiEvents = useMemo<TranscriptAguiEvent[]>(() => (
-    mergeTranscriptAguiEvents<TranscriptAguiEvent>(
-      aguiEvents,
-      aguiProtocolEvents,
-      liveAguiEvents,
-    )
-  ), [aguiEvents, aguiProtocolEvents, liveAguiEvents]);
-  const liveAguiPending = Boolean(
-    sending
-    && activeSession
-    && runningSessionCode === activeSession.sessionCode
-    && !liveAguiEvents.length,
-  );
-  const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => {
-    if (liveAguiPending && !aguiProtocolEvents.length) return [];
-    return filterTranscriptAguiEventsForSession(
-      mergeTranscriptAguiEvents(aguiProtocolEvents, liveAguiEvents),
-      activeSession?.sessionCode ?? "",
-      visibleMessages,
-      liveAguiAnchorMessageCodes,
-    );
-  }, [
-    activeSession?.sessionCode,
-    aguiProtocolEvents,
-    liveAguiAnchorMessageCodes,
-    liveAguiEvents,
-    liveAguiPending,
-    visibleMessages,
-  ]);
-  const waitingForModelAnchorMessageCode = useMemo(() => {
-    if (!liveAguiPending || !activeSession?.sessionCode) return "";
-    if (liveAguiPendingAnchorMessageCode && visibleMessages.some((message) => (
-      message.sessionCode === activeSession.sessionCode
-      && message.messageCode === liveAguiPendingAnchorMessageCode
-    ))) {
-      return liveAguiPendingAnchorMessageCode;
-    }
-    for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
-      const message = visibleMessages[index];
-      if (message.sessionCode === activeSession.sessionCode && message.role === "USER") {
-        return message.messageCode;
-      }
-    }
-    return "";
-  }, [activeSession?.sessionCode, liveAguiPending, liveAguiPendingAnchorMessageCode, visibleMessages]);
-  const workRailsByMessageCode = useMemo(() => (
-    aguiWorkRailsByMessageCode(
-      visibleMessages,
-      transcriptAguiEvents,
-      liveAguiAnchorMessageCodes,
-      aguiWorkReplayPreferences.recentTurnLimit,
-    )
-  ), [aguiWorkReplayPreferences.recentTurnLimit, liveAguiAnchorMessageCodes, transcriptAguiEvents, visibleMessages]);
-  const canAbortCurrentSession = Boolean(
-    sending
-    && activeSession
-    && runningSessionCode === activeSession.sessionCode,
-  );
-  const replayActiveRunHint = useMemo(
-    () => resolveLatestOpenChatReplayRun(
-      aguiProtocolEvents,
-      activeSession?.sessionCode ?? "",
-    ),
-    [activeSession?.sessionCode, aguiProtocolEvents],
-  );
-  const activeRunQueryMatchesSession = Boolean(
-    activeSession?.sessionCode
-    && activeRunState.data.sessionCode === activeSession.sessionCode,
-  );
-  const authoritativeActiveRun = activeRunQueryMatchesSession
-    ? activeRunState.data.activeRun
-    : null;
-  const replayActiveRunLoadingHint = (
-    activeRunState.loading
-    || Boolean(activeRunState.error)
-    || !activeRunQueryMatchesSession
-  )
-    ? replayActiveRunHint
-    : null;
-  const runUiState = resolveChatRunUiState({
-    authoritativeRun: authoritativeActiveRun,
-    localRunActive: canAbortCurrentSession,
-    localRunCode: activeRunCode,
-    localRunSupportsSteer: activeRunSupportsSteer,
-    replayRunHint: replayActiveRunLoadingHint,
-  });
-  const currentSessionRunActive = runUiState.active;
-  const sidebarRunningSessionCode = sending
-    ? runningSessionCode
-    : currentSessionRunActive
-      ? activeSession?.sessionCode ?? ""
-      : "";
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent("tron:chat-session-run-state", {
-      detail: { sessionCode: sidebarRunningSessionCode },
-    }));
-  }, [sidebarRunningSessionCode]);
-  const effectiveActiveRunCode = runUiState.runCode;
-  const canSteerCurrentRun = runUiState.canSteer;
-  const canStopCurrentRun = runUiState.canStop;
-  const visibleQueuedSubmissions = useMemo(
-    () => queuedSubmissions.filter((submission) => (
-      submission.sessionCode === activeSession?.sessionCode
-    )),
-    [activeSession?.sessionCode, queuedSubmissions],
-  );
-  const hasQueuedSubmissionForActiveSession = visibleQueuedSubmissions.length > 0;
-  const queueDisabled = Boolean(
-    !activeSession
-    || !selectedModel
-    || userInputRequest
-    || (!composer.trim() && !pendingAttachments.length)
-    || creatingSession,
-  );
-  const steerDisabled = queueDisabled || steering || !canSteerCurrentRun;
-  const hasOpenReplayRun = Boolean(replayActiveRunHint);
-  const activeRunConfirmedIdle = Boolean(
-    activeRunQueryMatchesSession
-    && !activeRunState.loading
-    && !activeRunState.error
-    && !authoritativeActiveRun
-  );
-  const shouldPollActiveChatData = Boolean(
-    activeSession?.sessionCode
-    && !(sending && runningSessionCode === activeSession.sessionCode)
-    && shouldPollChatRecoveryData({
-      activeRunConfirmedIdle,
-      hasActiveRun: currentSessionRunActive,
-      hasOpenReplayRun,
-      hasPendingUserInput: Boolean(userInputRequest),
-      hasQueuedSubmission: hasQueuedSubmissionForActiveSession,
-    }),
-  );
-  const shouldPollActiveChatReplay = shouldPollChatRunRecovery({
-    currentRunActive: currentSessionRunActive,
-    hasQueuedSubmission: hasQueuedSubmissionForActiveSession,
-    sessionCode: activeSession?.sessionCode ?? "",
-    shouldPollData: shouldPollActiveChatData,
-  });
+    mergeTranscriptAguiEvents<TranscriptAguiEvent>(aguiEvents, aguiProtocolEvents)
+  ), [aguiEvents, aguiProtocolEvents]);
   const handleCreateCompactionForRightPanel = useStableCallback(handleCreateCompaction);
   const handleCancelGoalForRightPanel = useStableCallback(handleCancelGoal);
   const handleClearGoalForRightPanel = useStableCallback(handleClearGoal);
@@ -5619,15 +3309,7 @@ export function ChatManagementPage() {
   const handlePauseGoalForRightPanel = useStableCallback(handlePauseGoal);
   const handleResumeGoalForRightPanel = useStableCallback(handleResumeGoal);
   const handleUpdateGoalForRightPanel = useStableCallback(handleUpdateGoal);
-  const workspaceGoalRunning = Boolean(
-    activeSession?.sessionCode
-    && activeGoal?.goal.status === "ACTIVE"
-    && (
-      (sending && runningSessionCode === activeSession.sessionCode)
-      || hasOpenReplayRun
-    ),
-  );
-
+  const workspaceGoalRunning = Boolean(activeGoal?.goal.status === "ACTIVE" && currentSessionRunActive);
   const activeRightPanelSnapshot = useMemo<ChatRightPanelSnapshot | null>(() => {
     if (!activeSession) return null;
 
@@ -5639,8 +3321,8 @@ export function ChatManagementPage() {
       goalStatus,
       latestCompaction,
       latestCompactionStatus,
-      latestRequestEstimate: latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null,
-      latestUsageAudit: latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null,
+      latestRequestEstimate: null,
+      latestUsageAudit: null,
       messages: visibleMessages,
       model: selectedMainAgentModel,
       selectedModel,
@@ -5658,8 +3340,6 @@ export function ChatManagementPage() {
     goalStatus,
     latestCompaction,
     latestCompactionStatus,
-    latestRequestEstimatesBySessionCode,
-    latestUsageAuditsBySessionCode,
     selectedMainAgentModel,
     selectedModel,
     shortTermMemoryTodos,
@@ -5728,20 +3408,6 @@ export function ChatManagementPage() {
   const transcriptWorkReplayOptions = useMemo(() => ({
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
   }), [aguiWorkReplayPreferences.recentTurnLimit]);
-  const transcriptAttachmentHeader = pendingAttachments.length ? (
-    <div className="flex max-w-full flex-wrap gap-[12px]">
-      {pendingAttachments.map((attachment) => (
-        <ChatAttachmentChip
-          attachment={attachment}
-          downloadAttachment={downloadPendingAttachment}
-          key={attachment.id}
-          onRemove={() => {
-            setPendingAttachments((current) => current.filter((item) => item.id !== attachment.id));
-          }}
-        />
-      ))}
-    </div>
-  ) : null;
   const transcriptFooterAddon = useMemo(() => (
     <div className="flex w-full min-w-0 max-w-full flex-col items-start gap-[12px]">
       <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-1">
@@ -5860,146 +3526,6 @@ export function ChatManagementPage() {
     rightPanelLabel: t("chat.shortTermMemory.workspaceTab"),
   });
 
-  useEffect(() => {
-    if (!shouldPollActiveChatReplay) return;
-    const intervalId = window.setInterval(() => {
-      setActiveChatReplayRefreshKey((current) => current + 1);
-      setActiveRunRefreshKey((current) => current + 1);
-    }, activeChatReplayPollIntervalMs);
-    return () => window.clearInterval(intervalId);
-  }, [activeSession?.sessionCode, shouldPollActiveChatReplay]);
-
-  useEffect(() => {
-    if (!shouldPollActiveChatData) return;
-    const intervalId = window.setInterval(() => {
-      setActiveChatDataRefreshKey((current) => current + 1);
-    }, activeChatReplayPollIntervalMs);
-    return () => window.clearInterval(intervalId);
-  }, [activeSession?.sessionCode, shouldPollActiveChatData]);
-
-  useEffect(() => {
-    if (!activeSession || canAbortCurrentSession) return;
-    const sessionCode = activeSession.sessionCode;
-    const observedRemoteRun = authoritativeActiveRun ?? replayActiveRunHint;
-    if (observedRemoteRun) {
-      observedRecoveredRunCodesRef.current.set(
-        sessionCode,
-        observedRemoteRun.runCode,
-      );
-      return;
-    }
-    const observedRunCode = observedRecoveredRunCodesRef.current.get(sessionCode)
-      ?? (hasQueuedSubmissionForActiveSession
-        ? latestTerminalChatRunCode(aguiProtocolEvents, sessionCode)
-        : "");
-    if (
-      !observedRunCode
-      || !isChatReplayRunTerminal(
-        aguiProtocolEvents,
-        sessionCode,
-        observedRunCode,
-      )
-    ) return;
-    observedRecoveredRunCodesRef.current.delete(sessionCode);
-    if (!claimChatRunTerminalDrain(
-      drainedRecoveredRunKeysRef.current,
-      sessionCode,
-      observedRunCode,
-    )) return;
-    if (
-      sendingRef.current
-      || invalidatedQueueSessionCodesRef.current.has(sessionCode)
-    ) return;
-    const nextSubmission = takeNextQueuedSubmission(sessionCode);
-    if (nextSubmission) {
-      void runChatInput(
-        activeSession,
-        nextSubmission.input,
-        false,
-        nextSubmission,
-      );
-    }
-  }, [
-    activeSession,
-    aguiProtocolEvents,
-    authoritativeActiveRun,
-    canAbortCurrentSession,
-    hasQueuedSubmissionForActiveSession,
-    replayActiveRunHint,
-  ]);
-
-  useEffect(() => {
-    if (autoStickToBottomRef.current) scrollToLatestMessage("auto");
-    else handleTranscriptScroll();
-  }, [transcriptAguiEvents, visibleMessages]);
-
-  function handleSessionSelect(sessionOrCode: ChatSession | string, sourceTab?: ChatSessionSourceTab) {
-    const sessionCode = typeof sessionOrCode === "string" ? sessionOrCode : sessionOrCode.sessionCode;
-    const selected = typeof sessionOrCode === "string" ? findSession(sessionGroups, sessionCode) : sessionOrCode;
-    const currentOwner = streamOwnershipRegistryRef.current.current;
-    if (currentOwner && currentOwner.sessionCode !== sessionCode) {
-      detachLocalRunObserver(currentOwner.sessionCode);
-    }
-    if (sessionCode !== activeSessionCode) setVisibleMessages([]);
-    setOptimisticActiveSession(selected ?? null);
-    activeSessionCodeRef.current = sessionCode;
-    setActiveSessionCode(sessionCode);
-    const nextSourceTab = sourceTab ?? sourceTabForSessionCode(sessionGroups, sessionCode);
-    if (nextSourceTab) selectSourceTab(nextSourceTab);
-    replaceChatSearchParams((next) => {
-      if (sessionCode) {
-        next.set("sessionCode", sessionCode);
-        if (nextSourceTab) next.set("sourceTab", nextSourceTab);
-      } else {
-        next.delete("sessionCode");
-        next.delete("sourceTab");
-      }
-    });
-    setUnseenSessionCodes((current) => {
-      if (!current.has(sessionCode)) return current;
-      const next = new Set(current);
-      next.delete(sessionCode);
-      return next;
-    });
-  }
-
-  function handleSourceTabSelect(sourceTab: ChatSessionSourceTab) {
-    selectSourceTab(sourceTab);
-    const nextSession = firstSessionForSourceTab(sessionGroups, sourceTab);
-    if (nextSession) {
-      handleSessionSelect(nextSession, sourceTab);
-      return;
-    }
-    detachLocalRunObserver();
-    activeSessionCodeRef.current = "";
-    setOptimisticActiveSession(null);
-    setActiveSessionCode("");
-    setVisibleMessages([]);
-    replaceChatSearchParams((next) => {
-      next.delete("sessionCode");
-      next.set("sourceTab", sourceTab);
-    });
-  }
-
-  function selectSessionAfterRemoval(groupsAfterRemoval: ChatSessionGroup[], sourceTab: ChatSessionSourceTab) {
-    selectSourceTab(sourceTab);
-    const nextSession = firstSessionForSourceTab(groupsAfterRemoval, sourceTab);
-    if (nextSession) {
-      handleSessionSelect(nextSession, sourceTab);
-      return;
-    }
-
-    detachLocalRunObserver();
-    activeSessionCodeRef.current = "";
-    setOptimisticActiveSession(null);
-    setActiveSessionCode("");
-    setVisibleMessages([]);
-    replaceChatSearchParams((next) => {
-      next.delete("sessionCode");
-      next.set("sourceTab", sourceTab);
-    });
-  }
-
   function handleAgentSelect(agentCode: string) {
     setSelectedAgentCode(agentCode);
     if (!activeSession) return;
@@ -6039,803 +3565,6 @@ export function ChatManagementPage() {
           [selectionKey]: optionCode,
         }
     ));
-  }
-
-  function clearLocalStreamState() {
-    setSendingState(false);
-    runningSessionCodeRef.current = "";
-    setRunningSessionCode("");
-    liveAssistantDraftRef.current = "";
-    liveAguiObservedRef.current = false;
-    activeRunCodeRef.current = "";
-    activeRunSupportsSteerRef.current = null;
-    setActiveRunCode("");
-    setActiveRunSupportsSteer(null);
-  }
-
-  function clearLocalStreamOwnership(owner: ChatStreamOwner) {
-    if (!streamOwnershipRegistryRef.current.release(owner)) return false;
-    clearLocalStreamState();
-    return true;
-  }
-
-  function detachLocalRunObserver(sessionCode?: string) {
-    const owner = streamOwnershipRegistryRef.current.current;
-    const ownsStream = Boolean(owner && (!sessionCode || owner.sessionCode === sessionCode));
-    const ownsSteer = steeringRef.current
-      && (!sessionCode || steeringSessionCodeRef.current === sessionCode);
-    if (!ownsStream && !ownsSteer) return;
-    if (ownsStream) {
-      const detachedOwner = streamOwnershipRegistryRef.current.detach(sessionCode);
-      if (!detachedOwner) return;
-      autoDrainEpochRef.current += 1;
-      detachedStreamControllersRef.current.add(detachedOwner.controller);
-      clearLocalStreamState();
-      detachedOwner.controller.abort();
-    }
-    if (ownsSteer) steerAbortControllerRef.current?.abort();
-  }
-
-  async function handleStopRun() {
-    if (stoppingRunRef.current || !activeSession || !canStopCurrentRun) return;
-    const sessionCode = activeSession.sessionCode;
-    const expectedRunCode = effectiveActiveRunCode;
-    const currentOwner = streamOwnershipRegistryRef.current.current;
-    const localOwner = currentOwner?.sessionCode === sessionCode
-      ? currentOwner
-      : null;
-    const abortController = new AbortController();
-    stopAbortControllerRef.current = abortController;
-    stoppingRunRef.current = true;
-    autoDrainEpochRef.current += 1;
-    try {
-      await stopChatRun(
-        { expectedRunCode, sessionCode },
-        abortController.signal,
-      );
-      drainedRecoveredRunKeysRef.current.add(`${sessionCode}:${expectedRunCode}`);
-      observedRecoveredRunCodesRef.current.delete(sessionCode);
-      if (localOwner) {
-        stopRequestedStreamControllersRef.current.add(localOwner.controller);
-      }
-      if (localOwner && clearLocalStreamOwnership(localOwner)) {
-        localOwner.controller.abort();
-      }
-      if (steeringSessionCodeRef.current === sessionCode) {
-        steerAbortControllerRef.current?.abort();
-      }
-      setActiveRunRefreshKey((current) => current + 1);
-      setActiveChatReplayRefreshKey((current) => current + 1);
-      setActiveChatDataRefreshKey((current) => current + 1);
-      toast.info(t("chat.management.toasts.chatStopped"), { title: t("chat.management.toasts.chatStoppedTitle") });
-    } catch (error) {
-      if (!isAbortError(error)) {
-        toast.error(
-          error instanceof Error ? error.message : t("chat.management.toasts.chatStopFailed"),
-          { title: t("chat.management.toasts.chatStopFailedTitle") },
-        );
-      }
-    } finally {
-      if (stopAbortControllerRef.current === abortController) {
-        stopAbortControllerRef.current = null;
-      }
-      stoppingRunRef.current = false;
-    }
-  }
-
-  function forgetSessionModelSelection(sessionCode: string) {
-    setSessionModelSelections((current) => {
-      if (!(sessionCode in current)) return current;
-      const next = { ...current };
-      delete next[sessionCode];
-      return next;
-    });
-  }
-
-  function forgetRightPanelSnapshot(sessionCode: string) {
-    setRightPanelSnapshots((current) => {
-      if (!(sessionCode in current)) return current;
-      const next = { ...current };
-      delete next[sessionCode];
-      return next;
-    });
-  }
-
-  function forgetComposerDraft(sessionCode: string) {
-    setComposerDraftsBySessionCode((current) => {
-      if (!(sessionCode in current)) return current;
-      const next = { ...current };
-      delete next[sessionCode];
-      return next;
-    });
-    setPendingAttachmentsBySessionCode((current) => {
-      if (!(sessionCode in current)) return current;
-      const next = { ...current };
-      delete next[sessionCode];
-      return next;
-    });
-  }
-
-  async function handleSend(contentOverride?: string, attachmentOverride?: ChatMessageAttachment[]) {
-    if (sendingRef.current || userInputRequest || userInputAnswerPending) return;
-    if (!activeSession) return;
-    const rawContent = contentOverride ?? composer;
-    const goalCommand = contentOverride === undefined
-      ? parseGoalCommand(rawContent)
-      : { isGoalCommand: false, content: rawContent.trim() };
-    const content = goalCommand.content;
-    const attachments = attachmentOverride ?? pendingAttachments;
-    if (!content && !attachments.length) {
-      toast.warning(
-        goalCommand.isGoalCommand ? t("chat.management.toasts.goalRequired") : t("chat.management.toasts.nothingToSend"),
-        { title: goalCommand.isGoalCommand ? t("chat.management.toasts.goalRequiredTitle") : t("chat.management.toasts.nothingToSendTitle") },
-      );
-      return;
-    }
-    if (!selectedModel) {
-      toast.warning(t("chat.management.toasts.selectModelFirst"), { title: t("chat.management.toasts.modelRequiredTitle") });
-      return;
-    }
-    if (!selectedModel.enabled) {
-      toast.warning(
-        selectedModel.remoteStatus === "Unavailable"
-          ? "该远程模型已经下线，请改选其他模型。"
-          : "该模型当前不可用，请改选其他模型。",
-        { title: t("chat.management.toasts.modelRequiredTitle") },
-      );
-      return;
-    }
-
-    if (goalCommand.isGoalCommand) {
-      const goalSet = await setGoalFromComposerCommand(content);
-      if (!goalSet) return;
-    }
-
-    const sendInput = createSendInput(activeSession, content, attachments);
-    if (!sendInput) return;
-    await runChatInput(
-      activeSession,
-      sendInput,
-      contentOverride === undefined,
-    );
-  }
-
-  async function setGoalFromComposerCommand(objective: string) {
-    if (!activeSession) return false;
-    const sessionCode = activeSession.sessionCode;
-    setGoalActionSessionCode(sessionCode);
-    try {
-      await setChatSessionGoal({
-        sessionCode,
-        objective,
-        maxRuns: 20,
-      });
-      setShortTermMemoryRefreshKey((current) => current + 1);
-      openRightSidebar();
-      toast.success(t("chat.shortTermMemory.messages.goalSet"), {
-        title: t("chat.shortTermMemory.messages.goalUpdatedTitle"),
-      });
-      return true;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("chat.shortTermMemory.messages.goalFailed"), {
-        title: t("chat.shortTermMemory.messages.goalFailedTitle"),
-      });
-      return false;
-    } finally {
-      setGoalActionSessionCode("");
-    }
-  }
-
-  async function runChatInput(
-    targetSession: ChatSession,
-    sendInput: SendChatMessageInput,
-    shouldClearComposer = false,
-    sourceSubmission: ChatQueuedSubmission | null = null,
-  ) {
-    const restoreSourceSubmission = () => {
-      if (
-        !sourceSubmission
-        || invalidatedQueueSessionCodesRef.current.has(sourceSubmission.sessionCode)
-      ) return;
-      const remaining = removeQueuedChatSubmission(
-        queuedSubmissionsRef.current,
-        sourceSubmission.id,
-      );
-      replaceQueuedSubmissions([sourceSubmission, ...remaining]);
-    };
-    if (streamOwnershipRegistryRef.current.current || sendingRef.current) {
-      restoreSourceSubmission();
-      return false;
-    }
-    const content = sendInput.content.trim();
-    if (!content && !(sendInput.attachments?.length)) {
-      restoreSourceSubmission();
-      return false;
-    }
-    const pendingSubmissionAttachments = sendInput.attachments ?? [];
-    const autoDrainEpoch = autoDrainEpochRef.current;
-    const sendingSessionCode = targetSession.sessionCode;
-    const abortController = new AbortController();
-    const streamOwner = streamOwnershipRegistryRef.current.acquire(
-      sendingSessionCode,
-      abortController,
-    );
-    const currentStreamSettlement = () => resolveChatStreamSettlement({
-      activeSessionCode: activeSessionCodeRef.current,
-      detached: detachedStreamControllersRef.current.has(abortController),
-      owner: streamOwner,
-      registry: streamOwnershipRegistryRef.current,
-      stopped: stopRequestedStreamControllersRef.current.has(abortController),
-    });
-    const liveRunCodes = new Set<string>();
-    activeRunCodeRef.current = "";
-    activeRunSupportsSteerRef.current = null;
-    setActiveRunCode("");
-    setActiveRunSupportsSteer(null);
-    const sendStartedAt = Date.now();
-    const streamAcceptedAfter = sendStartedAt - liveAguiStartToleranceMs;
-    const optimisticUserCode = `LOCAL-${sendStartedAt}-USER`;
-    const optimisticAssistantCode = `LOCAL-${sendStartedAt}-ASSISTANT`;
-    const optimisticCreatedAt = new Date().toISOString();
-    const optimisticUserMessage: ChatMessage = {
-      actor: "User",
-      channel: targetSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
-      content,
-      attachments: pendingSubmissionAttachments,
-      createdAt: optimisticCreatedAt,
-      id: -sendStartedAt,
-      messageCode: optimisticUserCode,
-      role: "USER",
-      runCode: null,
-      sessionCode: sendingSessionCode,
-    };
-    const optimisticAssistantMessage: ChatMessage = {
-      actor: "Assistant",
-      channel: targetSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
-      content: "",
-      createdAt: optimisticCreatedAt,
-      id: -sendStartedAt - 1,
-      messageCode: optimisticAssistantCode,
-      role: "ASSISTANT",
-      runCode: null,
-      sessionCode: sendingSessionCode,
-    };
-    setSendingState(true);
-    runningSessionCodeRef.current = sendingSessionCode;
-    setRunningSessionCode(sendingSessionCode);
-    if (shouldClearComposer) {
-      setComposerDraftsBySessionCode((current) => ({
-        ...current,
-        [sendingSessionCode]: "",
-      }));
-      setPendingAttachmentsBySessionCode((current) => ({
-        ...current,
-        [sendingSessionCode]: [],
-      }));
-    }
-    if (activeSessionCodeRef.current === sendingSessionCode) {
-      setVisibleMessages((current) => [
-        ...current,
-        optimisticUserMessage,
-      ]);
-      autoStickToBottomRef.current = true;
-      setShowScrollToBottom(false);
-      scrollToLatestMessage("auto");
-    }
-    let completed = false;
-    let completedRunCode = "";
-    let completedSession: ChatSession | null = null;
-    // Once a request crosses the transport boundary, automatic retry is unsafe:
-    // the backend may already have persisted its USER message. The sole safe
-    // restore path is CHAT_RUN_ALREADY_ACTIVE, which rejects before admission.
-    let shouldRestoreSourceSubmission = false;
-    try {
-      const result = await streamChatMessage(
-        targetSession,
-        sendInput,
-        {
-          onAguiEvent: (event) => {
-            if (!streamOwnershipRegistryRef.current.owns(streamOwner)) return;
-            if (event.threadId && event.threadId !== sendingSessionCode) return;
-            const eventMillis = aguiEventMillis(event);
-            if (eventMillis !== null && eventMillis < streamAcceptedAfter) return;
-            openAgentTerminalFromLiveResult(sendingSessionCode, event, openedLiveTerminalCallsRef.current);
-            handleTitleGenerationFailureEvent(event, sendingSessionCode);
-            const runCode = aguiEventRunCode(event);
-            if (String(event.type).toUpperCase() === "RUN_STARTED" && runCode && runCode !== "stream") {
-              activeRunCodeRef.current = runCode;
-              setActiveRunCode(runCode);
-              const supportsSteer = typeof event.supportsSteer === "boolean"
-                ? event.supportsSteer
-                : null;
-              activeRunSupportsSteerRef.current = supportsSteer;
-              setActiveRunSupportsSteer(supportsSteer);
-            }
-            if (runCode && runCode !== "stream") {
-              liveRunCodes.add(runCode);
-              setLiveAguiAnchorMessageCodesBySessionCode((current) => {
-                const sessionAnchors = current[sendingSessionCode] ?? {};
-                if (sessionAnchors[runCode]) return current;
-                return {
-                  ...current,
-                  [sendingSessionCode]: {
-                    ...sessionAnchors,
-                    [runCode]: optimisticUserCode,
-                  },
-                };
-              });
-            }
-            if (isStructuredWorkEvent(event)) {
-              liveAguiObservedRef.current = true;
-              if (activeSessionCodeRef.current === sendingSessionCode) {
-                setVisibleMessages((current) => current.filter((message) => (
-                  message.messageCode !== optimisticAssistantCode || Boolean(message.content.trim())
-                )));
-              }
-            }
-            setLiveAguiEventsBySessionCode((current) => ({
-              ...current,
-              [sendingSessionCode]: mergeTranscriptAguiEvents(current[sendingSessionCode] ?? [], [event]),
-            }));
-          },
-          onDelta: (delta) => {
-            if (!streamOwnershipRegistryRef.current.owns(streamOwner)) return;
-            liveAssistantDraftRef.current = `${liveAssistantDraftRef.current}${delta}`;
-            if (activeSessionCodeRef.current !== sendingSessionCode) return;
-            setVisibleMessages((current) => {
-              const assistantExists = current.some((message) => message.messageCode === optimisticAssistantCode);
-              if (!assistantExists) {
-                return [
-                  ...current,
-                  { ...optimisticAssistantMessage, content: delta },
-                ];
-              }
-              return current.map((message) => (
-                message.messageCode === optimisticAssistantCode
-                  ? { ...message, content: `${message.content}${delta}` }
-                  : message
-              ));
-            });
-          },
-        },
-        abortController.signal,
-      );
-      if (!currentStreamSettlement().canCommit) {
-        // Some transports settle normally after AbortSignal fires. Reuse the
-        // same observer-settlement path as a rejected stream before applying
-        // any session, usage, transcript, or queue side effects.
-        throw new Error("Chat stream observer closed");
-      }
-      shouldRestoreSourceSubmission = false;
-      setUserInputRequest(
-        result.userInputRequest?.status === "Pending"
-          ? result.userInputRequest
-          : null,
-      );
-      const pendingUserInputRequest = result.userInputRequest;
-      if (pendingUserInputRequest?.status === "Pending") {
-        setUserInputRequests((current) => [
-          ...current.filter((request) => request.requestCode !== pendingUserInputRequest.requestCode),
-          pendingUserInputRequest,
-        ]);
-      }
-      setSessionGroups((current) => replaceSession(current, result.session));
-      window.dispatchEvent(new Event("tron:chat-session-updated"));
-      setLatestRequestEstimatesBySessionCode((current) => {
-        if (result.run.latestRequestEstimate) {
-          return {
-            ...current,
-            [result.session.sessionCode]: result.run.latestRequestEstimate,
-          };
-        }
-        if (!(result.session.sessionCode in current)) return current;
-        const next = { ...current };
-        delete next[result.session.sessionCode];
-        return next;
-      });
-      setLatestUsageAuditsBySessionCode((current) => {
-        if (result.run.latestUsageAudit) {
-          return {
-            ...current,
-            [result.session.sessionCode]: result.run.latestUsageAudit,
-          };
-        }
-        if (!(result.session.sessionCode in current)) return current;
-        const next = { ...current };
-        delete next[result.session.sessionCode];
-        return next;
-      });
-      const resultUserMessage = result.messages.find((message) => message.role === "USER") ?? null;
-      const persistedUserCode = resultUserMessage?.messageCode ?? optimisticUserCode;
-      const runCodes = Array.from(liveRunCodes);
-      if (runCodes.length) {
-        setLiveAguiAnchorMessageCodesBySessionCode((current) => {
-          const sessionAnchors = current[result.session.sessionCode] ?? {};
-          const nextSessionAnchors = { ...sessionAnchors };
-          runCodes.forEach((runCode) => {
-            nextSessionAnchors[runCode] = persistedUserCode;
-          });
-          return {
-            ...current,
-            [result.session.sessionCode]: nextSessionAnchors,
-          };
-        });
-      }
-      if (activeSessionCodeRef.current === result.session.sessionCode) {
-        setVisibleMessages((current) => mergeChatMessagesChronologically(
-          current,
-          result.messages,
-          [optimisticUserCode, optimisticAssistantCode],
-        ));
-      }
-      setShortTermMemoryRefreshKey((current) => current + 1);
-      setUnseenSessionCodes((current) => {
-        const next = new Set(current);
-        if (activeSessionCodeRef.current === result.session.sessionCode) next.delete(result.session.sessionCode);
-        else next.add(result.session.sessionCode);
-        return next;
-      });
-      completedSession = result.session;
-      completedRunCode = result.run.runCode;
-      completed = !stopRequestedStreamControllersRef.current.has(abortController)
-        && !detachedStreamControllersRef.current.has(abortController)
-        && autoDrainEpochRef.current === autoDrainEpoch;
-    } catch (error) {
-      const settlement = currentStreamSettlement();
-      const explicitlyStopped = stopRequestedStreamControllersRef.current.has(abortController);
-      if (!settlement.canCommit) {
-        shouldRestoreSourceSubmission = settlement.restoreSourceSubmission;
-        if (explicitlyStopped) {
-          const terminalEvents = stoppedAguiEvents(sendingSessionCode, liveRunCodes);
-          if (terminalEvents.length) {
-            setLiveAguiEventsBySessionCode((current) => ({
-              ...current,
-              [sendingSessionCode]: mergeTranscriptAguiEvents(current[sendingSessionCode] ?? [], terminalEvents),
-            }));
-          }
-        }
-        if (activeSessionCodeRef.current === sendingSessionCode) {
-          setVisibleMessages((current) => current.filter((item) => (
-            item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
-          )));
-        }
-      } else if (isChatRunAlreadyActiveError(error)) {
-        if (sourceSubmission) {
-          restoreSourceSubmission();
-        } else {
-          enqueueSubmission(targetSession, sendInput, "front");
-        }
-        setActiveChatReplayRefreshKey((current) => current + 1);
-        setActiveRunRefreshKey((current) => current + 1);
-        if (activeSessionCodeRef.current === sendingSessionCode) {
-          setVisibleMessages((current) => current.filter((item) => (
-            item.messageCode !== optimisticUserCode
-            && item.messageCode !== optimisticAssistantCode
-          )));
-        }
-        toast.info(
-          t("chat.management.toasts.responseRecovered"),
-          { title: t("chat.management.toasts.responseRecoveredTitle") },
-        );
-      } else {
-        const rawMessage = error instanceof Error ? error.message : t("chat.management.toasts.chatSendFailed");
-        const toastMessage = chatSendErrorToastMessage(rawMessage);
-        if (!sourceSubmission && pendingSubmissionAttachments.length) {
-          setPendingAttachmentsBySessionCode((current) => ({
-            ...current,
-            [sendingSessionCode]: [
-              ...pendingSubmissionAttachments,
-              ...(current[sendingSessionCode] ?? []),
-            ],
-          }));
-        }
-        if (activeSessionCodeRef.current === sendingSessionCode) {
-          setVisibleMessages((current) => current.filter((item) => (
-            item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
-          )));
-        }
-        toast.error(toastMessage, { title: t("chat.management.toasts.chatSendFailedTitle") });
-      }
-    } finally {
-      clearLocalStreamOwnership(streamOwner);
-    }
-
-    if (shouldRestoreSourceSubmission) restoreSourceSubmission();
-
-    if (completed && completedSession) {
-      drainedRecoveredRunKeysRef.current.add(
-        `${sendingSessionCode}:${completedRunCode}`,
-      );
-      if (
-        observedRecoveredRunCodesRef.current.get(sendingSessionCode)
-        === completedRunCode
-      ) {
-        observedRecoveredRunCodesRef.current.delete(sendingSessionCode);
-      }
-      const nextSubmission = takeNextQueuedSubmission(sendingSessionCode);
-      if (nextSubmission) {
-        void runChatInput(
-          completedSession,
-          nextSubmission.input,
-          false,
-          nextSubmission,
-        );
-      }
-    }
-    return completed;
-  }
-
-  async function handleQueueMessage() {
-    if (queueDisabled || userInputRequest || userInputAnswerPending || !activeSession) return;
-    const content = composer.trim();
-    if (!content && !pendingAttachments.length) return;
-    const sendInput = createSendInput(
-      activeSession,
-      content,
-      pendingAttachments,
-    );
-    if (!sendInput) return;
-    setComposer("");
-    setPendingAttachments([]);
-    if (sendingRef.current || authoritativeActiveRun || replayActiveRunLoadingHint) {
-      enqueueSubmission(activeSession, sendInput);
-      return;
-    }
-    await runChatInput(activeSession, sendInput);
-  }
-
-  async function handleAnswerUserInput(answers: ChatUserInputAnswer[]) {
-    const targetSession = activeSession;
-    const request = userInputRequest;
-    if (!targetSession || !request || userInputAnswerPending) return;
-    const continuationAnchorMessageCode = [...visibleMessages]
-      .reverse()
-      .find((message) => message.role === "ASSISTANT")?.messageCode ?? "";
-    setUserInputAnswerPending(true);
-    setSendingState(true);
-    runningSessionCodeRef.current = targetSession.sessionCode;
-    setRunningSessionCode(targetSession.sessionCode);
-    activeRunCodeRef.current = "";
-    activeRunSupportsSteerRef.current = null;
-    setActiveRunCode("");
-    setActiveRunSupportsSteer(null);
-    setLiveAguiPendingAnchorMessageCodesBySessionCode((current) => ({
-      ...current,
-      [targetSession.sessionCode]: continuationAnchorMessageCode,
-    }));
-    setLiveAguiEventsBySessionCode((current) => ({
-      ...current,
-      [targetSession.sessionCode]: [],
-    }));
-    setLiveAguiAnchorMessageCodesBySessionCode((current) => ({
-      ...current,
-      [targetSession.sessionCode]: {},
-    }));
-    try {
-      const result = await streamChatUserInputAnswer(
-        targetSession,
-        request.requestCode,
-        { answers },
-        {
-          onAguiEvent: (event) => {
-            if (activeSessionCodeRef.current !== targetSession.sessionCode) return;
-            openAgentTerminalFromLiveResult(targetSession.sessionCode, event, openedLiveTerminalCallsRef.current);
-            handleTitleGenerationFailureEvent(event, targetSession.sessionCode);
-            const runCode = aguiEventRunCode(event);
-            if (String(event.type).toUpperCase() === "RUN_STARTED" && runCode && runCode !== "stream") {
-              activeRunCodeRef.current = runCode;
-              setActiveRunCode(runCode);
-              const supportsSteer = typeof event.supportsSteer === "boolean"
-                ? event.supportsSteer
-                : null;
-              activeRunSupportsSteerRef.current = supportsSteer;
-              setActiveRunSupportsSteer(supportsSteer);
-            }
-            if (runCode && runCode !== "stream") {
-              setLiveAguiAnchorMessageCodesBySessionCode((current) => {
-                const sessionAnchors = current[targetSession.sessionCode] ?? {};
-                if (sessionAnchors[runCode]) return current;
-                return {
-                  ...current,
-                  [targetSession.sessionCode]: {
-                    ...sessionAnchors,
-                    [runCode]: continuationAnchorMessageCode,
-                  },
-                };
-              });
-            }
-            setLiveAguiEventsBySessionCode((current) => ({
-              ...current,
-              [targetSession.sessionCode]: mergeTranscriptAguiEvents(
-                current[targetSession.sessionCode] ?? [],
-                [event],
-              ),
-            }));
-          },
-        },
-      );
-      if (activeSessionCodeRef.current === targetSession.sessionCode) {
-        setVisibleMessages((current) =>
-          mergeChatMessagesChronologically(current, result.messages),
-        );
-        const nextRequests = await listChatUserInputRequests(targetSession.sessionCode).catch(() => null);
-        if (nextRequests) {
-          setUserInputRequests(nextRequests);
-          setUserInputRequest(
-            nextRequests.find((item) => item.status === "Pending") ?? null,
-          );
-        } else {
-          setUserInputRequest(
-            result.userInputRequest?.status === "Pending"
-              ? result.userInputRequest
-              : null,
-          );
-          setUserInputRequests((current) => current.map((item) => (
-            item.requestCode === request.requestCode
-              ? { ...item, answers, status: "Answered" as const }
-              : item
-          )));
-        }
-      }
-      setSessionGroups((current) => replaceSession(current, result.session));
-      window.dispatchEvent(new Event("tron:chat-session-updated"));
-      setActiveChatDataRefreshKey((current) => current + 1);
-      setActiveRunRefreshKey((current) => current + 1);
-      setActiveChatReplayRefreshKey((current) => current + 1);
-      setShortTermMemoryRefreshKey((current) => current + 1);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("chat.management.toasts.answerFailed"), {
-        title: t("chat.management.toasts.answerFailedTitle"),
-      });
-    } finally {
-      setLiveAguiPendingAnchorMessageCodesBySessionCode((current) => {
-        if (!(targetSession.sessionCode in current)) return current;
-        const next = { ...current };
-        delete next[targetSession.sessionCode];
-        return next;
-      });
-      clearLocalStreamState();
-      setUserInputAnswerPending(false);
-    }
-  }
-
-  async function handleSteerMessage() {
-    if (steeringRef.current || steerDisabled || userInputRequest || userInputAnswerPending || !activeSession) return;
-    const content = composer.trim();
-    if (!content && !pendingAttachments.length) return;
-    const sendInput = createSendInput(
-      activeSession,
-      content,
-      pendingAttachments,
-    );
-    if (!sendInput) return;
-    const localRunIsTarget = sendingRef.current
-      && runningSessionCodeRef.current === activeSession.sessionCode;
-    const expectedRunCode = localRunIsTarget
-      ? activeRunCodeRef.current
-      : (authoritativeActiveRun?.runCode ?? "");
-    const authoritativeRunIsTarget = !localRunIsTarget
-      && authoritativeActiveRun?.runCode === expectedRunCode;
-    const targetSupportsSteer = localRunIsTarget
-      ? activeRunSupportsSteerRef.current === true
-      : Boolean(
-        authoritativeActiveRun?.supportsSteer
-        && authoritativeActiveRun.state.toUpperCase() !== "FINISHING",
-      );
-    const autoDrainEpoch = autoDrainEpochRef.current;
-    setComposer("");
-    setPendingAttachments([]);
-    if (
-      (!localRunIsTarget && !authoritativeRunIsTarget)
-      || !expectedRunCode
-      || !targetSupportsSteer
-    ) {
-      enqueueSubmission(activeSession, sendInput);
-      return;
-    }
-
-    const steerSession = activeSession;
-    const abortController = new AbortController();
-    steerAbortControllerRef.current = abortController;
-    steeringRef.current = true;
-    steeringSessionCodeRef.current = steerSession.sessionCode;
-    setSteering(true);
-    try {
-      const result = await steerChatMessage(
-        {
-          attachments: sendInput.attachments ?? [],
-          content: sendInput.content,
-          expectedRunCode,
-          sessionCode: steerSession.sessionCode,
-        },
-        abortController.signal,
-      );
-      if (activeSessionCodeRef.current === result.sessionCode) {
-        setVisibleMessages((current) => (
-          current.some((message) => message.messageCode === result.message.messageCode)
-            ? current
-            : [...current, result.message]
-        ));
-      }
-    } catch (error) {
-      const sessionInvalidated = invalidatedQueueSessionCodesRef.current.has(
-        steerSession.sessionCode,
-      );
-      const safeQueueFallback = isApiError(error)
-        && isSteerQueueFallbackCode(error.code);
-      if (!sessionInvalidated && safeQueueFallback) {
-        enqueueSubmission(steerSession, sendInput, "front");
-        if (
-          !sendingRef.current
-          && !authoritativeRunIsTarget
-          && autoDrainEpochRef.current === autoDrainEpoch
-        ) {
-          const nextSubmission = takeNextQueuedSubmission(
-            steerSession.sessionCode,
-          );
-          if (nextSubmission) {
-            void runChatInput(
-              steerSession,
-              nextSubmission.input,
-              false,
-              nextSubmission,
-            );
-          }
-        }
-      }
-      if (sessionInvalidated) {
-        toast.info(t("chat.management.toasts.steerDiscarded"), { title: t("chat.management.toasts.sessionClosedTitle") });
-      } else if (safeQueueFallback) {
-        toast.info(
-          t("chat.management.toasts.steerQueued"),
-          { title: t("chat.management.toasts.messageQueuedTitle") },
-        );
-      } else if (isAbortError(error)) {
-        toast.info(
-          t("chat.management.toasts.steerNotRetried"),
-          { title: t("chat.management.toasts.steerNotRetriedTitle") },
-        );
-      } else {
-        toast.error(
-          error instanceof Error ? error.message : t("chat.management.toasts.steerFailed"),
-          { title: t("chat.management.toasts.steerFailedTitle") },
-        );
-      }
-    } finally {
-      if (steerAbortControllerRef.current === abortController) {
-        steerAbortControllerRef.current = null;
-      }
-      steeringRef.current = false;
-      steeringSessionCodeRef.current = "";
-      setSteering(false);
-    }
-  }
-
-  async function handleSubmit(mode: ChatSubmitMode = "send") {
-    if (mode === "queue") {
-      await handleQueueMessage();
-      return;
-    }
-    if (mode === "steer") {
-      await handleSteerMessage();
-      return;
-    }
-    await handleSend();
-  }
-
-  function handleEditQueuedMessage(id: string, content: string) {
-    const submission = queuedSubmissionsRef.current.find((item) => item.id === id);
-    replaceQueuedSubmissions(
-      removeQueuedChatSubmission(queuedSubmissionsRef.current, id),
-    );
-    setComposer(content);
-    setPendingAttachments(submission?.input.attachments ?? []);
-  }
-
-  function handleRemoveQueuedMessage(id: string) {
-    replaceQueuedSubmissions(
-      removeQueuedChatSubmission(queuedSubmissionsRef.current, id),
-    );
   }
 
   async function handleCreateCompaction() {
@@ -6901,7 +3630,7 @@ export function ChatManagementPage() {
     );
     if (created) {
       openRightSidebar();
-      await handleSend(input.objective, []);
+      await submitterRef.current?.submit({ content: input.objective });
     }
     return created;
   }
@@ -6924,7 +3653,7 @@ export function ChatManagementPage() {
       t("chat.shortTermMemory.messages.goalResumed"),
     );
     if (resumed) {
-      await handleSend(t("chat.shortTermMemory.goalResumePrompt"), []);
+      await submitterRef.current?.submit({ content: t("chat.shortTermMemory.goalResumePrompt") });
     }
     return resumed;
   }
@@ -6943,121 +3672,9 @@ export function ChatManagementPage() {
     );
   }
 
-  function handleCreateSession() {
-    if (!activeWorkspaceCode) {
-      toast.warning(t("chat.management.toasts.createWorkspaceFirst"), { title: t("chat.management.toasts.noWorkspaceTitle") });
-      return;
-    }
-    openDraftChatTab();
-  }
-
-  async function handleArchiveSession(session: ChatSession) {
-    const returnSourceTab = requestedSourceTab ?? activeSourceTab;
-    const shouldCreateProjectReplacement = Boolean(
-      session.projectCode?.trim()
-      && activeSessionCode === session.sessionCode,
-    );
-    setSessionActionPendingCode(session.sessionCode);
-    try {
-      const archived = await archiveChatSession(session.sessionCode);
-      invalidateQueuedSession(archived.sessionCode);
-      const nextGroups = removeSession(sessionGroups, archived.sessionCode);
-      setSessionGroups(nextGroups);
-      setUnseenSessionCodes((current) => {
-        if (!current.has(archived.sessionCode)) return current;
-        const next = new Set(current);
-        next.delete(archived.sessionCode);
-        return next;
-      });
-      forgetSessionModelSelection(archived.sessionCode);
-      forgetRightPanelSnapshot(archived.sessionCode);
-      forgetComposerDraft(archived.sessionCode);
-
-      if (shouldCreateProjectReplacement) {
-        const params = new URLSearchParams({ draftCode: crypto.randomUUID(), projectCode: session.projectCode! });
-        const path = `/chats?${params}`;
-        const tabId = useTabStore.getState().addTab({
-          title: t("shell:chatSidebar.newChat"), titleTranslationKey: "shell:chatSidebar.newChat",
-          path, closable: true, activeNav: `chat-draft:${params.get("draftCode")}`,
-        });
-        useTabStore.getState().setActiveTab(tabId);
-        navigate(path);
-      } else if (activeSessionCode === archived.sessionCode) {
-        selectSessionAfterRemoval(nextGroups, returnSourceTab);
-      }
-      toast.success(t("chat.management.toasts.sessionArchived"), { title: archived.sessionCode });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t("chat.management.toasts.archiveSessionFailed");
-      toast.error(message, { title: t("chat.management.toasts.archiveSessionFailed") });
-    } finally {
-      setSessionActionPendingCode("");
-    }
-  }
-
-  async function handleSidebarRenameSession(session: ChatSession, title: string) {
-    if (!title.trim()) {
-      toast.warning(t("chat.management.toasts.titleRequired"), { title: t("chat.management.toasts.renameSkippedTitle") });
-      return;
-    }
-
-    setSessionActionPendingCode(session.sessionCode);
-    try {
-      const renamed = await updateChatSession(session.sessionCode, { title });
-      setSessionGroups((current) => replaceSession(current, renamed));
-      window.dispatchEvent(new Event("tron:chat-session-updated"));
-      toast.success(t("chat.management.toasts.sessionRenamed"), { title: renamed.sessionCode });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t("chat.management.toasts.renameSessionFailed");
-      toast.error(message, { title: t("chat.management.toasts.renameSessionFailed") });
-    } finally {
-      setSessionActionPendingCode("");
-    }
-  }
-
-  // Keep automatic width-based collapse separate from the user's manual choice.
-  useEffect(() => {
-    const mainElement = mainRef.current;
-    if (!mainElement) return;
-    const resizeObserver = new ResizeObserver(
-      throttle((entries: ResizeObserverEntry[]) => {
-        for (const entry of entries) {
-          if (entry.contentBoxSize) {
-            const width = entry.contentBoxSize[0].inlineSize;
-            setAutoSidebarCollapsed(width < 600);
-          }
-        }
-      }, 10)
-    );
-
-    resizeObserver.observe(mainElement);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
-
   return (
     <AgentTerminalSessionContext.Provider value={activeSession?.sessionCode ?? activeSessionCode}>
-    <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-[var(--color-elevated-surface)]" ref={mainRef}>
-      <div className="hidden">
-        <SessionSidebar
-          activeSessionCode={activeSession?.sessionCode ?? activeSessionCode}
-          activeSourceTab={activeSourceTab}
-          collapsed={sidebarCollapsed}
-          creatingSession={creatingSession}
-          groups={sessionGroups}
-          pendingUserInputSessionCodes={pendingUserInputSessionCodes}
-          runningSessionCode={currentSessionRunActive ? activeSession?.sessionCode ?? "" : ""}
-          sessionActionPendingCode={sessionActionPendingCode}
-          unseenSessionCodes={unseenSessionCodes}
-          onArchiveSession={(session) => void handleArchiveSession(session)}
-          onCollapseToggle={() => setUserSidebarCollapsed((value) => !value)}
-          onCreateSession={() => void handleCreateSession()}
-          onRenameSession={handleSidebarRenameSession}
-          onSessionSelect={handleSessionSelect}
-          onSourceTabSelect={handleSourceTabSelect}
-        />
-      </div>
+    <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-[var(--color-elevated-surface)]">
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {activeSession || isDraft ? (
           <AgentChatWindow
@@ -7066,9 +3683,10 @@ export function ChatManagementPage() {
             agentReplySpeed={agentReplySpeed}
             adapter={chatRuntimeAdapter}
             attachmentLabels={attachmentLabels}
+            attachmentDownloader={downloadPendingAttachment}
             autoFocusComposer={shouldAutoFocusChatComposer()}
             composerRef={composerRef}
-            composerHeader={transcriptAttachmentHeader}
+            submitterRef={submitterRef}
             config={{
               agentCode: effectiveAgentCode,
               disabledInput: creatingSession || !selectedModel?.enabled,

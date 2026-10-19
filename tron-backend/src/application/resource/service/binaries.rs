@@ -98,25 +98,14 @@ impl ResourceService {
         actor_user_code: &str,
         command: ResourceBinaryDownloadCommand,
     ) -> Result<(ResourceHttpBinaryDownload, ResourceFileRecord), ResourceError> {
-        validate_resource_code(&command.resource_code)?;
-        let workspace_code =
-            self.workspace_scope(actor_user_code, &command.workspace_code, false)?;
-        let record = match self
-            .effective_resources(&workspace_code)?
-            .remove(&command.resource_code)
-            .map(|effective| effective.resource)
-        {
-            Some(ManagedResource::File(record)) => record,
-            Some(_) | None => return Err(ResourceError::NotFound),
-        };
-        self.authorize_resource_read(
-            actor_user_code,
-            &record.workspace_code,
-            &record.resource_code,
-        )?;
-        if !self.storage.exists(&record.storage_locator)? {
-            return Err(ResourceError::MissingBinaryObject);
-        }
+        let record = self
+            .download_binary_records(
+                actor_user_code,
+                &command.workspace_code,
+                &[command.resource_code],
+            )?
+            .pop()
+            .ok_or(ResourceError::NotFound)?;
         Ok((
             ResourceHttpBinaryDownload {
                 file_name: record.file_name.clone(),
@@ -124,6 +113,40 @@ impl ResourceService {
             },
             record,
         ))
+    }
+
+    /// Resolve one authorized metadata snapshot for a batch of binary reads.
+    /// Preserve caller order and duplicates; each record retains its own privacy
+    /// check and inherited-resource override semantics.
+    pub fn download_binary_records(
+        &self,
+        actor_user_code: &str,
+        workspace_code: &str,
+        resource_codes: &[String],
+    ) -> Result<Vec<ResourceFileRecord>, ResourceError> {
+        for code in resource_codes {
+            validate_resource_code(code)?;
+        }
+        let workspace_code = self.workspace_scope(actor_user_code, workspace_code, false)?;
+        let effective = self.effective_resources(&workspace_code)?;
+        resource_codes
+            .iter()
+            .map(|code| {
+                let record = match effective.get(code).map(|entry| &entry.resource) {
+                    Some(ManagedResource::File(record)) => record,
+                    Some(_) | None => return Err(ResourceError::NotFound),
+                };
+                self.authorize_resource_read(
+                    actor_user_code,
+                    &record.workspace_code,
+                    &record.resource_code,
+                )?;
+                if !self.storage.exists(&record.storage_locator)? {
+                    return Err(ResourceError::MissingBinaryObject);
+                }
+                Ok(record.clone())
+            })
+            .collect()
     }
 
     pub fn download_binary_storage(

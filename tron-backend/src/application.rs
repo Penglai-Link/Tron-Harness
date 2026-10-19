@@ -36,3 +36,4 @@ pub mod capability;
 pub mod dude;
 pub mod dude_memory;
 pub mod document;
+pub mod knowledge_quality;

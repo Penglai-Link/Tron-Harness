@@ -1,0 +1,76 @@
+use super::*;
+use crate::{application::rag::RagSettings, response::EmptyData};
+
+// Rust/FE consensus §§2.1,2.2,2.4–2.6: one POST with camelCase settings,
+// dedicated request/response DTOs, protocol codes and request-localized failures.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct CreateRequest {
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default = "RagSettings::knowledge_base_default")]
+    index_settings: RagSettings,
+    #[serde(default)]
+    default_parse_preference: crate::application::knowledge_base::DocumentParsePreference,
+}
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct CreatedLibraryView {
+    id: String,
+    name: String,
+    description: String,
+    document_count: usize,
+}
+pub(super) struct CreateLibraryApiError(KnowledgeBaseError, String);
+impl IntoResponse for CreateLibraryApiError {
+    fn into_response(self) -> Response {
+        let descriptor = self.0.library_deletion_descriptor();
+        let (status, zh, en) = match descriptor.message_key {
+            "tron.knowledge_base.invalid" => (
+                StatusCode::BAD_REQUEST,
+                "知识库名称或索引配置无效",
+                "Invalid knowledge base name or index settings",
+            ),
+            "tron.knowledge_base.forbidden" => (
+                StatusCode::FORBIDDEN,
+                "无知识库权限",
+                "Access to this knowledge base is denied",
+            ),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "知识库创建失败",
+                "Could not create the knowledge base",
+            ),
+        };
+        (
+            status,
+            Json(ApiResponse::<EmptyData>::protocol_error(
+                descriptor.code,
+                if self.1.starts_with("en") { en } else { zh },
+            )),
+        )
+            .into_response()
+    }
+}
+pub(super) async fn create(
+    State(kb): State<KnowledgeBaseService>,
+    auth: RequestAuthContext,
+    Json(input): Json<CreateRequest>,
+) -> Result<Json<ApiResponse<CreatedLibraryView>>, CreateLibraryApiError> {
+    let library = kb
+        .create_with_parsing_settings(
+            &auth.user().user_code,
+            &input.name,
+            &input.description,
+            input.index_settings,
+            input.default_parse_preference,
+        )
+        .map_err(|error| CreateLibraryApiError(error, auth.locale.clone()))?;
+    Ok(Json(ApiResponse::protocol_success(CreatedLibraryView {
+        id: library.id,
+        name: library.name,
+        description: library.description,
+        document_count: library.document_count,
+    })))
+}

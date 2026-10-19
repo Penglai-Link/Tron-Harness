@@ -239,6 +239,49 @@ impl LlmRuntimeService {
         })
     }
 
+    pub async fn embedding_content_batch_call(
+        &self,
+        command: super::LlmEmbeddingContentBatchCallCommand,
+    ) -> Result<LlmEmbeddingBatchCallResult, LlmRuntimeError> {
+        let workspace =
+            required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
+        if command.inputs.is_empty() || command.dimensions == 0 {
+            return Err(LlmRuntimeError::invalid_provider_response(
+                "empty embedding batch or dimension",
+            ));
+        }
+        let inputs = command.inputs;
+        if inputs.iter().any(|input| input.is_empty()) {
+            return Err(LlmRuntimeError::InputRequired);
+        }
+        let model = optional_trimmed(command.model_code);
+        let config = self.resolve_embedding_model_config(&workspace, model.as_deref())?;
+        let (vectors, provider_model) = self
+            .client
+            .embed_content_batch_with_model(&config, &inputs, command.dimensions)
+            .await
+            .map_err(LlmRuntimeError::provider_failed)?;
+        let response = eliteforge_agent_framework::EmbeddingResponse {
+            model: eliteforge_agent_framework::ModelRef::new("http-embedding", &config.model_code),
+            provider_model,
+            vectors,
+            input_tokens: None,
+        };
+        response
+            .validate(inputs.len(), Some(command.dimensions))
+            .map_err(|error| {
+                LlmRuntimeError::invalid_provider_response(format!(
+                    "Embedding批次返回的数量、索引或向量无效（要求{}维）: {error}",
+                    command.dimensions
+                ))
+            })?;
+        Ok(LlmEmbeddingBatchCallResult {
+            model_code: config.model_code,
+            provider_model: response.provider_model,
+            vectors: response.vectors,
+        })
+    }
+
     pub async fn embedding_call_with_chunking(
         &self,
         command: LlmChunkedEmbeddingCallCommand,

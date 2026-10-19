@@ -1,6 +1,8 @@
+import { knowledgeQuality } from "./knowledgeQuality";
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
+  knowledgeQuality,
   agentActivation: { active: "Active", disabled: "Disabled" },
   awakening: {"queuePlaceholder": "Enter to queue · Shift+Enter for newline", "steerPlaceholder": "Enter to queue · ⌘/Ctrl+Enter to steer · Shift+Enter for newline", "startTimeout": "Dude has not started responding yet. Retry, set up manually, or skip for now.", "startFailed": "Awakening could not start. Retry or set up manually.", "skip": "SKIP", "title": "A new connection", "subtitle": "Let’s get to know each other.", "later": "Continue later", "manual": "Set up manually", "backToChat": "Back to conversation", "enter": "Enter Tron", "connecting": "Waking your Dude…", "continue": "Continue awakening"},
   "Automations": "Automations",
@@ -434,10 +436,23 @@ export const pages = {
       json: 'Enter a valid JSON value, such as true or "approved".',
     },
   },
+  modelAutoRoutes: { multimodalEmbedding: "Multimodal Embedding Automatic Routing", chat: "Conversation Automatic Routing", embedding: "Embedding Automatic Routing", rerank: "Rerank Automatic Routing" },
   ragUnified: {
+    taskErrorDetails: "Error details",
+    sourceSegment: "Segment {{value}}",
+    segmentPage: "Page {{value}} within segment",
+    partialSourceGroup: "Some source associations reached the loading limit. Continue in the source graph.",
+    imageAnnotations: { SourceCaption: "Original caption", OcrText: "Image text", GeneratedDescription: "Generated image description" },
+    taskView: "Task view",
+    latestTasks: "Latest tasks",
+    historyTasks: "Task history",
+    submittedAt: "Submitted at",
+    deleteRecord: "Delete record",
+    deleteRecords: "Delete records",
+    deleteRecordsHelp: "Delete {{count}} finished task records? Sources and published indexes will be kept.",
+    recordsDeleted: "Deleted {{count}} task records",
+
     fileSize: "File size",
-    smallFilesFirst:
-      "Smaller queued files run first; equal sizes follow submission order.",
     taskStatistics: "Ingestion task statistics",
     totalTasks: "Total tasks",
     processingTasks: "In progress",
@@ -450,6 +465,8 @@ export const pages = {
     viewRebuildTasks: "View ingestion jobs for {{name}} ({{count}} to rebuild)",
     viewIngestion: "View ingestion jobs",
     configSaved: "Index settings saved",
+    rebuildAccepted: "Rebuild jobs submitted",
+    rebuildCorpusHelp: "Rebuild indexes for all sources in “{{name}}” using the current settings?",
     rebuildSubmitted: "Rebuild jobs submitted: {{count}}",
     stageFailureHelp: "Failure details for {{channel}}",
     savedRebuildHelp:
@@ -486,7 +503,7 @@ export const pages = {
     manageKnowledgeBase: "Manage knowledge base",
     emptyCorpora: "No corpora. Creating a knowledge base creates its corpus.",
     configHelp:
-      "Saved settings apply to new jobs. Rebuild existing sources to apply changes; the published version remains available.",
+      "Knowledge bases automatically supplement indexes using cached parsing results. Current indexes remain available until completion. Rebuild built-in corpora manually.",
     fulltext: "Full text",
     vector: "Vector",
     fulltextHelp: "Search a tokenized full text index.",
@@ -498,16 +515,16 @@ export const pages = {
     imageDescriptionModelCodeHelp: "Index existing captions and OCR text, or select a vision model to generate descriptions before indexing them with the current text embedding model. Images without text are not directly embedded.",
     imageSourceTextOnly: "Use existing captions and OCR text only",
     embeddingModelCodeHelp:
-      "Select a specific Embedding model when vector search is enabled. Indexing and retrieval use the same model code; Tron routes among instances of that code.",
+      "Knowledge bases default to multimodal embeddings for text, image text and original images. Text embeddings index text only. Image descriptions are generated automatically. Retrieval uses the same pinned model as indexing.",
     instanceCount: "{{count}} instances",
-    embeddingModelRequired: "Select a specific Embedding model when vector search is enabled.",
+    embeddingModelRequired: "Choose Embedding Automatic Routing or a specific Embedding model when vector search is enabled.",
     graphModelCode: "Graph extraction model",
     graphModelCodeHelp:
       "When graph indexing is enabled, this model extracts entities and relations from the text during ingestion and keeps the original evidence. Choose the same Auto route as Agent conversations or a specific model. Skill-to-file links come directly from the skill directory and do not require a model call. Disabled graph indexing does not call it.",
-    autoRoute: "Automatic routing (Auto)",
+    autoRoute: "Conversation Automatic Routing",
     rerankModelCode: "Reranking model",
     rerankModelCodeHelp:
-      "Rescores fused candidate evidence to prioritize content relevant to the question. With reranking off, uses the fused ranking directly.",
+      "Rescores fused candidate evidence to prioritize content relevant to the question. Choose Rerank Automatic Routing or a specific model; with reranking off, use the fused ranking directly.",
     rerankOff: "Reranking off",
     defaultModel: "Select a specific model",
     chooseModel: "Select model",
@@ -518,7 +535,7 @@ export const pages = {
     allStates: "All states",
     rebuild: "Rebuild indexes",
     rebuilding: "Rebuilding…",
-    selectAllTasks: "Select rebuildable tasks in this list",
+    selectAllTasks: "Select finished tasks in this list",
     selectTask: "Select {{name}}",
     document: "Source",
     state: "State",
@@ -555,6 +572,9 @@ export const pages = {
       skill: "Skills",
     },
     states: {
+      TRUNCATED: 'Partial results',
+      INVALIDATED: 'Invalidated',
+      SKIPPED: 'Skipped',
       RUNNING: "Running",
       QUEUED: "Queued",
       COMPLETED: "Completed",
@@ -567,10 +587,16 @@ export const pages = {
       CHUNKING: "Chunking",
       EMBEDDING: "Vector indexing",
       PUBLISHING: "Validation and publication",
+      GRAPH_NODE_EMBEDDING: "Graph node embedding",
       GRAPH: "Graph indexing",
       FULLTEXT: "Full text indexing",
     },
     channels: {
+      source_structure: "Source image and text associations",
+      graph_fulltext: 'Graph node full text',
+      graph_vector: 'Graph node vectors',
+      graph_expand: 'Graph expansion',
+      graph_evidence: 'Graph source evidence',
       fulltext: "Full text",
       vector: "Vector",
       graph: "Graph",
@@ -580,7 +606,7 @@ export const pages = {
     flow: {
       read: "Read and parse",
       readHelp:
-        "MinerU for PDF, Word and Excel; direct Markdown reads and structured memory and skills.",
+        "MinerU parses supported documents; plain text is read directly, and memory and skills provide structured content.",
       chunk: "Unified chunking",
       chunkHelp: "Keep images and page, paragraph and cell source locations.",
       index: "Build indexes",
@@ -622,7 +648,7 @@ export const pages = {
     draftAssignmentHelp:
       "Confirm your selection, then save the agent to apply workspace access.",
     createdAssignmentPending:
-      "Agent created. Save to finish workspace assignment; retry will not create another agent.",
+      "Agent created. Some settings are still pending. Save again to finish without creating another agent.",
     agentDefinitions: "Internal Agents",
     agentAuthorization: "Workspace authorization",
     agentAuthorizationHelp:
@@ -743,6 +769,13 @@ export const pages = {
     attachmentFailed: "Could not download this attachment.",
   },
   knowledgeLibrary: {
+    librarySettings: "Knowledge base settings",
+    librarySettingsHelp: "View and edit the saved configuration for this knowledge base.",
+    librarySettingsSaved: "Knowledge base settings saved.",
+    libraryParsingSettingsHelp: "Parsing preferences apply to future uploads. Existing documents retain their parsed results.",
+    libraryIndexSettingsHelp: "Index changes automatically supplement indexes using existing parsed results and compatible vectors. Unchanged settings do not start tasks.",
+
+    indexSettings: "Index settings",
     batchRetry: "Retry selected",
     batchRetrying: "Submitting…",
     batchRetried_one: "Submitted a retry task for {{count}} document.",
@@ -760,11 +793,12 @@ export const pages = {
     chunkParameters: "Adjust chunk parameters",
     modeHelpLabel: "Chunking mode options",
     modeHelp: {
-      AUTO: "Automatic: groups content using detected headings, page or sheet boundaries; long content prefers line-break boundaries. Uses the existing size and overlap settings, which usually need no adjustment. Expand chunk parameters to fine-tune them.",
+      Structure: "Preserve paragraphs, lists and table rows across pages within a section, with parent context for retrieval.",
+      AUTO: "Automatic: preserves paragraphs, lists and table structure, using detected headings to organize content. Sections may span pages; worksheets stay separate. Oversized content is split with source locations preserved.",
       HEADING:
-        "By heading: uses the same structural splitting rules as Automatic, with an editable heading depth. Long sections still respect the character cap; page and sheet boundaries are preserved.",
+        "By heading: splits within each heading group at sentence or line boundaries, with an editable heading depth. Long paragraphs may be split; worksheets stay separate and source locations are preserved.",
       FIXED:
-        "Fixed length: ignores headings and splits by the maximum chunk length, with optional overlap between chunks. Page and sheet boundaries are preserved for source locations.",
+        "Fixed length: ignores heading groups and splits by the maximum character count with the configured overlap. Worksheets stay separate; page numbers remain available for source locations.",
     },
     maxCharsHelpLabel: "Maximum chunk length help",
     maxCharsHelp:
@@ -802,7 +836,7 @@ export const pages = {
     deleteDescription:
       "Stop processing {{file}}, remove all generations of chunks, full-text indexes, vectors and task records, and attempt to clean exclusive images and parsing attachments. The original upload, your local source file and shared resources are retained. Some derived files and MinerU cache may remain.",
     cancelDelete: "Keep document",
-    documentDeleted: "Document deleted. The original upload is retained.",
+    documentDeleted: "Deleted successfully",
     deletionHelp:
       "Deleting removes all document indexes and related records while retaining the original upload. Exclusive derived files are cleaned on a best-effort basis; file cleanup failure does not affect deletion success.",
 
@@ -907,6 +941,15 @@ export const pages = {
       Text: "Extract existing text: prefer the PDF text layer without forcing full-page OCR. Scans may have missing body text; image and table regions may still require recognition.",
     },
     parsingQuality: "Parsing quality",
+    parsingPreference: "Parsing method",
+    parsingPreferences: { Auto: "Automatic (recommended)", Native: "Document parsing", Recognition: "Scanned document OCR", Layout: "Precise parsing" },
+    autoParsingHelp: "Choose a suitable method from the file content. Plain text is read directly.",
+    uploadParsingHelp: "Upload after the file check completes. Parsing will use the method shown below.",
+    parsingAdvanced: "Advanced options",
+    directRead: "Read directly",
+    inspecting: "Checking…",
+    inspectionFailed: "Check failed",
+    parsingNotDetermined: "Not determined",
     parseModeHelp: "PersonAI supports document parsing, scanned-document OCR, and precise parsing. RAG indexing starts after parsing and settlement complete.",
     parseModes: { Text: "Document parsing", Ocr: "Scanned document OCR", Precise: "Precise parsing" },
     inheritParsing: "Use platform default ({{tier}})",
@@ -918,7 +961,7 @@ export const pages = {
       standard: "Standard",
       advanced: "Advanced",
     },
-    documentWarnings: "Warnings for {{name}}",
+    documentDetails: "Processing details for {{name}}",
     parseWarnings: "Parsing notices",
     queueReasons: {
       UNKNOWN: "Waiting for scheduling. Check the service status.",
@@ -1038,8 +1081,8 @@ export const pages = {
     uploading: "Uploading…",
     uploaded: "Document processed.",
     formats:
-      "Supports Markdown, Word (.docx), Excel (.xlsx), and PDFs including scanned pages. Standard parsing preserves structure and embedded images. Originals and images are stored in Resources. Convert legacy .doc / .xls files first.",
-    unsupported: "Upload .md, .docx, .xlsx, or a PDF.",
+      "Supports MinerU formats: PDF, images, Word, PowerPoint, Excel, RTF, ODF, EPUB, OFD, HTML, CSV/TSV, and plain text. Legacy DOC, PPT, and XLS use OCR; plain text is read directly.",
+    unsupported: "This format is not supported. Choose a MinerU-supported document or a plain text file.",
     tooLarge: "The maximum file size is 20 MiB.",
     status: "Status",
     chunks: "Chunks",
@@ -1053,6 +1096,7 @@ export const pages = {
     downloading: "Downloading…",
     emptyDocuments: "Upload a document to begin.",
     modes: {
+      Structure: "Structural",
       AUTO: "Automatic",
       HEADING: "By heading",
       FIXED: "Fixed length",
@@ -1587,13 +1631,40 @@ export const pages = {
     },
   },
   knowledgeGraph: {
+    ragNodeKinds: {"Entity": "Entity", "SourceVersion": "Source file", "Section": "Section", "Chunk": "Original chunk", "Table": "Table", "Image": "Image", "Asset": "Image file", "SourceCaption": "Original caption or footnote", "OcrText": "Recognized image text (OCR)", "GeneratedDescription": "Generated image description"},
+    ragTab: "Source graphs",
+    businessTab: "Workspace graphs",
+    ragInspector: "Entity and source evidence",
+    ragAliases: "Aliases",
+    ragHitReason: "Hit reasons",
+    ragHop: "{{count}} hops along {{direction}}",
+    ragDirections: {"Incoming": "incoming edges", "Outgoing": "outgoing edges"},
+    ragExpandIncoming: "Expand incoming",
+    ragExpandOutgoing: "Expand outgoing",
+    ragRelationships: "Relationships",
+    ragSelectRelated: "Inspect related entity",
+    ragSupportCount: "{{count}} original references",
+    ragSources: "Original sources",
+    ragAllCorpora: "All graph-enabled corpora",
+    ragOptions: "Expansion options",
+    ragDepth: {"incomingDepth": "Incoming depth", "outgoingDepth": "Outgoing depth"},
+    ragRelationFilter: "Relationship types (comma-separated)",
+    ragWindowCount: "Loaded {{nodes}} nodes and {{edges}} relationships",
+    ragLoadMore: "Load more",
+    ragBounded: "This is a partial subgraph. Load more or select an entity to expand.",
+    ragClientBudget: "Canvas limit reached. Narrow the search and start again.",
+    ragBrowse: "Browse graph",
+    ragInspectEntity: "Select an entity to view sources",
+    ragLoading: "Loading published graphs…",
+    ragEmpty: "No published nodes to display in this scope.",
+    ragOpen: "View graph",
     actions: {
       export: "Export",
       refresh: "Refresh Graph",
       runTraversal: "Run Traversal",
     },
     canvas: {
-      aria: "G6 semantic knowledge graph canvas",
+      aria: "Knowledge graph",
       metrics: {
         edges: "{{count}} edges",
         nodes: "{{count}} nodes",
@@ -1856,7 +1927,7 @@ export const pages = {
         searchPlaceholder: "Search models...",
         loading: "Loading models...",
         noMatch: 'No models match "{{query}}".',
-        autoName: "Auto",
+        autoName: "Conversation Automatic Routing",
         platformModels: "Platform models",
         qualityGroup: "{{quality}} · {{vendor}}",
         quality: {
@@ -2098,6 +2169,16 @@ export const pages = {
         skills: "Skills",
       },
       contextPanel: {
+        actualTokens: "Actual usage",
+        allocatedTokens: "Allocated",
+        configuredTokens: "Configured ceiling",
+        notRecorded: "Not recorded",
+        notApplicable: "Not applicable",
+        savedReportHelp: "Order and budgets come from this request’s saved plugin assembly report. Configured ceilings use the input capacity at that time. Missing values are not inferred.",
+        reportIdentity: "Assembly #{{sequence}} · Step {{step}} · Attempt {{attempt}}",
+        loadingReport: "Loading assembly report…",
+        noReport: "No assembly report has been saved for this session.",
+
         shortTermMemory: "Short-Term Memory",
         windowSuffix: "window",
         healthy: "Healthy",
@@ -2155,6 +2236,8 @@ export const pages = {
         outcomes: { Reduced: "Reduced", NoGain: "No reduction gain", Omitted: "Omitted", Failed: "Failed" },
         protocolName: "Tools and Request Protocol",
         protocolNote: "Separate from message assembly order; includes tool schemas and protocol costs for model request options.",
+        inputCapacityShareNote: "Each row shows actual tokens / available model input budget. Bars show the row’s share of that budget.",
+        requestAllocationNote: "Allocated {{tokens}} tokens for this request, based on actual need; this is not a capacity ceiling.",
         toolSchemaName: "Tool Schema",
         toolsEmpty: "No tool definitions.",
         toolParameter: "Parameter",
@@ -3322,27 +3405,6 @@ export const pages = {
     },
   },
   promptManagement: {
-    roleTemplates: {
-      open: "Choose template",
-      title: "Choose a role template",
-      managementHelpAria: "Role template management help",
-      managementHelp: "You can add agent role templates in Prompt Management.",
-      description:
-        "Preview a role template and copy it into the role prompt. You can edit it after applying.",
-      search: "Search role templates",
-      searchPlaceholder: "Search names, codes, or descriptions...",
-      loading: "Loading templates...",
-      empty: "No role templates match your search.",
-      preview: "Template preview",
-      select: "Select a template to preview its role prompt.",
-      unavailable: "This template is no longer available.",
-      itemLabel: "templates",
-      apply: "Apply",
-      confirmTitle: "Replace role prompt?",
-      confirmDescription:
-        "Applying this template will replace the entire existing role prompt.",
-      confirmApply: "Replace and apply",
-    },
     actions: {
       close: "Close",
       back: "Back",
@@ -4676,7 +4738,7 @@ export const pages = {
       Task: "Task",
     },
     values: {
-      automaticModel: "Automatic",
+      automaticModel: "Conversation Automatic Routing",
       loadingAgents: "Loading agents...",
       loadingModels: "Loading models...",
       loadingUsers: "Loading user options...",
@@ -4837,6 +4899,7 @@ export const pages = {
       Speech: "Speech",
       AigcTextDetection: "Text AIGC Detection",
       AigcImageDetection: "Image AIGC Detection",
+      Rerank: "Rerank",
     },
     detail: {
       authorizationSession: "Authorization Session",

@@ -16,6 +16,19 @@ pub struct DefaultRagRuntime {
 }
 
 impl DefaultRagRuntime {
+    pub(crate) async fn generate_text(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+        prompt: String,
+    ) -> Result<String, String> {
+        let config = self.llm_router.route_text(workspace, model)?;
+        self.llm
+            .text_generation_call_with_config(config, prompt)
+            .await
+            .map(|result| result.output)
+            .map_err(|error| error.to_string())
+    }
     pub fn new(llm: LlmRuntimeService, llm_router: impl TextModelRouter + 'static) -> Self {
         Self {
             llm,
@@ -25,6 +38,26 @@ impl DefaultRagRuntime {
 }
 
 impl RagEmbeddingRuntime for DefaultRagRuntime {
+    fn embedding_batch_input_limit(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+    ) -> Result<Option<usize>, String> {
+        RagEmbeddingRuntime::embedding_batch_input_limit(&self.llm, workspace, model)
+    }
+    fn embed_content_batch<'a>(
+        &'a self,
+        call: super::RagEmbeddingContentBatchCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingBatchResult, String>> + Send + 'a>> {
+        RagEmbeddingRuntime::embed_content_batch(&self.llm, call)
+    }
+    fn resolve_index_model(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        RagEmbeddingRuntime::resolve_index_model(&self.llm, workspace, model)
+    }
     fn embedding_fingerprint(
         &self,
         workspace: &str,
@@ -158,9 +191,10 @@ impl RagGraphRuntime for DefaultRagRuntime {
         call: RagGraphCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagGraphResult, String>> + Send + 'a>> {
         Box::pin(async move {
-            let config = self
-                .llm_router
-                .route_text(call.workspace_code.as_str(), call.model_code.as_deref())?;
+            let config = graph_extraction_config(
+                self.llm_router
+                    .route_text(call.workspace_code.as_str(), call.model_code.as_deref())?,
+            );
             self.llm
                 .text_generation_call_with_config(config, call.prompt)
                 .await
@@ -170,5 +204,64 @@ impl RagGraphRuntime for DefaultRagRuntime {
                 })
                 .map_err(|error| error.to_string())
         })
+    }
+}
+
+/// Graph extraction needs reasoning and a shared reasoning/answer budget. This
+/// policy belongs to the host use case, not a provider-wide parameter default.
+fn graph_extraction_config(
+    mut config: crate::application::model::RuntimeModelConfig,
+) -> crate::application::model::RuntimeModelConfig {
+    config.thinking_enabled = true;
+    config.reasoning_effort = config
+        .reasoning_effort
+        .or(Some(crate::domain::reasoning::ReasoningEffort::High));
+    config.max_tokens = Some(config.max_tokens.unwrap_or(0).max(32_768));
+    config
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{
+        model::{ModelProtocol, ModelType},
+        reasoning::ReasoningEffort,
+    };
+
+    #[test]
+    fn graph_extraction_preserves_deep_reasoning_and_gives_it_an_explicit_output_budget() {
+        for protocol in [ModelProtocol::OpenAiCompatible, ModelProtocol::Responses] {
+            let original = crate::application::model::RuntimeModelConfig {
+                model_code: "extractor".into(),
+                model_name: "extractor".into(),
+                protocol,
+                model_type: ModelType::Text,
+                base_url: "https://provider.invalid".into(),
+                api_path: None,
+                api_key: String::new(),
+                thinking_enabled: false,
+                reasoning_effort: None,
+                responses_stateful_enabled: false,
+                max_tokens: None,
+                context_window_tokens: Some(128_000),
+                temperature: None,
+                top_p: None,
+                max_retries: Some(0),
+            };
+            let configured = graph_extraction_config(original.clone());
+            assert!(configured.thinking_enabled);
+            assert_eq!(configured.reasoning_effort, Some(ReasoningEffort::High));
+            assert_eq!(configured.max_tokens, Some(32_768));
+            assert_eq!(configured.protocol, original.protocol);
+            assert_eq!(
+                configured.context_window_tokens,
+                original.context_window_tokens
+            );
+            let mut explicit = original;
+            explicit.thinking_enabled = true;
+            explicit.reasoning_effort = Some(ReasoningEffort::Max);
+            explicit.max_tokens = Some(65_536);
+            assert_eq!(graph_extraction_config(explicit.clone()), explicit);
+        }
     }
 }

@@ -8,6 +8,29 @@ use eliteforge_agent_official_plugin_model_http as sdk;
 mod model_errors;
 
 impl ModelProviderService {
+    pub fn embedding_accepts_images(&self, model: &str) -> Result<bool, ModelError> {
+        let Some(code) = model.strip_prefix(PERSON_AI_EMBEDDING_PREFIX) else {
+            return Ok(false);
+        };
+        let code = code.to_owned();
+        self.connection.call(move |connection| {
+            let mut statement = connection.prepare("SELECT dimension,tags_json FROM provider_multimedia_catalog_models WHERE provider_code='PersonAi' AND media_type=6 AND status='Available' AND model_code=?1")
+                .map_err(|_|ModelError::StorageFailure)?;
+            let rows = statement.query_map([&code], |row|Ok((row.get::<_,Option<usize>>(0)?,row.get::<_,String>(1)?)))
+                .map_err(|_|ModelError::StorageFailure)?;
+            let mut models = vec![];
+            for row in rows {
+                let (dimension,tags)=row.map_err(|_|ModelError::StorageFailure)?;
+                models.push(eliteforge_agent_capability_personai::PersonAiEmbeddingModel {
+                    model: eliteforge_agent_core::ModelRef::new("personai", &code), dimension,
+                    tags: serde_json::from_str(&tags).unwrap_or_default(),
+                });
+            }
+            Ok(!eliteforge_agent_capability_personai::personai_embedding_candidates(models,
+                eliteforge_agent_capability_personai::PersonAiEmbeddingKind::Multimodal,None).is_empty())
+        }, ||ModelError::StorageFailure)
+    }
+
     pub fn sdk_model_authorization_scope(&self) -> Result<String, fw::ModelError> {
         let this = self.clone();
         this.connection.clone().call(
@@ -45,7 +68,14 @@ impl ModelProviderService {
             .active_credentials(ModelProviderCode::PersonAi)
             .await
             .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
-        let embedding_code = config.model_code.strip_prefix(PERSON_AI_EMBEDDING_PREFIX).map(str::to_owned);
+        let embedding_code = config
+            .model_code
+            .strip_prefix(PERSON_AI_EMBEDDING_PREFIX)
+            .map(str::to_owned);
+        let rerank_id = config
+            .model_code
+            .strip_prefix(PERSON_AI_RERANK_PREFIX)
+            .map(str::to_owned);
         let (attempt, embedding_instance_id) = {
             let this = self.clone();
             let worker_credentials = credentials.clone();
@@ -71,6 +101,13 @@ impl ModelProviderService {
                         return Err(fw::ModelError::Fatal(
                             "PersonAI profile changed before model dispatch".into(),
                         ));
+                    }
+                    if let Some(id) = rerank_id.as_deref() {
+                        let available = connection.query_row(
+                            "SELECT EXISTS(SELECT 1 FROM provider_multimedia_catalog_models WHERE provider_code='PersonAi' AND media_type=7 AND status='Available' AND model_id=?1)",
+                            [id], |row| row.get::<_, bool>(0),
+                        ).map_err(|_| fw::ModelError::Fatal("rerank catalog lookup failed".into()))?;
+                        if !available { return Err(fw::ModelError::Fatal("PersonAI rerank model is unavailable".into())); }
                     }
                     let instance_id = if let Some(code) = embedding_code.as_deref() {
                         let ordinal = this.embedding_route_counter.fetch_add(1, Ordering::Relaxed);
@@ -223,17 +260,35 @@ struct SnapshotTransport {
 #[async_trait]
 impl sdk::ModelTransport for SnapshotTransport {
     async fn json(&self, path: &str, body: &Value) -> Result<Value, fw::ModelError> {
-        let routed_body = if let Some(instance_id) = self.embedding_instance_id.as_deref() {
+        let routed_body = if path.trim_matches('/') == "chat/completions" {
+            Some(
+                eliteforge_agent_capability_personai::personai_generation_request_body(
+                    body,
+                    self.config.thinking_enabled,
+                ),
+            )
+        } else if let Some(instance_id) = self.embedding_instance_id.as_deref() {
             let mut routed_body = body.clone();
             let object = routed_body.as_object_mut().ok_or_else(|| {
                 fw::ModelError::Fatal("embedding request body must be an object".into())
             })?;
             object.insert("model".into(), Value::String(instance_id.to_owned()));
             Some(routed_body)
+        } else if let Some(id) = self.config.model_code.strip_prefix(PERSON_AI_RERANK_PREFIX) {
+            let mut routed_body = body.clone();
+            let object = routed_body.as_object_mut().ok_or_else(|| {
+                fw::ModelError::Fatal("rerank request body must be an object".into())
+            })?;
+            object.remove("model");
+            object.insert("model_id".into(), Value::String(id.to_owned()));
+            Some(routed_body)
         } else {
             None
         };
-        let response = self.inner.json(path, routed_body.as_ref().unwrap_or(body)).await;
+        let response = self
+            .inner
+            .json(path, routed_body.as_ref().unwrap_or(body))
+            .await;
         match response {
             Ok(response) => {
                 self.providers
@@ -258,12 +313,22 @@ impl sdk::ModelTransport for SnapshotTransport {
         body: &Value,
         sink: sdk::EventSink<'_>,
     ) -> Result<(), fw::ModelError> {
+        let routed_body = if path.trim_matches('/') == "chat/completions" {
+            Some(
+                eliteforge_agent_capability_personai::personai_generation_request_body(
+                    body,
+                    self.config.thinking_enabled,
+                ),
+            )
+        } else {
+            None
+        };
         let metadata = std::sync::Mutex::new(super::snapshots::RuntimeSnapshotMetadata::default());
         let result = self
             .inner
             .events(
                 path,
-                body,
+                routed_body.as_ref().unwrap_or(body),
                 Arc::new(|event| {
                     {
                         let mut saved = metadata

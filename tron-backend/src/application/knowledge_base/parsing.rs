@@ -1,8 +1,10 @@
 //! Document parsing contract; parsing transports remain outbound adapters.
 mod normalization;
+mod segments;
 use super::{KnowledgeBaseError, local_documents::ParsedDocument};
 use async_trait::async_trait;
 pub(crate) use normalization::normalize_middle;
+pub(crate) use segments::{has_structured_middle, normalize_parse_middle};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

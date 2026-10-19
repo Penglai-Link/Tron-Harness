@@ -48,6 +48,7 @@ impl ModelProviderService {
         let mut adapters = HashMap::new();
         adapters.insert(adapter.code(), adapter);
         Ok(Self {
+            auto_routers: auto_selection::default_auto_routers(),
             model_executor: Default::default(),
             model_attempt_salt: Arc::new(eliteforge_agent_core::RunId::new_v4().to_string()),
             connection,

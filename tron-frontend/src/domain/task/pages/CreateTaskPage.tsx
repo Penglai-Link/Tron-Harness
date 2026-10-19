@@ -53,7 +53,7 @@ export function CreateTaskPage() {
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`tasks.${key}`, { defaultValue, ...options })
   );
-  const automaticModelLabel = pageT("values.automaticModel", "Automatic");
+  const automaticModelLabel = pageT("values.automaticModel", "Conversation Automatic Routing");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [taskType, setTaskType] = useState<TaskType>("Feature");

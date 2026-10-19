@@ -43,6 +43,71 @@ pub struct RagEvidence {
     pub row: RagSearchRow,
     pub channels: BTreeSet<String>,
     pub score: f64,
+    /// Assembled source text; the matched publication row remains immutable.
+    pub context_text: Option<String>,
+    pub recall_ranks: BTreeMap<String, usize>,
+    pub bundle: Option<RagEvidenceBundle>,
+    pub selected_blocks: BTreeSet<String>,
+}
+#[derive(Clone, Debug)]
+pub struct RagEvidenceBundle {
+    /// Publication rows are independent of the assembled display text.
+    pub members: Vec<RagEvidence>,
+    pub display: Vec<RagEvidence>,
+    pub partition: crate::domain::rag::graph::GraphPartition,
+    pub generations: BTreeSet<String>,
+    pub nodes: Vec<crate::domain::rag::graph::RagGraphNode>,
+    pub edges: Vec<crate::domain::rag::graph::RagGraphEdge>,
+    pub truncated_by: BTreeSet<String>,
+}
+impl RagEvidence {
+    pub(crate) fn associated(row: RagSearchRow) -> Self {
+        Self {
+            row,
+            channels: BTreeSet::new(),
+            score: 0.,
+            context_text: None,
+            recall_ranks: BTreeMap::new(),
+            bundle: None,
+            selected_blocks: BTreeSet::new(),
+        }
+    }
+    pub fn text(&self) -> &str {
+        self.context_text.as_deref().unwrap_or(&self.row.text)
+    }
+    pub(crate) fn select_blocks(&mut self, blocks: BTreeSet<String>) -> bool {
+        let selected = super::source_parts::select(
+            &self.row.text_metadata,
+            &self.row.text,
+            &self.row.target_code,
+            &blocks,
+        );
+        if let Some(text) = selected {
+            self.context_text = Some(text);
+            self.selected_blocks = blocks;
+            true
+        } else {
+            false
+        }
+    }
+    pub fn rerank_text(&self) -> String {
+        let Some(bundle) = &self.bundle else {
+            return self.text().to_owned();
+        };
+        let rows = if bundle.display.is_empty() {
+            std::iter::once(self)
+                .chain(bundle.members.iter())
+                .collect::<Vec<_>>()
+        } else {
+            bundle.display.iter().collect()
+        };
+        let mut seen = BTreeSet::new();
+        rows.into_iter()
+            .map(Self::text)
+            .filter(|text| !text.trim().is_empty() && seen.insert(*text))
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -50,6 +115,7 @@ pub struct RagEvidenceResult {
     pub hits: Vec<RagEvidence>,
     pub stages: Vec<RagRetrievalStage>,
     pub warnings: Vec<String>,
+    pub graph_context: Vec<super::graph::GraphRecallContext>,
 }
 
 impl<R, E> RagService<R, E>
@@ -64,6 +130,23 @@ where
         ranges: &[AuthorizedRagRange],
         limit: usize,
         rerank_model: Option<&str>,
+        run: Option<&eliteforge_agent_framework::RunContext>,
+    ) -> Result<RagEvidenceResult, RagError> {
+        let result = self
+            .recall_authorized(workspace, query, ranges, limit, run)
+            .await?;
+        self.rank_evidence(workspace, query, result, limit, rerank_model)
+            .await
+    }
+
+    /// Recall retains the full candidate set so source evidence can be assembled
+    /// and authorization checked before sending any text to a reranker.
+    pub(crate) async fn recall_authorized(
+        &self,
+        workspace: &str,
+        query: &str,
+        ranges: &[AuthorizedRagRange],
+        limit: usize,
         run: Option<&eliteforge_agent_framework::RunContext>,
     ) -> Result<RagEvidenceResult, RagError> {
         if !(1..=100).contains(&limit) {
@@ -128,6 +211,13 @@ where
                                     _ => false,
                                 }
                             {
+                                let mut invalidation = super::graph::graph_source_query(range);
+                                invalidation.query_embedding_model_code = geometry.0.clone();
+                                invalidation.policy =
+                                    json!({"fingerprint":geometry.3,"providerModel":geometry.2});
+                                self.repository
+                                    .invalidate_vector_cache(invalidation)
+                                    .map_err(|e| e.to_string())?;
                                 return Err("查询模型与已发布索引模型不一致".into());
                             }
                             let values = value.embedding;
@@ -224,42 +314,24 @@ where
                 }
             }
             if range.graph && !query.trim().is_empty() {
-                // Graph evidence is implemented by the repository and must preserve
-                // the same source/scope filters as the lexical/vector routes.
                 let started = std::time::Instant::now();
-                let rows = self.repository.search_route(RagRouteSearchQuery {
-                    corpus_id: range.corpus_id.clone(),
-                    route_id: "graph".into(),
-                    retriever: "GRAPH_EVIDENCE_V1".into(),
-                    workspace_code: workspace.into(),
-                    query: query.into(),
-                    query_embedding: None,
-                    query_embedding_model_code: None,
-                    source_version: range.source_version.clone(),
-                    scopes: range.scopes.clone(),
-                    filters: range.filters.clone(),
-                    policy: json!({}),
-                    return_fields: range.return_fields.clone(),
-                    limit,
-                });
-                match rows {
-                    Ok(rows) => {
-                        result
-                            .stages
-                            .push(stage(range, "graph", started, rows.len(), None));
-                        merge_rrf(&mut merged, rows, "graph");
+                match self
+                    .recall_graph_range(workspace, query, range, run, &mut embeddings)
+                    .await
+                {
+                    Ok(graph) => {
+                        result.stages.extend(graph.stages);
+                        result.warnings.extend(graph.warnings);
+                        result.graph_context.extend(graph.contexts);
+                        merge_rrf(&mut merged, graph.rows, "graph");
                     }
                     Err(error) => {
                         result
                             .warnings
                             .push(format!("{} graph: {error}", range.corpus_id));
-                        result.stages.push(stage(
-                            range,
-                            "graph",
-                            started,
-                            0,
-                            Some(error.to_string()),
-                        ));
+                        result
+                            .stages
+                            .push(stage(range, "graph", started, 0, Some(error)));
                     }
                 }
             }
@@ -279,6 +351,23 @@ where
             duration_ms: fusion_started.elapsed().as_millis() as u64,
             error: None,
         });
+        Ok(result)
+    }
+
+    pub(crate) async fn rank_evidence(
+        &self,
+        workspace: &str,
+        query: &str,
+        mut result: RagEvidenceResult,
+        limit: usize,
+        rerank_model: Option<&str>,
+    ) -> Result<RagEvidenceResult, RagError> {
+        if !(1..=100).contains(&limit) {
+            return Err(RagError::SearchRequestInvalid);
+        }
+        if result.hits.is_empty() {
+            return Ok(result);
+        }
         if let Some(model) = rerank_model.filter(|model| !model.trim().is_empty()) {
             let rerank_started = std::time::Instant::now();
             let order = self
@@ -287,7 +376,7 @@ where
                     workspace_code: workspace.into(),
                     model_code: Some(model.into()),
                     query: query.into(),
-                    documents: result.hits.iter().map(|hit| hit.row.text.clone()).collect(),
+                    documents: result.hits.iter().map(RagEvidence::rerank_text).collect(),
                     top_n: Some(limit),
                 })
                 .await;
@@ -386,13 +475,76 @@ fn merge_rrf(merged: &mut BTreeMap<String, RagEvidence>, rows: Vec<RagSearchRow>
             row,
             channels: BTreeSet::new(),
             score: 0.0,
+            context_text: None,
+            recall_ranks: BTreeMap::new(),
+            bundle: None,
+            selected_blocks: BTreeSet::new(),
         });
         evidence.score += 1.0 / (60.0 + rank as f64 + 1.0);
         evidence.channels.insert(channel.into());
+        evidence.recall_ranks.insert(channel.into(), rank);
     }
 }
 
 impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
+    pub(crate) fn recheck_graph_context(
+        &self,
+        ranges: &[AuthorizedRagRange],
+        result: &mut RagEvidenceResult,
+    ) -> Result<(), RagError> {
+        if result.graph_context.is_empty() {
+            return Ok(());
+        }
+        let mut visible =
+            BTreeMap::<crate::domain::rag::graph::GraphPartition, BTreeSet<String>>::new();
+        let mut generation_ids = BTreeSet::new();
+        for range in ranges.iter().filter(|r| r.graph) {
+            let corpus = self
+                .repository
+                .get_corpus(&range.corpus_id)?
+                .ok_or(RagError::CorpusNotFound)?;
+            if !super::RagSettings::from_capabilities(&corpus.capabilities)?.graph {
+                continue;
+            }
+            generation_ids.extend(
+                self.repository
+                    .published_graph_generations(super::graph::graph_source_query(range))?,
+            );
+            for scope in &range.scopes {
+                visible
+                    .entry(crate::domain::rag::graph::GraphPartition {
+                        corpus_id: range.corpus_id.clone(),
+                        scope_type: scope.scope_type.clone(),
+                        scope_code: scope.scope_code.clone(),
+                    })
+                    .or_default();
+            }
+        }
+        if let Some(infra) = &self.graph {
+            for generation in infra
+                .index
+                .active_generations(&visible.keys().cloned().collect::<Vec<_>>())
+                .map_err(|_| RagError::StorageFailure)?
+            {
+                if generation_ids.contains(&generation.id) && generation.expected_projections > 0 {
+                    visible
+                        .entry(generation.partition)
+                        .or_default()
+                        .insert(generation.id);
+                }
+            }
+        }
+        let old = result.graph_context.len();
+        result
+            .graph_context
+            .retain(|context| visible.get(&context.partition) == Some(&context.generations));
+        if result.graph_context.len() != old {
+            result
+                .warnings
+                .push("图谱授权或发布快照已改变，相关图谱上下文已移除".into());
+        }
+        Ok(())
+    }
     /// Build vector partitions from published metadata inside the authorized scope.
     pub fn partition_ranges(
         &self,
@@ -508,6 +660,8 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
                     row.scope_type,
                     row.scope_code,
                     row.text,
+                    serde_json::to_string(&row.source_metadata)
+                        .map_err(|_| RagError::StorageFailure)?,
                 ));
             }
         }
@@ -521,6 +675,7 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
                 hit.row.scope_type.clone(),
                 hit.row.scope_code.clone(),
                 hit.row.text.clone(),
+                serde_json::to_string(&hit.row.source_metadata).unwrap_or_default(),
             ))
         });
         if result.hits.len() != count {

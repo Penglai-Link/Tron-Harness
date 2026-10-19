@@ -8,12 +8,10 @@ import { RagDefinitionTab } from "../components/RagDefinitionTab";
 import { RagIngestionTab } from "../components/RagIngestionTab";
 import { RagRetrievalTab } from "../components/RagRetrievalTab";
 import { useAuthStore } from "@/store/authStore";
-import { useToast } from "@/components/ui/toast";
 import { useRagErrorToast } from "../hooks/useRagErrorToast";
 
 export function RagPage() {
   const { t } = useTranslation("pages");
-  const toast = useToast();
   const [params, setParams] = useSearchParams();
   const tab = ["definition", "ingestion", "retrieval"].includes(params.get("tab") ?? "") ? params.get("tab")! : "definition";
   const selected = params.get("corpus") ?? "";
@@ -31,8 +29,6 @@ export function RagPage() {
     return next;
   });
   const openIngestion = (id: string) => {
-    const count = corpora.data?.find((corpus) => corpus.id === id)?.counts.rebuildSourceCount ?? 0;
-    if (count > 0) toast.info(t("ragUnified.rebuildSelectionHelp", { count }));
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.set("tab", "ingestion");

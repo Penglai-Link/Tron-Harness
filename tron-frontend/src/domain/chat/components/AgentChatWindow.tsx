@@ -1,8 +1,8 @@
 import { defaultChatAnnotationLabels, zhChatAnnotationLabels } from "@eliteforge/agent-ui-chat-core";
-import { useCallback, useMemo } from "react";
+import { useCallback, useImperativeHandle, useMemo, useRef, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { useChatWorkRailLabels, useChatHistoryLabels } from "../hooks/useChatWorkRailLabels";
-import { ChatRuntimeWindow, type ChatRuntimeWindowProps } from "@eliteforge/agent-ui-chat-react";
+import { ChatRuntimeWindow, type ChatRuntimeWindowProps, type ChatRuntimeSubmitter } from "@eliteforge/agent-ui-chat-react";
 import type * as Ui from "@eliteforge/agent-ui-chat-core";
 import type { ChatAdapter, ChatClientConfig, ChatMessageAttachment, ChatRuntimeRunState, ChatSession, SendChatMessageInput } from "@tron/chat-core";
 import { createAgentUiAdapter } from "@tron/chat-agent-ui-adapter";
@@ -11,9 +11,15 @@ import { useChatInputSuggestions } from "@/domain/chat/hooks/useChatInputSuggest
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 
-type MappedProps = "adapter" | "config" | "initialSession" | "pendingAttachments" | "onPendingAttachmentsChange" | "onSessionChange" | "onRunStateChange" | "createSendInput";
+type MappedProps = "adapter" | "attachmentDownloader" | "submitterRef" | "config" | "initialSession" | "pendingAttachments" | "onPendingAttachmentsChange" | "onSessionChange" | "onRunStateChange" | "createSendInput";
+export interface AgentChatSubmitter {
+  submit(input: Pick<SendChatMessageInput, "content" | "attachments">): Promise<boolean>;
+}
 export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, MappedProps> {
   adapter: ChatAdapter;
+  attachmentDownloader?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+  submitterRef?: Ref<AgentChatSubmitter>;
+  knowledgeBaseId?: string;
   config: ChatClientConfig;
   initialSession?: ChatSession | null;
   pendingAttachments?: ChatMessageAttachment[];
@@ -24,11 +30,17 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
 }
 
 /** Product context adapter only. Rendering, streaming, queues, stop and replay belong to Agent UI. */
-export function AgentChatWindow({ adapter, config, initialSession, pendingAttachments,
+export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, config, knowledgeBaseId, initialSession, pendingAttachments,
   onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
+  const runtimeSubmitterRef = useRef<ChatRuntimeSubmitter | null>(null);
+  useImperativeHandle(submitterRef, () => ({
+    submit: (input) => runtimeSubmitterRef.current?.submit({
+      content: input.content, attachments: input.attachments?.map(toUiAttachment),
+    }) ?? Promise.resolve(false),
+  }), []);
   const { preferences: workPreferences } = useAguiWorkReplayPreferences();
-  const inputSuggestions = useChatInputSuggestions(config.agentCode, initialSession?.sessionCode, initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined, config.workspaceCode);
+  const inputSuggestions = useChatInputSuggestions(config.agentCode, initialSession?.sessionCode, initialSession?.sourceCode?.startsWith("__dude:") ? initialSession.sourceCode.slice(7) : undefined, config.workspaceCode, knowledgeBaseId);
   const { t, i18n } = useTranslation("pages");
   const workRailLabels = useChatWorkRailLabels();
   const historyLabels = useChatHistoryLabels();
@@ -49,6 +61,9 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
     [adapter, config.workspaceCode, config.appCode, config.taskCode, config.agentCode]);
   const session = useMemo(() => initialSession ? toUiSession(initialSession) : initialSession, [initialSession]);
   const attachments = useMemo(() => pendingAttachments?.map(toUiAttachment), [pendingAttachments]);
+  const downloadAttachment = useMemo(() => attachmentDownloader
+    ? (value: Ui.ChatMessageAttachment) => attachmentDownloader(fromUiAttachment(value))
+    : undefined, [attachmentDownloader]);
   const handleSession = useCallback((value: Ui.ChatSession | null) =>
     onSessionChange?.(value ? fromUiSession(value) : null), [onSessionChange]);
   const handleAttachments = useCallback((value: Ui.ChatMessageAttachment[]) =>
@@ -66,7 +81,7 @@ export function AgentChatWindow({ adapter, config, initialSession, pendingAttach
     };
     return input ? toUiInput(input) : null;
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
-  return <ChatRuntimeWindow {...props} adapter={uiAdapter}
+  return <ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
       showReasoningCards: workPreferences.showReasoningCards,

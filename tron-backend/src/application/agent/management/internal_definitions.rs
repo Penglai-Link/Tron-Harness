@@ -2,15 +2,22 @@
 use super::*;
 
 pub(super) fn default_main_agent_role_prompt() -> String {
-    crate::domain::prompt::builtin_prompt_text("agent.role.main", "zh-CN")
-        .unwrap_or_default()
-        .to_owned()
+    default_agent_role_prompt(MAIN_AGENT_CODE)
 }
 
-fn builtin_role_prompt(catalog_key: &str) -> String {
-    crate::domain::prompt::builtin_prompt_text(catalog_key, "zh-CN")
-        .unwrap_or_default()
-        .to_owned()
+fn default_agent_role_prompt(agent_code: &str) -> String {
+    static INSTRUCTIONS: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
+        std::sync::OnceLock::new();
+    INSTRUCTIONS
+        .get_or_init(|| {
+            serde_json::from_str(include_str!(
+                "../../../../resources/agents/internal-instructions.json"
+            ))
+            .expect("bundled internal agent instructions must be valid JSON")
+        })
+        .get(agent_code)
+        .expect("built-in internal agent must have default instructions")
+        .clone()
 }
 
 #[derive(Debug, Clone)]
@@ -61,12 +68,11 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
         platform_defined: true,
         built_in: true,
     }];
-    for (agent_code, name, description, catalog_key, group_name, avatar_id) in [
+    for (agent_code, name, description, group_name, avatar_id) in [
         (
             "explore-agent",
             "探索智能体",
             "只读探索任务使用的内置智能体。",
-            "agent.role.explorer",
             "探索",
             "fox",
         ),
@@ -74,7 +80,6 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             "fullstack-agent",
             "全栈工程师",
             "用于全栈开发任务的内置智能体。",
-            "agent.role.full-stack-developer",
             "开发",
             "panda",
         ),
@@ -82,7 +87,6 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             "prd-agent",
             "杨布斯",
             "用于产品分析与设计任务的内置智能体。",
-            "agent.role.product-manager",
             "设计",
             "astronaut",
         ),
@@ -92,7 +96,7 @@ pub(super) fn internal_agents() -> Vec<InternalAgentDefinition> {
             agent_code: agent_code.to_owned(),
             name: name.to_owned(),
             description: description.to_owned(),
-            role_prompt: builtin_role_prompt(catalog_key),
+            role_prompt: default_agent_role_prompt(agent_code),
             avatar_id: avatar_id.into(),
             candidate_model_codes: Vec::new(),
             group_name: Some(group_name.to_owned()),

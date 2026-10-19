@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { pages } from "@/i18n/locales/en-US/pages";
 import { pages as chinesePages } from "@/i18n/locales/zh-CN/pages";
-import { ImageAnalysisStatus } from "./ImageAnalysisStatus";
+import { currentImageWarnings, ImageAnalysisStatus } from "./ImageAnalysisStatus";
 const locale = vi.hoisted(() => ({ chinese: false }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, args?: Record<string, unknown>) => {
   const value = key.split(".").reduce((node: unknown, item) => (node as Record<string, unknown>)?.[item], locale.chinese ? chinesePages : pages);
@@ -12,6 +12,13 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, args
 afterEach(() => { cleanup(); locale.chinese = false; });
 const summary = { imageCount: 3, originalsOnly: 1, withSourceAnnotations: 1, withGeneratedDescriptions: 0, withUnattributedBodyText: 1, generationMode: "disabled_by_tier" as const };
 describe("ImageAnalysisStatus", () => {
+ it("removes resolved historical image notices while retaining genuine parse warnings", () => {
+  const old = "3 张图片没有可用描述或 OCR 文字，已保留解析产物但未建立图像语义索引";
+  const warnings = [old, "table row larger than chunk budget"];
+  expect(currentImageWarnings(warnings, { ...summary, originalsOnly: 0, withGeneratedDescriptions: 3, supplementStatus: "ready" })).toEqual([warnings[1]]);
+  expect(currentImageWarnings(warnings, { ...summary, supplementStatus: "pending" })).toEqual(warnings);
+  expect(currentImageWarnings(warnings, { ...summary, imageCount: 0 })).toEqual([warnings[1]]);
+ });
  it("shows only actual sources and explains the configured capability", () => {
   const { container } = render(<ImageAnalysisStatus summary={summary} />);
   expect(screen.getByText("1 image(s) saved without accompanying descriptions.")).toBeTruthy();

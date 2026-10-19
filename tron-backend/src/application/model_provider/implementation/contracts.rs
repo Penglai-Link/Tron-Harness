@@ -184,4 +184,6 @@ pub struct ExternalMultimediaCatalogModel {
     pub(super) model_code: String,
     pub(super) model_name: String,
     pub(super) catalog_model_type: ProviderCatalogModelType,
+    pub(super) dimension: Option<usize>,
+    pub(super) tags: Vec<String>,
 }

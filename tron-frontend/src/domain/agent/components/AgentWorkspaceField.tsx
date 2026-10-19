@@ -28,7 +28,7 @@ export function AgentWorkspaceField({ code, name, disabled, selectedCodes, onSel
     enabled: Boolean(code) && !builtin,
     queryFn: ({ signal }) => loadAgentWorkspaceGrants(code!, signal),
   });
-  const selected = selectedCodes ?? grants.data?.workspaceCodes ?? [];
+  const selected = selectedCodes ?? (code ? grants.data?.workspaceCodes : workspaces.data?.filter((workspace) => workspace.status === "Active").map((workspace) => workspace.workspaceCode)) ?? [];
   const pending = Boolean(code) && !builtin && grants.isPending;
   const error = grants.error ?? workspaces.error;
   return <>

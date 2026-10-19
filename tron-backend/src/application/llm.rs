@@ -8,6 +8,7 @@ pub use vision::VisionModelBinding;
 mod service_tests;
 
 pub use dto::{
+    LlmEmbeddingContentBatchCallCommand,
     LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmEmbeddingBatchCallCommand,
     LlmEmbeddingBatchCallResult, LlmEmbeddingCallCommand, LlmEmbeddingCallResult,
     LlmEmbeddingChunkResultItem, LlmRerankCallCommand, LlmRerankCallResult, LlmRerankResultItem,

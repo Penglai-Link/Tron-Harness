@@ -32,6 +32,9 @@ fn app() -> Router {
 fn app_with_config(config: AppConfig) -> Router {
     common::app_with_state_setup(common::prepared_config(config), |state| {
         state.knowledge_bases.stop_ingestion_workers();
+        // API fixtures use the production-style multi-thread Tokio runtime: real
+        // AppState background services can block on SQLite while an HTTP run
+        // needs another task to finish its transaction.
         // Runtime tests explicitly configure a React loop, just as Agent forms require.
         if !state
             .agent_management
@@ -479,7 +482,7 @@ fn test_config(codex_command: &PathBuf, opencode_command: &PathBuf) -> AppConfig
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn startup_scan_only_retains_available_system_agents() {
     let codex_command = temp_command_path("codex");
     let opencode_command = temp_command_path("opencode");
@@ -705,7 +708,7 @@ async fn startup_scan_only_retains_available_system_agents() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn startup_scan_loads_system_agent_models_and_rescan_refreshes_models() {
     let codex_command = temp_command_path("codex-models");
     let opencode_command = temp_command_path("opencode-models");
@@ -741,7 +744,7 @@ async fn startup_scan_loads_system_agent_models_and_rescan_refreshes_models() {
         .expect("codex row should exist after startup scan");
     assert_eq!(
         startup_codex["models"],
-        json!([{ "modelId": "gpt-5-codex", "displayName": "GPT-5 Codex" }])
+        json!([{ "modelId": "gpt-5-codex", "displayName": "GPT-5 Codex", "supportedReasoningEfforts": [] }])
     );
 
     write_executable_script(
@@ -769,11 +772,11 @@ async fn startup_scan_loads_system_agent_models_and_rescan_refreshes_models() {
         .expect("codex row should exist after rescan");
     assert_eq!(
         rescan_codex["models"],
-        json!([{ "modelId": "gpt-5-codex-next", "displayName": "GPT-5 Codex Next" }])
+        json!([{ "modelId": "gpt-5-codex-next", "displayName": "GPT-5 Codex Next", "supportedReasoningEfforts": [] }])
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn platform_main_agent_guidance_is_editable_and_legacy_storage_still_drives_runs() {
     let codex_command = temp_command_path("codex-main");
     let opencode_command = temp_command_path("opencode-main");
@@ -889,12 +892,18 @@ async fn platform_main_agent_guidance_is_editable_and_legacy_storage_still_drive
         .expect("main-agent guidance should be text");
     assert!(main_guidance.contains("Calm, terse, and surgical."));
     assert!(main_guidance.contains("Summarize the workspace problem before acting."));
-    assert_eq!(main_messages[1]["role"], json!("system"));
-    let output_guidance = main_messages[1]["content"]
-        .as_str()
-        .expect("main-agent output guidance should be text");
-    assert!(output_guidance.contains("renders Thinking and tool progress separately"));
-    assert!(output_guidance.contains("Do not repeat reasoning summaries"));
+    let request_text = serde_json::to_string(main_messages).unwrap();
+    for removed in [
+        "Final assistant output contract:",
+        "最终答复规范：",
+        "SYS_AGENT_FINAL_OUTPUT",
+        "agent.final-output",
+    ] {
+        assert!(
+            !request_text.contains(removed),
+            "retired prompt leaked: {removed}"
+        );
+    }
     assert_eq!(main_messages.last().unwrap()["role"], json!("user"));
     assert_eq!(
         main_messages.last().unwrap()["content"],
@@ -933,7 +942,7 @@ async fn platform_main_agent_guidance_is_editable_and_legacy_storage_still_drive
     assert!(!messages.contains("Legacy instructions"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() {
     let codex_command = temp_command_path("codex-domain-discovery");
     let opencode_command = temp_command_path("opencode-domain-discovery");
@@ -1118,7 +1127,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authorized() {
     let codex_command = temp_command_path("codex-domain-effective-tools");
     let opencode_command = temp_command_path("opencode-domain-effective-tools");
@@ -1241,7 +1250,7 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
     assert!(!second_request.contains("is not allowed"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_skill_view_loads_progressive_skill_detail() {
     let codex_command = temp_command_path("codex-skill-view");
     let opencode_command = temp_command_path("opencode-skill-view");
@@ -1413,7 +1422,7 @@ Progressive disclosure instructions loaded.\n",
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schema() {
     let codex_command = temp_command_path("codex-domain-discovery-zh");
     let opencode_command = temp_command_path("opencode-domain-discovery-zh");
@@ -1495,7 +1504,7 @@ async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schem
     }));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn capability_catalog_exposes_installed_packs_and_extension_implementations() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -1599,7 +1608,7 @@ async fn capability_catalog_exposes_installed_packs_and_extension_implementation
     }));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn runtime_registry_capabilities_are_discoverable() {
     let codex_command = temp_command_path("codex-runtime-discovery");
     let opencode_command = temp_command_path("opencode-runtime-discovery");
@@ -1690,7 +1699,7 @@ async fn runtime_registry_capabilities_are_discoverable() {
     assert_eq!(missing_body["code"], json!("AGENT_RUNTIME_NOT_FOUND"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn tool_catalog_read_apis_are_available() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -1797,7 +1806,7 @@ async fn tool_catalog_read_apis_are_available() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn tool_catalog_read_apis_follow_accept_language() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -1852,7 +1861,7 @@ async fn tool_catalog_read_apis_follow_accept_language() {
     assert_eq!(tool_body["data"]["inputSchema"], official.input_schema);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     let codex_command = temp_command_path("codex-internal-policy");
     let opencode_command = temp_command_path("opencode-internal-policy");
@@ -2116,7 +2125,7 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(reset["data"]["selectedServerCodes"], json!([]));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
     let codex_command = temp_command_path("codex-internal-policy-limits");
     let opencode_command = temp_command_path("opencode-internal-policy-limits");
@@ -2158,6 +2167,7 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
         Some(json!({
             "maxSteps": 1,
             "maxToolCalls": 1,
+            "toolAssignmentMode": "selected_tools",
             "toolExposureMode": "direct_list"
         })),
         None,
@@ -2165,6 +2175,24 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
     )
     .await;
     assert_eq!(patch_policy.status(), StatusCode::OK);
+    let assignment = internal_agent_api(
+        &app,
+        &authorization,
+        Method::PUT,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/tool-assignments",
+        Some(json!({"toolCodes":["task.create"]})),
+    )
+    .await;
+    assert_eq!(assignment["selectedToolCodes"], json!(["task.create"]));
+    assert_eq!(assignment["assignedToolCount"], 1);
+    internal_agent_api(
+        &app,
+        &authorization,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/mcp-policy",
+        Some(json!({"mcpAccessMode":"disabled"})),
+    )
+    .await;
 
     let run_response = request_with_headers(
         &app,
@@ -2179,8 +2207,8 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
                 "modelName": "gpt-test",
-                // The complete direct-list schema has the same capacity as the
-                // other production API fixtures; execution limits stay 1/1.
+                // Keep the original model capacity. This case needs only task_create;
+                // catalog growth must not turn it into a schema-budget test.
                 "contextWindowTokens": 65536
             }
         })),
@@ -2196,6 +2224,21 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
     assert_eq!(native["status"], json!("StepLimit"));
     assert!(native["runId"].as_str().is_some_and(|id| !id.is_empty()));
     assert_eq!(run_body["data"]["stepCount"], json!(1));
+    let requests = model_server.requests.lock().unwrap().clone();
+    assert_eq!(
+        requests.len(),
+        1,
+        "the step limit must stop the second model call"
+    );
+    let tool_names: Vec<_> = requests[0]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["function"]["name"].as_str().unwrap())
+        .collect();
+    assert!(tool_names.contains(&"task_create"));
+    assert!(!tool_names.contains(&"task_page"));
+    assert!(!tool_names.contains(&"app_page"));
     // Tool observations are deliberately omitted from the HTTP DTO. A real
     // product-side effect proves the single permitted invocation executed.
     let tasks = request_with_headers(
@@ -2246,7 +2289,7 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
     assert_eq!(recorded_requests.len(), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
     let codex_command = temp_command_path("codex-mcp-runtime");
     let opencode_command = temp_command_path("opencode-mcp-runtime");
@@ -2446,7 +2489,7 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
     let codex_command = temp_command_path("codex-coding-tools");
     let opencode_command = temp_command_path("opencode-coding-tools");
@@ -2621,7 +2664,7 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
     assert!(path_result.contains("src"), "{path_result}");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
     let codex_command = temp_command_path("codex-platform-workspace-guard");
     let opencode_command = temp_command_path("opencode-platform-workspace-guard");
@@ -2797,8 +2840,7 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
     );
     let delete_result = provider_tool_result(second_messages, "task_delete");
     assert!(
-        delete_result
-            .contains("workspaceCode `ENTERPRISE` does not match task workspace `TRON_CORE`"),
+        delete_result.contains("workspaceCode is outside the current authorized execution scope"),
         "{delete_result}"
     );
 
@@ -2829,7 +2871,7 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
     assert_eq!(task_detail_body["data"]["status"], json!("NOT_STARTED"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_task_update_rejects_invalid_status_without_partial_update() {
     let codex_command = temp_command_path("codex-task-update-atomic");
     let opencode_command = temp_command_path("opencode-task-update-atomic");
@@ -2966,7 +3008,7 @@ async fn internal_agent_api(
     body["data"].clone()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn builtin_default_react_loop_is_named_and_read_only() {
     let router = app();
     let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
@@ -3011,7 +3053,7 @@ async fn builtin_default_react_loop_is_named_and_read_only() {
     let _ = response_json(delete).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn builtin_internal_agents_have_default_react_loop_assigned() {
     let router =
         common::app_with_state_setup(common::prepared_config(AppConfig::default()), |state| {
@@ -3044,7 +3086,7 @@ async fn builtin_internal_agents_have_default_react_loop_assigned() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_platform_fields_inherit_override_restore_and_persist() {
     let config = AppConfig {
         database_url: temp_database_url("internal-agent-inheritance"),
@@ -3181,7 +3223,7 @@ async fn internal_agent_platform_fields_inherit_override_restore_and_persist() {
     assert_eq!(restored["selectedToolCodes"], json!(["workspace.page"]));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_workspace_definitions_are_local_and_validate_names() {
     let router = app();
     let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
@@ -3360,7 +3402,7 @@ async fn internal_agent_runs_use_selected_role_and_follow_next_run_configuration
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_codes_validate_and_reject_conflicts_without_overwriting() {
     let router = app();
     let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
@@ -3481,7 +3523,7 @@ async fn internal_agent_codes_validate_and_reject_conflicts_without_overwriting(
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_internal_agent_creation_preserves_the_first_definition() {
     let router = app();
     let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
@@ -3548,7 +3590,7 @@ async fn concurrent_internal_agent_creation_preserves_the_first_definition() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn agent_loop_runs_follow_stage_order_and_new_versions() {
     let server = recording_model_server().await;
     let router = app();
@@ -3616,7 +3658,7 @@ async fn agent_loop_runs_follow_stage_order_and_new_versions() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn agent_loop_dag_branches_skip_unselected_nodes() {
     let server = recording_model_server().await;
     let router = app();
@@ -3655,7 +3697,7 @@ async fn agent_loop_dag_branches_skip_unselected_nodes() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn agent_loop_dag_runs_parallel_roots_with_isolated_contexts() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -3731,7 +3773,7 @@ async fn agent_loop_dag_runs_parallel_roots_with_isolated_contexts() {
     task.abort();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn agent_loop_dag_matches_json_fields_from_model_output() {
     let response =
         |content: &str| json!({"choices":[{"message":{"role":"assistant","content":content}}]});
@@ -3768,7 +3810,7 @@ async fn agent_loop_dag_matches_json_fields_from_model_output() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn agent_loop_dag_preserves_all_terminal_outputs() {
     let server = recording_model_server().await;
     let router = app();
@@ -3793,7 +3835,7 @@ async fn agent_loop_dag_preserves_all_terminal_outputs() {
     assert!(outputs["second"].as_str().is_some());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn agent_loop_custom_workflow_runs_all_stages() {
     let server = recording_model_server().await;
     let router = app();
@@ -3839,7 +3881,7 @@ async fn agent_loop_custom_workflow_runs_all_stages() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn agent_loop_custom_analysis_joins_roots_and_selects_each_exit() {
     for approved in [true, false] {
         let app_config = AppConfig {
@@ -3912,7 +3954,7 @@ async fn agent_loop_custom_analysis_joins_roots_and_selects_each_exit() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_avatars_create_override_restore_and_survive_restart() {
     let config = AppConfig {
         database_url: temp_database_url("internal-agent-avatars"),
@@ -3929,7 +3971,7 @@ async fn internal_agent_avatars_create_override_restore_and_survive_restart() {
         None,
     )
     .await;
-    assert_eq!(defaults["avatarId"], "robot");
+    assert_eq!(defaults["avatarId"], "red-blue-pills");
     for id in [
         "robot",
         "fox",
@@ -4045,7 +4087,7 @@ async fn internal_agent_avatars_create_override_restore_and_survive_restart() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn internal_agent_group_api_persists_catalog_and_guards_builtin_definition_writes() {
     let router = app();
     let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);

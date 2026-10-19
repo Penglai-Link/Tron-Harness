@@ -184,11 +184,11 @@ function pointY(point: Point) {
 }
 
 function zoomToScale(zoom: number) {
-  return clamp(zoom / 100, 0.6, 2.2);
+  return clamp(zoom / 100, 0.05, 2.2);
 }
 
 function scaleToZoom(scale: number) {
-  return Math.round(clamp(scale, 0.6, 2.2) * 100);
+  return Math.round(clamp(scale, 0.05, 2.2) * 100);
 }
 
 function labelViewportScale(zoom: number) {
@@ -813,13 +813,16 @@ function edgeCurveOffset(source: ViewportPoint, target: ViewportPoint, active: b
   return offset * direction;
 }
 
-function buildNodeZoomStyle(selected: boolean, highlighted: boolean, zoom: number) {
-  const labelVisible = zoom >= 112;
+function buildNodeZoomStyle(node: PositionedNode, selected: boolean, highlighted: boolean, zoom: number) {
   const labelScale = labelViewportScale(zoom);
+  const radius = nodeRadius(node) + (selected ? 2 : highlighted ? 1 : 0);
 
   return {
-    label: selected || highlighted || labelVisible,
-    labelFontSize: (selected || highlighted ? 9 : 10) * labelScale,
+    r: radius * labelScale,
+    size: radius * 2 * labelScale,
+    lineWidth: (selected ? 2.5 : highlighted ? 1.8 : 0) * labelScale,
+    label: true,
+    labelFontSize: (selected || highlighted ? 13 : 12) * labelScale,
     labelOffsetX: 7 * labelScale,
   };
 }
@@ -828,7 +831,8 @@ function buildEdgeZoomStyle(edge: EdgeLike, active: boolean, zoom: number) {
   const labelScale = labelViewportScale(zoom);
 
   return {
-    label: active && zoom >= 116,
+    lineWidth: (active ? 1.35 : 0.8) * labelScale,
+    label: active,
     labelBackgroundLineWidth: labelScale,
     labelBackgroundRadius: 10 * labelScale,
     labelFontSize: 10 * labelScale,
@@ -857,8 +861,6 @@ function buildG6Data(
       const highlighted = selected || highlightedNodes.has(node.nodeCode);
       const palette = graphNodeColorForGroup(node.colorGroup);
       const point = graphPointForNode(node);
-      const radius = nodeRadius(node);
-      const displayRadius = selected ? radius + 2 : highlighted ? radius + 1 : radius;
       return {
         id: node.nodeCode,
         data: {
@@ -880,15 +882,12 @@ function buildG6Data(
           labelPadding: 0,
           labelPlacement: "right",
           labelText: resolveGraphNodeLabel(node, nodeLabelProperty),
-          lineWidth: selected ? 2.5 : highlighted ? 1.8 : 0,
           opacity: selected || highlighted ? 1 : 0.92,
-          r: displayRadius,
-          size: displayRadius * 2,
           stroke: selected ? graphCanvasTheme.selectedNodeStroke : highlighted ? graphCanvasTheme.highlightedNodeStroke : "transparent",
           x: point.x,
           y: point.y,
           zIndex: selected ? 10 : highlighted ? 6 : Math.max(1, Math.min(5, node.degree)),
-          ...buildNodeZoomStyle(selected, highlighted, zoom),
+          ...buildNodeZoomStyle(node, selected, highlighted, zoom),
         },
         type: "circle",
       };
@@ -928,7 +927,6 @@ function buildG6Data(
           labelPlacement: "center",
           labelText: edge.relationship,
           labelTextBaseline: "middle",
-          lineWidth: active ? 1.35 : 0.8,
           opacity: active ? 0.72 : 0.38,
           stroke: active ? graphCanvasTheme.activeEdgeColor : graphCanvasTheme.edgeStroke,
           zIndex: active ? 4 : 1,
@@ -966,7 +964,7 @@ function buildG6ZoomStyleData(
       const highlighted = selected || highlightedNodes.has(node.nodeCode);
       return {
         id: node.nodeCode,
-        style: buildNodeZoomStyle(selected, highlighted, zoom),
+        style: buildNodeZoomStyle(node, selected, highlighted, zoom),
       };
     }),
   };
@@ -980,6 +978,13 @@ function centerGraphAt(graph: Graph, point: ViewportPoint, duration: number) {
     width / 2 - pointX(viewportPosition),
     height / 2 - pointY(viewportPosition),
   ], duration ? { duration } : false);
+}
+
+async function fitGraphBounds(graph: Graph, bounds: GraphBounds) {
+  const [width, height] = graph.getSize();
+  const scale = clamp(Math.min((width - 64) / bounds.width, (height - 64) / bounds.height), 0.05, 1);
+  await graph.zoomTo(scale, false, graphViewportCenter(graph));
+  await centerGraphAt(graph, graphCenter(bounds), 0);
 }
 
 function buildGraphDataSyncKey(
@@ -1082,6 +1087,7 @@ export function GraphCanvas({
   const cameraZoomRef = useRef(zoom);
   const zoomStyleDataRef = useRef<GraphZoomStyleData>({ edges: [], nodes: [] });
   const graphReadyRef = useRef(false);
+  const fittedNodesRef = useRef(new Set<string>());
   const [cameraZoom, setCameraZoom] = useState(zoom);
   const [minimapViewport, setMinimapViewport] = useState<MinimapViewport>(fallbackMinimapViewport);
 
@@ -1291,7 +1297,7 @@ export function GraphCanvas({
       node: { type: "circle" },
       padding: 42,
       zoom: zoomToScale(zoom),
-      zoomRange: [0.6, 2.2],
+      zoomRange: [0.05, 2.2],
     });
 
     graphRef.current = graph;
@@ -1303,10 +1309,6 @@ export function GraphCanvas({
       if (!nodeCode) return;
 
       onSelectNodeRef.current(nodeCode);
-      void trackGraphTask(graph, async () => {
-        await centerGraphNode(graph, nodeCode, 240);
-        if (active) scheduleSyncViewportState(graph);
-      });
     };
     const handleCanvasClick = () => {
       onClearSelectionRef.current();
@@ -1340,8 +1342,9 @@ export function GraphCanvas({
       if (!active) return;
       graphReadyRef.current = true;
       const selectedNode = selectedNodeCode ? nodeByCode.get(selectedNodeCode) : undefined;
-      const center = selectedNode ? graphPointForNode(selectedNode) : graphCenter(graphBounds);
-      await centerGraphAt(graph, center, 0);
+      if (selectedNode) await centerGraphAt(graph, graphPointForNode(selectedNode), 0);
+      else if (nodes.length) await fitGraphBounds(graph, graphBounds);
+      else await centerGraphAt(graph, graphCenter(graphBounds), 0);
       if (active) scheduleSyncViewportState(graph);
     });
 
@@ -1370,13 +1373,20 @@ export function GraphCanvas({
     const graph = graphRef.current;
     if (!graph) return;
     const { bounds, data, selectedNodeCode: currentSelectedNodeCode } = g6DataSyncRef.current;
+    const nextIds = new Set((data.nodes ?? []).map((node) => String(node.id)));
+    const previousIds = fittedNodesRef.current;
+    const isNewWindow = nextIds.size > 0 && (previousIds.size === 0 || !Array.from(previousIds).every((id) => nextIds.has(id)));
+    fittedNodesRef.current = nextIds;
 
     void trackGraphTask(graph, async () => {
       graph.setData(data);
       await graph.draw();
       if (graphRef.current === graph) {
         if (!currentSelectedNodeCode) {
-          await centerGraphAt(graph, graphCenter(bounds), 0);
+          if (isNewWindow && g6DataSyncRef.current.data === data) {
+            await fitGraphBounds(graph, bounds);
+            reportZoom(graph);
+          } else await centerGraphAt(graph, graphCenter(bounds), 0);
         }
         setMinimapViewport(buildMinimapViewport(graph, bounds));
       }
@@ -1427,10 +1437,8 @@ export function GraphCanvas({
     if (!graph || !graphReadyRef.current || !selectedNode) return;
 
     suppressZoomReportRef.current = true;
-    const targetScale = Math.max(graph.getZoom(), zoomToScale(126));
     void trackGraphTask(graph, async () => {
       try {
-        await graph.zoomTo(targetScale, { duration: 160 });
         await centerGraphNode(graph, selectedNode.nodeCode, 260);
       } finally {
         suppressZoomReportRef.current = false;
@@ -1445,7 +1453,7 @@ export function GraphCanvas({
   return (
     <section
       className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--color-surface-container-lowest)]"
-      aria-label={pageT("canvas.aria", "G6 semantic knowledge graph canvas")}
+      aria-label={pageT("canvas.aria", "Knowledge graph")}
       style={{
         backgroundImage: graphCanvasTheme.canvasBackgroundImage,
         backgroundSize: "20px 20px, 100% 100%",

@@ -29,6 +29,7 @@ pub trait DudeRepository: Send {
 
     fn list(&mut self) -> Result<Vec<Dude>, DudeError>;
     fn save(&mut self, dude: &Dude) -> Result<(), DudeError>;
+    /// Atomically remove the Dude, its soul, Agent definition, and resource grants.
     fn delete(&mut self, code: &str) -> Result<(), DudeError>;
     fn designate_main(&mut self, code: &str) -> Result<(), DudeError>;
     fn resolve_session(&mut self, session: &DudeSession) -> Result<DudeSession, DudeError>;
@@ -264,10 +265,7 @@ impl DudeService {
         if d.is_main || d.kind != DudeKind::Custom {
             return Err(DudeError::Conflict);
         }
-        self.repo()?.delete(code)?;
-        self.management
-            .delete_platform_internal_agent(code)
-            .map_err(|_| DudeError::Storage)
+        self.repo()?.delete(code)
     }
     pub fn designate_main(&self, code: &str) -> Result<(), DudeError> {
         self.get(code)?;

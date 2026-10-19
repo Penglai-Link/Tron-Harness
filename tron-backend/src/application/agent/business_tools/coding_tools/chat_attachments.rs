@@ -73,12 +73,11 @@ impl Tool for ChatAttachmentReadTextTool {
         let max_bytes = bounded_limit(input.max_bytes, DEFAULT_READ_BYTES, MAX_READ_BYTES)?;
         let requested_start = input.start_byte.unwrap_or(0) as u64;
         let range_start = requested_start.saturating_sub(3);
-        let (record, range_start, bytes) = self
-            .resources
-            .for_agent_in_workspace(context.agent_code.as_deref(), &context.workspace_code)
-            .read_chat_session_attachment_range(
-                &context.workspace_code,
-                conversation_code(context)?,
+        conversation_code(context)?;
+        let (record, range_start, bytes) =
+            super::super::file_access::read_session_attachment_range(
+                &self.resources,
+                context,
                 input.attachment_code.trim(),
                 range_start,
                 max_bytes.saturating_add(3) as u64,

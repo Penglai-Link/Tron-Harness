@@ -2,8 +2,8 @@ use serde_json::{Map, Value, json};
 
 use crate::application::rag::{
     RagDiagnosticsRepository, RagEmbeddingRuntime, RagIngestRepository, RagSearchContextRequest,
-    RagSearchGraphExpansionRequest, RagSearchRepository, RagSearchRequest, RagSearchResult,
-    RagSearchRuntime, RagSearchTraceRequest,
+    RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRuntime,
+    RagSearchTraceRequest,
 };
 
 use super::{DEFAULT_CONTEXT_TOKEN_BUDGET, MEMORY_RETURN_FIELDS, MemoryService};
@@ -175,7 +175,6 @@ where
                         .iter()
                         .map(|field| (*field).to_string())
                         .collect(),
-                    graph_expansion: RagSearchGraphExpansionRequest::default(),
                 },
                 trace: RagSearchTraceRequest {
                     enabled: command.trace.unwrap_or(false),

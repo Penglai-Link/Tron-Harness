@@ -191,7 +191,7 @@ export function TaskDetailsPage() {
     [visibleAgentOptions],
   );
   const modelOptions = useMemo(
-    () => automationModelOptionsForAgent(workspaceModelOptions, configuredAgentOption, pageT("values.automaticModel", "Automatic")),
+    () => automationModelOptionsForAgent(workspaceModelOptions, configuredAgentOption, pageT("values.automaticModel", "Conversation Automatic Routing")),
     [configuredAgentOption, pageT, workspaceModelOptions],
   );
   const selectedModelCode = useMemo(() => {
@@ -729,7 +729,7 @@ export function TaskDetailsPage() {
                   onChange={setSelectedModelOptionCode}
                 />
               ) : (
-                <ReadValue>{task.modelCode || pageT("values.automaticModel", "Automatic")}</ReadValue>
+                <ReadValue>{task.modelCode || pageT("values.automaticModel", "Conversation Automatic Routing")}</ReadValue>
               )}
             </Field>
             <Field label={pageT("fields.title", "Title")}>

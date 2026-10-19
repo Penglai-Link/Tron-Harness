@@ -13,7 +13,6 @@ import type {
   PromptVariable,
 } from "@/domain/prompt/model";
 import { analyzePromptTemplate, normalizePromptVariables, reconcilePromptVariables } from "@/domain/prompt/model";
-import { agentRolePromptSeeds } from "./agentRolePromptSeeds";
 
 const seedTimestamp = "2026-07-13T02:00:00.000Z";
 let nextPromptSequence = 1000;
@@ -67,7 +66,6 @@ function initialPlatformPrompts() {
     makePrompt("PROMPT-734600000000000002", "Review Persona", "PERSONA", "Review {{change_summary}} for correctness, regressions, and missing tests."),
   ];
   const builtinSeeds: Array<[string, string, PromptCategory, string, boolean]> = [
-    ["SYS_AGENT_FINAL_OUTPUT", "Agent final output guidance", "SYSTEM", "Final assistant output contract: answer with only the final result and do not expose chain-of-thought.", true],
     ["SYS_CHAT_ASK_USER", "Interactive user input contract", "SYSTEM", "When material clarification is required, call chat_ask_user and stop the turn.", true],
     ["SYS_AGENT_DOMAIN_DISCOVERY", "Domain discovery guidance", "SYSTEM", "You may call only tools explicitly listed in the current tool list. Before using a visible but not yet expanded domain, first call `discovery_expand_tool_domain` and pass that domain's `domainCode`; after receiving the updated tool list, call a tool provided in it. Never guess tool names or request parameters, never call hidden tools directly before expanding the domain, and carefully review the tool-call examples.", true],
     ["SYS_CHAT_SESSION_TITLE", "Chat title generation", "TEMPLATE", "Generate a concise chat title from the user's first message. {{user_message}}", false],
@@ -76,21 +74,6 @@ function initialPlatformPrompts() {
   ];
   return [
     ...prompts,
-    ...agentRolePromptSeeds.map((seed) => {
-      const original = seed.translations["en-US"];
-      return {
-        ...makePrompt(seed.promptCode, original.displayName, "AGENT_ROLE", original.promptBody, true, false),
-        description: original.description,
-        catalogKey: seed.catalogKey,
-        translations: Object.entries(seed.translations).map(([locale, translation]) => ({
-          ...translation,
-          locale: locale as "en-US" | "zh-CN",
-          status: "PUBLISHED" as const,
-          sourceVersion: seed.version,
-          updatedAt: seedTimestamp,
-        })),
-      };
-    }),
     ...builtinSeeds.map(([code, name, category, body, runtimeRequired]) => {
       const prompt = makePrompt(code, name, category, body, true, runtimeRequired);
       if (code === "SYS_AGENT_DOMAIN_DISCOVERY") {

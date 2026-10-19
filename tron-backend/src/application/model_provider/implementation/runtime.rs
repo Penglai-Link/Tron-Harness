@@ -13,6 +13,90 @@ impl ProviderAwareLlmRuntimeResolver {
 }
 
 impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
+    fn embedding_batch_input_limit(
+        &self,
+        workspace: &str,
+        model: &str,
+    ) -> Result<Option<usize>, ModelError> {
+        if !model.starts_with(PERSON_AI_EMBEDDING_PREFIX) {
+            return Ok(None);
+        }
+        use eliteforge_agent_capability_personai::{
+            PersonAiEmbeddingKind, personai_embedding_batch_limit,
+        };
+        Ok(Some(personai_embedding_batch_limit(
+            if self.embedding_accepts_images(workspace, model)? {
+                PersonAiEmbeddingKind::Multimodal
+            } else {
+                PersonAiEmbeddingKind::Text
+            },
+        )))
+    }
+    fn embedding_accepts_images(&self, _: &str, model: &str) -> Result<bool, ModelError> {
+        self.providers.embedding_accepts_images(model)
+    }
+
+    fn auto_vision_runtime_model_config<'a>(
+        &'a self,
+        workspace: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Option<RuntimeModelConfig>, ModelError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let before = self
+                .providers
+                .sdk_model_authorization_scope()
+                .map_err(|e| ModelError::RuntimeResolutionFailed(e.to_string()))?;
+            let credentials = self
+                .providers
+                .active_credentials(ModelProviderCode::PersonAi)
+                .await
+                .map_err(runtime_resolution_error)?;
+            let client = crab_serverapi::gateway::ChatCompletionsClient::new(
+                credentials.server_base_url.clone(),
+            )
+            .map_err(|e| ModelError::RuntimeResolutionFailed(e.to_string()))?;
+            let mut candidates = client
+                .list_models(
+                    &credentials.context(),
+                    Some(QualityType::High),
+                    Some(true),
+                    None,
+                )
+                .await
+                .map_err(|e| ModelError::RuntimeResolutionFailed(e.to_string()))?;
+            candidates.retain(|model| model.image_understanding == Some(true));
+            candidates.sort_by(|a, b| a.model_code.cmp(&b.model_code));
+            let after = self
+                .providers
+                .sdk_model_authorization_scope()
+                .map_err(|e| ModelError::RuntimeResolutionFailed(e.to_string()))?;
+            if before != after {
+                return Err(ModelError::RuntimeResolutionFailed(
+                    "图片说明账户已改变".into(),
+                ));
+            }
+            let Some(candidate) = candidates.first() else {
+                return Ok(None);
+            };
+            let code = match candidate
+                .provider_code
+                .as_deref()
+                .filter(|code| !code.is_empty())
+            {
+                Some(provider) => format!("{provider}/{}", candidate.model_code),
+                None => candidate.model_code.clone(),
+            };
+            self.vision_runtime_model_config(
+                workspace,
+                &person_ai_fixed_runtime_code(ProviderModelQuality::High, &code),
+            )
+        })
+    }
     fn vision_cache_identity(&self) -> Result<Option<String>, ModelError> {
         // Stable account identity across process restarts; never hash or persist credentials.
         self.providers.connection.call(
@@ -46,9 +130,21 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
         if !model.starts_with("PERSON_AI:FIXED:High:") {
             return Ok(None);
         }
+        let code = model
+            .strip_prefix("PERSON_AI:FIXED:High:")
+            .expect("validated prefix");
         self.providers
-            .text_runtime_model_config(workspace, Some(model))
-            .map_err(|_| ModelError::StorageFailure)
+            .resolve_chat_selection(
+                workspace,
+                Some(&ModelSelection::person_ai_fixed(
+                    code,
+                    ProviderModelQuality::High,
+                )),
+                None,
+                None,
+            )
+            .map(|config| config.map(runtime_config_from_agent))
+            .map_err(runtime_resolution_error)
     }
 
     fn embedding_runtime_model_config(
@@ -64,7 +160,7 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
             Ok(None) => self
                 .models
                 .embedding_runtime_model_config(workspace_code, model_code),
-            Err(_) => Err(ModelError::StorageFailure),
+            Err(error) => Err(runtime_resolution_error(error)),
         }
     }
 
@@ -81,8 +177,36 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
             Ok(None) => self
                 .models
                 .rerank_runtime_model_config(workspace_code, model_code),
-            Err(_) => Err(ModelError::StorageFailure),
+            Err(error) => Err(runtime_resolution_error(error)),
         }
+    }
+}
+
+fn runtime_resolution_error(error: ModelProviderError) -> ModelError {
+    match error {
+        ModelProviderError::Storage => ModelError::StorageFailure,
+        error => ModelError::RuntimeResolutionFailed(error.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn model_selection_and_authorization_errors_are_not_storage_failures() {
+        for error in [
+            ModelProviderError::InvalidSelection("no tagged embedding candidates".into()),
+            ModelProviderError::AuthenticationRequired,
+            ModelProviderError::ConnectionNotReady,
+        ] {
+            let expected = error.to_string();
+            let mapped = runtime_resolution_error(error);
+            assert_eq!(mapped, ModelError::RuntimeResolutionFailed(expected));
+        }
+        assert_eq!(
+            runtime_resolution_error(ModelProviderError::Storage),
+            ModelError::StorageFailure
+        );
     }
 }
 
@@ -143,6 +267,24 @@ pub(super) fn person_ai_runtime_quality(config: &AgentModelConfig) -> Option<Pro
     let encoded = config.model_code.strip_prefix("PERSON_AI:FIXED:")?;
     let (quality, _) = encoded.split_once(':')?;
     ProviderModelQuality::from_storage(quality)
+}
+
+pub(super) fn require_high_chat_quality(
+    quality: Option<ProviderModelQuality>,
+) -> Result<(), ModelProviderError> {
+    if quality == Some(ProviderModelQuality::High) {
+        return Ok(());
+    }
+    let english = crate::shared::auth_holder::AuthHolder::get()
+        .is_some_and(|context| context.locale == "en-US");
+    Err(ModelProviderError::InvalidSelection(
+        if english {
+            "Tron only supports High-quality PersonAI chat models. Select a High-quality model or Chat Auto."
+        } else {
+            "Tron 仅支持 PersonAI 高质量对话模型，请选择高质量模型或对话自动路由。"
+        }
+        .into(),
+    ))
 }
 
 pub(super) fn runtime_config_from_agent(config: AgentModelConfig) -> RuntimeModelConfig {

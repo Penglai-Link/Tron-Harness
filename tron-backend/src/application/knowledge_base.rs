@@ -1,5 +1,9 @@
+mod settings;
+pub use settings::KnowledgeLibrarySettings;
 mod agent_grants;
 pub mod deletion;
+mod document_intake;
+pub(crate) mod chunk_context;
 pub mod fidelity; // Legacy finding types and read guards for persisted documents.
 pub mod ingestion;
 pub(crate) mod ingestion_worker;
@@ -8,6 +12,8 @@ mod managed_retrieval;
 pub mod office_visuals;
 pub mod parsing;
 mod parsing_cache;
+pub(crate) mod image_index;
+pub use crate::application::document::preflight::{DocumentParsePlan, DocumentParsePreference};
 pub mod pdf_visual_source;
 mod platform_catalog;
 mod publication_resources;
@@ -31,7 +37,7 @@ use crate::{
     shared::sqlite_extensions::TRON_VECTOR_INDEX_DIMENSION,
 };
 use local_documents::{
-    ChunkConfig, ImageAnalysisSummary, LocatedChunk, parse_local_document, split_document,
+    ChunkConfig, ImageAnalysisSummary, LocatedChunk, parse_local_document,
 };
 use parsing::{
     KnowledgeDocumentParser, OcrMode, ParsingArtifact, ParsingCapabilities, ParsingTier,
@@ -91,6 +97,8 @@ pub struct KnowledgeBase {
     pub owner_user_code: String,
     pub default_chunk_config: ChunkConfig,
     #[serde(default)]
+    pub default_parse_preference: DocumentParsePreference,
+    #[serde(default)]
     pub documents: Vec<KnowledgeBaseDocument>,
     #[serde(default)]
     pub document_count: usize,
@@ -133,6 +141,8 @@ pub struct KnowledgeBaseDocument {
     #[serde(default)]
     pub ocr_mode: Option<OcrMode>,
     #[serde(default)]
+    pub parse_plan: Option<DocumentParsePlan>,
+    #[serde(default)]
     pub parsing_artifact: Option<ParsingArtifact>,
     #[serde(default)]
     pub derived_resource_codes: Vec<String>,
@@ -172,6 +182,9 @@ pub struct KnowledgeBaseContext {
 }
 #[derive(Clone)]
 pub struct KnowledgeBaseService {
+    pub(crate) quality_jobs: Arc<crate::application::knowledge_quality::QualityJobs>,
+    pub(crate) quality_questions: Option<Arc<dyn crate::application::knowledge_quality::QualityQuestionGenerator>>,
+    pub(crate) chunk_strategies: eliteforge_agent_core::ChunkStrategies,
     skills: Arc<std::sync::OnceLock<crate::application::skill::SkillRegistryService>>,
     pub(crate) cleanup_gate: Arc<std::sync::Mutex<()>>,
     pub(crate) queue: Arc<dyn ingestion::KnowledgeIngestionQueue>,
@@ -219,6 +232,9 @@ impl KnowledgeBaseService {
                 .expect("knowledge ingestion schema"),
         );
         Self {
+            quality_jobs: Default::default(),
+            quality_questions: None,
+            chunk_strategies: eliteforge_agent_capability_chunking::built_in_chunk_strategies(),
             skills: Default::default(),
             cleanup_gate: Default::default(),
             queue,
@@ -236,6 +252,17 @@ impl KnowledgeBaseService {
             visual_context_enabled: false,
             runtime_config: None,
         }
+    }
+    pub fn with_chunk_strategies(mut self, strategies: eliteforge_agent_core::ChunkStrategies) -> Self {
+        self.chunk_strategies = strategies;
+        self
+    }
+    pub fn with_quality_question_generator(mut self, generator: Arc<dyn crate::application::knowledge_quality::QualityQuestionGenerator>) -> Self {
+        self.quality_questions = Some(generator);
+        self
+    }
+    pub fn chunking_strategies(&self) -> Vec<eliteforge_agent_core::ChunkStrategyDescriptor> {
+        self.chunk_strategies.descriptors()
     }
     /// Disabled by default; enabling allows authorized KB image bytes to reach the answer model.
     pub fn with_visual_context(mut self, enabled: bool) -> Self {
@@ -343,8 +370,14 @@ impl KnowledgeBaseService {
     pub fn detail(&self, user: &str, id: &str) -> Result<KnowledgeBase, KnowledgeBaseError> {
         let mut kb = self.owned(user, id)?;
         kb.documents = self.repository.documents(id)?;
-        let document_ids = kb.documents.iter().map(|doc| doc.id.clone()).collect::<Vec<_>>();
-        let latest_tasks = self.queue.latest_for_library(id, &document_ids)
+        let document_ids = kb
+            .documents
+            .iter()
+            .map(|doc| doc.id.clone())
+            .collect::<Vec<_>>();
+        let latest_tasks = self
+            .queue
+            .latest_for_library(id, &document_ids)
             .map_err(ingestion_worker::queue_error)?;
         for doc in &mut kb.documents {
             if let Some(task) = latest_tasks.get(&doc.id) {
@@ -407,7 +440,42 @@ impl KnowledgeBaseService {
         name: &str,
         description: &str,
     ) -> Result<KnowledgeBase, KnowledgeBaseError> {
+        self.create_with_index_settings(user, name, description, RagSettings::knowledge_base_default())
+    }
+
+    pub fn create_with_index_settings(
+        &self,
+        user: &str,
+        name: &str,
+        description: &str,
+        index_settings: RagSettings,
+    ) -> Result<KnowledgeBase, KnowledgeBaseError> {
+        self.create_with_parsing_settings(
+            user,
+            name,
+            description,
+            index_settings,
+            DocumentParsePreference::Auto,
+        )
+    }
+    pub fn create_with_parsing_settings(
+        &self,
+        user: &str,
+        name: &str,
+        description: &str,
+        index_settings: RagSettings,
+        default_parse_preference: DocumentParsePreference,
+    ) -> Result<KnowledgeBase, KnowledgeBaseError> {
         self.require_user(user)?;
+        // Validate before inserting the library: no partially configured draft on invalid input.
+        index_settings
+            .validate()
+            .map_err(|_| KnowledgeBaseError::Invalid("索引配置无效".into()))?;
+        if index_settings.graph && index_settings.graph_model_code.is_none() {
+            return Err(KnowledgeBaseError::Invalid(
+                "开启图谱索引需要选择抽取模型".into(),
+            ));
+        }
         if name.trim().is_empty() || name.chars().count() > 120 {
             return Err(KnowledgeBaseError::Invalid(
                 "知识库名称需为1–120字符".into(),
@@ -420,6 +488,7 @@ impl KnowledgeBaseService {
             description: description.trim().into(),
             owner_user_code: user.into(),
             default_chunk_config: ChunkConfig::default(),
+            default_parse_preference,
             documents: vec![],
             document_count: 0,
             agent_codes: vec![],
@@ -455,7 +524,7 @@ impl KnowledgeBaseService {
             display_name: kb.name.clone(),
             description: Some(kb.description.clone()),
             status: RagStatus::Enabled,
-            capabilities: json!({"fulltext":true,"vector":true,"tree":false,"graph":false}),
+            capabilities: json!({"fulltext":true,"vector":true,"tree":false,"graph":true,"settings":index_settings}),
             filter_schema: json!({"fields":{"sourceCode":{"type":"string","column":"source_code","operators":["eq","in"]}}}),
             field_mapping: mapping.clone(),
             source_field_mapping: mapping
@@ -508,7 +577,34 @@ impl KnowledgeBaseService {
         bytes: &[u8],
         request_ingestion: bool,
     ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
-        self.owned(user, kb_id)?;
+        self.upload_original_with_plan(
+            user,
+            namespace,
+            kb_id,
+            filename,
+            bytes,
+            request_ingestion,
+            None,
+            None,
+        )
+    }
+    pub(super) fn upload_original_with_plan(
+        &self,
+        user: &str,
+        namespace: &str,
+        kb_id: &str,
+        filename: &str,
+        bytes: &[u8],
+        request_ingestion: bool,
+        preference: Option<DocumentParsePreference>,
+        confirmed: Option<&DocumentParsePlan>,
+    ) -> Result<KnowledgeBaseDocument, KnowledgeBaseError> {
+        let plan = self.preflight_document(user, kb_id, filename, bytes, preference)?;
+        if confirmed.is_some_and(|confirmed| confirmed != &plan) {
+            return Err(KnowledgeBaseError::Invalid(
+                "文件或解析选择已改变，请重新检查后上传".into(),
+            ));
+        }
         // Serialize original creation across service clones; stable content IDs also
         // prevent duplicate persisted documents after request replay or restart.
         static UPLOAD_GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -522,9 +618,12 @@ impl KnowledgeBaseService {
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_ascii_lowercase();
-        if !matches!(ext.as_str(), "md" | "docx" | "xlsx" | "pdf") {
+        if !crate::application::document::preflight::PARSE_EXTENSIONS.contains(&ext.as_str())
+            && !crate::application::document::preflight::DIRECT_READ_EXTENSIONS
+                .contains(&ext.as_str())
+        {
             return Err(KnowledgeBaseError::Invalid(
-                "支持 .md/.docx/.xlsx/.pdf；旧 .doc/.xls 请先另存为新格式".into(),
+                "此格式不在MinerU支持范围内".into(),
             ));
         }
         let id = format!(
@@ -541,6 +640,15 @@ impl KnowledgeBaseService {
             )
         );
         if let Ok(existing) = self.repository.document(kb_id, &id) {
+            if existing
+                .parse_plan
+                .as_ref()
+                .is_some_and(|stored| stored.method != plan.method)
+            {
+                return Err(KnowledgeBaseError::Invalid(
+                    "同一文件已存在；如需更换解析方式，请修改已有文档设置".into(),
+                ));
+            }
             if request_ingestion {
                 self.repository.request_ingestion(kb_id, &existing)?;
             }
@@ -576,7 +684,7 @@ impl KnowledgeBaseService {
                 resource_code: resource.clone(),
             },
         )?;
-        let doc = KnowledgeBaseDocument {
+        let mut doc = KnowledgeBaseDocument {
             task_id: None,
             stage: None,
             wait_reason: None,
@@ -605,11 +713,13 @@ impl KnowledgeBaseService {
             image_analysis: None,
             parsing_tier: None,
             ocr_mode: None,
+            parse_plan: None,
             parsing_artifact: None,
             derived_resource_codes: vec![],
             visual_source: None,
             image_description_artifacts: vec![],
         };
+        document_intake::apply_plan(&mut doc, plan);
         self.repository
             .insert_document_with_intent(kb_id, &doc, request_ingestion)?;
         Ok(doc)
@@ -647,6 +757,13 @@ impl KnowledgeBaseService {
         &self,
         doc: &KnowledgeBaseDocument,
     ) -> Result<Option<Arc<dyn KnowledgeDocumentParser>>, KnowledgeBaseError> {
+        if doc
+            .parse_plan
+            .as_ref()
+            .is_some_and(|plan| plan.features.local_text)
+        {
+            return Ok(None);
+        }
         match (&self.parser, doc.ocr_mode) {
             (Some(parser), Some(mode)) => parser.with_ocr_mode(mode).map(Some),
             (_, None) => Ok(self.parser.clone()),
@@ -660,7 +777,7 @@ impl KnowledgeBaseService {
         kb: &KnowledgeBase,
         doc: &KnowledgeBaseDocument,
         generate_descriptions: bool,
-    ) -> Result<(Vec<LocatedChunk>, Vec<String>, KnowledgeBaseDocument), KnowledgeBaseError> {
+    ) -> Result<(Vec<LocatedChunk>, Vec<eliteforge_agent_core::ChunkContext>, Vec<String>, KnowledgeBaseDocument), KnowledgeBaseError> {
         let (_, record) = self.resources.download_binary_to_file(
             user,
             ResourceBinaryDownloadCommand {
@@ -682,13 +799,15 @@ impl KnowledgeBaseService {
                 return Err(KnowledgeBaseError::Conflict);
             }
         }
-        let (parsed, parsed_doc) = self
-            .parsed_document(user, namespace, kb, doc, &bytes)
-            .await?;
+        let reuse_only = self.parse_checkpoint.as_ref().map(|checkpoint|checkpoint.task())
+            .transpose()?.is_some_and(|task|task.configuration["reuseParsedOnly"]==true);
+        let (parsed, parsed_doc) = if reuse_only {
+            (self.existing_parsed_document(user, doc)?, doc.clone())
+        } else {
+            self.parsed_document(user, namespace, kb, doc, &bytes).await?
+        };
         if generate_descriptions && fidelity::blocked(&parsed_doc) {
-            return Err(KnowledgeBaseError::Invalid(
-                "现有解析产物已记录失败，未发布索引；原件已保留".into(),
-            ));
+            return Err(KnowledgeBaseError::Invalid(format!("解析质量校验失败，索引未发布：{}；请核对原件及图片",fidelity::failure_reason(&parsed_doc))));
         }
         let (parsed, mut parsed_doc) = self
             .supplement_image_descriptions(
@@ -704,14 +823,32 @@ impl KnowledgeBaseService {
         if let Some(checkpoint) = &self.parse_checkpoint {
             checkpoint.chunking()?;
         }
-        let chunks = split_document(
+        let mut chunked = crate::application::document::split_document_with_strategies(
             &parsed,
             doc.chunk_config
                 .as_ref()
                 .unwrap_or(&kb.default_chunk_config),
+            &self.chunk_strategies,
+            &doc.id,
+            &doc.file_name,
         )
         .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
-        Ok((chunks, parsed.warnings, parsed_doc))
+        let image_vectors = match self.parse_checkpoint.as_ref().map(|checkpoint|checkpoint.task()).transpose()? {
+            Some(task) => match task.configuration["embeddingImages"].as_bool() {
+                Some(value)=>value,
+                // Preserve image candidates without resolving an unavailable
+                // embedding model in the parsing task. Indexing decides which
+                // candidates to consume after the model identity is pinned.
+                None if task.configuration["ragSettings"]["vector"]==true => true,
+                None=>false,
+            },
+            None=>false,
+        };
+        if image_vectors {
+            image_index::append_image_chunks(&parsed, &doc.file_name, &mut chunked.chunks)?;
+        }
+        chunked.warnings.extend(parsed.warnings);
+        Ok((chunked.chunks, chunked.contexts, chunked.warnings, parsed_doc))
     }
     pub async fn preview(
         &self,
@@ -722,7 +859,7 @@ impl KnowledgeBaseService {
         let namespace = "PLATFORM";
         let kb = self.owned(user, kb)?;
         let doc = self.repository.document(&kb.id, doc)?;
-        let (chunks, warnings, parsed_doc) = self.chunks(user, namespace, &kb, &doc, false).await?;
+        let (chunks, _, warnings, parsed_doc) = self.chunks(user, namespace, &kb, &doc, false).await?;
         Ok(KnowledgeBasePreview {
             fidelity_issues: vec![], // Legacy response field; no interactive audit workflow.
             chunk_count: chunks.len(),
@@ -764,14 +901,12 @@ impl KnowledgeBaseService {
                 .document(kb, doc)?
                 .file_name
                 .to_ascii_lowercase();
-            if (filename.ends_with(".docx") || filename.ends_with(".xlsx"))
-                && selected != ParsingTier::Flash
+            let extension = std::path::Path::new(&filename)
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default();
+            if crate::application::document::preflight::DIRECT_READ_EXTENSIONS.contains(&extension)
             {
-                return Err(KnowledgeBaseError::Invalid(
-                    "Word/Excel仅支持原生解析".into(),
-                ));
-            }
-            if filename.ends_with(".md") {
                 return Err(KnowledgeBaseError::Invalid(
                     "Markdown使用直接读取，无需解析质量覆盖".into(),
                 ));
@@ -783,10 +918,15 @@ impl KnowledgeBaseService {
         }
         if let Some(Some(mode)) = ocr {
             let document = self.repository.document(kb, doc)?;
-            if !document.file_name.to_ascii_lowercase().ends_with(".pdf") {
-                return Err(KnowledgeBaseError::Invalid(
-                    "文字识别方式仅适用于PDF".into(),
-                ));
+            let extension = std::path::Path::new(&document.file_name)
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if !crate::application::document::preflight::PARSE_EXTENSIONS
+                .contains(&extension.as_str())
+            {
+                return Err(KnowledgeBaseError::Invalid("此文件不需要文字识别".into()));
             }
             self.parser
                 .as_ref()
@@ -832,6 +972,9 @@ impl KnowledgeBaseService {
         if let Some(c) = &config {
             c.validate()
                 .map_err(|e| KnowledgeBaseError::Invalid(e.to_string()))?;
+            if !self.chunk_strategies.descriptors().iter().any(|d| d.id == c.mode.strategy_id()) {
+                return Err(KnowledgeBaseError::Invalid("切片策略未注册".into()));
+            }
         }
         let mut doc = self.repository.document(kb, doc)?;
         if ingestion_worker::in_progress(&doc.status) {
@@ -844,6 +987,18 @@ impl KnowledgeBaseService {
         if let Some(ocr) = ocr {
             doc.ocr_mode = ocr;
         }
+        if tier.is_some() || ocr.is_some() {
+            let preference = if doc.parsing_tier == Some(ParsingTier::Advanced) {
+                DocumentParsePreference::Layout
+            } else if doc.ocr_mode == Some(OcrMode::Ocr) {
+                DocumentParsePreference::Recognition
+            } else if doc.parsing_tier.is_none() && doc.ocr_mode.is_none() {
+                DocumentParsePreference::Auto
+            } else {
+                DocumentParsePreference::Native
+            };
+            self.replan_document(user, kb, &mut doc, preference)?;
+        }
         doc.status = if fidelity::blocked(&doc) {
             "REVIEW_REQUIRED"
         } else if doc.active_source_code.is_some() {
@@ -853,7 +1008,7 @@ impl KnowledgeBaseService {
         }
         .into();
         doc.error = fidelity::blocked(&doc)
-            .then(|| "数据保真核验发现未解决字形或符号，禁止发布索引；请核对原件及图片".into());
+            .then(|| format!("解析质量校验失败，索引未发布：{}；请核对原件及图片",fidelity::failure_reason(&doc)));
         Ok(doc)
     }
     pub fn set_grants(
@@ -1012,7 +1167,8 @@ impl KnowledgeBaseService {
         {
             return Ok(vec![]);
         }
-        self.repository.authorized_libraries_with_documents(user, agent)
+        self.repository
+            .authorized_libraries_with_documents(user, agent)
     }
     pub(crate) fn authorized_rag_ranges(
         &self,
@@ -1442,7 +1598,7 @@ impl RagAccessResolver for KnowledgeBaseService {
         }
         Ok(ranges)
     }
-    fn recheck(
+    fn recheck_sources(
         &self,
         identity: &RagIdentity,
         result: &mut RagEvidenceResult,
@@ -1471,6 +1627,14 @@ impl RagAccessResolver for KnowledgeBaseService {
                     .and_then(Value::as_i64)
                     .is_none_or(|expiry| expiry > now)
         });
+
         Ok(())
     }
+    fn recheck(&self,identity:&RagIdentity,result:&mut RagEvidenceResult)->Result<(),RagError>{
+        self.recheck_sources(identity,result)
+    }
+    fn assemble_context(&self,identity:&RagIdentity,result:&mut RagEvidenceResult)->Result<(),RagError>{
+        self.expand_context_evidence(&identity.user_code,result).map_err(|_|RagError::StorageFailure)
+    }
+
 }

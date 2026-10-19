@@ -25,6 +25,7 @@ impl ModelProviderService {
                         .into_iter()
                         .filter(|m| {
                             m.status == ProviderCatalogModelStatus::Available
+                                && m.quality_type == Some(ProviderModelQuality::High)
                                 && m.context_window_tokens.is_some_and(|n| n > 0)
                         })
                         .filter_map(|model| {
@@ -61,6 +62,21 @@ impl ModelProviderService {
     pub fn list_text_select_options(
         &self,
         workspace_code: &str,
+    ) -> Result<Vec<ProviderModelSelectOption>, ModelProviderError> {
+        self.text_select_options(workspace_code, true)
+    }
+
+    pub(crate) fn list_temporary_text_select_options(
+        &self,
+        workspace_code: &str,
+    ) -> Result<Vec<ProviderModelSelectOption>, ModelProviderError> {
+        self.text_select_options(workspace_code, false)
+    }
+
+    fn text_select_options(
+        &self,
+        workspace_code: &str,
+        high_quality_only: bool,
     ) -> Result<Vec<ProviderModelSelectOption>, ModelProviderError> {
         let this = self.clone();
         let worker_workspace_code = workspace_code.to_owned();
@@ -106,7 +122,7 @@ impl ModelProviderService {
                         is_default: default_selection.as_ref() == Some(&selection),
                         selection,
                         option_code: "provider:PersonAi:route:ChatAuto".into(),
-                        display_name: "Auto".into(),
+                        display_name: eliteforge_agent_core::CHAT_AUTO_ROUTE_NAME.into(),
                         provider_code: ModelProviderCode::PersonAi,
                         access_platform: ModelProviderCode::PersonAi.display_name().into(),
                         upstream_vendor_name: None,
@@ -122,6 +138,9 @@ impl ModelProviderService {
                     });
                 }
                 for model in read_chat_catalog_models(&connection, ModelProviderCode::PersonAi)? {
+                    if high_quality_only && model.quality_type != Some(ProviderModelQuality::High) {
+                        continue;
+                    }
                     let enabled = active && model.status == ProviderCatalogModelStatus::Available;
                     let selection = ModelSelection::person_ai_fixed(
                         model.selection_model_code(),
@@ -167,6 +186,31 @@ impl ModelProviderService {
         selection: Option<&ModelSelection>,
         legacy_model_code: Option<&str>,
         reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    ) -> Result<Option<AgentModelConfig>, ModelProviderError> {
+        self.resolve_text_selection(
+            workspace_code,
+            selection,
+            legacy_model_code,
+            reasoning_effort,
+            true,
+        )
+    }
+
+    pub(crate) fn resolve_temporary_text_selection(
+        &self,
+        workspace_code: &str,
+        selection: &ModelSelection,
+    ) -> Result<Option<AgentModelConfig>, ModelProviderError> {
+        self.resolve_text_selection(workspace_code, Some(selection), None, None, false)
+    }
+
+    fn resolve_text_selection(
+        &self,
+        workspace_code: &str,
+        selection: Option<&ModelSelection>,
+        legacy_model_code: Option<&str>,
+        reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+        high_quality_only: bool,
     ) -> Result<Option<AgentModelConfig>, ModelProviderError> {
         let this = self.clone();
         let worker_workspace_code = workspace_code.to_owned();
@@ -273,6 +317,9 @@ impl ModelProviderService {
                         .ok_or_else(|| {
                             ModelProviderError::CatalogModelUnavailable(model_code.into())
                         })?;
+                        if high_quality_only {
+                            require_high_chat_quality(model.quality_type)?;
+                        }
                         if model.status != ProviderCatalogModelStatus::Available {
                             return Err(ModelProviderError::CatalogModelUnavailable(
                                 model_code.into(),
@@ -325,7 +372,9 @@ impl ModelProviderService {
         model_code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelProviderError> {
         let requested = model_code.map(str::trim).filter(|value| !value.is_empty());
-        if let Some(logical_code) = requested.and_then(|value| value.strip_prefix(PERSON_AI_EMBEDDING_PREFIX)) {
+        if let Some(logical_code) =
+            requested.and_then(|value| value.strip_prefix(PERSON_AI_EMBEDDING_PREFIX))
+        {
             if logical_code.is_empty() {
                 return Ok(None);
             }
@@ -334,67 +383,59 @@ impl ModelProviderService {
             let available = self.connection.call(
                 {
                     let code = code.clone();
-                    move |connection| connection.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM provider_multimedia_catalog_models
+                    move |connection| {
+                        connection
+                            .query_row(
+                                "SELECT EXISTS(SELECT 1 FROM provider_multimedia_catalog_models
                          WHERE provider_code = 'PersonAi' AND media_type = 6
                            AND status = 'Available' AND model_code = ?1)",
-                        [&code], |row| row.get::<_, bool>(0),
-                    ).map_err(|_| ModelProviderError::Storage)
+                                [&code],
+                                |row| row.get::<_, bool>(0),
+                            )
+                            .map_err(|_| ModelProviderError::Storage)
+                    }
                 },
                 || ModelProviderError::Storage,
             )?;
             if !available {
                 return Ok(None);
             }
-            return Ok(Some(RuntimeModelConfig {
-                model_code: format!("{PERSON_AI_EMBEDDING_PREFIX}{code}"),
-                protocol: ModelProtocol::OpenAiCompatibleEmbedding,
-                model_type: ModelType::Embedding,
-                base_url: "https://person-ai.invalid".into(),
-                api_path: Some("embeddings".into()),
-                api_key: String::new(),
-                model_name: code,
-                thinking_enabled: false,
-                reasoning_effort: None,
-                responses_stateful_enabled: false,
-                temperature: None,
-                max_tokens: None,
-                context_window_tokens: None,
-                top_p: None,
-                max_retries: Some(0),
-            }));
+            return Ok(Some(super::auto_selection::person_ai_embedding_config(
+                &code,
+            )));
+        }
+        let default = if requested.is_none() {
+            self.default_selection(workspace_code, ModelType::Embedding)?
+        } else {
+            None
+        };
+        if requested == Some("PERSON_AI:ROUTE:MultimodalEmbeddingAuto")
+            || default.as_ref().is_some_and(|selection| {
+                selection.provider_code == Some(ModelProviderCode::PersonAi)
+                    && selection.kind == ModelSelectionKind::ProviderRoute
+                    && selection.route_code == Some(ProviderRouteCode::MultimodalEmbeddingAuto)
+            })
+        {
+            self.require_active_connection(ModelProviderCode::PersonAi)?;
+            return self
+                .auto_multimodal_embedding_config(workspace_code)
+                .map(Some);
         }
         if requested.is_some_and(|value| value != "PERSON_AI:ROUTE:EmbeddingAuto") {
             return Ok(None);
         }
-        // An explicit route identity must still match this workspace's current selection.
-        let Some(selection) = self.default_selection(workspace_code, ModelType::Embedding)? else {
-            return Ok(None);
-        };
-        if selection.provider_code != Some(ModelProviderCode::PersonAi)
-            || selection.kind != ModelSelectionKind::ProviderRoute
-            || selection.route_code != Some(ProviderRouteCode::EmbeddingAuto)
+        let selection = default;
+        if requested.is_none()
+            && !selection.is_some_and(|selection| {
+                selection.provider_code == Some(ModelProviderCode::PersonAi)
+                    && selection.kind == ModelSelectionKind::ProviderRoute
+                    && selection.route_code == Some(ProviderRouteCode::EmbeddingAuto)
+            })
         {
             return Ok(None);
         }
         self.require_active_connection(ModelProviderCode::PersonAi)?;
-        Ok(Some(RuntimeModelConfig {
-            model_code: "PERSON_AI:ROUTE:EmbeddingAuto".into(),
-            protocol: ModelProtocol::OpenAiCompatibleEmbedding,
-            model_type: ModelType::Embedding,
-            base_url: "https://person-ai.invalid".into(),
-            api_path: Some("embeddings".into()),
-            api_key: String::new(),
-            model_name: String::new(),
-            thinking_enabled: false,
-            reasoning_effort: None,
-            responses_stateful_enabled: false,
-            temperature: None,
-            max_tokens: None,
-            context_window_tokens: None,
-            top_p: None,
-            max_retries: Some(0),
-        }))
+        self.auto_embedding_config(workspace_code).map(Some)
     }
 
     pub fn rerank_runtime_model_config(
@@ -402,42 +443,34 @@ impl ModelProviderService {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelProviderError> {
-        let explicit_llm_fallback = model_code
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some_and(|value| value == "PERSON_AI:ROUTE:LlmFallback");
-        if model_code.is_some_and(|value| !value.trim().is_empty()) && !explicit_llm_fallback {
+        let requested = model_code.map(str::trim).filter(|code| !code.is_empty());
+        if let Some(id) = requested.and_then(|code| code.strip_prefix(PERSON_AI_RERANK_PREFIX)) {
+            self.require_active_connection(ModelProviderCode::PersonAi)?;
+            let id = id.to_owned();
+            let available = self.connection.call({
+                let id = id.clone();
+                move |connection| connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM provider_multimedia_catalog_models WHERE provider_code='PersonAi' AND media_type=7 AND status='Available' AND model_id=?1)",
+                    [&id], |row| row.get::<_, bool>(0),
+                ).map_err(|_| ModelProviderError::Storage)
+            }, || ModelProviderError::Storage)?;
+            return Ok(available.then(|| super::auto_selection::person_ai_rerank_config(&id)));
+        }
+        if requested.is_some_and(|code| code != "PERSON_AI:ROUTE:RerankAuto") {
             return Ok(None);
         }
-        if !explicit_llm_fallback {
-            let Some(selection) = self.default_selection(workspace_code, ModelType::Rerank)? else {
-                return Ok(None);
-            };
-            if selection.provider_code != Some(ModelProviderCode::PersonAi)
-                || selection.kind != ModelSelectionKind::ProviderRoute
-                || selection.route_code != Some(ProviderRouteCode::LlmFallback)
-            {
-                return Ok(None);
-            }
+        let selection = self.default_selection(workspace_code, ModelType::Rerank)?;
+        if requested.is_none()
+            && !selection.is_some_and(|selection| {
+                selection.provider_code == Some(ModelProviderCode::PersonAi)
+                    && selection.kind == ModelSelectionKind::ProviderRoute
+                    && selection.route_code == Some(ProviderRouteCode::RerankAuto)
+            })
+        {
+            return Ok(None);
         }
         self.require_active_connection(ModelProviderCode::PersonAi)?;
-        let Some(text_selection) = self.default_selection(workspace_code, ModelType::Text)? else {
-            return Ok(None);
-        };
-        let Some(text_config) =
-            self.resolve_chat_selection(workspace_code, Some(&text_selection), None, None)?
-        else {
-            return Ok(None);
-        };
-        let mut config = runtime_config_from_agent(text_config);
-        // This is a RERANK runtime contract, but the LLM invocation must use
-        // the workspace's effective TEXT selection (Auto or a fixed remote
-        // Person-AI model), not a pretend native rerank endpoint.
-        config.protocol = ModelProtocol::Rerank;
-        config.model_type = ModelType::Rerank;
-        config.max_tokens = Some(512);
-        config.temperature = Some(0.0);
-        Ok(Some(config))
+        self.auto_rerank_config(workspace_code).map(Some)
     }
 
     pub fn is_person_ai_config(&self, model_code: &str) -> bool {

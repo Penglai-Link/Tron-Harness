@@ -10,6 +10,55 @@ use tron_backend::application::{
     model_router::AgentModelRouter,
 };
 
+struct HostRouter(String);
+impl eliteforge_agent_core::ChatAutoRouter for HostRouter {
+    fn select(
+        &self,
+        context: &eliteforge_agent_core::AutoRouteContext<'_>,
+        candidates: &[eliteforge_agent_core::AutoRouteCandidate],
+    ) -> Result<eliteforge_agent_core::ModelRef, eliteforge_agent_core::AgentError> {
+        assert_eq!(
+            context.operation,
+            eliteforge_agent_core::ModelOperation::Chat
+        );
+        assert!(context.affinity.contains("custom-session"));
+        candidates
+            .iter()
+            .find(|candidate| candidate.model.model.contains(&self.0))
+            .map(|candidate| candidate.model.clone())
+            .ok_or_else(|| eliteforge_agent_core::AgentError::Run("host candidate missing".into()))
+    }
+}
+
+#[tokio::test]
+async fn host_can_replace_the_pack_router_using_its_authorized_catalog() {
+    let f = Fixture::new();
+    let a = add_text_model(&f.state, "Custom A");
+    let b = add_text_model(&f.state, "Custom B");
+    let router = AgentModelRouter::new(f.state.models.clone(), f.state.model_providers.clone())
+        .with_auto_router(std::sync::Arc::new(HostRouter(b.clone())));
+    let (model, route) = router
+        .resolve_initial(WORKSPACE, "custom-session", "custom-agent", None)
+        .unwrap();
+    assert_eq!(model.model_code, b);
+    assert_eq!(route.authorized_candidates.len(), 2);
+    assert!(
+        route
+            .authorized_candidates
+            .iter()
+            .any(|c| c.config.model_code == a)
+    );
+    assert_eq!(
+        router
+            .resolve_initial(WORKSPACE, "custom-session", "custom-agent", None)
+            .unwrap()
+            .0
+            .model_code,
+        b
+    );
+    assert!(f.state.agent_framework.close().await.is_success());
+}
+
 #[tokio::test]
 async fn candidate_models_persist_inherit_and_bound_initial_and_refreshed_auto_selection() {
     let f = Fixture::new();

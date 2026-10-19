@@ -573,6 +573,17 @@ impl ChatRepository for SqliteChatRepository {
     fn get_session(&mut self, id: &str) -> Result<ChatSession, ChatError> {
         blocking(self.session(id))
     }
+    fn find_source_session(&mut self,user:&str,source:&str)->Result<Option<ChatSession>,ChatError>{
+        let user=user.to_owned();let source=source.to_owned();
+        blocking(async{
+            self.framework().await?;
+            let database=self.host.shared_database().await.map_err(chat_error)?;
+            let row=database.call_read(move|connection|->Result<Option<SessionProjection>,ChatError>{
+                connection.query_row(&format!("{SESSION_PROJECTION_SQL} WHERE json_extract(l.business_json,'$.user_code')=?1 AND json_extract(l.business_json,'$.source_code')=?2 AND json_extract(s.record,'$.status') IN ('Active','ACTIVE') LIMIT 1"),params![user,source],session_row).optional().map_err(|_|ChatError::StorageFailure)
+            }).await.map_err(|_|ChatError::StorageFailure)?;
+            row.map(chat_session_from_row).transpose()
+        })
+    }
     fn update_session_status(
         &mut self,
         id: &str,

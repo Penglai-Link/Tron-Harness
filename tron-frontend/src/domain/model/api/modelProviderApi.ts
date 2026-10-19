@@ -36,6 +36,8 @@ export interface ModelProviderConnection {
 }
 
 export interface ProviderCatalogModel {
+  dimension?: number | null;
+  tags?: string[];
   providerCode: ModelProviderCode;
   catalogModelType: ProviderCatalogModelType;
   modelId: string | null;

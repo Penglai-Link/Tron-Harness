@@ -6,11 +6,59 @@ use serde_json::{Value, json};
 use crate::{
     application::resource::ResourceService,
     domain::agent::{AgentRunContext, ToolError},
+    domain::resource::{ChatSessionAttachmentRecord, ResourceError},
 };
 
 use super::coding_tools::resolve_path;
 
 const MAX_INPUT_FILE_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Resolve within the current session, then its server-bound delegation origin.
+/// The model cannot supply the origin or widen the workspace/owner scope.
+pub(super) fn read_session_attachment_range(
+    resources: &ResourceService,
+    context: &AgentRunContext,
+    attachment_code: &str,
+    start: u64,
+    limit: u64,
+) -> Result<(ChatSessionAttachmentRecord, u64, Vec<u8>), ResourceError> {
+    let session = context
+        .conversation_code
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or(ResourceError::InvalidInput)?;
+    let resources =
+        resources.for_agent_in_workspace(context.agent_code.as_deref(), &context.workspace_code);
+    let result = resources.read_chat_session_attachment_range(
+        &context.workspace_code,
+        session,
+        attachment_code,
+        start,
+        limit,
+    );
+    if !matches!(result, Err(ResourceError::NotFound)) {
+        return result;
+    }
+    let origin = context
+        .collaboration_owner
+        .as_ref()
+        .filter(|owner| {
+            (owner.kind == "USER" && owner.code == context.user_code.as_deref().unwrap_or("system"))
+                || owner.kind == "DUDE"
+        })
+        .and_then(|owner| owner.origin_session_code.as_deref())
+        .filter(|origin| !origin.trim().is_empty() && *origin != session);
+    match origin {
+        Some(origin) => resources.read_chat_session_attachment_range(
+            &context.workspace_code,
+            origin,
+            attachment_code,
+            start,
+            limit,
+        ),
+        None => result,
+    }
+}
 
 /// A source-neutral reference used by document tools. The source kind controls
 /// how bytes are resolved; format-specific tools only consume the resulting bytes.
@@ -126,7 +174,7 @@ pub(super) fn resolve_input_file_bounded(
                     "fileRef.attachmentCode is required".into(),
                 ));
             }
-            let session_code = context
+            context
                 .conversation_code
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -135,19 +183,13 @@ pub(super) fn resolve_input_file_bounded(
                         "session attachment fileRef requires a conversation session".into(),
                     )
                 })?;
-            let (record, _, bytes) = resources
-                .read_chat_session_attachment_range(
-                    &context.workspace_code,
-                    session_code,
-                    attachment_code,
-                    0,
-                    limit,
-                )
-                .map_err(|error| {
-                    ToolError::ExecutionFailed(format!(
-                        "session attachment `{attachment_code}` could not be read: {error}"
-                    ))
-                })?;
+            let (record, _, bytes) =
+                read_session_attachment_range(&resources, context, attachment_code, 0, limit)
+                    .map_err(|error| {
+                        ToolError::ExecutionFailed(format!(
+                            "session attachment `{attachment_code}` could not be read: {error}"
+                        ))
+                    })?;
             if record.byte_size > limit {
                 return Err(ToolError::ExecutionFailed(format!(
                     "attachment exceeds {limit} byte input limit"

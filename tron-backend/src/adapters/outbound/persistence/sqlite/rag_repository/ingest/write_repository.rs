@@ -27,6 +27,57 @@ use super::{
 };
 
 impl RagIngestRepository for SqliteRagRepositorySql<'_> {
+    fn cached_vectors(
+        &self,
+        corpus: &str,
+        source: &str,
+        workspace: &str,
+        fingerprint: &str,
+        dimension: usize,
+    ) -> Result<std::collections::BTreeMap<String, Vec<f32>>, RagError> {
+        let corpus = self.get_corpus(corpus)?.ok_or(RagError::CorpusNotFound)?;
+        let plan = compile_sql_corpus_plan(self, &corpus)?;
+        // Other storage implementations may provide their own cache. Never guess a binding.
+        if plan.has_distinct_vector_table()
+            || plan.has_distinct_source_table()
+            || !plan.has_sqlite_vector()
+        {
+            return Ok(Default::default());
+        }
+        let table = quote_identifier(&plan.text_unit_table)?;
+        let Some(metadata) = plan.source_metadata_column.as_deref() else {
+            return Ok(Default::default());
+        };
+        let metadata = quote_identifier(metadata)?;
+        let status = quote_identifier(&plan.source_status_column)?;
+        let sql = format!(
+            "SELECT embedding_text_hash,embedding FROM {table} WHERE source_code=?1 AND scope_type='SPACE' AND scope_code=?2 AND {status}='ACTIVE' AND embedding_status='INDEXED' AND embedding_dimension=?3 AND json_extract({metadata},'$.embeddingFingerprint')=?4 AND coalesce(json_extract({metadata},'$.embeddingCacheInvalidated'),0)=0"
+        );
+        let mut statement = self.connection.prepare(&sql).map_err(storage_error)?;
+        let rows = statement
+            .query_map(
+                params![source, workspace, dimension as i64, fingerprint],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<Vec<u8>>>(1)?,
+                    ))
+                },
+            )
+            .map_err(storage_error)?;
+        let mut result = std::collections::BTreeMap::new();
+        for row in rows {
+            let (Some(key), Some(bytes)) = row.map_err(storage_error)? else {
+                continue;
+            };
+            if let Some(vector) = decode_embedding(&bytes)
+                .filter(|v| v.len() == dimension && v.iter().all(|n| n.is_finite()))
+            {
+                result.insert(key, vector);
+            }
+        }
+        Ok(result)
+    }
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
         let corpus = self
             .get_corpus(&command.corpus_id)?
@@ -41,6 +92,10 @@ impl RagIngestRepository for SqliteRagRepositorySql<'_> {
             .get("indexTaskId")
             .and_then(serde_json::Value::as_str)
         {
+            let capabilities:String=tx.query_row("SELECT capabilities_json FROM rag_corpora WHERE corpus_id=?1",[&command.corpus_id],|r|r.get(0)).map_err(storage_error)?;
+            let current=crate::application::rag::RagSettings::from_capabilities(&serde_json::from_str(&capabilities).map_err(|_|RagError::StorageFailure)?)?;
+            let expected:crate::application::rag::RagSettings=serde_json::from_value(command.metadata["indexSettings"].clone()).map_err(|_|RagError::IngestRequestInvalid)?;
+            if current!=expected{return Err(RagError::IngestRequestInvalid);}
             let running: i64 = tx.query_row("SELECT COUNT(*) FROM rag_record_tasks current WHERE id=?1 AND state='RUNNING' AND user_code=?2 AND NOT EXISTS (SELECT 1 FROM rag_record_tasks newer WHERE newer.corpus_id=current.corpus_id AND newer.rowid>current.rowid AND json_extract(newer.payload_json,'$.sourceCode')=json_extract(current.payload_json,'$.sourceCode') AND json_extract(newer.payload_json,'$.scopeType')=json_extract(current.payload_json,'$.scopeType') AND json_extract(newer.payload_json,'$.scopeCode')=json_extract(current.payload_json,'$.scopeCode'))",params![task_id,command.user_code],|row|row.get(0)).map_err(storage_error)?;
             if running != 1 {
                 return Err(RagError::IngestRequestInvalid);
@@ -61,16 +116,17 @@ impl RagIngestRepository for SqliteRagRepositorySql<'_> {
         sync_text_unit_indexes_for_units(&tx, &plan, &command.text_units)?;
         persist_tree_nodes(&tx, &plan, &command)?;
         persist_warnings(&tx, &plan, &command)?;
-        tx.execute("DELETE FROM rag_graph_evidence WHERE corpus_id=?1 AND source_code=?2 AND source_version=?3 AND scope_type=?4 AND scope_code=?5", params![command.corpus_id,command.source_code,command.source_version,command.scope.scope_type,command.scope.scope_code]).map_err(storage_error)?;
-        if let Some(graph) = &command.related_graph {
-            // Every derived entity/relation is bound to its original chunk identity.
-            for unit in &command.text_units {
-                let Some(evidence) = graph.get(&unit.text_unit_code) else {
-                    continue;
-                };
-                let graph_text =
-                    serde_json::to_string(evidence).map_err(|_| RagError::StorageFailure)?;
-                tx.execute("INSERT INTO rag_graph_evidence(corpus_id,source_code,source_version,scope_type,scope_code,target_code,text,metadata) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",params![command.corpus_id,command.source_code,command.source_version,command.scope.scope_type,command.scope.scope_code,unit.text_unit_code,graph_text,graph_text]).map_err(storage_error)?;
+        if command.source_status == "ACTIVE" {
+            let partition=crate::domain::rag::graph::GraphPartition{corpus_id:command.corpus_id.clone(),scope_type:command.scope.scope_type.clone(),scope_code:command.scope.scope_code.clone()};
+            let logical=command.metadata["logicalSourceCode"].as_str().unwrap_or(&command.source_code);
+            if command.metadata["indexSettings"]["graph"]==true {
+                let id=command.metadata["graphGenerationId"].as_str().ok_or(RagError::IngestRequestInvalid)?;
+                let config=command.metadata["graphConfigurationHash"].as_str().ok_or(RagError::IngestRequestInvalid)?;
+                let graphs=&crate::adapters::outbound::persistence::sqlite::rag_graph_index::validate_graph_generation_binding;
+                graphs(&tx,id,&partition,logical,&command.source_code,&command.task_id,config).map_err(|_|RagError::IngestRequestInvalid)?;
+                crate::adapters::outbound::persistence::sqlite::rag_graph_index::activate_graph_generation(&tx,id).map_err(|_|RagError::IngestRequestInvalid)?;
+            }else{
+                crate::adapters::outbound::persistence::sqlite::rag_graph_index::retire_graph_source(&tx,&partition,logical).map_err(|_|RagError::StorageFailure)?;
             }
         }
         if let Some(task_id) = command
@@ -365,6 +421,33 @@ fn persist_vector_units(
 }
 
 impl RagIngestRepository for SqliteRagRepository {
+    fn cached_vectors(
+        &self,
+        corpus: &str,
+        source: &str,
+        workspace: &str,
+        fingerprint: &str,
+        dimension: usize,
+    ) -> Result<std::collections::BTreeMap<String, Vec<f32>>, RagError> {
+        let (corpus, source, workspace, fingerprint) = (
+            corpus.to_owned(),
+            source.to_owned(),
+            workspace.to_owned(),
+            fingerprint.to_owned(),
+        );
+        self.connection.call(
+            move |connection| {
+                SqliteRagRepositorySql { connection }.cached_vectors(
+                    &corpus,
+                    &source,
+                    &workspace,
+                    &fingerprint,
+                    dimension,
+                )
+            },
+            || RagError::StorageFailure,
+        )
+    }
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
         self.connection.call(
             move |connection| SqliteRagRepositorySql { connection }.persist_ingest(command),

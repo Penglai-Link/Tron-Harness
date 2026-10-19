@@ -1,3 +1,4 @@
+mod settings;
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
@@ -15,16 +16,12 @@ use axum::{
 };
 use serde::Deserialize;
 mod agent_grants;
+mod creation;
+mod preflight;
+mod quality;
 mod library;
 mod library_agent_grants;
 mod platform_catalog;
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Create {
-    name: String,
-    #[serde(default)]
-    description: String,
-}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Configure {
@@ -49,7 +46,8 @@ async fn parsing(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContex
 }
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/knowledge-bases", get(list).post(create))
+        .merge(quality::routes())
+        .route("/api/v1/knowledge-bases", get(list).post(creation::create))
         .route(
             "/api/v1/knowledge-bases/platform",
             get(platform_catalog::list),
@@ -68,8 +66,16 @@ pub fn routes() -> Router<AppState> {
             get(detail).delete(library::remove),
         )
         .route(
+            "/api/v1/knowledge-bases/{id}/settings",
+            get(settings::get).put(settings::update),
+        )
+        .route(
             "/api/v1/knowledge-bases/{id}/resources/{resourceCode}/binary",
             get(binary),
+        )
+        .route(
+            "/api/v1/knowledge-bases/{id}/documents/preflight",
+            axum::routing::post(preflight::inspect),
         )
         .route(
             "/api/v1/knowledge-bases/{id}/documents",
@@ -137,13 +143,6 @@ async fn list(State(kb): State<KnowledgeBaseService>, auth: RequestAuthContext) 
         Err(error) => response::<()>(Err(error)),
     }
 }
-async fn create(
-    State(kb): State<KnowledgeBaseService>,
-    auth: RequestAuthContext,
-    Json(q): Json<Create>,
-) -> Response {
-    response(kb.create(&auth.user().user_code, &q.name, &q.description))
-}
 async fn detail(
     State(kb): State<KnowledgeBaseService>,
     auth: RequestAuthContext,
@@ -166,6 +165,8 @@ async fn upload(
 ) -> Response {
     let mut file = None;
     let mut request_key = None;
+    let mut preference = None;
+    let mut plan = None;
     loop {
         match multipart.next_field().await {
             Ok(Some(field)) => match field.name().unwrap_or("") {
@@ -188,6 +189,16 @@ async fn upload(
                         )));
                     }
                 },
+                "parsePreference" => {
+                    preference = match field.text().await.ok().and_then(|v| serde_json::from_value::<crate::application::knowledge_base::DocumentParsePreference>(serde_json::Value::String(v)).ok()) {
+                        Some(value) => Some(value), None => return response::<()>(Err(KnowledgeBaseError::Invalid("解析方式无效".into())))
+                    };
+                }
+                "parsePlan" => {
+                    plan = match field.text().await.ok().and_then(|v| serde_json::from_str::<crate::application::knowledge_base::DocumentParsePlan>(&v).ok()) {
+                        Some(value) => Some(value), None => return response::<()>(Err(KnowledgeBaseError::Invalid("解析计划无效".into())))
+                    };
+                }
                 _ => {}
             },
             Ok(None) => break,
@@ -197,12 +208,14 @@ async fn upload(
         }
     }
     match file {
-        Some((name, bytes)) => response(kb.upload_with_request(
+        Some((name, bytes)) => response(kb.upload_with_parsing_options(
             &auth.user().user_code,
             &id,
             &name,
             &bytes,
             request_key.as_deref(),
+            preference,
+            plan.as_ref(),
         )),
         _ => response::<()>(Err(KnowledgeBaseError::Invalid("需要file".into()))),
     }

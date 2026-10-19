@@ -32,6 +32,34 @@ pub struct SqliteAgentManagementRepository {
     connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
 }
 
+// A Dude shares its Agent configuration and grants. Both owners must remove
+// these records inside their existing transaction, before deleting its soul.
+pub(super) fn delete_platform_internal_agent_records(
+    transaction: &super::framework_storage::BusinessTransaction<'_>,
+    agent_code: &str,
+) -> rusqlite::Result<bool> {
+    let removed = transaction.execute(
+        "DELETE FROM platform_internal_agent_configs WHERE agent_code = ?1",
+        [agent_code],
+    )?;
+    if removed == 0 {
+        return Ok(false);
+    }
+    for sql in [
+        "DELETE FROM agent_skill_assignments WHERE agent_code=?1",
+        "DELETE FROM workspace_internal_agent_mcp_server_assignments WHERE agent_code=?1",
+        "DELETE FROM workspace_internal_agent_tool_assignments WHERE agent_code=?1",
+        "DELETE FROM workspace_internal_agent_policies WHERE agent_code=?1",
+        "DELETE FROM workspace_internal_agent_definitions WHERE agent_code=?1",
+        "DELETE FROM agent_workspace_grants WHERE agent_code=?1",
+        "DELETE FROM agent_workspace_grant_policies WHERE agent_code=?1",
+        "DELETE FROM knowledge_base_grants WHERE agent_code=?1",
+    ] {
+        transaction.execute(sql, [agent_code])?;
+    }
+    Ok(true)
+}
+
 fn ensure_internal_agent_code_available(
     connection: &Connection,
     workspace_code: Option<&str>,
@@ -442,65 +470,10 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
             rusqlite::TransactionBehavior::Immediate,
         )
         .map_err(storage_error)?;
-        let removed = transaction
-            .execute(
-                "DELETE FROM platform_internal_agent_configs WHERE agent_code = ?1",
-                [agent_code],
-            )
-            .map_err(storage_error)?;
-        if removed == 0 {
-            return Ok(false);
-        }
-        transaction
-            .execute(
-                "DELETE FROM agent_skill_assignments WHERE agent_code=?1",
-                [agent_code],
-            )
-            .map_err(storage_error)?;
-        transaction
-            .execute(
-                "DELETE FROM workspace_internal_agent_mcp_server_assignments WHERE agent_code = ?1",
-                [agent_code],
-            )
-            .map_err(storage_error)?;
-        transaction
-            .execute(
-                "DELETE FROM workspace_internal_agent_tool_assignments WHERE agent_code = ?1",
-                [agent_code],
-            )
-            .map_err(storage_error)?;
-        transaction
-            .execute(
-                "DELETE FROM workspace_internal_agent_policies WHERE agent_code = ?1",
-                [agent_code],
-            )
-            .map_err(storage_error)?;
-        transaction
-            .execute(
-                "DELETE FROM workspace_internal_agent_definitions WHERE agent_code = ?1",
-                [agent_code],
-            )
-            .map_err(storage_error)?;
-        transaction
-            .execute(
-                "DELETE FROM agent_workspace_grants WHERE agent_code = ?1",
-                [agent_code],
-            )
-            .map_err(storage_error)?;
-        transaction
-            .execute(
-                "DELETE FROM agent_workspace_grant_policies WHERE agent_code = ?1",
-                [agent_code],
-            )
-            .map_err(storage_error)?;
-        transaction
-            .execute(
-                "DELETE FROM knowledge_base_grants WHERE agent_code = ?1",
-                [agent_code],
-            )
+        let removed = delete_platform_internal_agent_records(&transaction, agent_code)
             .map_err(storage_error)?;
         transaction.commit().map_err(storage_error)?;
-        Ok(true)
+        Ok(removed)
     }
     fn delete_workspace_internal_agent(
         &mut self,

@@ -85,6 +85,8 @@ pub(super) fn related_graph_payload(
             let reference = file_ref(&file.path);
             json!({
                 "ref": reference,
+                "name":file.path,
+                "type":"SkillFile",
                 "kind": kind,
                 "label": "RagSkillFile",
                 "code": file_code(workspace_code, skill_name, &file.path),
@@ -99,7 +101,7 @@ pub(super) fn related_graph_payload(
             })
         })
         .collect::<Vec<_>>();
-    nodes.push(json!({"ref":"$skill","name":skill_name,"evidence":skill_name}));
+    nodes.push(json!({"ref":"$skill","name":skill_name,"type":"Skill","evidence":skill_name}));
     let edges = files
         .iter()
         .map(|file| {

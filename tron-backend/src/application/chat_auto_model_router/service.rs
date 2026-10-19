@@ -6,6 +6,11 @@ use crate::{
         reasoning::ReasoningEffort,
     },
 };
+use eliteforge_agent_capability_personai::{
+    PERSONAI_PROVIDER, PERSONAI_QUALITY, PersonAiAutoRouter,
+};
+use eliteforge_agent_core as fw;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 struct Candidate {
@@ -14,18 +19,30 @@ struct Candidate {
     config: AgentModelConfig,
     key: String,
     provider: bool,
-    prefers_responses: bool,
 }
 
 #[derive(Clone)]
 pub struct ChatAutoModelRouter {
     models: ModelService,
     providers: ModelProviderService,
+    router: Arc<dyn fw::ChatAutoRouter>,
 }
 
 impl ChatAutoModelRouter {
     pub fn new(models: ModelService, providers: ModelProviderService) -> Self {
-        Self { models, providers }
+        Self {
+            models,
+            providers,
+            router: Arc::new(PersonAiAutoRouter {
+                prefer_responses: true,
+                ..Default::default()
+            }),
+        }
+    }
+
+    pub fn with_router(mut self, router: Arc<dyn fw::ChatAutoRouter>) -> Self {
+        self.router = router;
+        self
     }
 
     pub fn resolve_initial(
@@ -72,17 +89,37 @@ impl ChatAutoModelRouter {
             .providers
             .chat_auto_route_selection(workspace_code, session_code, agent_code)
             .map_err(|error| error.to_string())?;
-        let candidate = assigned
-            .and_then(|selection| {
-                candidates
-                    .iter()
-                    .find(|candidate| candidate.selection == selection)
-                    .cloned()
-            })
-            .or_else(|| {
-                choose_initial_candidate(&candidates, workspace_code, session_code, agent_code)
-            })
-            .ok_or_else(|| "Auto has no available Text model with a context window".to_string())?;
+        let available = candidates.iter().map(route_candidate).collect::<Vec<_>>();
+        let previous = assigned
+            .and_then(|selection| candidates.iter().find(|c| c.selection == selection))
+            .map(|c| route_candidate(c).model);
+        let affinity = serde_json::to_string(&(workspace_code, session_code, agent_code))
+            .map_err(|error| error.to_string())?;
+        let routers = fw::AutoRouters {
+            source: Some(Arc::new(
+                crate::application::model_router::TronAutoRouteDataSource(available.clone()),
+            )),
+            chat: Some(self.router.clone()),
+            ..Default::default()
+        };
+        let selected = routers
+            .select(
+                &fw::AutoRouteContext {
+                    operation: fw::ModelOperation::Chat,
+                    stage: "",
+                    affinity: &affinity,
+                    call_key: "initial",
+                    previous: previous.as_ref(),
+                    transient_failures: 0,
+                },
+                &available,
+            )
+            .map_err(|error| error.to_string())?;
+        let candidate = candidates
+            .iter()
+            .find(|candidate| route_candidate(candidate).model == selected)
+            .cloned()
+            .ok_or_else(|| "对话自动路由 selected an unauthorized model".to_string())?;
         self.providers
             .save_chat_auto_route_selection(
                 workspace_code,
@@ -213,15 +250,12 @@ impl ChatAutoModelRouter {
             .auto_chat_candidates(allowed, reasoning_effort)
             .map_err(|error| format!("Auto provider catalog lookup failed: {error}"))?
         {
-            let prefers_responses =
-                config.protocol == crate::domain::agent::AgentModelProtocol::Responses;
             candidates.push(Candidate {
                 code,
                 key: candidate_key(&selection),
                 selection,
                 config,
                 provider: true,
-                prefers_responses,
             });
         }
         for config in self
@@ -236,58 +270,75 @@ impl ChatAutoModelRouter {
                 selection,
                 config,
                 provider: false,
-                prefers_responses: false,
             });
         }
         candidates.retain(|candidate| allowed.is_empty() || allowed.contains(&candidate.code));
+        let filtered = self
+            .router
+            .candidates(&candidates.iter().map(route_candidate).collect::<Vec<_>>());
+        let filtered = filtered
+            .into_iter()
+            .map(|c| c.model)
+            .collect::<std::collections::BTreeSet<_>>();
+        candidates
+            .retain(|candidate| filtered.contains(&fw::ModelRef::new("tron.chat", &candidate.key)));
         Ok(candidates)
     }
 }
 
 fn order_authorized_candidates(
-    mut candidates: Vec<AutoModelCandidate>,
+    candidates: Vec<AutoModelCandidate>,
     current: &AgentModelConfig,
 ) -> Vec<AgentModelConfig> {
-    candidates.sort_by_key(|candidate| {
-        (
-            u8::from(candidate.config.identity() != current.identity()),
-            u8::from(candidate.selection.provider_code.is_none()),
-            context_window_rank(
-                current.context_window_tokens.unwrap_or_default(),
-                candidate.config.context_window_tokens.unwrap_or_default(),
-            ),
-            candidate_key(&candidate.selection),
-        )
-    });
-    candidates
+    let data = candidates
+        .iter()
+        .map(|candidate| {
+            route_candidate(&Candidate {
+                code: candidate.config.model_code.clone(),
+                key: candidate_key(&candidate.selection),
+                provider: candidate.selection.provider_code.is_some(),
+                selection: candidate.selection.clone(),
+                config: candidate.config.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+    let current_ref = candidates
+        .iter()
+        .zip(&data)
+        .find(|(candidate, _)| candidate.config.identity() == current.identity())
+        .map(|(_, candidate)| candidate.model.clone())
+        .unwrap_or_else(|| fw::ModelRef::new("tron.chat", ""));
+    let ordered = PersonAiAutoRouter::recovery_candidates(
+        &data,
+        &current_ref,
+        current.context_window_tokens.unwrap_or_default() as usize,
+    );
+    let mut configs = candidates
         .into_iter()
-        .map(|candidate| candidate.config)
+        .zip(data)
+        .map(|(candidate, data)| (data.model, candidate.config))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    ordered
+        .into_iter()
+        .filter_map(|entry| configs.remove(&entry.model))
         .collect()
 }
 
-fn choose_initial_candidate(
-    candidates: &[Candidate],
-    workspace_code: &str,
-    session_code: &str,
-    agent_code: &str,
-) -> Option<Candidate> {
-    let pool = candidates
-        .iter()
-        .filter(|candidate| candidate.provider)
-        .collect::<Vec<_>>();
-    let pool = if pool.is_empty() {
-        candidates.iter().collect::<Vec<_>>()
-    } else {
-        pool
-    };
-    pool.into_iter()
-        .max_by_key(|candidate| {
-            (
-                u8::from(candidate.prefers_responses),
-                rendezvous_score(workspace_code, session_code, agent_code, &candidate.key),
-            )
-        })
-        .cloned()
+fn route_candidate(candidate: &Candidate) -> fw::AutoRouteCandidate {
+    let mut data = fw::AutoRouteCandidate::new(fw::ModelRef::new("tron.chat", &candidate.key));
+    data.protocol = match candidate.config.protocol {
+        crate::domain::agent::AgentModelProtocol::Responses => "openai.responses",
+        _ => "openai.chat-completions",
+    }
+    .into();
+    data.context_window_tokens = candidate.config.context_window_tokens.map(|v| v as usize);
+    data.metadata
+        .insert(PERSONAI_PROVIDER.into(), candidate.provider.into());
+    if let Some(quality) = candidate.selection.quality_type {
+        data.metadata
+            .insert(PERSONAI_QUALITY.into(), quality.storage_value().into());
+    }
+    data
 }
 
 fn candidate_key(selection: &ModelSelection) -> String {
@@ -300,48 +351,8 @@ fn candidate_key(selection: &ModelSelection) -> String {
     })
 }
 
-fn rendezvous_score(workspace: &str, session: &str, agent: &str, candidate: &str) -> u64 {
-    let mut hash = 0xcbf29ce484222325_u64;
-    for byte in [workspace, session, agent, candidate]
-        .into_iter()
-        .flat_map(|part| part.as_bytes().iter().copied().chain([0xff]))
-    {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
-}
-
-fn context_window_rank(current: u32, candidate: u32) -> u8 {
-    if candidate == current {
-        0
-    } else if candidate > current {
-        1
-    } else {
-        2
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{context_window_rank, rendezvous_score};
-
-    #[test]
-    fn rendezvous_routing_is_stable_per_session_agent_and_candidate() {
-        assert_eq!(
-            rendezvous_score("ws", "session", "agent", "model"),
-            rendezvous_score("ws", "session", "agent", "model")
-        );
-        assert_ne!(
-            rendezvous_score("ws", "session-a", "agent", "model"),
-            rendezvous_score("ws", "session-b", "agent", "model")
-        );
-        assert_ne!(
-            rendezvous_score("ws", "session", "agent-a", "model"),
-            rendezvous_score("ws", "session", "agent-b", "model")
-        );
-    }
-
     #[test]
     fn snapshot_order_matches_full_identity_and_preserves_context_window_policy() {
         use super::*;
@@ -365,12 +376,5 @@ mod tests {
             &current.config,
         );
         assert_eq!(ordered, vec![current.config, large.config, small.config]);
-    }
-
-    #[test]
-    fn fallback_window_order_preserves_then_grows_before_shrinking() {
-        assert_eq!(context_window_rank(256, 256), 0);
-        assert_eq!(context_window_rank(256, 512), 1);
-        assert_eq!(context_window_rank(256, 128), 2);
     }
 }

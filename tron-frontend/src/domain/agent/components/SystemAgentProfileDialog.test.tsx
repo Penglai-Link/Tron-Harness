@@ -5,7 +5,14 @@ import { SystemAgentProfileDialog } from "./SystemAgentProfileDialog";
 import type { PlatformSystemAgentRecord } from "../model";
 import { pages } from "@/i18n/locales/en-US/pages";
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key.startsWith("pages:settingsAgents.profile.") ? pages.settingsAgents.profile[key.slice("pages:settingsAgents.profile.".length) as keyof typeof pages.settingsAgents.profile] : "Close" }) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => {
+  if (key.startsWith("pages:settingsAgents.profile.")) {
+    return pages.settingsAgents.profile[key.slice("pages:settingsAgents.profile.".length) as keyof typeof pages.settingsAgents.profile];
+  }
+  if (key === "agentActivation.active") return pages.agentActivation.active;
+  if (key === "agentActivation.disabled") return pages.agentActivation.disabled;
+  return key;
+} }) }));
 const agents: PlatformSystemAgentRecord[] = [{ agentCode: "codex", name: "Codex", description: "CLI", source: "System Scan", status: "Enabled", enabled: true, available: true, lastScannedAt: null, models: [{ modelId: "fast-model", displayName: "Fast" }, { modelId: "deep-model", displayName: "Deep" }] }];
 const toastError = vi.hoisted(() => vi.fn());
 vi.mock("@/components/ui/toast", () => ({ useToast: () => ({ error: toastError }) }));
@@ -24,7 +31,7 @@ it("validates a distinct identity and saves an explicit model with its base Agen
   expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save" }).disabled).toBe(true);
   fireEvent.change(screen.getByRole("textbox", { name: "Code" }), { target: { value: "codex-fast" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({ agentCode: "codex-fast", name: "Codex Fast", baseAgentCode: "codex", modelId: "fast-model", enabled: true }));
+  await waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({ agentCode: "codex-fast", name: "Codex Fast", description: "", baseAgentCode: "codex", modelId: "fast-model", reasoningEffort: null, fastMode: false, avatarId: "robot", enabled: true }));
   await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
 });
 it("keeps the configured model draft after a failed save and permits retry", async () => {
@@ -62,7 +69,16 @@ it("requires a qualified model ID for OpenCode", () => {
 it("saves the disabled state from the edit header", async () => {
   const onSave = vi.fn().mockResolvedValue(undefined);
   render(<SystemAgentProfileDialog agents={agents} record={{ ...agents[0], agentCode: "codex-fast", baseAgentCode: "codex", modelId: "fast-model" }} onSave={onSave} onClose={vi.fn()} />);
-  fireEvent.click(screen.getByRole("switch"));
+  const activation = screen.getByRole("switch", { name: /^Active\b/ });
+  const fastMode = screen.getByRole("switch", { name: "Fast mode" });
+  expect(activation.getAttribute("aria-checked")).toBe("true");
+  expect(fastMode.getAttribute("aria-checked")).toBe("false");
+  fireEvent.click(activation);
+  expect(activation.getAttribute("aria-checked")).toBe("false");
+  expect(fastMode.getAttribute("aria-checked")).toBe("false");
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ enabled: false })));
+  await waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({
+    agentCode: "codex-fast", name: "Codex", description: "CLI", baseAgentCode: "codex",
+    modelId: "fast-model", reasoningEffort: null, fastMode: false, avatarId: "robot", enabled: false,
+  }));
 });

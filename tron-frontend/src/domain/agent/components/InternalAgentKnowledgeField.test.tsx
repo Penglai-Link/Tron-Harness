@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ list: vi.fn(), save: vi.fn(), success: vi.fn(), error: vi.fn() }));
-vi.mock("@/domain/knowledge-base/api/knowledgeBaseApi", () => ({ listAgentKnowledgeLibraries: fixture.list, setAgentKnowledgeLibraries: fixture.save }));
+const fixture = vi.hoisted(() => ({ list: vi.fn(), catalog: vi.fn(), save: vi.fn(), success: vi.fn(), error: vi.fn() }));
+vi.mock("@/domain/knowledge-base/api/knowledgeBaseApi", () => ({ listKnowledgeLibraries: fixture.catalog, listAgentKnowledgeLibraries: fixture.list, setAgentKnowledgeLibraries: fixture.save }));
 vi.mock("@/domain/knowledge-base/hooks/useKnowledgeLibraries", () => ({ useKnowledgeUser: () => "USER", useKnowledgeViewActive: () => ({ current: true }) }));
 vi.mock("@/components/ui/toast", () => ({ useToast: () => ({ success: fixture.success, error: fixture.error }) }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, options?: { count?: number }) => {
@@ -21,12 +21,13 @@ beforeEach(() => {
     { id: "b", name: "Product", description: "User scenarios", documentCount: 1, granted: false },
   ]);
   fixture.save.mockResolvedValue({});
+  fixture.catalog.mockResolvedValue([{ id: "a", name: "Engineering", description: "Build systems", documentCount: 2 }]);
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-function setup(onSelectionChange?: (ids: string[]) => void) {
+function setup(onSelectionChange?: (ids: string[]) => void, agentCode = "main-agent") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const invalidate = vi.spyOn(client, "invalidateQueries");
-  render(<QueryClientProvider client={client}><InternalAgentKnowledgeField agentCode="main-agent" agentName="Main" disabled={false} onSelectionChange={onSelectionChange} /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><InternalAgentKnowledgeField agentCode={agentCode} agentName="Main" disabled={false} onSelectionChange={onSelectionChange} /></QueryClientProvider>);
   return { client, invalidate };
 }
 async function open() {
@@ -93,4 +94,19 @@ describe("internal agent knowledge assignments", () => {
     await screen.findByRole("button", { name: "Choose knowledge bases (0)" });
     expect(screen.getByText("none")).toBeTruthy();
   });
+});
+
+it("stages a creation-time library selection without querying or writing an unknown Agent", async () => {
+  const choose = vi.fn();
+  setup(choose, "");
+  const button = await screen.findByRole<HTMLButtonElement>("button", { name: "Choose knowledge bases (0)" });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("switch", { name: "Engineering" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "confirm" }));
+  expect(choose).toHaveBeenCalledWith(["a"]);
+  expect(fixture.catalog).toHaveBeenCalledWith(expect.any(AbortSignal));
+  expect(fixture.list).not.toHaveBeenCalled();
+  expect(fixture.save).not.toHaveBeenCalled();
 });

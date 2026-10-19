@@ -1,5 +1,6 @@
 //! Local-only document extraction and bounded, source-located splitting.
 //! No network clients, model calls, jobs, or user-resource writes belong here.
+pub mod preflight;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -12,6 +13,8 @@ use zip::ZipArchive;
 pub const MAX_RAW_BYTES: usize = 20 * 1024 * 1024;
 pub const MAX_EXPANDED_BYTES: usize = 100 * 1024 * 1024;
 pub const MAX_TEXT_BYTES: usize = 2 * 1024 * 1024;
+/// Bounded normalized output from a document parser; independent of local text uploads.
+pub const MAX_PARSED_TEXT_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_CHUNKS: usize = 2_000;
 const WORD_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
@@ -27,13 +30,48 @@ fn failed(message: impl fmt::Display) -> LocalDocumentError {
     LocalDocumentError(message.to_string())
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum ChunkMode {
     #[default]
     Auto,
     Heading,
     Fixed,
+    Structure,
+    Custom(String),
+}
+impl ChunkMode {
+    pub fn strategy_id(&self) -> &str {
+        match self {
+            Self::Auto => "auto",
+            Self::Heading => "heading",
+            Self::Fixed => "fixed",
+            Self::Structure => "structure",
+            Self::Custom(id) => id,
+        }
+    }
+}
+impl Serialize for ChunkMode {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(match self {
+            Self::Auto => "AUTO",
+            Self::Heading => "HEADING",
+            Self::Fixed => "FIXED",
+            Self::Structure => "Structure",
+            Self::Custom(id) => id,
+        })
+    }
+}
+impl<'de> Deserialize<'de> for ChunkMode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let id = String::deserialize(deserializer)?;
+        Ok(match id.as_str() {
+            "AUTO" | "Auto" | "auto" => Self::Auto,
+            "HEADING" | "Heading" | "heading" => Self::Heading,
+            "FIXED" | "Fixed" | "fixed" => Self::Fixed,
+            "STRUCTURE" | "Structure" | "structure" => Self::Structure,
+            _ => Self::Custom(id),
+        })
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
@@ -72,6 +110,18 @@ impl ChunkConfig {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentLocation {
+    /// Identity within the immutable parse artifact, including segment and nested block path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_block_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_source_block_id: Option<String>,
+    /// A supplier segment is not an original physical page number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_segment: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment_page: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pages: Vec<u32>,
     /// Normalized source-page rectangle; retained only when the parser supplied it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bbox: Option<[f64; 4]>,
@@ -126,6 +176,9 @@ pub struct ImageAnnotation {
     pub model_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_resource_code: Option<String>,
+    /// Present only when the parser or description artifact identifies one asset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_code: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,12 +216,33 @@ pub struct LocatedChunk {
     pub heading_path: Vec<String>,
     pub location: DocumentLocation,
     pub ordinal: usize,
+    #[serde(default)]
+    pub index_text: String,
+    #[serde(default)]
+    pub source_spans: Vec<eliteforge_agent_core::ChunkSourceSpan>,
+    #[serde(default)]
+    pub source_locations: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub context_id: String,
 }
 
 /// Extensions describe the supported input formats, rather than invoking external converters.
 pub fn parse_local_document(
     filename: &str,
     bytes: &[u8],
+) -> Result<ParsedDocument, LocalDocumentError> {
+    parse_document(filename, bytes, MAX_TEXT_BYTES)
+}
+
+/// Parse normalized supplier Markdown after binary image payloads have been removed.
+pub fn parse_normalized_markdown(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
+    parse_document("normalized.md", bytes, MAX_PARSED_TEXT_BYTES)
+}
+
+fn parse_document(
+    filename: &str,
+    bytes: &[u8],
+    text_limit: usize,
 ) -> Result<ParsedDocument, LocalDocumentError> {
     if bytes.len() > MAX_RAW_BYTES {
         return Err(failed("document exceeds 20 MiB upload limit"));
@@ -179,7 +253,8 @@ pub fn parse_local_document(
         .unwrap_or_default()
         .to_ascii_lowercase();
     let mut document = match extension.as_str() {
-        "md" => parse_markdown(bytes)?,
+        "md" | "markdown" => parse_markdown(bytes, text_limit)?,
+        "txt" | "rst" | "tex" => parse_text(bytes)?,
         "docx" => parse_docx(bytes)?,
         "xlsx" => parse_xlsx(bytes)?,
         "pdf" => parse_pdf(bytes)?,
@@ -203,8 +278,11 @@ pub fn parse_local_document(
         total_bytes = total_bytes
             .checked_add(section.text.len() + 1)
             .ok_or_else(|| failed("document text too large"))?;
-        if total_bytes > MAX_TEXT_BYTES {
-            return Err(failed("normalized document text exceeds 2 MiB"));
+        if total_bytes > text_limit {
+            return Err(failed(format!(
+                "normalized document text exceeds {} MiB",
+                text_limit / 1024 / 1024
+            )));
         }
         section.location.char_start = offset;
         offset += section.text.chars().count();
@@ -226,6 +304,56 @@ fn parsed(format: &str, sections: Vec<LocatedSection>) -> ParsedDocument {
         image_analysis: None,
     }
 }
+pub fn decode_plain_text(bytes: &[u8]) -> Result<String, LocalDocumentError> {
+    if bytes.len() > MAX_TEXT_BYTES {
+        return Err(failed("文字文件超过2 MiB上限"));
+    }
+    let text = if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
+        if bytes.len() % 2 != 0 {
+            return Err(failed("UTF-16文字文件编码无效"));
+        }
+        let little = bytes[0] == 0xff;
+        let units = bytes[2..]
+            .chunks_exact(2)
+            .map(|b| {
+                if little {
+                    u16::from_le_bytes([b[0], b[1]])
+                } else {
+                    u16::from_be_bytes([b[0], b[1]])
+                }
+            })
+            .collect::<Vec<_>>();
+        String::from_utf16(&units).map_err(failed)?
+    } else {
+        std::str::from_utf8(bytes)
+            .map_err(|_| failed("文字文件需为UTF-8或带BOM的UTF-16"))?
+            .trim_start_matches('\u{feff}')
+            .to_owned()
+    };
+    if text.contains('\0') {
+        return Err(failed("文字文件包含二进制内容"));
+    }
+    if text.len() > MAX_TEXT_BYTES {
+        return Err(failed("解码文字超过2 MiB上限"));
+    }
+    Ok(text)
+}
+fn parse_text(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
+    let text = decode_plain_text(bytes)?;
+    let count = text.lines().count() as u32;
+    Ok(parsed(
+        "txt",
+        vec![section(
+            text,
+            None,
+            DocumentLocation {
+                line_start: Some(1),
+                line_end: Some(count),
+                ..Default::default()
+            },
+        )],
+    ))
+}
 fn section(text: String, heading_level: Option<u8>, location: DocumentLocation) -> LocatedSection {
     LocatedSection {
         text,
@@ -233,9 +361,12 @@ fn section(text: String, heading_level: Option<u8>, location: DocumentLocation) 
         location,
     }
 }
-fn parse_markdown(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
-    if bytes.len() > MAX_TEXT_BYTES {
-        return Err(failed("normalized document text exceeds 2 MiB"));
+fn parse_markdown(bytes: &[u8], text_limit: usize) -> Result<ParsedDocument, LocalDocumentError> {
+    if bytes.len() > text_limit {
+        return Err(failed(format!(
+            "normalized document text exceeds {} MiB",
+            text_limit / 1024 / 1024
+        )));
     }
     let text = std::str::from_utf8(bytes)
         .map_err(|_| failed("Markdown must be UTF-8"))?
@@ -266,6 +397,22 @@ fn parse_markdown(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
                 None => fence = Some((first, fence_count)),
                 _ => {}
             }
+        }
+        if line.trim().is_empty() && fence.is_none() {
+            if !current.is_empty() {
+                sections.push(section(
+                    std::mem::take(&mut current),
+                    level.take(),
+                    DocumentLocation {
+                        heading: heading.clone(),
+                        line_start: Some(start_line),
+                        line_end: Some(end_line),
+                        ..Default::default()
+                    },
+                ));
+            }
+            start_line = index as u32 + 2;
+            continue;
         }
         let hashes = if fence.is_none() && line.len() - trimmed.len() <= 3 {
             trimmed.chars().take_while(|c| *c == '#').count()
@@ -302,9 +449,23 @@ fn parse_markdown(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
         }
         if !current.is_empty() {
             current.push('\n');
+        } else {
+            start_line = index as u32 + 1;
         }
         current.push_str(line);
         end_line = index as u32 + 1;
+        if is_heading {
+            sections.push(section(
+                std::mem::take(&mut current),
+                level.take(),
+                DocumentLocation {
+                    heading: heading.clone(),
+                    line_start: Some(start_line),
+                    line_end: Some(end_line),
+                    ..Default::default()
+                },
+            ));
+        }
     }
     if !current.is_empty() {
         sections.push(section(
@@ -569,7 +730,12 @@ fn parse_pdf(bytes: &[u8]) -> Result<ParsedDocument, LocalDocumentError> {
 }
 
 mod chunking;
-pub use chunking::split_document;
+mod source_facts;
+pub use chunking::{
+    ChunkedDocument, chunk_document_input, span_location, split_document,
+    split_document_with_strategies,
+};
+pub use source_facts::source_fact_locations;
 
 #[cfg(test)]
 mod tests {
@@ -702,7 +868,7 @@ mod tests {
             "前言\n# 一级\n正文\n```md\n# example code\n```\n## 二级\n内容".as_bytes(),
         )
         .unwrap();
-        assert_eq!(doc.sections.len(), 3);
+        assert_eq!(doc.sections.len(), 5);
         let chunks = split_document(&doc, &ChunkConfig::default()).unwrap();
         assert!(chunks[0].text.contains("前言"));
         assert_eq!(chunks[1].heading_path, ["一级"]);
@@ -743,10 +909,18 @@ mod tests {
         let doc =
             parse_local_document("text.pdf", &pdf(&["First page", "Second page", ""])).unwrap();
         let chunks = split_document(&doc, &ChunkConfig::default()).unwrap();
-        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks.len(), 1); // Automatic structure may connect adjacent pages.
         assert!(chunks[0].text.contains("First page"));
-        assert_eq!(chunks[0].location.page, Some(1));
-        assert_eq!(chunks[1].location.page, Some(2));
+        assert!(chunks[0].text.contains("Second page"));
+        assert_eq!(chunks[0].location.pages, vec![1, 2]);
+        assert_eq!(
+            chunks[0]
+                .source_locations
+                .iter()
+                .map(|location| location["page"].as_u64().unwrap())
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
         assert!(doc.warnings[0].contains("OCR is unsupported"));
         assert!(
             parse_local_document("scan.pdf", &image_only_pdf())
@@ -837,6 +1011,7 @@ mod tests {
     }
     #[test]
     fn too_many_chunks_is_explicit_and_heading_depth_is_respected() {
+        assert_eq!(MAX_CHUNKS, 2000);
         let doc = parse_local_document("many.md", "a".repeat(400_001).as_bytes()).unwrap();
         assert!(
             split_document(
@@ -850,7 +1025,7 @@ mod tests {
             )
             .unwrap_err()
             .to_string()
-            .contains("2000 chunks")
+            .contains("chunk count budget")
         );
         let doc = parse_local_document(
             "depth.md",

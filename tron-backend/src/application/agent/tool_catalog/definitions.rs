@@ -1,8 +1,10 @@
 mod business;
 mod coding;
+mod knowledge_quality;
 mod memory;
 mod productivity;
 mod rag;
+mod rag_graph;
 mod terminal;
 
 use serde_json::Value;
@@ -178,6 +180,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     definitions.extend(terminal::tool_definitions());
     definitions.extend(memory::tool_definitions());
     definitions.extend(rag::tool_definitions());
+    definitions.extend(rag_graph::tool_definitions());
+    definitions.extend(knowledge_quality::tool_definitions());
     definitions.extend(productivity::tool_definitions());
     definitions
 }

@@ -1,7 +1,7 @@
 //! Attach original Office coordinates without inventing physical page numbers.
 use super::{
     KnowledgeBaseError,
-    local_documents::{MAX_TEXT_BYTES, ParsedDocument, parse_xlsx, validate_office},
+    local_documents::{MAX_PARSED_TEXT_BYTES, ParsedDocument, parse_xlsx, validate_office},
 };
 use serde_json::Value;
 
@@ -33,8 +33,8 @@ pub(super) fn apply(
     let mut size = 0usize;
     for section in &mut parsed.sections {
         size = size.saturating_add(section.text.len());
-        if size > MAX_TEXT_BYTES {
-            return Err(invalid("解析文本超过2 MiB上限"));
+        if size > MAX_PARSED_TEXT_BYTES {
+            return Err(invalid("解析文本超过16 MiB上限"));
         }
         section.location.char_start = offset;
         offset += section.text.chars().count();

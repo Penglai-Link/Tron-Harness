@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   fetchAgentSkills,
+  fetchRegistrySkills,
   CAPABILITY_RESOURCES_CHANGED,
 } from "@/domain/skill/api";
 import type { RegistrySkillRecord } from "@/domain/skill/model";
@@ -54,7 +55,7 @@ export function InternalAgentSkillField({
   const client = useQueryClient();
   const query = useQuery({
     queryKey: ["agent-skills", agentCode],
-    queryFn: () => fetchAgentSkills(agentCode),
+    queryFn: () => agentCode ? fetchAgentSkills(agentCode) : fetchRegistrySkills().then((items) => items.map((item) => ({ ...item, assigned: item.available && !!item.providerPackId }))),
   });
   useEffect(() => {
     const changed = () => {

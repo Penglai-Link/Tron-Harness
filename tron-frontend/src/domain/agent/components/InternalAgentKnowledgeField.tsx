@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { SearchField } from "@/components/search-field";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useToast } from "@/components/ui/toast";
-import { listAgentKnowledgeLibraries, setAgentKnowledgeLibraries, type AgentKnowledgeLibrary } from "@/domain/knowledge-base/api/knowledgeBaseApi";
+import { listKnowledgeLibraries, listAgentKnowledgeLibraries, setAgentKnowledgeLibraries, type AgentKnowledgeLibrary } from "@/domain/knowledge-base/api/knowledgeBaseApi";
 import { useKnowledgeUser, useKnowledgeViewActive } from "@/domain/knowledge-base/hooks/useKnowledgeLibraries";
 
 interface Props { agentCode: string; agentName: string; disabled: boolean; selectedIds?: string[]; onSelectionChange?: (ids: string[]) => void }
@@ -21,7 +21,7 @@ export function InternalAgentKnowledgeField({ agentCode, agentName, disabled, se
   const query = useQuery({
     queryKey: ["knowledge-agent-libraries", user, agentCode],
     enabled: Boolean(user),
-    queryFn: ({ signal }) => listAgentKnowledgeLibraries( agentCode, signal),
+    queryFn: ({ signal }) => agentCode ? listAgentKnowledgeLibraries(agentCode, signal) : listKnowledgeLibraries(signal).then((items) => items.map((item) => ({ ...item, granted: false }))),
   });
   const selected = query.data?.filter((library) => selectedIds ? selectedIds.includes(library.id) : library.granted) ?? [];
 

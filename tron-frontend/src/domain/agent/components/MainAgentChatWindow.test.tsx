@@ -3,8 +3,11 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ChatSession, SendChatMessageInput } from "@tron/chat-core";
 import { MainAgentChatWindow } from "./MainAgentChatWindow";
+import { MemoryRouter } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 const { resolve, adapter, lastProps } = vi.hoisted(() => ({ resolve: vi.fn(), adapter: vi.fn((_options: {getHeaders: () => Headers; workspaceCode: string | null}) => ({})), lastProps: { current: null as unknown } }));
-vi.mock("@/domain/dude/api/dudeApi", () => ({ resolveMainDudeSession: resolve }));
+vi.mock("@/domain/dude/api/dudeApi", () => ({ resolveMainDudeSession: resolve, getAwakening: vi.fn().mockResolvedValue({ state: "Ready" }) }));
 vi.mock("@/domain/dude/hooks/useDudes", () => ({ useDudes: () => ({ data: [{ dudeCode: "main-dude", name: "好兄弟", isMain: true }] }) }));
 vi.mock("@tron/chat-internal-adapter", () => ({ createInternalChatAdapter: adapter }));
 vi.mock("@/domain/chat/components/AgentChatWindow", () => ({ AgentChatWindow: (props: { initialSession: ChatSession }) => { lastProps.current = props; return <div data-testid="main-dude-session">{props.initialSession.sessionCode}</div>; } }));
@@ -18,9 +21,19 @@ vi.mock("react-i18next", async importOriginal => ({ ...await importOriginal<type
 const session: ChatSession = { id: "9007199254740993", sessionCode: "platform-session", workspaceCode: null, agentCode: "main-dude", ownerDudeCode: "main-dude", purpose: "Interactive", title: "Main Dude", status: "ACTIVE", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" };
 const windowState = { open: true, collapsed: false, x: 0, y: 0, width: 400, height: 600 };
 afterEach(() => { cleanup(); vi.clearAllMocks(); localStorage.clear(); });
+function renderWindow(ui: ReactNode) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </MemoryRouter>
+    ),
+  });
+}
 it("opens the server-resolved platform session and preserves it while the selected workspace changes", async () => {
   resolve.mockResolvedValue(session);
-  const view = render(<MainAgentChatWindow workspaceCode="alpha" windowState={windowState} onWindowStateChange={vi.fn()} />);
+  const view = renderWindow(<MainAgentChatWindow workspaceCode="alpha" windowState={windowState} onWindowStateChange={vi.fn()} />);
   expect(await screen.findByTestId("main-dude-session")).toHaveProperty("textContent", "platform-session");
   view.rerender(<MainAgentChatWindow workspaceCode="beta" windowState={windowState} onWindowStateChange={vi.fn()} />);
   expect(resolve).toHaveBeenCalledTimes(1);
@@ -37,15 +50,15 @@ it("opens the server-resolved platform session and preserves it while the select
 });
 it("resolves again after reopening so a changed main Dude takes effect without replacing the session locally", async () => {
   resolve.mockResolvedValueOnce(session).mockResolvedValueOnce({ ...session, sessionCode: "replacement-session", agentCode: "another-dude" });
-  const first = render(<MainAgentChatWindow workspaceCode="alpha" windowState={windowState} onWindowStateChange={vi.fn()} />);
+  const first = renderWindow(<MainAgentChatWindow workspaceCode="alpha" windowState={windowState} onWindowStateChange={vi.fn()} />);
   await screen.findByText("platform-session"); first.unmount();
-  render(<MainAgentChatWindow workspaceCode="beta" windowState={windowState} onWindowStateChange={vi.fn()} />);
+  renderWindow(<MainAgentChatWindow workspaceCode="beta" windowState={windowState} onWindowStateChange={vi.fn()} />);
   await screen.findByText("replacement-session");
   expect(resolve).toHaveBeenCalledTimes(2);
 });
 it("keeps Dude authorization after generic chat completions and AskUser resumes", async () => {
   resolve.mockResolvedValue(session);
-  render(<MainAgentChatWindow windowState={windowState} onWindowStateChange={vi.fn()} />);
+  renderWindow(<MainAgentChatWindow windowState={windowState} onWindowStateChange={vi.fn()} />);
   await screen.findByText("platform-session");
   const { ownerDudeCode: _owner, purpose: _purpose, ...completion } = session;
   for (const lastRunStatus of ["AWAITING_USER_INPUT", "COMPLETED"]) {
@@ -61,7 +74,7 @@ it("keeps Dude authorization after generic chat completions and AskUser resumes"
 });
 it("keeps resolution failures visible and never opens a fallback workspace session", async () => {
   resolve.mockRejectedValue(new Error("Platform session unavailable"));
-  render(<MainAgentChatWindow workspaceCode="alpha" windowState={windowState} onWindowStateChange={vi.fn()} />);
+  renderWindow(<MainAgentChatWindow workspaceCode="alpha" windowState={windowState} onWindowStateChange={vi.fn()} />);
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Platform session unavailable"));
   expect(screen.queryByTestId("main-dude-session")).toBeNull();
 });

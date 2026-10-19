@@ -321,11 +321,16 @@ impl crate::application::rag::RagSourceContentRepository for SqliteRagRepository
             let table = quote_identifier(&plan.text_unit_table)?;
             let status = quote_identifier(&plan.text_unit_status_column)?;
             let source_status = quote_identifier(&plan.source_status_column)?;
-            // KB uses an embedded source/text layout. A retired or staging generation is never visible.
-            if plan.has_distinct_source_table() { return Err(RagError::StorageBindingInvalid); }
-            let filter = format!("source_code=?1 AND source_version=?2 AND scope_type=?3 AND scope_code=?4 AND {status}='ACTIVE' AND {source_status}='ACTIVE'");
-            let total: usize = repository.connection.query_row(&format!("SELECT COUNT(*) FROM {table} WHERE {filter}"), params![request.source_code, request.source_version, request.scope_type, request.scope_code], |row| row.get(0)).map_err(storage_error)?;
-            let mut statement = repository.connection.prepare(&format!("SELECT text_unit_code,ordinal,text,heading_path,metadata FROM {table} WHERE {filter} ORDER BY ordinal,text_unit_code LIMIT ?5 OFFSET ?6")).map_err(storage_error)?;
+            // Inspect only published content, in either an embedded or split source/text layout.
+            let (join, source_alias) = match plan.source_table.as_deref() {
+                Some(source) => (format!("JOIN {} src ON src.source_code=tu.source_code AND src.source_version=tu.source_version AND src.scope_type=tu.scope_type AND src.scope_code=tu.scope_code", quote_identifier(source)?), "src"),
+                None => (String::new(), "tu"),
+            };
+            let metadata = plan.text_unit_metadata_column.as_deref().map(quote_identifier).transpose()?.map(|column| format!("tu.{column}")).unwrap_or_else(|| "'{}'".into());
+            let filter = format!("tu.source_code=?1 AND tu.source_version=?2 AND tu.scope_type=?3 AND tu.scope_code=?4 AND tu.{status}='ACTIVE' AND {source_alias}.{source_status}='ACTIVE'");
+            let from = format!("{table} tu {join}");
+            let total: usize = repository.connection.query_row(&format!("SELECT COUNT(*) FROM {from} WHERE {filter}"), params![request.source_code, request.source_version, request.scope_type, request.scope_code], |row| row.get(0)).map_err(storage_error)?;
+            let mut statement = repository.connection.prepare(&format!("SELECT tu.text_unit_code,tu.ordinal,tu.text,tu.heading_path,{metadata} FROM {from} WHERE {filter} ORDER BY tu.ordinal,tu.text_unit_code LIMIT ?5 OFFSET ?6")).map_err(storage_error)?;
             let items = statement.query_map(params![request.source_code, request.source_version, request.scope_type, request.scope_code, page_size, (page-1)*page_size], |row| {
                 Ok(crate::application::rag::RagSourceUnit {
                     text_unit_code: row.get(0)?, ordinal: row.get(1)?, text: row.get(2)?,

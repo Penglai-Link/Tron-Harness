@@ -194,6 +194,38 @@ fn exposed(model: &Server) -> Vec<Value> {
         .cloned()
         .unwrap_or_default()
 }
+// Direct-list cases below exercise saved local/MCP assignments. The platform's
+// independent collaboration/skill facilities are covered in agent_collaboration.
+// Keep every other name, so an unexpected tool still fails the exact assertions.
+fn exposed_assigned_tools(model: &Server) -> Vec<Value> {
+    const PLATFORM_RUNTIME_TOOLS: &[&str] = &[
+        "agent_get",
+        "agent_spawn",
+        "child_answer",
+        "child_cancel",
+        "child_list",
+        "child_read",
+        "child_send",
+        "child_wait",
+        "thread_answer",
+        "thread_close",
+        "thread_create",
+        "thread_list",
+        "thread_read",
+        "thread_send",
+        "thread_wait",
+        "skill_load",
+        "skill_read_resource",
+    ];
+    exposed(model)
+        .into_iter()
+        .filter(|tool| {
+            !tool["function"]["name"]
+                .as_str()
+                .is_some_and(|name| PLATFORM_RUNTIME_TOOLS.contains(&name))
+        })
+        .collect()
+}
 fn tool_output(model: &Server, name: &str) -> String {
     let requests = model.requests.lock().unwrap();
     let messages = requests[1]["messages"].as_array().unwrap();
@@ -208,7 +240,7 @@ fn tool_output(model: &Server, name: &str) -> String {
         .to_string()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn saved_empty_allowlist_blocks_forged_local_tools_at_native_execution() {
     let (app, authorization) = fixture(&[], "direct_list").await;
     let temp = tempfile::tempdir().unwrap();
@@ -228,7 +260,7 @@ async fn saved_empty_allowlist_blocks_forged_local_tools_at_native_execution() {
         vec![forged_tool("fs_write_text"), forged_tool("bash_exec")],
     )
     .await;
-    assert!(exposed(&model).is_empty());
+    assert!(exposed_assigned_tools(&model).is_empty());
     assert!(
         !marker.exists(),
         "a forged DTO must not admit a local executor"
@@ -237,7 +269,7 @@ async fn saved_empty_allowlist_blocks_forged_local_tools_at_native_execution() {
     assert!(tool_output(&model, "bash_exec").contains("is not allowed"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn saved_selected_local_tools_use_original_schemas_and_bash_alias() {
     let (app, authorization) = fixture(&["bash.exec", "fs.read_text"], "direct_list").await;
     let temp = tempfile::tempdir().unwrap();
@@ -269,7 +301,7 @@ async fn saved_selected_local_tools_use_original_schemas_and_bash_alias() {
         ],
     )
     .await;
-    let tools = exposed(&model);
+    let tools = exposed_assigned_tools(&model);
     assert_eq!(tools.len(), 2, "{tools:?}");
     let bash = tools
         .iter()
@@ -285,7 +317,7 @@ async fn saved_selected_local_tools_use_original_schemas_and_bash_alias() {
     assert!(tool_output(&model, "system_exec").contains("is not allowed"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn nonempty_request_narrows_saved_local_authority_while_empty_uses_saved_policy() {
     let (app, authorization) = fixture(&["bash.exec", "fs.read_text"], "direct_list").await;
     let temp = tempfile::tempdir().unwrap();
@@ -303,7 +335,7 @@ async fn nonempty_request_narrows_saved_local_authority_while_empty_uses_saved_p
         vec![forged_tool("fs_read_text")],
     )
     .await;
-    assert_eq!(exposed(&narrowed).len(), 1);
+    assert_eq!(exposed_assigned_tools(&narrowed).len(), 1);
     assert!(tool_output(&narrowed, "fs_read_text").contains("read only"));
     assert!(tool_output(&narrowed, "bash_exec").contains("is not allowed"));
     let saved = model_server(vec![(
@@ -312,11 +344,11 @@ async fn nonempty_request_narrows_saved_local_authority_while_empty_uses_saved_p
     )])
     .await;
     run(&app, &authorization, &saved, vec![]).await;
-    assert_eq!(exposed(&saved).len(), 2);
+    assert_eq!(exposed_assigned_tools(&saved).len(), 2);
     assert!(tool_output(&saved, "bash_exec").contains("empty-request-keeps-saved-policy"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn domain_discovery_cannot_authorize_requested_tools_outside_saved_selection() {
     let (app, authorization) = fixture(&["bash.exec"], "domain_discovery").await;
     let temp = tempfile::tempdir().unwrap();
@@ -348,7 +380,7 @@ async fn domain_discovery_cannot_authorize_requested_tools_outside_saved_selecti
     assert!(tool_output(&model, "bash_exec").contains("is not allowed"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn dynamic_mcp_respects_disabled_empty_selected_and_request_intersection() {
     let (app, authorization) = fixture(&[], "direct_list").await;
     let selected_server = mcp_server().await;
@@ -387,7 +419,7 @@ async fn dynamic_mcp_respects_disabled_empty_selected_and_request_intersection()
             vec![forged_tool("mcp_selected_tools_search_docs")],
         )
         .await;
-        assert!(exposed(&denied).is_empty(), "{mode}");
+        assert!(exposed_assigned_tools(&denied).is_empty(), "{mode}");
         assert!(tool_output(&denied, "mcp_selected_tools_search_docs").contains("is not allowed"));
         assert!(
             selected_server.requests.lock().unwrap().is_empty(),
@@ -418,7 +450,7 @@ async fn dynamic_mcp_respects_disabled_empty_selected_and_request_intersection()
         ],
     )
     .await;
-    let tools = exposed(&selected);
+    let tools = exposed_assigned_tools(&selected);
     assert_eq!(tools.len(), 1);
     assert_eq!(
         tools[0]["function"]["name"],
@@ -466,7 +498,7 @@ async fn dynamic_mcp_respects_disabled_empty_selected_and_request_intersection()
         vec![forged_tool("mcp_selected_tools_search_docs")],
     )
     .await;
-    assert_eq!(exposed(&narrowed).len(), 1);
+    assert_eq!(exposed_assigned_tools(&narrowed).len(), 1);
     assert!(tool_output(&narrowed, "mcp_selected_tools_search_docs").contains("native MCP result"));
     assert!(tool_output(&narrowed, "mcp_other_tools_search_docs").contains("is not allowed"));
     assert!(
@@ -510,7 +542,7 @@ async fn dynamic_mcp_respects_disabled_empty_selected_and_request_intersection()
         vec![forged_tool("mcp_selected_tools_search_docs")],
     )
     .await;
-    assert!(exposed(&disabled).is_empty());
+    assert!(exposed_assigned_tools(&disabled).is_empty());
     assert!(tool_output(&disabled, "mcp_selected_tools_search_docs").contains("is not allowed"));
     assert_eq!(selected_server.requests.lock().unwrap().len(), calls_before);
 }

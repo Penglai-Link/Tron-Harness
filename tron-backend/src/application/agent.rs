@@ -14,8 +14,9 @@ pub use execution_context::{
     execution_context_message, project_instructions_message, refresh_execution_context,
 };
 pub use framework_runtime::{
-    CapabilityPackInfo, ExtensionImplementationInfo, FrameworkHost, SubagentRecord, SubagentView, DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink,
-    capability_pack_catalog, capability_pack_catalog_with_state, extension_implementation_catalog,
+    CapabilityPackInfo, DudeThreadCatalogItem, ExtensionImplementationInfo, FrameworkHost,
+    SubagentRecord, SubagentView, ThreadFeedback, ThreadFeedbackSink, capability_pack_catalog,
+    capability_pack_catalog_with_state, extension_implementation_catalog,
     extension_implementation_catalog_with_state, install_capability_pack,
     installed_capability_packs,
 };
@@ -46,8 +47,8 @@ pub use agui_stream::{
 pub use business_tools::{
     CHAT_ASK_USER_TOOL, DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, ask_user_definition,
     build_domain_discovery_guidance, discovery_expand_tool_definition,
-    domain_discovery_runtime_values, rag_search_tool, register_default_agent_tools,
-    tool_record_to_effective_tool,
+    domain_discovery_runtime_values, knowledge_quality_tools, rag_graph_tools, rag_search_tool,
+    register_default_agent_tools, tool_record_to_effective_tool,
 };
 pub use canonical_event::CanonicalRuntimeEvent;
 pub(crate) use dto::AgentPageContext;

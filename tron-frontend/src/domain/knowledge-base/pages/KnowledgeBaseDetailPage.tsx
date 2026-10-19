@@ -1,5 +1,6 @@
+
 import { MoreHorizontal } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,10 +21,15 @@ import { useKnowledgeLibrary, useKnowledgeUser, useKnowledgeViewActive } from ".
 import type { KnowledgeDocument, KnowledgeLibraryDetail } from "../model/KnowledgeLibraryModel";
 import { formatIngestionWaitReason } from "../model/ingestionWaitReason";
 import { formatKnowledgeDocumentError } from "../model/knowledgeDocumentError";
+import { KnowledgeLibrarySettingsDialog } from "../components/KnowledgeLibrarySettingsDialog";
 import { DocumentSettingsDialog } from "../components/DocumentSettingsDialog";
 import { KnowledgeDocumentResourcesDialog } from "../components/KnowledgeDocumentResourcesDialog";
 import { KnowledgeDocumentName } from "../components/KnowledgeDocumentName";
 import { KnowledgeGrantsDialog } from "../components/KnowledgeGrantsDialog";
+import { DocumentUploadDialog, type PreparedDocumentUpload } from "../components/DocumentUploadDialog";
+import { knowledgeDocumentAccept, isKnowledgeDocumentSupported } from "../model/documentFormats";
+
+const KnowledgeQualityPanel = lazy(() => import("../components/KnowledgeQualityPanel").then(module => ({ default: module.KnowledgeQualityPanel })));
 
 const canRetryDocument = (doc: KnowledgeDocument) => doc.status.includes("FAILED") || doc.status === "REVIEW_REQUIRED" || doc.status === "CANCELLED";
 
@@ -54,7 +60,9 @@ function KnowledgeDetail({ id }: { id: string }) {
     retry: false,
   });
   const [selected, setSelected] = useState<KnowledgeDocument | null>(null);
+  const [librarySettingsOpen, setLibrarySettingsOpen] = useState(false);
   const [agentGrants, setAgentGrants] = useState(false);
+  const [qualityOpen, setQualityOpen] = useState(false);
   const [chunksDocument, setChunksDocument] = useState<KnowledgeDocument | null>(null);
   const [tasksDocument, setTasksDocument] = useState<KnowledgeDocument | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -62,6 +70,7 @@ function KnowledgeDetail({ id }: { id: string }) {
   const [deleteTarget, setDeleteTarget] = useState<KnowledgeDocument | null>(null);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
   const input = useRef<HTMLInputElement>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   useEffect(() => {
     const documentId = searchParams.get("documentId");
     const document = library?.documents.find((item) => item.id === documentId);
@@ -71,15 +80,15 @@ function KnowledgeDetail({ id }: { id: string }) {
     setSearchParams(next, { replace: true });
   }, [library, searchParams, setSearchParams]);
   const upload = useMutation({
-    mutationFn: async (files: File[]) => {
+    mutationFn: async (files: PreparedDocumentUpload[]) => {
       let uploaded = 0;
       const failures: string[] = [];
-      for (const file of files) {
+      for (const { file, plan } of files) {
         if (!active.current) break;
         try {
-          if (!/\.(md|docx|xlsx|pdf)$/i.test(file.name)) throw new Error(text("unsupported"));
+          if (!isKnowledgeDocumentSupported(file.name)) throw new Error(text("unsupported"));
           if (file.size > 20 * 1024 * 1024) throw new Error(text("tooLarge"));
-          const result = await uploadKnowledgeDocument( id, file);
+          const result = await uploadKnowledgeDocument( id, file, plan);
           if (!active.current) break;
           // Show each saved document immediately, even while later files are uploading.
           const queryKey = ["knowledge-base", user, id];
@@ -107,6 +116,7 @@ function KnowledgeDetail({ id }: { id: string }) {
       if (!active.current) return;
       await query.refetch();
       if (!active.current) return;
+      setPendingFiles(null);
       if (uploaded) toast.success(t("knowledgeLibrary.batchUploaded", { count: uploaded }));
       if (failures.length) toast.error(`${t("knowledgeLibrary.batchUploadFailed", { count: failures.length })}\n${failures.join("\n")}`);
     },
@@ -187,9 +197,11 @@ function KnowledgeDetail({ id }: { id: string }) {
   });
   const busy = upload.isPending || operation.isPending || deletion.isPending || batchRetry.isPending;
   const parsingQuality = (doc: KnowledgeDocument) => {
+    if (doc.parsePlan) return text(doc.parsePlan.features.localText ? "directRead" : `parsingPreferences.${doc.parsePlan.method}`);
     if (/\.(md|docx|xlsx)$/i.test(doc.fileName)) return text("parseModes.Text");
     if (doc.ocrMode === "Ocr") return text("parseModes.Ocr");
     const tier = doc.parsingArtifact?.effectiveTier ?? doc.parsingTier ?? capabilities.data?.defaultTier;
+    if (!tier) return text("parsingNotDetermined");
     return text(`parseModes.${tier === "advanced" ? "Precise" : "Text"}`);
   };
   const statusLabel = (doc: KnowledgeDocument) => {
@@ -202,15 +214,19 @@ function KnowledgeDetail({ id }: { id: string }) {
 
   return <>
     <PageHeader title={library?.name ?? text("title")} breadcrumbs={[{ label: text("title"), href: "/settings/knowledge-base" }, { label: library?.name ?? text("loading") }]} actions={<>
+      <Button variant="outline" disabled={!library} onClick={() => setLibrarySettingsOpen(true)}>{text("librarySettings")}</Button>
+      <Button variant="outline" disabled={!library} onClick={() => setQualityOpen(true)}>{t("knowledgeQuality.title")}</Button>
       <Button variant="outline" disabled={!library || busy} onClick={() => setAgentGrants(true)}>{text("grants")}</Button>
       <Button variant="outline" disabled={busy || selectedDocuments.length === 0} onClick={() => batchRetry.mutate(selectedDocuments)}>{text(batchRetry.isPending ? "batchRetrying" : "batchRetry")}</Button>
       <Button variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>{text("refresh")}</Button>
       <Button disabled={!library || busy} onClick={() => input.current?.click()}>{text(upload.isPending ? "uploading" : "upload")}</Button>
     </>} />
-    <Input ref={input} type="file" multiple className="sr-only" tabIndex={-1} aria-label={text("upload")} accept=".md,.docx,.xlsx,.pdf" disabled={!library || busy} onChange={(event) => {
+    {qualityOpen && library ? <Suspense fallback={<p role="status">{text("loading")}</p>}><KnowledgeQualityPanel key={`${user}:${id}`} libraryId={id} name={library.name} onClose={() => setQualityOpen(false)} onPublished={refreshLibrary} /></Suspense> : null}
+    <Input ref={input} type="file" multiple className="sr-only" tabIndex={-1} aria-label={text("upload")} accept={knowledgeDocumentAccept} disabled={!library || busy} onChange={(event) => {
       const files = Array.from(event.target.files ?? []); event.target.value = "";
-      if (files.length) upload.mutate(files);
+      if (files.length) setPendingFiles(files);
     }} />
+    {pendingFiles && library ? <DocumentUploadDialog libraryId={id} files={pendingFiles} defaultPreference={library.defaultParsePreference ?? "Auto"} pending={upload.isPending} onClose={() => setPendingFiles(null)} onUpload={(files) => upload.mutate(files)} /> : null}
     {query.isLoading ? <p role="status">{text("loading")}</p> : query.error ? <p role="alert" className="text-[var(--color-error)]">{query.error.message}</p> : library ? <SurfaceCard>
       {library.description ? <p className="mb-4 text-sm">{library.description}</p> : null}
       <Table><TableHeader><TableRow><TableHead className="w-12"><input type="checkbox" className="size-4 accent-[var(--color-primary)]" aria-label={text("selectAllRetryableDocuments")} checked={allSelected} ref={(node) => { if (node) node.indeterminate = selectedDocuments.length > 0 && !allSelected; }} disabled={busy || retryableDocuments.length === 0} onChange={(event) => setSelectedDocumentIds(event.target.checked ? new Set(retryableDocuments.map((doc) => doc.id)) : new Set())} /></TableHead><TableHead><span className="inline-flex items-center gap-1">{text("document")}<InfoTooltip ariaLabel={text("documentHelp")}><div className="max-w-sm space-y-2 text-left"><p>{text("formats")}</p><p>{text("deletionHelp")}</p></div></InfoTooltip></span></TableHead><TableHead>{text("parsingQuality")}</TableHead><TableHead>{text("mode")}</TableHead><TableHead>{text("status")}</TableHead><TableHead>{text("chunks")}</TableHead><TableHead className="w-16 text-right">{text("actions")}</TableHead></TableRow></TableHeader><TableBody>
@@ -218,7 +234,7 @@ function KnowledgeDetail({ id }: { id: string }) {
           <TableCell><input type="checkbox" className="size-4 accent-[var(--color-primary)]" aria-label={t("knowledgeLibrary.selectDocument", { name: doc.fileName })} checked={canRetryDocument(doc) && selectedDocumentIds.has(doc.id)} disabled={busy || !canRetryDocument(doc)} onChange={(event) => toggleDocument(doc.id, event.target.checked)} /></TableCell>
           <TableCell className="max-w-xs"><KnowledgeDocumentName document={doc} /></TableCell>
           <TableCell>{parsingQuality(doc)}</TableCell>
-          <TableCell>{text(`modes.${(doc.chunkConfig ?? library.defaultChunkConfig).mode}`)}</TableCell>
+          <TableCell>{t(`knowledgeLibrary.modes.${(doc.chunkConfig ?? library.defaultChunkConfig).mode}`, { defaultValue: (doc.chunkConfig ?? library.defaultChunkConfig).mode })}</TableCell>
           <TableCell title={doc.waitReason ? formatIngestionWaitReason(doc.waitReason, t) : undefined}>
             <p className="whitespace-nowrap text-sm">{statusLabel(doc)}</p>
           </TableCell>
@@ -243,6 +259,7 @@ function KnowledgeDetail({ id }: { id: string }) {
     {upload.isPending ? <p role="status" className="mt-4 text-sm">{text("uploading")}</p> : null}
     {operation.isPending ? <p role="status" className="mt-4 text-sm">{text(operation.variables?.type === "download" ? "downloading" : "indexing")}</p> : null}
     <ConfirmDialog open={Boolean(deleteTarget)} title={text("deleteTitle")} description={t("knowledgeLibrary.deleteDescription", { file: deleteTarget?.fileName ?? "" })} cancelText={text("cancelDelete")} confirmText={text("deleteDocument")} pending={deletion.isPending} onCancel={() => setDeleteTarget(null)} onConfirm={() => { if (deleteTarget) deletion.mutate(deleteTarget); }} />
+    {librarySettingsOpen ? <KnowledgeLibrarySettingsDialog libraryId={id} onClose={() => setLibrarySettingsOpen(false)} /> : null}
     {selected && library ? <DocumentSettingsDialog libraryId={id} document={selected} defaults={library.defaultChunkConfig} onClose={() => setSelected(null)} onChanged={() => query.refetch()} /> : null}
     {chunksDocument ? <KnowledgeDocumentChunksDialog libraryId={id} document={chunksDocument} onClose={() => setChunksDocument(null)} /> : null}
     {tasksDocument ? <KnowledgeDocumentTasksDialog libraryId={id} document={tasksDocument} onClose={() => setTasksDocument(null)} /> : null}

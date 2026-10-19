@@ -13,20 +13,20 @@ interface InputSuggestionsResponse {
 }
 
 /** Server resolves persisted Agent ownership and returns only effective grants. */
-export function useChatInputSuggestions(agentCode?: string, sessionCode?: string, dudeCode?: string, workspaceCode?: string | null) {
+export function useChatInputSuggestions(agentCode?: string, sessionCode?: string, dudeCode?: string, workspaceCode?: string | null, knowledgeBaseId?: string) {
   const { t, i18n } = useTranslation("pages");
   const feedback = useChatFeedback();
   const query = useQuery({
-    queryKey: ["chat-input-suggestions", agentCode, sessionCode, dudeCode, workspaceCode, i18n.resolvedLanguage],
+    queryKey: ["chat-input-suggestions", agentCode, sessionCode, dudeCode, workspaceCode, knowledgeBaseId, i18n.resolvedLanguage],
     queryFn: ({ signal }) => requestApi<InputSuggestionsResponse>("GET /api/v1/chats/input-suggestions", {
       queryParams: { agentCode, sessionCode, workspaceCode: workspaceCode ?? undefined },
-      headers: dudeCode ? { "X-Dude-Code": dudeCode } : undefined, signal,
+      headers: { ...(dudeCode ? { "X-Dude-Code": dudeCode } : {}), ...(knowledgeBaseId ? { "X-Knowledge-Base-Code": knowledgeBaseId } : {}) }, signal,
     }),
     // Suggestions change rarely; capability changes force a refetch through
     // CAPABILITY_RESOURCES_CHANGED, so a short cache window avoids refetching
     // on every composer remount.
     staleTime: 30_000,
-    enabled: Boolean(workspaceCode || dudeCode),
+    enabled: Boolean(workspaceCode || dudeCode || knowledgeBaseId),
   });
   const { refetch } = query;
   useEffect(() => {

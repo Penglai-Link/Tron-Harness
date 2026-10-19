@@ -1,3 +1,4 @@
+pub mod graph;
 mod model;
 
 pub use model::{

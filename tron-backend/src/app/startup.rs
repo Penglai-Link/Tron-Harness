@@ -143,6 +143,7 @@ pub(super) fn build_rag_service(
     database_url: &str,
     llm_runtime: LlmRuntimeService,
     llm_router: LlmModelRouter,
+    graph_core: GrafeoStoreCore,
 ) -> Result<AppRagService, AppBootstrapError> {
     let sqlite = SqliteRagRepository::connect(database_url).map_err(|source| {
         AppBootstrapError::RagInitFailed {
@@ -150,10 +151,14 @@ pub(super) fn build_rag_service(
             source,
         }
     })?;
+    let graph_index=crate::adapters::outbound::persistence::SqliteRagGraphIndexRepository::open(database_url)
+        .map_err(|_|AppBootstrapError::RagInitFailed{database_url:database_url.into(),source:RagError::StorageFailure})?;
+    let graph=crate::application::rag::graph::GraphInfrastructure::new(
+        Arc::new(crate::adapters::outbound::persistence::GrafeoRagStore::new(graph_core)),Arc::new(graph_index));
     Ok(RagService::new(
         Arc::new(Mutex::new(sqlite)),
         DefaultRagRuntime::new(llm_runtime, llm_router),
-    ))
+    ).with_graph_infrastructure(graph))
 }
 
 pub(super) fn build_graph_core(

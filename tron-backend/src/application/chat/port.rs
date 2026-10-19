@@ -16,6 +16,9 @@ pub trait ChatRepository: Send {
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError>;
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError>;
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError>;
+    fn find_source_session(&mut self,user:&str,source:&str)->Result<Option<ChatSession>,ChatError>{
+        Ok(self.list_sessions()?.into_iter().find(|session|session.user_code.as_deref()==Some(user) && session.source_code.as_deref()==Some(source) && session.status==crate::domain::chat::ChatSessionStatus::Active))
+    }
     fn list_archived_sessions(
         &mut self,
         workspace_code: Option<&str>,

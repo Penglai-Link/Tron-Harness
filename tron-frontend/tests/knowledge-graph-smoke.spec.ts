@@ -1,4 +1,4 @@
-import { routeActiveProfileApi } from "./support/resource-ui-harness";
+import { routeActiveProfileApi, routeResourceUiShellApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -18,6 +18,10 @@ const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 
 test.describe.configure({ timeout: 60_000 });
+test.beforeEach(async ({ page }) => {
+  await routeResourceUiShellApi(page);
+  await page.route("**/api/v1/admin/workspaces/options**", route => route.fulfill({ json: { code: "0", message: "ok", data: [{ workspaceCode: "TRON_CORE", name: "Tron Core", label: "Tron Core", status: "Active" }] } }));
+});
 
 type KnowledgeGraphFixture = ReturnType<typeof graphFixture>;
 
@@ -150,7 +154,7 @@ async function startFrontend(env: NodeJS.ProcessEnv): Promise<FrontendHarness> {
   frontendProcess.stderr.on("data", appendFrontendLog);
 
   try {
-    await waitForFrontend(`${baseUrl}/knowledge-graph`, frontendProcess, () => frontendLogs);
+    await waitForFrontend(`${baseUrl}/knowledge-graph?workspaceCode=TRON_CORE&mode=business`, frontendProcess, () => frontendLogs);
   } catch (error) {
     await stopManagedProcess(frontendProcess);
     frontendProcess = undefined;
@@ -324,6 +328,7 @@ test.describe("Knowledge graph mock mode", () => {
   test.beforeAll(async () => {
     harness = await startFrontend({
       VITE_TRON_AUTH_DATA_SOURCE: "mock",
+      VITE_TRON_ADMIN_DATA_SOURCE: "api",
       VITE_TRON_DATA_SOURCE: "mock",
       VITE_TRON_KNOWLEDGE_GRAPH_DATA_SOURCE: "mock",
     });
@@ -335,16 +340,17 @@ test.describe("Knowledge graph mock mode", () => {
 
   test("renders backend-shaped graph mock data and updates inspector from result selection", async ({ page }) => {
     await routeActiveProfileApi(page);
-  await page.goto(`${harness.baseUrl}/knowledge-graph`);
+  await page.goto(`${harness.baseUrl}/knowledge-graph?workspaceCode=TRON_CORE&mode=business`);
 
-    await expect(page.getByRole("tab", { name: "KnowledgeGraph", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Workspace graphs", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Explore" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Run Traversal" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Export", exact: true })).toHaveCount(0);
     await expect(page.getByText("Query Results")).toHaveCount(0);
     await expect(page.getByText(/\d+\s+namespaces/i)).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Node Inspector" })).toHaveCount(0);
-    await expect(page.getByLabel("G6 semantic knowledge graph canvas")).toBeVisible();
+    await expect(page.getByLabel("Knowledge graph")).toBeVisible();
+    await page.getByLabel("Graph legend").locator("summary").click();
     await expect(page.getByText("RagSkill").first()).toBeVisible();
     await expect(page.getByText("embeddingJson")).toHaveCount(0);
 
@@ -354,7 +360,7 @@ test.describe("Knowledge graph mock mode", () => {
     await page.getByRole("option", { name: /GIT RagTool/i }).click();
     await expect(page.getByRole("heading", { name: "GIT" })).toBeVisible();
     await expect(page.getByText("U-TRON-001").first()).toBeVisible();
-    await expect(page.getByText("provider").first()).toBeVisible();
+    await expect(page.getByText("provider", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("git").first()).toBeVisible();
     await expect(page.getByText("priority").first()).toBeVisible();
   });
@@ -365,9 +371,9 @@ test.describe("Knowledge graph mock mode", () => {
     });
 
     await routeActiveProfileApi(page);
-  await page.goto(`${harness.baseUrl}/knowledge-graph`);
+  await page.goto(`${harness.baseUrl}/knowledge-graph?workspaceCode=TRON_CORE&mode=business`);
 
-    const canvas = page.getByLabel("G6 semantic knowledge graph canvas");
+    const canvas = page.getByLabel("Knowledge graph");
     await expect(canvas).toBeVisible();
     const gridColor = await canvas.evaluate(element => {
       const sample = document.createElement("span");
@@ -390,6 +396,7 @@ test.describe("Knowledge graph API mode", () => {
   test.beforeAll(async () => {
     harness = await startFrontend({
       VITE_TRON_AUTH_DATA_SOURCE: "mock",
+      VITE_TRON_ADMIN_DATA_SOURCE: "api",
       VITE_TRON_DATA_SOURCE: "mock",
       VITE_TRON_KNOWLEDGE_GRAPH_DATA_SOURCE: "api",
     });
@@ -458,7 +465,7 @@ test.describe("Knowledge graph API mode", () => {
     await page.route("**/api/v1/knowledge-graph/list-namespaces?**", async (route, request) => {
       namespaceRequested = true;
       expect(new URL(request.url()).searchParams.get("workspace-code")).toBe("TRON_CORE");
-      await fulfillGraph(route, ["audit-graph", "rag_skill"]);
+      await fulfillGraph(route, ["rag_skill", "audit-graph"]);
     });
     await page.route("**/api/v1/knowledge-graph?**", async (route, request) => {
       if (request.method() !== "GET") {
@@ -480,9 +487,9 @@ test.describe("Knowledge graph API mode", () => {
     });
 
     await routeActiveProfileApi(page);
-  await page.goto(`${harness.baseUrl}/knowledge-graph`);
+  await page.goto(`${harness.baseUrl}/knowledge-graph?workspaceCode=TRON_CORE&mode=business`);
 
-    await expect(page.getByRole("tab", { name: "KnowledgeGraph", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Workspace graphs", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Explore" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Run Traversal" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Export", exact: true })).toHaveCount(0);
@@ -514,9 +521,12 @@ test.describe("Knowledge graph API mode", () => {
     await expect(page.getByRole("heading", { name: "CUSTOM_LABEL_NODE_WITH_LONG_SUFFIX_1234567" })).toBeVisible();
     expect(queryBodies).toHaveLength(0);
     const graphNodeLabels = page.locator("[aria-label='Graph node labels']");
-    await expect(graphNodeLabels).toContainText("title：RAG Reviewer");
+    await expect(graphNodeLabels).toContainText("RAG Reviewer");
     await expect(graphNodeLabels).toContainText("nodeCode：GIT");
+    await page.getByRole("button", { name: "Close node inspector", exact: true }).click();
     const graphLegend = page.getByLabel("Graph legend");
+    await expect(graphLegend.getByText("CustomNode")).toBeHidden();
+    await graphLegend.locator("summary").click();
     await expect(graphLegend.getByText("CustomNode")).toBeVisible();
     await expect(graphLegend.getByText("Ontology")).toHaveCount(0);
     await page.getByLabel("Graph namespace").click();
@@ -528,7 +538,7 @@ test.describe("Knowledge graph API mode", () => {
     await expect(page.getByRole("option", { name: "provider" })).toBeVisible();
     await page.getByRole("option", { name: "skillName" }).click();
     await expect(graphNodeLabels).toContainText("skillName：rag-reviewer");
-    await expect(graphNodeLabels).toContainText("title：User Review Note");
+    await expect(graphNodeLabels).toContainText("User Review Note");
     await expect(graphNodeLabels).toContainText("nodeCode：GIT");
     await expect(page.getByLabel("Filter relationship")).toHaveCount(0);
     await page.getByRole("button", { name: "Toggle graph filters" }).click();
@@ -563,12 +573,12 @@ test.describe("Knowledge graph API mode", () => {
     await page.getByPlaceholder("Locate node by code or title...").fill("rag reviewer");
     await expect(page.getByRole("option", { name: /RAG Reviewer RAG_REVIEWER RagSkill/i })).toBeVisible();
     await page.getByRole("option", { name: /RAG Reviewer RAG_REVIEWER RagSkill/i }).click();
-    await expect(page.getByText("scopeType").first()).toBeVisible();
-    await expect(page.getByText("SPACE").first()).toBeVisible();
-    await expect(page.getByText("originWorkspaceCode").first()).toBeVisible();
-    await expect(page.getByText("WS-ROOT").first()).toBeVisible();
-    await expect(page.getByText("inherited").first()).toBeVisible();
-    await expect(page.getByText("editable").first()).toBeVisible();
+    await expect(page.getByText("scopeType", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("SPACE", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("originWorkspaceCode", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("WS-ROOT", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("inherited", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("editable", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("embeddingJson")).toHaveCount(0);
     await expect(page.getByText("[0.12,0.24]")).toHaveCount(0);
 

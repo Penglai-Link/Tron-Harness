@@ -119,9 +119,9 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
             // Match document metadata, all attempt-specific source IDs, and the active pointer.
             // A source explicitly shared by another document is retained.
             let sql = format!(
-                "SELECT rowid FROM \"{units}\" WHERE (json_extract(metadata,'$.documentId')=?1 OR substr(source_code,1,length(?1)+1)=?1||'_' OR source_code=?2) AND scope_code=?3 AND source_code NOT IN (SELECT coalesce(json_extract(payload_json,'$.activeSourceCode'),'') FROM knowledge_base_documents WHERE id!=?1)"
+                "SELECT DISTINCT source_code FROM \"{units}\" WHERE (json_extract(metadata,'$.documentId')=?1 OR substr(source_code,1,length(?1)+1)=?1||'_' OR source_code=?2) AND scope_code=?3 AND source_code NOT IN (SELECT coalesce(json_extract(payload_json,'$.activeSourceCode'),'') FROM knowledge_base_documents WHERE id!=?1)"
             );
-            let ids = {
+            let sources = {
                 let mut stmt = tx.prepare(&sql).map_err(storage)?;
                 stmt.query_map(
                     params![
@@ -129,19 +129,22 @@ impl SqliteKnowledgeBaseRepositorySql<'_> {
                         doc.active_source_code.as_deref().unwrap_or(""),
                         job.workspace_code
                     ],
-                    |r| r.get::<_, i64>(0),
+                    |r| r.get::<_, String>(0),
                 )
                 .map_err(storage)?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(storage)?
             };
-            for name in [format!("{units}_fts"), format!("{units}_vec_d1024"), units] {
-                if table_exists(&tx, &name)? {
-                    for id in &ids {
-                        tx.execute(&format!("DELETE FROM \"{name}\" WHERE rowid=?1"), [id])
-                            .map_err(storage)?;
-                    }
-                }
+            for source in sources {
+                // One retirement path handles all vector dimensions, source
+                // contexts and graph publication supports before row deletion.
+                super::super::knowledge_ingestion_queue::retire_knowledge_index(&tx, kb, &source)
+                    .map_err(|error|match error {
+                        crate::application::knowledge_base::ingestion::IngestionQueueError::Conflict=>KnowledgeBaseError::Conflict,
+                        crate::application::knowledge_base::ingestion::IngestionQueueError::NotFound=>KnowledgeBaseError::NotFound,
+                        crate::application::knowledge_base::ingestion::IngestionQueueError::Invalid(reason)=>KnowledgeBaseError::Invalid(reason),
+                        crate::application::knowledge_base::ingestion::IngestionQueueError::Storage(reason)=>storage(reason),
+                    })?;
             }
         }
         for code in &job.resources {

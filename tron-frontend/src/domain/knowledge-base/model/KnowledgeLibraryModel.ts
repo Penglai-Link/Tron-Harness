@@ -1,5 +1,5 @@
 export interface ChunkConfig {
-  mode: "AUTO" | "HEADING" | "FIXED";
+  mode: string;
   maxChars: number;
   overlapChars: number;
   headingDepth: number;
@@ -11,6 +11,14 @@ export const defaultChunkConfig: ChunkConfig = {
 
 export type ParsingTier = "flash" | "basic" | "standard" | "advanced";
 export type OcrMode = "Auto" | "Text" | "Ocr";
+export type DocumentParsePreference = "Auto" | "Native" | "Recognition" | "Layout";
+export interface DocumentParsePlan {
+  preference: DocumentParsePreference;
+  method: "Native" | "Recognition" | "Layout";
+  reason: string;
+  rulesVersion: string;
+  features: { format: string; sourceSha256: string; localText: boolean; [key: string]: unknown };
+}
 export interface ParsingCapabilities { defaultOcrMode: OcrMode; defaultTier: ParsingTier; availableTiers: ParsingTier[]; parserVersion: string; officeTier: ParsingTier }
 
 export interface ImageAnalysisSummary {
@@ -52,6 +60,7 @@ export interface KnowledgeDocument {
   chunkConfig: ChunkConfig | null;
   parsingTier?: ParsingTier | null;
   ocrMode?: OcrMode | null;
+  parsePlan?: DocumentParsePlan | null;
   parsingArtifact?: { effectiveTier: ParsingTier; parserVersion: string; resourceCode: string; imageResourceCodes: string[]; fidelityChecked?: boolean; fidelityIssues?: FidelityIssue[] } | null;
   visualSource?: { originalSha256: string; derivedSha256: string; derivedResourceCode: string; auditResourceCode: string; pageCount: number; pageImageSha256: string[]; originalFindings: FidelityIssue[]; renderer: string } | null;
   status: string;
@@ -96,6 +105,7 @@ export interface KnowledgeLibraryDetail extends KnowledgeLibrary {
   documents: KnowledgeDocument[];
   agentCodes: string[];
   defaultChunkConfig: ChunkConfig;
+  defaultParsePreference?: DocumentParsePreference;
 }
 
 export interface KnowledgeLibrarySummary extends KnowledgeLibrary {
@@ -103,6 +113,7 @@ export interface KnowledgeLibrarySummary extends KnowledgeLibrary {
 }
 
 export interface DocumentLocation {
+  pages?: number[];
   bbox?: [number, number, number, number] | null;
   page?: number;
   logicalPage?: number;

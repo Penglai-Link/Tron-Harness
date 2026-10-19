@@ -3,10 +3,7 @@ use crate::{
     domain::{
         agent::AgentModelProtocol,
         model::ModelProtocol,
-        model_provider::{
-            ModelSelection, ModelSelectionKind, ProviderCatalogModelStatus, ProviderModelQuality,
-            ProviderRouteCode,
-        },
+        model_provider::{ModelSelection, ProviderModelQuality, ProviderRouteCode},
     },
 };
 
@@ -35,6 +32,12 @@ impl LlmModelRouter {
         model_code: Option<&str>,
     ) -> Result<RuntimeModelConfig, String> {
         if let Some(model_code) = model_code.map(str::trim).filter(|value| !value.is_empty()) {
+            if model_code == "PERSON_AI:ROUTE:TextGenerationAuto" {
+                return self
+                    .providers
+                    .text_generation_auto_config(workspace_code)
+                    .map_err(|error| error.to_string());
+            }
             if model_code == "PERSON_AI:ROUTE:ChatAuto" {
                 return self.route_selection(
                     workspace_code,
@@ -44,29 +47,9 @@ impl LlmModelRouter {
             return self.route_person_ai(workspace_code, model_code);
         }
 
-        let mut person_ai = self
-            .providers
-            .list_text_select_options(workspace_code)
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .filter(|option| {
-                option.enabled
-                    && option.remote_status == ProviderCatalogModelStatus::Available
-                    && option.selection.kind == ModelSelectionKind::Fixed
-                    && temporary_text_quality_rank(option.quality_type).is_some()
-            })
-            .collect::<Vec<_>>();
-        person_ai.sort_by_key(|option| {
-            (
-                temporary_text_quality_rank(option.quality_type).unwrap_or(u8::MAX),
-                option.option_code.clone(),
-            )
-        });
-        if let Some(option) = person_ai.into_iter().next() {
-            return self.route_selection(workspace_code, &option.selection);
-        }
-
-        Err("no available middle- or low-quality Person-AI Text model".into())
+        self.providers
+            .text_generation_auto_config(workspace_code)
+            .map_err(|error| error.to_string())
     }
 
     fn route_person_ai(
@@ -82,23 +65,30 @@ impl LlmModelRouter {
                     .map(|(quality, code)| (ProviderModelQuality::from_storage(quality), code))
             })
             .unwrap_or((None, model_code));
-        let options = self
+        let candidates = self
             .providers
-            .list_text_select_options(workspace_code)
+            .text_generation_candidates(workspace_code)
             .map_err(|error| error.to_string())?;
-        let mut matches = options
+        let matches = self
+            .providers
+            .list_temporary_text_select_options(workspace_code)
+            .map_err(|error| error.to_string())?
             .into_iter()
             .filter(|option| {
                 option.selection.model_code.as_deref() == Some(catalog_model_code)
-                    && option.enabled
-                    && option.remote_status == ProviderCatalogModelStatus::Available
-                    && temporary_text_quality_rank(option.quality_type).is_some()
                     && requested_quality.is_none_or(|quality| option.quality_type == Some(quality))
+                    && option.quality_type.is_some_and(|quality| {
+                        candidates.iter().any(|candidate| {
+                            candidate.model.model
+                                == format!(
+                                    "PERSON_AI:FIXED:{}:{}",
+                                    quality.storage_value(),
+                                    catalog_model_code
+                                )
+                        })
+                    })
             })
             .collect::<Vec<_>>();
-        matches.sort_by_key(|option| {
-            u8::from(option.quality_type != Some(ProviderModelQuality::Middle))
-        });
         let option = matches.into_iter().next().ok_or_else(|| {
             "explicit LLM model must be an available middle- or low-quality Text model".to_string()
         })?;
@@ -112,7 +102,7 @@ impl LlmModelRouter {
     ) -> Result<RuntimeModelConfig, String> {
         let config = self
             .providers
-            .resolve_chat_selection(workspace_code, Some(selection), None, None)
+            .resolve_temporary_text_selection(workspace_code, selection)
             .map_err(|error| error.to_string())?
             .ok_or_else(|| "LLM Text model is unavailable".to_string())?;
         Ok(runtime_from_agent(config))
@@ -123,36 +113,35 @@ impl super::router::ModelRouter for LlmModelRouter {}
 
 #[cfg(test)]
 mod tests {
-    use super::temporary_text_quality_rank;
-    use crate::domain::model_provider::ProviderModelQuality;
-
     #[test]
-    fn temporary_text_router_only_accepts_middle_and_low_quality() {
+    fn converting_a_routed_model_does_not_erase_its_reasoning_settings() {
+        let config = crate::domain::agent::AgentModelConfig {
+            model_code: "extractor".into(),
+            model_name: "extractor".into(),
+            protocol: crate::domain::agent::AgentModelProtocol::ChatCompletions,
+            base_url: "https://provider.invalid".into(),
+            api_path: None,
+            api_key: String::new(),
+            thinking_enabled: true,
+            reasoning_effort: Some(crate::domain::reasoning::ReasoningEffort::Max),
+            responses_stateful_enabled: false,
+            temperature: None,
+            max_tokens: Some(65_536),
+            context_window_tokens: Some(128_000),
+            top_p: None,
+            max_retries: Some(0),
+        };
+        let converted = super::runtime_from_agent(config);
+        assert!(converted.thinking_enabled);
         assert_eq!(
-            temporary_text_quality_rank(Some(ProviderModelQuality::Middle)),
-            Some(0)
+            converted.reasoning_effort,
+            Some(crate::domain::reasoning::ReasoningEffort::Max)
         );
-        assert_eq!(
-            temporary_text_quality_rank(Some(ProviderModelQuality::Low)),
-            Some(1)
-        );
-        assert_eq!(
-            temporary_text_quality_rank(Some(ProviderModelQuality::High)),
-            None
-        );
-        assert_eq!(temporary_text_quality_rank(None), None);
+        assert_eq!(converted.max_tokens, Some(65_536));
     }
 }
 
-fn temporary_text_quality_rank(quality: Option<ProviderModelQuality>) -> Option<u8> {
-    match quality {
-        Some(ProviderModelQuality::Middle) => Some(0),
-        Some(ProviderModelQuality::Low) => Some(1),
-        Some(ProviderModelQuality::High) | None => None,
-    }
-}
-
-pub(crate) fn runtime_from_agent(
+fn runtime_from_agent(
     config: crate::domain::agent::AgentModelConfig,
 ) -> RuntimeModelConfig {
     RuntimeModelConfig {
@@ -167,8 +156,8 @@ pub(crate) fn runtime_from_agent(
         api_path: config.api_path,
         api_key: config.api_key,
         model_name: config.model_name,
-        thinking_enabled: false,
-        reasoning_effort: None,
+        thinking_enabled: config.thinking_enabled,
+        reasoning_effort: config.reasoning_effort,
         responses_stateful_enabled: config.responses_stateful_enabled,
         temperature: config.temperature,
         max_tokens: config.max_tokens,

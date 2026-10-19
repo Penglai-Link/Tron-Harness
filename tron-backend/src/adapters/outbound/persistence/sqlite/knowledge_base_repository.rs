@@ -4,8 +4,12 @@ use crate::application::knowledge_base::{
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Serialize, de::DeserializeOwned};
 mod agent_grants;
+mod settings;
 pub(super) mod deletion;
 mod intake;
+mod quality;
+mod quality_publication;
+pub(crate) use quality::{StoredChunkContext,OptimizedDocumentPublication,stored_contexts};
 mod platform_catalog;
 struct SqliteKnowledgeBaseRepositorySql<'a> {
     connection: &'a mut Connection,

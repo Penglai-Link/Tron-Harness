@@ -25,12 +25,151 @@ struct MockState {
 
 type SharedMock = Arc<Mutex<MockState>>;
 
+#[tokio::test]
+async fn tron_chat_only_uses_high_quality_personai_models() {
+    let cipher = Arc::new(
+        Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+            key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+        })
+        .unwrap(),
+    );
+    let service = ModelProviderService::connect(":memory:", cipher).unwrap();
+    service.connection.call(|connection| {
+        connection.execute_batch(
+            "INSERT INTO provider_connections(provider_code,server_base_url,status,created_at,updated_at)
+             VALUES('PersonAi','https://provider.invalid','Connected',1,1);
+             INSERT INTO provider_catalog_models(provider_code,model_code,model_name,upstream_vendor_code,
+                 context_window_tokens,quality_type,status,first_seen_at,updated_at) VALUES
+             ('PersonAi','shared','Same model','vendor',128000,'High','Available',1,1),
+             ('PersonAi','shared','Same model','vendor',128000,'Middle','Available',1,1),
+             ('PersonAi','minimax-m3','MiniMax M3','minimax_plan',128000,'Middle','Available',1,1),
+             ('PersonAi','low-model','Low model','vendor',NULL,'Low','Available',1,1);"
+        ).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    let candidates = service.auto_chat_candidates(&[], None).unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(
+        candidates[0].0,
+        "provider:PersonAi:model:High:vendor/shared"
+    );
+    assert_eq!(
+        person_ai_runtime_quality(&candidates[0].2),
+        Some(ProviderModelQuality::High)
+    );
+    let middle = "provider:PersonAi:model:Middle:vendor/shared".to_owned();
+    assert!(
+        service
+            .auto_chat_candidates(&[middle.clone()], None)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        service
+            .auto_chat_candidates(&[middle, candidates[0].0.clone()], None)
+            .unwrap()
+            .len(),
+        1
+    );
+    let options = service.list_text_select_options("").unwrap();
+    assert!(
+        options
+            .iter()
+            .all(|option| option.quality_type == Some(ProviderModelQuality::High))
+    );
+    assert_eq!(
+        options
+            .iter()
+            .filter(|option| option.selection.kind == ModelSelectionKind::Fixed)
+            .count(),
+        1
+    );
+    for quality in [ProviderModelQuality::Middle, ProviderModelQuality::Low] {
+        let code = if quality == ProviderModelQuality::Middle {
+            "vendor/shared"
+        } else {
+            "vendor/low-model"
+        };
+        assert!(matches!(
+            service.resolve_chat_selection(
+                "",
+                Some(&ModelSelection::person_ai_fixed(code, quality)),
+                None,
+                None
+            ),
+            Err(ModelProviderError::InvalidSelection(_))
+        ));
+    }
+    let router = crate::application::model_router::LlmModelRouter::new(service.clone());
+    let temporary = router.route_text("", None).unwrap();
+    assert_eq!(
+        temporary.model_code,
+        "PERSON_AI:FIXED:Middle:minimax_plan/minimax-m3"
+    );
+    assert!(!temporary.thinking_enabled);
+    assert!(temporary.reasoning_effort.is_none());
+    assert_eq!(
+        router
+            .route_text("", Some("PERSON_AI:ROUTE:TextGenerationAuto"))
+            .unwrap()
+            .model_code,
+        temporary.model_code
+    );
+    struct LastTextModel;
+    impl fw::TextGenerationAutoRouter for LastTextModel {
+        fn select(
+            &self,
+            _: &fw::AutoRouteContext<'_>,
+            candidates: &[fw::AutoRouteCandidate],
+        ) -> Result<fw::ModelRef, fw::AgentError> {
+            Ok(candidates.last().unwrap().model.clone())
+        }
+    }
+    let custom = crate::application::model_router::LlmModelRouter::new(
+        service.clone().with_auto_routers(fw::AutoRouters {
+            text_generation: Some(Arc::new(LastTextModel)),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(
+        custom.route_text("", None).unwrap().model_code,
+        "PERSON_AI:FIXED:Low:vendor/low-model"
+    );
+    assert!(
+        router
+            .route_text("", Some("PERSON_AI:FIXED:Middle:vendor/shared"))
+            .is_ok()
+    );
+    service.connection.call(|connection| {
+        connection.execute("UPDATE provider_catalog_models SET status='Unavailable' WHERE quality_type='High'", []).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    assert!(service.auto_chat_candidates(&[], None).unwrap().is_empty());
+    assert!(router.route_text("", None).is_ok());
+    service.connection.call(|connection| {
+        connection.execute("UPDATE provider_catalog_models SET status='Unavailable' WHERE quality_type='Middle'", []).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    assert_eq!(
+        router.route_text("", None).unwrap().model_code,
+        "PERSON_AI:FIXED:Low:vendor/low-model"
+    );
+    assert!(service.auto_chat_candidates(&[], None).unwrap().is_empty());
+    service.connection.call(|connection| {
+        connection.execute("UPDATE provider_catalog_models SET status=CASE quality_type WHEN 'High' THEN 'Available' ELSE 'Unavailable' END", []).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    assert!(!service.auto_chat_candidates(&[], None).unwrap().is_empty());
+    assert!(router.route_text("", None).is_err());
+}
+
 #[test]
 fn embedding_auto_route_stays_within_one_model_code() {
     let cipher = Arc::new(
         Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
             key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
-        }).unwrap(),
+        })
+        .unwrap(),
     );
     let service = ModelProviderService::connect(":memory:", cipher).unwrap();
     let selected = service.connection.call(
@@ -66,28 +205,41 @@ async fn embedding_transport_dispatches_instance_and_reports_logical_model() {
             *self.0.lock().unwrap() = body.clone();
             Ok(json!({"model":"physical-instance","data":[]}))
         }
-        async fn events(&self, _: &str, _: &Value, _: sdk::EventSink<'_>) -> Result<(), fw::ModelError> {
+        async fn events(
+            &self,
+            _: &str,
+            _: &Value,
+            _: sdk::EventSink<'_>,
+        ) -> Result<(), fw::ModelError> {
             unreachable!()
         }
     }
     let cipher = Arc::new(
         Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
             key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
-        }).unwrap(),
+        })
+        .unwrap(),
     );
     let observed = Arc::new(Mutex::new(Value::Null));
     let transport = SnapshotTransport {
         inner: Arc::new(Capture(observed.clone())),
         providers: ModelProviderService::connect(":memory:", cipher).unwrap(),
         config: person_ai_agent_config(
-            "PERSON_AI:EMBEDDING:bge-m3", "bge-m3", None, None, AgentModelProtocol::Embeddings,
+            "PERSON_AI:EMBEDDING:bge-m3",
+            "bge-m3",
+            None,
+            None,
+            AgentModelProtocol::Embeddings,
         ),
         run: None,
         attempt: "fixture".into(),
         embedding_instance_id: Some("physical-instance".into()),
         embedding_logical_code: Some("bge-m3".into()),
     };
-    let response = transport.json("embeddings", &json!({"model":"bge-m3","input":["text"]})).await.unwrap();
+    let response = transport
+        .json("embeddings", &json!({"model":"bge-m3","input":["text"]}))
+        .await
+        .unwrap();
     assert_eq!(observed.lock().unwrap()["model"], "physical-instance");
     assert_eq!(response["model"], "bge-m3");
 }
@@ -464,22 +616,38 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
                 {"model_id":"image-1","model_code":"agnes-image","media_type":0},
                 {"model_id":"speech-1","model_code":"qwen-asr","media_type":2},
                 {"model_id":"aigc-1","model_code":"aigc-detector","media_type":3},
-                {"model_id":"embedding-1","model_code":"bge-m3","media_type":6}
+                {"model_id":"embedding-1","model_code":"bge-m3","media_type":6},
+                {"model_id":"rerank-1","model_code":"bge-reranker","media_type":7}
             ]),
         ),
     ]);
     state.lock().unwrap().steps = steps;
     let run = service.sync_now(ModelProviderCode::PersonAi).await.unwrap();
-    assert_eq!(run.model_count, Some(12));
+    assert_eq!(run.model_count, Some(13));
     let catalog = service
         .list_catalog_models(ModelProviderCode::PersonAi)
         .unwrap();
-    assert_eq!(catalog.len(), 12);
+    assert_eq!(catalog.len(), 13);
     assert!(catalog.iter().any(|model| {
         model.model_code == "bge-m3"
             && model.catalog_model_type == ProviderCatalogModelType::Embedding
             && model.status == ProviderCatalogModelStatus::Available
     }));
+    assert!(catalog.iter().any(|model| model.catalog_model_type
+        == ProviderCatalogModelType::Rerank
+        && model.model_id.as_deref() == Some("rerank-1")));
+    let native = service
+        .rerank_runtime_model_config("", Some("PERSON_AI:ROUTE:RerankAuto"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(native.model_code, "PERSON_AI:RERANK:rerank-1");
+    assert_eq!(native.api_path.as_deref(), Some("/rerank"));
+    assert_eq!(native.model_type, ModelType::Rerank);
+    let fixed_native = service
+        .rerank_runtime_model_config("", Some("PERSON_AI:RERANK:rerank-1"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(fixed_native.model_code, native.model_code);
     assert_eq!(
         catalog
             .iter()
@@ -496,22 +664,18 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
         ).unwrap();
         Ok::<_, ModelProviderError>(())
     }, || ModelProviderError::Storage).unwrap();
-    let canonical = service
-        .resolve_chat_selection(
+    assert!(matches!(
+        service.resolve_chat_selection(
             "",
             Some(&ModelSelection::person_ai_fixed(
                 "qwen3.6-flash",
-                ProviderModelQuality::Low,
+                ProviderModelQuality::Low
             )),
             None,
             None,
-        )
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        canonical.model_code,
-        "PERSON_AI:FIXED:Low:alibaba_coding_plan/qwen3.6-flash"
-    );
+        ),
+        Err(ModelProviderError::InvalidSelection(_))
+    ));
     service.connection.call(|connection| {
         connection.execute("UPDATE default_model_selections SET model_code='deepseek-v4.1-flash' WHERE scope_key='platform'", []).unwrap();
         Ok::<_, ModelProviderError>(())
@@ -537,14 +701,14 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
         .iter()
         .filter(|option| option.selection.kind == ModelSelectionKind::Fixed)
         .collect::<Vec<_>>();
-    assert_eq!(fixed.len(), 8);
+    assert_eq!(fixed.len(), 6);
     assert_eq!(
         fixed
             .iter()
             .map(|option| &option.option_code)
             .collect::<HashSet<_>>()
             .len(),
-        8
+        6
     );
     for option in &fixed {
         let config = service
@@ -640,10 +804,9 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
     let last_good = service
         .list_catalog_models(ModelProviderCode::PersonAi)
         .unwrap();
-    assert_eq!(last_good.len(), 12);
+    assert_eq!(last_good.len(), 13);
     assert!(last_good.iter().any(|model| {
-        model.model_code == "bge-m3"
-            && model.status == ProviderCatalogModelStatus::Unavailable
+        model.model_code == "bge-m3" && model.status == ProviderCatalogModelStatus::Unavailable
     }));
     assert_eq!(
         last_good
@@ -1063,4 +1226,134 @@ async fn query_amplification_stream_deltas_only_write_changed_lineage() {
         assert_eq!(row, ("actual-model".into(),"actual-vendor".into()));
         Ok::<_,rusqlite::Error>(())
     }, || rusqlite::Error::InvalidQuery).unwrap();
+}
+
+#[tokio::test]
+async fn rerank_transport_dispatches_native_model_id_and_preserves_scores_and_usage() {
+    struct Capture(Arc<Mutex<Value>>);
+    #[async_trait]
+    impl sdk::ModelTransport for Capture {
+        async fn json(&self, path: &str, body: &Value) -> Result<Value, fw::ModelError> {
+            assert_eq!(path, "/rerank");
+            *self.0.lock().unwrap() = body.clone();
+            Ok(json!({"results":[{"index":1,"relevance_score":0.87}],"usage":{"total_tokens":13}}))
+        }
+        async fn events(
+            &self,
+            _: &str,
+            _: &Value,
+            _: sdk::EventSink<'_>,
+        ) -> Result<(), fw::ModelError> {
+            unreachable!()
+        }
+    }
+    let cipher = Arc::new(
+        Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+            key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+        })
+        .unwrap(),
+    );
+    let observed = Arc::new(Mutex::new(Value::Null));
+    let mut config = person_ai_agent_config(
+        "PERSON_AI:RERANK:rerank-1",
+        "rerank-1",
+        None,
+        None,
+        AgentModelProtocol::ChatCompletions,
+    );
+    config.api_path = super::super::auto_selection::person_ai_rerank_config("rerank-1").api_path;
+    let transport = SnapshotTransport {
+        inner: Arc::new(Capture(observed.clone())),
+        providers: ModelProviderService::connect(":memory:", cipher).unwrap(),
+        config: config.clone(),
+        run: None,
+        attempt: "fixture".into(),
+        embedding_instance_id: None,
+        embedding_logical_code: None,
+    };
+    let model = sdk::HttpRerankModel {
+        config: (&config).into(),
+        factory: Arc::new(sdk::FixedModelTransportFactory(Arc::new(transport))),
+        chat_fallback: false,
+    };
+    let response = fw::RerankModel::rerank_with_usage(
+        &model,
+        "rerank-1",
+        fw::RerankRequest {
+            choice: fw::ModelChoice::model(fw::ModelRef::new("personai", "rerank-1")),
+            query: "orchid".into(),
+            documents: vec!["stone".into(), "flower".into()],
+            top_n: Some(1),
+        },
+        None,
+    )
+    .await
+    .unwrap();
+    let body = observed.lock().unwrap();
+    assert_eq!(body["model_id"], "rerank-1");
+    assert!(body.get("model").is_none());
+    assert!(body.get("messages").is_none());
+    assert_eq!(body["top_n"], 1);
+    assert_eq!(response.response.results[0].index, 1);
+    assert_eq!(response.response.results[0].score, 0.87);
+    assert_eq!(response.usage.unwrap().input_tokens, 13);
+}
+
+#[test]
+fn embedding_auto_routes_use_platform_tags_and_preserve_one_declared_space() {
+    let cipher = Arc::new(
+        Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+            key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+        })
+        .unwrap(),
+    );
+    let service = ModelProviderService::connect(":memory:", cipher).unwrap();
+    service.connection.call(|connection| {
+        for (id, code, dimension, tags) in [
+            ("text", "arbitrary-text", 1024, "[\"text_embedding\"]"),
+            ("image", "arbitrary-image", 1024, "[\"multimodal_embedding\"]"),
+            ("small", "small-image", 512, "[\"multimodal_embedding\"]"),
+            ("unknown", "Qwen3-VL-Embedding-2B", 1024, "[]"),
+        ] {
+            connection.execute("INSERT INTO provider_multimedia_catalog_models(provider_code,model_id,model_code,model_name,media_type,status,first_seen_at,updated_at,dimension,tags_json) VALUES('PersonAi',?1,?2,?2,6,'Available',1,1,?3,?4)", params![id,code,dimension,tags]).unwrap();
+        }
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    assert_eq!(
+        service
+            .auto_embedding_config("PLATFORM")
+            .unwrap()
+            .model_name,
+        "arbitrary-text"
+    );
+    assert_eq!(
+        service
+            .auto_multimodal_embedding_config("PLATFORM")
+            .unwrap()
+            .model_name,
+        "arbitrary-image"
+    );
+    let models = service
+        .list_catalog_models(ModelProviderCode::PersonAi)
+        .unwrap();
+    let image = models
+        .iter()
+        .find(|model| model.model_code == "arbitrary-image")
+        .unwrap();
+    assert_eq!(image.tags, ["multimodal_embedding"]);
+    assert_eq!(image.dimension, Some(1024));
+    service.connection.call(|connection| {
+        connection.execute("INSERT INTO provider_multimedia_catalog_models(provider_code,model_id,model_code,model_name,media_type,status,first_seen_at,updated_at,dimension,tags_json) VALUES('PersonAi','inconsistent','arbitrary-image','Image',6,'Available',1,1,1024,'[\"text_embedding\"]')", []).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    assert!(
+        service
+            .auto_multimodal_embedding_config("PLATFORM")
+            .is_err()
+    );
+    assert!(
+        service
+            .auto_embedding_config("archived-or-missing")
+            .is_err()
+    );
 }

@@ -1,4 +1,6 @@
 //! Tron scope checks, business state and display projections over Framework stores.
+mod context_assembly;
+pub use context_assembly::{SavedContextAssembly, context_assembly_error_descriptor};
 mod assembler;
 mod config;
 mod dto;

@@ -1,4 +1,5 @@
 use super::error_mapper::rag_error_response;
+use super::search_response::{RecallInput, RecallResponse, SearchResponse};
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext, app::AppState, application::rag::*,
     response::ApiResponse,
@@ -53,10 +54,17 @@ struct RagCorpusView {
 impl From<RagCorpusSummary> for RagCorpusView {
     fn from(summary: RagCorpusSummary) -> Self {
         Self {
-            id: summary.id, name: summary.name,
-            kind: if summary.managed_source_id.is_some() { "knowledgeBase" } else { "builtin" }.into(),
+            id: summary.id,
+            name: summary.name,
+            kind: if summary.managed_source_id.is_some() {
+                "knowledgeBase"
+            } else {
+                "builtin"
+            }
+            .into(),
             knowledge_base_id: summary.managed_source_id,
-            settings: summary.settings, counts: summary.counts,
+            settings: summary.settings,
+            counts: summary.counts,
         }
     }
 }
@@ -66,7 +74,12 @@ pub async fn corpora(State(state): State<AppState>, auth: RequestAuthContext) ->
         Err(error) => return failure(error),
     };
     match state.rag.corpus_summaries(&ids) {
-        Ok(rows) => Json(ApiResponse::success(rows.into_iter().map(RagCorpusView::from).collect::<Vec<_>>())).into_response(),
+        Ok(rows) => Json(ApiResponse::success(
+            rows.into_iter()
+                .map(RagCorpusView::from)
+                .collect::<Vec<_>>(),
+        ))
+        .into_response(),
         Err(error) => rag_error_response(error),
     }
 }
@@ -82,8 +95,24 @@ pub async fn configure(
     if settings.graph && id != "skill" && settings.graph_model_code.is_none() {
         return failure("开启图谱索引需要选择抽取模型");
     }
+    let old_settings = match state.rag.settings_for_corpus(&id) {
+        Ok(settings) => settings,
+        Err(error) => return rag_error_response(error),
+    };
     match state.rag.configure_corpus(&id, settings) {
-        Ok(settings) => Json(ApiResponse::success(settings)).into_response(),
+        Ok(settings) => {
+            if serde_json::to_value(&old_settings).ok() != serde_json::to_value(&settings).ok()
+                && !matches!(id.as_str(), "skill" | "memory-card")
+            {
+                if let Err(error) = state
+                    .knowledge_bases
+                    .supplement_corpus_indexes(&auth.user().user_code, &id)
+                {
+                    return failure(error);
+                }
+            }
+            Json(ApiResponse::success(settings)).into_response()
+        }
         Err(error) => rag_error_response(error),
     }
 }
@@ -138,7 +167,7 @@ pub async fn search(
         )
         .await
     {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Ok(result) => Json(ApiResponse::success(SearchResponse::from(result))).into_response(),
         Err(error) => rag_error_response(error),
     }
 }
@@ -146,14 +175,22 @@ pub async fn search(
 pub async fn recall(
     State(state): State<AppState>,
     auth: RequestAuthContext,
-    Json(input): Json<RagQueryInput>,
+    Json(input): Json<RecallInput>,
 ) -> Response {
     match state
         .knowledge_bases
-        .recall_for_user(&auth.user().user_code, input)
+        .recall_for_user(
+            &auth.user().user_code,
+            RagQueryInput {
+                query: input.query,
+                corpus_ids: input.corpus_ids,
+                filters: input.filters,
+                limit: input.limit,
+            },
+        )
         .await
     {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Ok(result) => Json(ApiResponse::success(RecallResponse::from(result))).into_response(),
         Err(error) => rag_error_response(error),
     }
 }
@@ -167,6 +204,12 @@ pub async fn tasks(State(state): State<AppState>, auth: RequestAuthContext) -> R
         Ok(knowledge) => tasks.extend(knowledge),
         Err(error) => return failure(error),
     }
+    let deleted = match state.rag.repository_handle().deleted_task_history(user) {
+        Ok(deleted) => deleted,
+        Err(error) => return rag_error_response(error),
+    };
+    tasks.retain(|task| !deleted.contains(&task.id));
+    tasks.sort_by_key(|task| std::cmp::Reverse((task.created_at, task.id.clone())));
     Json(ApiResponse::success(tasks)).into_response()
 }
 #[derive(Deserialize)]
@@ -329,6 +372,14 @@ async fn control(
     };
     if matches!(action, TaskControl::Retry | TaskControl::Rebuild) {
         if let Some(task) = system_task {
+            if !state
+                .rag
+                .repository_handle()
+                .record_task_is_latest(&task)
+                .unwrap_or(false)
+            {
+                return failure("任务状态已改变，请刷新列表");
+            }
             if matches!(task.state.as_str(), "RUNNING" | "QUEUED") {
                 return failure("任务仍在运行");
             }

@@ -1,4 +1,6 @@
 mod catalog;
+mod knowledge_quality;
+mod rag_graph;
 use catalog::{translate_en_us, translate_zh_cn};
 mod business;
 mod coding;
@@ -114,6 +116,12 @@ fn materialize_schema_node(locale: SupportedLocale, node: &mut Value) {
 }
 
 pub(crate) fn translate(locale: SupportedLocale, key: &str) -> &'static str {
+    if let Some(value) = knowledge_quality::translate(locale, key) {
+        return value;
+    }
+    if let Some(value) = rag_graph::translate(locale, key) {
+        return value;
+    }
     match locale {
         SupportedLocale::EnUs => translate_en_us(key),
         SupportedLocale::ZhCn => translate_zh_cn(key),

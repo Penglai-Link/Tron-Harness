@@ -207,8 +207,8 @@ impl Default for ImageDescriptionConfig {
         Self {
             enabled: false,
             model_code: String::new(),
-            max_images_per_document: 64,
-            timeout_seconds: 30,
+            max_images_per_document: 256,
+            timeout_seconds: 120,
         }
     }
 }
@@ -311,8 +311,8 @@ mod image_description_tests {
         let config: ImageDescriptionConfig =
             serde_yaml::from_str("modelCode: PERSON_AI:FIXED:High:synthetic-vision").unwrap();
         assert!(!config.enabled);
-        assert_eq!(config.timeout_seconds, 30);
-        assert_eq!(config.max_images_per_document, 64);
+        assert_eq!(config.timeout_seconds, 120);
+        assert_eq!(config.max_images_per_document, 256);
         assert!(!MineruConfig::default().image_description.enabled);
         assert!(!MineruConfig::default().visual_context_enabled);
         assert_eq!(MineruConfig::default().default_tier.as_str(), "standard");

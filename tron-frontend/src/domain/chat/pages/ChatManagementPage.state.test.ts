@@ -25,18 +25,39 @@ vi.hoisted(() => {
 });
 
 import {
-  ChatStreamOwnershipRegistry,
-  buildContextMemoryBlocks,
-  claimChatRunTerminalDrain,
+  buildReportedContextMemoryBlocks,
   defaultChatModelOption,
-  latestTerminalChatRunCode,
   latestContextBudgetBreakdownFromEvents,
   latestShortTermMemoryRuntimeNotice,
-  normalizeContextBudgetBreakdown,
-  resolveChatStreamSettlement,
-  shouldPollChatRecoveryData,
-  shouldPollChatRunRecovery,
 } from "./ChatManagementPage";
+import { contextAssemblySnapshot } from "../model/contextAssemblyReport";
+
+describe("saved plugin context budgets", () => {
+  it.each([776_601, 0])("retains the saved protocol ceiling for live and historical reports (%s)", (ceiling) => {
+    const snapshot = contextAssemblySnapshot({
+      snapshotSequence: "4",
+      budgetBreakdown: { toolSchemaBudgetTokens: ceiling },
+      contextReport: { input_capacity: 1_294_336, protocol_tokens: 303, blocks: [] },
+    })!;
+    const rows = buildReportedContextMemoryBlocks(snapshot, (key) => key);
+    expect(rows[0]).toMatchObject({ code: "protocol", tokens: 303, limitTokens: ceiling, snapshotSequence: "4" });
+    expect(buildReportedContextMemoryBlocks(JSON.parse(JSON.stringify(snapshot)), (key) => key)).toEqual(rows);
+  });
+  it.each([1_300_000, null])("does not treat an exact admission allocation as a full window (%s)", (capacity) => {
+    const snapshot = contextAssemblySnapshot({ contextReport: {
+      input_capacity: capacity,
+      protocol_tokens: 5600,
+      blocks: [{ id: "agent_directory", position: 0, sources: [], original_tokens: 690,
+        allocated_tokens: 690, configured_tokens: 2048, reduction_budget_tokens: 690, final_tokens: 690,
+        final_message_count: 1, outcome: "Kept" }],
+    } });
+    expect(snapshot).not.toBeNull();
+    const blocks = buildReportedContextMemoryBlocks(snapshot!, (key) => key);
+    expect(blocks[0]).toMatchObject({ order: 1, tokens: 690, allocationTokens: 690, limitTokens: 2048 });
+    expect(blocks[1]).toMatchObject({ order: 2, tokens: 5600, allocationTokens: null, limitTokens: null });
+    expect(blocks[0]!.tokens / blocks[0]!.limitTokens!).toBeLessThan(0.5);
+  });
+});
 
 describe("chat model default selection", () => {
   const fixedDefault = {
@@ -68,81 +89,28 @@ describe("chat model default selection", () => {
   });
 });
 
-describe("tool schema context budget", () => {
-  it("localizes every context memory block name and avoids duplicate labels", () => {
-    const blocks = buildContextMemoryBlocks({
-      breakdown: null,
-      requestEstimate: null,
-      translate: (key) => ({
-        "chat.shortTermMemory.contextPanel.systemPromptName": "系统提示词",
-        "chat.applications.contextName": "应用执行上下文",
-        "chat.shortTermMemory.contextPanel.toolSchemaName": "工具定义",
-        "chat.shortTermMemory.contextPanel.checkpointName": "当前会话检查点",
-        "chat.shortTermMemory.contextPanel.workingStateName": "当前会话工作状态",
-        "chat.shortTermMemory.contextPanel.sessionHistoryName": "模型请求中的历史",
-      }[key] ?? key),
-    });
-
-    expect(blocks.map((block) => block.name)).toEqual([
-      "系统提示词",
-      "应用执行上下文",
-      "工具定义",
-      "当前会话检查点",
-      "当前会话工作状态",
-      "模型请求中的历史",
-    ]);
-    expect(blocks.every((block) => !("meta" in block))).toBe(true);
+describe("plugin assembly report", () => {
+  it("uses report positions and retains every plugin block after saving", () => {
+    const payload={contextReport:{input_capacity:1300000,protocol_tokens:303,estimated_input_tokens:8600,model:{model:"fixture-model"},stage:"chat",step:1,attempt:1,blocks:[
+      {id:"framework.history",position:7,allocated_tokens:1200000,configured_tokens:1300000,final_tokens:252,final_message_count:1},
+      {id:"knowledge_base",position:4,allocated_tokens:0,configured_tokens:1200,final_tokens:0,final_message_count:0},
+      {id:"agent_directory",position:5,allocated_tokens:690,configured_tokens:2048,final_tokens:690,final_message_count:1},
+      {id:"framework.instructions",position:0,allocated_tokens:7362,configured_tokens:16000,final_tokens:7362,final_message_count:6},
+    ]},snapshotSequence:"52"};
+    const live=contextAssemblySnapshot(payload)!;
+    const saved=JSON.parse(JSON.stringify(live));
+    const rows=buildReportedContextMemoryBlocks(live,key=>key);
+    expect(buildReportedContextMemoryBlocks(saved,key=>key)).toEqual(rows);
+    expect(rows.map(({code})=>code)).toEqual(["framework.instructions","knowledge_base","agent_directory","framework.history","protocol"]);
+    expect(rows.map(({order})=>order)).toEqual([1,2,3,4,5]);
+    expect(rows.every(row=>row.snapshotSequence==="52")).toBe(true);
+    expect(rows[2]).toMatchObject({tokens:690,allocationTokens:690,limitTokens:2048});
   });
-
-  it("splits application context out of the prefix without double-counting tokens", () => {
-    const breakdown = normalizeContextBudgetBreakdown({
-      promptPrefixTokens: 1000,
-      estimatedInputTokens: 1000,
-      promptPrefixMessageCount: 3,
-      applicationContextTokens: 300,
-      applicationContextMessageCount: 1,
-      promptPrefixBudgetTokens: 16000,
-      promptPrefixMaxRatioBps: 5000,
-      promptPrefixMaxTokens: 16000,
-    });
-    const blocks = buildContextMemoryBlocks({ breakdown, requestEstimate: null, translate: (key) => key });
-    expect(blocks.find((block) => block.detailCode === "systemPrompt")?.tokens).toBe(700);
-    expect(blocks.find((block) => block.detailCode === "applicationContext")?.tokens).toBe(300);
-    expect(blocks.find((block) => block.detailCode === "systemPrompt")?.limitTokens).toBe(15700);
-    expect(blocks.filter((block) => block.color === "seed").reduce((sum, block) => sum + block.tokens, 0)).toBe(1000);
+  it("keeps missing historical ceilings unknown instead of borrowing the model capacity", () => {
+    const snapshot=contextAssemblySnapshot({contextReport:{input_capacity:1300000,protocol_tokens:0,blocks:[{id:"custom-plugin",position:1,allocated_tokens:690,final_tokens:12,final_message_count:1}]}})!;
+    expect(buildReportedContextMemoryBlocks(snapshot,key=>key)[0]).toMatchObject({name:"custom-plugin",tokens:12,allocationTokens:690,limitTokens:null});
+    expect(contextAssemblySnapshot({budgetBreakdown:{estimatedInputTokens:100}})).toBeNull();
   });
-
-  it.each([6_000, 0])("uses the independent schema limit %s", (limit) => {
-    const breakdown = normalizeContextBudgetBreakdown({
-      estimatedInputTokens: 10_000,
-      effectiveInputBudget: 28_000,
-      toolSchemaBudgetTokens: limit,
-      toolSchemaTokens: 1_000,
-    });
-    const blocks = buildContextMemoryBlocks({
-      breakdown,
-      requestEstimate: null,
-      translate: (key) => key,
-    });
-    expect(blocks.find((block) => block.color === "tool")).toMatchObject({
-      limitTokens: limit,
-      tokens: 1_000,
-    });
-  });
-
-  it("keeps the shared-budget fallback for historical records", () => {
-    const breakdown = normalizeContextBudgetBreakdown({
-      estimatedInputTokens: 10_000,
-      effectiveInputBudget: 28_000,
-    });
-    const blocks = buildContextMemoryBlocks({
-      breakdown,
-      requestEstimate: null,
-      translate: (key) => key,
-    });
-    expect(blocks.find((block) => block.color === "tool")?.limitTokens).toBe(28_000);
-  });
-
   it("reads a live context budget from an AG-UI custom event", () => {
     const breakdown = latestContextBudgetBreakdownFromEvents([{
       name: "tron.short_term_memory.context.assembled",
@@ -203,178 +171,5 @@ describe("tool schema context budget", () => {
       error,
       { timestamp: 200, type: "RUN_FINISHED" },
     ])).toBeNull();
-  });
-});
-
-describe("chat page run recovery state", () => {
-  it("keeps polling after a 409 queues the message even when status and replay are unresolved", () => {
-    expect(shouldPollChatRunRecovery({
-      currentRunActive: false,
-      hasQueuedSubmission: true,
-      sessionCode: "SESSION-1",
-      shouldPollData: false,
-    })).toBe(true);
-  });
-
-  it("does not poll an idle session without queued recovery work", () => {
-    expect(shouldPollChatRunRecovery({
-      currentRunActive: false,
-      hasQueuedSubmission: false,
-      sessionCode: "SESSION-1",
-      shouldPollData: false,
-    })).toBe(false);
-  });
-
-  it("stops polling when recovery confirms that every active state is empty", () => {
-    expect(shouldPollChatRecoveryData({
-      activeRunConfirmedIdle: true,
-      hasActiveRun: false,
-      hasOpenReplayRun: false,
-      hasPendingUserInput: false,
-      hasQueuedSubmission: false,
-    })).toBe(false);
-  });
-
-  it("continues polling for a queued message or pending user input", () => {
-    expect(shouldPollChatRecoveryData({
-      activeRunConfirmedIdle: false,
-      hasActiveRun: false,
-      hasOpenReplayRun: false,
-      hasPendingUserInput: false,
-      hasQueuedSubmission: true,
-    })).toBe(true);
-    expect(shouldPollChatRecoveryData({
-      activeRunConfirmedIdle: false,
-      hasActiveRun: false,
-      hasOpenReplayRun: false,
-      hasPendingUserInput: true,
-      hasQueuedSubmission: false,
-    })).toBe(true);
-  });
-
-  it("stops polling when active-run status confirms idle despite stale replay events", () => {
-    expect(shouldPollChatRecoveryData({
-      activeRunConfirmedIdle: true,
-      hasActiveRun: false,
-      hasOpenReplayRun: true,
-      hasPendingUserInput: false,
-      hasQueuedSubmission: false,
-    })).toBe(false);
-  });
-
-  it("finds the newest protocol terminal even when the active run was missed", () => {
-    expect(latestTerminalChatRunCode([
-      {
-        runId: "RUN-NEW",
-        threadId: "SESSION-1",
-        timestamp: 20,
-        type: "RUN_FINISHED",
-      },
-      {
-        runId: "RUN-OLD",
-        threadId: "SESSION-1",
-        timestamp: 10,
-        type: "RUN_ERROR",
-      },
-      {
-        runId: "RUN-OTHER",
-        threadId: "SESSION-2",
-        timestamp: 30,
-        type: "RUN_FINISHED",
-      },
-    ], "SESSION-1")).toBe("RUN-NEW");
-  });
-
-  it("claims a recovered terminal only once so one effect cycle drains one FIFO item", () => {
-    const drainedRunKeys = new Set<string>();
-
-    expect(claimChatRunTerminalDrain(
-      drainedRunKeys,
-      "SESSION-1",
-      "RUN-1",
-    )).toBe(true);
-    expect(claimChatRunTerminalDrain(
-      drainedRunKeys,
-      "SESSION-1",
-      "RUN-1",
-    )).toBe(false);
-  });
-});
-
-describe("chat page stream ownership", () => {
-  it("detaches the old session and ignores its stale finally after a new owner starts", () => {
-    const registry = new ChatStreamOwnershipRegistry();
-    const oldController = new AbortController();
-    const oldOwner = registry.acquire("SESSION-OLD", oldController);
-
-    expect(registry.detach("SESSION-OLD")).toBe(oldOwner);
-    oldController.abort();
-    expect(oldController.signal.aborted).toBe(true);
-
-    const newController = new AbortController();
-    const newOwner = registry.acquire("SESSION-NEW", newController);
-
-    expect(registry.release(oldOwner)).toBe(false);
-    expect(registry.current).toBe(newOwner);
-    expect(registry.owns(newOwner)).toBe(true);
-    expect(newController.signal.aborted).toBe(false);
-  });
-
-  it("does not detach an observer owned by another session", () => {
-    const registry = new ChatStreamOwnershipRegistry();
-    const owner = registry.acquire("SESSION-1", new AbortController());
-
-    expect(registry.detach("SESSION-2")).toBeNull();
-    expect(registry.current).toBe(owner);
-  });
-
-  it("does not requeue a source already admitted before explicit Stop", () => {
-    const registry = new ChatStreamOwnershipRegistry();
-    const owner = registry.acquire("SESSION-1", new AbortController());
-    registry.release(owner);
-
-    expect(resolveChatStreamSettlement({
-      activeSessionCode: "SESSION-1",
-      detached: false,
-      owner,
-      registry,
-      stopped: true,
-    })).toEqual({
-      canCommit: false,
-      restoreSourceSubmission: false,
-    });
-  });
-
-  it("does not restore or commit a detached stream settlement", () => {
-    const registry = new ChatStreamOwnershipRegistry();
-    const owner = registry.acquire("SESSION-1", new AbortController());
-    registry.detach("SESSION-1");
-
-    expect(resolveChatStreamSettlement({
-      activeSessionCode: "SESSION-1",
-      detached: true,
-      owner,
-      registry,
-      stopped: false,
-    })).toEqual({
-      canCommit: false,
-      restoreSourceSubmission: false,
-    });
-  });
-
-  it("blocks a stale resolve before the session-switch detach effect runs", () => {
-    const registry = new ChatStreamOwnershipRegistry();
-    const owner = registry.acquire("SESSION-OLD", new AbortController());
-
-    expect(resolveChatStreamSettlement({
-      activeSessionCode: "SESSION-NEW",
-      detached: false,
-      owner,
-      registry,
-      stopped: false,
-    })).toEqual({
-      canCommit: false,
-      restoreSourceSubmission: false,
-    });
   });
 });

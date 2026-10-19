@@ -35,12 +35,28 @@ pub async fn list_select_options(
         Ok(mut records) => match state
             .model_providers
             .list_text_select_options(&workspace_code)
-        {
+            .and_then(|mut options| {
+                options.extend(
+                    state
+                        .model_providers
+                        .list_auxiliary_route_options(&workspace_code)?,
+                );
+                Ok(options)
+            }) {
             Ok(provider_records) => {
                 records.extend(provider_records.into_iter().map(|record| {
                     ModelSelectOption {
                         option_code: record.option_code,
-                        model_code: record.selection.model_code.clone().unwrap_or_default(),
+                        model_code: record
+                            .selection
+                            .model_code
+                            .clone()
+                            .or_else(|| {
+                                record.selection.route_code.map(|route| {
+                                    format!("PERSON_AI:ROUTE:{}", route.storage_value())
+                                })
+                            })
+                            .unwrap_or_default(),
                         display_name: record.display_name,
                         model_name: record
                             .selection
@@ -53,7 +69,13 @@ pub async fn list_select_options(
                             .upstream_vendor_name
                             .clone()
                             .unwrap_or_else(|| record.access_platform.clone()),
-                        protocol: ModelProtocol::OpenAiCompatible,
+                        protocol: match record.model_type {
+                            crate::domain::model::ModelType::Embedding => {
+                                ModelProtocol::OpenAiCompatibleEmbedding
+                            }
+                            crate::domain::model::ModelType::Rerank => ModelProtocol::Rerank,
+                            _ => ModelProtocol::OpenAiCompatible,
+                        },
                         model_type: record.model_type,
                         enabled: record.enabled,
                         model_selection: record.selection,

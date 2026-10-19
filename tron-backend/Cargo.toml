@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+eliteforge-agent-capability-chunking = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-chunking" }
 eliteforge-agent-capability-personai = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-personai" }
 eliteforge-agent-official-plugin-tools-web = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-web" }
 eliteforge-agent-official-plugin-tools-media = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-media" }
@@ -42,8 +43,7 @@ async-stream = "0.3"
 base64 = "0.22"
 bcrypt = "0.17"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "d36495205418c1925f32a09267c68401ec4d24b5" }
-crab-serverapi-parse = { package = "crab-serverapi", git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "eecbd377cca48bab18997a5bc246d9a6ba77841d" }
+crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "b1e63a5e0199d09f000ad1d23b7e5559ee95710c" }
 cron = "0.12"
 gmcrypto-core = { version = "1.0.0", features = ["sm4-aead"] }
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
@@ -79,9 +79,11 @@ tokio-cron = "0.1.3"
 tower-http = { version = "0.6", features = ["cors"] }
 utoipa = { version = "5", features = ["axum_extras", "chrono", "yaml"] }
 utoipa-scalar = { version = "0.3", features = ["axum"] }
+unicode-normalization = "0.1"
 url = "2"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 roxmltree = "0.20"
+regex = "1"
 umya-spreadsheet = "3.1"
 pdf-extract = "0.12"
 image = { version = "0.25.10", default-features = false, features = ["png"] }

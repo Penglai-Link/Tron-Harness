@@ -210,6 +210,8 @@ impl ModelProviderAdapter for PersonAiAdapter {
                         model_name: model.model_name.unwrap_or_else(|| model.model_code.clone()),
                         model_code: model.model_code,
                         catalog_model_type,
+                        dimension: model.dimension,
+                        tags: model.tags,
                     }
                 });
             }
