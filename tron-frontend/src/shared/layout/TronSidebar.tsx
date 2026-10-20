@@ -113,7 +113,8 @@ export function TronSidebar({
     const active = item.label === activeItem || Boolean(item.href && activeHref && (item.href === activeHref || activeHref.startsWith(`${item.href}/`)));
     const itemLabel = item.translationKey ? translate(item.translationKey) : item.label;
     const hasChildren = item.isGroup || Boolean(item.children?.length);
-    const open = hasChildren && (openNavigationItems[itemKey] ?? true);
+    const openByDefault = !inFlyout;
+    const open = hasChildren && (openNavigationItems[itemKey] ?? openByDefault);
     if (nestingLevel > 0 && !hasChildren) {
       return (
         <SidebarMenuSubItem key={itemKey}>
@@ -153,7 +154,7 @@ export function TronSidebar({
             className="gap-[12px] px-3 text-sidebar-foreground"
             type="button"
             onClick={() => {
-              setOpenNavigationItems((current) => ({ ...current, [itemKey]: !(current[itemKey] ?? true) }));
+              setOpenNavigationItems((current) => ({ ...current, [itemKey]: !(current[itemKey] ?? openByDefault) }));
             }}
           >
             <Icon className="shrink-0" size={17} aria-hidden="true" />
