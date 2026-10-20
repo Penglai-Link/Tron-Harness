@@ -17,9 +17,9 @@
     "--color-surface-container": "#102017",
     "--color-surface-container-high": "#14271d",
     "--color-surface-container-highest": "#1b3125",
-    "--color-on-surface": "#83e8a0",
-    "--color-on-surface-variant": "#65ad7b",
-    "--color-inverse-surface": "#83e8a0",
+    "--color-on-surface": "#58c878",
+    "--color-on-surface-variant": "#3f9257",
+    "--color-inverse-surface": "#58c878",
     "--color-inverse-on-surface": "#06110a",
     "--color-outline": "#4e755a",
     "--color-outline-variant": "#213b2b",
@@ -55,7 +55,7 @@
     "--color-menu-selected-surface": "#213b2b",
     "--color-card-border": "#21422f",
     "--color-background": "#010603",
-    "--color-on-background": "#83e8a0",
+    "--color-on-background": "#58c878",
     "--color-header-backdrop": "rgba(3, 12, 8, 0.92)",
     "--color-backdrop-scrim": "rgba(1, 6, 3, 0.72)",
     "--color-elevated-surface": "#09150d",
@@ -106,9 +106,9 @@
     "--tron-syntax-markup-ignored-text": "var(--color-on-surface)",
     "--tron-syntax-comment": "var(--color-on-surface-variant)",
     "--tron-syntax-markup-heading": "var(--color-primary)",
-    "--tron-terminal-white": "#83e8a0",
+    "--tron-terminal-white": "#58c878",
     "--tron-terminal-bright-white": "#6fffa0",
-    "--tron-terminal-bright-black": "#65ad7b"
+    "--tron-terminal-bright-black": "#3f9257"
   },
   "layout": {
     "--radius": "0.625rem"

@@ -2267,8 +2267,8 @@ export const pages = {
         contributorEmpty: "No messages from this source were retained in this request.",
         reductionStat: "Before reduction: {{original}}; retained: {{final}} tokens.",
         outcomes: { Reduced: "Reduced", NoGain: "No reduction gain", Omitted: "Omitted", Failed: "Failed" },
-        protocolName: "Tools and Request Protocol",
-        protocolNote: "Separate from message assembly order; includes tool schemas and protocol costs for model request options.",
+        protocolName: "Tool Definitions",
+        protocolNote: "The separate `tools` field in the request.",
         inputCapacityShareNote: "Each row shows actual tokens / available model input budget. Bars show the row’s share of that budget.",
         requestAllocationNote: "Allocated {{tokens}} tokens for this request, based on actual need; this is not a capacity ceiling.",
         toolSchemaName: "Tool Schema",
@@ -2915,11 +2915,11 @@ export const pages = {
         expandedDomainPersistenceMode: {
           ariaLabel: "Explain expanded domain persistence mode",
           summary:
-            "Controls how long domain-expanded tools stay available during a run after discovery loads them.",
+            "Only applies to Domain discovery. Controls whether expanded tools stay in the `tools` field of later requests. A more stable field helps reuse cached tool definitions.",
           optionOne:
-            "Sticky expanded: once a domain is expanded, its tools stay available for the rest of the run.",
+            "Keep for this run: after expansion, include these tools in later requests until the run ends. Stable definitions are more cache-friendly.",
           optionTwo:
-            "Ephemeral expanded: expanded tools are temporary and can be dropped after the relevant step.",
+            "Remove after the next tool call: send expanded tools with the next request, then omit them from later requests. This changes the `tools` field and may reduce cache reuse. The model can expand the domain again when needed.",
         },
         toolAssignmentMode: {
           ariaLabel: "Explain tool assignment mode",
@@ -2934,11 +2934,11 @@ export const pages = {
         toolExposureMode: {
           ariaLabel: "Explain tool exposure mode",
           summary:
-            "Controls how the assigned tools are exposed to the model at runtime.",
+            "Controls which tools the model sees at the start and how it can find others.",
           optionOne:
-            "Direct list: send the concrete tool schemas to the model at startup.",
+            "Direct list: give the model the assigned tools and their usage details when the run starts.",
           optionTwo:
-            "Domain discovery: send the domain catalog first, then expand a domain before concrete tools are loaded.",
+            "Domain discovery: show the model the available tool categories first. It can open a category to see its tools when needed.",
         },
         maxSteps: {
           ariaLabel: "Explain max steps",
@@ -2969,7 +2969,7 @@ export const pages = {
         },
       },
       labels: {
-        expandedDomainPersistenceMode: "Expanded domain persistence mode",
+        expandedDomainPersistenceMode: "When to remove expanded tools",
         maxSteps: "Max steps",
         maxToolCalls: "Max total tool calls",
         maxParallelToolCalls: "Max parallel tool calls",
@@ -2986,12 +2986,12 @@ export const pages = {
         allTools: "All platform tools",
         directList: "Direct list",
         domainDiscovery: "Domain discovery",
-        ephemeralExpanded: "Ephemeral expanded",
+        ephemeralExpanded: "Remove after next tool call",
         mcpDisabled: "Disabled",
         allReadOnlyTools: "All read-only tools",
         selectedTools: "Selected tools",
         selectedServers: "Selected servers",
-        stickyExpanded: "Sticky expanded",
+        stickyExpanded: "Keep for this run",
       },
       assignmentDialog: {
         mcpTitle: "Choose MCP servers",

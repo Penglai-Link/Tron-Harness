@@ -138,7 +138,7 @@ impl Default for AgentRunLimits {
 }
 
 fn default_max_parallel_tool_calls() -> u32 {
-    4
+    10
 }
 
 /// Trusted ownership supplied by the host; never accepted from tool arguments.

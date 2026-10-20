@@ -7,7 +7,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import type { WorkspaceInternalAgentRecord } from "../model";
 
 export type AgentPolicyDraft = Pick<WorkspaceInternalAgentRecord, "toolAssignmentMode" | "toolExposureMode" | "expandedDomainPersistenceMode" | "maxSteps" | "maxToolCalls" | "maxParallelToolCalls" | "mcpAccessMode" | "selectedToolCodes" | "selectedServerCodes">;
-export const newAgentPolicyDraft = (): AgentPolicyDraft => ({ toolAssignmentMode: "all_platform_tools", toolExposureMode: "domain_discovery", expandedDomainPersistenceMode: "sticky_expanded", maxSteps: 100, maxToolCalls: 100, maxParallelToolCalls: 4, mcpAccessMode: "all_enabled_servers", selectedToolCodes: [], selectedServerCodes: [] });
+export const newAgentPolicyDraft = (): AgentPolicyDraft => ({ toolAssignmentMode: "all_platform_tools", toolExposureMode: "domain_discovery", expandedDomainPersistenceMode: "sticky_expanded", maxSteps: 100, maxToolCalls: 100, maxParallelToolCalls: 10, mcpAccessMode: "all_enabled_servers", selectedToolCodes: [], selectedServerCodes: [] });
 const labels = { mcpAccessMode: "MCP access mode", toolAssignmentMode: "Tool assignment mode", toolExposureMode: "Tool exposure mode", expandedDomainPersistenceMode: "Expanded domain persistence mode", maxSteps: "Max steps", maxToolCalls: "Max total tool calls", maxParallelToolCalls: "Max parallel tool calls" };
 export function AgentPolicyFields({ panel, draft, disabled, onChange, onAssignment, children }: {
   panel: "resources" | "advanced"; draft: AgentPolicyDraft; disabled: boolean;

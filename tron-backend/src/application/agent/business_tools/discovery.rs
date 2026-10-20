@@ -169,6 +169,10 @@ impl Tool for DiscoveryExpandToolDomainTool {
                 "domainCode": domain.domain_code,
                 "status": "expanded",
                 "toolCount": tools.len(),
+                "tools": tools.iter().map(|tool| json!({
+                    "toolName": tool.tool_name,
+                    "description": tool.description,
+                })).collect::<Vec<_>>(),
             }))
             .map_err(service_tool_error)?,
         };

@@ -177,7 +177,7 @@ export function ChatNavigationProvider({
       );
     }
     if (menu.pageCode === CHAT_PANEL_WIDGET_KEYS.recents) {
-      return recentSessions.length > 0 ? (
+      return (
         <RecentSessionGroup
           label={menu.label}
           key={menu.menuCode}
@@ -189,7 +189,7 @@ export function ChatNavigationProvider({
           onToggleSessionPin={togglePinnedSession}
           onRemoveSessionPin={removePinnedSession}
         />
-      ) : null;
+      );
     }
     return null;
   }

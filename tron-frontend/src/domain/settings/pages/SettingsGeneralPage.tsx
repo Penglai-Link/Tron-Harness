@@ -65,21 +65,26 @@ export function SettingsGeneralPage() {
             />
           </Field>
 
-          <label className="flex items-center justify-between gap-4 rounded-lg border border-[var(--color-outline-variant)] p-3">
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-[var(--color-outline-variant)] p-3">
             <span className="min-w-0 space-y-1">
-              <span className="block text-sm font-medium text-[var(--color-on-surface)]">{pageT("settingsGeneral.aguiWorkReplay.showReasoningCards")}</span>
-              <span className="block text-xs text-[var(--color-on-surface-variant)]">{pageT("settingsGeneral.aguiWorkReplay.showReasoningCardsHint")}</span>
+              <span className="flex items-center gap-1 text-sm font-medium text-[var(--color-on-surface)]">
+                {pageT("settingsGeneral.aguiWorkReplay.showReasoningCards")}
+                <InfoTooltip ariaLabel={pageT("settingsGeneral.aguiWorkReplay.showReasoningCards")}>{pageT("settingsGeneral.aguiWorkReplay.showReasoningCardsHint")}</InfoTooltip>
+              </span>
             </span>
             <Switch
               aria-label={pageT("settingsGeneral.aguiWorkReplay.showReasoningCards")}
               checked={aguiWorkReplayPreferences.showReasoningCards}
               onCheckedChange={setShowReasoningCards}
             />
-          </label>
+          </div>
 
           <fieldset className="space-y-2 rounded-lg border border-[var(--color-outline-variant)] p-3">
-            <legend className="px-1 text-sm font-medium text-[var(--color-on-surface)]">{pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitMode")}</legend>
-            <p className="text-xs text-[var(--color-on-surface-variant)]">{pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitModeHint")}</p>
+            <legend className="sr-only">{pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitMode")}</legend>
+            <div className="flex items-center gap-1 text-sm font-medium text-[var(--color-on-surface)]">
+              {pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitMode")}
+              <InfoTooltip ariaLabel={pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitMode")}>{pageT("settingsGeneral.aguiWorkReplay.runningEnterSubmitModeHint")}</InfoTooltip>
+            </div>
             <div className="flex flex-wrap gap-4">
               {(["steer", "queue"] as const).map((mode) => (
                 <label key={mode} className="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-on-surface)]">

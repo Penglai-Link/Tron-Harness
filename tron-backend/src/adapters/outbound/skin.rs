@@ -14,6 +14,8 @@ const MAX_PACKAGE: usize = 20 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
 const ORIGINAL_MATRIX: &str =
     include_str!("../../../resources/skins/migrations/matrix-dark-original.json");
+const PREVIOUS_MATRIX: &str =
+    include_str!("../../../resources/matrix-dark-shipped-v1.json");
 const LEGACY_MATRIX_PARTICLES: &str =
     include_str!("../../../resources/skins/migrations/matrix-particles.json");
 const BUILTINS: [&str; 2] = [
@@ -51,7 +53,11 @@ impl FileSkinStore {
                     .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
                 let original: serde_json::Value =
                     serde_json::from_str(ORIGINAL_MATRIX).map_err(|_| SkinError::Storage)?;
-                if previous.as_ref() == Some(&original) {
+                let previous_shipped: serde_json::Value =
+                    serde_json::from_str(PREVIOUS_MATRIX).map_err(|_| SkinError::Storage)?;
+                if previous.as_ref() == Some(&original)
+                    || previous.as_ref() == Some(&previous_shipped)
+                {
                     atomic_write(&dir.join("skin.json"), content.as_bytes())?;
                 }
             }

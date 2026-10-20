@@ -1669,12 +1669,17 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
     <>
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-1">
-          <button type="button" disabled={!block.detailCode} onClick={() => setDialogOpen(true)} title={block.limitDescription} className="group flex min-w-0 flex-wrap items-baseline gap-1 rounded text-left outline-none enabled:cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]">
+          <button type="button" disabled={!block.detailCode} onClick={() => setDialogOpen(true)} title={block.code === "protocol" ? undefined : block.limitDescription} className="group flex min-w-0 flex-wrap items-baseline gap-1 rounded text-left outline-none enabled:cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]">
             {block.order ? <span className="shrink-0 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{block.order}.</span> : null}
-            <span className="min-w-0 break-words text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]" title={block.code}>{block.name}</span>
+            <span className="min-w-0 break-words text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]" title={block.code === "protocol" ? undefined : block.code}>{block.name}</span>
             {block.stat ? <span className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</span> : null}
             {block.status ? <span className={cn("text-[10px] font-medium", block.statusTone === "error" ? "text-[var(--color-error)]" : "text-[var(--color-warning)]")}>{block.status}</span> : null}
           </button>
+          {block.code === "protocol" ? (
+            <InfoTooltip ariaLabel={block.name} align="start">
+              {t("chat.shortTermMemory.contextPanel.protocolNote")}
+            </InfoTooltip>
+          ) : null}
           {block.sources?.length ? (
             <InfoTooltip ariaLabel={block.name} align="start">
               <div className="max-w-[18rem] whitespace-normal text-xs leading-5">

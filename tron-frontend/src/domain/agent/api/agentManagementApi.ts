@@ -304,7 +304,7 @@ export function normalizeWorkspaceInternalAgentRecord(
       typeof record.maxParallelToolCalls === "number" &&
       Number.isFinite(record.maxParallelToolCalls)
         ? record.maxParallelToolCalls
-        : 4,
+        : 10,
     source: normalizeWorkspaceInternalAgentSource(record.source),
     selectedServerCodes: Array.isArray(record.selectedServerCodes)
       ? [...new Set(record.selectedServerCodes)]

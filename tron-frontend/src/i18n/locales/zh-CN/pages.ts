@@ -2179,8 +2179,8 @@ export const pages = {
         contributorEmpty: "这次请求没有保留此来源的消息。",
         reductionStat: "压缩前 {{original}}，保留 {{final}} tokens。",
         outcomes: { Reduced: "已压缩", NoGain: "压缩无收益", Omitted: "已跳过", Failed: "失败" },
-        protocolName: "工具定义与请求协议",
-        protocolNote: "独立于消息组装顺序，包含工具定义和模型请求选项的协议开销。",
+        protocolName: "工具定义",
+        protocolNote: "请求中的独立 tools 字段",
         inputCapacityShareNote: "各项显示实际 token / 模型可用输入预算；进度条表示该项占输入预算的比例。",
         requestAllocationNote: "本次分配 {{tokens}} token，按实际需要分配，不代表容量上限。",
         toolSchemaName: "工具定义",
@@ -2816,11 +2816,12 @@ export const pages = {
         optionLabel: "选项说明",
         expandedDomainPersistenceMode: {
           ariaLabel: "解释展开领域持久化模式",
-          summary: "控制 discovery 展开出来的工具在一次运行里保留多久。",
+          summary:
+            "仅对“领域发现”模式生效：决定展开的工具是否继续出现在后续请求的 tools 字段中。字段越稳定，越有利于复用工具定义缓存。",
           optionOne:
-            "持续展开：某个领域一旦被展开，该领域下的工具会在本次运行剩余阶段持续可用。",
+            "本次运行内保留：展开后，这些工具会继续随本次运行的后续请求发送，定义保持稳定，更有利于缓存复用。",
           optionTwo:
-            "临时展开：展开出来的工具只临时可用，相关步骤结束后可以被回收。",
+            "下次工具调用后移除：展开的工具会随下一次请求发送；调用完成后，后续请求不再附带它们，tools 字段会变化，缓存复用可能降低。需要时可重新展开。",
         },
         toolAssignmentMode: {
           ariaLabel: "解释工具分配模式",
@@ -2832,10 +2833,11 @@ export const pages = {
         },
         toolExposureMode: {
           ariaLabel: "解释工具暴露模式",
-          summary: "控制已分配工具在运行时如何暴露给模型。",
-          optionOne: "直接列表：启动时直接把具体工具 schema 提供给模型。",
+          summary: "决定模型一开始能看到哪些工具，以及如何查找其他工具。",
+          optionOne:
+            "直接列表：运行开始时，把分配给智能体的工具及其用法说明提供给模型。",
           optionTwo:
-            "领域发现：先给模型领域目录，再按需展开具体领域并加载工具。",
+            "领域发现：先告诉模型有哪些工具领域；需要某类工具时，再展开对应领域查看可用工具。",
         },
         maxSteps: {
           ariaLabel: "解释最大步数",
@@ -2860,7 +2862,7 @@ export const pages = {
         },
       },
       labels: {
-        expandedDomainPersistenceMode: "展开领域持久化模式",
+        expandedDomainPersistenceMode: "展开后工具何时移除",
         maxSteps: "最大步数",
         maxToolCalls: "最大总工具调用数",
         maxParallelToolCalls: "最大并行工具调用数",
@@ -2877,12 +2879,12 @@ export const pages = {
         allTools: "全部平台工具",
         directList: "直接列表",
         domainDiscovery: "领域发现",
-        ephemeralExpanded: "临时展开",
+        ephemeralExpanded: "下次工具调用后移除",
         mcpDisabled: "禁用",
         allReadOnlyTools: "所有只读工具",
         selectedTools: "指定工具",
         selectedServers: "指定服务",
-        stickyExpanded: "持续展开",
+        stickyExpanded: "本次运行内保留",
       },
       assignmentDialog: {
         mcpTitle: "选择 MCP 服务",

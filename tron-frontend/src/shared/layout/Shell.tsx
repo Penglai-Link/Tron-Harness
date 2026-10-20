@@ -7,7 +7,6 @@ import {
   PanelBottomOpen,
   PanelRightClose,
   PanelRightOpen,
-  ChevronsUpDown,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { ShinyText } from "@/shared/motion";
@@ -1075,7 +1074,6 @@ export function TronShell({
                 {email ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{email}</span> : null}
                 {!email && personAiPlan ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{personAiPlan}</span> : null}
               </span>
-              <ChevronsUpDown className="shrink-0 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
             </>
           )}
         </button>
