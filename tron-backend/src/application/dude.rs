@@ -11,7 +11,6 @@ use crate::domain::dude::*;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 pub use tools::register_dude_tools;
-pub(crate) use work_changes::WORK_PROTOCOL;
 
 pub trait DudeRepository: Send {
     fn soul(&mut self, _code: &str) -> Result<DudeSoul, DudeError> {

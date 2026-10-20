@@ -76,6 +76,7 @@ pub struct RuntimeModelConfig {
     pub api_key: String,
     pub model_name: String,
     pub thinking_enabled: bool,
+    pub supports_developer_role: bool,
     pub reasoning_effort: Option<ReasoningEffort>,
     pub responses_stateful_enabled: bool,
     pub temperature: Option<f64>,

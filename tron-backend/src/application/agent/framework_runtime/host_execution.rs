@@ -43,6 +43,9 @@ impl FrameworkHost {
         )
         .await
         .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?;
+        if let Some(session_code) = context.conversation_code.as_deref() {
+            self.recover_interrupted_checkpoint(session_code).await?;
+        }
         let mut lifecycle = host_run::ProductLifecycle::start(&harness, &context)?;
         let agent = if let Some(code) = context.agent_code.as_deref() {
             self.internal_agent_profile(&context.workspace_code, code, onboarding)
@@ -233,6 +236,27 @@ impl FrameworkHost {
                 }
             },
         );
+        if let Some(prompts) = self.0.prompt_service.get() {
+            let resolved = prompts.runtime_prompt_texts(
+                &[
+                    "agent.goal-judge",
+                    "memory.context-summary",
+                    "skills.guidance",
+                    "a2ui.guidance",
+                    "dude.identity-guidance",
+                    "dude.soul-guidance",
+                    "dude.onboarding-language",
+                    "dude.initial-setup",
+                    "agent.directory-guidance",
+                ],
+                &context.locale,
+                &std::collections::HashMap::new(),
+            )
+            .map_err(|error| AgentError::InvalidConfiguration(format!(
+                "managed developer prompts could not be resolved: {error}"
+            )))?;
+            request.extensions.insert(fw::ManagedDeveloperPrompts(resolved));
+        }
         if let Some(capabilities) = a2ui_options {
             request
                 .extensions

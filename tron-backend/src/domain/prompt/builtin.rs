@@ -54,7 +54,7 @@ pub fn builtin_prompts() -> &'static [BuiltinPromptDefinition] {
     BUILTIN_PROMPTS
         .get_or_init(|| {
             serde_json::from_str(include_str!(
-                "../../../resources/prompts/system-prompts.json"
+                "../../../resources/prompts/builtin-prompts.json"
             ))
             .expect("bundled prompt catalog must be valid JSON")
         })

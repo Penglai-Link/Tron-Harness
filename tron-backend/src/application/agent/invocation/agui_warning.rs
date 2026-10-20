@@ -107,6 +107,7 @@ mod tests {
             api_key: String::new(),
             model_name: model_name.into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: None,

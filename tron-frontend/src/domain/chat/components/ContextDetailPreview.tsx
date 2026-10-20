@@ -24,6 +24,11 @@ function parse(value: unknown): unknown {
   try { return JSON.parse(value); } catch { return value; }
 }
 
+function taggedContent(text: string, tag: string): string | null {
+  const match = text.trim().match(new RegExp(`^<${tag}>([\\s\\S]*?)</${tag}>$`));
+  return match?.[1]?.trim() ?? null;
+}
+
 function Empty({ label }: { label: string }) {
   return <p className="py-2 text-xs text-[var(--color-on-surface-variant)]">{label}</p>;
 }
@@ -142,10 +147,9 @@ function ToolPreview({ value }: { value: unknown }) {
   })}</div>;
 }
 
-function ApplicationPreview({ value }: { value: unknown }) {
+function ApplicationScopePreview({ scope }: { scope: RecordValue }) {
   const { t } = useTranslation("pages");
-  const scope = record(value) && record(value.executionScope) ? value.executionScope : null;
-  const apps = scope ? records(scope.applications) : [];
+  const apps = records(scope.applications);
   if (apps.length) return <div className="divide-y divide-[var(--color-outline-variant)]">{apps.map((app, index) => <section className="space-y-3 py-4 first:pt-0 last:pb-0" key={index}>
     <h3 className="text-xs font-semibold">{String(app.appName ?? app.appCode ?? "")}</h3>
     <StructuredContent value={{
@@ -160,6 +164,67 @@ function ApplicationPreview({ value }: { value: unknown }) {
   </section>)}</div>;
   if (scope?.localDirectory) return <StructuredContent value={{ workingDirectory: scope.localDirectory }} />;
   return <Empty label={t("chat.applications.noSnapshot")} />;
+}
+
+function ToolDomainsPreview({ domains }: { domains: RecordValue[] }) {
+  const { t } = useTranslation("pages");
+  return <section className="space-y-2">
+    <div className="flex items-baseline justify-between gap-3">
+      <h3 className="text-xs font-semibold">{t("chat.applications.preview.toolDomains")}</h3>
+      <span className="shrink-0 text-[11px] text-[var(--color-on-surface-variant)]">{t("chat.applications.preview.domainCount", { count: domains.length })}</span>
+    </div>
+    <div className="divide-y divide-[var(--color-outline-variant)] border-y border-[var(--color-outline-variant)]">
+      {domains.map((domain, index) => {
+        const code = typeof domain.domainCode === "string" ? domain.domainCode : "";
+        const name = typeof domain.name === "string" ? domain.name : code;
+        const sampleTools = Array.isArray(domain.sampleTools) ? domain.sampleTools.filter((tool): tool is string => typeof tool === "string") : [];
+        const toolCount = typeof domain.toolCount === "number" ? domain.toolCount : sampleTools.length;
+        return <details className="group py-2" key={`${code}:${index}`}>
+          <summary className="cursor-pointer text-xs marker:text-[var(--color-on-surface-variant)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)]">
+            <span className="font-semibold text-[var(--color-on-surface)]">{name}</span>
+            {code ? <code className="ml-2 break-all text-[11px] text-[var(--color-on-surface-variant)]">{code}</code> : null}
+            <span className="ml-2 text-[11px] text-[var(--color-on-surface-variant)]">· {t("chat.applications.preview.toolCount", { count: toolCount })}</span>
+            {typeof domain.hasMutationTools === "boolean" ? <span className="ml-2 text-[11px] text-[var(--color-on-surface-variant)]">· {t(`chat.applications.preview.${domain.hasMutationTools ? "canModify" : "readOnly"}`)}</span> : null}
+            {typeof domain.description === "string" && domain.description ? <span className="mt-1 block pl-4 leading-5 text-[var(--color-on-surface-variant)]">{domain.description}</span> : null}
+          </summary>
+          {sampleTools.length ? <div className="pb-1 pl-4 pt-2">
+            <p className="mb-1.5 text-[11px] text-[var(--color-on-surface-variant)]">{t("chat.applications.preview.sampleTools")}</p>
+            <div className="flex flex-wrap gap-1">{sampleTools.map((tool, toolIndex) => <code className="break-all rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[11px]" key={`${tool}:${toolIndex}`}>{tool}</code>)}</div>
+          </div> : null}
+        </details>;
+      })}
+    </div>
+  </section>;
+}
+
+function ApplicationMessagePart({ part }: { part: RecordValue }) {
+  const { t } = useTranslation("pages");
+  const text = typeof part.text === "string" ? part.text : null;
+  if (text) {
+    const directory = taggedContent(text, "available_tool_domains");
+    if (directory !== null) {
+      const domains = parse(directory);
+      if (Array.isArray(domains) && domains.every(record)) return <ToolDomainsPreview domains={domains} />;
+    }
+    const execution = taggedContent(text, "application-execution-context");
+    if (execution !== null) {
+      const jsonStart = execution.indexOf("{");
+      const scope = jsonStart >= 0 ? parse(execution.slice(jsonStart)) : null;
+      if (record(scope)) return <section className="space-y-2">
+        <h3 className="text-xs font-semibold">{t("chat.applications.preview.executionLocation")}</h3>
+        <ApplicationScopePreview scope={scope} />
+      </section>;
+    }
+  }
+  return <MessagePart part={part} />;
+}
+
+function ApplicationPreview({ value }: { value: unknown }) {
+  const { t } = useTranslation("pages");
+  const messages = record(value) ? records(value.messages) : [];
+  if (messages.length) return <div className="space-y-4">{messages.flatMap((message) => records(message.parts)).map((part, index) => <ApplicationMessagePart key={index} part={part} />)}</div>;
+  const scope = record(value) && record(value.executionScope) ? value.executionScope : null;
+  return scope ? <ApplicationScopePreview scope={scope} /> : <Empty label={t("chat.applications.noSnapshot")} />;
 }
 
 export function ContextDetailPreview({ block, value, onOpenPrompt }: { block: ContextDetailBlock; value: unknown; onOpenPrompt?: (code: string) => void }) {

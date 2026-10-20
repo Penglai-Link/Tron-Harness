@@ -393,7 +393,8 @@ impl AgentRunContextBuilder {
                 AgentInvocationError::RuntimeFailed("internal agent config load failed".into())
             })?;
             if let Some(guidance) = guidance {
-                messages.push(AgentMessage::system(guidance));
+                messages.push(AgentMessage::system(guidance)
+                    .with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Agent));
                 prompt_prefix_sources.push(None);
             }
         }
@@ -406,7 +407,7 @@ impl AgentRunContextBuilder {
                 "chat.ask-user",
                 &locale,
                 &empty_runtime_prompt_values,
-            )?));
+            )?).with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Plugin));
             prompt_prefix_sources
                 .push(Some(managed_system_prompt_source("chat.ask-user", &locale)));
         }
@@ -426,7 +427,7 @@ impl AgentRunContextBuilder {
                 "agent.domain-discovery",
                 &locale,
                 &runtime_values,
-            )?));
+            )?).with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Plugin));
             prompt_prefix_sources.push(Some(managed_system_prompt_source(
                 "agent.domain-discovery",
                 &locale,

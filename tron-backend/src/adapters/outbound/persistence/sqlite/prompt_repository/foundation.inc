@@ -70,7 +70,7 @@ impl PromptRepository for SqlitePromptRepositorySql<'_> {
             .execute(
                 "UPDATE prompts
              SET display_name = ?2, prompt_body = ?3, description = ?4, enabled = ?5,
-                 version = ?6, updated_at = ?7
+                 version = ?6, updated_at = ?7, category = ?9
              WHERE prompt_code = ?1 AND version = ?8",
                 params![
                     prompt.prompt_code,
@@ -81,6 +81,7 @@ impl PromptRepository for SqlitePromptRepositorySql<'_> {
                     prompt.version,
                     timestamp_to_millis(&prompt.updated_at),
                     expected_version,
+                    category_to_storage(prompt.category),
                 ],
             )
             .map_err(storage_error)?;

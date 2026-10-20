@@ -10,7 +10,7 @@ use crate::{
     application::{
         llm::LlmRuntimeService,
         model_router::LlmModelRouter,
-        prompt::{PromptPageQuery, PromptRepository},
+        prompt::PromptRepository,
         variable::VariableService,
     },
     domain::prompt::{
@@ -112,36 +112,44 @@ impl PromptService {
                 prompt.catalog_key.as_deref() == Some(definition.catalog_key.as_str())
                     || prompt.prompt_code == definition.prompt_code
             }) {
-                if current.built_in && current.version < definition.version {
+                if current.built_in
+                    && (current.version < definition.version || current.category != definition.category)
+                {
                     let mut prompt = current.clone();
-                    let translation = definition
-                        .translations
-                        .get("en-US")
-                        .or_else(|| definition.translations.values().next())
-                        .ok_or(crate::domain::prompt::PromptError::StorageFailure)?;
                     let now = current_timestamp();
-                    prompt.display_name = translation.display_name.clone();
-                    prompt.prompt_body = translation.prompt_body.clone();
-                    prompt.description = Some(translation.description.clone());
-                    prompt.version = definition.version;
-                    prompt.variables =
-                        crate::domain::prompt::builtin_prompt_variables(&definition.catalog_key)
-                            .expect(
-                                "builtin prompt definition must produce its variable contracts",
-                            );
-                    prompt.translations = definition
-                        .translations
-                        .iter()
-                        .map(|(locale, value)| crate::domain::prompt::PromptTranslation {
-                            locale: locale.clone(),
-                            display_name: value.display_name.clone(),
-                            prompt_body: value.prompt_body.clone(),
-                            description: Some(value.description.clone()),
-                            status: crate::domain::prompt::PromptTranslationStatus::Published,
-                            source_version: definition.version,
-                            updated_at: now.clone(),
-                        })
-                        .collect();
+                    prompt.category = definition.category;
+                    if current.version < definition.version {
+                        let translation = definition
+                            .translations
+                            .get("en-US")
+                            .or_else(|| definition.translations.values().next())
+                            .ok_or(crate::domain::prompt::PromptError::StorageFailure)?;
+                        prompt.display_name = translation.display_name.clone();
+                        prompt.prompt_body = translation.prompt_body.clone();
+                        prompt.description = Some(translation.description.clone());
+                        prompt.version = definition.version;
+                        prompt.variables =
+                            crate::domain::prompt::builtin_prompt_variables(&definition.catalog_key)
+                                .expect("builtin prompt definition must produce its variable contracts");
+                        prompt.translations = definition
+                            .translations
+                            .iter()
+                            .map(|(locale, value)| crate::domain::prompt::PromptTranslation {
+                                locale: locale.clone(),
+                                display_name: value.display_name.clone(),
+                                prompt_body: value.prompt_body.clone(),
+                                description: Some(value.description.clone()),
+                                status: crate::domain::prompt::PromptTranslationStatus::Published,
+                                source_version: definition.version,
+                                updated_at: now.clone(),
+                            })
+                            .collect();
+                    } else {
+                        // A locally edited built-in keeps its text when only
+                        // its catalog category changes.
+                        prompt.version = prompt.version.checked_add(1)
+                            .ok_or(crate::domain::prompt::PromptError::StorageFailure)?;
+                    }
                     prompt.updated_at = now;
                     self.repository
                         .lock()
@@ -295,22 +303,40 @@ impl PromptService {
         locale: &str,
         runtime_values: &HashMap<PromptRuntimeProvider, Value>,
     ) -> Result<Option<String>, crate::domain::prompt::PromptError> {
-        let prompt = self
-            .platform_page(PromptPageQuery {
-                current: 1,
-                size: 200,
-                search: None,
-                category: None,
-                enabled: None,
-            })
-            .and_then(|page| {
-                page.records
-                    .into_iter()
-                    .find(|record| record.catalog_key.as_deref() == Some(catalog_key))
-                    .ok_or(crate::domain::prompt::PromptError::NotFound)
-            });
+        let records = self.all_prompts()?;
+        self.runtime_prompt_text_from_records(&records, catalog_key, locale, runtime_values)
+    }
+
+    pub fn runtime_prompt_texts(
+        &self,
+        catalog_keys: &[&str],
+        locale: &str,
+        runtime_values: &HashMap<PromptRuntimeProvider, Value>,
+    ) -> Result<std::collections::BTreeMap<String, String>, crate::domain::prompt::PromptError> {
+        let records = self.all_prompts()?;
+        let mut resolved = std::collections::BTreeMap::new();
+        for key in catalog_keys {
+            if let Some(text) =
+                self.runtime_prompt_text_from_records(&records, key, locale, runtime_values)?
+            {
+                resolved.insert((*key).to_owned(), text);
+            }
+        }
+        Ok(resolved)
+    }
+
+    fn runtime_prompt_text_from_records(
+        &self,
+        records: &[Prompt],
+        catalog_key: &str,
+        locale: &str,
+        runtime_values: &HashMap<PromptRuntimeProvider, Value>,
+    ) -> Result<Option<String>, crate::domain::prompt::PromptError> {
+        let prompt = records
+            .iter()
+            .find(|record| record.catalog_key.as_deref() == Some(catalog_key));
         let (prompt_body, variables) = match prompt {
-            Ok(prompt) => {
+            Some(prompt) => {
                 if !prompt.enabled {
                     return Ok(None);
                 }
@@ -326,9 +352,9 @@ impl PromptService {
                     })
                     .map(|value| value.prompt_body.clone())
                     .unwrap_or(prompt.prompt_body.clone());
-                (prompt_body, prompt.variables)
+                (prompt_body, prompt.variables.clone())
             }
-            Err(crate::domain::prompt::PromptError::NotFound) => {
+            None => {
                 let definition = crate::domain::prompt::builtin_prompt(catalog_key)
                     .ok_or(crate::domain::prompt::PromptError::NotFound)?;
                 let prompt_body = definition
@@ -341,7 +367,6 @@ impl PromptService {
                     .ok_or(crate::domain::prompt::PromptError::NotFound)?;
                 (prompt_body, variables)
             }
-            Err(error) => return Err(error),
         };
         Ok(Some(self.render_prompt_body(
             &variables,

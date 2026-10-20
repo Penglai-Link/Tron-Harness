@@ -317,7 +317,7 @@ impl AppState {
             )),
             Arc::new(HttpLlmRuntimeClient::with_model_client(
                 agent_model_client.clone(),
-            )),
+            ).with_prompt_service(prompts.clone())),
         );
         let prompts = prompts.with_llm_runtime(llm_runtime.clone());
         let llm_router = LlmModelRouter::new(model_providers.clone());
@@ -389,6 +389,7 @@ impl AppState {
         )
         .expect("initialize Framework storage configuration");
         agent_framework.bind_runtime_config(runtime_config.clone());
+        agent_framework.bind_prompt_service(prompts.clone());
         agent_framework
             .bind_personai(model_providers.clone())
             .expect("initial PersonAI tool credentials");

@@ -1275,6 +1275,7 @@ async fn rerank_transport_dispatches_native_model_id_and_preserves_scores_and_us
         config: (&config).into(),
         factory: Arc::new(sdk::FixedModelTransportFactory(Arc::new(transport))),
         chat_fallback: false,
+        chat_instruction: None,
     };
     let response = fw::RerankModel::rerank_with_usage(
         &model,

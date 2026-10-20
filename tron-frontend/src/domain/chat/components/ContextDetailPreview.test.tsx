@@ -33,6 +33,31 @@ describe.each(["zh-CN", "en-US"])("context inspector in %s", (locale) => {
     expect(container.textContent).not.toContain("6906");
   });
 
+  it("previews the native application-context messages from the saved request", async () => {
+    await i18n.changeLanguage(locale);
+    const messages = [
+      { role: "user", parts: [{ type: "text", text: '<available_tool_domains>[{"domainCode":"app","name":"Application tools","description":"Manage workspace applications.","toolCount":5,"sampleTools":["app.page"],"hasMutationTools":true},{"domainCode":"git","name":"Git tools","description":"Inspect branches.","toolCount":2,"sampleTools":["git.status"],"hasMutationTools":false}]</available_tool_domains>' }] },
+      { role: "user", parts: [{ type: "text", text: "Current workspace: demo" }] },
+    ];
+    const { container } = render(<ContextDetailPreview block="applicationContext" value={{ messages }} />);
+    expect(container.textContent).toContain("Application tools");
+    expect(container.textContent).toContain("app.page");
+    expect(container.textContent).toContain("Current workspace: demo");
+    expect(container.querySelectorAll("details")).toHaveLength(2);
+    expect(container.querySelector("details")?.open).toBe(false);
+    expect(container.textContent).not.toContain("domainCode");
+    expect(container.textContent).not.toContain("sampleTools");
+    expect(container.textContent).not.toContain(i18n.t("chat.applications.noSnapshot", { ns: "pages" }));
+    expect(contextDetailRawValue("applicationContext", { messages })).toEqual(messages);
+  });
+
+  it("groups the execution scope separately from tool domains", async () => {
+    await i18n.changeLanguage(locale);
+    render(<ContextDetailPreview block="applicationContext" value={{ messages: [{ role: "user", parts: [{ type: "context", text: `<application-execution-context>\nRuntime metadata\n${JSON.stringify({ localDirectory: "/workspace/project", applications: [] })}\n</application-execution-context>` }] }] }} />);
+    expect(screen.getByRole("heading", { name: i18n.t("chat.applications.preview.executionLocation", { ns: "pages" }) })).toBeTruthy();
+    expect(screen.getByText("/workspace/project")).toBeTruthy();
+  });
+
   it("makes the four native history messages and hidden interaction answer readable", async () => {
     await i18n.changeLanguage(locale);
     const { container } = render(<ContextDetailPreview block="history" value={{ messages: [

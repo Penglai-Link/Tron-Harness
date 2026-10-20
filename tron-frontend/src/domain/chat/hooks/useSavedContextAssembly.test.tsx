@@ -17,6 +17,13 @@ it("loads the persisted report when reopening a session",async()=>{
  await waitFor(()=>expect(view.result.current.snapshot).toEqual(saved));
  expect(request).toHaveBeenCalledWith("GET /api/v1/chats/sessions/get-context-assembly",expect.objectContaining({queryParams:{sessionCode:"session"}}));
 });
+it("reads a Dude session with its ownership header",async()=>{
+ request.mockResolvedValue({snapshot:null});
+ renderHook(()=>useSavedContextAssembly("dude-session",null,"main-dude"),{wrapper});
+ await waitFor(()=>expect(request).toHaveBeenCalledWith("GET /api/v1/chats/sessions/get-context-assembly",expect.objectContaining({
+  queryParams:{sessionCode:"dude-session"},headers:{"X-Dude-Code":"main-dude"},
+ })));
+});
 it("uses the persisted live event report without a second request",()=>{
  const live=snapshot("8");const view=renderHook(()=>useSavedContextAssembly("session",live),{wrapper});
  expect(view.result.current.snapshot).toBe(live);expect(request).not.toHaveBeenCalled();

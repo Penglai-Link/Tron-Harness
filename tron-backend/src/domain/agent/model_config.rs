@@ -15,6 +15,8 @@ pub struct AgentModelConfig {
     pub model_name: String,
     #[serde(default)]
     pub thinking_enabled: bool,
+    #[serde(default)]
+    pub supports_developer_role: bool,
     pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(default)]
     pub responses_stateful_enabled: bool,

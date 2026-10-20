@@ -1,4 +1,4 @@
-import { toolCommandLinePreview, toolDisplayName } from "@eliteforge/agent-ui-chat-core";
+import { toolCommandLinePreview, toolDisplayName, type ToolActionSummary } from "@eliteforge/agent-ui-chat-core";
 import type { ChatWorkRailLabels } from "@tron/chat-core";
 import { fetchToolDomains, listTools } from "@/domain/agent/api";
 import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";
@@ -32,6 +32,16 @@ export function useChatWorkRailLabels() {
 
   return useMemo<ChatWorkRailLabels>(() => {
     const number = new Intl.NumberFormat(i18n.language);
+    const groupSummary = (summary: ToolActionSummary) => {
+      const parts: string[] = [];
+      if (summary.commands) parts.push(t("chat.management.tool.actionSummary.commands", { count: summary.commands }));
+      if (summary.editedFiles) parts.push(t("chat.management.tool.actionSummary.editedFiles", { count: summary.editedFiles }));
+      if (summary.editOperations) parts.push(t("chat.management.tool.actionSummary.editOperations", { count: summary.editOperations }));
+      if (summary.searches) parts.push(t("chat.management.tool.actionSummary.searches", { count: summary.searches }));
+      if (summary.reads) parts.push(t("chat.management.tool.actionSummary.reads", { count: summary.reads }));
+      if (summary.otherActions) parts.push(t("chat.management.tool.actionSummary.otherActions", { count: summary.otherActions }));
+      return i18n.language.startsWith("zh") ? parts.join("，") : new Intl.ListFormat(i18n.language, { style: "short", type: "conjunction" }).format(parts);
+    };
     const resolveToolName = (runtimeName: string, args: unknown) => {
       const commandLine = toolCommandLinePreview(runtimeName, args);
       if (commandLine) {
@@ -75,6 +85,7 @@ export function useChatWorkRailLabels() {
         domainExpanded: (name) => t("chat.management.tool.domainExpanded", { name }),
         domainExpanding: (name) => t("chat.management.tool.domainExpanding", { name }),
         group: (count) => t("chat.management.tool.ranCommands", { count }),
+        groupSummary,
         statusDone: t("chat.management.tool.badgeDone"),
         statusRunning: t("chat.management.tool.badgeRunning"),
         parameters: t("chat.management.tool.parameters"),

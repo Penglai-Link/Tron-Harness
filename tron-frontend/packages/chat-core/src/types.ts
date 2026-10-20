@@ -1,4 +1,4 @@
-import type { ChatAnnotation } from "@eliteforge/agent-ui-chat-core";
+import type { ChatAnnotation, ToolActionSummary } from "@eliteforge/agent-ui-chat-core";
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
 export type ChatSessionSourceType = "MANUAL" | "TASK" | "AUTOMATION" | "TERMINAL";
 export type ChatMessageRole = "USER" | "ASSISTANT";
@@ -221,6 +221,7 @@ export interface ChatToolWorkLabels {
   domainExpanded: (name: string) => string;
   domainExpanding: (name: string) => string;
   group: (count: number) => string;
+  groupSummary?: (summary: ToolActionSummary) => string;
   statusDone: string;
   statusRunning: string;
   parameters: string;

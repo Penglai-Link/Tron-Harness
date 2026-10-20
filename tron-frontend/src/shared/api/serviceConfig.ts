@@ -42,6 +42,7 @@ interface ServiceQueryOptions<T> {
   domain: ServiceDomain;
   enabled?: boolean;
   endpoint: string;
+  headers?: HeadersInit;
   mockData: () => T;
   params?: EndpointParams;
   deps?: DependencyList;
@@ -124,7 +125,7 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
   };
 }
 
-export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true, endpoint, mockData, params, deps = [], refreshKey = 0, select = selectApiData<T>, suppressErrorToast = false }: ServiceQueryOptions<T>): ServiceQueryState<T> {
+export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true, endpoint, headers: requestHeaders, mockData, params, deps = [], refreshKey = 0, select = selectApiData<T>, suppressErrorToast = false }: ServiceQueryOptions<T>): ServiceQueryState<T> {
   const toast = useToast();
   const dataSource = getServiceDataSource(domain);
   const shouldUseMockData = dataSource === "mock";
@@ -139,6 +140,7 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
   selectRef.current = select;
 
   const paramsKey = JSON.stringify(params ?? {});
+  const headersKey = JSON.stringify(Object.fromEntries(new Headers(requestHeaders)));
   const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
   const initialRefreshKey = shouldUseMockData ? refreshKey : undefined;
   const initialValue = useMemo(
@@ -168,6 +170,7 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
     const headers = new Headers(
       accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     );
+    new Headers(requestHeaders).forEach((value, key) => headers.set(key, value));
     applyCurrentLocaleHeader(headers);
     setLoading(true);
     setError(null);
@@ -205,7 +208,7 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
       });
 
     return () => controller.abort();
-  }, [dataSource, domain, enabled, refreshKey, request.method, request.url, retryKey, suppressErrorToast, toast]);
+  }, [dataSource, domain, enabled, headersKey, refreshKey, request.method, request.url, retryKey, suppressErrorToast, toast]);
 
   return { data, loading, error, retry };
 }

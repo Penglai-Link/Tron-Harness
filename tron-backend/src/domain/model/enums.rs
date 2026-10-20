@@ -51,6 +51,7 @@ pub enum ModelCapability {
     MultimodalAll,
     TextGeneration,
     DeepThinking,
+    SupportsDeveloperRole,
     VisionUnderstanding,
     ImageGeneration,
     VideoGeneration,

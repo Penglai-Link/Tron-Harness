@@ -201,6 +201,17 @@ async fn native_skills_share_prefix_budget_once_under_ratio_and_hard_cap() {
             .join("\n");
         assert_eq!(text.matches("<available_skills>").count(), 1);
         assert_eq!(text.matches("trusted workspace rule").count(), 1);
+        let host_rule = requests[0]
+            .messages
+            .iter()
+            .find(|message| message.content.text() == "trusted workspace rule")
+            .expect("host rule");
+        assert_eq!(host_rule.instruction_origin, None);
+        let catalog = requests[0].messages.iter().find(|message|
+            message.content.text().contains("<available_skills>"))
+            .expect("skill catalog");
+        assert_eq!(catalog.role, fw::Role::User);
+        assert_eq!(catalog.instruction_origin, None);
         let reports = reports.0.lock().unwrap();
         assert_eq!(reports.len(), 1);
         let report = &reports[0];

@@ -18,6 +18,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 pub struct HttpLlmRuntimeClient {
     models: Arc<HttpModelClient>,
     auto_routers: fw::AutoRouters,
+    prompts: Option<crate::application::prompt::PromptService>,
 }
 impl HttpLlmRuntimeClient {
     pub fn new(client: sdk::ModelHttpClient) -> Self {
@@ -26,16 +27,22 @@ impl HttpLlmRuntimeClient {
                 HttpModelProviderClient::new(client),
             ))),
             auto_routers: default_auto_routers(),
+            prompts: None,
         }
     }
     pub fn with_model_client(models: Arc<HttpModelClient>) -> Self {
         Self {
             models,
             auto_routers: default_auto_routers(),
+            prompts: None,
         }
     }
     pub fn with_auto_routers(mut self, routers: fw::AutoRouters) -> Self {
         self.auto_routers = routers;
+        self
+    }
+    pub fn with_prompt_service(mut self, prompts: crate::application::prompt::PromptService) -> Self {
+        self.prompts = Some(prompts);
         self
     }
     fn routing_for(&self, model: &AgentModelConfig, reference: &fw::ModelRef) -> fw::AutoRouters {
@@ -75,6 +82,7 @@ pub(crate) fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> Agen
         api_key: config.api_key.clone(),
         model_name: config.model_name.clone(),
         thinking_enabled: config.thinking_enabled,
+        supports_developer_role: config.supports_developer_role,
         reasoning_effort: config.reasoning_effort,
         responses_stateful_enabled: config.responses_stateful_enabled,
         temperature: config.temperature,
@@ -381,6 +389,7 @@ mod tests {
             api_key: "fixture".into(),
             model_name: "fixture".into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: None,
@@ -468,6 +477,7 @@ mod tests {
             api_key: "fixture".into(),
             model_name: "fixture".into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: None,
@@ -572,6 +582,7 @@ mod tests {
             api_key: "fixture".into(),
             model_name: "fixture".into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: None,
@@ -657,6 +668,7 @@ mod tests {
             api_key: "fixture".into(),
             model_name: "fixture".into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: None,
@@ -730,6 +742,7 @@ mod tests {
             api_key: "synthetic".into(),
             model_name: "synthetic-vision".into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: Some(0.0),

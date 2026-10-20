@@ -3,6 +3,7 @@ import { cn } from "@/shared/lib/utils";
 import { useState } from "react";
 import type { ChatSession } from "@/domain/chat/model";
 import type { ProjectRecord } from "@/domain/project";
+import { sortPinnedSessions } from "../hooks/usePinnedSessionCodes";
 
 import MessageItem from "./MessageItem";
 import ActionsMenu from "./ActionsMenu";
@@ -20,9 +21,12 @@ const SessionGroup = ({
   sessions,
   selected,
   pinned,
+  pinnedSessionCodes,
   onEdit,
   onPinnedChange,
   onRefresh,
+  onToggleSessionPin,
+  onRemoveSessionPin,
   onSelect,
 }: {
   project: ProjectRecord;
@@ -32,9 +36,12 @@ const SessionGroup = ({
   sessions: ChatSession[];
   selected: boolean;
   pinned: boolean;
+  pinnedSessionCodes: string[];
   onEdit: () => void;
   onPinnedChange: () => void;
   onRefresh: () => void;
+  onToggleSessionPin: (sessionCode: string) => void;
+  onRemoveSessionPin: (sessionCode: string) => void;
   onSelect: (projectCode: string) => void;
 }) => {
   const { t } = useTranslation("shell");
@@ -75,13 +82,16 @@ const SessionGroup = ({
       />
       {open ? (
         <div className="flex flex-col gap-1">
-          {sessions.slice(0, visibleSessionCount).map((session) => (
+          {sortPinnedSessions(sessions, pinnedSessionCodes).slice(0, visibleSessionCount).map((session) => (
             <MessageItem
               key={session.sessionCode}
               running={runningSessionCode === session.sessionCode}
               active={activeSessionCode === session.sessionCode}
               onNavigate={onNavigate}
               session={session}
+              pinned={pinnedSessionCodes.includes(session.sessionCode)}
+              onTogglePin={() => onToggleSessionPin(session.sessionCode)}
+              onRemovePin={() => onRemoveSessionPin(session.sessionCode)}
             />
           ))}
           {sessions.length === 0 ? (

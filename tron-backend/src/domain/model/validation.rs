@@ -78,6 +78,7 @@ pub fn model_capability_model_type(value: ModelCapability) -> ModelType {
         ModelCapability::MultimodalAll
         | ModelCapability::TextGeneration
         | ModelCapability::DeepThinking
+        | ModelCapability::SupportsDeveloperRole
         | ModelCapability::SpeechRecognition
         | ModelCapability::SpeechSynthesis
         | ModelCapability::RealtimeMultimodal

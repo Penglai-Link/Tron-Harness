@@ -16,6 +16,7 @@ fn request_builders_send_externalized_tool_notice_to_providers() {
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,

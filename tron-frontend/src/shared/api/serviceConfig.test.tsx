@@ -38,13 +38,14 @@ function deferredResponse(data: QueryRecord[]) {
   };
 }
 
-function QueryHarness() {
+function QueryHarness({ headers }: { headers?: HeadersInit }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const state = useServiceQueryState<QueryRecord[]>({
     apiInitialData: () => [],
     deps: [],
     domain: "chat",
     endpoint: "GET /api/test-records",
+    headers,
     mockData: () => [{ label: "mock" }],
     refreshKey,
   });
@@ -72,6 +73,15 @@ describe("useServiceQueryState", () => {
     cleanup();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+  });
+
+  it("forwards a Dude scope header alongside the visible locale", async () => {
+    vi.mocked(fetch).mockImplementation(() => jsonResponse([]));
+    render(<ToastProvider><QueryHarness headers={{ "X-Dude-Code": "main-dude" }} /></ToastProvider>);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const headers = new Headers(vi.mocked(fetch).mock.calls[0]?.[1]?.headers);
+    expect(headers.get("X-Dude-Code")).toBe("main-dude");
+    expect(headers.get("Accept-Language")).toBe("en-US");
   });
 
   it("keeps API data visible while refreshKey refetches", async () => {

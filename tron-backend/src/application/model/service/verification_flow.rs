@@ -21,6 +21,7 @@ impl ModelService {
             api_key,
             model_name: model.model_name.clone(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: None,

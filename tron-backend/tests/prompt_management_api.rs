@@ -20,6 +20,79 @@ use tron_backend::{
 use common::{app_with_config, authenticated_request, response_json};
 
 #[tokio::test]
+async fn developer_prompts_are_managed_separately_from_system_prompts() {
+    let database_url = temp_database_url("developer-prompt-category");
+    let database_url = database_url.with_file_name(format!(
+        "seeded-{}", database_url.file_name().unwrap().to_string_lossy()
+    ));
+    let router = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    for prompt_code in [
+        "SYS_CHAT_ASK_USER",
+        "SYS_AGENT_DOMAIN_DISCOVERY",
+        "DEV_AGENT_GOAL_JUDGE",
+        "DEV_MEMORY_CONTEXT_SUMMARY",
+        "DEV_SKILLS_GUIDANCE",
+        "DEV_A2UI_GUIDANCE",
+        "DEV_AGENT_DELEGATED_SYNC",
+        "DEV_AGENT_DELEGATED_BACKGROUND",
+        "DEV_MODEL_CHAT_RERANK",
+        "DEV_DUDE_IDENTITY_GUIDANCE",
+        "DEV_DUDE_SOUL_GUIDANCE",
+        "DEV_DUDE_ONBOARDING_LANGUAGE",
+        "DEV_DUDE_INITIAL_SETUP",
+        "DEV_AGENT_DIRECTORY_GUIDANCE",
+    ] {
+        let response = authenticated_request(
+            &router,
+            Method::POST,
+            "/api/v1/admin/platform/prompts/detail",
+            Some(json!({ "promptCode": prompt_code })),
+        ).await;
+        assert_eq!(response.status(), StatusCode::OK, "{prompt_code}");
+        let detail = response_json(response).await;
+        assert_eq!(detail["data"]["category"], json!("DEVELOPER"), "{prompt_code}");
+    }
+    let terminal = post_json(
+        &router,
+        "/api/v1/admin/platform/prompts/detail",
+        json!({ "promptCode": "SYS_TERMINAL_COMMAND_EXACT" }),
+    ).await;
+    assert_eq!(terminal["data"]["category"], json!("TEMPLATE"));
+    let custom = post_json(
+        &router,
+        "/api/v1/admin/platform/prompts/create",
+        json!({
+            "displayName": "Custom developer rule",
+            "category": "DEVELOPER",
+            "promptBody": "Follow the workspace rule.",
+            "description": null,
+            "enabled": true,
+            "variables": []
+        }),
+    ).await;
+    assert_eq!(custom["data"]["category"], json!("DEVELOPER"));
+
+    Connection::open(&database_url).unwrap().execute(
+        "UPDATE prompts SET category = 'SYSTEM', version = 100, prompt_body = 'Locally edited rule' WHERE prompt_code = 'SYS_CHAT_ASK_USER'",
+        [],
+    ).unwrap();
+    let restarted = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let migrated = post_json(
+        &restarted,
+        "/api/v1/admin/platform/prompts/detail",
+        json!({ "promptCode": "SYS_CHAT_ASK_USER" }),
+    ).await;
+    assert_eq!(migrated["data"]["category"], json!("DEVELOPER"));
+    assert_eq!(migrated["data"]["promptBody"], json!("Locally edited rule"));
+}
+
+#[tokio::test]
 async fn platform_prompt_lifecycle_uses_global_records_and_prompt_local_envelopes() {
     let (router, database_url) = prompt_app("platform-prompt-lifecycle");
     let created = post_json(

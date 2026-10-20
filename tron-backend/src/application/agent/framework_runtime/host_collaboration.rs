@@ -410,14 +410,21 @@ impl Runtime {
                 ExecutionLimits::AgentDefinition | ExecutionLimits::AgentDefinitionDetached
             )
         {
-            let guidance = crate::domain::agent::AgentMessage::system(match limits {
-                ExecutionLimits::AgentDefinitionDetached => {
-                    "This is a background delegated agent_spawn task running independently of the caller's turn. Return a bounded result or the precise missing facts to your caller. Do not ask the user directly, close the owning Dude's work, or publish notifications. Parallel sub-work can use agent_spawn with background=true; work needing user decisions or durable continuation belongs in thread_create."
-                }
-                _ => {
-                    "This is a synchronous delegated agent_spawn task. Return a bounded result or the precise missing facts to your caller. Do not ask the user directly, close the owning Dude's work, or publish notifications. Parallel sub-work can use agent_spawn with background=true; work needing user decisions or durable continuation belongs in thread_create."
-                }
-            });
+            let key = match limits {
+                ExecutionLimits::AgentDefinitionDetached => "agent.delegated-background",
+                _ => "agent.delegated-sync",
+            };
+            let text = if let Some(prompts) = host.0.prompt_service.get() {
+                prompts.runtime_prompt_text(key, &context.locale, &std::collections::HashMap::new())
+                    .map_err(|error| failure(format!("managed developer prompt `{key}`: {error}")))?
+                    .ok_or_else(|| failure(format!("managed developer prompt `{key}` is disabled")))?
+            } else {
+                crate::domain::prompt::builtin_prompt_text(key, &context.locale)
+                    .ok_or_else(|| failure(format!("bundled developer prompt `{key}` is missing")))?
+                    .to_owned()
+            };
+            let guidance = crate::domain::agent::AgentMessage::system(text)
+                .with_instruction_origin(fw::InstructionOrigin::Plugin);
             std::sync::Arc::make_mut(&mut context.messages).push(guidance.clone());
             if let Some(memory) = &mut context.short_term_memory {
                 memory.prompt_prefix.push(guidance);

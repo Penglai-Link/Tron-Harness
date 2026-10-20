@@ -96,6 +96,7 @@ impl From<&AgentModelConfig> for sdk::AgentModelConfig {
             api_key: config.api_key.clone(),
             model_name: config.model_name.clone(),
             thinking_enabled: config.thinking_enabled,
+            supports_developer_role: config.supports_developer_role,
             reasoning_effort: config.reasoning_effort.map(sdk_reasoning_effort),
             responses_stateful_enabled: config.responses_stateful_enabled,
             temperature: config.temperature,
@@ -117,6 +118,7 @@ impl From<&sdk::AgentModelConfig> for AgentModelConfig {
             api_key: config.api_key.clone(),
             model_name: config.model_name.clone(),
             thinking_enabled: config.thinking_enabled,
+            supports_developer_role: config.supports_developer_role,
             reasoning_effort: config.reasoning_effort.map(domain_reasoning_effort),
             responses_stateful_enabled: config.responses_stateful_enabled,
             temperature: config.temperature,
@@ -307,6 +309,7 @@ impl From<&AgentMessage> for sdk::AgentMessage {
         Self {
             // Both sides share the framework annotation type.
             annotations: message.annotations.clone(),
+            instruction_origin: message.instruction_origin,
             role: message.role.clone(),
             parts: message
                 .parts
@@ -321,6 +324,7 @@ impl From<AgentMessage> for sdk::AgentMessage {
     fn from(message: AgentMessage) -> Self {
         Self {
             annotations: message.annotations,
+            instruction_origin: message.instruction_origin,
             role: message.role,
             parts: message.parts.into_iter().map(Into::into).collect(),
         }
@@ -331,6 +335,7 @@ impl From<sdk::AgentMessage> for AgentMessage {
     fn from(message: sdk::AgentMessage) -> Self {
         Self {
             annotations: message.annotations,
+            instruction_origin: message.instruction_origin,
             role: message.role,
             parts: message.parts.into_iter().map(Into::into).collect(),
         }
@@ -501,12 +506,23 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn developer_instruction_origin_survives_domain_http_bridge() {
+        let source = AgentMessage::system("agent custom rule")
+            .with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Agent);
+        let wire = sdk::AgentMessage::from(&source);
+        assert_eq!(wire.instruction_origin, source.instruction_origin);
+        let restored = AgentMessage::from(wire);
+        assert_eq!(restored, source);
+    }
+
     /// The hand-written conversions must agree with the serde round trip they
     /// replaced, for every message shape.
     #[test]
     fn conversions_match_the_serde_round_trip() {
         let domain_message = AgentMessage {
             annotations: Vec::new(),
+            instruction_origin: None,
             role: "user".into(),
             parts: vec![
                 AgentMessagePart::Text {

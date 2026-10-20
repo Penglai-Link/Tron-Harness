@@ -240,6 +240,7 @@ mod tests {
                 api_path: None,
                 api_key: String::new(),
                 thinking_enabled: false,
+                supports_developer_role: false,
                 reasoning_effort: None,
                 responses_stateful_enabled: false,
                 max_tokens: None,

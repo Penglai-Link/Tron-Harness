@@ -6,6 +6,7 @@ import ActionButton from "./ActionButton";
 import Item from "./Item";
 import type { ChatSession } from "@/domain/chat/model";
 import { Button } from "@/components/ui/button";
+import { sortPinnedSessions } from "../hooks/usePinnedSessionCodes";
 
 const recentSessionListPageSize = 5;
 
@@ -15,12 +16,18 @@ export default function RecentSessionGroup({
   activeSessionCode,
   onNavigate,
   sessions,
+  pinnedSessionCodes,
+  onToggleSessionPin,
+  onRemoveSessionPin,
 }: {
   label?: string;
   runningSessionCode: string;
   activeSessionCode: string;
   onNavigate: (path: string) => void;
   sessions: ChatSession[];
+  pinnedSessionCodes: string[];
+  onToggleSessionPin: (sessionCode: string) => void;
+  onRemoveSessionPin: (sessionCode: string) => void;
 }) {
   const { t } = useTranslation("shell");
   const [open, setOpen] = useState(true);
@@ -57,13 +64,16 @@ export default function RecentSessionGroup({
       />
       {open ? (
         <div className="flex flex-col gap-1">
-          {sessions.slice(0, visibleSessionCount).map((session) => (
+          {sortPinnedSessions(sessions, pinnedSessionCodes).slice(0, visibleSessionCount).map((session) => (
             <MessageItem
               key={session.sessionCode}
               running={runningSessionCode === session.sessionCode}
               active={activeSessionCode === session.sessionCode}
               onNavigate={onNavigate}
               session={session}
+              pinned={pinnedSessionCodes.includes(session.sessionCode)}
+              onTogglePin={() => onToggleSessionPin(session.sessionCode)}
+              onRemovePin={() => onRemoveSessionPin(session.sessionCode)}
             />
           ))}
           {sessions.length > visibleSessionCount ? (

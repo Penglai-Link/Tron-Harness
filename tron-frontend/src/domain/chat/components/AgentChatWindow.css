@@ -1,0 +1,9 @@
+/* The main chat and Dude share this host-level font preference. */
+.ef-chat {
+  --agent-ui-system-font-size: var(--tron-system-font-size);
+  --agent-ui-composer-font-size: var(--tron-system-font-size);
+}
+
+.ef-chat .ef-chat__message-body {
+  font-size: var(--tron-system-font-size);
+}

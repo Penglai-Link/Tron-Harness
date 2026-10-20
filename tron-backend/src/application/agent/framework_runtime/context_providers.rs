@@ -78,18 +78,6 @@ pub(super) async fn assemble(
             instructions.push(instruction.clone());
         }
     }
-    // Native plugins may introduce domains only after their bindings are leased.
-    // Publish that live directory before assembly so it shares the seed budget.
-    if context.tool_exposure.tool_exposure_mode
-        == Some(crate::domain::agent::ToolExposureMode::DomainDiscovery)
-    {
-        let directory = serde_json::to_string(&context.tool_exposure.visible_domains)
-            .map_err(|error| fw::AgentError::InvalidConfiguration(error.to_string()))?;
-        instructions.push(fw::Message::system(format!(
-            "Current authorized tool domains for this run: {directory}. Use {} to discover tools in these domains. This current directory supersedes any earlier domain listing.",
-            crate::application::agent::DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL,
-        )));
-    }
     let mut application = source
         .prefix
         .iter()
@@ -103,6 +91,17 @@ pub(super) async fn assemble(
             scope.role = "user".into();
             application.push(scope);
         }
+    }
+    // Native plugins may introduce domains only after their bindings are leased.
+    // The live directory is data; fixed discovery instructions come from Prompt Management.
+    if context.tool_exposure.tool_exposure_mode
+        == Some(crate::domain::agent::ToolExposureMode::DomainDiscovery)
+    {
+        let directory = serde_json::to_string(&context.tool_exposure.visible_domains)
+            .map_err(|error| fw::AgentError::InvalidConfiguration(error.to_string()))?;
+        application.push(crate::domain::agent::AgentMessage::user(format!(
+            "<available_tool_domains>{directory}</available_tool_domains>"
+        )));
     }
     let history = input.history.clone();
     let budget = fw::ContextBudget {
@@ -169,6 +168,16 @@ pub(super) async fn assemble(
         .extensions
         .get::<super::host::collaboration::Runtime>();
     if let Some(runtime) = directory.as_ref() {
+        let key = "agent.directory-guidance";
+        let fallback = crate::domain::prompt::builtin_prompt_text(key, &context.locale)
+            .ok_or_else(|| fw::AgentError::InvalidConfiguration(format!(
+                "bundled developer prompt is missing: {key}"
+            )))?;
+        let guidance = fw::ManagedDeveloperPrompts::resolve(input.run, key, fallback)?;
+        instructions.push(
+            fw::Message::system(guidance)
+                .with_instruction_origin(fw::InstructionOrigin::Plugin),
+        );
         contributors.push(Arc::new(
             agent_directory_context::AgentDirectoryContributor((**runtime).clone()),
         ));

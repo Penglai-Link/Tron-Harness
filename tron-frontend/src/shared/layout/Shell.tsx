@@ -26,6 +26,8 @@ import {
   useMemo,
   useRef,
   useState,
+  lazy,
+  Suspense,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -33,6 +35,7 @@ import {
 import {
   readFloatingState,
   writeFloatingState,
+  type ChatSession,
   type ChatFloatingState,
 } from "@tron/chat-core";
 
@@ -62,7 +65,7 @@ import {
   type WorkspaceTreeNode,
 } from "@/shared/lib/workspaceTree";
 import { useCreateChatTab } from "./chat/hooks/useCreateChatTab";
-import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
+import { OPEN_CHAT_CONTEXT_EVENT, OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { cn } from "@/shared/lib/utils";
 import { mapNavigationTree } from "@/shared/lib/navigationMenuMapper";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
@@ -86,6 +89,8 @@ import RightPanelContainer from "./content/RightPanelContainer";
 import { TronSidebar } from "./TronSidebar";
 import { ChatNavigationProvider } from "./chat";
 import { useTabPanelRegistry } from "./content/TabPanelRegistry";
+
+const ChatContextInspector = lazy(() => import("@/domain/chat/components/ChatContextInspector").then((module) => ({ default: module.ChatContextInspector })));
 
 interface TronShellProps {
   activeItem?: string;
@@ -277,6 +282,34 @@ export function TronShell({
     window.addEventListener(OPEN_CHATS_PAGE_VIEW_EVENT, handleOpenPageView);
     return () => window.removeEventListener(OPEN_CHATS_PAGE_VIEW_EVENT, handleOpenPageView);
   }, [activeTabId, tabPanelRegistry, updateRightPanelState]);
+
+  useEffect(() => {
+    const handleOpenContext = (event: Event) => {
+      const session = (event as CustomEvent<ChatSession | null>).detail ?? null;
+      const ownerKey = tabPanelRegistry.getRightPanelOwnerKey(activeTabId);
+      const configuredContext = tabPanelRegistry.get(activeTabId)?.rightPanelTabs?.some((tab) => tab.key === "context");
+      if (session?.sessionCode && ownerKey === session.sessionCode && configuredContext) {
+        tabPanelRegistry.setRightPanelActiveKey(activeTabId, "context");
+      } else {
+        const prefix = ownerKey ? `${encodeURIComponent(ownerKey)}:` : "";
+        const key = `${prefix}chat-context:${session?.sessionCode ?? "draft"}`;
+        const tab = {
+          key, stableId: key, ownerKey, closable: true,
+          label: t("pages:chat.shortTermMemory.shortTermMemoryTab"),
+          children: <Suspense fallback={null}><ChatContextInspector session={session} /></Suspense>,
+        };
+        if (tabPanelRegistry.getRightPanelTabs(activeTabId).some((item) => item.key === key)) {
+          tabPanelRegistry.updateRightPanelTab(activeTabId, key, tab);
+        } else {
+          tabPanelRegistry.openRightPanelTab(activeTabId, tab);
+        }
+        tabPanelRegistry.setRightPanelActiveKey(activeTabId, key);
+      }
+      updateRightPanelState(activeTabId, { open: true });
+    };
+    window.addEventListener(OPEN_CHAT_CONTEXT_EVENT, handleOpenContext);
+    return () => window.removeEventListener(OPEN_CHAT_CONTEXT_EVENT, handleOpenContext);
+  }, [activeTabId, tabPanelRegistry, t, updateRightPanelState]);
 
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);

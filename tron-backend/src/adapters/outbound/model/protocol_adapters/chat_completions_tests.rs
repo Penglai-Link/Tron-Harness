@@ -17,6 +17,7 @@ fn chat_stream_request_asks_for_usage_chunk_and_thinking() {
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: true,
+        supports_developer_role: false,
         reasoning_effort: Some(ReasoningEffort::High),
         responses_stateful_enabled: false,
         temperature: None,

@@ -80,6 +80,7 @@ struct Host {
     mcp: OnceCell<crate::application::mcp::McpService>,
     rag: OnceCell<crate::app::AppRagService>,
     skill_registry: OnceCell<crate::application::skill::SkillRegistryService>,
+    prompt_service: OnceCell<crate::application::prompt::PromptService>,
     capability_resources: OnceCell<crate::application::capability::CapabilityResources>,
     skills: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
     installed_packs: std::sync::RwLock<BTreeMap<String, Vec<String>>>,
@@ -154,6 +155,10 @@ impl FrameworkHost {
             .agent_management
             .set(service)
             .unwrap_or_else(|_| panic!("agent management already bound"));
+    }
+    pub fn bind_prompt_service(&self, service: crate::application::prompt::PromptService) {
+        self.0.prompt_service.set(service)
+            .unwrap_or_else(|_| panic!("prompt service already bound"));
     }
     pub fn bind_skills(
         &self,
@@ -649,6 +654,7 @@ impl FrameworkHost {
             mcp: OnceCell::new(),
             rag: OnceCell::new(),
             skill_registry: OnceCell::new(),
+            prompt_service: OnceCell::new(),
             capability_resources: OnceCell::new(),
             skills: Default::default(),
             installed_packs: Default::default(),
@@ -697,6 +703,7 @@ impl FrameworkHost {
             mcp: OnceCell::new(),
             rag: OnceCell::new(),
             skill_registry: OnceCell::new(),
+            prompt_service: OnceCell::new(),
             capability_resources: OnceCell::new(),
             skills: Default::default(),
             installed_packs: Default::default(),

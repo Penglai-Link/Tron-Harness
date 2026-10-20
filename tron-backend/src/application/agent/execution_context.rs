@@ -166,6 +166,7 @@ pub fn project_instructions_message(
     }
     let mut message = AgentMessage::context_block("project_instructions", text);
     message.role = "system".into();
+    message.instruction_origin = Some(eliteforge_agent_core::InstructionOrigin::Agent);
     Ok(Some(message))
 }
 

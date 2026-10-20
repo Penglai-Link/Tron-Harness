@@ -433,6 +433,7 @@ fn test_context(max_retries: u32) -> AgentRunContext {
             api_key: "sk-test".into(),
             model_name: "test-model".into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: Some(0.2),
@@ -864,9 +865,9 @@ async fn read_only_assignment_admits_fresh_native_bindings_and_preserves_request
                 .find_map(|message| {
                     message.parts.iter().find_map(|part| match part {
                         AgentMessagePart::Text { text }
-                            if text.starts_with("Current authorized tool domains") =>
+                            if text.starts_with("<available_tool_domains>") =>
                         {
-                            assert_eq!(message.role, "system");
+                            assert_eq!(message.role, "user");
                             Some(text)
                         }
                         _ => None,

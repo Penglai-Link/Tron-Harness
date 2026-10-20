@@ -6,6 +6,8 @@ use serde_json::Value;
 pub struct AgentMessage {
     #[serde(default)]
     pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instruction_origin: Option<eliteforge_agent_core::InstructionOrigin>,
     pub role: String,
     pub parts: Vec<AgentMessagePart>,
 }
@@ -61,8 +63,14 @@ impl AgentMessage {
         Self {
             role: role.into(),
             annotations: Vec::new(),
+            instruction_origin: None,
             parts,
         }
+    }
+
+    pub fn with_instruction_origin(mut self, origin: eliteforge_agent_core::InstructionOrigin) -> Self {
+        self.instruction_origin = Some(origin);
+        self
     }
 
     pub fn system(content: impl Into<String>) -> Self {

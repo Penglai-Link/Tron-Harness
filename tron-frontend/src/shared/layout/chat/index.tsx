@@ -9,6 +9,7 @@ import RecentSessionGroup from "./components/RecentSessionGroup";
 import { ProjectCreateDialog } from "./components/ProjectCreateDialog";
 import { useChatSidebarData } from "./hooks/useChatSidebarData";
 import { usePinnedProjectCodes } from "./hooks/usePinnedProjectCodes";
+import { usePinnedSessionCodes } from "./hooks/usePinnedSessionCodes";
 import type { ProjectRecord } from "@/domain/project";
 import { CHAT_PANEL_WIDGET_KEYS } from "@/shared/constants/chatPanelMenu";
 
@@ -54,6 +55,7 @@ export function ChatNavigationProvider({
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectRecord>();
   const { pinnedProjectCodes, togglePinned } = usePinnedProjectCodes();
+  const { pinnedSessionCodes, togglePinnedSession, removePinnedSession } = usePinnedSessionCodes();
   const orderedProjects = useMemo(() => {
     const pinned = new Set(pinnedProjectCodes);
     return [...projects].sort(
@@ -143,6 +145,9 @@ export function ChatNavigationProvider({
                       sessionsByProject.get(project.projectCode) ?? []
                     }
                     pinned={pinnedProjectCodes.includes(project.projectCode)}
+                    pinnedSessionCodes={pinnedSessionCodes}
+                    onToggleSessionPin={togglePinnedSession}
+                    onRemoveSessionPin={removePinnedSession}
                     onEdit={() => setEditingProject(project)}
                     onPinnedChange={() => togglePinned(project.projectCode)}
                     onRefresh={() =>
@@ -180,6 +185,9 @@ export function ChatNavigationProvider({
           activeSessionCode={activeSessionCode}
           onNavigate={navigateToPath}
           sessions={recentSessions}
+          pinnedSessionCodes={pinnedSessionCodes}
+          onToggleSessionPin={togglePinnedSession}
+          onRemoveSessionPin={removePinnedSession}
         />
       ) : null;
     }

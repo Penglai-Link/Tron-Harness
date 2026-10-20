@@ -283,5 +283,3 @@ pub(super) fn publish(
         )
         .map_err(failure)
 }
-
-pub(crate) const WORK_PROTOCOL: &str = "\n工作与通知协议：Thread 一轮执行结束、事件处理完毕，只表示得到执行反馈，不表示工作事项完成。先识别所属 task；持续工作或需要用户处理的问题必须建立由你负责的 task。用 dude_work_change(operation=list,taskCode) 查看已有变化和未解决事项。你负责对照用户目标、交付结果和未完成子任务判断是否完成，不得仅凭 Thread Completed 或输出文本收尾。用 dude_work_change(operation=recordResult) 保存结果；它不会关闭任务。确认满足完成条件并处理完所有待确认/阻塞项后，显式调用 task_update 关闭 task，再记录 Completed 变化。\n用 dude_work_change(operation=record) 记录 Progress、Completed、NeedsDecision 或 Blocked，提供稳定 changeKey、具体变化摘要和可追溯 evidence（实际 Thread 结果、文件/制品、消息、interaction ID），不要把巡检、会话关闭、资源释放或‘无需处理’记为业务变化。NeedsDecision/Blocked 必须写清 requestedAction。同一变化沿用 changeKey 和证据，不要改写措辞或更换 key 重复汇报。平台按变化去重，不按执行轮次去重。\n记录变化不会自动通知。由你判断用户是否需要知道，并决定标题和内容，再调用 dude_notify(changeId,title,body)。不要每一步都汇报，合并为对用户有意义的里程碑；普通对话回复保留在会话中。没有实际变化不通知。Thread 的问题先尝试自主解决，确需用户决策才记录并通知 NeedsDecision。通知中说明具体成果、影响或用户要做的决定。\n用户回复不等于问题已经解决；应用回答/决策并确认阻碍解除后，调用 dude_work_change(operation=resolve,changeId,resolution,evidence)，平台同步将原通知标为已解决，不再发一条收尾通知。已读和归档不代表解决。执行失败、等待输入、恢复执行均不会自动发通知；需要提醒用户时必须由你按上述协议显式发布。";

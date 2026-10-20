@@ -14,6 +14,7 @@ fn responses_request_uses_previous_response_id_and_response_items_for_stateful_c
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: true,
         temperature: None,
@@ -26,8 +27,6 @@ fn responses_request_uses_previous_response_id_and_response_items_for_stateful_c
         &config,
         &ModelRequest {
             messages: vec![
-                AgentMessage::system("You are helpful."),
-                AgentMessage::user("hello"),
                 AgentMessage::tool_with_call_id(
                     "tool:workspace.page\nresult:\n[]",
                     "call-123",
@@ -69,6 +68,7 @@ fn responses_stateful_rebase_preserves_tool_call_and_tool_result_items() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: true,
         temperature: None,
@@ -103,12 +103,13 @@ fn responses_stateful_rebase_preserves_tool_call_and_tool_result_items() {
     );
 
     let input = body["input"].as_array().expect("input should be an array");
-    assert_eq!(input[1]["type"], json!("function_call"));
-    assert_eq!(input[1]["call_id"], json!("call-lookup"));
-    assert_eq!(input[1]["name"], json!("workspace.lookup"));
-    assert_eq!(input[2]["type"], json!("function_call_output"));
+    assert_eq!(input[0]["role"], json!("system"));
+    assert_eq!(input[2]["type"], json!("function_call"));
     assert_eq!(input[2]["call_id"], json!("call-lookup"));
-    assert_eq!(input[2]["output"], json!("{\"name\":\"Tron Core\"}"));
+    assert_eq!(input[2]["name"], json!("workspace.lookup"));
+    assert_eq!(input[3]["type"], json!("function_call_output"));
+    assert_eq!(input[3]["call_id"], json!("call-lookup"));
+    assert_eq!(input[3]["output"], json!("{\"name\":\"Tron Core\"}"));
     assert!(
         input.iter().all(|item| item["content"] != json!("")),
         "stateful replay must not emit empty assistant messages"

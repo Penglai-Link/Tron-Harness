@@ -5,6 +5,7 @@ import type {
 
 export const promptCategoryOptions: Array<{ label: string; value: PromptCategory }> = [
   { label: "System", value: "SYSTEM" },
+  { label: "Developer", value: "DEVELOPER" },
   { label: "Persona", value: "PERSONA" },
   { label: "Agent role", value: "AGENT_ROLE" },
   { label: "Tool", value: "TOOL" },

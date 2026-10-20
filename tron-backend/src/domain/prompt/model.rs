@@ -6,6 +6,7 @@ use crate::shared::id::SnowflakeId;
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PromptCategory {
     System,
+    Developer,
     Persona,
     AgentRole,
     Tool,

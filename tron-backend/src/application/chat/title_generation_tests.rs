@@ -73,6 +73,7 @@ fn config(code: &str) -> RuntimeModelConfig {
         api_key: "test".into(),
         model_name: code.into(),
         thinking_enabled: true,
+        supports_developer_role: false,
         reasoning_effort: Some(crate::domain::reasoning::ReasoningEffort::High),
         responses_stateful_enabled: false,
         temperature: None,

@@ -300,8 +300,23 @@ impl ResponsesItemState {
             self.context_hash = Some(hash.to_string());
         }
         let current_messages = self.current_messages(messages);
+        let mut request_messages = Vec::new();
+        if context.model.supports_developer_role && self.previous_response_id.is_some() {
+            // Responses does not carry top-level instructions through
+            // previous_response_id. Reattach only developer-marked instructions;
+            // conversation items remain a delta.
+            request_messages.extend(
+                messages[..self.consumed_message_count.min(messages.len())]
+                    .iter()
+                    .filter(|message| {
+                        message.role == "system" && message.instruction_origin.is_some()
+                    })
+                    .cloned(),
+            );
+        }
+        request_messages.extend_from_slice(current_messages);
         ModelRequest {
-            messages: current_messages.to_vec(),
+            messages: request_messages,
             tools: context.tools.clone(),
             prepared_tool_schema: self.tool_schema_cache.current(),
             system_agent_session_id: context.system_agent_session_id.clone(),
@@ -405,6 +420,7 @@ mod tests {
                 api_key: "sk-test".into(),
                 model_name: "qwen-test".into(),
                 thinking_enabled: false,
+                supports_developer_role: false,
                 reasoning_effort: None,
                 responses_stateful_enabled: true,
                 temperature: Some(0.2),
@@ -537,6 +553,38 @@ mod tests {
         assert_eq!(items[0]["type"], json!("function_call_output"));
         assert_eq!(items[0]["call_id"], json!("call-1"));
         assert_eq!(items[0]["output"], json!("found"));
+    }
+
+    #[test]
+    fn responses_state_repeats_developer_instructions_on_continuation() {
+        let mut context = responses_context();
+        context.model.supports_developer_role = true;
+        let mut messages = vec![
+            AgentMessage::system("ordinary host context"),
+            AgentMessage::system("managed plugin rule")
+                .with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Plugin),
+            AgentMessage::user("hello"),
+        ];
+        let mut state = ResponsesItemState::default();
+        let first = state.build_request(&context, &messages, false, Some("hash-1"));
+        assert_eq!(first.messages, messages);
+        state.apply_model_response(
+            &ModelResponse::final_output_with_usage_and_response_id(
+                "ok",
+                None,
+                Some("resp-1".into()),
+            ),
+            messages.len(),
+        );
+        messages.push(AgentMessage::user("next"));
+        let next = state.build_request(&context, &messages, false, Some("hash-1"));
+        assert_eq!(next.previous_response_id.as_deref(), Some("resp-1"));
+        assert_eq!(next.messages.len(), 2);
+        assert_eq!(next.messages[0].plain_text_content(), "managed plugin rule");
+        assert_eq!(next.messages[1].plain_text_content(), "next");
+        let items = next.response_input_items.expect("stateful input items");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["content"], json!("next"));
     }
 
     #[test]

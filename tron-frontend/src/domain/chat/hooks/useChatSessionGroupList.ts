@@ -1,6 +1,7 @@
 import {
   archiveMockChatSession,
   createMockChatSession,
+  deleteMockChatSession,
   getChatSessionGroups,
   updateMockChatSession,
 } from "@/domain/chat/mock/data";
@@ -92,12 +93,27 @@ export async function createChatSession(input: CreateChatSessionInput): Promise<
   return session;
 }
 
-export function archiveChatSession(sessionCode: string): Promise<ChatSession> {
+export async function archiveChatSession(sessionCode: string): Promise<ChatSession> {
   if (getServiceDataSource("chat") === "mock") {
-    return Promise.resolve(archiveMockChatSession(sessionCode));
+    const archived = archiveMockChatSession(sessionCode);
+    recentlyCreatedSessions.delete(sessionCode);
+    return archived;
   }
 
-  return requestApi<ChatSession>(chatApiEndpoints.archiveChatSession, {
+  const archived = await requestApi<ChatSession>(chatApiEndpoints.archiveChatSession, {
+    pathParams: { sessionCode },
+  });
+  recentlyCreatedSessions.delete(sessionCode);
+  return archived;
+}
+
+export async function deleteArchivedChatSession(sessionCode: string): Promise<void> {
+  if (getServiceDataSource("chat") === "mock") {
+    deleteMockChatSession(sessionCode);
+    return;
+  }
+
+  await requestApi(chatApiEndpoints.deleteChatSession, {
     pathParams: { sessionCode },
   });
 }

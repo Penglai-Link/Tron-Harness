@@ -459,6 +459,7 @@ pub(crate) fn build_system_runtime_model_config(
         api_key: "sk-system-agent".into(),
         model_name: model_name.to_string(),
         thinking_enabled: true,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,

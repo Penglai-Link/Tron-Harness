@@ -42,6 +42,7 @@ interface AguiProtocolEvent {
 
 interface ChatMessageListQueryOptions {
   suppressErrorToast?: boolean;
+  dudeCode?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -54,6 +55,7 @@ export function useChatMessageListBySession(sessionCode: string, refreshKey = 0,
     domain: "chat",
     enabled: Boolean(sessionCode),
     endpoint: chatApiEndpoints.listChatMessages,
+    headers: options.dudeCode ? { "X-Dude-Code": options.dudeCode } : undefined,
     mockData: () => getChatMessages(sessionCode),
     deps: [sessionCode],
     params: { sessionCode },
@@ -62,12 +64,13 @@ export function useChatMessageListBySession(sessionCode: string, refreshKey = 0,
   });
 }
 
-export function useChatAguiEvents(sessionCode: string, refreshKey = 0) {
+export function useChatAguiEvents(sessionCode: string, refreshKey = 0, dudeCode?: string) {
   return useServiceQuery<ChatAguiEvent[]>({
     apiInitialData: () => [],
     domain: "chat",
     enabled: Boolean(sessionCode),
     endpoint: chatApiEndpoints.listAguiEvents,
+    headers: dudeCode ? { "X-Dude-Code": dudeCode } : undefined,
     mockData: () => getChatAguiEvents(sessionCode),
     deps: [sessionCode],
     params: { streamKey: sessionCode },

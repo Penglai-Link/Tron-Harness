@@ -296,14 +296,14 @@ export function getChatSessionGroups(): ChatSessionGroup[] {
       taskTitle: "Auth latency rollback",
       sourceCode: "TASK-8842",
       sourceType: "Task",
-      sessions: sessions.filter((session) => session.taskCode === "TASK-8842"),
+      sessions: sessions.filter((session) => session.taskCode === "TASK-8842" && session.status === "ACTIVE"),
     },
     {
       taskCode: null,
       taskTitle: "Chat",
       sourceCode: null,
       sourceType: "Manual",
-      sessions: sessions.filter((session) => !session.taskCode),
+      sessions: sessions.filter((session) => !session.taskCode && session.status === "ACTIVE"),
     },
   ];
 }

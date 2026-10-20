@@ -108,6 +108,7 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
@@ -157,6 +158,7 @@ fn request_builders_preserve_nested_data_source_schema_and_examples() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
@@ -222,6 +224,7 @@ fn request_builders_handle_tool_observations_per_protocol() {
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
@@ -264,6 +267,7 @@ fn responses_request_uses_string_input_for_single_user_prompt() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
@@ -287,8 +291,10 @@ fn responses_request_uses_string_input_for_single_user_prompt() {
         },
     );
 
-    assert_eq!(body["instructions"], json!("You are helpful."));
-    assert_eq!(body["input"], json!("hello"));
+    assert!(body.get("instructions").is_none());
+    assert_eq!(body["input"][0]["role"], json!("system"));
+    assert_eq!(body["input"][0]["content"], json!("You are helpful."));
+    assert_eq!(body["input"][1]["role"], json!("user"));
 }
 
 #[test]
@@ -301,6 +307,7 @@ fn responses_request_uses_stateful_response_items_and_previous_response_id() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        supports_developer_role: false,
         reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
@@ -383,6 +390,7 @@ fn responses_request_enables_reasoning_for_thinking_models() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: true,
+        supports_developer_role: false,
         reasoning_effort: Some(ReasoningEffort::Medium),
         responses_stateful_enabled: false,
         temperature: None,

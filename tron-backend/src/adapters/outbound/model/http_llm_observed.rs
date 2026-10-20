@@ -202,10 +202,20 @@ impl HttpLlmRuntimeClient {
             };
         let reference = fw::ModelRef::new("http-rerank", &model.model_code);
         let routers = self.routing_for(&model, &reference);
+        let chat_instruction = match self.prompts.as_ref() {
+            Some(prompts) => match prompts.runtime_prompt_text(
+                "model.chat-rerank", "en-US", &std::collections::HashMap::new(),
+            ) {
+                Ok(value) => value,
+                Err(error) => return failure(format!("managed chat rerank prompt: {error}")),
+            },
+            None => None,
+        };
         let adapter = Arc::new(sdk::HttpRerankModel {
             config: wire,
             factory,
             chat_fallback: false,
+            chat_instruction,
         });
         let service = fw::RerankModelService::new(reference.clone(), adapter.clone());
         let request = fw::RerankRequest {

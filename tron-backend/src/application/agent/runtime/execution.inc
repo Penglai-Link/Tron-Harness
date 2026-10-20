@@ -84,10 +84,12 @@ impl ReactAgent {
         let mut draft = BusEventDraft::agui(event_name, "agent_runtime")
             .outcome(outcome)
             .subject("agent_run", context.run_code.clone())
-            .attr("workspace_code", context.workspace_code.clone())
             .attr("agent_kind", agent_kind_label(context.agent_kind))
             .attr("runtime_kind", "in_process")
             .attr("model_code", context.model.model_code.clone());
+        if !context.workspace_code.trim().is_empty() {
+            draft = draft.attr("workspace_code", context.workspace_code.clone());
+        }
         if !context.model.model_name.trim().is_empty() {
             draft = draft.payload_field("model_name", context.model.model_name.clone());
         }

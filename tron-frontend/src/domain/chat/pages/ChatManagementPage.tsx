@@ -76,7 +76,8 @@ import { ChatDraftResources } from "../model/chatDraftResources";
 import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
 import { ContextDetailPreview, contextDetailRawValue, type ContextDetailBlock } from "@/domain/chat/components/ContextDetailPreview";
 import { useSavedContextAssembly } from "../hooks/useSavedContextAssembly";
-import { contextAssemblySnapshot, type ContextAssemblySnapshot } from "../model/contextAssemblyReport";
+import { useChatContextRefreshInterval } from "../hooks/useChatContextRefreshInterval";
+import { contextAssemblySnapshot, contextModelDisplayName, type ContextAssemblySnapshot } from "../model/contextAssemblyReport";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
   type ChatAttachmentLabels,
@@ -1476,7 +1477,8 @@ function ContextOverviewPanel({
   const usedTokens = snapshot?.estimatedInputTokens ?? null;
   const inputBudget = snapshot?.inputCapacity ?? null;
   const windowLimit = breakdown?.contextWindowLimit ?? null;
-  const percent = contextPercent(usedTokens, inputBudget);
+  const percent = usedTokens !== null && inputBudget !== null && inputBudget > 0
+    ? contextPercent(usedTokens, inputBudget) : null;
   const statusLabel = contextStatusLabel(null, breakdown, (key) => t(key));
   const statusTone = contextStatusTone(null, breakdown);
 
@@ -1492,20 +1494,19 @@ function ContextOverviewPanel({
               <p className="max-w-[18rem] whitespace-normal leading-5">{t("chat.shortTermMemory.contextPanel.savedReportHelp")}</p>
             </InfoTooltip>
           </div>
-          <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]">
-            {snapshot?.modelCode ?? "—"}
+          <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]" title={snapshot?.modelCode ?? undefined}>
+            {contextModelDisplayName(snapshot?.modelCode ?? null)}
             {windowLimit ? ` · ${formatCompactTokenCount(windowLimit)} ${t("chat.shortTermMemory.contextPanel.windowSuffix")}` : ""}
           </p>
-          {snapshot?.snapshotSequence ? <p className="text-[10px] text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.reportIdentity", {sequence:snapshot.snapshotSequence,step:snapshot.step ?? "—",attempt:snapshot.attempt ?? "—"})}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
+          {snapshot ? <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
             {statusLabel}
-          </Badge>
+          </Badge> : null}
           <button
             aria-label={t("chat.shortTermMemory.createCheckpoint")}
             className={iconButtonClass()}
-            disabled={!session || compactionBusy}
+            disabled={!session || !onCreateCompaction || compactionBusy}
             title={t("chat.shortTermMemory.createCheckpoint")}
             type="button"
             onClick={onCreateCompaction}
@@ -1524,7 +1525,7 @@ function ContextOverviewPanel({
           {formatPercent(percent)}
         </div>
       </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+      {percent !== null ? <div className="h-2.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
         <div
           className={cn(
             "h-full rounded-full transition-[width]",
@@ -1532,7 +1533,7 @@ function ContextOverviewPanel({
           )}
           style={{ width: `${percent}%` }}
         />
-      </div>
+      </div> : null}
     </div>
   );
 }
@@ -1592,20 +1593,22 @@ function ContextStat({ label, value }: { label: string; value: string }) {
 function ContextStructurePanel({
   sessionCode,
   blocks,
+  dudeCode,
 }: {
   sessionCode: string;
   blocks: ContextMemoryBlockItem[];
+  dudeCode?: string;
 }) {
   return (
     <div>
       {blocks.map((block) => (
-        <ContextMemoryBlockRow block={block} key={block.code} sessionCode={sessionCode} />
+        <ContextMemoryBlockRow block={block} dudeCode={dudeCode} key={block.code} sessionCode={sessionCode} />
       ))}
     </div>
   );
 }
 
-function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlockItem; sessionCode: string }) {
+function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: ContextMemoryBlockItem; dudeCode?: string; sessionCode: string }) {
   const { t } = useTranslation("pages");
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1631,6 +1634,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     let refreshing = true;
     void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
       queryParams: { sessionCode, blockCode: block.detailCode, ...(block.snapshotSequence ? { snapshotSequence: block.snapshotSequence } : {}) },
+      headers: dudeCode ? { "X-Dude-Code": dudeCode } : undefined,
       signal: controller.signal,
     }).then((value) => { if (!controller.signal.aborted) setDetail(value); }).catch(() => {
       if (!controller.signal.aborted) setLoadError(true);
@@ -1642,13 +1646,13 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
       if (refreshing) return;
       refreshing = true;
       void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
-        queryParams: { sessionCode, blockCode: block.detailCode }, signal: controller.signal,
+        queryParams: { sessionCode, blockCode: block.detailCode }, headers: dudeCode ? { "X-Dude-Code": dudeCode } : undefined, signal: controller.signal,
       }).then((value) => { if (!controller.signal.aborted) { setDetail(value); setLoadError(false); } }).catch(() => {
         if (!controller.signal.aborted) setLoadError(true);
       }).finally(() => { refreshing = false; });
     }, 3000) : undefined;
     return () => { controller.abort(); if (timer !== undefined) window.clearInterval(timer); };
-  }, [block.detailCode, block.detailValue, block.snapshotSequence, dialogOpen, sessionCode]);
+  }, [block.detailCode, block.detailValue, block.snapshotSequence, dialogOpen, dudeCode, sessionCode]);
   let parsedDetail = detail;
   if (typeof detail === "string") {
     try {
@@ -1784,7 +1788,7 @@ function ProviderUsagePanel({
         </h4>
         <div className="grid grid-cols-3 gap-1.5">
           <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(sessionInput)} />
-          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(sessionUsage?.cachedInputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(sessionUsage?.cachedInputTokens ?? 0)} />
           <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(sessionUsage?.reasoningTokens)} />
         </div>
       </div>
@@ -1794,7 +1798,7 @@ function ProviderUsagePanel({
         </h4>
         <div className="grid grid-cols-3 gap-1.5">
           <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(providerUsage?.inputTokens)} />
-          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(providerUsage?.cachedInputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(providerUsage?.cachedInputTokens ?? 0)} />
           <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(providerUsage?.reasoningTokens)} />
         </div>
         <p className="mt-2 rounded-md bg-[var(--color-surface-container-low)] px-2 py-1.5 text-[10px] leading-4 text-[var(--color-on-surface-variant)]">
@@ -2193,7 +2197,8 @@ function RightWorkspaceSidebar({
   );
 }
 
-function RightContextSidebar({
+export function RightContextSidebar({
+  dudeCode,
   events,
   latestCompactionStatus,
   latestUsageAudit,
@@ -2202,6 +2207,7 @@ function RightContextSidebar({
   compactionBusy,
   session,
 }: {
+  dudeCode?: string;
   events: TranscriptAguiEvent[];
   goal?: ChatSessionGoalView | null;
   latestCompaction?: ChatSessionCompaction | null;
@@ -2220,7 +2226,7 @@ function RightContextSidebar({
   const usage = chatTokenUsage(messages);
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
   const liveAssembly = useMemo(() => latestContextAssemblyFromEvents(events), [events]);
-  const assembly = useSavedContextAssembly(session?.sessionCode ?? "", liveAssembly.snapshot?.snapshotSequence ? liveAssembly.snapshot : null);
+  const assembly = useSavedContextAssembly(session?.sessionCode ?? "", liveAssembly.snapshot?.snapshotSequence ? liveAssembly.snapshot : null, dudeCode);
   const budgetBreakdown = assembly.snapshot ? normalizeContextBudgetBreakdown({
     ...assembly.snapshot.budgetBreakdown,
     estimatedInputTokens: assembly.snapshot.estimatedInputTokens ?? undefined,
@@ -2240,7 +2246,7 @@ function RightContextSidebar({
         />
         <div className="pt-2">
           {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
-          {assembly.loading ? <p role="status">{t("chat.shortTermMemory.contextPanel.loadingReport")}</p> : assembly.error ? <div role="alert"><p>{assembly.error.message}</p><button type="button" onClick={() => void assembly.retry()}>{t("chat.shortTermMemory.retry")}</button></div> : assembly.snapshot ? <ContextStructurePanel blocks={contextBlocks} sessionCode={session?.sessionCode ?? ""} /> : <p>{t("chat.shortTermMemory.contextPanel.noReport")}</p>}
+          {assembly.loading ? <p role="status">{t("chat.shortTermMemory.contextPanel.loadingReport")}</p> : assembly.error ? <div role="alert"><p>{assembly.error.message}</p><button type="button" onClick={() => void assembly.retry()}>{t("chat.shortTermMemory.retry")}</button></div> : assembly.snapshot ? <ContextStructurePanel blocks={contextBlocks} dudeCode={dudeCode} sessionCode={session?.sessionCode ?? ""} /> : <p>{t("chat.shortTermMemory.contextPanel.noReport")}</p>}
         </div>
       </div>
       {latestCompactionStatus?.error ? (
@@ -2694,6 +2700,8 @@ export function ChatManagementPage() {
       ? firstSessionForSourceTab(sessionGroups, defaultChatSessionSourceTab)
       : undefined
   );
+  const [runtimeRunState, setRuntimeRunState] = useState<ChatRuntimeRunState | null>(null);
+  const currentSessionRunActive = Boolean(runtimeRunState?.active && runtimeRunState.sessionCode === activeSession?.sessionCode);
   useChatGeneratedTitle(activeSession, useStableCallback((updated: ChatSession) => {
     setSessionGroups((current) => replaceSession(current, updated));
     setOptimisticActiveSession((current) => current?.sessionCode === updated.sessionCode ? updated : current);
@@ -2722,8 +2730,9 @@ export function ChatManagementPage() {
   }), [activeGoalState.error, activeGoalState.loading, activeGoalState.retry]);
   // Context inspection is an explicit, separate read from ordinary public history.
   const contextInspectionSessionCode = contextPanelOpen ? activeSession?.sessionCode ?? "" : "";
-  const aguiEvents = useChatAguiEvents(contextInspectionSessionCode, activeChatDataRefreshKey + shortTermMemoryRefreshKey);
-  const aguiProtocolEvents = useChatAguiProtocolEvents(contextInspectionSessionCode, activeChatReplayRefreshKey);
+  const liveContextRefreshKey = useChatContextRefreshInterval(contextInspectionSessionCode, currentSessionRunActive);
+  const aguiEvents = useChatAguiEvents(contextInspectionSessionCode, activeChatDataRefreshKey + shortTermMemoryRefreshKey + liveContextRefreshKey);
+  const aguiProtocolEvents = useChatAguiProtocolEvents(contextInspectionSessionCode, activeChatReplayRefreshKey + shortTermMemoryRefreshKey + liveContextRefreshKey);
   const visibleMessages = useChatMessageListBySession(contextInspectionSessionCode, activeChatDataRefreshKey, { suppressErrorToast: true });
   const [creatingSession, setCreatingSession] = useState(false);
   const [chatModels, setChatModels] = useState<ModelSelectOption[]>([]);
@@ -2904,8 +2913,6 @@ export function ChatManagementPage() {
     setActiveChatReplayRefreshKey((current) => current + 1);
   }, []);
 
-  const [runtimeRunState, setRuntimeRunState] = useState<ChatRuntimeRunState | null>(null);
-  const currentSessionRunActive = Boolean(runtimeRunState?.active && runtimeRunState.sessionCode === activeSession?.sessionCode);
   const sending = currentSessionRunActive;
   const handleRuntimeRunStateChange = useCallback((state: ChatRuntimeRunState) => {
     setRuntimeRunState(state);
@@ -3409,8 +3416,7 @@ export function ChatManagementPage() {
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
   }), [aguiWorkReplayPreferences.recentTurnLimit]);
   const transcriptFooterAddon = useMemo(() => (
-    <div className="flex w-full min-w-0 max-w-full flex-col items-start gap-[12px]">
-      <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-1">
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
         <input
           className="hidden"
           ref={attachmentFileInputRef}
@@ -3486,7 +3492,6 @@ export function ChatManagementPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
-      </div>
     </div>
   ), [
     agentScopedModels,

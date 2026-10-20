@@ -441,7 +441,7 @@ CREATE TABLE prompts (
     id INTEGER PRIMARY KEY,
     prompt_code TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL,
-    category TEXT NOT NULL CHECK (category IN ('SYSTEM', 'PERSONA', 'TOOL', 'TEMPLATE', 'ACTION', 'AGENT_ROLE')),
+    category TEXT NOT NULL CHECK (category IN ('SYSTEM', 'DEVELOPER', 'PERSONA', 'TOOL', 'TEMPLATE', 'ACTION', 'AGENT_ROLE')),
     prompt_body TEXT NOT NULL,
     description TEXT NULL,
     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
@@ -1350,7 +1350,7 @@ CREATE TRIGGER trg_prompts_immutable_identity
 BEFORE UPDATE ON prompts
 FOR EACH ROW
 WHEN NEW.prompt_code <> OLD.prompt_code
-    OR NEW.category <> OLD.category
+    OR (NEW.category <> OLD.category AND NOT (OLD.built_in = 1 AND NEW.built_in = 1))
 BEGIN
     SELECT RAISE(ABORT, 'prompt identity fields are immutable');
 END;

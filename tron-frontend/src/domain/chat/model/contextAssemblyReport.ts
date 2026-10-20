@@ -26,6 +26,15 @@ export interface ContextAssemblySnapshot {
   budgetBreakdown: Record<string, unknown> | null;
 }
 
+/** A saved report contains the runtime route code, not a user-facing model name. */
+export function contextModelDisplayName(modelCode: string | null): string {
+  if (!modelCode) return "—";
+  const fixedRoute = modelCode.match(/^PERSON_AI:FIXED:[^:]+:(.+)$/);
+  if (!fixedRoute) return modelCode;
+  const catalogCode = fixedRoute[1];
+  return catalogCode?.split("/").at(-1) || modelCode;
+}
+
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

@@ -1,5 +1,5 @@
 import { defaultChatAnnotationLabels, zhChatAnnotationLabels } from "@eliteforge/agent-ui-chat-core";
-import { useCallback, useImperativeHandle, useMemo, useRef, type Ref } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { useChatWorkRailLabels, useChatHistoryLabels } from "../hooks/useChatWorkRailLabels";
 import { ChatRuntimeWindow, type ChatRuntimeWindowProps, type ChatRuntimeSubmitter } from "@eliteforge/agent-ui-chat-react";
@@ -10,6 +10,12 @@ import { fromUiAttachment, fromUiSession, toUiAttachment, toUiInput, toUiSession
 import { useChatInputSuggestions } from "@/domain/chat/hooks/useChatInputSuggestions";
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
+import { latestChatComposerMetrics, type ChatComposerMetrics as ComposerMetrics } from "../model/chatComposerMetrics";
+import type { ContextAssemblySnapshot } from "../model/contextAssemblyReport";
+import { ChatComposerMetrics } from "./ChatComposerMetrics";
+import { OPEN_CHAT_CONTEXT_EVENT } from "@/shared/lib/shellEvents";
+import { requestApi } from "@/shared/api/httpClient";
+import "./AgentChatWindow.css";
 
 type MappedProps = "adapter" | "attachmentDownloader" | "submitterRef" | "config" | "initialSession" | "pendingAttachments" | "onPendingAttachmentsChange" | "onSessionChange" | "onRunStateChange" | "createSendInput";
 export interface AgentChatSubmitter {
@@ -31,9 +37,37 @@ export interface AgentChatWindowProps extends Omit<ChatRuntimeWindowProps, Mappe
 
 /** Product context adapter only. Rendering, streaming, queues, stop and replay belong to Agent UI. */
 export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, config, knowledgeBaseId, initialSession, pendingAttachments,
-  onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, ...props }: AgentChatWindowProps) {
+  onPendingAttachmentsChange, onSessionChange, onRunStateChange, createSendInput, onError, onInfo, footerAddon, ...props }: AgentChatWindowProps) {
   const feedback = useChatFeedback();
   const runtimeSubmitterRef = useRef<ChatRuntimeSubmitter | null>(null);
+  const [activeSessionCode, setActiveSessionCode] = useState<string | null>(initialSession?.sessionCode ?? null);
+  const [activeSession, setActiveSession] = useState<ChatSession | null>(initialSession ?? null);
+  const [composerSnapshot, setComposerSnapshot] = useState<{ sessionCode: string; metrics: ComposerMetrics | null } | null>(null);
+  const metricsRequestRef = useRef(0);
+  const wasRunActiveRef = useRef(false);
+  useEffect(() => {
+    setActiveSessionCode(initialSession?.sessionCode ?? null);
+    setActiveSession(initialSession ?? null);
+  }, [initialSession?.sessionCode]);
+  const refreshComposerMetrics = useCallback(async (sessionCode: string) => {
+    const request = ++metricsRequestRef.current;
+    const [eventsResult, contextResult] = await Promise.allSettled([
+      adapter.loadAguiEvents(sessionCode),
+      requestApi<{ snapshot: ContextAssemblySnapshot | null }>("GET /api/v1/chats/sessions/get-context-assembly", {
+        queryParams: { sessionCode },
+        headers: activeSession?.ownerDudeCode ? { "X-Dude-Code": activeSession.ownerDudeCode } : undefined,
+      }),
+    ]);
+    const events = eventsResult.status === "fulfilled" ? eventsResult.value : [];
+    const contextSnapshot = contextResult.status === "fulfilled" ? contextResult.value.snapshot : null;
+    const metrics = latestChatComposerMetrics(events, contextSnapshot);
+    if (request === metricsRequestRef.current) {
+      setComposerSnapshot({ sessionCode, metrics });
+    }
+  }, [adapter, activeSession?.ownerDudeCode]);
+  useEffect(() => {
+    if (activeSessionCode) void refreshComposerMetrics(activeSessionCode);
+  }, [activeSessionCode, refreshComposerMetrics]);
   useImperativeHandle(submitterRef, () => ({
     submit: (input) => runtimeSubmitterRef.current?.submit({
       content: input.content, attachments: input.attachments?.map(toUiAttachment),
@@ -64,13 +98,26 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   const downloadAttachment = useMemo(() => attachmentDownloader
     ? (value: Ui.ChatMessageAttachment) => attachmentDownloader(fromUiAttachment(value))
     : undefined, [attachmentDownloader]);
-  const handleSession = useCallback((value: Ui.ChatSession | null) =>
-    onSessionChange?.(value ? fromUiSession(value) : null), [onSessionChange]);
+  const handleSession = useCallback((value: Ui.ChatSession | null) => {
+    setActiveSessionCode(value?.sessionId ?? null);
+    const nextSession = value ? fromUiSession(value) : null;
+    setActiveSession(nextSession);
+    onSessionChange?.(nextSession);
+  }, [onSessionChange]);
+  const openContext = useCallback(() => {
+    window.dispatchEvent(new CustomEvent(OPEN_CHAT_CONTEXT_EVENT, { detail: activeSession }));
+  }, [activeSession]);
   const handleAttachments = useCallback((value: Ui.ChatMessageAttachment[]) =>
     onPendingAttachmentsChange?.(value.map(fromUiAttachment)), [onPendingAttachmentsChange]);
-  const handleRun = useCallback((value: Ui.ChatRuntimeRunState) => onRunStateChange?.({
-    loading: value.loading, active: value.active, runCode: value.runId, sessionCode: value.sessionId, supportsSteer: value.supportsSteer,
-  }), [onRunStateChange]);
+  const handleRun = useCallback((value: Ui.ChatRuntimeRunState) => {
+    if (wasRunActiveRef.current && !value.active && value.sessionId) {
+      void refreshComposerMetrics(value.sessionId);
+    }
+    wasRunActiveRef.current = value.active;
+    onRunStateChange?.({
+      loading: value.loading, active: value.active, runCode: value.runId, sessionCode: value.sessionId, supportsSteer: value.supportsSteer,
+    });
+  }, [onRunStateChange, refreshComposerMetrics]);
   const createInput = useCallback((value: Ui.ChatSession, content: string, files: Ui.ChatMessageAttachment[]) => {
     const hostSession = fromUiSession(value);
     const hostFiles = files.map(fromUiAttachment);
@@ -82,6 +129,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     return input ? toUiInput(input) : null;
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
   return <ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
+    footerAddon={<>{footerAddon}<ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /></>}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
       showReasoningCards: workPreferences.showReasoningCards,

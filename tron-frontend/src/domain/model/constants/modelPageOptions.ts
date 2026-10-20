@@ -63,6 +63,7 @@ const modelCapabilityGroups: ModelCapabilityGroup[] = [
     options: [
       { label: "Text Generation", modelType: "TEXT", value: "TEXT_GENERATION" },
       { label: "Deep Thinking", modelType: "TEXT", value: "DEEP_THINKING" },
+      { label: "Supports developer role", modelType: "TEXT", value: "SUPPORTS_DEVELOPER_ROLE" },
     ],
   },
   {

@@ -1,0 +1,42 @@
+.tron-chat-composer-metrics {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin-inline-start: auto;
+  color: var(--agent-ui-chat-text-muted, var(--color-on-surface-variant));
+  font-size: 11px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.tron-chat-composer-metrics__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tron-chat-composer-metrics__item:hover,
+.tron-chat-composer-metrics__item:focus-visible {
+  background: var(--color-hover-surface);
+  color: var(--color-on-surface);
+}
+
+.tron-chat-composer-metrics__item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.tron-chat-composer-metrics__item svg {
+  flex: none;
+  stroke-width: 1.8;
+}

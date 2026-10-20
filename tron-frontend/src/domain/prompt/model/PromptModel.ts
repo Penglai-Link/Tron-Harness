@@ -1,4 +1,4 @@
-export type PromptCategory = "SYSTEM" | "PERSONA" | "AGENT_ROLE" | "TOOL" | "TEMPLATE" | "ACTION";
+export type PromptCategory = "SYSTEM" | "DEVELOPER" | "PERSONA" | "AGENT_ROLE" | "TOOL" | "TEMPLATE" | "ACTION";
 export type PromptVariableType = "STRING" | "NUMBER" | "BOOLEAN" | "JSON";
 export type PromptVariableSourceKind = "MANAGED" | "RUNTIME";
 export type PromptRuntimeProvider =

@@ -1,6 +1,7 @@
 fn category_to_storage(value: PromptCategory) -> &'static str {
     match value {
         PromptCategory::System => "SYSTEM",
+        PromptCategory::Developer => "DEVELOPER",
         PromptCategory::Persona => "PERSONA",
         PromptCategory::AgentRole => "AGENT_ROLE",
         PromptCategory::Tool => "TOOL",
@@ -12,6 +13,7 @@ fn category_to_storage(value: PromptCategory) -> &'static str {
 fn category_from_storage(value: &str) -> rusqlite::Result<PromptCategory> {
     match value {
         "SYSTEM" => Ok(PromptCategory::System),
+        "DEVELOPER" => Ok(PromptCategory::Developer),
         "PERSONA" => Ok(PromptCategory::Persona),
         "AGENT_ROLE" => Ok(PromptCategory::AgentRole),
         "TOOL" => Ok(PromptCategory::Tool),
