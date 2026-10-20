@@ -191,6 +191,7 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
         body: {
           attachments: input.attachments ?? [],
           content: input.content,
+          pageContext: input.pageContext ?? null,
           requestedSkills: input.requestedSkills ?? [],
           annotations: input.annotations ?? [],
           expectedRunCode: context.expectedRunCode,
@@ -285,6 +286,7 @@ export function createInternalChatAdapter(options: InternalChatAdapterOptions): 
       return transport.streamSse<ChatSendResult>({
         body: {
           ...input,
+          pageContext: input.pageContext ?? null,
           annotations: input.annotations ?? [],
           clientCapabilities: {
             ...input.clientCapabilities,

@@ -30,11 +30,19 @@ impl ReactAgent {
 
 pub(super) fn record_inputs(
     _short_term_memory: Option<&ShortTermMemoryService>,
-    _context: &AgentRunContext,
+    context: &AgentRunContext,
     inputs: Vec<AgentSteerInput>,
 ) -> Result<Vec<AgentMessage>, AgentError> {
     inputs
         .into_iter()
-        .map(|input| Ok(user_prompt_message(input.content, &input.attachments)))
+        .map(|input| {
+            let mut message = user_prompt_message(input.content, &input.attachments);
+            super::super::page_context::attach(
+                &mut message,
+                input.page_context.as_ref(),
+                &context.locale,
+            );
+            Ok(message)
+        })
         .collect()
 }

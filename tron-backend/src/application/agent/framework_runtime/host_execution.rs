@@ -244,6 +244,7 @@ impl FrameworkHost {
                     "skills.guidance",
                     "a2ui.guidance",
                     "dude.identity-guidance",
+                    "dude.ui-page-context",
                     "dude.soul-guidance",
                     "dude.onboarding-language",
                     "dude.initial-setup",

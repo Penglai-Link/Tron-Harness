@@ -132,6 +132,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     footerAddon={<>{footerAddon}<ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /></>}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
+      resizeHint: t("chat.floating.resizeHint"),
       showReasoningCards: workPreferences.showReasoningCards,
       runningEnterSubmitMode: workPreferences.runningEnterSubmitMode,
       inputPlaceholder: "",

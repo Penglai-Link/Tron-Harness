@@ -29,6 +29,8 @@ export interface AppRoute {
   layout?: AppRouteLayout;
   settingsNav?: string;
   shellConfig?: AppRouteShellConfig;
+  /** Only this declared business identifier may be included in a Dude page snapshot. */
+  pageContextTarget?: { source: "query" | "path"; parameter: string };
 }
 
 const registeredRoutes: AppRoute[] = [
@@ -36,7 +38,7 @@ const registeredRoutes: AppRoute[] = [
   { pageId: "notifications.index", route: "/notifications", activeNav: "Notifications", title: "Notifications", titleTranslationKey: "pages:notifications.title", archetype: "data-table" },
   {pageId:"observability.logs", layout: "settings",route:"/settings/observability/logs",activeNav:"Logs",title:"Logs",titleTranslationKey:"observability:logs",archetype:"data-table"},
   {pageId:"observability.dashboard", layout: "settings",route:"/settings/observability/dashboard",activeNav:"Dashboard",title:"Dashboard",titleTranslationKey:"observability:dashboard",archetype:"dashboard"},
-  { pageId: "observability.traceDetail", layout: "settings", settingsNav: "Traces", route: "/settings/observability/traces/:traceId", activeNav: "Traces", title: "Trace detail", titleTranslationKey: "observability:detail", archetype: "detail" },
+  { pageId: "observability.traceDetail", pageContextTarget: { source: "path", parameter: "traceId" }, layout: "settings", settingsNav: "Traces", route: "/settings/observability/traces/:traceId", activeNav: "Traces", title: "Trace detail", titleTranslationKey: "observability:detail", archetype: "detail" },
   {
     pageId: "observability.traces", layout: "settings",
     route: "/settings/observability/traces",
@@ -100,6 +102,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "models.detail",
+    pageContextTarget: { source: "query", parameter: "modelCode" },
     route: "/models/detail",
     activeNav: "Models",
     title: "Workspace Model Detail",
@@ -130,6 +133,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "apps.detail",
+    pageContextTarget: { source: "query", parameter: "appCode" },
     route: "/apps/detail",
     activeNav: "Apps",
     title: "App Detail",
@@ -141,6 +145,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "apps.edit",
+    pageContextTarget: { source: "query", parameter: "appCode" },
     route: "/apps/edit",
     activeNav: "Apps",
     title: "Edit App",
@@ -205,6 +210,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "chats.index",
+    pageContextTarget: { source: "query", parameter: "sessionCode" },
     route: "/chats",
     activeNav: "Chats",
     title: "Chat Management",
@@ -250,6 +256,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "automations.detail",
+    pageContextTarget: { source: "query", parameter: "automationCode" },
     route: "/automations/detail",
     activeNav: "Automations",
     title: "Automation Detail",
@@ -259,6 +266,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "automations.executions",
+    pageContextTarget: { source: "query", parameter: "automationCode" },
     route: "/automations/executions",
     activeNav: "Automations",
     title: "Automation Executions",
@@ -310,6 +318,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "knowledgeBase.detail",
+    pageContextTarget: { source: "path", parameter: "knowledgeBaseId" },
     route: "/knowledge-base/:knowledgeBaseId",
     activeNav: "KnowledgeBase",
     title: "Knowledge Base",
@@ -345,6 +354,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "memory.details",
+    pageContextTarget: { source: "query", parameter: "memoryId" },
     route: "/memory/details",
     activeNav: "Memory",
     title: "Memory Details",
@@ -399,6 +409,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "resources.detail",
+    pageContextTarget: { source: "query", parameter: "resourceCode" },
     route: "/resources/detail",
     activeNav: "Resources",
     title: "Resource Detail",
@@ -489,6 +500,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "tasks.detail",
+    pageContextTarget: { source: "query", parameter: "taskCode" },
     route: "/tasks/detail",
     activeNav: "Tasks",
     title: "Task Details",
@@ -524,6 +536,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "variables.details",
+    pageContextTarget: { source: "query", parameter: "variableKey" },
     route: "/variables/detail",
     activeNav: "Variables",
     title: "Variable Details",
@@ -532,6 +545,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "variables.details",
+    pageContextTarget: { source: "query", parameter: "variableKey" },
     route: "/variables/details",
     activeNav: "Variables",
     title: "Variable Details",
@@ -600,6 +614,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.mcpServersDetail",
+    pageContextTarget: { source: "query", parameter: "serverCode" },
     route: "/settings/mcp-servers/detail",
     activeNav: "Settings",
     title: "Platform MCP Server Detail",
@@ -610,6 +625,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.mcpServersEdit",
+    pageContextTarget: { source: "query", parameter: "serverCode" },
     route: "/settings/mcp-servers/edit",
     activeNav: "Settings",
     title: "Edit Platform MCP Server",
@@ -640,6 +656,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.capabilityPackDetail",
+    pageContextTarget: { source: "path", parameter: "packId" },
     route: "/settings/capability-packs/:packId",
     activeNav: "Settings",
     title: "Capability Pack Details",
@@ -690,6 +707,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.taskFlowsEdit",
+    pageContextTarget: { source: "query", parameter: "flowCode" },
     route: "/settings/task-flows/edit",
     activeNav: "Settings",
     title: "Edit Task Flow",
@@ -750,6 +768,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.modelsDetail",
+    pageContextTarget: { source: "query", parameter: "modelCode" },
     route: "/settings/models/detail",
     activeNav: "Settings",
     title: "Platform Model Detail",
@@ -780,6 +799,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.promptsDetail",
+    pageContextTarget: { source: "query", parameter: "promptCode" },
     route: "/settings/prompts/detail",
     activeNav: "Settings",
     title: "Platform Prompt Detail",
@@ -790,6 +810,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.promptsEdit",
+    pageContextTarget: { source: "query", parameter: "promptCode" },
     route: "/settings/prompts/edit",
     activeNav: "Settings",
     title: "Edit Platform Prompt",
@@ -820,6 +841,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.resourcesDetail",
+    pageContextTarget: { source: "query", parameter: "resourceCode" },
     route: "/settings/resources/detail",
     activeNav: "Settings",
     title: "Resource Detail",
@@ -860,6 +882,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.variablesDetail",
+    pageContextTarget: { source: "query", parameter: "variableKey" },
     route: "/settings/variables/detail",
     activeNav: "Settings",
     title: "Platform Variable Detail",
@@ -870,6 +893,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.variablesEdit",
+    pageContextTarget: { source: "query", parameter: "variableKey" },
     route: "/settings/variables/edit",
     activeNav: "Settings",
     title: "Edit Platform Variable",
@@ -900,6 +924,7 @@ const registeredRoutes: AppRoute[] = [
   },
   {
     pageId: "settings.skillDetail",
+    pageContextTarget: { source: "path", parameter: "skillName" },
     route: "/settings/skills/:skillName",
     activeNav: "Settings",
     title: "Skill Detail",

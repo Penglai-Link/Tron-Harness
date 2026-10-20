@@ -42,7 +42,7 @@ use super::error_mapper::{
     chat_error_response, chat_send_error_response, chat_steer_error_response,
     steer_chat_message_request_rejection_response,
 };
-use super::request::{AnswerChatUserInputRequest, SteerChatMessageRequest};
+use super::request::{AnswerChatUserInputRequest, SendChatMessageRequest, StreamChatMessageRequest, SteerChatMessageRequest};
 use super::response::{ChatSteerResultResponse, ChatUserInputRequestResponse};
 use super::stream_task::{ChatStreamForwardingGate, ChatStreamLifecycleGuard};
 mod shared;

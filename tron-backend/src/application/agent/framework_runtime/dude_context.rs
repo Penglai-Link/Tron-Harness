@@ -58,6 +58,12 @@ impl fw::ContextContributor for DudeContributor {
             let mut guidance = managed_guidance(input, "dude.identity-guidance", &ctx.locale)?;
             if let Some(soul) = &soul {
                 guidance.push('\n');
+                guidance.push_str(&managed_guidance(
+                    input,
+                    "dude.ui-page-context",
+                    &ctx.locale,
+                )?);
+                guidance.push('\n');
                 guidance.push_str(&managed_guidance(input, "dude.soul-guidance", &ctx.locale)?);
                 if soul.state != SoulState::Ready {
                     guidance.push('\n');

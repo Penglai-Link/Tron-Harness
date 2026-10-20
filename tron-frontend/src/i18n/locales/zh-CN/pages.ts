@@ -1702,6 +1702,9 @@ export const pages = {
     title: "知识图谱",
   },
   chat: {
+    floating: {
+      resizeHint: "拖动调整窗口大小；方向键微调，按住 Shift 加快调整。",
+    },
     composerMetrics: {
       ariaLabel: "最近一次模型调用指标",
       unavailable: "0",

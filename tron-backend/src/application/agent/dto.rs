@@ -10,11 +10,22 @@ use crate::domain::{
     reasoning::ReasoningEffort,
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AgentPageContext {
-    pub title: String,
-    pub path: String,
+pub struct AgentPageContext {
+    pub title: Option<String>,
+    pub path: Option<String>,
+    pub tab_title: Option<String>,
+    pub workspace_code: Option<String>,
+    pub workspace_name: Option<String>,
+    pub target: Option<AgentPageTarget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPageTarget {
+    pub key: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

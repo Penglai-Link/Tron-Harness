@@ -75,7 +75,7 @@ export function toUiResult(value: ChatSendResult): Ui.ChatSendResult {
 }
 export function toUiInput(input: SendChatMessageInput): MappedInput {
   const model = input.modelSelection;
-  return { content: input.content, annotations: input.annotations ?? [], requestedSkills: input.requestedSkills ?? [], pageContext: input.pageContext, modelId: input.modelCode,
+  return { content: input.content, annotations: input.annotations ?? [], requestedSkills: input.requestedSkills ?? [], modelId: input.modelCode,
     reasoningEffort: input.reasoningEffort, clientCapabilities: input.clientCapabilities, a2uiMetadata: input.a2uiMetadata,
     attachments: input.attachments?.map(toUiAttachment),
     modelSelection: model ? {

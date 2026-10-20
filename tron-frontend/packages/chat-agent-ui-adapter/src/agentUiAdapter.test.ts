@@ -26,7 +26,7 @@ describe("Tron / Agent UI boundary", () => {
       content: "Continue", annotations: [{id:"a-1",messageId:"source",selectedText:"original",comment:"Explain"}], requestedSkills: ["review"], workspaceCode: "WORKSPACE", appCode: "APP", taskCode: "TASK", agentCode: "codex",
       modelSelection: { kind: "ProviderRoute", providerCode: "PersonAi", qualityType: "High", routeCode: "ChatAuto" },
       modelCode: "kuaishou/deepseek", systemModelId: "codex/model", reasoningEffort: "XHigh",
-      pageContext: { title: "Application", path: "/apps/APP" },
+      pageContext: { title: "Application", path: "/apps/APP", tabTitle: null, workspaceCode: null, workspaceName: null, target: null },
       attachments: [{ id: "FILE", resourceCode: "RESOURCE", kind: "image", metadata: { fileRef: "attachment" }, summary: "Image" }],
     };
     expect(fromUiInput({ ...toUiInput(input) })).toEqual(input);

@@ -522,6 +522,7 @@ impl ChatService {
                     annotations.clone(),
                 )?;
                 let input = AgentSteerInput {
+                    page_context: crate::application::agent::page_context::normalized(command.page_context.as_ref()),
                     annotations: annotations.clone(),
                     steer_code: message.message_code.clone(),
                     requested_skills: requested_skills.clone(),

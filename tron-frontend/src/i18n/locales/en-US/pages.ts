@@ -1779,6 +1779,9 @@ export const pages = {
     title: "Knowledge Graph",
   },
   chat: {
+    floating: {
+      resizeHint: "Drag to resize the window. Arrow keys fine-tune the size; hold Shift for larger steps.",
+    },
     composerMetrics: {
       ariaLabel: "Latest model call metrics",
       unavailable: "0",

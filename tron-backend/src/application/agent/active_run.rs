@@ -13,6 +13,7 @@ use crate::domain::chat::ChatMessageAttachment;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentSteerInput {
+    pub page_context: Option<super::dto::AgentPageContext>,
     pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     pub steer_code: String,
     pub requested_skills: Vec<String>,
@@ -584,7 +585,8 @@ mod tests {
                     Ok::<_, ()>((
                         (),
                         AgentSteerInput {
-            annotations: Vec::new(),
+                            page_context: None,
+                            annotations: Vec::new(),
                             requested_skills: Vec::new(),
                             steer_code: "MSG-1".into(),
                             content: "too late".into(),

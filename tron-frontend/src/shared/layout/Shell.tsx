@@ -49,6 +49,7 @@ import { fetchNavigationDomains, fetchNavigationMenuTree } from "@/domain/naviga
 import { useAuthSession } from "@/domain/auth";
 import { NotificationLauncher } from "@/domain/notification/components/NotificationLauncher";
 import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
+import { captureDudePageContext } from "./dudePageContext";
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { tronNavigation } from "@/shared/constants/shellNavigation";
@@ -317,10 +318,6 @@ export function TronShell({
     ...readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultMainAgentWindowState),
     open: false,
   }));
-  const [mainAgentPageContext, setMainAgentPageContext] = useState<{
-    title: string;
-    path: string;
-  } | undefined>();
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
   const navigationDomainsControllerRef = useRef<AbortController | null>(null);
@@ -447,6 +444,17 @@ export function TronShell({
     ? compactWorkspacePath(selectedWorkspaceNode.label)
     : selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace");
   const activeWorkspaceCode = effectiveSecondarySpaceId || effectivePrimarySpaceId;
+  const pageSnapshotSourceRef = useRef({ pathname, search, workspaceCode: activeWorkspaceCode || null,
+    workspaceName: selectedWorkspaceNode?.name ?? selectedPrimarySpace?.name ?? null, t });
+  pageSnapshotSourceRef.current = { pathname, search, workspaceCode: activeWorkspaceCode || null,
+    workspaceName: selectedWorkspaceNode?.name ?? selectedPrimarySpace?.name ?? null, t };
+  const getMainAgentPageContext = useCallback(() => {
+    const tabs = useTabStore.getState();
+    return captureDudePageContext({
+      ...pageSnapshotSourceRef.current,
+      tab: tabs.tabs.find((tab) => tab.id === tabs.activeTabId),
+    });
+  }, []);
   useLayoutEffect(() => { setApiWorkspaceCode(activeWorkspaceCode || null); return () => setApiWorkspaceCode(null); }, [activeWorkspaceCode]);
 
   useEffect(() => {
@@ -888,10 +896,6 @@ export function TronShell({
     setTopbarToolsMenuOpen(false);
     if (!agentOpen) {
       closeFloatingPanels();
-      setMainAgentPageContext({
-        title: activeTab?.title.trim() || pathname,
-        path: pathname,
-      });
     }
 
     setAgentOpen(!agentOpen);
@@ -1312,7 +1316,7 @@ export function TronShell({
           {agentOpen ? (
             <MainAgentChatWindow
               currentUserDisplayName={authSession?.user.displayName || authSession?.user.username || ""}
-              pageContext={mainAgentPageContext}
+              getPageContext={getMainAgentPageContext}
               workspaceCode={activeWorkspaceCode}
               windowState={{ ...mainAgentWindowState, open: true }}
               onWindowStateChange={handleMainAgentWindowStateChange}

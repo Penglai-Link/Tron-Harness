@@ -1,7 +1,5 @@
 use crate::application::agent::tool_framework::FrameworkToolRegistryExt;
-mod page_context;
 mod tool_access;
-use page_context::page_context_message;
 use std::{collections::HashMap, sync::Arc};
 use tool_access::PreparedToolAccess;
 
@@ -24,7 +22,7 @@ use crate::{
 };
 
 use crate::application::agent::{
-    AgentInvocationCommand, AgentInvocationError, AgentManagementService, AgentPageContext,
+    AgentInvocationCommand, AgentInvocationError, AgentManagementService,
     ResolvedAgentRuntime, RuntimeAdapterSelection, domain_discovery_runtime_values,
 };
 
@@ -440,7 +438,10 @@ impl AgentRunContextBuilder {
             prompt_prefix_sources.push(None);
         }
         let mut prompt_prefix_messages = messages.clone();
-        let user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);
+        let mut user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);
+        crate::application::agent::page_context::attach(
+            &mut user_prompt_message, page_context.as_ref(), &locale,
+        );
         messages.push(user_prompt_message.clone());
 
         let local_directory = execution_scope_override
@@ -538,14 +539,6 @@ impl AgentRunContextBuilder {
             transcript_input_kind.as_deref(),
             transcript_input_metadata,
         )?;
-        if let Some(message) = page_context_message(page_context.as_ref()) {
-            if context.short_term_memory.is_some() {
-                std::sync::Arc::make_mut(&mut context.messages).push(message);
-            } else {
-                let index = context.messages.len().saturating_sub(1);
-                std::sync::Arc::make_mut(&mut context.messages).insert(index, message);
-            }
-        }
 
         Ok(PreparedAgentRun {
             leases,
@@ -665,29 +658,27 @@ mod tests {
 
     #[test]
     fn page_context_is_compact_json_metadata_and_bounded() {
-        let context = AgentPageContext {
-            title: "Page".repeat(30),
-            path: format!("/{}?secret=query", "route/".repeat(40)),
+        let context = crate::application::agent::AgentPageContext {
+            title: Some("Page".repeat(30)),
+            path: Some(format!("/{}?secret=query", "route/".repeat(40))),
+            ..Default::default()
         };
-
-        let message = page_context_message(Some(&context)).expect("page context message");
-        let AgentMessagePart::Text { text } = &message.parts[0] else {
-            panic!("page context should be text");
+        let mut message = AgentMessage::user("question");
+        crate::application::agent::page_context::attach(&mut message, Some(&context), "en-US");
+        let AgentMessagePart::Context { text, metadata, .. } = &message.parts[0] else {
+            panic!("page context should be structured user data");
         };
-        assert!(text.starts_with("Opened from UI page (metadata only): {"));
-        assert!(text.contains("\"title\":"));
-        assert!(text.contains("\"path\":"));
-        assert!(text.len() < 300);
+        assert_eq!(message.role, "user");
+        assert!(text.contains("UI page at this message's submission"));
+        assert!(serde_json::to_vec(metadata).unwrap().len() <= 2048);
         assert!(!text.contains("secret=query"));
+        assert_eq!(message.output_text_content(), "question");
     }
 
     #[test]
     fn empty_page_context_is_omitted() {
-        let context = AgentPageContext {
-            title: "  ".into(),
-            path: "".into(),
-        };
-        assert!(page_context_message(Some(&context)).is_none());
-        assert!(page_context_message(None).is_none());
+        let context = crate::application::agent::AgentPageContext::default();
+        assert!(crate::application::agent::page_context::normalized(Some(&context)).is_none());
+        assert!(crate::application::agent::page_context::normalized(None).is_none());
     }
 }

@@ -2,8 +2,9 @@ pub async fn send_message(
     State(state): State<AppState>,
     auth: RequestAuthContext,
     Path(session_code): Path<String>,
-    Json(mut request): Json<SendChatMessageCommand>,
+    Json(request): Json<SendChatMessageRequest>,
 ) -> Response {
+    let mut request = SendChatMessageCommand::from(request);
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
@@ -120,6 +121,7 @@ pub async fn steer_message(
         Err(error) => return steer_chat_message_request_rejection_response(error),
     };
     match state.chats.steer_message(SteerChatMessageCommand {
+        page_context: request.page_context,
         annotations: request.annotations,
         session_code: request.session_code,
         expected_run_code: request.expected_run_code,
@@ -138,9 +140,9 @@ pub async fn stream_message(
     State(state): State<AppState>,
     auth: RequestAuthContext,
     Path(session_code): Path<String>,
-    Json(request): Json<SendChatMessageCommand>,
+    Json(request): Json<StreamChatMessageRequest>,
 ) -> Response {
-    stream_message_command(state, auth, session_code, request).await
+    stream_message_command(state, auth, session_code, request.into()).await
 }
 
 pub(crate) async fn stream_message_command(

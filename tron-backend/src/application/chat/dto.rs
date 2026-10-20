@@ -129,6 +129,8 @@ pub struct SendChatMessageCommand {
 #[serde(rename_all = "camelCase")]
 pub struct SteerChatMessageCommand {
     #[serde(default)]
+    pub page_context: Option<AgentPageContext>,
+    #[serde(default)]
     pub annotations: Vec<eliteforge_agent_core::MessageAnnotation>,
     pub session_code: Option<String>,
     pub expected_run_code: Option<String>,

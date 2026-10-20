@@ -255,14 +255,21 @@ export interface ChatWorkRailLabels {
   tool?: Partial<ChatToolWorkLabels>;
 }
 
+/** A small, immutable snapshot of the UI when the user submits a message. */
+export interface ChatPageContext {
+  title: string | null;
+  path: string | null;
+  tabTitle: string | null;
+  workspaceCode: string | null;
+  workspaceName: string | null;
+  target: { key: string; value: string } | null;
+}
+
 export interface SendChatMessageInput {
   annotations?: ChatAnnotation[];
   content: string;
   workspaceCode: string | null;
-  pageContext?: {
-    title: string;
-    path: string;
-  };
+  pageContext?: ChatPageContext | null;
   appCode?: string | null;
   taskCode?: string | null;
   agentCode?: string | null;

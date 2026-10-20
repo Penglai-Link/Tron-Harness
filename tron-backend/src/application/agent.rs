@@ -6,6 +6,7 @@ pub(crate) mod agui_translate;
 mod business_tools;
 mod canonical_event;
 mod dto;
+pub(crate) mod page_context;
 mod error;
 mod execution_context;
 pub(crate) mod framework_runtime;
@@ -51,8 +52,7 @@ pub use business_tools::{
     register_default_agent_tools, tool_record_to_effective_tool,
 };
 pub use canonical_event::CanonicalRuntimeEvent;
-pub(crate) use dto::AgentPageContext;
-pub use dto::{AgentInvocationCommand, AgentInvocationResult};
+pub use dto::{AgentInvocationCommand, AgentInvocationResult, AgentPageContext, AgentPageTarget};
 pub use error::AgentInvocationError;
 pub use history::AgentRunHistoryService;
 pub use invocation::{AgentInvocationService, generate_agent_run_code};

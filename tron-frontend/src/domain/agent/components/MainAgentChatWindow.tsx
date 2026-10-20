@@ -44,7 +44,7 @@ interface MainAgentChatWindowProps {
   floatingSubtitle?: string;
   floatingTitle?: string;
   footerAddon?: ReactNode;
-  pageContext?: SendChatMessageInput["pageContext"];
+  getPageContext?: () => SendChatMessageInput["pageContext"];
   workspaceCode?: string;
   windowState?: ChatFloatingState;
   onWindowStateChange?: (state: ChatFloatingState) => void;
@@ -60,7 +60,7 @@ export function MainAgentChatWindow({
   floatingSubtitle,
   floatingTitle,
   footerAddon,
-  pageContext,
+  getPageContext,
   workspaceCode: _workspaceCode,
   windowState,
   onWindowStateChange,
@@ -200,11 +200,11 @@ export function MainAgentChatWindow({
       clientCapabilities: { userInputRequests: true },
       content,
       modelSelection: { kind: "Auto" },
-      pageContext,
+      pageContext: getPageContext?.() ?? null,
       taskCode: session.taskCode,
       workspaceCode: null,
     }),
-    [pageContext]
+    [getPageContext]
   );
 
   const handleError = useCallback(
@@ -242,25 +242,19 @@ export function MainAgentChatWindow({
   }, [resolvedWindowState.open, retry, userCode]);
 
   if (!persistedSession)
-    return resolvedWindowState.open ? (
+    return resolvedWindowState.open && resolutionError ? (
       <div
         role="dialog"
         aria-label={chatTitle}
         className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-4 shadow-lg"
       >
-        {resolutionError ? (
-          <>
-            <p role="alert">{resolutionError}</p>
-            <Button
-              className="mt-3"
-              onClick={() => setRetry((value) => value + 1)}
-            >
-              {t("dude.retry")}
-            </Button>
-          </>
-        ) : (
-          <p role="status">{t("dude.loading")}</p>
-        )}
+        <p role="alert">{resolutionError}</p>
+        <Button
+          className="mt-3"
+          onClick={() => setRetry((value) => value + 1)}
+        >
+          {t("dude.retry")}
+        </Button>
         <Button
           className="ml-2"
           variant="ghost"
@@ -280,6 +274,7 @@ export function MainAgentChatWindow({
         agentReplySpeed={agentReplySpeed}
         adapter={adapter}
         config={windowConfig}
+        showHistoryRail={false}
         createSendInput={createSendInput}
         currentUserDisplayName={currentUserDisplayName}
         floatingSubtitle={floatingSubtitle ?? t("dude.platform")}

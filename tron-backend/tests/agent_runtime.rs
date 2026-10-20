@@ -1962,7 +1962,8 @@ async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_s
                 Ok::<_, ()>((
                     (),
                     AgentSteerInput {
-            annotations: Vec::new(),
+                        page_context: None,
+                        annotations: Vec::new(),
                         requested_skills: Vec::new(),
                         steer_code: "MSG-STEER-1".into(),
                         content: "change direction now".into(),
@@ -2079,7 +2080,8 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
                 Ok::<_, ()>((
                     (),
                     AgentSteerInput {
-            annotations: Vec::new(),
+                        page_context: None,
+                        annotations: Vec::new(),
                         requested_skills: Vec::new(),
                         steer_code: "MSG-STEER-TOOL".into(),
                         content: "use the completed tool result differently".into(),
