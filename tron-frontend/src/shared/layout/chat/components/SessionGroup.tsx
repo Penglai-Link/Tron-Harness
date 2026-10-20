@@ -1,3 +1,4 @@
+import { Folder, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/shared/lib/utils";
 import { useState } from "react";
@@ -48,6 +49,7 @@ const SessionGroup = ({
   const [open, setOpen] = useState(true);
   const [visibleSessionCount, setVisibleSessionCount] =
     useState(sessionListPageSize);
+  const TopicIcon = open ? FolderOpen : Folder;
   return (
     <section>
       <Item
@@ -56,13 +58,13 @@ const SessionGroup = ({
         )}
         left={
           <ActionButton
-            className="flex min-w-0 flex-1 items-center text-left justify-start truncate"
+            className="flex min-w-0 flex-1 items-center gap-2 text-left justify-start truncate"
             onClick={() => {
               onSelect(project.projectCode);
               setOpen((value) => !value);
             }}
           >
-
+            <TopicIcon size={16} className="shrink-0" aria-hidden="true" />
             <span className="truncate">{project.name}</span>
           </ActionButton>
         }
@@ -81,7 +83,7 @@ const SessionGroup = ({
         }
       />
       {open ? (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 pl-2">
           {sortPinnedSessions(sessions, pinnedSessionCodes).slice(0, visibleSessionCount).map((session) => (
             <MessageItem
               key={session.sessionCode}
