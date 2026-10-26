@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
@@ -41,35 +41,56 @@ test.afterAll(async () => {
   await stopResourceUiFrontend(frontend); await stopManagedProcess(backend);
   if (directory) await rm(directory, { recursive: true, force: true });
 });
-test("public agent-ui terminal executes through Tron's real PTY, resizes and closes", async ({ page }) => {
+test("public agent-ui terminal executes through Tron's real PTY, resizes and closes", async ({ page }, info) => {
   test.setTimeout(30_000);
   await seedResourceUiShell(page);
   // Only identity bootstrap is a fixture; chat sessions, tickets, sockets and PTY are real.
   await routeActiveProfileApi(page);
+  const frames: Array<{direction:string;payload:string}> = [];
+  let promptEpoch = 0;
+  const sizes: Array<{rows:number;cols:number}> = [];
   const ready = new Promise<void>(resolveReady => page.on("websocket", socket => {
-    socket.on("framereceived", event => { if (String(event.payload).includes(']133;B')) resolveReady(); });
+    socket.on("framereceived", event => { frames.push({direction:"in",payload:String(event.payload)}); if (String(event.payload).includes(']133;B')) { promptEpoch += 1; resolveReady(); } });
+    socket.on("framesent", event => {
+      const payload = String(event.payload);
+      frames.push({direction:"out",payload});
+      if (!payload.startsWith("42")) return;
+      try { const [name, size] = JSON.parse(payload.slice(payload.indexOf("["))); if (name === "terminal:resize") sizes.push(size); } catch { /* Socket.IO connection frame */ }
+    });
   }));
   page.on("console", message => { if (message.type() === "error" || message.type() === "warning") console.log("PTY browser:", message.text()); });
+  try {
   await page.goto(`${frontend!.baseUrl}/apps`);
   await page.getByRole("button", { name: "Open terminal", exact: true }).click();
   const input = page.locator(".xterm-helper-textarea");
   await expect(input).toBeAttached();
   await ready;
+  const command = async (text: string) => {
+    const previousPrompt = promptEpoch;
+    await input.pressSequentially(text);
+    await input.press("Enter");
+    // A file can be written before the shell emits its next ready prompt.
+    await expect.poll(() => promptEpoch).toBeGreaterThan(previousPrompt);
+  };
   await input.focus();
-  await page.keyboard.type("printf '%s' 'real-pty-ok' > acceptance-result.txt");
-  await page.keyboard.press("Enter");
+  await command("printf '%s' 'real-pty-ok' > acceptance-result.txt");
   await expect.poll(() => readFile(join(directory, "acceptance-result.txt"), "utf8").catch(() => "")).toBe("real-pty-ok");
-  await page.keyboard.type("stty size > acceptance-initial-size.txt");
-  await page.keyboard.press("Enter");
+  await command("stty size > acceptance-initial-size.txt");
   await expect.poll(() => readFile(join(directory, "acceptance-initial-size.txt"), "utf8").catch(() => "")).toMatch(/^\s*\d+\s+\d+\s*$/);
   const [initialRows, initialCols] = (await readFile(join(directory, "acceptance-initial-size.txt"), "utf8")).trim().split(/\s+/).map(Number);
   await page.getByRole("button", { name: "Maximize terminal", exact: true }).click();
+  await expect.poll(() => sizes.some(size => size.rows > initialRows && size.cols >= initialCols)).toBe(true);
   await input.focus();
-  await page.keyboard.type("stty size > acceptance-size.txt"); await page.keyboard.press("Enter");
+  await command("stty size > acceptance-size.txt");
   await expect.poll(async () => {
     const [rows, cols] = (await readFile(join(directory, "acceptance-size.txt"), "utf8").catch(() => "0 0")).trim().split(/\s+/).map(Number);
     return rows > initialRows && cols >= initialCols;
   }).toBe(true);
-  await page.keyboard.type("exit"); await page.keyboard.press("Enter");
+  await input.pressSequentially("exit"); await input.press("Enter");
   await expect(input).toHaveCount(0);
+  } finally {
+    const path = info.outputPath("pty-evidence.json");
+    await writeFile(path, JSON.stringify({frames,sizes,promptEpoch, files: await readdir(directory), screen: await page.locator("body").innerText()},null,2));
+    await info.attach("pty-evidence", {path,contentType:"application/json"});
+  }
 });

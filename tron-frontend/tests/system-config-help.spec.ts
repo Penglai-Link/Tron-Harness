@@ -58,6 +58,8 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     await expect(tooltip).not.toContainText("1200");
     await page.mouse.move(1, 1);
     await help("mineru.ocrMode").focus();
+    await expect(tooltip).toHaveCount(0);
+    await help("mineru.ocrMode").hover();
     await expect(tooltip).toContainText("auto");
     await expect(tooltip).toContainText("txt");
     await expect(tooltip).toContainText("ocr");

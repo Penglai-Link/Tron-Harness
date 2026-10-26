@@ -31,14 +31,14 @@ fn reopen(f: &Fixture) -> KnowledgeBaseService {
     let llm = LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone()));
     KnowledgeBaseService::new(
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
-        tron_backend::application::rag::RagService::new(
-            Arc::new(std::sync::Mutex::new(tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(&f.state.config.database_url).unwrap())),
-            tron_backend::application::rag::DefaultRagRuntime::new(llm.clone(), f.state.llm_router.clone()),
-        ),
+        f.state.rag.with_runtime(tron_backend::application::rag::DefaultRagRuntime::new(
+            LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())), FixtureGraphRouter,
+        )),
         f.state.resources.clone(),
         f.state.agent_management.clone(),
         llm,
     )
+    .with_document_parser(Arc::new(FixtureDocumentParser))
     .with_ingestion_config(fast())
 }
 async fn wait_document(
@@ -696,7 +696,7 @@ async fn successful_reparse_deletes_old_chunks_history_and_files_but_retains_liv
             &kb.id,
             &first.id,
             None,
-            Some(Some(ParsingTier::Basic)),
+            Some(Some(ParsingTier::Advanced)),
             None,
         )
         .await
@@ -900,6 +900,8 @@ struct CleanupImageParser;
 impl tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser
     for CleanupImageParser
 {
+    fn with_ocr_mode(&self, _: tron_backend::application::knowledge_base::parsing::OcrMode) -> Result<Arc<dyn tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser>, tron_backend::application::knowledge_base::KnowledgeBaseError> { Ok(Arc::new(CleanupImageParser)) }
+
     fn default_tier(&self) -> tron_backend::application::knowledge_base::parsing::ParsingTier {
         Default::default()
     }
@@ -913,7 +915,7 @@ impl tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser
         Ok(ParsingCapabilities {
             default_tier: ParsingTier::Standard,
             default_ocr_mode: OcrMode::Auto,
-            available_tiers: vec![ParsingTier::Standard, ParsingTier::Basic],
+            available_tiers: vec![ParsingTier::Standard, ParsingTier::Advanced],
             parser_version: "4.0.10-fixture".into(),
             office_tier: ParsingTier::Flash,
         })

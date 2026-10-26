@@ -1,5 +1,12 @@
 // Help is scoped to full configuration paths; dynamic profile names use "profile".
 export const systemConfigDescriptions = {
+  "shortTermMemory_context_providers_historyRecentTurns": "Number of recent complete conversation turns kept verbatim when older history is summarized.",
+  "shortTermMemory_context_providers_dataBlocks_block_maxTokens": "Token cap for this context block. All allocated block budgets must fit the model input window.",
+  "shortTermMemory_context_providers_dataBlocks_block_strategy": "Block reduction strategy: keep preserves content, bound replaces oversized data with a bounded current snapshot, summarize produces a summary.",
+  "shortTermMemory_context_providers_dataBlocks_block_triggerRatio": "Fraction of this block budget that triggers reduction.",
+  "shortTermMemory_context_providers_dataBlocks_block_targetRatio": "Target fraction of this block budget after reduction.",
+  "shortTermMemory_context_providers_dataBlocks_block_minGainTokens": "Minimum token savings required to accept a reduction.",
+
   "modelInvocation_defaultOutputTokens": "Default output token limit per call when the model has no explicit limit. Defaults to 16384; adjust to the provider's supported limit.",
   "modelInvocation_text_callTimeoutSeconds": "Maximum wait in seconds for one standalone chat or auxiliary text call. Embedding calls are timed per batch, not per document.",
   "modelInvocation_text_operationTimeoutSeconds": "Total budget in seconds for one standalone chat or auxiliary text operation, including retries and backoff. Must be at least the per-call timeout.",

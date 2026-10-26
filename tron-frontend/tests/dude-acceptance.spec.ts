@@ -1,3 +1,4 @@
+import { gatewayArguments, singleGatewayResult } from "./support/gateway-stub";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, type Server } from "node:http";
@@ -14,6 +15,7 @@ let provider: Server | undefined;
 let directory = "";
 let api = "";
 let foregroundStarted = false;
+let backgroundTaskCode = "";
 let questionIssued = false;
 let releaseForeground = () => {};
 let backendLogs = "";
@@ -112,6 +114,21 @@ test.beforeAll(async () => {
       response.write(`data: ${JSON.stringify({ id: "dude-question", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "dude-question-call", type: "function", function: { name: "tool_execute", arguments: JSON.stringify({ tool: "chat_ask_user", arguments: { intro: "Choose the acceptance target", questions: [{ question: "Which target should I use?", options: [{ label: "Acceptance Local" }, { label: "Acceptance Remote" }] }] } }) } }] }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 } })}\n\n`);
       response.end("data: [DONE]\n\n");
       return;
+    }
+    if (payload.stream && !summaryRequest && input.includes("acceptance-background-work")) {
+      const toolResult = (id: string) => payload.messages?.find((message: {role:string;tool_call_id?:string}) => message.role === "tool" && message.tool_call_id === id);
+      const recorded = toolResult("dude-result-call");
+      const change = toolResult("dude-change-call");
+      const notified = toolResult("dude-notify-call");
+      if (!recorded || !change || !notified) {
+        const changeId = change ? JSON.parse(singleGatewayResult(change.content)).changeId : null;
+        const inner = !recorded || !change ? "dude_work_change" : "dude_notify";
+        const args = !recorded ? {operation:"recordResult", taskCode:backgroundTaskCode, result:"dude-background-finished"} : !change ? { operation: "record", taskCode: backgroundTaskCode, changeKey:"acceptance-background", kind:"Progress", summary:"dude-background-finished", evidence:["acceptance:background-run"] } : {changeId,title:"Background result",body:"dude-background-finished"};
+        const id = !recorded ? "dude-result-call" : !change ? "dude-change-call" : "dude-notify-call";
+        response.writeHead(200, {"Content-Type":"text/event-stream"});
+        response.end(`data: ${JSON.stringify({choices:[{index:0,delta:{tool_calls:[{index:0,id,type:"function",function:{name:"tool_execute",arguments:JSON.stringify(gatewayArguments("tool_execute",{tool:inner,arguments:args}))}}]},finish_reason:"tool_calls"}]})}\n\ndata: [DONE]\n\n`);
+        return;
+      }
     }
     if (payload.stream && !summaryRequest && input.includes("acceptance-foreground-hold")) {
       foregroundStarted = true;
@@ -253,7 +270,8 @@ test("robot opens the persistent platform conversation while task work runs in p
     // Native startup includes persisted context and resource preparation. The
     // controlled provider stays held throughout background task completion.
     await expect.poll(() => foregroundStarted, { timeout: 60_000 }).toBe(true);
-    await request("POST", "/api/v1/tasks", { workspaceCode: null, ownerDudeCode: session.ownerDudeCode, title: "acceptance-background-work", description: "acceptance-background-work: finish this while we are still chatting", dueAt: null, priority: "Medium", taskType: "General", sourceType: "Internal", assigneeUserCodes: [], agentCodes: [], appCodes: [] });
+    const backgroundTask = await request("POST", "/api/v1/tasks", { workspaceCode: null, ownerDudeCode: session.ownerDudeCode, title: "acceptance-background-work", description: "acceptance-background-work: finish this while we are still chatting", dueAt: null, priority: "Medium", taskType: "General", sourceType: "Internal", assigneeUserCodes: [], agentCodes: [], appCodes: [] });
+    backgroundTaskCode = backgroundTask.taskCode;
     await expect.poll(async () => {
       const events = await request("GET", `/api/v1/dudes/${session.ownerDudeCode}/events`);
       const completed = events.find((event: { source: string; status: string; result?: string }) => event.source === "TaskReminder" && event.status === "Completed" && event.result?.includes("dude-background-finished"));
@@ -307,18 +325,23 @@ test("robot opens the persistent platform conversation while task work runs in p
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("platform-dude-parallel-work.png") });
   await page.getByRole("button", { name: "Platform main Dude conversation", exact: true }).click();
   await page.goto(`${frontend!.baseUrl}/notifications`);
+  await page.getByRole("tab", {name:"All",exact:true}).click();
   const notice = page.locator("article").filter({ hasText: "dude-background-finished" });
   await notice.getByRole("button", { name: "Mark read", exact: true }).click();
   await expect(notice.getByRole("button", { name: "Mark unread", exact: true })).toBeVisible();
   await page.reload();
+  await page.getByRole("tab", {name:"All",exact:true}).click();
   await expect(notice.getByRole("button", { name: "Mark unread", exact: true })).toBeVisible();
-  await notice.locator('a[href*="/dudes?"]').click();
-  await expect(page).toHaveURL(new RegExp(`session=${backgroundSession}`));
+  await notice.click();
+  await page.getByRole("dialog").getByRole("button", {name:"Open related content",exact:true}).click();
+  await expect(page).toHaveURL(new RegExp(`task=${backgroundTaskCode}.*tab=tasks`));
+  // Work-change notifications target the task; inspect that work session separately.
+  await page.goto(`${frontend!.baseUrl}/dudes?dude=${session.ownerDudeCode}&session=${backgroundSession}&tab=history`);
   const workHistory = page.getByRole("region", { name: "Chat transcript", exact: true });
-  await expect(workHistory).toContainText("dude-background-finished");
+  await expect(workHistory).toContainText("dude-background-finished", {timeout:30_000});
   await expect(workHistory).not.toContainText("dude-foreground-finished");
-  const traceLink = page.getByRole("link", { name: "View traces", exact: true });
-  await expect(traceLink).toHaveAttribute("href", `/settings/observability/traces?sessionCode=${backgroundSession}`);
+  const traceLink = page.getByRole("button", { name: "View traces", exact: true });
+  await expect(traceLink).toHaveAttribute("href", `/settings/observability/traces?category=Agent&sessionCode=${backgroundSession}`);
   expect(errors).toEqual([]);
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("dude-notification-work-history.png") });
   const traceQuery = page.waitForResponse(response => response.request().method() === "POST"
@@ -330,11 +353,14 @@ test("robot opens the persistent platform conversation while task work runs in p
   expect((await queryResponse.json()).data.records.some((trace: any) => trace.traceId === backgroundDetail.trace.traceId)).toBe(true);
   await expect(page.getByRole("button", { name: backgroundDetail.trace.traceId, exact: true })).toBeVisible();
   await page.getByRole("button", { name: backgroundDetail.trace.traceId, exact: true }).click();
-  await expect(page.getByRole("button", { name: /^tron\.dude\.execute\s/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^agent\.model\s/ })).toBeVisible();
-  await expect(page.getByRole("img", { name: "Waterfall", exact: true }).locator("canvas")).toBeVisible();
-  await page.getByRole("button", { name: /^tron\.dude\.execute\s/ }).click();
+  await expect(page.getByRole("button", { name: "tron.dude.execute", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "MODEL-734600000000000001", exact: true })).toHaveCount(
+    backgroundDetail.spans.filter((span: any) => span.name === "agent.model").length,
+  );
+  await page.getByRole("button", { name: "tron.dude.execute", exact: true }).click();
   await expect(page.getByText("tron.dude.event.source", { exact: true })).toBeVisible();
+  await page.getByRole("tab", {name:"Waterfall", exact:true}).click();
+  await expect(page.getByRole("img", { name: "Waterfall", exact: true }).locator("canvas")).toBeVisible();
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("dude-trace-explorer.png") });
   expect(errors).toEqual([]);
 });
@@ -342,16 +368,16 @@ test("robot opens the persistent platform conversation while task work runs in p
 test("Dude creation stays in agent management with a clear consumption notice", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await seedResourceUiShell(page, "en-US"); await routeAcceptanceProfile(page);
-  await page.goto(`${frontend!.baseUrl}/settings/agents?tab=dudes`);
-  await expect(page.getByRole("button", { name: "New Dude", exact: true }),
+  await page.goto(`${frontend!.baseUrl}/settings/agents`);
+  await expect(page.getByRole("region", {name:"Dude",exact:true}).getByRole("button", { name: "New", exact: true }),
     `Dude manager unavailable. Page errors: ${JSON.stringify(evidence.get(page)!.errors)}. Frontend: ${frontend!.logs()}`)
     .toBeVisible({ timeout: 10_000 });
-  await page.getByRole("button", { name: "New Dude", exact: true }).click();
+  await page.getByRole("region", {name:"Dude",exact:true}).getByRole("button", { name: "New", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText(/points|credits|consumption/i);
   await expect(dialog).not.toContainText(/Points budget|Session strategy|Notification preferences|Event subscriptions/i);
   await expect(dialog.getByText("Group", { exact: true })).toHaveCount(0);
-  await expect(dialog.getByRole("switch", { name: "Background operation", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("switch", {name:"Pause",exact:true})).toBeChecked();
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("dude-creation-consumption-notice.png") });
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByRole("button", { name: /Set as main|Make main/i })).toHaveCount(0);
@@ -360,10 +386,13 @@ test("Dude creation stays in agent management with a clear consumption notice", 
     && new URL(response.url()).pathname === "/api/v1/agents/registry/internal/main-dude/skills");
   const knowledge = page.waitForResponse(response => response.request().method() === "GET"
     && new URL(response.url()).pathname === "/api/v1/knowledge-bases/agent-grants/main-dude");
-  await page.getByRole("button", { name: "Edit", exact: true }).first().click();
+  await page.getByRole("region", {name:"Dude",exact:true}).getByRole("button", {name:/main-dude$/}).click();
+  await dialog.getByRole("tab", {name:"Resources",exact:true}).click();
   expect((await skills).status()).toBe(200);
   expect((await knowledge).status()).toBe(200);
+  await dialog.getByRole("tab", {name:"Background",exact:true}).click();
   await expect(dialog.getByRole("spinbutton", { name: /Heartbeat/i })).toHaveValue("5");
+  await dialog.getByRole("tab", {name:"Resources",exact:true}).click();
   await expect(dialog.getByRole("alert")).toHaveCount(0);
   await dialog.getByRole("button", { name: /^Select skills/ }).click();
   const skillDialog = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Confirm selection", exact: true }) });

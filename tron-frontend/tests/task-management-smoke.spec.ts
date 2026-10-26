@@ -740,7 +740,6 @@ test("task management supports workflow search create detail updates subtasks an
   await page.getByLabel("Task Type").click(); await page.getByRole("option", { name: "Feature", exact: true }).click();
   await page.getByLabel("Source Type").click(); await page.getByRole("option", { name: "GitHub", exact: true }).click();
   await page.getByLabel("Source URL").fill("https://github.com/clouds3n/tron/issues/100");
-  await page.getByLabel("Agent Codes").fill("agent-reviewer, agent-builder");
   await page.getByRole("combobox", { name: "Apps", exact: true }).click(); await page.getByRole("option", { name: /Tron API/ }).click(); await page.keyboard.press("Escape");
   await expect(page.getByLabel("Assign Auth Operator")).toHaveCount(0);
   await page.getByRole("button", { name: "Open description fullscreen" }).click();
@@ -771,7 +770,7 @@ test("task management supports workflow search create detail updates subtasks an
   await expect(page.getByLabel("Task detail status")).toBeVisible();
   await page.getByLabel("Task detail status").click(); await expect(page.getByRole("option")).toHaveText(statuses.filter(status => status !== "Archived").map(statusTitle)); await page.keyboard.press("Escape");
   await expect(page.getByLabel("Task detail priority")).toBeVisible();
-  await expect(page.getByLabel("Task detail progress")).toBeVisible();
+  await expect(page.getByLabel("Task detail progress", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Task detail agent codes")).toBeVisible();
   await expect(page.getByLabel("Task detail app codes")).toHaveCount(0);
   await expect(page.getByRole("toolbar").filter({ has: page.getByRole("combobox", { name: "Apps", exact: true }) })).toContainText("Tron API");
@@ -793,7 +792,7 @@ test("task management supports workflow search create detail updates subtasks an
     return body?.workspaceCode === "TRON_CORE"
       && body.taskType === "Feature"
       && body.sourceType === "GitHub"
-      && body.agentCodes?.includes("agent-reviewer") === true
+      && Array.isArray(body.agentCodes) && body.agentCodes.length === 0
       && body.appCodes?.includes("APP-TRON-API") === true;
   }).toBe(true);
 
@@ -801,8 +800,8 @@ test("task management supports workflow search create detail updates subtasks an
   await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeVisible();
   await page.getByLabel("Task detail status").click(); await page.getByRole("option", { name: "Green", exact: true }).click();
   await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeVisible();
-  await page.getByLabel("Task detail progress").fill("55");
-  await page.getByLabel("Task detail progress").press("Tab");
+  await page.getByLabel("Task detail progress", { exact: true }).fill("55");
+  await page.getByLabel("Task detail progress", { exact: true }).press("Tab");
   await page.getByLabel("Task detail agent codes").fill("agent-reviewer, agent-builder, agent-qa");
   await page.getByLabel("Task detail agent codes").press("Tab");
   await page.getByRole("combobox", { name: "Apps", exact: true }).click(); await page.getByRole("option", { name: /Tron Console/ }).click(); await page.keyboard.press("Escape");
@@ -865,8 +864,8 @@ test("parent task detail derives progress from active subtasks and keeps the pro
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-PROGRESS-PARENT`);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
-  await expect(page.getByLabel("Task detail progress")).toHaveValue("50");
-  await expect(page.getByLabel("Task detail progress")).toBeDisabled();
+  await expect(page.getByLabel("Task detail progress", { exact: true })).toHaveValue("50");
+  await expect(page.getByLabel("Task detail progress", { exact: true })).toBeDisabled();
   await openDesktopRightSidebar(page);
   await expect(page.getByTestId("tron-right-sidebar").getByText("Completed child")).toBeVisible();
   await expect(page.getByTestId("tron-right-sidebar").getByText("Open child")).toBeVisible();
@@ -1095,7 +1094,7 @@ test("task shell exposes a navigation drawer below the desktop breakpoint", asyn
 
   const mobileSidebar = page.getByRole("dialog", { name: "Sidebar", exact: true });
   await expect(mobileSidebar).toBeVisible();
-  await expect(mobileSidebar.getByRole("link", { name: "Tasks" })).toBeVisible();
+  await expect(mobileSidebar.getByRole("button", { name: "Explore more", exact: true })).toBeVisible();
   await expect(mobileSidebar.getByRole("button", { name: "Open user menu" })).toBeVisible();
 
   await page.keyboard.press("Escape");

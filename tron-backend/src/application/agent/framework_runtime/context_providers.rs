@@ -105,13 +105,16 @@ pub(super) async fn assemble(
             message
         })
         .collect::<Vec<_>>();
-    if application.is_empty() {
-        if let Some(mut scope) =
-            crate::application::agent::execution_context_message(&context.execution_scope)
-        {
-            scope.role = "user".into();
-            application.push(scope);
-        }
+    // Execution scope is independent of project instructions and other context.
+    // Refresh it at every boundary, even when another application entry exists.
+    application.retain(|message| !message.parts.iter().any(|part| matches!(part,
+        crate::domain::agent::AgentMessagePart::Context { kind, .. } if kind == "application_execution_context"
+    )));
+    if let Some(mut scope) =
+        crate::application::agent::execution_context_message(&context.execution_scope)
+    {
+        scope.role = "user".into();
+        application.push(scope);
     }
     let mut history = input.history.clone();
     let page = page_context::project(&mut history)?;

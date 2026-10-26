@@ -240,15 +240,7 @@ async fn delayed_agent_model_mock_server() -> AgentModelMockServer {
         "/v1/chat/completions",
         post(|Json(payload): Json<Value>| async move {
             sleep(Duration::from_millis(750)).await;
-            let prompt = payload["messages"]
-                .as_array()
-                .and_then(|messages| {
-                    messages
-                        .iter()
-                        .rev()
-                        .find_map(|message| message["content"].as_str())
-                })
-                .unwrap_or_default();
+            let prompt = common::last_conversation_content(&payload);
             valid_mock_completion(&payload, format!("delayed reply: {prompt}"))
         }),
     );
@@ -320,15 +312,7 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
         return session_summary_mock_response(&payload);
     }
 
-    let prompt = payload["messages"]
-        .as_array()
-        .and_then(|messages| {
-            messages
-                .iter()
-                .rev()
-                .find_map(|message| message["content"].as_str())
-        })
-        .unwrap_or_default();
+    let prompt = common::last_conversation_content(&payload);
     if payload["stream"].as_bool() == Some(true) {
         assert_eq!(payload["enable_thinking"], json!(true));
         let raw_reasoning = json!({

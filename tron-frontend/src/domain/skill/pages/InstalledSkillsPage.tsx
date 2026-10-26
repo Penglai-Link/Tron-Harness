@@ -1,7 +1,7 @@
+import { SkillAgentGrants } from "../components/SkillAgentGrants";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SkillCandidatesPanel } from "../components/SkillCandidatesPanel";
@@ -22,8 +22,6 @@ import { PageHeader, SurfaceCard } from "@/shared";
 import { useToast } from "@/components/ui/toast";
 import {
   fetchRegistrySkills,
-  fetchSkillAgents,
-  setSkillAgents,
   uninstallRegistrySkill,
   rescanRegistrySkills,
   updateRegistrySkills,
@@ -33,9 +31,6 @@ import {
 import type {
   RegistrySkillRecord,
 } from "@/domain/skill/model";
-import { listDudes } from "@/domain/dude/api/dudeApi";
-import { fetchWorkspaceInternalAgents } from "@/domain/agent/api/agentManagementApi";
-import { PLATFORM_INTERNAL_AGENT_SCOPE } from "@/domain/agent/model";
 import { DisabledResourceReason } from "@/domain/agent/components/InternalAgentSkillField";
 
 export function InstalledSkillsPage() {
@@ -301,129 +296,5 @@ function InstalledSkillList() {
         </Dialog>
       ) : null}
     </>
-  );
-}
-function SkillAgentGrants({
-  skill,
-  onClose,
-  onSaved,
-}: {
-  skill: RegistrySkillRecord;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const { t } = useTranslation("pages");
-  const toast = useToast();
-  const client = useQueryClient();
-  const [agents, setAgents] = useState<{ agentCode: string; name: string }[]>(
-    []
-  );
-  const [selected, setSelected] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const text = (k: string) => t(`agentSkills.${k}`);
-  async function load() {
-    setLoading(true);
-    try {
-      const [a, g, dudes] = await Promise.all([
-        fetchWorkspaceInternalAgents(PLATFORM_INTERNAL_AGENT_SCOPE),
-        fetchSkillAgents(skill.skillName),
-        listDudes(),
-      ]);
-      setAgents([...a, ...dudes.map(dude => ({ agentCode: dude.dudeCode, name: dude.name }))]);
-      setSelected(g.agentCodes);
-      setError("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => {
-    void load();
-  }, [skill.skillName]);
-  async function save() {
-    setBusy(true);
-    try {
-      await setSkillAgents(skill.skillName, selected);
-      await client.invalidateQueries({ queryKey: ["agent-skills"] });
-      onSaved();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Dialog
-      open
-      disablePointerDismissal
-      onOpenChange={(o) => {
-        if (!o && !busy) onClose();
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{text("assignAgents")}</DialogTitle>
-          <DialogDescription>{skill.skillName}</DialogDescription>
-        </DialogHeader>
-        <SearchField
-          ariaLabel={text("searchAgents")}
-          placeholder={text("searchAgents")}
-          value={search}
-          onChange={setSearch}
-        />
-        {error ? (
-          <p role="alert">
-            {error}
-            <Button onClick={() => void load()}>{text("retry")}</Button>
-          </p>
-        ) : null}
-        <div className="max-h-[50dvh] space-y-2 overflow-y-auto">
-          {agents
-            .filter((a) =>
-              `${a.name} ${a.agentCode}`
-                .toLowerCase()
-                .includes(search.toLowerCase())
-            )
-            .map((a) => (
-              <label
-                key={a.agentCode}
-                className="flex items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] p-3"
-              >
-                <input
-                  type="checkbox"
-                  disabled={busy}
-                  checked={selected.includes(a.agentCode)}
-                  onChange={(e) =>
-                    setSelected(
-                      e.currentTarget.checked
-                        ? [...selected, a.agentCode]
-                        : selected.filter((c) => c !== a.agentCode)
-                    )
-                  }
-                />
-                <span>
-                  {a.name}
-                  <span className="block text-xs">{a.agentCode}</span>
-                </span>
-              </label>
-            ))}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" disabled={busy} onClick={onClose}>
-            {text("cancel")}
-          </Button>
-          <Button
-            disabled={busy || loading || !!error}
-            onClick={() => void save()}
-          >
-            {text("save")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

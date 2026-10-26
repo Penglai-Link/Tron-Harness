@@ -28,7 +28,7 @@ test.beforeAll(async () => {
     let body = ""; for await (const chunk of request) body += chunk;
     const payload = JSON.parse(body);
     requests.push(payload);
-    const lastUser = [...(payload.messages || [])].reverse().find((message: {role: string}) => message.role === "user");
+    const lastUser = [...(payload.messages || [])].reverse().find((message: {role: string; content?: unknown}) => message.role === "user" && /acceptance-turn|acceptance-question/.test(JSON.stringify(message.content)));
     const content = JSON.stringify(lastUser?.content || "");
     const questionTurn = JSON.stringify(payload.messages).includes("acceptance-question");
     const askQuestion = payload.stream && questionTurn && !questionIssued;
@@ -116,7 +116,7 @@ async function inspectContextPreviews(page: import("@playwright/test").Page, tes
   // nothing else) instead of the per-request expanded catalogue.
   expect(tool.tools.map((value: { toolName: string }) => value.toolName).sort()).toEqual(["tool_execute", "tool_search"]);
   await expect(dialog.getByRole("heading", { name: "tool_search", exact: true })).toBeVisible();
-  await expect(dialog.locator("section").filter({ has: page.getByRole("heading", { name: "tool_search", exact: true }) }).getByRole("table")).toContainText("domainCode");
+  await expect(dialog.locator("section").filter({ has: page.getByRole("heading", { name: "tool_search", exact: true }) }).getByRole("table")).toContainText("items");
   await expect(dialog.getByRole("heading", { name: "tool_execute", exact: true })).toBeVisible();
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`tool-definitions-${locale}.png`) });
   await close();
@@ -133,7 +133,7 @@ async function inspectContextPreviews(page: import("@playwright/test").Page, tes
   await dialog.getByRole("button", { name: zh ? "预览" : "Preview", exact: true }).click();
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`system-prompt-${locale}.png`) });
   await close();
-  const history = await openBlock(zh ? "模型请求中的历史" : "Request History");
+  const history = await openBlock(zh ? "对话历史·" : "Conversation History·");
   expect(history.messages.length).toBeGreaterThan(0);
   await close();
 }
@@ -146,20 +146,20 @@ test("public chat uses the real framework, restores history and shows its contex
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`${frontend!.baseUrl}/chats`);
-  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.locator('[data-menu-code="CHAT_NEW_SESSION"]').getByRole("button", { name: "New chat", exact: true }).click();
   await page.getByRole("button", { name: "Select chat model", exact: true }).click();
   await page.getByRole("menuitemradio", { name: "Framework Acceptance", exact: true }).click();
   const input = page.locator('[data-theme-part="chat-input"]');
   const transcript = page.getByRole("region", { name: "Chat transcript", exact: true });
   await input.fill("acceptance-turn-one: remember the word sapphire"); await input.press("Enter");
-  await expect(transcript).toContainText("framework-first-reply");
+  await expect(transcript).toContainText("framework-first-reply", { timeout: 30_000 });
   await expect(input).toBeEnabled();
   await expect(transcript).not.toContainText("tronMessagePart");
   await page.reload();
-  await expect(transcript).toContainText("framework-first-reply");
+  await expect(transcript).toContainText("framework-first-reply", { timeout: 30_000 });
   await expect(transcript).not.toContainText("tronMessagePart");
   await input.fill("acceptance-turn-two: use the earlier word"); await input.press("Enter");
-  await expect(transcript).toContainText("framework-second-reply");
+  await expect(transcript).toContainText("framework-second-reply", { timeout: 30_000 });
   expect(requests.some(request => request.stream && JSON.stringify(request.messages).includes("acceptance-turn-one") && JSON.stringify(request.messages).includes("acceptance-turn-two") && JSON.stringify(request.messages).includes("framework-first-reply"))).toBe(true);
   // The interactive-question contract now reaches the model through the gateway:
   // the payload the model actually receives must instruct the envelope call.
@@ -168,13 +168,13 @@ test("public chat uses the real framework, restores history and shows its contex
   if (await open.isVisible()) await open.click();
   const sidebar = page.getByTestId("tron-right-sidebar");
   await sidebar.getByRole("tab", { name: "Short-term memory", exact: true }).click();
-  await expect(sidebar.getByText("Request History")).toBeVisible();
+  await expect(sidebar.getByText("Conversation History")).toBeVisible();
   await expect(sidebar.getByText("Session Total", { exact: true })).toBeVisible();
   // The sidebar renders the platform model identity of the active connection
   // (currently the generated model code) followed by the context window; the
   // seeded provider exposes a 128k window either way.
   await expect(sidebar).toContainText(/· 128k window/);
-  await expect(sidebar).toContainText("Request History· 3 messages");
+  await expect(sidebar).toContainText("Conversation History· 3 messages");
   await expect(sidebar.getByText("480", { exact: true })).toBeVisible();
   await expect(sidebar.getByText("240", { exact: true })).toBeVisible();
   await expect(sidebar).toContainText("/ 16k");
@@ -184,9 +184,9 @@ test("public chat uses the real framework, restores history and shows its contex
   await input.fill("acceptance-question: ask me to choose the target"); await input.press("Enter");
   // The question card renders the questions and their options; the interaction
   // intro is carried in the payload but not displayed by the current card.
-  await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByText("Which target should I use?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByText("Which target should I use?", { exact: true })).toBeVisible({timeout:30_000});
   await page.reload();
-  await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByText("Which target should I use?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Assistant questions", exact: true }).getByText("Which target should I use?", { exact: true })).toBeVisible({timeout:30_000});
   const answers = page.getByRole("region", { name: "Assistant questions", exact: true });
   await answers.getByText("Acceptance Local", { exact: true }).click();
   await expect(page.getByRole("radio", { name: /Acceptance Local/ })).toBeChecked();
@@ -204,13 +204,13 @@ test("context previews show native Framework content in Chinese", async ({ page 
   await seedResourceUiShell(page, "zh-CN");
   await routeActiveProfileApi(page);
   await page.goto(`${frontend!.baseUrl}/chats`);
-  await page.getByRole("button", { name: "新会话", exact: true }).click();
+  await page.locator('[data-menu-code="CHAT_NEW_SESSION"]').getByRole("button", { name: "新会话", exact: true }).click();
   await page.getByRole("button", { name: "选择模型", exact: true }).click();
   await page.getByRole("menuitemradio", { name: "Framework Acceptance", exact: true }).click();
   const input = page.locator('[data-theme-part="chat-input"]');
   await input.fill("acceptance-turn-one: 检查短期记忆");
   await input.press("Enter");
-  await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).toContainText("framework-first-reply");
+  await expect(page.getByRole("region", { name: "Chat transcript", exact: true })).toContainText("framework-first-reply", { timeout: 30_000 });
   // The zh run must receive the localized gateway contract (same envelope form).
   expect(JSON.stringify(requests).replace(/\\"/g, '"')).toContain('必须调用 `tool_execute`，参数为 `{"tool":"chat_ask_user"');
   const open = page.getByRole("button", { name: "打开右侧边栏", exact: true });

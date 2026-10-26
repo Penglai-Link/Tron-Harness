@@ -58,7 +58,11 @@ for(const locale of ["en-US","zh-CN"] as const) {
   const aggregate=page.getByRole("dialog");
   await expect(aggregate.locator("iframe")).toBeVisible();await expect(aggregate.getByRole("img")).toBeVisible();
   await aggregate.locator("figure").filter({has:page.locator("iframe")}).getByRole("button").click();
-  await expect(page).toHaveURL(/resource-management\/files\/detail\?resourceCode=res-pdf&preview=1/);
+  await expect(page).toHaveURL(/knowledge-base\/kb-preview$/);
+  await expect(page.getByRole("dialog").getByRole("heading", {name:"guide.pdf"})).toBeVisible();
+  await expect(page.getByRole("dialog").locator("iframe")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button",{name:zh?"关闭":"Close",exact:true}).click();
+  await page.goto(`${frontend!.baseUrl}/resource-management/files/detail?resourceCode=res-pdf&preview=1`);
   const dialog=page.getByRole("dialog");
   await expect(dialog.getByRole("heading",{name:"guide.pdf"})).toBeVisible();
   await expect(dialog.locator("iframe")).toHaveAttribute("src",/^blob:/);
@@ -91,7 +95,10 @@ for(const locale of ["en-US","zh-CN"] as const) {
   await page.getByRole("row").filter({hasText:"guide.pdf"}).getByRole("button").click();
   await page.getByRole("menuitem",{name:zh?"预览":"Preview",exact:true}).click();
   await aggregate.locator("figure").filter({has:page.getByRole("img")}).getByRole("button").click();
-  await expect(page).toHaveURL(/resourceCode=res-image&preview=1/);
+  await expect(page).toHaveURL(/knowledge-base\/kb-preview$/);
+  await expect(dialog.getByRole("img")).toBeVisible();
+  await dialog.getByRole("button",{name:zh?"关闭":"Close",exact:true}).click();
+  await page.goto(`${frontend!.baseUrl}/resource-management/files/detail?resourceCode=res-image&preview=1`);
   await expect(dialog.getByRole("img",{name:"table.png"})).toBeVisible();
   const imageUrl=await dialog.getByRole("img",{name:"table.png"}).getAttribute("src");
   await maximize.click(); await expect(restore).toBeVisible();

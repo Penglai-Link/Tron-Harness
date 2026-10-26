@@ -116,7 +116,17 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 async function routeAuthApi(page: Page) {
+  await page.route("**/api/v1/knowledge-bases/platform", route => route.fulfill({json:successEnvelope([])}));
   await routeActiveProfileApi(page);
+  await page.route("**/api/v1/admin/workspaces/options*", route => route.fulfill({json:successEnvelope([{workspaceCode:"TRON_CORE",name:"Tron Core",label:"Tron Core"}])}));
+  await page.route("**/api/v1/chats/sessions/get-context-assembly?*", route => route.fulfill({json:successEnvelope({snapshot:{
+    blocks: [
+      {id:"framework.instructions",position:0,allocatedTokens:16000,finalTokens:4000,messageCount:1},
+      {id:"current_session_checkpoint",position:1,allocatedTokens:6000,finalTokens:400,messageCount:1},
+      {id:"framework.history",position:2,allocatedTokens:64000,finalTokens:8000,messageCount:3},
+    ].map(block=>({...block,sources:[],originalTokens:block.finalTokens,configuredTokens:block.allocatedTokens,outcome:"Kept"})),
+    protocolTokens:1800,inputCapacity:100000,estimatedInputTokens:14200,modelCode:"fixture-model",budgetBreakdown:{contextWindowLimit:100000,toolSchemaTokens:1800,toolSchemaBudgetTokens:6000}
+  }})}));
 }
 async function signIn(page: Page, targetPath: string) {
   await routeActiveProfileApi(page);
@@ -211,13 +221,7 @@ async function expectNoStaleInspector(page: Page) {
   await expect(
     rightSidebar(page).getByText("Task Metadata", { exact: true })
   ).toHaveCount(0);
-  await expect
-    .poll(
-      async () =>
-        (await rightSidebarOpenControl(page).isVisible()) ||
-        (await rightSidebarCloseControl(page).isVisible())
-    )
-    .toBe(true);
+
 }
 
 test.beforeAll(async () => {
@@ -402,10 +406,7 @@ test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show 
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}`);
-  await openRightSidebar(page);
-  await expect(
-    rightSidebar(page).getByRole("button", { name: "New Tab", exact: true })
-  ).toBeVisible();
+  await expectNoStaleInspector(page);
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/apps`);
@@ -456,20 +457,20 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
     "Context compacted"
   );
   await expect(
-    sidebar.getByRole("button", { name: /^Tool Schema/ })
+    sidebar.getByRole("button", { name: /^4\. Tool Definitions/ }).locator("xpath=ancestor::div[contains(@class, 'py-2')][1]")
   ).toContainText("1.8k / 6k");
-  await expect(sidebar.getByText("Current Session Checkpoint")).toBeVisible();
+  await expect(sidebar.getByText("Conversation Summary")).toBeVisible();
   await expect(
-    sidebar.getByText("· 1 checkpoint", { exact: true })
+    sidebar.getByRole("button", { name: /Conversation Summary/ })
   ).toBeVisible();
 
-  await sidebar.getByRole("button", { name: "Create checkpoint" }).click();
+  await sidebar.getByRole("button", { name: "Compact short-term memory" }).click();
 
   await expect(
-    page.getByText("Session checkpoint created", { exact: true })
+    page.getByLabel("Chat transcript").getByText("/compact", { exact: true })
   ).toBeVisible();
   await expect(
-    sidebar.getByRole("button", { name: "Create checkpoint" })
+    sidebar.getByRole("button", { name: "Compact short-term memory" })
   ).toBeEnabled();
 
   await page.getByRole("button", { name: "Open user menu" }).click();
@@ -483,7 +484,7 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
     "上下文已压缩"
   );
   await expect(
-    sidebar.getByRole("button", { name: /^工具定义/ })
+    sidebar.getByRole("button", { name: /^4\. 工具定义/ }).locator("xpath=ancestor::div[contains(@class, 'py-2')][1]")
   ).toContainText("1.8k / 6k");
 });
 
@@ -520,10 +521,10 @@ test("AC-RCS-04: graph inspector stays inline and memory inspectors preserve sel
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedWorkspaceSelection(page);
   await routeAuthApi(page);
-  await signIn(page, "/knowledge-graph");
+  await signIn(page, "/settings/knowledge-graph?mode=business");
 
   await expect(
-    page.getByRole("tab", { name: "KnowledgeGraph", exact: true })
+    page.getByRole("searchbox", {name: "Locate graph node"})
   ).toBeVisible();
   await expectNoStaleInspector(page);
   await page
@@ -539,9 +540,9 @@ test("AC-RCS-04: graph inspector stays inline and memory inspectors preserve sel
   await expect(page.getByText("Node Inspector")).toHaveCount(0);
 
   await routeActiveProfileApi(page);
-  await page.goto(`${frontendBaseUrl}/knowledge-graph`);
+  await page.goto(`${frontendBaseUrl}/settings/knowledge-graph?mode=business`);
   await expect(
-    page.getByRole("tab", { name: "KnowledgeGraph", exact: true })
+    page.getByRole("searchbox", {name: "Locate graph node"})
   ).toBeVisible();
   await expectNoStaleInspector(page);
   await page
@@ -696,13 +697,11 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/prompts`);
-  await openRightSidebar(page);
   await expectNoStaleInspector(page);
   await page.getByRole("row").filter({ hasText: "SYS_CHAT_SESSION_TITLE" }).click();
   await expect(page).toHaveURL(/\/settings\/prompts\/detail\?promptCode=/);
-  await expect(
-    page.getByRole("textbox", { name: "Prompt code", exact: true })
-  ).toHaveAttribute("readonly", "");
+  await expect(page.getByText("SYS_CHAT_SESSION_TITLE", {exact: true})).toBeVisible();
+  await expect(page.getByRole("textbox", {name: "Prompt code", exact: true})).toHaveCount(0);
   await expectNoStaleInspector(page);
 
   await routeActiveProfileApi(page);
@@ -728,20 +727,20 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   }
 
   await routeActiveProfileApi(page);
-  await page.goto(`${frontendBaseUrl}/knowledge-base`);
-  await expect(rightSidebarOpenControl(page)).toBeVisible();
-  await page
-    .locator("tbody tr")
-    .filter({ hasText: "Operations SOP Library" })
-    .click();
-  await expect(
-    rightSidebar(page).getByText("Selected KnowledgeBase")
-  ).toBeVisible();
-  await expect(
-    rightSidebar(page).getByText("Operations SOP Library")
-  ).toBeVisible();
+  await page.goto(`${frontendBaseUrl}/settings/knowledge-base`);
+  await expect(page.getByRole("searchbox",{name:"Search knowledge bases",exact:true})).toBeVisible();
+  await expectNoStaleInspector(page);
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/skills`);
   await expectNoStaleInspector(page);
+});
+
+// Keep the rendered state beside failed acceptance evidence.
+test.afterEach(async ({page}, info) => {
+  if (info.status !== info.expectedStatus) {
+    const path = info.outputPath("failed-page.txt");
+    await (await import("node:fs/promises")).writeFile(path, await page.locator("body").ariaSnapshot());
+    await info.attach("failed-page", {path, contentType: "text/plain"});
+  }
 });

@@ -1,3 +1,4 @@
+//! Deterministic synthetic V1 contract fixtures; no live OCR quality claims.
 mod common;
 #[path = "support/knowledge_base_fixture.rs"]
 mod fixture;
@@ -19,6 +20,7 @@ const DOCX: &[u8] = include_bytes!("fixtures/mineru-v1/synthetic.docx.zip");
 const XLSX: &[u8] = include_bytes!("fixtures/mineru-v1/synthetic.xlsx.zip");
 const PDF: &[u8] = include_bytes!("fixtures/mineru-v1/synthetic.pdf.zip");
 const SCAN: &[u8] = include_bytes!("fixtures/mineru-v1/synthetic-scanned.pdf.zip");
+#[derive(Clone)]
 struct Replay {
     calls: Arc<AtomicUsize>,
 }
@@ -26,6 +28,9 @@ struct Replay {
 impl KnowledgeDocumentParser for Replay {
     fn default_tier(&self) -> ParsingTier {
         ParsingTier::Standard
+    }
+    fn with_ocr_mode(&self, _mode: OcrMode) -> Result<Arc<dyn KnowledgeDocumentParser>, KnowledgeBaseError> {
+        Ok(Arc::new(self.clone()))
     }
     async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
         Ok(ParsingCapabilities {
@@ -52,7 +57,7 @@ impl KnowledgeDocumentParser for Replay {
         } else {
             (PDF, ParsingTier::Standard)
         };
-        if tier.is_some_and(|t| t != actual) {
+        if !name.ends_with(".docx") && !name.ends_with(".xlsx") && tier.is_some_and(|t| t != actual) {
             return Err(KnowledgeBaseError::Invalid(
                 "Unsupported synthetic tier".into(),
             ));
@@ -61,7 +66,7 @@ impl KnowledgeDocumentParser for Replay {
     }
 }
 #[tokio::test]
-async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_index() {
+async fn structured_outputs_use_resource_cache_with_image_acl_and_1024_index() {
     let f = Fixture::new();
     let calls = Arc::new(AtomicUsize::new(0));
     let service = f.service.clone().with_document_parser(Arc::new(Replay {
@@ -76,6 +81,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
         "synthetic.pdf",
         "synthetic-scanned.pdf",
     ] {
+        let pdf_input = pdf();
         let doc = service
             .upload(
                 USER,
@@ -86,7 +92,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
                 } else if name.ends_with(".xlsx") {
                     include_bytes!("fixtures/mineru-v1/synthetic.xlsx").as_slice()
                 } else {
-                    b"synthetic replay input"
+                    &pdf_input
                 },
             )
             .unwrap();
@@ -126,7 +132,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
             std::iter::once(&artifact.resource_code).chain(artifact.image_resource_codes.iter())
         {
             let command = || ResourceBinaryDownloadCommand {
-                workspace_code: WORKSPACE.into(),
+                workspace_code: "PLATFORM".into(),
                 resource_code: resource.clone(),
             };
             assert!(
@@ -144,7 +150,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
             assert!(
                 f.state
                     .resources
-                    .for_agent(Some(&f.agent))
+                    .for_agent_in_workspace(Some(&f.agent), WORKSPACE)
                     .download_binary_to_file(USER, command())
                     .is_err()
             );
@@ -161,7 +167,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
             assert!(
                 f.state
                     .resources
-                    .for_agent(Some(&f.agent))
+                    .for_agent_in_workspace(Some(&f.agent), WORKSPACE)
                     .download_binary_to_file(USER, command())
                     .is_ok()
             );
@@ -169,7 +175,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
             assert!(
                 f.state
                     .resources
-                    .for_agent(Some(&f.agent))
+                    .for_agent_in_workspace(Some(&f.agent), WORKSPACE)
                     .download_binary_to_file(USER, command())
                     .is_err()
             );
@@ -189,7 +195,7 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
             .download_binary_to_file(
                 USER,
                 ResourceBinaryDownloadCommand {
-                    workspace_code: WORKSPACE.into(),
+                    workspace_code: "PLATFORM".into(),
                     resource_code: artifact.image_resource_codes[0].clone(),
                 },
             )
@@ -322,11 +328,11 @@ async fn real_structured_outputs_use_resource_cache_with_image_acl_and_1024_inde
         assert!(
             f.state
                 .resources
-                .for_agent(Some(&f.agent))
+                .for_agent_in_workspace(Some(&f.agent), WORKSPACE)
                 .download_binary_to_file(
                     USER,
                     ResourceBinaryDownloadCommand {
-                        workspace_code: WORKSPACE.into(),
+                        workspace_code: "PLATFORM".into(),
                         resource_code: image
                     }
                 )
@@ -404,7 +410,7 @@ async fn cancellation_preserves_parsed_resources_and_retry_reuses_cache() {
     }));
     let kb = service.create(USER, "Cancel synthetic", "").unwrap();
     let doc = service
-        .upload(USER, &kb.id, "synthetic.pdf", b"synthetic cancel")
+        .upload(USER, &kb.id, "synthetic.pdf", &pdf())
         .unwrap();
     f.client.blocking.store(true, Ordering::SeqCst);
     let owned = service.clone();
@@ -435,7 +441,7 @@ async fn cancellation_preserves_parsed_resources_and_retry_reuses_cache() {
 }
 
 #[tokio::test]
-async fn retry_resumes_exact_hash_inflight_vendor_job_without_upload_or_new_job() {
+async fn retry_resumes_durable_vendor_job_without_upload_or_new_job() {
     use axum::{
         Json, Router,
         extract::State,
@@ -443,6 +449,20 @@ async fn retry_resumes_exact_hash_inflight_vendor_job_without_upload_or_new_job(
     };
     use serde_json::json;
     use sha2::{Digest, Sha256};
+    use tron_backend::application::knowledge_base::ingestion::IngestionTask;
+    struct Saved(std::sync::Mutex<IngestionTask>);
+    impl ParseCheckpoint for Saved {
+        fn task(&self) -> Result<IngestionTask, KnowledgeBaseError> {
+            Ok(self.0.lock().unwrap().clone())
+        }
+        fn save(&self, file_id: Option<String>, job_id: Option<String>, reconciling: bool) -> Result<(), KnowledgeBaseError> {
+            let mut task = self.0.lock().unwrap();
+            task.remote_file_id = file_id;
+            task.remote_job_id = job_id;
+            task.reconciling = reconciling;
+            Ok(())
+        }
+    }
     #[derive(Clone)]
     struct Counter(Arc<AtomicUsize>);
     async fn job(State(count): State<Counter>) -> Json<serde_json::Value> {
@@ -464,7 +484,11 @@ async fn retry_resumes_exact_hash_inflight_vendor_job_without_upload_or_new_job(
         )
         .route(
             "/v1/parse/jobs",
-            get(|| async { Json(json!({"data":[{"job_id":"job_existing"}]})) }).post(|| async {
+            get(|| async {
+                panic!("retry must use its durable identity, never scan unrelated vendor jobs");
+                #[allow(unreachable_code)]
+                Json(json!({}))
+            }).post(|| async {
                 panic!("retry must not submit a new parse job");
                 #[allow(unreachable_code)]
                 Json(json!({}))
@@ -493,13 +517,22 @@ async fn retry_resumes_exact_hash_inflight_vendor_job_without_upload_or_new_job(
     let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     let mut config = MineruConfig::default();
     config.base_url = format!("http://{addr}");
+    let mut saved = IngestionTask::queued(
+        "task".into(), "kb".into(), "doc".into(), USER.into(), WORKSPACE.into(), 1, 1,
+        format!("{:x}", Sha256::digest(b"resume transport")), json!({"ocrMode":"Auto"}),
+    );
+    saved.endpoint_id = Some("default".into());
+    saved.remote_file_id = Some("file_existing".into());
+    saved.remote_job_id = Some("job_existing".into());
+    let saved = Arc::new(Saved(std::sync::Mutex::new(saved)));
     let parser = MineruKnowledgeDocumentParser::new(config);
     let parsed = parser
-        .parse("synthetic.pdf", b"resume transport", None)
+        .parse_durable("synthetic.pdf", b"resume transport", None, saved.clone())
         .await
         .unwrap();
     assert_eq!(parsed.vendor_job_id, "job_existing");
     assert_eq!(count.0.load(Ordering::SeqCst), 2);
+    assert_eq!(saved.task().unwrap().remote_job_id.as_deref(), Some("job_existing"));
     task.abort();
 }
 
@@ -665,7 +698,7 @@ async fn independent_clean_ocr_cannot_clear_original_risks_or_publish_vectors() 
         .download_binary_to_file(
             USER,
             ResourceBinaryDownloadCommand {
-                workspace_code: WORKSPACE.into(),
+                workspace_code: "PLATFORM".into(),
                 resource_code: source.derived_resource_code.clone(),
             },
         )
@@ -694,7 +727,7 @@ async fn independent_clean_ocr_cannot_clear_original_risks_or_publish_vectors() 
         .download_binary_to_file(
             USER,
             ResourceBinaryDownloadCommand {
-                workspace_code: WORKSPACE.into(),
+                workspace_code: "PLATFORM".into(),
                 resource_code: uploaded.resource_code.clone(),
             },
         )

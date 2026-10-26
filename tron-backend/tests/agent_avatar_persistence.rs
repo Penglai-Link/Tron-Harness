@@ -39,8 +39,8 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
     let config = common::prepared_config(AppConfig::default());
     let agents = service(&config.database_url);
     assert_eq!(
-        agents.list_platform_internal_agents().unwrap()[0].avatar_id,
-        "robot"
+        agents.list_platform_internal_agents().unwrap().into_iter().find(|agent| agent.agent_code == "main-agent").unwrap().avatar_id,
+        "red-blue-pills"
     );
     for avatar in [
         "robot",
@@ -192,7 +192,7 @@ fn built_in_dudes_have_independent_default_avatars_and_preserve_customization() 
             },
         )
         .unwrap();
-    for (code, avatar) in [("main-dude", "neo"), ("memory-dude", "kucha")] {
+    for (code, avatar) in [("main-dude", "neo"), ("memory-dude", "black-hole")] {
         agents.initialize_dude_definition(code, code, None).unwrap();
         let definition = agents
             .all_platform_internal_agents()

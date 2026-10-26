@@ -38,16 +38,7 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
 async fn agent_chat_completion(
     axum::extract::Json(payload): axum::extract::Json<serde_json::Value>,
 ) -> Response {
-    let prompt = payload["messages"]
-        .as_array()
-        .and_then(|messages| {
-            messages.iter().rev().find_map(|message| {
-                (message["role"].as_str() == Some("user"))
-                    .then(|| message["content"].as_str())
-                    .flatten()
-            })
-        })
-        .unwrap_or_default();
+    let prompt = common::last_conversation_content(&payload);
     let text = format!("mock: {prompt}");
     if payload["stream"].as_bool().unwrap_or(false) {
         // Real OpenAI-compatible servers answer stream requests with SSE.

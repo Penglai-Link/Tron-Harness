@@ -10,6 +10,7 @@ for(const locale of ["en-US","zh-CN"] as const){
   const writes:unknown[]=[];
   await page.route("**/api/v1/knowledge-bases/**",async(route)=>{
    const url=new URL(route.request().url());let data:unknown;
+      if (new URL(route.request().url()).pathname.endsWith("/chunking-strategies")) return route.fulfill({ json: { code: "SUCCESS", data: { strategies: ["auto", "structure", "heading", "fixed"].map(id => ({ id, version: "1" })) } } });
    if(url.pathname.endsWith("parsing-capabilities")){data={defaultTier:"standard",availableTiers:["flash","standard","advanced"],parserVersion:"4.0.10",officeTier:"flash"};}
    else if(route.request().method()==="PATCH"){writes.push(route.request().postDataJSON());data={};}
    else {data={id:"kb-synthetic",name:"Synthetic only",description:"",workspaceCode:"TRON_CORE",documentCount:1,agentCodes:[],defaultChunkConfig:{mode:"AUTO",maxChars:1200,overlapChars:120,headingDepth:2},documents:[{id:"doc-synthetic",name:"Synthetic",fileName:"synthetic-scanned.pdf",resourceCode:"KB_SYNTHETIC",resourceRevision:1,chunkConfig:null,parsingTier:null,status:"UPLOADED",error:null,chunkCount:0,indexRevision:0}]};}
@@ -18,7 +19,7 @@ for(const locale of ["en-US","zh-CN"] as const){
   await page.goto(`${frontend!.baseUrl}/knowledge-base/kb-synthetic`);await expect(page.getByText("synthetic-scanned.pdf",{exact:true})).toBeVisible();
   const help=page.getByRole("button",{name:locale==="en-US"?"Document upload and deletion help":"文档上传与删除说明"});
   await expect(page.getByText(locale==="en-US"?"Supports Markdown":"支持 Markdown",{exact:false})).not.toBeVisible();
-  await help.hover();await expect(page.getByRole("tooltip")).toContainText(locale==="en-US"?"Markdown":"支持 Markdown");
+  await help.hover();await expect(page.getByRole("tooltip")).toContainText(locale==="en-US"?"MinerU formats":"MinerU 格式");
   await page.getByRole("button",{name:locale==="en-US"?"Actions for synthetic-scanned.pdf":"操作 synthetic-scanned.pdf",exact:true}).click();
   await page.getByRole("menuitem",{name:locale==="en-US"?"Settings":"设置",exact:true}).click();
   const dialog=page.getByRole("dialog");
@@ -26,14 +27,14 @@ for(const locale of ["en-US","zh-CN"] as const){
   await expect(dialog.getByText(locale==="en-US"?"Unavailable quality fails":"选定质量不可用时",{exact:false})).not.toBeVisible();
   await page.getByRole("button",{name:locale==="en-US"?"Parsing quality options":"解析质量选项说明"}).hover();
   const qualityHelp=page.getByRole("tooltip");
-  for(const name of locale==="en-US"?["Default:","Native text:","Basic:","Standard:","Advanced:"]:["默认：","原生文本：","基础：","标准：","高级："]) await expect(qualityHelp).toContainText(name);
+  for(const name of locale==="en-US"?["document parsing","scanned-document OCR","precise parsing"]:["文档解析","扫描件识别","高精度解析"]) await expect(qualityHelp).toContainText(name);
   await page.screenshot({animations:"disabled",path:testInfo.outputPath(`parsing-quality-help-${locale}.png`)});
 
-  await expect(page.getByText(locale==="en-US"?"Use platform default (Standard)":"继承平台（标准）",{exact:true})).toBeVisible();
+  await expect(page.getByText(locale==="en-US"?"Automatic (recommended)":"自动选择（推荐）",{exact:true})).toBeVisible();
   const quality=page.getByRole("combobox").first();await quality.click();
-  await page.getByRole("option",{name:locale==="en-US"?"Advanced":"高级",exact:true}).click();
+  await page.getByRole("option",{name:locale==="en-US"?"Precise parsing":"高精度解析",exact:true}).click();
   await page.getByRole("button",{name:locale==="en-US"?"Save":"保存",exact:true}).click();
-  await expect.poll(()=>writes.length).toBe(1);expect(writes[0]).toMatchObject({workspaceCode:"TRON_CORE",chunkConfig:null,parsingTier:"advanced"});
+  await expect.poll(()=>writes.length).toBe(1);expect(writes[0]).toMatchObject({chunkConfig:null,parsingTier:"advanced",ocrMode:"Text"});
   await page.screenshot({animations:"disabled",path:testInfo.outputPath(`mineru-kb-ui-${locale}.png`)});
  });
  test(`Durable stages, cancellation and retry render in ${locale}`,async({page},testInfo)=>{
@@ -43,7 +44,7 @@ for(const locale of ["en-US","zh-CN"] as const){
   await page.route("**/api/v1/knowledge-bases/**",async(route)=>{
    const url=new URL(route.request().url());
    if(route.request().method()==="POST"){
-    expect(route.request().postDataJSON()).toEqual({workspaceCode:"TRON_CORE"});writes.push(url.pathname);
+    expect(route.request().postDataJSON()).toEqual({});writes.push(url.pathname);
     if(url.pathname.endsWith("/cancel"))state="CANCELLED";
     if(url.pathname.endsWith("/retry"))state="EMBEDDING";
    }
@@ -52,8 +53,8 @@ for(const locale of ["en-US","zh-CN"] as const){
    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({code:"SUCCESS",message:"ok",data})});
   });
   await page.goto(`${frontend!.baseUrl}/knowledge-base/kb-synthetic`);
-  const statusCell=page.locator("tbody tr").first().locator("td").nth(2);
-  await expect(statusCell.getByText(locale==="en-US"?"Queued":"排队中",{exact:true})).toBeVisible();
+  const statusCell=page.locator("tbody tr").first().locator("td").nth(4);
+  await expect(statusCell.getByText(locale==="en-US"?"Waiting for document parsing":"等待文档解析",{exact:true})).toBeVisible();
   const actions=page.getByRole("button",{name:locale==="en-US"?"Actions for synthetic.pdf":"操作 synthetic.pdf",exact:true});
   await actions.click();
   await expect(page.getByRole("menuitem",{name:locale==="en-US"?"Settings":"设置",exact:true})).toHaveAttribute("aria-disabled","true");
@@ -68,13 +69,12 @@ for(const locale of ["en-US","zh-CN"] as const){
   await expect(statusCell.getByText(locale==="en-US"?"Cancelled":"已取消",{exact:true})).toBeVisible();
   await actions.click();
   await page.getByRole("menuitem",{name:locale==="en-US"?"Retry":"重试",exact:true}).click();
-  await expect(statusCell.getByText(locale==="en-US"?"Embedding":"向量化中",{exact:true})).toBeVisible();
-  await expect(statusCell.getByText(locale==="en-US"?"Processing":"处理中",{exact:true})).toBeVisible();
-  await expect(statusCell.locator("p")).toHaveCount(2);
+  await expect(statusCell.getByText(locale==="en-US"?"Generating vectors":"向量化中",{exact:true})).toBeVisible();
+  await expect(statusCell.locator("p")).toHaveCount(1);
   await expect(statusCell.locator('[data-slot="badge"]')).toHaveCount(0);
   expect(writes.map(path=>path.split("/").at(-1))).toEqual(["cancel","retry"]);
   state="PUBLISHING";
-  await expect(statusCell.getByText(locale==="en-US"?"Publishing":"发布中",{exact:true})).toBeVisible({timeout:6000});
+  await expect(statusCell.getByText(locale==="en-US"?"Publishing index":"索引发布中",{exact:true})).toBeVisible({timeout:6000});
   await page.screenshot({animations:"disabled",path:testInfo.outputPath(`ingestion-${locale}.png`)});
  });
 }
@@ -89,7 +89,7 @@ for (const locale of ["en-US", "zh-CN"] as const) {
    expect(route.request().method()).toBe("GET");
    let data: unknown;
    if (url.pathname.endsWith("/chunks")) {
-    expect(url.searchParams.get("workspaceCode")).toBe("TRON_CORE");
+    expect(url.searchParams.has("workspaceCode")).toBe(false);
     const current = Number(url.searchParams.get("page")); const size = Number(url.searchParams.get("pageSize")); reads.push(current);
     data = { total: 31, page: current, pageSize: size, items: Array.from({length: Math.min(size, 31-(current-1)*size)}, (_, n) => {
      const ordinal = (current-1)*size+n;

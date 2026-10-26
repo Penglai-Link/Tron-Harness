@@ -975,11 +975,7 @@ async fn platform_main_agent_guidance_is_editable_and_legacy_storage_still_drive
             "retired prompt leaked: {removed}"
         );
     }
-    assert_eq!(main_messages.last().unwrap()["role"], json!("user"));
-    assert_eq!(
-        main_messages.last().unwrap()["content"],
-        json!("Investigate latency.")
-    );
+    assert!(main_messages.iter().any(|message| message["role"] == "user" && message["content"] == "Investigate latency."));
 
     let task_messages = recorded_requests[1]["messages"]
         .as_array()
@@ -989,11 +985,7 @@ async fn platform_main_agent_guidance_is_editable_and_legacy_storage_still_drive
             .unwrap()
             .contains("Calm, terse, and surgical.")
     );
-    assert_eq!(task_messages.last().unwrap()["role"], json!("user"));
-    assert_eq!(
-        task_messages.last().unwrap()["content"],
-        json!("Investigate latency for task.")
-    );
+    assert!(task_messages.iter().any(|message| message["role"] == "user" && message["content"] == "Investigate latency for task."));
 
     legacy["rolePrompt"] = json!("");
     connection.execute("UPDATE platform_internal_agent_configs SET config_json=?1 WHERE agent_code='main-agent'", [legacy.to_string()]).unwrap();
@@ -1334,7 +1326,6 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
         .as_array()
         .expect("first request messages should be an array")
         .iter()
-        .filter(|message| message["role"] == json!("system"))
         .filter_map(|message| message["content"].as_str())
         .collect();
     let instructions = system_messages.join("\n");
@@ -1349,7 +1340,7 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
         "placeholder leaked into the run instructions: {instructions}"
     );
     assert!(
-        inventory.contains("workspace.page") && inventory.contains("workspace.get"),
+        inventory.contains("workspace_page") && inventory.contains("workspace_get"),
         "domain tool codes missing from the run instructions: {inventory}"
     );
     assert!(
@@ -1357,7 +1348,7 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
         "unauthorized domain leaked into the run instructions: {inventory}"
     );
     assert!(
-        inventory.contains("tool_search") && inventory.contains("tool_execute"),
+        instructions.contains("tool_search") && instructions.contains("tool_execute"),
         "gateway contract missing from the run instructions: {inventory}"
     );
 
@@ -1398,8 +1389,8 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
             .as_array()
             .expect("grouped tools should be an array")
             .iter()
-            .all(|tool| tool["input_schema"].is_object()),
-        "discovery must expose each tool's input schema: {domain_search}"
+            .all(|tool| tool.get("input_schema").is_none()),
+        "summary discovery must omit schemas: {domain_search}"
     );
 
     // Keyword discovery still reaches the same wrapped tool.
@@ -1578,9 +1569,8 @@ async fn host_taxonomy_makes_framework_pack_tools_domain_listable() {
         .as_array()
         .expect("first request messages should be an array")
         .iter()
-        .filter(|message| message["role"] == json!("system"))
         .filter_map(|message| message["content"].as_str())
-        .find(|content| content.contains("\"domainCode\":\""))
+        .find(|content| !advertised_domain_codes(content).is_empty())
         .unwrap_or_else(|| panic!("run instructions must carry the domain inventory"))
         .to_string();
     let mut advertised = advertised_domain_codes(&instructions);

@@ -26,7 +26,7 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     await page.goto(`${frontend!.baseUrl}/knowledge-base/kb-notices`);
     const row = page.getByRole("row").filter({ hasText: "guideline.pdf" });
     const nameCell = row.locator("td").nth(1);
-    const notice = nameCell.getByRole("button", { name: zh ? "guideline.pdf 的告警详情" : "Warnings for guideline.pdf" });
+    const notice = nameCell.getByRole("button", { name: zh ? "guideline.pdf 的处理说明" : "Processing details for guideline.pdf" });
     const tooltip = page.locator('[role="tooltip"][data-open]');
     await expect(nameCell).toHaveText("guideline.pdf");
     await expect(tooltip).toHaveCount(0);
@@ -40,9 +40,8 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     await page.mouse.move(1, 1);
     await expect(tooltip).toHaveCount(0);
     await notice.focus();
-    await page.keyboard.press("Tab");
-    await page.keyboard.press("Shift+Tab");
-    await expect(notice).toBeFocused();
+    await expect(tooltip).toHaveCount(0);
+    await notice.hover();
     await expect(tooltip).toContainText(zh ? "当前解析质量" : "The current parsing quality");
     await notice.press("Escape");
     await expect(tooltip).toHaveCount(0);

@@ -87,7 +87,7 @@ async function expectMainComposerFocused(page: Page) {
   await expect.poll(() => page.evaluate(() => {
     const active = document.activeElement;
     return active instanceof HTMLTextAreaElement
-      && active.placeholder === "Enter to send, Shift+Enter for newline"
+      && active.matches('[data-theme-part="chat-input"]')
       && active.closest("main") !== null;
   })).toBe(true);
 }
@@ -241,6 +241,15 @@ test.beforeAll(async () => {
   await waitForFrontend(frontendBaseUrl);
 });
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/v1/chats/input-suggestions?*", route => fulfillJson(route, successEnvelope({ commands: [], skills: [] })));
+  await page.route("**/api/v1/chats/sessions/get-context-assembly?*", route => fulfillJson(route, successEnvelope({ snapshot: {
+    blocks: [{ id: "framework.history", position: 0, sources: [], originalTokens: 8000, configuredTokens: 16000, allocatedTokens: 16000, finalTokens: 8000, messageCount: 2, outcome: "Kept" }],
+    modelCode: "gpt-5-codex", estimatedInputTokens: 8000, inputCapacity: 128000, protocolTokens: 0, stage: "BeforeModel", step: 1, attempt: 1,
+    budgetBreakdown: { contextWindowLimit: 128000, contextCompactionTriggerTokens: 115200 },
+  } })));
+});
+
 test.afterAll(async () => {
   try {
     await stopManagedProcess(frontendProcess);
@@ -286,7 +295,7 @@ test("chat agent and model selectors are linked and agent locks after first turn
 
   await expect(page.locator('a[href="/chats?sessionCode=SESSION-UNASSIGNED"]')).toHaveText("Historical trace review");
 
-  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.locator('[data-menu-code="CHAT_NEW_SESSION"]').getByRole("button", { name: "New chat", exact: true }).click();
 
   const agentSelector = page.getByRole("button", { name: "Select chat agent", exact: true });
   const modelSelector = page.getByRole("button", { name: "Select chat model", exact: true });
@@ -318,7 +327,7 @@ test("chat agent and model selectors are linked and agent locks after first turn
   await expect(systemModelList.getByText("GPT-4o Main")).toHaveCount(0);
   await systemModelList.getByRole("menuitemradio", { name: /GPT-5 Codex/ }).first().click();
 
-  const composer = page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline", exact: true });
+  const composer = page.locator('main [data-theme-part="chat-input"]:visible');
   await composer.fill("lock agent after first turn");
   await composer.press("Enter");
 
@@ -372,7 +381,7 @@ test("new sessions always start on main agent after browsing a system agent sess
   await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-REFACTOR`);
   await expect(page.getByRole("button", { name: "Select chat model", exact: true })).toContainText("GPT-5 Codex");
 
-  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.locator('[data-menu-code="CHAT_NEW_SESSION"]').getByRole("button", { name: "New chat", exact: true }).click();
 
   await expect(page.getByRole("button", { name: "Select chat agent", exact: true })).toContainText("Main");
 });
@@ -417,7 +426,7 @@ test("composer autofocuses when opening or creating a session on desktop", async
   await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-REFACTOR`);
   await expectMainComposerFocused(page);
 
-  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.locator('[data-menu-code="CHAT_NEW_SESSION"]').getByRole("button", { name: "New chat", exact: true }).click();
   await expectMainComposerFocused(page);
 });
 
@@ -460,5 +469,5 @@ test("system agent sessions show history snapshot in context sidebar", async ({ 
   const rightSidebar = page.getByTestId("tron-right-sidebar");
   await rightSidebar.getByRole("tab", { name: "Short-term memory", exact: true }).click();
   await expect(rightSidebar.getByText("Session Total", { exact: true })).toBeVisible();
-  await expect(rightSidebar.getByText("Current Session History")).toBeVisible();
+  await expect(rightSidebar.getByText("Conversation History")).toBeVisible();
 });

@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import type { SessionHistory } from "@eliteforge/agent-ui-chat-core";
 import type { ChatAguiStreamEvent, ChatMessage, ChatSession } from "@tron/chat-core";
 import {
   routeResourceUiShellApi,
@@ -27,7 +28,7 @@ async function fulfillJson(route: Route, data: unknown) {
 }
 
 async function mockChat(page: Page) {
-  const now = Date.now();
+  let now = Date.now();
   const session: ChatSession = {
     id: 1, sessionCode: "SESSION-CONTEXT", workspaceCode: "TRON_CORE", title: "Context checks",
     sourceType: "MANUAL", agentCode: "main-agent", status: "ACTIVE",
@@ -37,15 +38,31 @@ async function mockChat(page: Page) {
   let events: ChatAguiStreamEvent[] = [];
   const userMessage = (content: string): ChatMessage => ({
     id: 1, messageCode: "MSG-CONTEXT", sessionCode: session.sessionCode, role: "USER",
-    actor: "User", channel: "MAIN_AGENT", content, createdAt: new Date(now).toISOString(),
+    actor: "User", channel: "MAIN_AGENT", content, runCode: "RUN-CONTEXT", createdAt: new Date(now).toISOString(),
   });
   const event = (type: string, extra: Partial<ChatAguiStreamEvent> = {}): ChatAguiStreamEvent => ({
     type, threadId: session.sessionCode, runId: "RUN-CONTEXT", timestamp: now + 1, ...extra,
   });
 
+  function history(): SessionHistory {
+    const failed = events.find(entry => entry.type === "RUN_ERROR");
+    const completed = events.some(entry => entry.type === "RUN_FINISHED");
+    const compacting = events.some(entry => entry.name === "tron.short_term_memory.compaction.started");
+    const status = failed ? "Failed" as const : completed ? "Completed" as const : "Running" as const;
+    const run = { id: "RUN-CONTEXT", sessionId: session.sessionCode, parentRunId: null, rootRunId: "RUN-CONTEXT", status,
+      startedAtMs: now, finishedAtMs: status === "Running" ? null : now + 3, error: failed?.message ?? null };
+    return { sessionId: session.sessionCode, version: String(events.length), nextCursor: null,
+      runs: events.length ? [run] : [], activeRuns: events.length && status === "Running" ? [run] : [], pendingInteractions: [],
+      records: { messages: [...messages.map(message => ({ id: message.messageCode, runId: run.id, stepId: null, role: "User", content: [{ type: "Text", text: message.content }], structured: null, status: "Completed" as const, createdAtMs: now })), ...(events.length ? [{ id: "assistant-work", runId: run.id, stepId: compacting ? "compact" : null, role: "Assistant" as const, content: failed ? [{ type: "Text" as const, text: failed.message! }] : [], structured: null, status, createdAtMs: now + 1 }] : [])],
+        steps: compacting ? [{ id: "compact", runId: run.id, nodeInvocationId: null, sequence: 1, attempt: 1, name: "framework.context.compaction", model: null, status, usage: null, startedAtMs: now + 1, finishedAtMs: run.finishedAtMs }] : [],
+        interactions: [], toolInvocations: [] } };
+  }
   await routeResourceUiShellApi(page);
   await page.route("**/api/v1/chats/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/history/query")) { return fulfillJson(route, history()); }
+    if (path.endsWith("/input-suggestions")) return fulfillJson(route, { skills: [], commands: [] });
+    if (path.endsWith("/a2ui-state")) return fulfillJson(route, { sessionId: session.sessionCode, revision: 0, surfaces: [] });
     if (path.endsWith("/session-groups")) {
       return fulfillJson(route, [{ taskCode: null, taskTitle: "Workspace chat", sessions: [session] }]);
     }
@@ -57,6 +74,7 @@ async function mockChat(page: Page) {
       });
     }
     if (path.endsWith("/messages/stream")) {
+      now = Date.now();
       messages = [userMessage(route.request().postDataJSON().content)];
       events = [
         event("RUN_STARTED"),
@@ -117,7 +135,8 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       await expect(transcript.locator("button.ef-chat__rail-summary")).toHaveCount(0);
       await expect(transcript.getByRole("article")).toHaveCount(1);
       await page.reload();
-      await expect(alert).toContainText(title);
+      // Native history preserves the durable diagnostic text, without an AG-UI error code.
+      await expect(alert).toContainText("TOOL_SCHEMA_OVER_BUDGET: estimatedTokens=27294, limitTokens=21597, toolCount=89");
       await expect(alert).toHaveCount(1);
       await expect.poll(() => alert.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
@@ -135,7 +154,7 @@ test("chat updates compaction in place and retains the completed state after ref
   await page.goto(fixture.url);
   await page.waitForLoadState("networkidle");
   const transcript = page.getByRole("region", { name: "Chat transcript", exact: true });
-  const status = transcript.getByRole("status");
+  const status = transcript.getByRole("status").filter({ hasText: /正在压缩上下文|上下文已压缩/ });
   await expect(status).toContainText("正在压缩上下文");
   fixture.compact("completed");
   await expect(status).toContainText("上下文已压缩");

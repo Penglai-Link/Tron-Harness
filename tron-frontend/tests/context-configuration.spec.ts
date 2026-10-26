@@ -19,7 +19,7 @@ async function document() {
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   directory = await mkdtemp(join(tmpdir(), "tron-context-config-browser-"));
-  await writeFile(join(directory, "application.yaml"), "port: 8080\nvariableCrypto:\n  keyBase64: dGVzdC1zZWNyZXQ=\nshortTermMemory:\n  context:\n    defaultContextWindowTokens: 6100\n  compaction:\n    retainedHistoryRatio: '30%'\n", { mode: 0o600 });
+  await writeFile(join(directory, "application.yaml"), "port: 8080\nvariableCrypto:\n  keyBase64: dGVzdC1zZWNyZXQ=\nshortTermMemory:\n  context:\n    defaultContextWindowTokens: 6100\n    providers:\n      history:\n        targetRatio: '30%'\n", { mode: 0o600 });
   const port = await new Promise<number>((done, reject) => {
     const socket = createServer(); socket.on("error", reject); socket.listen(0, "127.0.0.1", () => {
       const address = socket.address(); if (!address || typeof address === "string") throw new Error("missing port");
@@ -68,9 +68,11 @@ test("system configuration exposes omitted defaults and persists context order a
   };
   await expand();
   const order = page.getByRole("textbox", {name:"shortTermMemory.context.providers.order", exact:true});
-  await expect(order).toHaveValue("seed_prompt_prefix\napplication_context\ncurrent_session_checkpoint\ncurrent_session_working_state\nknowledge_base\ncurrent_session_history");
+  expect((await order.inputValue()).split("\n")).toEqual(expect.arrayContaining(["seed_prompt_prefix", "current_session_checkpoint", "current_session_history", "agent_directory", "skills.catalog"]));
   const entries = (await order.inputValue()).split("\n");
-  [entries[0], entries[1]] = [entries[1], entries[0]];
+  const applicationIndex = entries.indexOf("application_context");
+  const knowledgeIndex = entries.indexOf("knowledge_base");
+  [entries[applicationIndex], entries[knowledgeIndex]] = [entries[knowledgeIndex], entries[applicationIndex]];
   await order.fill(entries.join("\n"));
   for (const [field, value] of [["strategy", "semantic"], ["triggerRatio", "75%"], ["targetRatio", "25%"]]) {
     await page.getByRole("textbox", {name:`shortTermMemory.context.providers.working.${field}`, exact:true}).fill(value);
@@ -87,7 +89,7 @@ test("system configuration exposes omitted defaults and persists context order a
   expect(yaml.shortTermMemory.context.providers.order).toEqual(entries);
   expect(yaml.shortTermMemory.context.providers.working.strategy).toBe("semantic");
   expect(yaml.shortTermMemory.context.defaultContextWindowTokens).toBe(6100);
-  expect(yaml.shortTermMemory.context.providers.history).toBeUndefined();
+  expect(yaml.shortTermMemory.context.providers.history.targetRatio).toBe("30%");
   expect(find(await document(), "shortTermMemory.context.providers.history.targetRatio")).toBe("30%");
   await page.reload(); await expand();
   await expect(order).toHaveValue(entries.join("\n"));

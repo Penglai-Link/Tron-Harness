@@ -80,11 +80,7 @@ async fn scripted_chat_completion(
         .expect("scripted model response mutex poisoned")
         .pop_front()
         .unwrap_or_else(|| {
-            let prompt = payload["messages"]
-                .as_array()
-                .and_then(|messages| messages.last())
-                .and_then(|message| message["content"].as_str())
-                .unwrap_or_default();
+            let prompt = common::last_conversation_content(&payload);
             final_response(format!("mock: {prompt}"))
         });
     sse_completion(&payload, response)

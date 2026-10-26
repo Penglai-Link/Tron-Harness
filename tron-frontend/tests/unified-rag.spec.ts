@@ -162,7 +162,11 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await rebuildDialog.getByRole("button", { name: zh ? "重建索引" : "Rebuild indexes", exact: true }).click();
     await expect(page).toHaveURL(/\/settings\/rag\?tab=ingestion&corpus=corpus-evidence$/);
     expect(rebuildRequests).toEqual([{ corpusId: "corpus-evidence" }]);
-    await page.getByRole("tab", { name: zh ? "定义" : "Definition", exact: true }).click();
+    await expect(rebuildDialog).not.toBeVisible();
+    await expect(page.getByRole("tab", {name: zh ? "入库" : "Ingestion", exact: true})).toHaveAttribute("aria-selected", "true");
+    const definitionTab = page.getByRole("tab", { name: zh ? "定义" : "Definition", exact: true });
+    await definitionTab.click();
+    await expect(definitionTab).toHaveAttribute("aria-selected", "true");
     await rowActions.click();
     await page.getByRole("menuitem", { name: zh ? "配置索引" : "Configure indexes", exact: true }).click();
     const dialog = page.getByRole("dialog").filter({ hasNot: page.locator('[data-slot="toast-title"], [data-slot="toast-description"]') });
@@ -422,3 +426,11 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     expect(requests.filter(current => current === 1).length).toBeGreaterThanOrEqual(2);
   });
 }
+
+test.afterEach(async ({page}, info) => {
+  if (info.status !== info.expectedStatus) {
+    const path = info.outputPath("failed-page.txt");
+    await (await import("node:fs/promises")).writeFile(path, await page.locator("body").ariaSnapshot());
+    await info.attach("failed-page", {path, contentType: "text/plain"});
+  }
+});

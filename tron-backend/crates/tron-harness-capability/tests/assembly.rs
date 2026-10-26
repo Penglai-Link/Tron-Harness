@@ -94,9 +94,13 @@ impl AgentLoop for ProbeLoop {
                     .messages,
             );
         }
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].role, Role::System);
-        assert!(messages[0].content.text().contains("Workspace:"));
+        // The SDK also contributes its own guidance; the harness must preserve
+        // exactly one host instruction with the current invocation scope.
+        let scope = TronRunScope::from_run(run)?;
+        let host = messages.iter().filter(|message| message.content.text().starts_with("Workspace:")).collect::<Vec<_>>();
+        assert_eq!(host.len(), 1);
+        assert_eq!(host[0].role, Role::System);
+        assert_eq!(host[0].content.text(), format!("Workspace: {}", scope.workspace_code));
         let mut tools = Vec::new();
         for provider in &services.tools {
             let mut lease = provider.lease(run).await?;

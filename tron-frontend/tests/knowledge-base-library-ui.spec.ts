@@ -144,7 +144,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(submit).toBeDisabled();
     await choose(zh ? "图谱抽取模型" : "Graph extraction model", zh ? "对话自动路由" : "Conversation Automatic Routing");
     await choose(zh ? "重排模型" : "Reranking model", zh ? "关闭重排" : "Reranking off");
-    await choose(zh ? "图片检索方式" : "Image retrieval", "Vision model");
+    await expect(dialog.getByRole("combobox", { name: zh ? "图片检索方式" : "Image retrieval", exact: true })).toHaveCount(0);
     await expect(submit).toBeEnabled();
     await page.screenshot({ path: info.outputPath(`knowledge-create-index-settings-${locale}.png`), fullPage: true });
     await submit.click();
@@ -153,14 +153,14 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     await expect(submit).toBeEnabled(); failCreate = false; await submit.click();
     await expect(page).toHaveURL(/settings\/knowledge-base\/kb-configured$/);
     expect(created).toHaveLength(2);
-    expect(created[1]).toEqual({ name: "Configured", description: "Selected before upload", defaultParsePreference: "Auto", indexSettings: { fulltext: true, vector: true, graph: true, embeddingDimension: 1024, embeddingModelCode: "PERSON_AI:EMBEDDING:bge-m3", graphModelCode: "PERSON_AI:ROUTE:ChatAuto", rerankModelCode: null, imageDescriptionModelCode: "vision-model" } });
+    expect(created[1]).toEqual({ name: "Configured", description: "Selected before upload", defaultParsePreference: "Auto", indexSettings: { fulltext: true, vector: true, graph: true, embeddingDimension: 1024, embeddingModelCode: "PERSON_AI:EMBEDDING:bge-m3", graphModelCode: "PERSON_AI:ROUTE:ChatAuto", rerankModelCode: null, imageDescriptionModelCode: null } });
     await page.goto(`${frontend!.baseUrl}/settings/rag`);
     await page.getByRole("button", { name: zh ? "Configured的操作" : "Actions for Configured", exact: true }).click();
     await page.getByRole("menuitem", { name: zh ? "配置索引" : "Configure indexes", exact: true }).click();
     const indexDialog = page.getByRole("dialog", { name: zh ? "配置索引 · Configured" : "Configure indexes · Configured", exact: true });
     await expect(indexDialog.getByRole("combobox", { name: zh ? "Embedding 模型" : "Embedding model", exact: true })).toContainText("BGE-M3 · Person-AI");
     await expect(indexDialog.getByRole("combobox", { name: zh ? "重排模型" : "Reranking model", exact: true })).toContainText(zh ? "关闭重排" : "Reranking off");
-    await expect(indexDialog.getByRole("combobox", { name: zh ? "图片检索方式" : "Image retrieval", exact: true })).toContainText("Vision model");
+    await expect(indexDialog.getByRole("combobox", { name: zh ? "图片检索方式" : "Image retrieval", exact: true })).toHaveCount(0);
   });
 }
 

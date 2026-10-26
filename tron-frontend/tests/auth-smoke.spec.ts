@@ -16,6 +16,7 @@ async function profilesApi(page: Page, count = 0, active: string | null = null) 
     const ok = (data: unknown) => route.fulfill({ json: { code: "SUCCESS", message: "success", data } });
     const failed = (message: string, status = 500) => route.fulfill({ status, json: { code: "PROFILE_ERROR", message, data: {} } });
     if (path === "/api/v1/bootstrap/status") return ok({ hasProfiles: state.profiles.length > 0, activeProfileId: state.active, activeProfile: state.profiles.find(p => p.profileId === state.active) ?? null, avatarUrl: null, account: null });
+    if (path === "/api/v1/dudes/main/awakening") return ok({ dudeCode: "main-dude", name: "Neo", state: "Ready", started: true, deferred: false, sessionCode: "guide", canResume: true });
     if (path === "/api/v1/profiles") return ok(state.profiles);
     if (path === "/api/v1/profiles/events") return route.fulfill({ status: 204 });
     if (path === "/api/v1/profiles/active/token") return state.tokenExpired ? failed("Authorization expired", 401) : ok({ token: "profile-token" });

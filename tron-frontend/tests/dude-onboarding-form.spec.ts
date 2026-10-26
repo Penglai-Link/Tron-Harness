@@ -58,8 +58,13 @@ test("onboarding accepts a direct name and custom personality through a restored
       const result = { session: { ...session, createdAt: new Date(time).toISOString(), updatedAt: new Date(time).toISOString() },
         run: { runCode: "product", status: "COMPLETED", finalOutput: "Saved River", stepCount: 1 },
         messages: [{ id: "final", messageCode: "final", sessionCode: "awakening", runCode: "native", role: "ASSISTANT", actor: "Dude", channel: "MAIN_AGENT", content: "Saved River", createdAt: new Date(time + 1500).toISOString() }], userInputRequest: null };
-      const event = { type: "RUN_FINISHED", runId: "product", threadId: "awakening", timestamp: time + 2000, metadata: { framework: { runId: "native" } }, outcome: { type: "success" }, result };
-      return route.fulfill({ contentType: "text/event-stream", body: `event: RUN_FINISHED\ndata: ${JSON.stringify(event)}\n\n` });
+      // Replay the full public message protocol. RUN_FINISHED.result alone is
+      // legacy payload; relying on the next history poll races the home redirect.
+      const frame = (type: string, extra = {}) => ({type, runId:"product", threadId:"awakening", timestamp:time+1500, metadata:{framework:{runId:"native"}}, ...extra});
+      const events = [frame("RUN_STARTED"), frame("TEXT_MESSAGE_START", {messageId:"final", role:"assistant"}),
+        frame("TEXT_MESSAGE_CONTENT", {messageId:"final", delta:"Saved River"}), frame("TEXT_MESSAGE_END", {messageId:"final"}),
+        frame("RUN_FINISHED", {outcome:{type:"success"}, result})];
+      return route.fulfill({ contentType: "text/event-stream", body: events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join("") });
     }
     return route.fallback();
   });

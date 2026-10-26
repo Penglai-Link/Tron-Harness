@@ -29,7 +29,9 @@ for (const locale of ["en-US", "zh-CN"] as const) {
         parsingArtifact: parsed ? { effectiveTier: "standard", parserVersion: "4.0.10", resourceCode: `cache-${fileName}`, imageResourceCodes: [] } : null,
       });
       let data: unknown = { id: "kb-batch", name: "Guidelines", workspaceCode: "TRON_CORE", documents: uploaded.map(document), documentCount: uploaded.length, agentCodes: [], defaultChunkConfig: config };
-      if (path.endsWith("/parsing-capabilities")) {
+      if (path.endsWith("/documents/preflight")) {
+        data = { plan: { preference: "Auto", method: "Native", reason: "native_content", rulesVersion: "document-features-v2", features: { format: "pdf", localText: false, sourceSha256: "synthetic" } } };
+      } else if (path.endsWith("/parsing-capabilities")) {
         data = { defaultTier: "standard", availableTiers: ["flash", "basic", "standard", "advanced"], parserVersion: "4.0.10", officeTier: "flash" };
       } else if (request.method() === "POST" && path.endsWith("/documents")) {
         expect(request.headers()["accept-language"]).toBe(locale);
@@ -55,13 +57,14 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       { name: "failed.pdf", mimeType: "application/pdf", buffer: Buffer.from("synthetic rejected PDF") },
       { name: "last.pdf", mimeType: "application/pdf", buffer: Buffer.from("synthetic last PDF") },
     ]);
+    await page.getByRole("dialog", { name: zh ? "上传" : "Upload", exact: true }).getByRole("button", { name: zh ? "上传" : "Upload", exact: true }).click();
     await expect.poll(() => requests).toEqual(["first.pdf", "failed.pdf", "last.pdf"]);
     // The batch is still pending: the first saved document must already be visible.
-    await expect(page.getByRole("row").filter({ hasText: "first.pdf" })).toBeVisible();
+    await expect(page.locator("tbody tr").filter({ hasText: "first.pdf" })).toHaveCount(1);
     await expect(page.getByRole("row").filter({ hasText: "last.pdf" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: zh ? "上传中…" : "Uploading…", exact: true })).toBeDisabled();
+    await expect(page.getByRole("dialog").getByRole("button", { name: zh ? "上传中…" : "Uploading…", exact: true })).toBeDisabled();
     status = "PARSING";
-    await expect(page.getByRole("row").filter({ hasText: "first.pdf" }).getByRole("cell", { name: zh ? "文档解析中" : "Parsing document", exact: true })).toBeVisible();
+    await expect(page.locator("tbody tr").filter({ hasText: "first.pdf" })).toContainText(zh ? "文档解析中" : "Parsing document");
     await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`batch-upload-in-progress-${locale}.png`) });
     status = "QUEUED";
     releaseLastUpload();
@@ -71,7 +74,7 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     await expect(page.getByRole("columnheader", { name: zh ? "切分方式" : "Splitting", exact: true })).toBeVisible();
     for (const fileName of ["first.pdf", "last.pdf"]) {
       const row = page.getByRole("row").filter({ hasText: fileName });
-      await expect(row.getByRole("cell", { name: zh ? "标准" : "Standard", exact: true })).toBeVisible();
+      await expect(row.getByRole("cell", { name: zh ? "文档解析" : "Document parsing", exact: true })).toBeVisible();
       await expect(row.getByRole("cell", { name: zh ? "自动" : "Automatic", exact: true })).toBeVisible();
       await expect(row.getByRole("cell", { name: zh ? "等待文档解析" : "Waiting for document parsing", exact: true })).toBeVisible();
     }
@@ -97,11 +100,12 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     const first = page.getByRole("row").filter({ hasText: "first.pdf" });
     await expect(first.getByText(zh ? "可用" : "Available", { exact: true })).toBeVisible();
     await expect(first.getByRole("cell", { name: zh ? "可用" : "Available", exact: true }).locator("p")).toHaveCount(1);
-    await expect(first.getByRole("cell", { name: zh ? "标准" : "Standard", exact: true })).toBeVisible();
+    await expect(first.getByRole("cell", { name: zh ? "文档解析" : "Document parsing", exact: true })).toBeVisible();
     await expect(first.getByRole("cell", { name: zh ? "自动" : "Automatic", exact: true })).toBeVisible();
     await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`batch-upload-${locale}.png`) });
     // Clearing the native input lets the same selection be uploaded again.
     await input.setInputFiles({ name: "first.pdf", mimeType: "application/pdf", buffer: Buffer.from("synthetic first PDF") });
+    await page.getByRole("dialog", { name: zh ? "上传" : "Upload", exact: true }).getByRole("button", { name: zh ? "上传" : "Upload", exact: true }).click();
     await expect.poll(() => requests.length).toBe(4);
     await expect(page.getByText(zh ? "已上传 1 个文件。" : "Uploaded 1 file.", { exact: true })).toBeVisible();
   });

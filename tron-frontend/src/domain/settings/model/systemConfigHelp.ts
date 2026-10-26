@@ -4,6 +4,7 @@ import type { TFunction } from "i18next";
 // the owning subsystem so identical leaf names never share unrelated help.
 export function systemConfigHelpKey(path: string) {
   const scoped = path
+    .replace(/^shortTermMemory\.context\.providers\.dataBlocks\..+\./, "shortTermMemory.context.providers.dataBlocks.block.")
     .replace(/^resource\.storage\.profiles\.[^.]+\./, "resource.storage.profiles.profile.")
     .replace(/^httpClients\.(default|modelInference|runtimeControl|documentParsing)\./, "httpClients.profile.");
   return `settingsGeneral.systemConfig.descriptions.${scoped.replaceAll(".", "_")}`;

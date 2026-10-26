@@ -930,8 +930,9 @@ async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
 
     assert_eq!(result.final_output, "after-tool");
     assert_eq!(result.observations.len(), 2);
-    assert_eq!(result.observations[0].output, "observed:\"a\"");
-    assert_eq!(result.observations[1].output, "observed:\"b\"");
+    let mut outputs = result.observations.iter().map(|o| o.output.as_str()).collect::<Vec<_>>();
+    outputs.sort();
+    assert_eq!(outputs, ["observed:\"a\"", "observed:\"b\""]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1003,8 +1004,9 @@ async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
 
     assert_eq!(result.final_output, "after-tool");
     assert_eq!(result.observations.len(), 2);
-    assert_eq!(result.observations[0].output, "observed:\"a\"");
-    assert_eq!(result.observations[1].output, "observed:\"b\"");
+    let mut outputs = result.observations.iter().map(|o| o.output.as_str()).collect::<Vec<_>>();
+    outputs.sort();
+    assert_eq!(outputs, ["observed:\"a\"", "observed:\"b\""]);
     assert_eq!(max_running.load(Ordering::SeqCst), 2);
 }
 
@@ -2086,7 +2088,7 @@ async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_s
     assert_eq!(
         requests[1]
             .messages
-            .last()
+            .iter().find(|message| message.role == "user" && message.plain_text_content() == "change direction now")
             .expect("second request should contain steer input")
             .plain_text_content(),
         "change direction now"
@@ -2198,7 +2200,7 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
         requests[1]
             .1
             .messages
-            .last()
+            .iter().find(|message| message.role == "user" && message.plain_text_content() == "use the completed tool result differently")
             .expect("second request should contain steer input")
             .plain_text_content(),
         "use the completed tool result differently"
@@ -2206,7 +2208,7 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn framework_restores_responses_continuation_after_host_restart() {
+async fn framework_restores_responses_history_and_replays_changed_layout_after_restart() {
     use tron_backend::application::agent::FrameworkHost;
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("framework.sqlite3");
@@ -2229,6 +2231,13 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     let mut context = base_context("24d910a1-ba3b-55a6-b27b-14fc9f21168b");
     context.model.protocol = AgentModelProtocol::Responses;
     context.model.responses_stateful_enabled = true;
+    // Contributor data follows history. Inserting a new turn changes that
+    // layout, so restore persisted history and safely replay instead of using
+    // a provider response ID for a nonmatching prefix. Exact-prefix ID restore
+    // is covered by turn_state::durable_continuation_rejects_edited_prefix_and_restores_exact_history.
+    context.execution_scope = Default::default();
+    context.variables.clear();
+    context.skills.clear();
     context.tools.clear();
     agent.run(context.clone()).await.unwrap();
     host.close().await;
@@ -2256,7 +2265,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     let requests = second.requests();
     assert_eq!(
         requests[0].1.previous_response_id.as_deref(),
-        Some("resp-persisted")
+        None
     );
     assert!(
         requests[0]
@@ -2266,7 +2275,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
             .any(|message| message.plain_text_content() == "follow up")
     );
     assert!(
-        !requests[0]
+        requests[0]
             .1
             .messages
             .iter()

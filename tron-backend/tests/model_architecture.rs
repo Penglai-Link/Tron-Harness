@@ -20,7 +20,9 @@ fn production_model_network_and_retry_execution_belongs_to_sdk() {
         if production.contains(".post(") {
             assert!(
                 relative.starts_with("adapters/inbound/")
-                    || relative == "application/rag/mineru.rs",
+                    || relative == "application/rag/mineru.rs"
+                    // MinerU parse-job upload is document transport, not model inference.
+                    || matches!(relative, "adapters/outbound/mineru_documents.rs" | "adapters/outbound/mineru_documents/routing.rs"),
                 "unexpected outbound POST in {relative}"
             );
         }
@@ -52,7 +54,8 @@ fn production_model_network_and_retry_execution_belongs_to_sdk() {
             assert!(
                 matches!(
                     relative,
-                    "application/agent/runtime/framework_model.rs"
+                    "application/agent/runtime/foundation.inc"
+                        | "application/agent/runtime/framework_model.rs"
                         | "application/agent/runtime_compaction.rs"
                         | "shared/id/snowflake.rs"
                 ),
@@ -63,7 +66,8 @@ fn production_model_network_and_retry_execution_belongs_to_sdk() {
             assert!(
                 matches!(
                     relative,
-                    "application/agent/runtime/framework_model.rs"
+                    "application/agent/runtime/foundation.inc"
+                        | "application/agent/runtime/framework_model.rs"
                         | "adapters/outbound/model/http_model_client.rs"
                 ),
                 "uncontrolled model stream caller: {relative}"
@@ -83,14 +87,13 @@ fn production_model_network_and_retry_execution_belongs_to_sdk() {
     }
     let compact = |text: &str| text.split_whitespace().collect::<String>();
     let probe = source("application/model/service/verification_flow.rs");
-    assert!(compact(probe).contains("self.model_executor.with_runtime(runtime).chat("));
+    assert!(compact(probe).contains("self.model_executor.with_runtime(runtime).with_options(options).chat("));
     assert!(!probe.contains("for_in"));
     let client = source("adapters/outbound/model/http_model_client.rs");
     assert!(client.contains("eliteforge_agent_framework::ModelClient"));
     for controlled in [
         "chat_observed",
         "chat_with_validator_observed",
-        "workflow_observed",
     ] {
         assert!(
             client.contains(controlled),
@@ -118,7 +121,7 @@ fn production_model_network_and_retry_execution_belongs_to_sdk() {
     }
     let goal = source("application/chat/goal_loop.rs");
     assert!(!goal.contains("forattemptin"));
-    assert!(goal.contains("ModelResponseValidator"));
+    assert!(compact(goal).contains("fw::GoalPolicy::evaluate(&fw::ModelGoalPolicy::default(),&evidence,parent)"));
     let app = source("app.rs");
     assert!(compact(app).contains("with_model_executor(model_providers.model_executor())"));
 }

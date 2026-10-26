@@ -1,4 +1,4 @@
-import { routeActiveProfileApi } from "./support/resource-ui-harness";
+import { seedResourceUiShell, routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -105,17 +105,19 @@ test("memory rows preserve line breaks in a bounded plain-text preview", async (
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await routeActiveProfileApi(page);
+  await seedResourceUiShell(page, "en-US");
+  await page.route("**/api/v1/admin/workspaces/options*", route => route.fulfill({json:{code:"SUCCESS",data:[{workspaceCode:"TRON_CORE",name:"Tron Core",label:"Tron Core"}]}}));
   await page.goto(`${frontendBaseUrl}/memory/new`);
   await page.getByLabel("Title").fill(title);
   await page.locator('[data-slot="field"]', { hasText: "Memory text" }).locator("textarea").fill(text);
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page).toHaveURL(/\/memory\/details\?memoryId=/);
+  await expect(page).toHaveURL(/\/settings\/memory\/details\?memoryId=/);
 
   await page
     .getByRole("navigation", { name: "Breadcrumb" })
     .getByRole("link", { name: "Memory", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/memory$/);
+  await expect(page).toHaveURL(/\/settings\/memory(?:\?|$)/);
   const titleButton = page.getByRole("button", { name: title, exact: true });
   const row = page.getByRole("row").filter({ has: titleButton });
   const preview = row.getByTestId("memory-record-text");
@@ -155,6 +157,6 @@ test("memory rows preserve line breaks in a bounded plain-text preview", async (
   });
 
   await titleButton.click();
-  await expect(page).toHaveURL(/\/memory\/details\?memoryId=/);
+  await expect(page).toHaveURL(/\/settings\/memory\/details\?memoryId=/);
   await expect(page.getByText(text, { exact: true })).toBeVisible();
 });

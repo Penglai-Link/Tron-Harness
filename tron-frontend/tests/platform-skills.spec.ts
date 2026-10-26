@@ -139,19 +139,21 @@ test("platform skills, bidirectional drafts and disabled resource focus hints us
     .filter({ hasText: "main-agent" })
     .getByRole("checkbox");
   await mainGrant.check();
+  const assignmentSaved = page.waitForResponse(r => r.request().method() === "PUT" && r.url().includes("/browser-business/agent-grants"));
   await grant.getByRole("button", { name: "Save", exact: true }).click();
+  const assignment = await assignmentSaved;
+  expect(assignment.request().postDataJSON()).toEqual({agentCodes:["main-agent"]});
+  expect(assignment.status(), await assignment.text()).toBe(200);
+  expect((await request("skills/registry/browser-business/agent-grants")).agentCodes).toContain("main-agent");
   await expect(grant).toHaveCount(0);
-  expect(
-    (await request("agents/registry/internal/main-agent/skills")).find(
-      (s: { skillName: string }) => s.skillName === "browser-business"
-    ).assigned
-  ).toBe(true);
+  await expect.poll(async () => (await request("agents/registry/internal/main-agent/skills")).find((s: { skillName: string }) => s.skillName === "browser-business").assigned).toBe(true);
   await page.goto(`${frontend!.baseUrl}/settings/agents`);
   const edit = page
     .getByRole("button", { name: /(?:Edit|View) Main Agent/ })
     .first();
   await edit.click();
   const editor = page.getByRole("dialog").first();
+  await editor.getByRole("tab", { name: "Capabilities", exact: true }).click();
   await editor.getByRole("button", { name: /Select skills/ }).click();
   const selection = page.getByRole("dialog", {
     name: "Select skills",
@@ -168,6 +170,7 @@ test("platform skills, bidirectional drafts and disabled resource focus hints us
     ).assigned
   ).toBe(true);
   await edit.click();
+  await editor.getByRole("tab", { name: "Capabilities", exact: true }).click();
   await editor.getByRole("button", { name: /Select skills/ }).click();
   await selection
     .getByRole("checkbox", { name: "browser-business", exact: true })
@@ -183,6 +186,7 @@ test("platform skills, bidirectional drafts and disabled resource focus hints us
   });
   await page.reload();
   await edit.click();
+  await editor.getByRole("tab", { name: "Capabilities", exact: true }).click();
   await editor.getByRole("button", { name: /Select skills/ }).click();
   const blocked = selection.getByRole("checkbox", {
     name: builtin.skillName,
@@ -197,10 +201,14 @@ test("platform skills, bidirectional drafts and disabled resource focus hints us
     })
     .first();
   await reason.focus();
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await reason.hover();
   await expect(page.getByRole("tooltip")).toContainText(
     "Capability pack tron.harness is disabled"
   );
   await reason.blur();
+  await page.mouse.move(0,0);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
   await reason.hover();
   await expect(page.getByRole("tooltip")).toContainText(
     "Capability pack tron.harness is disabled"
@@ -282,6 +290,7 @@ for (const variant of [
       .first()
       .click();
     const editor = page.getByRole("dialog").first();
+    await editor.getByRole("tab", { name: zh ? "能力资源" : "Capabilities", exact: true }).click();
     const choose = editor.getByRole("button", {
       name: zh ? /选择技能/ : /Select skills/,
     });
@@ -330,3 +339,11 @@ for (const variant of [
       .click();
   });
 }
+
+test.afterEach(async ({page}, info) => {
+  if (info.status !== info.expectedStatus) {
+    const path = info.outputPath("failed-page.txt");
+    await (await import("node:fs/promises")).writeFile(path, await page.locator("body").ariaSnapshot());
+    await info.attach("failed-page", {path, contentType: "text/plain"});
+  }
+});

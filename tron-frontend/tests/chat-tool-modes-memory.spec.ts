@@ -1,3 +1,4 @@
+import { gatewayArguments, singleGatewayResult } from "./support/gateway-stub";
 /**
  * End-to-end acceptance for the two-tool gateway (`tool_search` / `tool_execute`)
  * across async long tasks, short-term memory tools and parallel tool calls.
@@ -9,7 +10,7 @@
  * the tool results it needs to continue the run.
  */
 import { expect, test } from "@playwright/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer as createHttpServer, type Server } from "node:http";
@@ -85,7 +86,7 @@ function stringifyContent(value: unknown) {
 
 function lastUserIndex(messages: StubMessage[]) {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === "user") return index;
+    if (messages[index]?.role === "user" && TAGS.some(tag => stringifyContent(messages[index].content).includes(tag))) return index;
   }
   return -1;
 }
@@ -98,7 +99,7 @@ function tagOfTurn(turn: StubMessage[]) {
 
 function toolResultFor(turn: StubMessage[], callId: string) {
   const message = turn.find((entry) => entry.role === "tool" && entry.tool_call_id === callId);
-  return message ? stringifyContent(message.content) : "";
+  return message ? singleGatewayResult(stringifyContent(message.content)) : "";
 }
 
 function parseTaskId(text: string) {
@@ -252,7 +253,7 @@ test.beforeAll(async () => {
         recorded.push({ callId: id, tool: call.tool });
         stubCalls.set(tag, recorded);
       }
-      return { id, name: "tool_execute", args: { tool: call.tool, arguments: call.args } };
+      return { id, name: "tool_execute", args: gatewayArguments("tool_execute", { tool: call.tool, arguments: call.args }) };
     });
 
     if (stream) {
@@ -334,6 +335,13 @@ test.afterAll(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
+test.afterEach(async ({page}, info) => {
+  if (info.status !== info.expectedStatus) {
+    await writeFile(info.outputPath("failed-page.txt"), await page.locator("body").ariaSnapshot());
+    await page.screenshot({path: info.outputPath("failed-page.png")});
+  }
+});
+
 function resetScenarioState(tag: string) {
   modelRequests.length = 0;
   stubCalls.set(tag, []);
@@ -352,25 +360,31 @@ function report(label: string, value: unknown) {
   console.log(`[E2E] ${label}: ${typeof value === "string" ? value : JSON.stringify(value, null, 2)}`);
 }
 
-async function expandWorkTranscript(transcript: import("@playwright/test").Locator) {
-  for (const selector of ["button.ef-chat__rail-summary[aria-expanded=\"false\"]", "button.ef-chat__rail-entry-toggle[aria-expanded=\"false\"]"]) {
-    for (let guard = 0; guard < 12; guard += 1) {
-      const collapsed = transcript.locator(selector);
-      if (await collapsed.count() === 0) break;
-      await collapsed.first().click();
+async function expandButtons(transcript: import("@playwright/test").Locator, selectors: string[]) {
+  // Freeze the class-based positions. Filtering by aria-expanded races with
+  // late run updates and can make a button disappear between count and click.
+  for (const selector of selectors) {
+    const buttons = transcript.locator(selector);
+    const count = await buttons.count();
+    for (let index = 0; index < count; index += 1) {
+      const button = buttons.nth(index);
+      if (await button.getAttribute("aria-expanded") === "false") await button.click({timeout: 5_000});
+      await expect(button).toHaveAttribute("aria-expanded", "true");
     }
   }
+}
+async function expandWorkTranscript(transcript: import("@playwright/test").Locator) {
+  // The final text arrives before RUN_FINISHED. Wait for the completed rail
+  // before expanding; completion deliberately collapses the live work rail.
+  const summary = transcript.locator("button.ef-chat__rail-summary");
+  await expect(summary).toContainText("已工作");
+  await expect(summary).toHaveAttribute("aria-expanded", "false");
+  await expandButtons(transcript, ["button.ef-chat__rail-summary", "button.ef-chat__rail-entry-toggle"]);
 }
 
 /** Opens every tool card, then its Parameters panel, so payloads are on screen. */
 async function expandToolPayloads(transcript: import("@playwright/test").Locator) {
-  for (const selector of ["button.ef-chat__tool-toggle[aria-expanded=\"false\"]", "button.ef-chat__tool-subtoggle[aria-expanded=\"false\"]"]) {
-    for (let guard = 0; guard < 24; guard += 1) {
-      const collapsed = transcript.locator(selector);
-      if (await collapsed.count() === 0) break;
-      await collapsed.first().click();
-    }
-  }
+  await expandButtons(transcript, ["button.ef-chat__tool-toggle", "button.ef-chat__tool-subtoggle"]);
 }
 
 async function openChat(page: import("@playwright/test").Page) {
@@ -378,7 +392,7 @@ async function openChat(page: import("@playwright/test").Page) {
   await seedResourceUiShell(page, "zh-CN");
   await routeActiveProfileApi(page);
   await page.goto(`${frontend!.baseUrl}/chats`);
-  await page.getByRole("button", { name: "新会话", exact: true }).click();
+  await page.locator('[data-menu-code="CHAT_NEW_SESSION"]').getByRole("button", { name: "新会话", exact: true }).click();
   await page.getByRole("button", { name: "选择模型", exact: true }).click();
   await page.getByRole("menuitemradio", { name: "Framework Acceptance", exact: true }).click();
 }

@@ -116,7 +116,7 @@ async fn authenticated_snapshots_conflicts_and_workspace_isolation() {
 
 // Match the server runtime: archive reads include synchronous product repositories.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn disabled_a2ui_keeps_sessions_and_archives_available_without_installing_plugin() {
+async fn disabled_a2ui_keeps_sessions_and_archives_available() {
     let config = prepared_config(AppConfig::default());
     // App bootstrap initializes Framework storage, so disable before construction.
     let capability_path =
@@ -139,7 +139,9 @@ async fn disabled_a2ui_keeps_sessions_and_archives_available_without_installing_
     ).await).await;
     let session = created["data"]["sessionCode"].as_str().unwrap();
     let framework = host.storage_framework().await.unwrap();
-    assert!(framework.services().unwrap().get::<A2uiService>().is_none());
+    assert_eq!(host.capability_state().0.get("framework.a2ui"), Some(&false));
+    // Pack registration owns durable surface storage even when its run selection is disabled.
+    assert!(framework.services().unwrap().get::<A2uiService>().is_some());
     let snapshot = response_json(
         request_with_headers(
             &app,

@@ -72,7 +72,7 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/loop-agent/definition",
         Some(json!({"loopCode":null})),
-        StatusCode::NOT_FOUND,
+        StatusCode::OK,
     )
     .await;
     let mut update = design();
@@ -144,8 +144,8 @@ async fn loop_crud_binding_inheritance_version_and_restart() {
         &restarted,
         Method::PATCH,
         "/api/v1/agents/registry/internal/loop-agent/definition",
-        Some(json!({"loopCode":null})),
-        StatusCode::NOT_FOUND,
+        Some(json!({"loopCode":"default-react"})),
+        StatusCode::OK,
     )
     .await;
     call(
@@ -236,7 +236,7 @@ async fn loop_rejects_invalid_graphs_references_and_duplicate_identity() {
 }
 
 #[tokio::test]
-async fn loop_catalog_is_user_managed_and_has_no_builtin_definitions() {
+async fn loop_catalog_includes_the_default_react_definition_after_restart() {
     let config = common::prepared_config(AppConfig::default());
     let app = common::app_with_state_setup(config.clone(), |s| {
         s.knowledge_bases.stop_ingestion_workers()
@@ -249,16 +249,19 @@ async fn loop_catalog_is_user_managed_and_has_no_builtin_definitions() {
         StatusCode::OK,
     )
     .await;
-    assert!(catalog["data"].as_array().unwrap().is_empty());
+    let defaults = catalog["data"].as_array().unwrap();
+    assert_eq!(defaults.len(), 1);
+    assert_eq!(defaults[0]["loopCode"], "default-react");
+    assert_eq!(defaults[0]["name"], "EliteForge ReAct");
     let restarted =
         common::app_with_state_setup(config, |s| s.knowledge_bases.stop_ingestion_workers());
     let policy = call(
         &restarted,
         Method::GET,
-        "/api/v1/agents/workspaces/TRON_CORE/internal/builtin-agent-0",
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent",
         None,
         StatusCode::OK,
     )
     .await;
-    assert!(policy["data"].get("loopCode").is_none());
+    assert_eq!(policy["data"]["loopCode"], "default-react");
 }

@@ -388,7 +388,9 @@ async fn schema_within_its_own_limit_still_counts_toward_total_input_budget() {
         // 3 ASCII chars per token: a message alone under the input budget.
         let input_budget =
             context.model.context_window_tokens.unwrap() - context.model.max_tokens.unwrap();
-        let message_len = ((input_budget - 4_000) as usize) * 3;
+        // Honor the configured history share as well as protocol/instruction
+        // overhead. A message fitting the whole window may exceed its block.
+        let message_len = ((input_budget / 3) as usize) * 3;
         context.messages = vec![AgentMessage::user("x".repeat(message_len))].into();
 
         // The message alone fits the window.

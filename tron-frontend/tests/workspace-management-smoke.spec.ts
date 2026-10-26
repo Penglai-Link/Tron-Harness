@@ -1020,9 +1020,10 @@ test("workspace management preserves hierarchy search create edit move archive a
   await search.fill("");
   await expect(treeButton("PLATFORM")).toBeVisible();
   const statusFilter = page.getByLabel("Filter workspaces by status");
-  await statusFilter.selectOption("Active");
+  await statusFilter.click();
+  await page.getByRole("option", { name: "Active", exact: true }).click();
   await expect(treeButton("ARCHIVE_VAULT")).toBeHidden();
-  await statusFilter.selectOption("All");
+  await statusFilter.click(); await page.getByRole("option", {name: "All", exact: true}).click();
   await expect(treeButton("ARCHIVE_VAULT")).toBeVisible();
   await page.getByRole("button", { name: "Create workspace", exact: true }).click();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Risk");
@@ -1034,21 +1035,30 @@ test("workspace management preserves hierarchy search create edit move archive a
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Risk Review");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Review");
-  await expect(page.getByRole("combobox", { name: "Parent", exact: true })).toHaveValue("WS-0000000000000001");
+  await expect(page.getByRole("combobox", { name: "Parent", exact: true })).toContainText("Risk (WS-0000000000000001)");
   await treeButton("WS-0000000000000001").click();
   await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Risk Control");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(treeButton("WS-0000000000000001")).toContainText("Risk Control");
   await expect(page.getByRole("heading", { name: "Risk Control", exact: true })).toBeVisible();
-  await page.getByRole("combobox", { name: "Parent", exact: true }).selectOption("COMPLIANCE");
+  await page.getByRole("combobox", { name: "Parent", exact: true }).click(); await page.getByRole("option", {name: /Compliance/}).click();
   await page.getByRole("button", { name: "Move", exact: true }).click();
   await expect.poll(() => requests.some(request => request.pathname.endsWith("/WS-0000000000000001/move") && request.method === "POST")).toBe(true);
-  await expect(page.getByRole("combobox", { name: "Parent", exact: true })).toHaveValue("COMPLIANCE");
+  await expect(page.getByRole("combobox", { name: "Parent", exact: true })).toContainText("Compliance (COMPLIANCE)");
   await page.getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByRole("button", { name: "Restore", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Restore", exact: true }).click();
   await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeVisible();
   await expect.poll(() => requests.some(request => request.pathname.endsWith("/WS-0000000000000001/restore") && request.method === "POST")).toBe(true);
   expect(requests.some(request => /\/access\/(users|roles)$/.test(request.pathname))).toBe(false);
+});
+
+// Keep the rendered state beside failed acceptance evidence.
+test.afterEach(async ({page}, info) => {
+  if (info.status !== info.expectedStatus) {
+    const path = info.outputPath("failed-page.txt");
+    await (await import("node:fs/promises")).writeFile(path, await page.locator("body").ariaSnapshot());
+    await info.attach("failed-page", {path, contentType: "text/plain"});
+  }
 });

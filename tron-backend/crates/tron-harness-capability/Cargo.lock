@@ -712,6 +712,7 @@ dependencies = [
  "eliteforge-agent-official-plugin-storage-local",
  "serde_json",
  "tempfile",
+ "tokio",
  "uuid",
 ]
 

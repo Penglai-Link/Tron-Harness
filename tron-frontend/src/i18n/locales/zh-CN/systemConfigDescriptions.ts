@@ -1,5 +1,12 @@
 // Help is scoped to full configuration paths; dynamic profile names use "profile".
 export const systemConfigDescriptions = {
+  "shortTermMemory_context_providers_historyRecentTurns": "压缩较早对话时，保留近期完整对话原文的轮数。",
+  "shortTermMemory_context_providers_dataBlocks_block_maxTokens": "此上下文块的 token 上限；所有块分配的预算之和必须在模型输入窗口内。",
+  "shortTermMemory_context_providers_dataBlocks_block_strategy": "块缩减策略：keep 保留原文，bound 将过大的数据替换为受限的当前快照，summarize 生成摘要。",
+  "shortTermMemory_context_providers_dataBlocks_block_triggerRatio": "此块已用量达到预算的该比例时触发缩减。",
+  "shortTermMemory_context_providers_dataBlocks_block_targetRatio": "缩减后的目标用量占此块预算的比例。",
+  "shortTermMemory_context_providers_dataBlocks_block_minGainTokens": "接受缩减结果所需的最少 token 节省量。",
+
   "modelInvocation_defaultOutputTokens": "模型未单独配置输出额度时，每次调用使用的默认输出 token 上限。默认 16384，可按模型服务限制调整。",
   "modelInvocation_text_callTimeoutSeconds": "独立对话或辅助文本单次模型调用的最长等待时间，单位秒。向量场景按每批请求计时，不是整份文档。",
   "modelInvocation_text_operationTimeoutSeconds": "独立对话或辅助文本一次操作的总等待预算，包含重试和退避，单位秒；不能小于单次调用超时。",

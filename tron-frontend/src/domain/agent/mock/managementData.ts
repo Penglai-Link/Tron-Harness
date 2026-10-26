@@ -533,7 +533,7 @@ export function deleteWorkspaceInternalAgentMock(workspaceCode: string, agentCod
 }
 
 export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { enabled?: boolean; name?: string; description?: string; rolePrompt?: string; loopCode?: string; candidateModelCodes?: string[]; avatarId?: string; groupName?: string | null }) {
-  if (buildWorkspaceInternalAgentRecord(workspaceCode, agentCode).builtIn) throw new Error("Built-in agent definitions are read-only");
+  if (workspaceCode !== PLATFORM_INTERNAL_AGENT_SCOPE && buildWorkspaceInternalAgentRecord(workspaceCode, agentCode).builtIn) throw new Error("Built-in agent definitions are read-only outside platform settings");
   const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
   const patch = { ...payload, ...(groupName !== undefined ? { groupName } : {}) };
   if (groupName === undefined) delete patch.groupName;

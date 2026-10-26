@@ -67,6 +67,7 @@ it("registers short-term memory for the selected Dude and history session withou
   fireEvent.click(screen.getByRole("tab", { name: "历史会话" }));
   fireEvent.click(await screen.findByRole("button", { name: "打开" }));
   expect(await screen.findByTestId("inspected-session")).toHaveProperty("textContent", "memory-dude:memory-dude-history");
+  expect(screen.getByRole("button", {name:i18n.t("pages:dude.viewTraces")}).getAttribute("href")).toBe("/settings/observability/traces?category=Agent&sessionCode=memory-dude-history");
   fireEvent.click(screen.getByRole("tab", { name: "任务" }));
   await waitFor(() => expect(screen.queryByTestId("inspected-session")).toBeNull());
   query.clear();

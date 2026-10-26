@@ -1,3 +1,4 @@
+use std::future::{Ready, ready};
 use chrono::Utc;
 use socketioxide::{
     SocketIo,
@@ -80,43 +81,49 @@ async fn terminal_connected(
     socket.on_disconnect(terminal_disconnected);
 }
 
-async fn write_terminal_input(
+// Socketioxide calls the handler to obtain its future before spawning it.
+// Perform these synchronous PTY operations during that call: an async body
+// would schedule each packet independently and could reorder typed bytes.
+fn write_terminal_input(
     socket: SocketRef,
     State(gateway): State<TerminalSocketGateway>,
     TryData(payload): TryData<TerminalInputPayload>,
-) {
+) -> Ready<()> {
     let Ok(payload) = payload else {
-        return;
+        return ready(());
     };
     if let Err(error) = gateway.write_input(&socket.id.to_string(), payload) {
         emit_session_error(&socket, error.to_string());
     }
+    ready(())
 }
 
-async fn resize_terminal(
+fn resize_terminal(
     socket: SocketRef,
     State(gateway): State<TerminalSocketGateway>,
     TryData(payload): TryData<TerminalResizePayload>,
-) {
+) -> Ready<()> {
     let Ok(payload) = payload else {
-        return;
+        return ready(());
     };
     if let Err(error) = gateway.resize(&socket.id.to_string(), payload) {
         emit_session_error(&socket, error.to_string());
     }
+    ready(())
 }
 
-async fn signal_terminal(
+fn signal_terminal(
     socket: SocketRef,
     State(gateway): State<TerminalSocketGateway>,
     TryData(payload): TryData<TerminalSignalPayload>,
-) {
+) -> Ready<()> {
     let Ok(payload) = payload else {
-        return;
+        return ready(());
     };
     if let Err(error) = gateway.signal(&socket.id.to_string(), payload) {
         emit_session_error(&socket, error.to_string());
     }
+    ready(())
 }
 
 async fn terminal_disconnected(socket: SocketRef, State(gateway): State<TerminalSocketGateway>) {

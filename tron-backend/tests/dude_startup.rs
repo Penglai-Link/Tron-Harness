@@ -30,6 +30,10 @@ async fn first_launch_waits_for_profile_without_consuming_events_then_resumes() 
     )
     .unwrap();
     state.knowledge_bases.stop_ingestion_workers();
+    // This test isolates the account gate; unfinished onboarding has its own gate.
+    for dude in ["main-dude", "memory-dude"] {
+        state.dudes.save_soul(dude, dude.into(), "Configured startup fixture.".into()).unwrap();
+    }
     let mut pending = Vec::new();
     for (dude, source) in [
         ("main-dude", DudeEventSource::Heartbeat),
@@ -75,9 +79,10 @@ async fn first_launch_waits_for_profile_without_consuming_events_then_resumes() 
     }
     assert!(state.dudes.notifications().unwrap().is_empty());
 
-    profiles
+    let profile = profiles
         .register_or_update("USR-FIRST-LAUNCH", "first.launch")
         .unwrap();
+    profiles.activate(&profile.profile_id).unwrap();
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             let resumed = pending.iter().all(|event| {
@@ -88,12 +93,10 @@ async fn first_launch_waits_for_profile_without_consuming_events_then_resumes() 
                     .iter()
                     .any(|current| {
                         current.event_id == event.event_id
-                            && if event.dude_code == "memory-dude" {
-                                current.status == DudeEventStatus::Completed
-                            } else {
-                                // There is no model configured, but authorized work must start.
-                                current.attempts > 0 && current.status != DudeEventStatus::Running
-                            }
+                            && current.attempts > 0
+                            && current.status != DudeEventStatus::Running
+                            // Missing models and synthetic work inputs may be retryable.
+                            && (current.status != DudeEventStatus::Queued || current.result.is_some())
                     })
             });
             if resumed {

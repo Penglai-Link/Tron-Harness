@@ -425,7 +425,7 @@ async fn gateway_search_and_envelopes_cannot_authorize_tools_outside_saved_selec
     // Discovery round: search for saved and unsaved tools alike.
     let model = model_server_rounds(vec![
         vec![
-            ("tool_search", json!({"items":[{"query":"bash"}]})),
+            ("tool_search", json!({"items":[{"tool":"bash_exec"}]})),
             ("tool_search", json!({"items":[{"query":"write text"}]})),
         ],
         vec![

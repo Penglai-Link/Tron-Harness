@@ -41,11 +41,16 @@ impl Drop for Fixture {
 async fn model_reply(
     State(requests): State<Arc<Mutex<Vec<Value>>>>,
     Json(payload): Json<Value>,
-) -> Json<Value> {
-    requests.lock().unwrap().push(payload);
-    Json(
-        json!({"choices":[{"message":{"role":"assistant","content":"native fixture reply"},"finish_reason":"stop"}]}),
-    )
+) -> axum::response::Response {
+    requests.lock().unwrap().push(payload.clone());
+    let response = json!({"choices":[{"message":{"role":"assistant","content":"native fixture reply"},"finish_reason":"stop"}]});
+    {
+        use axum::response::IntoResponse;
+        if payload["stream"] == true {
+            let chunks = format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices":[{"index":0,"delta":{"role":"assistant","content":"native fixture reply"},"finish_reason":"stop"}]}));
+            ([(axum::http::header::CONTENT_TYPE,"text/event-stream")],chunks).into_response()
+        } else { Json(response).into_response() }
+    }
 }
 
 async fn fixture() -> Fixture {

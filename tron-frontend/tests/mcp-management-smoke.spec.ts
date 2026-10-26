@@ -79,6 +79,10 @@ async function blockApiRequests(page: Page) {
       await route.fulfill({ contentType: "application/json", body: JSON.stringify({ code: "SUCCESS", data: path.endsWith("/active") ? null : [] }) });
       return;
     }
+    if (path === "/api/v1/observability/browser-spans") { await route.fulfill({status:204}); return; }
+    if (path === "/api/v1/notifications" || path === "/api/v1/apps/workspaces/TRON_CORE/options" || path === "/api/v1/chats/session-groups" || path === "/api/v1/models/workspaces/TRON_CORE/select-options" || path === "/api/v1/admin/workspaces/options" || path === "/api/v1/dudes" || path === "/api/v1/knowledge-bases/agent-grants/main-agent" || path === "/api/v1/agents/registry/internal/main-agent/skills") {
+      await route.fulfill({json:{code:"SUCCESS", data:path.endsWith("/options") ? [{workspaceCode:"TRON_CORE",name:"Tron Core",label:"Tron Core",status:"Active"}] : []}}); return;
+    }
     requests.push(route.request().url());
     await route.abort();
   });
@@ -247,20 +251,21 @@ test("mcp settings, workspace policy, and agent assignment work in mock mode", a
   await expect(page.getByRole("dialog").filter({ hasText: "Knowledge Tools now follows platform policy" })).toBeVisible();
 
   await routeActiveProfileApi(page);
-  await page.goto(`${frontendBaseUrl}/agents`);
-  await expect(page.getByRole("tab", { name: "Internal Agents", exact: true })).toBeVisible();
-  const mainAgentSection = page.locator("section").filter({
-    has: page.getByRole("heading", { name: "Main Agent", exact: true }),
-  }).first();
-  const mcpAccessSelect = page.getByRole("combobox", { name: /^mcp access mode/i });
+  await page.goto(`${frontendBaseUrl}/settings/agents`);
+  await page.getByRole("button", {name:"Edit Main Agent · Built-in agent",exact:true}).click();
+  const agentEditor = page.getByRole("dialog", {name:"Edit Main Agent", exact:true});
+  await agentEditor.getByRole("tab", {name:"Capabilities",exact:true}).click();
+  const mcpAccessSelect = agentEditor.getByRole("combobox", { name: /^mcp access mode/i });
   await mcpAccessSelect.click(); await page.getByRole("option", { name: "Selected servers", exact: true }).click();
-  await expect(page.getByText("Selected MCP servers")).toBeVisible();
-
-  const knowledgeServerCard = page.locator("label").filter({ has: page.getByText("Knowledge Tools", { exact: true }) }).first();
-  await knowledgeServerCard.locator('input[type="checkbox"]').check();
-  await page.waitForTimeout(1200);
+  const selection = page.getByRole("dialog").filter({has:page.getByRole("checkbox", {name:/Knowledge Tools/})});
+  await selection.getByRole("checkbox", {name:/Knowledge Tools/}).check();
+  await selection.getByRole("button", {name:"Confirm",exact:true}).click();
+  await agentEditor.getByRole("button", {name:"Save",exact:true}).click();
+  await expect(agentEditor).toHaveCount(0);
+  await page.getByRole("button", {name:"Edit Main Agent · Built-in agent",exact:true}).click();
+  await agentEditor.getByRole("tab", {name:"Capabilities",exact:true}).click();
   await expect(mcpAccessSelect).toContainText("Selected servers");
-  await expect(knowledgeServerCard.locator('input[type="checkbox"]')).toBeChecked();
+  await agentEditor.getByRole("button", {name:"Cancel",exact:true}).click();
 
   await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/mcp-servers/new`);
@@ -286,4 +291,13 @@ test("mcp settings, workspace policy, and agent assignment work in mock mode", a
   await expect(rowByName(page, "Ops Tools New")).toBeVisible();
 
   expect(blockedRequests).toEqual([]);
+});
+
+// Keep the rendered state beside failed acceptance evidence.
+test.afterEach(async ({page}, info) => {
+  if (info.status !== info.expectedStatus) {
+    const path = info.outputPath("failed-page.txt");
+    await (await import("node:fs/promises")).writeFile(path, await page.locator("body").ariaSnapshot());
+    await info.attach("failed-page", {path, contentType: "text/plain"});
+  }
 });

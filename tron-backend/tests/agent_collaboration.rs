@@ -463,8 +463,7 @@ async fn tool_search_discovers_wrapped_inventory_and_gateway_executes_it() {
             .collect::<Vec<_>>()
             .join("\n")
     };
-    // The first search returns the native collaboration tool with its inner
-    // schema; the second returns the skill tools. Both stay discoverable while
+    // The first search returns native collaboration summaries; the second returns the skill tools. Both stay discoverable while
     // being executed through envelopes.
     assert!(
         search_output(1).contains("agent_spawn"),
@@ -472,8 +471,8 @@ async fn tool_search_discovers_wrapped_inventory_and_gateway_executes_it() {
         search_output(1)
     );
     assert!(
-        search_output(1).contains("input_schema"),
-        "discovery must expose the inner schema; actual search output: {}",
+        !search_output(1).contains("input_schema") && search_output(1).contains("summary"),
+        "summary discovery must omit schemas; actual search output: {}",
         search_output(1)
     );
     assert!(

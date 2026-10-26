@@ -301,7 +301,7 @@ export function WorkspaceManagementPage() {
                   </SelectInput>
                 </Field>
                 <Field className="min-w-0 xl:col-span-2" label={t("workspaceManagement.descriptionField")}>
-                  <TextArea className="min-h-28 resize-y" value={description} onChange={(event) => setDescription(event.target.value)} />
+                  <TextArea aria-label={t("workspaceManagement.descriptionField")} className="min-h-28 resize-y" value={description} onChange={(event) => setDescription(event.target.value)} />
                 </Field>
               </div>
 

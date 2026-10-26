@@ -65,7 +65,7 @@ impl Fixture {
         let agent = state
             .agent_management
             .list_workspace_internal_agents(WORKSPACE)
-            .unwrap()[0]
+            .unwrap().into_iter().find(|agent| agent.agent_code == "main-agent").unwrap()
             .agent_code
             .clone();
         let client = FakeEmbedding::default();
@@ -133,6 +133,11 @@ impl FakeEmbedding {
     }
 }
 impl LlmRuntimeClient for FakeEmbedding {
+    fn model_authorization_scope(&self, _: &RuntimeModelConfig) -> Result<Option<String>, String> { Ok(Some("synthetic-fixture-account".into())) }
+    fn generate_vision<'a>(&'a self, _: &'a RuntimeModelConfig, _: &'a str, mime: &'a str, bytes: &'a [u8]) -> Pin<Box<dyn Future<Output=Result<String,String>>+Send+'a>> {
+        Box::pin(async move { assert!(mime.starts_with("image/")); assert!(!bytes.is_empty()); Ok(r#"{"description":"Synthetic diagram evidence","visibleText":[],"relations":[]}"#.into()) })
+    }
+
     fn embed_batch_with_model<'a>(
         &'a self,
         _: &'a RuntimeModelConfig,
@@ -237,6 +242,13 @@ impl LlmRuntimeClient for FakeEmbedding {
 }
 pub struct EmbeddingResolver;
 impl LlmRuntimeModelResolver for EmbeddingResolver {
+    fn auto_vision_runtime_model_config<'a>(&'a self, workspace: &'a str) -> Pin<Box<dyn Future<Output=Result<Option<RuntimeModelConfig>, ModelError>>+Send+'a>> {
+        Box::pin(async move { self.vision_runtime_model_config(workspace, "PERSON_AI:FIXED:High:synthetic-vision") })
+    }
+    fn vision_runtime_model_config(&self, workspace: &str, code: &str) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        let mut config=self.embedding_runtime_model_config(workspace, Some(code))?.unwrap(); config.model_type=ModelType::Text; Ok(Some(config))
+    }
+
     fn embedding_runtime_model_config(
         &self,
         _: &str,
@@ -333,7 +345,7 @@ pub fn pdf() -> Vec<u8> {
 
 // Baseline product tests isolate extraction behind the application port. Production
 // uses Person-AI; provider result handling is covered separately.
-struct FixtureDocumentParser;
+pub struct FixtureDocumentParser;
 #[async_trait::async_trait]
 impl tron_backend::application::knowledge_base::parsing::KnowledgeDocumentParser
     for FixtureDocumentParser

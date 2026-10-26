@@ -15,6 +15,7 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     const updates: unknown[] = [];
     await page.route("**/api/v1/knowledge-bases**", async route => {
       const path = new URL(route.request().url()).pathname;
+      if (new URL(route.request().url()).pathname.endsWith("/chunking-strategies")) return route.fulfill({ json: { code: "SUCCESS", data: { strategies: ["auto", "structure", "heading", "fixed"].map(id => ({ id, version: "1" })) } } });
       let data: unknown = { id: "kb-help", name: "Guidelines", workspaceCode: "TRON_CORE", documents: [document], documentCount: 1, agentCodes: [], defaultChunkConfig: config };
       if (path.endsWith("/parsing-capabilities")) data = { defaultOcrMode: "Ocr", defaultTier: "standard", availableTiers: ["flash", "basic", "standard", "advanced"], parserVersion: "4.0.10", officeTier: "flash" };
       if (route.request().method() === "PATCH") {
@@ -36,7 +37,7 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     await expect(max).not.toBeVisible();
     await expect(dialog.getByRole("button", { name: zh ? "保存" : "Save", exact: true })).toBeDisabled();
     await dialog.getByRole("button", { name: zh ? "解析质量选项说明" : "Parsing quality options" }).hover();
-    await expect(tooltip).toContainText(zh ? "扫描 PDF" : "scanned PDFs");
+    await expect(tooltip).toContainText(zh ? "扫描件识别" : "scanned-document OCR");
     await dialog.getByRole("button", { name: zh ? "切分方式选项说明" : "Chunking mode options" }).hover();
     await expect(tooltip).toContainText(zh ? "自动" : "Automatic");
     await expect(tooltip).toContainText(zh ? "按标题" : "By heading");
@@ -53,19 +54,17 @@ for (const locale of ["en-US", "zh-CN"] as const) {
     const mode = dialog.getByRole("combobox", { name: zh ? "切分方式" : "Splitting", exact: true });
     await mode.click(); await page.getByRole("option", { name: zh ? "固定长度" : "Fixed length", exact: true }).click();
     await expect(max).toBeVisible(); await expect(dialog.locator("summary")).toHaveCount(0);
-    await mode.click(); await page.getByRole("option", { name: zh ? "按标题" : "By heading", exact: true }).click();
+    await mode.click(); await page.getByRole("option", { name: zh ? "标题" : "Heading", exact: true }).click();
     await expect(dialog.getByRole("spinbutton", { name: zh ? "标题深度" : "Heading depth", exact: true })).toBeVisible();
     await mode.click(); await page.getByRole("option", { name: zh ? "自动" : "Automatic", exact: true }).click();
     await expect(max).not.toBeVisible();
-    const ocr = dialog.getByRole("combobox", { name: zh ? "文字识别方式" : "Text recognition", exact: true });
-    await expect(ocr).toContainText(zh ? "继承平台（强制 OCR）" : "Use platform default (Force OCR)");
-    await dialog.getByRole("button", { name: zh ? "文字识别方式选项说明" : "Text recognition options" }).hover();
-    await expect(tooltip).toContainText(zh ? "已有文本层" : "text layer");
-    await ocr.click(); await page.getByRole("option", { name: zh ? "强制 OCR" : "Force OCR", exact: true }).click();
+    const parsing = dialog.getByRole("combobox", { name: zh ? "解析质量" : "Parsing quality", exact: true });
+    await expect(parsing).toContainText(zh ? "文档解析" : "Document parsing");
+    await parsing.click(); await page.getByRole("option", { name: zh ? "扫描件识别" : "Scanned document OCR", exact: true }).click();
     await expect(dialog.getByRole("button", { name: zh ? "保存" : "Save", exact: true })).toBeEnabled();
-    await ocr.click(); await page.getByRole("option", { name: zh ? "提取已有文本" : "Extract existing text", exact: true }).click();
+    await parsing.click(); await page.getByRole("option", { name: zh ? "文档解析" : "Document parsing", exact: true }).click();
     await dialog.locator("summary").click(); await max.fill("600");
     await dialog.getByRole("button", { name: zh ? "保存" : "Save", exact: true }).click();
-    await expect.poll(() => updates).toEqual([{ workspaceCode: "TRON_CORE", chunkConfig: { ...config, maxChars: 600 }, parsingTier: "standard", ocrMode: "Text" }]);
+    await expect.poll(() => updates).toEqual([{ chunkConfig: { ...config, maxChars: 600 }, parsingTier: "standard", ocrMode: "Text" }]);
   });
 }

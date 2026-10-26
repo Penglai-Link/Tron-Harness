@@ -29,6 +29,7 @@ fn service(database: &str) -> AgentManagementService {
     {
         agents.save_loop_design(serde_json::from_value(serde_json::json!({"loopCode":"test-react","name":"Test React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(), 0).unwrap();
     }
+    agents.initialize_default_main_loop().unwrap();
     agents
 }
 fn create(code: &str, group: Option<&str>) -> CreateWorkspaceInternalAgentCommand {

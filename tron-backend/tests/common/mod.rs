@@ -479,3 +479,17 @@ pub fn single_gateway_result(text: &str) -> String {
     assert_eq!(rows[0]["index"],0);
     rows[0]["result"].as_str().map(str::to_owned).unwrap_or_else(||rows[0]["result"].to_string())
 }
+
+/// Scripted providers echo the last conversational payload, not runtime data
+/// contributors which are deliberately placed after history in the request.
+pub fn last_conversation_content(payload: &Value) -> &str {
+    payload["messages"].as_array().and_then(|messages| messages.iter().rev().find_map(|message| {
+        if message["role"] != "user" && message["role"] != "tool" { return None; }
+        let text = message["content"].as_str()?;
+        if ["<available_skills>", "<available_agents>", "<application-execution-context>",
+            "<current-session-working-state>", "<page-context>", "<knowledge", "<dude-"].iter().any(|tag| text.trim_start().starts_with(tag)) { return None; }
+        if serde_json::from_str::<Value>(text).is_ok_and(|value| value.get("agents").is_some()) { return None; }
+        if serde_json::from_str::<Vec<Value>>(text).is_ok_and(|items| items.iter().any(|item| item.get("domainCode").is_some())) { return None; }
+        Some(text)
+    })).unwrap_or_default()
+}

@@ -43,19 +43,9 @@ async fn platform_prompt_variable_options_expose_registered_runtime_variables() 
     .await;
     assert_eq!(visible_domains_response.status(), StatusCode::OK);
     let options = response_json(visible_domains_response).await;
-    let visible_domains = options["data"]
-        .as_array()
-        .expect("platform runtime prompt options should be an array")
-        .iter()
-        .find(|option| option["key"] == json!("visible_domains"))
-        .unwrap_or_else(|| panic!("visible_domains runtime option missing: {options}"));
-    assert_eq!(visible_domains["type"], json!("JSON"));
-    assert_eq!(visible_domains["sourceKind"], json!("RUNTIME"));
-    assert_eq!(
-        visible_domains["runtimeProvider"],
-        json!("AGENT_VISIBLE_DOMAINS")
-    );
-    assert_eq!(visible_domains["sourceLabel"], json!("Agent tool domains"));
+    // Domain inventory is a typed context contributor, no longer a template
+    // runtime variable. Do not advertise a placeholder that cannot be resolved.
+    assert!(options["data"].as_array().unwrap().iter().all(|option| option["key"] != "visible_domains"));
 }
 
 #[tokio::test]

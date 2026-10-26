@@ -134,6 +134,7 @@ async function routeThemeApi(
   const data = options.workspaceSwitcherData ?? getWorkspaceSwitcherMock();
   await page.route("**/api/v1/admin/workspaces/switcher", route => fulfillJson(route, successEnvelope(data)));
   await page.route("**/api/v1/admin/platform/models", route => fulfillJson(route, successEnvelope([])));
+  await page.route("**/api/v1/knowledge-bases/platform", route => fulfillJson(route, successEnvelope([])));
 }
 
 async function signIn(page: Page) {
@@ -333,48 +334,33 @@ test("workspace inheritance map keeps descendant workspaces nested under their d
 
 });
 
-test("sidebar groups knowledge and resource navigation under data", async ({ page }) => {
-  await routeThemeApi(page);
-  await signIn(page);
-
-  const navigation = page.getByRole("navigation", { name: "Tron primary navigation" });
-  const dataToggle = navigation.getByRole("button", { name: "Data" });
-  await dataToggle.click();
-  const dataSection = dataToggle.locator("xpath=ancestor::*[@data-slot='sidebar-group'][1]");
-  const agentOperationsSection = navigation.getByRole("button", { name: "Agent Operations" }).locator("xpath=ancestor::*[@data-slot='sidebar-group'][1]");
-
-  await expect(dataSection.getByRole("link", { name: "KnowledgeGraph" })).toBeVisible();
-  await expect(dataSection.getByRole("link", { name: "KnowledgeBase" })).toBeVisible();
-  await dataSection.getByRole("button", { name: "Expand Resource Management submenu" }).click();
-  await expect(dataSection.getByRole("link", { name: "File Management", exact: true })).toBeVisible();
-  await expect(agentOperationsSection.getByRole("link", { name: "File Management" })).toHaveCount(0);
-
-  await dataSection.getByRole("link", { name: "KnowledgeBase" }).click();
-  await expect(page).toHaveURL(/\/knowledge-base$/);
-  await expect(page.getByRole("tab", { name: "KnowledgeBase", exact: true })).toBeVisible();
+test("settings groups knowledge navigation under data", async ({ page }) => {
+  await routeThemeApi(page); await signIn(page);
+  await page.goto(`${frontendBaseUrl}/settings/general`);
+  const dataToggle = page.getByRole("button", { name: "Data", exact:true });
+  if (await dataToggle.getAttribute("aria-expanded") !== "true") await dataToggle.click();
+  await expect(page.getByRole("link", {name:"KnowledgeGraph",exact:true})).toBeVisible();
+  await page.getByRole("link", {name:"KnowledgeBase",exact:true}).click();
+  await expect(page).toHaveURL(/settings\/knowledge-base$/);
+  await expect(page.getByRole("searchbox", {name:"Search knowledge bases",exact:true})).toBeVisible();
 });
 
 test("sidebar navigation still works after entering chats", async ({ page }) => {
-  await routeThemeApi(page);
-  await signIn(page);
-
-  await routeActiveProfileApi(page);
-  await page.goto(`${frontendBaseUrl}/chats`, { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(/\/(?:chats|default)(?:\?.*)?$/);
+  await routeThemeApi(page); await signIn(page);
+  await page.goto(`${frontendBaseUrl}/chats`);
   await expect(page.getByRole("button", { name: "New chat", exact: true }).first()).toBeVisible();
-
-  await page.getByRole("link", { name: "Apps" }).click();
+  await page.getByRole("button", { name: "Explore more", exact:true }).click();
+  await page.getByRole("button", {name:"Expand Core submenu", exact:true}).click();
+  await page.getByRole("link", {name:"Apps",exact:true}).click();
   await expect(page).toHaveURL(/\/apps$/);
-  await expect(page.getByRole("tab", { name: "Apps", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", {name:"Apps",exact:true})).toBeVisible();
+});
 
-  const dataToggle = page.getByRole("button", { name: "Data" });
-  const resourcesLink = page.getByRole("link", { name: "File Management" });
-  if (!(await resourcesLink.isVisible())) {
-    if (await dataToggle.getAttribute("aria-expanded") !== "true") await dataToggle.click();
-    await page.getByRole("button", { name: "Expand Resource Management submenu" }).click();
+// Keep the rendered state beside failed acceptance evidence.
+test.afterEach(async ({page}, info) => {
+  if (info.status !== info.expectedStatus) {
+    const path = info.outputPath("failed-page.txt");
+    await (await import("node:fs/promises")).writeFile(path, await page.locator("body").ariaSnapshot());
+    await info.attach("failed-page", {path, contentType: "text/plain"});
   }
-  await resourcesLink.click();
-  await expect(page).toHaveURL(/\/resource-management\/files$/);
-  await expect(page.getByRole("tab", { name: "File Management", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Primary Investigation" })).toHaveCount(0);
 });

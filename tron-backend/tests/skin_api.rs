@@ -58,7 +58,7 @@ async fn skin_api_import_activate_restart_and_errors() {
     let (app, state) = router(dir.path());
     let (_, active) = request(&app, "GET", "/api/v1/system/skins/active", Value::Null).await;
     assert_eq!(active["code"], "0");
-    assert_eq!(active["data"]["skin"]["id"], "light");
+    assert_eq!(active["data"]["skin"]["id"], "matrix-dark");
     let mut changes = state.skins.subscribe();
     let manifest = json!({"id":"ocean", "name":"Ocean", "version":1,"mode":"Light",
         "colors":{"--color-primary":"#164b85"}, "layout":{}, "resources":{"background":null,"font":null}});

@@ -23,6 +23,8 @@ electron/resources/update-config.json
 *.tar.gz
 *.tar
 *.zip
+!tron-backend/tests/fixtures/mineru-v1/synthetic.*.zip
+!tron-backend/tests/fixtures/mineru-v1/synthetic-scanned.pdf.zip
 
 # IDEs and editors
 .idea/

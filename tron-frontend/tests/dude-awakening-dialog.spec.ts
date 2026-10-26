@@ -53,7 +53,8 @@ test("restored awakening preserves reading position and enters home after the an
         messages: [{ id: "final", messageCode: "final", sessionCode: "awakening", runCode: "native", role: "ASSISTANT", actor: "Dude", channel: "MAIN_AGENT", content: "Soul saved", createdAt: new Date(time + 1500).toISOString() }], userInputRequest: null };
       const frame = (type: string, extra = {}) => ({ type, runId: "product", threadId: "awakening", timestamp: time + 1000, metadata: { framework: { runId: "native" } }, ...extra });
       return route.fulfill({ contentType: "text/event-stream", body: [frame("RUN_STARTED"), frame("TOOL_CALL_START", { toolCallId: "save-tool", toolCallName: "dude_soul_update" }),
-        frame("RUN_FINISHED", { outcome: { type: "success" }, result })].map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join("") });
+        frame("TEXT_MESSAGE_START", {messageId:"final", role:"assistant"}), frame("TEXT_MESSAGE_CONTENT", {messageId:"final", delta:"Soul saved"}),
+        frame("TEXT_MESSAGE_END", {messageId:"final"}), frame("RUN_FINISHED", { outcome: { type: "success" }, result })].map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join("") });
     }
     return route.fallback();
   });

@@ -69,7 +69,7 @@ impl NodeState {
     fn new(id: &str) -> Self {
         Self {
             id: id.into(),
-            expected_ocr: Arc::new(Mutex::new("ocr".into())),
+            expected_ocr: Arc::new(Mutex::new("txt".into())),
             healthy: Arc::new(AtomicBool::new(true)),
             complete: Default::default(),
             lose_post_response: Default::default(),
@@ -209,10 +209,9 @@ fn config(nodes: Vec<MineruNode>) -> MineruConfig {
 fn service(f: &Fixture, config: &MineruConfig) -> KnowledgeBaseService {
     KnowledgeBaseService::new(
         SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap(),
-        tron_backend::application::rag::RagService::new(
-            Arc::new(std::sync::Mutex::new(tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository::connect(&f.state.config.database_url).unwrap())),
-            tron_backend::application::rag::DefaultRagRuntime::new(LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())), f.state.llm_router.clone()),
-        ),
+        f.state.rag.with_runtime(tron_backend::application::rag::DefaultRagRuntime::new(
+            LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())), FixtureGraphRouter,
+        )),
         f.state.resources.clone(),
         f.state.agent_management.clone(),
         LlmRuntimeService::new(Arc::new(EmbeddingResolver), Arc::new(f.client.clone())),
@@ -287,6 +286,7 @@ async fn restart_resumes_recorded_remote_job_on_same_node_without_upload_post_or
     let (b, nb, sb) = node("node_b").await;
     let f = Fixture::new();
     let cfg = config(vec![na, nb]);
+    *a.expected_ocr.lock().unwrap() = "ocr".into();
     let first = service(&f, &cfg);
     let kb = first.create(USER, "Restart affinity", "").unwrap();
     let doc = first.upload(USER, &kb.id, "one.pdf", &pdf()).unwrap();
@@ -310,8 +310,7 @@ async fn restart_resumes_recorded_remote_job_on_same_node_without_upload_post_or
     until(|| resumed.detail(USER, &kb.id).unwrap().documents[0].status == "READY").await;
     let after = resumed
         .ingestion_tasks(USER, &kb.id, &doc.id)
-        .unwrap()
-        .remove(0);
+        .unwrap().into_iter().find(|task| task.id == before.id).unwrap();
     assert_eq!(after.id, before.id);
     assert_eq!(after.endpoint_id, before.endpoint_id);
     assert_eq!(after.remote_job_id, before.remote_job_id);
@@ -339,8 +338,7 @@ async fn lost_job_post_response_reconciles_original_file_and_does_not_submit_dup
     until(|| service.detail(USER, &kb.id).unwrap().documents[0].status == "READY").await;
     let task = service
         .ingestion_tasks(USER, &kb.id, &doc.id)
-        .unwrap()
-        .remove(0);
+        .unwrap().into_iter().find(|task| task.kind == tron_backend::application::knowledge_base::ingestion::IngestionKind::Parsing).unwrap();
     assert!(!task.reconciling);
     assert!(task.remote_job_id.is_some());
     assert_eq!(a.uploads.load(Ordering::SeqCst), 1);
@@ -527,14 +525,14 @@ async fn document_ocr_override_changes_request_cache_and_task_snapshot() {
         .configure_parsing(USER, &kb.id, &doc.id, None, None, Some(None))
         .await
         .unwrap();
-    assert_eq!(inherited.ocr_mode, None);
-    *node.expected_ocr.lock().unwrap() = "auto".into();
+    assert_eq!(inherited.ocr_mode, Some(OcrMode::Text));
+    *node.expected_ocr.lock().unwrap() = "txt".into();
     let automatic = service
         .configure_and_index(USER, &kb.id, &doc.id, None, None, Some(Some(OcrMode::Auto)))
         .await
         .unwrap();
     assert_eq!(automatic.status, "READY");
-    assert_eq!(automatic.ocr_mode, Some(OcrMode::Auto));
+    assert_eq!(automatic.ocr_mode, Some(OcrMode::Text));
     assert_eq!(node.posts.load(Ordering::SeqCst), 3);
     assert_eq!(
         node.lists.load(Ordering::SeqCst),

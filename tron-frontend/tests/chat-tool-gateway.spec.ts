@@ -1,3 +1,4 @@
+import { gatewayArguments } from "./support/gateway-stub";
 /**
  * Real-browser acceptance for the stable two-tool gateway.
  *
@@ -107,7 +108,7 @@ function recordRequest(payload: Record<string, unknown>): RecordedRequest {
   const toolNames = tools.map((tool) => tool.function?.name ?? "");
   // The scripted turn follows the *latest* user message: a session that keeps
   // chatting carries earlier markers and earlier tool results in its history.
-  const lastUserIndex = messages.map((message) => message.role).lastIndexOf("user");
+  const lastUserIndex = messages.findLastIndex(message => message.role === "user" && Object.keys(SCENARIOS).some(key => JSON.stringify(message.content).includes(key)));
   const lastUserText = JSON.stringify(messages[lastUserIndex]?.content ?? "");
   const marker = Object.keys(SCENARIOS)
     .sort((left, right) => right.length - left.length)
@@ -159,7 +160,7 @@ function writeToolCallStream(response: import("node:http").ServerResponse, id: s
           index,
           id: `${id}-call-${index + 1}`,
           type: "function",
-          function: { name: call.name, arguments: JSON.stringify(call.args) },
+          function: { name: call.name, arguments: JSON.stringify(gatewayArguments(call.name, call.args)) },
         })),
       },
       finish_reason: "tool_calls",
@@ -276,7 +277,9 @@ test.afterAll(async () => {
  * one to enable instead of clicking whichever match Playwright finds first.
  */
 async function clickFirstEnabled(page: Page, name: string) {
-  const buttons = page.getByRole("button", { name, exact: true });
+  const buttons = name === "New chat" || name === "新会话"
+    ? page.locator('[data-menu-code="CHAT_NEW_SESSION"]').getByRole("button")
+    : page.getByRole("button", { name, exact: true });
   await expect(buttons.first()).toBeVisible({ timeout: 30_000 });
   await expect(buttons.first()).toBeEnabled({ timeout: 60_000 });
   await buttons.first().click();
@@ -305,16 +308,22 @@ async function send(page: Page, text: string) {
 /** The work rail auto-collapses when the run completes; open it to reach the cards. */
 async function expandWorkRail(transcript: Locator) {
   const summaries = transcript.locator("button.ef-chat__rail-summary");
+  // Reply text precedes RUN_FINISHED, which automatically collapses the rail.
+  await expect(summaries.last()).toContainText(/^(Worked for|已工作)/);
+  // Completion collapses in a React effect after the summary text changes.
+  await expect(summaries.last()).toHaveAttribute("aria-expanded", "false");
   const count = await summaries.count();
   for (let index = 0; index < count; index += 1) {
     const button = summaries.nth(index);
-    if ((await button.getAttribute("aria-expanded")) === "false") await button.click();
+    if ((await button.getAttribute("aria-expanded")) === "false") await button.click({timeout: 5_000});
+    await expect(button).toHaveAttribute("aria-expanded", "true");
   }
   const entryToggles = transcript.locator("button.ef-chat__rail-entry-toggle");
   const entryCount = await entryToggles.count();
   for (let index = 0; index < entryCount; index += 1) {
     const button = entryToggles.nth(index);
-    if ((await button.getAttribute("aria-expanded")) === "false") await button.click();
+    if ((await button.getAttribute("aria-expanded")) === "false") await button.click({timeout: 5_000});
+    await expect(button).toHaveAttribute("aria-expanded", "true");
   }
 }
 
@@ -431,7 +440,7 @@ test("3. tool_execute really runs bash_exec and the card hides the raw ids", asy
   // title is a localized action summary carrying the command instead of the
   // gateway's raw id. Assert the measured wording (verified against the real
   // browser) and that no raw tool id leaks anywhere in the transcript.
-  expect(titles, "zh execute card title must be a localized action summary carrying the command").toContain("执行：echo acc-gateway-hello");
+  expect(titles, "zh execute card title must be a localized action summary carrying the command").toContain("执行 Shell 命令 echo acc-gateway-hello");
 });
 
 test("4. two parallel tool_calls execute in one batch and render two cards", async ({ page }, testInfo) => {
@@ -503,5 +512,5 @@ test("5. reverse validation: en-US renders the same gateway cards in English", a
   // Same as the zh case: the host i18n `chat.management.tool.commandSummary`
   // renders 「Run: {{command}}」 in en-US. Assert the measured wording rather
   // than a brief-invented template, keeping the raw-name invariant above.
-  expect(titles, "en execute card title must be a localized action summary carrying the command").toContain("Run: echo acc-gateway-hello");
+  expect(titles, "en execute card title must be a localized action summary carrying the command").toContain("Run shell command echo acc-gateway-hello");
 });

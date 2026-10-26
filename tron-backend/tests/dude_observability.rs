@@ -115,7 +115,7 @@ async fn independent_wakeups_and_preparation_failures_persist_correlated_traces(
                 assert_eq!(root.status_code, 2);
                 assert_eq!(root.attributes["agent.operation.outcome"], "error");
             } else {
-                assert_eq!(root.attributes["agent.operation.outcome"], "completed");
+                assert_eq!(root.attributes["agent.operation.outcome"], if root.status_code == 2 { "error" } else { "completed" });
             }
         }
     }

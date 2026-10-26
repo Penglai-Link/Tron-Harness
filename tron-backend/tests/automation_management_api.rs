@@ -87,15 +87,7 @@ async fn agent_chat_completion(
     Json(payload): Json<Value>,
 ) -> Response {
     request_count.fetch_add(1, Ordering::SeqCst);
-    let prompt = payload["messages"]
-        .as_array()
-        .and_then(|messages| {
-            messages
-                .iter()
-                .rev()
-                .find_map(|message| message["content"].as_str())
-        })
-        .unwrap_or_default();
+    let prompt = common::last_conversation_content(&payload);
     sse_completion(
         &payload,
         json!({

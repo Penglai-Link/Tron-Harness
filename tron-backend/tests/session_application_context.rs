@@ -1208,7 +1208,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
                         .text_content()
                         .contains("application-execution-context")
                 })
-                .unwrap();
+                .unwrap_or_else(|| panic!("missing application scope in request: {:?}", request.messages));
             let content = message.text_content();
             let begin = content.find('{').unwrap();
             let end = content.rfind('}').unwrap();

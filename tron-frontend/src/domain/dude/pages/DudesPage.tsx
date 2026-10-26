@@ -346,7 +346,7 @@ export function DudesPage() {
                       size="sm"
                       variant="outline"
                       nativeButton={false}
-                      render={<Link to={`/settings/observability/traces?sessionCode=${encodeURIComponent(selectedHistory.sessionCode)}`} />}
+                      render={<Link to={`/settings/observability/traces?category=Agent&sessionCode=${encodeURIComponent(selectedHistory.sessionCode)}`} />}
                     >
                       {t("dude.viewTraces")}
                     </Button>
