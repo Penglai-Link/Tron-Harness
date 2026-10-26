@@ -10,7 +10,6 @@ use crate::{
             Project, ProjectAppLink, ProjectError, ProjectStatus, ProjectView,
             validate_project_code,
         },
-        workspace::WorkspaceStatus,
     },
     shared::{
         id::{IdGenerator, SnowflakedSnowflakeIdProvider},
@@ -34,11 +33,26 @@ pub struct ProjectExecutionContext {
     pub linked_apps: Vec<AppDetail>,
 }
 
+pub struct ProjectReadPage { pub total:usize, pub records:Vec<ProjectView> }
+
+pub trait ProjectReadRepository: Send + Sync {
+    /// Native count and bounded ordered page in a single storage snapshot.
+    fn page_active(
+        &self,
+        workspace_code: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<ProjectReadPage, ProjectError>;
+    fn list_active(&self, workspace_code: &str) -> Result<Vec<ProjectView>, ProjectError>;
+}
+
 pub trait ProjectRepository: Send {
+    fn reader(&self) -> Arc<dyn ProjectReadRepository>;
     fn next_id(&mut self) -> Result<i64, ProjectError>;
     fn list_projects(&mut self, workspace_code: &str) -> Result<Vec<Project>, ProjectError>;
     fn get_project(&mut self, project_code: &str) -> Result<Project, ProjectError>;
     fn list_links(&mut self, project_code: &str) -> Result<Vec<ProjectAppLink>, ProjectError>;
+    fn list_links_many(&mut self, codes: &[String]) -> Result<Vec<ProjectAppLink>, ProjectError>;
     fn save_project(
         &mut self,
         project: &Project,
@@ -57,6 +71,7 @@ pub struct ProjectService {
     apps: AppService,
     id_generator: Arc<dyn IdGenerator>,
     repository: Arc<Mutex<Box<dyn ProjectRepository>>>,
+    reader: Arc<dyn ProjectReadRepository>,
     workspaces: WorkspaceService,
 }
 
@@ -66,7 +81,9 @@ impl ProjectService {
         workspaces: WorkspaceService,
         apps: AppService,
     ) -> Self {
+        let reader = repository.reader();
         Self {
+            reader,
             directory_inspector: None,
             apps,
             workspaces,
@@ -77,21 +94,19 @@ impl ProjectService {
 
     pub fn list(&self, workspace_code: &str) -> Result<Vec<ProjectView>, ProjectError> {
         self.active_workspace(workspace_code)?;
-        // `view` reads each project's links from the same repository.  Keep
-        // this guard scoped to the initial query so the follow-up reads do
-        // not attempt to acquire the mutex recursively.
-        let projects = {
-            let mut repository = self
-                .repository
-                .lock()
-                .expect("project repository mutex poisoned");
-            repository.list_projects(workspace_code)?
-        };
-        projects
-            .into_iter()
-            .filter(|project| project.status == ProjectStatus::Active)
-            .map(|project| self.view(project))
-            .collect()
+        self.reader.list_active(workspace_code)
+    }
+
+    pub fn page(
+        &self,
+        workspace_code: &str,
+        current: usize,
+        size: usize,
+    ) -> Result<ProjectReadPage, ProjectError> {
+        self.active_workspace(workspace_code)?;
+        let size = size.clamp(1, 100);
+        let offset = current.max(1).saturating_sub(1).saturating_mul(size);
+        self.reader.page_active(workspace_code, offset, size)
     }
 
     pub fn get(&self, project_code: &str) -> Result<ProjectView, ProjectError> {
@@ -122,14 +137,18 @@ impl ProjectService {
             if app_code.is_empty() || app_codes.iter().any(|item: &String| item == &app_code) {
                 return Err(ProjectError::DuplicateApp);
             }
-            let app = self
-                .apps
-                .get_app(&app_code)
-                .map_err(|_| ProjectError::AppInvalid)?;
-            if app.workspace_code != command.workspace_code || app.status != AppStatus::Active {
-                return Err(ProjectError::AppInvalid);
-            }
             app_codes.push(app_code);
+        }
+        if self
+            .apps
+            .get_apps(&app_codes)
+            .map_err(|_| ProjectError::AppInvalid)?
+            .iter()
+            .any(|app| {
+                app.workspace_code != command.workspace_code || app.status != AppStatus::Active
+            })
+        {
+            return Err(ProjectError::AppInvalid);
         }
         let primary_app_code = match (app_codes.first(), command.primary_app_code) {
             (None, None) => None,
@@ -231,16 +250,15 @@ impl ProjectService {
         if project.workspace_code != workspace_code {
             return Err(ProjectError::WorkspaceInvalid);
         }
-        let mut linked_apps = Vec::with_capacity(project.app_codes.len());
-        for app_code in &project.app_codes {
-            let app = self
-                .apps
-                .get_app(app_code)
-                .map_err(|_| ProjectError::AppInvalid)?;
-            if app.workspace_code != workspace_code || app.status != AppStatus::Active {
-                return Err(ProjectError::AppInvalid);
-            }
-            linked_apps.push(app);
+        let linked_apps = self
+            .apps
+            .get_apps(&project.app_codes)
+            .map_err(|_| ProjectError::AppInvalid)?;
+        if linked_apps
+            .iter()
+            .any(|app| app.workspace_code != workspace_code || app.status != AppStatus::Active)
+        {
+            return Err(ProjectError::AppInvalid);
         }
         let primary_app = linked_apps
             .iter()
@@ -254,11 +272,11 @@ impl ProjectService {
     }
 
     fn active_workspace(&self, workspace_code: &str) -> Result<(), ProjectError> {
-        let workspace = self
+        let active = self
             .workspaces
-            .get_workspace(workspace_code.trim())
+            .workspace_is_active(workspace_code.trim())
             .map_err(|_| ProjectError::WorkspaceInvalid)?;
-        if workspace.status != WorkspaceStatus::Active {
+        if !active {
             return Err(ProjectError::WorkspaceInvalid);
         }
         Ok(())
@@ -270,11 +288,15 @@ impl ProjectService {
             .lock()
             .expect("project repository mutex poisoned")
             .list_links(&project.project_code)?;
+        Ok(Self::view_with_links(project, links))
+    }
+
+    fn view_with_links(project: Project, links: Vec<ProjectAppLink>) -> ProjectView {
         let primary_app_code = links
             .iter()
             .find(|link| link.is_primary)
             .map(|link| link.app_code.clone());
-        Ok(ProjectView {
+        ProjectView {
             project_code: project.project_code,
             workspace_code: project.workspace_code,
             name: project.name,
@@ -284,6 +306,6 @@ impl ProjectService {
             created_at: project.created_at,
             updated_at: project.updated_at,
             archived_at: project.archived_at,
-        })
+        }
     }
 }

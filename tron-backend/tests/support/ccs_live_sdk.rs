@@ -391,7 +391,7 @@ pub async fn run() {
         .unwrap();
     service.preview(USER, &kb.id, &doc.id).await.unwrap();
     service
-        .reparse_visual_document(USER, WORKSPACE, &kb.id, &doc.id)
+        .reparse_visual_document(USER, &kb.id, &doc.id)
         .await
         .unwrap();
     let ready = service.index(USER, &kb.id, &doc.id).await.unwrap();

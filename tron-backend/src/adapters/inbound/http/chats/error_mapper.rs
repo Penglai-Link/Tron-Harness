@@ -57,7 +57,7 @@ pub fn chat_error_response(error: ChatError) -> Response {
         ChatError::SessionRunActive => (
             StatusCode::CONFLICT,
             "CHAT_SESSION_RUN_ACTIVE",
-            "running chat sessions cannot be archived".to_string(),
+            "this operation is unavailable while the chat session is running".to_string(),
         ),
         ChatError::SessionTitleRequired => (
             StatusCode::BAD_REQUEST,

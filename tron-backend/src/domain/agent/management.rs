@@ -19,20 +19,6 @@ pub enum ToolAssignmentMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ToolExposureMode {
-    DirectList,
-    DomainDiscovery,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ExpandedDomainPersistenceMode {
-    StickyExpanded,
-    EphemeralExpanded,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum McpAccessMode {
     Disabled,
     AllEnabledServers,
@@ -53,8 +39,6 @@ pub struct WorkspaceInternalAgentPolicy {
     pub agent_code: String,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
-    pub tool_exposure_mode: ToolExposureMode,
-    pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
     pub max_steps: u32,
     pub max_tool_calls: u32,
     pub max_parallel_tool_calls: u32,
@@ -103,8 +87,6 @@ pub struct PlatformInternalAgentConfig {
     pub candidate_model_codes: Vec<String>,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
-    pub tool_exposure_mode: ToolExposureMode,
-    pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
     pub max_steps: u32,
     pub max_tool_calls: u32,
     pub max_parallel_tool_calls: u32,
@@ -156,8 +138,6 @@ pub struct InternalAgentToolPolicy {
     pub source: InternalAgentPolicySource,
     pub tool_assignment_mode: ToolAssignmentMode,
     pub mcp_access_mode: McpAccessMode,
-    pub tool_exposure_mode: ToolExposureMode,
-    pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
     pub max_steps: u32,
     pub max_tool_calls: u32,
     pub max_parallel_tool_calls: u32,
@@ -324,6 +304,7 @@ pub struct ToolDomainRecord {
     pub name: String,
     pub description: String,
     pub tool_count: usize,
+    /// Exact invocation names (`call_name`), never catalog IDs.
     pub sample_tools: Vec<String>,
     pub has_mutation_tools: bool,
 }

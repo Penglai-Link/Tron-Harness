@@ -640,11 +640,12 @@ impl ShortTermMemoryService {
                     goal.as_ref(),
                     &todos,
                     memory.todo_enabled,
-                    u32::MAX,
                 )
                 .into_iter()
                 .collect()
             }
+            // The shared Framework history coordinator fills this destination
+            // from its persisted summary and immutable transcript snapshot.
             "current_session_checkpoint" => vec![],
             _ => return Err(ShortTermMemoryError::StorageFailure),
         };
@@ -843,7 +844,9 @@ impl ShortTermMemoryService {
             options: eliteforge_agent_memory::CompressionOptions {
                 max_input_tokens: self.model_context_budget_plan(model).effective_input_budget
                     as usize,
-                max_summary_bytes: 16 * 1024,
+                max_summary_bytes: eliteforge_agent_memory::summary_byte_guard(
+                    self.model_context_budget_plan(model).block_budgets.current_session_checkpoint.effective_limit_tokens as usize
+                ),
                 max_model_calls: 16,
             },
             reason,

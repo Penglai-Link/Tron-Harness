@@ -36,7 +36,7 @@ impl ModelClient for HumanScript {
             let results: Vec<_> = request
                 .messages
                 .iter()
-                .filter_map(|m| m.tool_result.as_ref().map(|_| m.content.text()))
+                .filter_map(|m| m.tool_result.as_ref().map(|_| common::single_gateway_result(&m.content.text())))
                 .collect();
             if request
                 .messages
@@ -44,9 +44,14 @@ impl ModelClient for HumanScript {
                 .any(|m| m.content.text() == "root:dude-native")
             {
                 if results.is_empty() {
+                    // Gateway mode: every wrapped tool travels as a tool_execute
+                    // envelope so the model-visible schema stays the stable pair.
                     return Ok(ModelResponse::tool_call(
-                        "thread_create",
-                        json!({"agentCode":"reviewer","task":"child:needs-human","title":"Dude delegated work"}),
+                        "tool_execute",
+                        json!({
+                            "tool":"thread_create",
+                            "arguments":{"items":[{"agentCode":"reviewer","task":"child:needs-human","title":"Dude delegated work"}]}
+                        }),
                     ));
                 }
                 let created: Value = serde_json::from_str(&results[0])
@@ -72,10 +77,22 @@ impl ModelClient for HumanScript {
                     self.release.notified().await;
                 }
                 self.questions.fetch_add(1, Ordering::AcqRel);
-                assert!(request.tools.iter().any(|t| t.call_name == "chat_ask_user"));
+                let model_tools = request
+                    .tools
+                    .iter()
+                    .map(|t| t.call_name.as_str())
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    model_tools,
+                    vec!["tool_execute", "tool_search"],
+                    "gateway must expose only the stable pair"
+                );
                 return Ok(ModelResponse::tool_call(
-                    "chat_ask_user",
-                    json!({"intro":"Choose deployment target","questions":[{"question":"Which target?","options":[{"label":"Staging"},{"label":"Production"}]}]}),
+                    "tool_execute",
+                    json!({
+                        "tool":"chat_ask_user",
+                        "arguments":{"intro":"Choose deployment target","questions":[{"question":"Which target?","options":[{"label":"Staging"},{"label":"Production"}]}]}
+                    }),
                 ));
             }
             Ok(ModelResponse::final_output("answered-work-completed"))

@@ -336,14 +336,17 @@ impl KnowledgeBaseService {
         code: &str,
     ) -> Result<(std::fs::File, u64), KnowledgeBaseError> {
         self.owned(user, id)?;
-        let mut reachable = std::collections::BTreeSet::new();
+        let mut reachable = self
+            .repository
+            .library_derived_resources(id)?
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
         for document in self.repository.documents(id)? {
             deletion::collect_codes(
                 &serde_json::to_value(&document).map_err(invalid_storage)?,
                 &mut reachable,
             );
             reachable.insert(document.resource_code);
-            reachable.extend(self.repository.derived_resources(&document.id)?);
         }
         if !reachable.contains(code) {
             return Err(KnowledgeBaseError::NotFound);
@@ -1184,6 +1187,10 @@ impl KnowledgeBaseService {
         allowed: Vec<KnowledgeBase>,
     ) -> Result<(Vec<AuthorizedRagRange>, Vec<KnowledgeBase>, Vec<String>), KnowledgeBaseError>
     {
+        let ids = allowed.iter().map(|kb| kb.id.clone()).collect::<Vec<_>>();
+        let acl_revisions = self.repository.acl_revisions(&ids)?;
+        let corpora = self.rag.repository_handle().get_corpora(&ids)?;
+        let mut fingerprints = BTreeMap::new();
         let mut versions = vec![];
         let mut ranges = vec![];
         for kb in &allowed {
@@ -1212,10 +1219,17 @@ impl KnowledgeBaseService {
             versions.push(format!(
                 "{}:{}:{}",
                 kb.id,
-                self.repository.acl_revision(&kb.id)?,
+                acl_revisions
+                    .get(&kb.id)
+                    .ok_or(KnowledgeBaseError::NotFound)?,
                 identities.join("|")
             ));
-            let settings = self.rag.settings_for_corpus(&kb.id)?;
+            let settings = RagSettings::from_capabilities(
+                &corpora
+                    .get(&kb.id)
+                    .ok_or(KnowledgeBaseError::NotFound)?
+                    .capabilities,
+            )?;
             ranges.push(AuthorizedRagRange {
                 corpus_id: kb.id.clone(),
                 scopes: vec![RagSearchScope {
@@ -1245,11 +1259,13 @@ impl KnowledgeBaseService {
                 ) else {
                     continue;
                 };
-                if !self
-                    .llm
-                    .embedding_space_fingerprint("PLATFORM", Some(model), dimension)
-                    .is_ok_and(|current| current == *stored)
-                {
+                let fingerprint = fingerprints
+                    .entry((model.clone(), dimension))
+                    .or_insert_with(|| {
+                        self.llm
+                            .embedding_space_fingerprint("PLATFORM", Some(model), dimension)
+                    });
+                if !fingerprint.as_ref().is_ok_and(|current| current == stored) {
                     self.require_rebuild(
                         &kb.id,
                         document.clone(),

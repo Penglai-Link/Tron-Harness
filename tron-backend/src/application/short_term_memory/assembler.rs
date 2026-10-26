@@ -2,12 +2,10 @@ use crate::domain::{
     agent::{AgentMessage, AgentMessagePart},
     short_term_memory::{ShortTermMemoryGoalView, ShortTermMemoryTodo, TodoStatus},
 };
-pub(super) const DEFAULT_TODO_MAX_ITEMS: usize = 50;
 pub(super) fn working_state_message(
     active_goal: Option<&ShortTermMemoryGoalView>,
     todos: &[ShortTermMemoryTodo],
     todo_enabled: bool,
-    token_limit: u32,
 ) -> Option<AgentMessage> {
     let active_todos = todos
         .iter()
@@ -41,10 +39,7 @@ pub(super) fn working_state_message(
 
     if todo_enabled && !active_todos.is_empty() {
         text.push_str("\n<active-todos>\n");
-        for todo in active_todos.into_iter().take(DEFAULT_TODO_MAX_ITEMS) {
-            if text.len() >= token_limit as usize {
-                break;
-            }
+        for todo in active_todos {
             text.push_str(&format!(
                 "- [{}] {} ({})\n",
                 todo.status.code(),
@@ -55,7 +50,6 @@ pub(super) fn working_state_message(
         text.push_str("</active-todos>\n");
     }
     text.push_str("</current-session-working-state>");
-    text = truncate_chars(&text, token_limit as usize);
     Some(AgentMessage::context_block(
         "current_session_working_state",
         text,
@@ -112,4 +106,21 @@ pub(crate) fn estimate_messages_tokens(messages: &[AgentMessage]) -> u32 {
     messages.iter().fold(0u32, |total, message| {
         total.saturating_add(eliteforge_agent_memory::estimate_serialized_tokens(message))
     })
+}
+
+#[cfg(test)]
+mod contributor_source_tests {
+    use super::*;
+    #[test]
+    fn working_state_leaves_selection_to_the_configured_reducer() {
+        let todos = (0..61).map(|i| serde_json::from_value(serde_json::json!({
+            "id": i, "todoCode": format!("todo-{i}"), "sessionCode":"session", "workspaceCode":"workspace",
+            "position":i, "content":format!("unique-task-{i}"), "status":"pending", "priority":"medium",
+            "createdByRunCode":null, "updatedByRunCode":null, "createdAt":"now", "updatedAt":"now"
+        })).unwrap()).collect::<Vec<ShortTermMemoryTodo>>();
+        let message = working_state_message(None, &todos, true).unwrap();
+        let encoded = serde_json::to_string(&message).unwrap();
+        assert!(encoded.contains("unique-task-60"));
+        assert_eq!(encoded.matches("unique-task-").count(), 61);
+    }
 }

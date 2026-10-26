@@ -93,12 +93,11 @@ impl AgentManagementService {
         let record = ToolCatalogRecord {
             tool_code: descriptor.id.clone(),
             tool_name: descriptor.call_name.clone(),
-            domain_code: if descriptor.id.starts_with("mcp/") {
-                "mcp"
-            } else {
-                "native"
-            }
-            .into(),
+            domain_code: self
+                .cached_tool_by_name(&descriptor.call_name)
+                .map_err(|_| "Could not read tool catalog".to_string())?
+                .map(|record| record.domain_code)
+                .unwrap_or_else(|| "native".into()),
             name: descriptor.call_name.clone(),
             description: descriptor.description.clone(),
             operation_kind: match descriptor.operation_kind {
@@ -128,10 +127,33 @@ impl AgentManagementService {
         &self,
         descriptors: &[ToolDescriptor],
     ) -> Result<Vec<ToolCatalogRecord>, String> {
+        self.register_labeled_tool_descriptors(descriptors, &[])
+    }
+    pub(crate) fn register_labeled_tool_descriptors(
+        &self,
+        descriptors: &[ToolDescriptor],
+        tools: &[crate::domain::agent::EffectiveTool],
+    ) -> Result<Vec<ToolCatalogRecord>, String> {
+        let labels: BTreeMap<_, _> = tools
+            .iter()
+            .filter_map(|tool| {
+                tool.domain_code
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|code| !code.is_empty())
+                    .map(|code| (tool.tool_name.as_str(), code))
+            })
+            .collect();
         let records = descriptors
             .iter()
-            .map(|d| self.describe_tool_descriptor(d))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|descriptor| {
+                let mut record = self.describe_tool_descriptor(descriptor)?;
+                if let Some(code) = labels.get(descriptor.call_name.as_str()) {
+                    record.domain_code = (*code).into();
+                }
+                Ok(record)
+            })
+            .collect::<Result<Vec<_>, String>>()?;
         let discovered = records
             .iter()
             .filter(|r| fixed_tool(&r.tool_name).is_none())

@@ -1,3 +1,4 @@
+import contextCacheFixture from "../../../../../.agent-deps/agent-ui/contracts/context-cache-order.json";
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from "vitest";
@@ -90,6 +91,18 @@ describe("chat model default selection", () => {
 });
 
 describe("plugin assembly report", () => {
+  it("renders the shared page contributor in live and saved Dude assembly order", () => {
+    const blocks = ["framework.instructions", "framework.history", "agent_directory", "skills.catalog", "page_context", "dude_environment"]
+      .map((id, position) => ({ id, position, allocated_tokens: 100, configured_tokens: 2048, final_tokens: 30, final_message_count: 1 }));
+    const live = contextAssemblySnapshot({ snapshotSequence: "80", contextReport: { input_capacity: 32000, blocks } })!;
+    const saved = JSON.parse(JSON.stringify(live));
+    const rows = buildReportedContextMemoryBlocks(live, key => key);
+    expect(rows.map(row => row.code)).toEqual(blocks.map(block => block.id));
+    expect(rows.find(row => row.code === "page_context")).toMatchObject({
+      name: "chat.shortTermMemory.contextPanel.pageContextName", detailCode: "page_context", snapshotSequence: "80", order: 5,
+    });
+    expect(buildReportedContextMemoryBlocks(saved, key => key)).toEqual(rows);
+  });
   it("uses report positions and retains every plugin block after saving", () => {
     const payload={contextReport:{input_capacity:1300000,protocol_tokens:303,estimated_input_tokens:8600,model:{model:"fixture-model"},stage:"chat",step:1,attempt:1,blocks:[
       {id:"framework.history",position:7,allocated_tokens:1200000,configured_tokens:1300000,final_tokens:252,final_message_count:1},
@@ -172,4 +185,31 @@ describe("plugin assembly report", () => {
       { timestamp: 200, type: "RUN_FINISHED" },
     ])).toBeNull();
   });
+});
+
+
+it("keeps the Framework history prefix and dynamic suffix identical in live and saved UI reports", () => {
+  const snapshot=contextAssemblySnapshot(contextCacheFixture)!;
+  const live=buildReportedContextMemoryBlocks(snapshot,key=>key);
+  const saved=buildReportedContextMemoryBlocks(contextAssemblySnapshot(JSON.parse(JSON.stringify(contextCacheFixture)))!,key=>key);
+  expect(saved).toEqual(live);
+  expect(live.map(row=>[row.code,row.placement])).toEqual([
+    ["framework.instructions","prefix"],["framework.history","history"],["dynamic","dynamic"],["protocol","protocol"],
+  ]);
+  const history=live[1]!.detailValue as {messages:unknown[]};
+  expect(JSON.stringify(history.messages)).toContain("prior evidence");
+  expect(JSON.stringify(history.messages)).not.toContain("working revision A");
+  expect(JSON.stringify(live[2]!.detailValue)).toContain("working revision A");
+});
+
+it("preserves uncapped stable blocks before history in live and saved reports", () => {
+  const snapshot=contextAssemblySnapshot({contextReport:{input_capacity:100000,protocol_tokens:0,blocks:[
+    {id:"framework.instructions",position:0,configured_tokens:null,allocated_tokens:20000,final_tokens:20000,final_message_count:1},
+    {id:"tool_domains",position:1,configured_tokens:null,allocated_tokens:18000,final_tokens:18000,final_message_count:1},
+    {id:"framework.history",position:2,configured_tokens:100000,allocated_tokens:62000,final_tokens:1200,final_message_count:3},
+  ]}})!;
+  const rows=buildReportedContextMemoryBlocks(snapshot,key=>key);
+  expect(rows.slice(0,3).map(row=>row.code)).toEqual(["framework.instructions","tool_domains","framework.history"]);
+  expect(rows.slice(0,2).map(row=>row.limitTokens)).toEqual([null,null]);
+  expect(buildReportedContextMemoryBlocks(JSON.parse(JSON.stringify(snapshot)),key=>key)).toEqual(rows);
 });

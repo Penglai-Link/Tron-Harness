@@ -36,20 +36,16 @@ impl SqliteKnowledgeBaseRepository {
             let tx = super::super::framework_storage::business_transaction(connection, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
             let owned = {
                 let mut statement = tx.prepare("SELECT id FROM knowledge_bases WHERE owner_user_code=?1").map_err(storage)?;
-                statement.query_map([user], |row| row.get::<_, String>(0)).map_err(storage)?.collect::<Result<BTreeSet<_>, _>>().map_err(storage)?
+                statement.query_map([&user], |row| row.get::<_, String>(0)).map_err(storage)?.collect::<Result<BTreeSet<_>, _>>().map_err(storage)?
             };
             let selected = library_ids.into_iter().collect::<BTreeSet<_>>();
             if !selected.is_subset(&owned) { return Err(KnowledgeBaseError::NotFound); }
-            for id in owned {
-                let granted: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_base_grants WHERE knowledge_base_id=?1 AND agent_code=?2)", params![id, agent], |row| row.get(0)).map_err(storage)?;
-                if granted == selected.contains(&id) { continue; }
-                if selected.contains(&id) {
-                    tx.execute("INSERT INTO knowledge_base_grants VALUES(?1,?2)", params![id, agent]).map_err(storage)?;
-                } else {
-                    tx.execute("DELETE FROM knowledge_base_grants WHERE knowledge_base_id=?1 AND agent_code=?2", params![id, agent]).map_err(storage)?;
-                }
-                tx.execute("UPDATE knowledge_bases SET acl_revision=acl_revision+1 WHERE id=?1", [&id]).map_err(storage)?;
-            }
+            let selected = serde_json::to_string(&selected).map_err(storage)?;
+            // Only changed grants advance the ACL revision. Evaluate the delta
+            // before replacing grants, under the same write transaction.
+            tx.execute("UPDATE knowledge_bases SET acl_revision=acl_revision+1 WHERE owner_user_code=?1 AND (EXISTS(SELECT 1 FROM knowledge_base_grants g WHERE g.knowledge_base_id=knowledge_bases.id AND g.agent_code=?2) != (id IN (SELECT value FROM json_each(?3))))", params![user,agent,selected]).map_err(storage)?;
+            tx.execute("DELETE FROM knowledge_base_grants WHERE agent_code=?2 AND knowledge_base_id IN (SELECT id FROM knowledge_bases WHERE owner_user_code=?1) AND knowledge_base_id NOT IN (SELECT value FROM json_each(?3))", params![user,agent,selected]).map_err(storage)?;
+            tx.execute("INSERT OR IGNORE INTO knowledge_base_grants SELECT value,?1 FROM json_each(?2)", params![agent,selected]).map_err(storage)?;
             tx.commit().map_err(storage)
         }, || storage("database worker stopped"))
     }

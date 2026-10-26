@@ -34,6 +34,12 @@ where
 }
 
 pub trait OntologyStore: Send + Sync {
+    /// Ordered existence checks for a reference set in the resolved scope.
+    fn resources_present(
+        &self,
+        scope: &ResolvedGraphScope,
+        references: &[(OntologyResourceType, String)],
+    ) -> Result<Vec<bool>, OntologyError>;
     fn create_class(
         &self,
         scope: &ResolvedGraphScope,
@@ -210,9 +216,10 @@ where
         let class = class.validate()?;
         self.with_scope(scope, |store, scope| {
             ensure_codes_exist(
+                store,
+                scope,
                 OntologyResourceType::Class,
                 &class.parent_class_codes,
-                |code| Ok(store.get_class(scope, code)?.is_some()),
             )?;
             store.create_class(scope, class)
         })
@@ -239,9 +246,10 @@ where
         let class = class.validate()?;
         self.with_scope(scope, |store, scope| {
             ensure_codes_exist(
+                store,
+                scope,
                 OntologyResourceType::Class,
                 &class.parent_class_codes,
-                |code| Ok(store.get_class(scope, code)?.is_some()),
             )?;
             store.update_class(scope, class)
         })
@@ -264,13 +272,17 @@ where
         let property = property.validate()?;
         self.with_scope(scope, |store, scope| {
             ensure_codes_exist(
+                store,
+                scope,
                 OntologyResourceType::Domain,
                 &property.domain_codes,
-                |code| Ok(store.get_domain(scope, code)?.is_some()),
             )?;
-            ensure_codes_exist(OntologyResourceType::Range, &property.range_codes, |code| {
-                Ok(store.get_range(scope, code)?.is_some())
-            })?;
+            ensure_codes_exist(
+                store,
+                scope,
+                OntologyResourceType::Range,
+                &property.range_codes,
+            )?;
             store.create_property(scope, property)
         })
     }
@@ -296,13 +308,17 @@ where
         let property = property.validate()?;
         self.with_scope(scope, |store, scope| {
             ensure_codes_exist(
+                store,
+                scope,
                 OntologyResourceType::Domain,
                 &property.domain_codes,
-                |code| Ok(store.get_domain(scope, code)?.is_some()),
             )?;
-            ensure_codes_exist(OntologyResourceType::Range, &property.range_codes, |code| {
-                Ok(store.get_range(scope, code)?.is_some())
-            })?;
+            ensure_codes_exist(
+                store,
+                scope,
+                OntologyResourceType::Range,
+                &property.range_codes,
+            )?;
             store.update_property(scope, property)
         })
     }
@@ -424,9 +440,10 @@ where
         let constraint = constraint.validate()?;
         self.with_scope(scope, |store, scope| {
             ensure_codes_exist(
+                store,
+                scope,
                 OntologyResourceType::Range,
                 &constraint.allowed_range_codes,
-                |code| Ok(store.get_range(scope, code)?.is_some()),
             )?;
             store.create_constraint(scope, constraint)
         })
@@ -453,9 +470,10 @@ where
         let constraint = constraint.validate()?;
         self.with_scope(scope, |store, scope| {
             ensure_codes_exist(
+                store,
+                scope,
                 OntologyResourceType::Range,
                 &constraint.allowed_range_codes,
-                |code| Ok(store.get_range(scope, code)?.is_some()),
             )?;
             store.update_constraint(scope, constraint)
         })

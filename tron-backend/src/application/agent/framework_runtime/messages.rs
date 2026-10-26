@@ -5,6 +5,13 @@ use eliteforge_agent_core::{
     Content, ContentBlock, MediaContent, MediaSource, Message, Role, ToolCall,
 };
 
+/// The host prefix includes typed runtime data as well as fixed instructions.
+/// It is source material for contributors, never persisted conversation history.
+pub(super) fn is_prompt_prefix(message: &AgentMessage) -> bool {
+    message.role == "system" || (message.role == "user" && !message.parts.is_empty()
+        && message.parts.iter().all(|part| matches!(part, AgentMessagePart::Context { .. })))
+}
+
 pub(super) fn encode(message: &AgentMessage) -> Result<Message, String> {
     let role = match message.role.to_ascii_lowercase().as_str() {
         "system" => Role::System,

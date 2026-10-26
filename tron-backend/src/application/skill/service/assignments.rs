@@ -93,8 +93,12 @@ impl SkillRegistryService {
     }
     pub fn replace_skill_agents(&self, name: &str, agents: &[String]) -> Result<(), SkillError> {
         let _guard = self.capabilities.get().map(|r| r.assignment_guard());
-        for agent in agents {
-            self.validate_agent(agent)?;
+        let valid = self
+            .internal_agent_codes()?
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        if agents.iter().any(|agent| !valid.contains(agent)) {
+            return Err(SkillError::InvalidAgent);
         }
         self.initialize_assignments()?;
         let mut repo = self.repository.lock().unwrap();

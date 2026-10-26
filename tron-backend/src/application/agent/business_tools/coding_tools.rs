@@ -268,7 +268,6 @@ mod tests {
             }],
             effective_tools: Vec::new(),
             tool_assignment: None,
-            tool_exposure: Default::default(),
             execution_scope: AgentExecutionScope {
                 applications: Vec::new(),
                 project_code: None,

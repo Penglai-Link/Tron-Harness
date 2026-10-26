@@ -54,3 +54,6 @@ pub use dude_memory_repository::SqliteDudeMemoryRepository;
 
 mod rag_graph_index;
 pub use rag_graph_index::SqliteRagGraphIndexRepository;
+
+#[cfg(test)]
+mod query_scaling_tests;

@@ -40,13 +40,12 @@ impl HostRunState {
         let trusted_prefix = context
             .messages
             .iter()
-            .take_while(|message| message.role == "system")
+            .take_while(|message| super::messages::is_prompt_prefix(message))
             .cloned()
             .collect();
         let product_tool_authority = context
             .authorized_tools()
             .iter()
-            .chain(context.tool_exposure.hidden_tools.iter())
             .filter(|tool| context.is_tool_authorized(&tool.tool_name))
             .map(|tool| tool.tool_name.clone())
             .collect();

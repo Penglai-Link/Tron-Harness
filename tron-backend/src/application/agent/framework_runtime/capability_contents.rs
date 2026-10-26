@@ -252,8 +252,8 @@ fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityCon
             ],
         ),
         "framework.tools.discovery" => (
-            "Discover and load available tools on demand",
-            &["tool_search"],
+            "Discover and execute available tools on demand",
+            &[eliteforge_agent_core::TOOL_SEARCH_CALL_NAME, eliteforge_agent_core::TOOL_EXECUTE_CALL_NAME],
         ),
         "framework.web.tools" => (
             "Fetch text from public webpages",

@@ -624,6 +624,7 @@ async fn embedding_timeout_changes_apply_to_the_next_http_call_without_rebuildin
         .with_runtime_config(fixture.runtime.clone()),
     ));
     let config = RuntimeModelConfig {
+        supports_developer_role: false,
         model_code: "fixture".into(),
         protocol: ModelProtocol::OpenAiCompatibleEmbedding,
         model_type: ModelType::Embedding,

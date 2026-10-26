@@ -331,6 +331,7 @@ describe("createInternalChatAdapter", () => {
     );
     expect(JSON.parse(String(init?.body))).toEqual({
       annotations: [],
+      pageContext: null,
       attachments: [],
       content: "Steer the active response",
       requestedSkills: ["review"],

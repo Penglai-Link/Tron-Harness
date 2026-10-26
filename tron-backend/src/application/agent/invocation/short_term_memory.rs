@@ -5,7 +5,6 @@ use crate::{
     },
     domain::agent::{
         AgentMessage, AgentPromptPrefixSource, AgentRunContext, AgentShortTermMemoryRunContext,
-        ToolExposureMode,
     },
 };
 
@@ -30,7 +29,15 @@ pub(super) fn activate_short_term_memory(
         let part = crate::domain::agent::AgentMessagePart::Context {
             kind: "tron_interaction_response".into(),
             text: String::new(),
-            metadata: Some(metadata.clone()),
+            // Only interaction transport belongs to this record. Copying the
+            // whole invocation metadata would persist current event payloads in
+            // history, bypassing the configured dynamic context contributor.
+            metadata: Some(serde_json::Value::Object(
+                ["resume", "a2uiClientCapabilities"]
+                    .into_iter()
+                    .filter_map(|key| metadata.get(key).map(|value| (key.into(), value.clone())))
+                    .collect(),
+            )),
         };
         if let Some(message) = user_prompt_message.as_mut() {
             message.parts.push(part.clone());
@@ -95,19 +102,8 @@ fn runtime_input_context_message(
 }
 
 fn resolve_todo_enabled(context: &AgentRunContext) -> bool {
-    let visible_tools_contain_todo = context
-        .tools
-        .iter()
-        .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo_update"));
-    if visible_tools_contain_todo {
-        return true;
-    }
-    if context.tool_exposure.tool_exposure_mode != Some(ToolExposureMode::DomainDiscovery) {
-        return false;
-    }
     context
-        .tool_exposure
-        .hidden_tools
+        .tools
         .iter()
         .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo_update"))
 }
@@ -118,41 +114,10 @@ mod tests {
 
     use crate::domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
-        AgentRunContext, AgentRunLimits, AgentToolExposureState, EffectiveSkill, EffectiveTool,
-        EffectiveVariable, ExpandedDomainPersistenceMode, ToolExposureMode,
+        AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool, EffectiveVariable,
     };
 
     use super::resolve_todo_enabled;
-
-    #[test]
-    fn todo_enabled_uses_domain_discovery_hidden_tools() {
-        let mut context = context_with_tools(vec![tool("domain.expand")]);
-        context.tool_exposure = AgentToolExposureState {
-            tool_exposure_mode: Some(ToolExposureMode::DomainDiscovery),
-            expanded_domain_persistence_mode: Some(
-                ExpandedDomainPersistenceMode::EphemeralExpanded,
-            ),
-            visible_domains: Vec::new(),
-            hidden_tools: vec![tool("todo_update")],
-            expanded_domain_codes: Vec::new(),
-        };
-
-        assert!(resolve_todo_enabled(&context));
-    }
-
-    #[test]
-    fn todo_disabled_when_direct_list_omits_todo_update() {
-        let mut context = context_with_tools(vec![tool("domain.expand")]);
-        context.tool_exposure = AgentToolExposureState {
-            tool_exposure_mode: Some(ToolExposureMode::DirectList),
-            expanded_domain_persistence_mode: None,
-            visible_domains: Vec::new(),
-            hidden_tools: vec![tool("todo_update")],
-            expanded_domain_codes: Vec::new(),
-        };
-
-        assert!(!resolve_todo_enabled(&context));
-    }
 
     #[test]
     fn non_user_transcript_input_becomes_runtime_context_block() {
@@ -179,6 +144,18 @@ mod tests {
             super::runtime_input_context_message("USER_PROMPT", "hello", &None).is_none(),
             "ordinary user prompts are represented by transcript messages"
         );
+    }
+
+    #[test]
+    fn todo_enabled_uses_authorized_tool_catalog() {
+        let context = context_with_tools(vec![tool("todo_update")]);
+        assert!(resolve_todo_enabled(&context));
+    }
+
+    #[test]
+    fn todo_disabled_when_catalog_omits_todo_update() {
+        let context = context_with_tools(vec![tool("bash_exec")]);
+        assert!(!resolve_todo_enabled(&context));
     }
 
     fn context_with_tools(tools: Vec<EffectiveTool>) -> AgentRunContext {
@@ -218,7 +195,6 @@ mod tests {
             tools,
             effective_tools: Vec::new(),
             tool_assignment: None,
-            tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
             messages: vec![AgentMessage::user("hello")].into(),

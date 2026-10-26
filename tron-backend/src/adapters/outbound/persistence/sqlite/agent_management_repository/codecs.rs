@@ -1,6 +1,6 @@
 use crate::domain::agent::{
-    AgentManagementError, AgentRuntimeType, ExpandedDomainPersistenceMode, McpAccessMode,
-    ToolAssignmentMode, ToolExposureMode,
+    AgentManagementError, AgentRuntimeType, McpAccessMode,
+    ToolAssignmentMode,
 };
 
 pub(super) fn storage_error(_error: rusqlite::Error) -> AgentManagementError {
@@ -43,38 +43,6 @@ pub(super) fn tool_assignment_mode_from_storage(value: String) -> ToolAssignment
         "SELECTED_TOOLS" => ToolAssignmentMode::SelectedTools,
         "ALL_READ_ONLY_TOOLS" => ToolAssignmentMode::AllReadOnlyTools,
         _ => ToolAssignmentMode::AllPlatformTools,
-    }
-}
-
-pub(super) fn tool_exposure_mode_to_storage(value: ToolExposureMode) -> &'static str {
-    match value {
-        ToolExposureMode::DirectList => "DIRECT_LIST",
-        ToolExposureMode::DomainDiscovery => "DOMAIN_DISCOVERY",
-    }
-}
-
-pub(super) fn tool_exposure_mode_from_storage(value: String) -> ToolExposureMode {
-    match value.trim().to_ascii_uppercase().as_str() {
-        "DOMAIN_DISCOVERY" => ToolExposureMode::DomainDiscovery,
-        _ => ToolExposureMode::DirectList,
-    }
-}
-
-pub(super) fn expanded_domain_persistence_mode_to_storage(
-    value: ExpandedDomainPersistenceMode,
-) -> &'static str {
-    match value {
-        ExpandedDomainPersistenceMode::StickyExpanded => "STICKY_EXPANDED",
-        ExpandedDomainPersistenceMode::EphemeralExpanded => "EPHEMERAL_EXPANDED",
-    }
-}
-
-pub(super) fn expanded_domain_persistence_mode_from_storage(
-    value: String,
-) -> ExpandedDomainPersistenceMode {
-    match value.trim().to_ascii_uppercase().as_str() {
-        "EPHEMERAL_EXPANDED" => ExpandedDomainPersistenceMode::EphemeralExpanded,
-        _ => ExpandedDomainPersistenceMode::StickyExpanded,
     }
 }
 

@@ -34,6 +34,18 @@ pub(crate) fn map_authorized_descriptor(
     descriptor: &fw::ToolDescriptor,
     extensions: &fw::Extensions,
 ) -> Result<EffectiveTool, fw::AgentError> {
+    // The stable gateway pair is host infrastructure, not a business tool:
+    // it is always visible and carries no product ACL entry.
+    if eliteforge_agent_core::is_gateway_descriptor(descriptor) {
+        return Ok(EffectiveTool {
+            tool_name: descriptor.call_name.clone(),
+            domain_code: None,
+            description: descriptor.description.clone(),
+            input_schema: descriptor.input_schema.clone(),
+            skill_name: None,
+            required_variable_keys: vec![],
+        });
+    }
     if framework_a2ui_binding(extensions, descriptor) || native_skill_descriptor(descriptor) {
         return Ok(EffectiveTool {
             tool_name: descriptor.call_name.clone(),
@@ -64,7 +76,6 @@ pub(crate) fn map_authorized_descriptor(
     let mut tool = context
         .authorized_tools()
         .iter()
-        .chain(context.tool_exposure.hidden_tools.iter())
         .find(|tool| tool.tool_name == descriptor.call_name)
         .cloned()
         .ok_or_else(|| {
@@ -132,11 +143,15 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         {
             return Ok(fw::ToolBindingAdmission::Exclude);
         }
+        // The stable gateway pair is host infrastructure: assignment modes and
+        // the persisted platform tool table never scope or revoke it. Inner
+        // tools are still fully checked below after envelope unwrapping.
+        if eliteforge_agent_core::is_gateway_descriptor(&binding.descriptor) {
+            return Ok(fw::ToolBindingAdmission::Allow);
+        }
         let host = HostExecution::from_extensions(&run.extensions)?;
         let mut state = host.state.lock().await;
         let name = &binding.descriptor.call_name;
-        let control_tool = name == crate::application::agent::DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL
-            && binding.descriptor.id == format!("tron.{name}");
         if let (Some(management), Some(selection)) =
             (&self.management, state.context.tool_assignment.as_ref())
         {
@@ -149,7 +164,7 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             state
                 .pending_tool_descriptors
                 .push(binding.descriptor.clone());
-            if !control_tool && read_only && !selected {
+            if read_only && !selected {
                 state.product_tool_authority.remove(name);
                 return Ok(fw::ToolBindingAdmission::Exclude);
             }
@@ -170,13 +185,7 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 let tool = crate::application::agent::tool_record_to_effective_tool(record);
                 state.product_tool_authority.insert(name.clone());
                 state.context.effective_tools.push(tool.clone());
-                if state.context.tool_exposure.tool_exposure_mode
-                    == Some(crate::domain::agent::ToolExposureMode::DomainDiscovery)
-                {
-                    state.context.tool_exposure.hidden_tools.push(tool);
-                } else {
-                    state.context.tools.push(tool);
-                }
+                state.context.tools.push(tool);
             }
         }
         if (!state.product_tool_authority.contains(name)
@@ -185,69 +194,6 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             || overridden_native_skill(&host, &state, &binding.descriptor)
         {
             return Ok(fw::ToolBindingAdmission::Exclude);
-        }
-        if !control_tool
-            && state.context.tool_exposure.tool_exposure_mode
-                == Some(crate::domain::agent::ToolExposureMode::DomainDiscovery)
-        {
-            let intrinsic = (self.skills.is_some() && native_skill_descriptor(&binding.descriptor))
-                || framework_a2ui_binding(&run.extensions, &binding.descriptor);
-            // A plugin may have its own nested discovery (for example A2UI).
-            // Do not promote its deliberately hidden schemas into a domain.
-            if intrinsic && !binding.exposed {
-                return Ok(fw::ToolBindingAdmission::Hidden);
-            }
-            let mut tool =
-                map_authorized_descriptor(&state.context, &binding.descriptor, &run.extensions)?;
-            if let Some(management) = &self.management {
-                let record = management
-                    .describe_tool_descriptor(&binding.descriptor)
-                    .map_err(fw::AgentError::ToolSetup)?;
-                tool.domain_code.get_or_insert(record.domain_code);
-                if !state.pending_tool_descriptors.contains(&binding.descriptor) {
-                    state
-                        .pending_tool_descriptors
-                        .push(binding.descriptor.clone());
-                }
-            }
-            tool.domain_code.get_or_insert_with(|| "native".into());
-            let expanded = state
-                .context
-                .tool_exposure
-                .expanded_domain_codes
-                .iter()
-                .any(|code| {
-                    tool.domain_code
-                        .as_deref()
-                        .is_some_and(|domain| domain.eq_ignore_ascii_case(code))
-                });
-            if !state
-                .context
-                .effective_tools
-                .iter()
-                .any(|entry| entry.tool_name == *name)
-            {
-                state.context.effective_tools.push(tool.clone());
-            }
-            if !state
-                .context
-                .tool_exposure
-                .hidden_tools
-                .iter()
-                .any(|entry| entry.tool_name == *name)
-            {
-                state.context.tool_exposure.hidden_tools.push(tool);
-            }
-            if !expanded {
-                // Native collaboration, interaction and skill tools obey the same
-                // exposure mode as business tools. Authority remains unchanged.
-                state.context.tools.retain(|entry| entry.tool_name != *name);
-            }
-            return Ok(if expanded {
-                fw::ToolBindingAdmission::Allow
-            } else {
-                fw::ToolBindingAdmission::Hidden
-            });
         }
         if (self.skills.is_some() && native_skill_descriptor(&binding.descriptor))
             || framework_a2ui_binding(&run.extensions, &binding.descriptor)
@@ -308,11 +254,6 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 .tools
                 .retain(|t| admitted.contains(t.tool_name.as_str()));
             state
-                .context
-                .tool_exposure
-                .hidden_tools
-                .retain(|t| admitted.contains(t.tool_name.as_str()));
-            state
                 .product_tool_authority
                 .retain(|name| admitted.contains(name.as_str()));
         }
@@ -341,46 +282,6 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
                 .context
                 .tools
                 .retain(|t| !denied.contains(&t.tool_name));
-            state
-                .context
-                .tool_exposure
-                .hidden_tools
-                .retain(|t| !denied.contains(&t.tool_name));
-            let hidden = state.context.tool_exposure.hidden_tools.clone();
-            state
-                .context
-                .tool_exposure
-                .visible_domains
-                .retain_mut(|domain| {
-                    let tools = hidden
-                        .iter()
-                        .filter(|t| t.domain_code.as_deref() == Some(domain.domain_code.as_str()))
-                        .collect::<Vec<_>>();
-                    domain.tool_count = tools.len();
-                    domain
-                        .sample_tools
-                        .retain(|name| tools.iter().any(|t| &t.tool_name == name));
-                    !tools.is_empty()
-                });
-        }
-        if let Some(management) = &self.management {
-            let hidden = &state.context.tool_exposure.hidden_tools;
-            let records = management
-                .list_tools(None, None, &state.context.locale)
-                .into_iter()
-                .filter_map(|mut record| {
-                    let tool = hidden.iter().find(|t| t.tool_name == record.tool_name)?;
-                    if let Some(domain) = &tool.domain_code {
-                        record.domain_code = domain.clone();
-                    }
-                    Some(record)
-                })
-                .collect::<Vec<_>>();
-            state.context.tool_exposure.visible_domains =
-                crate::application::agent::BusinessToolCatalog::domains_for_records(
-                    &records,
-                    &state.context.locale,
-                );
         }
         state.tool_catalog = bindings
             .iter()
@@ -405,6 +306,12 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
             return Ok(fw::ToolPolicyDecision::Deny(
                 "tool extension is disabled".into(),
             ));
+        }
+        // The stable gateway pair is host infrastructure: executing discovery
+        // (or the defensive execute executor) never requires product tool
+        // authority, mirroring the admission-side exemption.
+        if eliteforge_agent_core::is_gateway_descriptor(invocation.descriptor) {
+            return Ok(fw::ToolPolicyDecision::Allow);
         }
         let host = HostExecution::from_extensions(&invocation.run.extensions)?;
         let state = host.state.lock().await;

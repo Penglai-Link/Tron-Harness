@@ -28,6 +28,45 @@ fn git(path: &Path, args: &[&str]) {
     );
 }
 
+/// Rewrite every scripted direct tool call into a `tool_execute` envelope,
+/// keeping the original call id so observations stay addressable. Gateway mode
+/// exposes only the stable pair (`tool_execute`, `tool_search`) to the model.
+fn to_gateway_response(
+    response: tron_backend::domain::agent::ModelResponse,
+) -> tron_backend::domain::agent::ModelResponse {
+    use tron_backend::domain::agent::{AgentMessagePart, ModelResponse};
+    let mut assistant = response.assistant;
+    for part in &mut assistant.parts {
+        if let AgentMessagePart::ToolCall {
+            call_id: _,
+            tool_name,
+            input,
+            input_error,
+        } = part
+        {
+            if input_error.is_some() { continue; }
+            if tool_name == "tool_search" {
+                *input = common::gateway_arguments(tool_name, input.clone());
+                continue;
+            }
+            if tool_name == "tool_execute" {
+                if let Ok(envelope) = eliteforge_agent_core::GatewayEnvelope::parse(input) {
+                    *input = json!({"tool":envelope.tool,"arguments":common::gateway_arguments(&envelope.tool,envelope.arguments)});
+                }
+                continue;
+            }
+            let inner_name = tool_name.clone();
+            let inner_input = input.clone();
+            *tool_name = "tool_execute".into();
+            *input = json!({"tool": inner_name, "arguments": common::gateway_arguments(&inner_name, inner_input)});
+        }
+    }
+    ModelResponse {
+        assistant,
+        ..response
+    }
+}
+
 #[test]
 fn inspector_tracks_actual_branch_worktree_and_detached_head() {
     let temporary = tempfile::tempdir().unwrap();
@@ -281,6 +320,7 @@ fn memory_context(_run_code: &str) -> tron_backend::domain::agent::AgentRunConte
             api_key: "sk-test".into(),
             model_name: "gpt-test".into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: Some(0.2),
@@ -311,7 +351,6 @@ fn memory_context(_run_code: &str) -> tron_backend::domain::agent::AgentRunConte
         }],
         effective_tools: Vec::new(),
         tool_assignment: None,
-        tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
             applications: Vec::new(),
             project_code: None,
@@ -327,7 +366,7 @@ fn memory_context(_run_code: &str) -> tron_backend::domain::agent::AgentRunConte
             max_tool_calls: 2,
             max_parallel_tool_calls: 2,
         },
-        messages: vec![AgentMessage::user("hello")],
+        messages: vec![AgentMessage::user("hello")].into(),
         observations: Vec::new(),
         short_term_memory: None,
         started_at: "2026-05-27T00:00:00Z".into(),
@@ -556,7 +595,14 @@ fn execute_tool(
             output: serde_json::to_string(&output).unwrap(),
         }));
     }
-    if !(request.tool_name.starts_with("fs_") || request.tool_name.starts_with("bash_")) {
+    // Gateway calls (`tool_search`/`tool_execute`) are framework-host tools, so
+    // they travel through the same in-process React loop as the local
+    // filesystem/command tools instead of the business registry.
+    let is_gateway_call = matches!(request.tool_name.as_str(), "tool_search" | "tool_execute");
+    if !(request.tool_name.starts_with("fs_")
+        || request.tool_name.starts_with("bash_")
+        || is_gateway_call)
+    {
         return state.agent_tool_registry.execute_allowed(request, context);
     }
     struct CallModel(std::sync::Mutex<Option<ToolRequest>>);
@@ -569,10 +615,10 @@ fn execute_tool(
             Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
         > {
             Box::pin(async move {
-                Ok(match self.0.lock().unwrap().take() {
+                Ok(to_gateway_response(match self.0.lock().unwrap().take() {
                     Some(call) => ModelResponse::tool_call(call.tool_name, call.input),
                     None => ModelResponse::final_output("verified"),
-                })
+                }))
             })
         }
 
@@ -615,13 +661,15 @@ fn execute_tool(
     context.limits.max_steps = 2;
     context.limits.max_tool_calls = 1;
     context.observations.clear();
-    context
-        .messages
-        .push(AgentMessage::user("execute this tool"));
+    std::sync::Arc::make_mut(&mut context.messages).push(AgentMessage::user("execute this tool"));
     context.short_term_memory = None;
-    context
-        .tools
-        .retain(|tool| tool.tool_name == request.tool_name);
+    // `tool_search` inspects the whole authorized inventory, so the gateway
+    // branch keeps the fixture catalog instead of narrowing it to one tool.
+    if !is_gateway_call {
+        context
+            .tools
+            .retain(|tool| tool.tool_name == request.tool_name);
+    }
     let name = request.tool_name.clone();
     let result = std::thread::scope(|scope| {
         scope
@@ -654,10 +702,7 @@ fn execute_tool(
     if output.get("error").is_some_and(|value| !value.is_null()) {
         return Err(ToolError::ExecutionFailed(observation.output));
     }
-    Ok(ToolExecutionResult {
-        observation,
-        context_delta: Default::default(),
-    })
+    Ok(ToolExecutionResult::observation(observation))
 }
 
 #[test]
@@ -971,45 +1016,45 @@ fn productivity_domains_are_localized_and_discoverable() {
         let domains = BusinessToolCatalog::domains(locale);
         let mut context = productivity_context(temporary.path());
         context.locale = locale.into();
-        context.tool_exposure.hidden_tools = context.tools.clone();
-        context.tools =
-            vec![tron_backend::application::agent::discovery_expand_tool_definition(locale)];
-        context.effective_tools = context
-            .tools
-            .iter()
-            .chain(context.tool_exposure.hidden_tools.iter())
-            .cloned()
-            .collect();
-        context.tool_exposure.visible_domains = domains.clone();
 
         for domain in ["worktree", "git", "word", "excel"] {
             assert!(domains.iter().any(|item| item.domain_code == domain));
             let tools = BusinessToolCatalog::list_tools(Some(domain), None, locale);
             assert!(!tools.is_empty());
-            let expanded = execute_tool(
+            for tool in &tools {
+                let encoded = serde_json::to_string(tool).unwrap();
+                assert!(!encoded.contains("UNTRANSLATED"), "{encoded}");
+                assert!(!encoded.contains("x-i18n-description-key"));
+                jsonschema::validator_for(&tool.input_schema).unwrap();
+            }
+
+            // The gateway refactor removed `discovery_expand_tool_domain` and
+            // its `context_delta.add_tools`; discovery is now keyword search
+            // over the wrapped descriptors the run authorized (`tool_search`).
+            let discovered = execute_tool(
                 &state,
                 tron_backend::domain::agent::ToolRequest {
-                    tool_name: "discovery_expand_tool_domain".into(),
-                    input: json!({"domainCode":domain}),
+                    tool_name: "tool_search".into(),
+                    input: json!({"query": domain, "limit": 20}),
                     invocation_id: None,
                 },
                 &context,
             )
             .unwrap();
-            assert_eq!(expanded.context_delta.add_tools.len(), tools.len());
-            assert!(
-                expanded
-                    .context_delta
-                    .add_tools
-                    .iter()
-                    .all(|tool| tool.domain_code.as_deref() == Some(domain))
-            );
-
-            for tool in tools {
-                let encoded = serde_json::to_string(&tool).unwrap();
-                assert!(!encoded.contains("UNTRANSLATED"), "{encoded}");
-                assert!(!encoded.contains("x-i18n-description-key"));
-                jsonschema::validator_for(&tool.input_schema).unwrap();
+            let payload: serde_json::Value =
+                serde_json::from_str(&discovered.observation.output).unwrap();
+            let names: Vec<&str> = payload["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|tool| tool["call_name"].as_str())
+                .collect();
+            for tool in &tools {
+                assert!(
+                    names.contains(&tool.tool_name.as_str()),
+                    "tool_search({domain:?}) missed {} for {locale}: {names:?}",
+                    tool.tool_name
+                );
             }
         }
     }
@@ -1040,7 +1085,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
                 let mut step = self.step.lock().unwrap();
                 let current = *step;
                 *step += 1;
-                Ok(match current {
+                Ok(to_gateway_response(match current {
                     0 => ModelResponse::tool_call(
                         "worktree_create",
                         json!({"name":"selected","branch":"feature/selected"}),
@@ -1051,7 +1096,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
                     ),
                     2 => ModelResponse::tool_call("worktree_select", json!({"path":self.root})),
                     _ => ModelResponse::final_output("verified"),
-                })
+                }))
             })
         }
 
@@ -1817,6 +1862,11 @@ async fn terminal_http_and_agent_share_process_with_conversation_isolation() {
     let temporary = tempfile::tempdir().unwrap();
     let root = temporary.path().canonicalize().unwrap();
     let state = productivity_state(&root);
+    // The agent run below emits AG-UI frames for the fixture `stream_key`, and
+    // the replay journal owns a framework session keyed by that stream before
+    // the product link exists. Establish the "CONV-1" fixture first so the
+    // later `call_tool` helper does not collide with that journal-owned record.
+    ensure_native_fixture_session(&state);
     let auth = RequestAuthContext::from_profile(
         &state.profiles.current_context().unwrap(),
         "en-US".into(),
@@ -1859,10 +1909,10 @@ async fn terminal_http_and_agent_share_process_with_conversation_isolation() {
             Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
         > {
             Box::pin(async move {
-                Ok(match self.0.lock().unwrap().take() {
+                Ok(to_gateway_response(match self.0.lock().unwrap().take() {
                     Some(input) => ModelResponse::tool_call("terminal_start", input),
                     None => ModelResponse::final_output("terminal started"),
-                })
+                }))
             })
         }
 
@@ -2051,7 +2101,7 @@ async fn project_instructions_refresh_without_duplicating_and_primary_tools_use_
             input_code: "input-test".into(),
             input_kind: "USER_PROMPT".into(),
             input_metadata: None,
-            prompt_prefix: context.messages.clone(),
+            prompt_prefix: context.messages.to_vec(),
             prompt_prefix_sources: vec![None; context.messages.len()],
             current_input_message: None,
             agent_code: None,

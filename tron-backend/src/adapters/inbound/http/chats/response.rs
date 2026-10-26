@@ -22,6 +22,7 @@ pub struct ActiveChatRunResponse {
     pub run_code: String,
     pub runtime_adapter_key: String,
     pub supports_steer: bool,
+    pub operation_kind: Option<String>,
     pub state: String,
 }
 
@@ -134,6 +135,7 @@ impl From<ActiveChatRunSnapshot> for ActiveChatRunResponse {
             run_code: value.run_code,
             runtime_adapter_key: value.runtime_adapter_key,
             supports_steer: value.supports_steer,
+            operation_kind: value.operation_kind,
             state: value.state.code().to_string(),
         }
     }

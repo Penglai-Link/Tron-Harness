@@ -30,7 +30,7 @@ impl<'a> SqliteSkillRegistryRepositorySql<'a> {
     }
 }
 
-impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
+impl SqliteSkillRegistryRepositorySql<'_> {
     fn list_registry_skills(&mut self) -> Result<Vec<RegistrySkill>, SkillError> {
         let mut statement = self
             .connection
@@ -67,49 +67,8 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
     }
 
     fn upsert_registry_skill(&mut self, skill: &RegistrySkill) -> Result<(), SkillError> {
-        self.connection
-            .execute(
-                "INSERT INTO registry_skills (
-                    skill_name, source_ref, source_type, registry_path, declared_version,
-                    compatibility, update_status, managed_by, last_checked_at, last_updated_at,
-                    last_error, created_at, updated_at, provider_pack_id, available
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
-                 ON CONFLICT(skill_name) DO UPDATE SET
-                    provider_pack_id = excluded.provider_pack_id,
-                    available = excluded.available,
-                    source_ref = excluded.source_ref,
-                    source_type = excluded.source_type,
-                    registry_path = excluded.registry_path,
-                    declared_version = excluded.declared_version,
-                    compatibility = excluded.compatibility,
-                    update_status = excluded.update_status,
-                    managed_by = excluded.managed_by,
-                    last_checked_at = excluded.last_checked_at,
-                    last_updated_at = excluded.last_updated_at,
-                    last_error = excluded.last_error,
-                    updated_at = excluded.updated_at",
-                params![
-                    skill.skill_name,
-                    skill.source_ref,
-                    source_type_to_storage(skill.source_type),
-                    skill.registry_path,
-                    skill.declared_version,
-                    Option::<String>::None,
-                    update_status_to_storage(skill.update_status),
-                    managed_by_to_storage(skill.managed_by),
-                    option_timestamp_to_millis(skill.last_checked_at.as_deref()),
-                    option_timestamp_to_millis(skill.last_updated_at.as_deref()),
-                    skill.last_error,
-                    timestamp_to_millis(&skill.created_at),
-                    timestamp_to_millis(&skill.updated_at),
-                    skill.provider_pack_id,
-                    skill.available,
-                ],
-            )
-            .map_err(storage_error)?;
-        Ok(())
+        upsert_skill(self.connection, skill)
     }
-
     fn delete_registry_skill(&mut self, skill_name: &str) -> Result<bool, SkillError> {
         let deleted_rows = self
             .connection
@@ -146,19 +105,15 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
             [agent],
         )
         .map_err(storage_error)?;
-        for name in names {
-            let available: bool = tx
-                .query_row(
-                    "SELECT available FROM registry_skills WHERE skill_name=?1",
-                    [name],
-                    |r| r.get(0),
-                )
-                .map_err(|_| SkillError::Unavailable)?;
-            if !available {
-                return Err(SkillError::Unavailable);
-            }
-            tx.execute("INSERT INTO agent_skill_assignments VALUES(?1,?2,1) ON CONFLICT(agent_code,skill_name) DO UPDATE SET enabled=1",params![agent,name]).map_err(storage_error)?;
+        let selected = serde_json::to_string(names).map_err(|_| SkillError::StorageFailure)?;
+        let unavailable: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM json_each(?1) selected WHERE NOT EXISTS(SELECT 1 FROM registry_skills s WHERE s.skill_name=selected.value AND s.available=1))",
+            [&selected], |row| row.get(0),
+        ).map_err(storage_error)?;
+        if unavailable {
+            return Err(SkillError::Unavailable);
         }
+        tx.execute("INSERT INTO agent_skill_assignments SELECT ?1,value,1 FROM json_each(?2) WHERE true ON CONFLICT(agent_code,skill_name) DO UPDATE SET enabled=1", params![agent,selected]).map_err(storage_error)?;
         tx.commit().map_err(storage_error)
     }
     fn replace_skill_agents(&mut self, name: &str, agents: &[String]) -> Result<(), SkillError> {
@@ -276,6 +231,50 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepositorySql<'_> {
             .map_err(storage_error)?;
         Ok(())
     }
+}
+
+fn upsert_skill(connection: &Connection, skill: &RegistrySkill) -> Result<(), SkillError> {
+    connection
+        .execute(
+            "INSERT INTO registry_skills (
+                    skill_name, source_ref, source_type, registry_path, declared_version,
+                    compatibility, update_status, managed_by, last_checked_at, last_updated_at,
+                    last_error, created_at, updated_at, provider_pack_id, available
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                 ON CONFLICT(skill_name) DO UPDATE SET
+                    provider_pack_id = excluded.provider_pack_id,
+                    available = excluded.available,
+                    source_ref = excluded.source_ref,
+                    source_type = excluded.source_type,
+                    registry_path = excluded.registry_path,
+                    declared_version = excluded.declared_version,
+                    compatibility = excluded.compatibility,
+                    update_status = excluded.update_status,
+                    managed_by = excluded.managed_by,
+                    last_checked_at = excluded.last_checked_at,
+                    last_updated_at = excluded.last_updated_at,
+                    last_error = excluded.last_error,
+                    updated_at = excluded.updated_at",
+            params![
+                skill.skill_name,
+                skill.source_ref,
+                source_type_to_storage(skill.source_type),
+                skill.registry_path,
+                skill.declared_version,
+                Option::<String>::None,
+                update_status_to_storage(skill.update_status),
+                managed_by_to_storage(skill.managed_by),
+                option_timestamp_to_millis(skill.last_checked_at.as_deref()),
+                option_timestamp_to_millis(skill.last_updated_at.as_deref()),
+                skill.last_error,
+                timestamp_to_millis(&skill.created_at),
+                timestamp_to_millis(&skill.updated_at),
+                skill.provider_pack_id,
+                skill.available,
+            ],
+        )
+        .map_err(storage_error)?;
+    Ok(())
 }
 
 fn map_rag_index_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SkillRagIndexRecord> {
@@ -410,6 +409,23 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
         self.connection.call(
             move |connection| {
                 SqliteSkillRegistryRepositorySql { connection }.upsert_registry_skill(&skill)
+            },
+            || SkillError::StorageFailure,
+        )
+    }
+    fn upsert_registry_skills(&mut self, skills: &[RegistrySkill]) -> Result<(), SkillError> {
+        let skills = skills.to_vec();
+        self.connection.call(
+            move |connection| {
+                let tx = super::framework_storage::business_transaction(
+                    connection,
+                    rusqlite::TransactionBehavior::Immediate,
+                )
+                .map_err(storage_error)?;
+                for skill in skills {
+                    upsert_skill(&tx, &skill)?;
+                }
+                tx.commit().map_err(storage_error)
             },
             || SkillError::StorageFailure,
         )

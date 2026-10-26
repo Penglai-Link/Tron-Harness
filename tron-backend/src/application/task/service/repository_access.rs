@@ -6,36 +6,15 @@ impl TaskService {
         if normalized.is_empty() {
             return Err(TaskError::NotFound);
         }
-        self.all_tasks()?
-            .into_iter()
-            .find(|task| task.task_code == normalized)
-            .ok_or(TaskError::NotFound)
+        self.reader.get_task(normalized)
     }
     pub(super) fn all_tasks(&self) -> Result<Vec<Task>, TaskError> {
-        self.repository
-            .lock()
-            .expect("task repository mutex poisoned")
-            .list_tasks()
+        self.reader.list_tasks()
     }
-    pub(super) fn raw_user_assignments(
+    pub(super) fn task_relations(
         &self,
-        task_code: &str,
-    ) -> Result<Vec<TaskUserAssignment>, TaskError> {
-        self.repository
-            .lock()
-            .expect("task repository mutex poisoned")
-            .list_user_assignments(task_code)
-    }
-    pub(super) fn raw_agent_links(&self, task_code: &str) -> Result<Vec<TaskCodeLink>, TaskError> {
-        self.repository
-            .lock()
-            .expect("task repository mutex poisoned")
-            .list_agent_links(task_code)
-    }
-    pub(super) fn raw_app_links(&self, task_code: &str) -> Result<Vec<TaskCodeLink>, TaskError> {
-        self.repository
-            .lock()
-            .expect("task repository mutex poisoned")
-            .list_app_links(task_code)
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, TaskRelations>, TaskError> {
+        self.reader.relations(codes)
     }
 }

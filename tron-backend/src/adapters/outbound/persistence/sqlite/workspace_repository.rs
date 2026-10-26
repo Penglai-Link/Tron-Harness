@@ -1,9 +1,9 @@
 use std::{fs, path::Path};
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    application::workspace::WorkspaceRepository,
+    application::workspace::{WorkspaceRepository, WorkspaceReadRepository},
     domain::workspace::{
         Workspace, WorkspaceError, WorkspaceStatus, workspace_status_from_storage,
         workspace_status_to_storage,
@@ -28,6 +28,11 @@ impl SqliteWorkspaceRepository {
 }
 
 impl WorkspaceRepository for SqliteWorkspaceRepository {
+    fn reader(&self) -> std::sync::Arc<dyn WorkspaceReadRepository> {
+        std::sync::Arc::new(SqliteWorkspaceReader {
+            connection: self.connection.clone(),
+        })
+    }
     fn list_workspaces(&mut self) -> Result<Vec<Workspace>, WorkspaceError> {
         self.connection.call(move |connection| {
 
@@ -227,4 +232,26 @@ fn ensure_database_parent(database_url: &str) -> Result<(), WorkspaceError> {
 
 fn storage_error(_error: rusqlite::Error) -> WorkspaceError {
     WorkspaceError::StorageFailure
+}
+
+struct SqliteWorkspaceReader { connection: super::framework_storage::SharedDatabase }
+impl WorkspaceReadRepository for SqliteWorkspaceReader {
+    fn is_active(&self, workspace_code: &str) -> Result<bool, WorkspaceError> {
+        let code = workspace_code.to_owned();
+        self.connection.call_read(
+            move |c| {
+                let status = c
+                    .query_row(
+                        "SELECT status FROM workspaces WHERE workspace_code=?1",
+                        [code],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .optional()
+                    .map_err(storage_error)?
+                    .ok_or(WorkspaceError::NotFound)?;
+                Ok(workspace_status_from_storage(&status)? == WorkspaceStatus::Active)
+            },
+            || WorkspaceError::StorageFailure,
+        )
+    }
 }

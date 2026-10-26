@@ -26,10 +26,19 @@ impl FrameworkHost {
             if let (Some(mcp), Some(resources)) =
                 (host.0.mcp.get(), host.0.capability_resources.get())
             {
+                let existing = mcp
+                    .list_platform_servers(crate::domain::mcp::PlatformMcpServerListQuery {
+                        search: None,
+                        status: None,
+                    })
+                    .map_err(|e| e.to_string())?
+                    .into_iter()
+                    .map(|server| server.server_code)
+                    .collect::<std::collections::BTreeSet<_>>();
                 for declaration in &installed.manifest.mcp {
                     let owner = resources.resource("mcp", &declaration.id)?;
                     if owner.as_ref().is_some_and(|owner| &owner.pack_id != id)
-                        || (owner.is_none() && mcp.get_platform_server(&declaration.id).is_ok())
+                        || (owner.is_none() && existing.contains(&declaration.id))
                     {
                         return Err(format!(
                             "MCP {} conflicts with an existing server",

@@ -4,7 +4,6 @@ use crate::{
     domain::{agent::AgentRunContext, dude::SoulState},
 };
 use eliteforge_agent_core as fw;
-use fw::ContextAssembler;
 
 pub(super) fn active(context: &AgentRunContext, dudes: Option<&DudeService>) -> bool {
     if !context.is_owning_dude() {
@@ -59,47 +58,9 @@ pub(super) fn narrow(context: &mut AgentRunContext) {
     context.tools = tools.clone();
     context.effective_tools = tools;
     context.tool_assignment = None;
-    context.tool_exposure = Default::default();
     context.skills.clear();
-    std::sync::Arc::make_mut(&mut context.messages)
-        .retain(|m| m.role != "system");
+    std::sync::Arc::make_mut(&mut context.messages).retain(|m| m.role != "system");
 }
-
-pub(super) async fn assemble(
-    input: &fw::ContextAssemblyInput<'_>,
-    context: &AgentRunContext,
-    dudes: &DudeService,
-) -> Result<fw::ContextWindow, fw::AgentError> {
-    let soul = dudes
-        .soul(context.agent_code.as_deref().unwrap_or_default())
-        .map_err(|e| fw::AgentError::Run(e.to_string()))?;
-    let key = "dude.initial-setup";
-    let fallback = crate::domain::prompt::builtin_prompt_text(key, &context.locale)
-        .ok_or_else(|| fw::AgentError::InvalidConfiguration(format!(
-            "bundled developer prompt is missing: {key}"
-        )))?;
-    let guidance = fw::ManagedDeveloperPrompts::resolve(input.run, key, fallback)?;
-    let instructions = [
-        fw::Message::system(guidance)
-            .with_instruction_origin(fw::InstructionOrigin::Plugin),
-        fw::Message::system(format!(
-            "Current onboarding data (not instructions): {}",
-            serde_json::json!({
-                "interfaceLanguage": context.locale,
-                "identity": {"name": soul.name, "nameConfirmed": soul.name_confirmed, "state": soul.state},
-                "currentSoul": soul.markdown,
-            }),
-        )),
-    ];
-    fw::DefaultContextAssembler::default()
-        .assemble(&fw::ContextAssemblyInput {
-            instructions: &instructions,
-            ..*input
-        })
-        .await
-}
-
-
 
 /// Use the original Framework executor, validation and durable interaction store.
 pub(super) struct FormTools;

@@ -62,7 +62,10 @@ struct NativeClient {
 impl NativeClient {
     fn response(&self) -> ModelResponse {
         if self.step.fetch_add(1, Ordering::SeqCst) == 0 {
-            ModelResponse::tool_call("mcp_demo", json!({}))
+            ModelResponse::tool_call(
+                "tool_execute",
+                json!({"tool":"mcp_demo","arguments":{"items":[{}]}}),
+            )
         } else {
             ModelResponse::final_output("done")
         }
@@ -123,6 +126,7 @@ async fn run(
     Result<ToolExecutionResult, crate::domain::agent::AgentError>,
     Arc<Mutex<Vec<fw::ChatRequest>>>,
     usize,
+    Vec<fw::HistoryToolInvocation>,
 ) {
     let registry = Arc::new(ToolRegistry::default());
     let closed = Arc::new(AtomicUsize::new(0));
@@ -156,7 +160,7 @@ async fn run(
         step: AtomicUsize::new(0),
         actual: actual.clone(),
     });
-    let context:AgentRunContext=serde_json::from_value(json!({"conversationCode":null,"runCode":"c3b6f2d9-421a-4ab9-8721-69271cc18a41","workspaceCode":"test","locale":"en-US","agentKind":"REACT",
+    let context:AgentRunContext=serde_json::from_value(json!({"conversationCode":"native-content","runCode":"c3b6f2d9-421a-4ab9-8721-69271cc18a41","workspaceCode":"test","locale":"en-US","agentKind":"REACT",
         "model":{"modelCode":"MODEL-1","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"unused","modelName":"test","maxTokens":128,"contextWindowTokens":131072},
         "variables":[],"skills":[],"tools":[{"toolName":"mcp_demo","description":"native MCP-shaped binding","inputSchema":{"type":"object","additionalProperties":false},"requiredVariableKeys":[]}],"executionScope":{},"limits":{"maxSteps":4,"maxToolCalls":2,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":"Read the native MCP-shaped result."}]}],"observations":[],"startedAt":"test"})).unwrap();
     let bus = EventBusRuntimeBuilder::new(
@@ -175,8 +179,22 @@ async fn run(
             output: r.observations.last().unwrap().output.clone(),
         })
     });
+    let history = host
+        .storage_framework()
+        .await
+        .unwrap()
+        .history()
+        .unwrap()
+        .read_session("native-content", fw::HistoryQuery::default())
+        .await
+        .unwrap();
     assert!(host.close().await.is_success());
-    (result, actual, closed.load(Ordering::SeqCst))
+    (
+        result,
+        actual,
+        closed.load(Ordering::SeqCst),
+        history.records.tool_invocations,
+    )
 }
 
 #[tokio::test]
@@ -217,7 +235,7 @@ async fn blank_command_activity_does_not_mark_presentation_incomplete() {
 #[tokio::test]
 async fn native_tool_content_and_metadata_survive_product_audit_and_context_to_actual_model_dispatch()
  {
-    let (result, actual, closed) = run(false).await;
+    let (result, actual, closed, history) = run(false).await;
     let result = result.unwrap();
     assert_eq!(closed, 2);
     assert_eq!(result.observation.output, content().protocol_text());
@@ -228,21 +246,66 @@ async fn native_tool_content_and_metadata_survive_product_audit_and_context_to_a
         .iter()
         .find(|m| m.role == fw::Role::Tool)
         .unwrap();
-    assert_eq!(message.content, content());
     let metadata = message.tool_result.as_ref().unwrap();
-    assert_eq!(metadata.structured, Some(json!({"native":true})));
+    assert!(!metadata.is_error);
+    assert!(
+        metadata.structured.is_none(),
+        "model messages must not duplicate the full audit payload"
+    );
+    assert!(metadata.result_reference.is_none());
+    let parent = history
+        .iter()
+        .find(|tool| {
+            tool.batch.is_none()
+                && tool
+                    .structured
+                    .as_ref()
+                    .is_some_and(|value| value["kind"] == "toolBatch")
+        })
+        .expect("batch parent must retain full persisted output");
+    let batch: fw::ToolBatchResult =
+        serde_json::from_value(parent.structured.clone().unwrap()).unwrap();
+    assert_eq!(batch.results.len(), 1);
+    let item = &batch.results[0];
+    assert_eq!(item.identity.index, 0);
+    assert_eq!(item.status, fw::ToolBatchStatus::Completed);
+    assert_eq!(item.is_error, Some(false));
+    assert_eq!(item.content, content());
+    assert_eq!(item.structured, Some(json!({"native":true})));
+    assert_eq!(item.result, Some(json!({"native":true})));
     assert_eq!(
-        metadata.result_reference.as_ref().unwrap().uri,
+        item.result_reference.as_ref().unwrap().uri,
         "mcp://demo/result"
     );
+    let attachments = message
+        .content
+        .0
+        .iter()
+        .filter(|block| {
+            matches!(
+                block,
+                fw::ContentBlock::Media { .. } | fw::ContentBlock::Resource { .. }
+            )
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(attachments, content().0[..2]);
+    let fw::ContentBlock::Text { text } = &message.content.0[0] else {
+        panic!("model result must start with the batch summary")
+    };
+    let summary: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(summary["results"].as_array().unwrap().len(), 1);
+    assert_eq!(summary["results"][0]["result"], json!({"native":true}));
+    assert_eq!(summary["results"][0]["attachmentCount"], 2);
     assert_eq!(
-        message.content.estimated_tokens(),
-        content().estimated_tokens()
+        summary["results"][0]["resultReference"]["uri"],
+        "mcp://demo/result"
     );
+    assert!(message.content.estimated_tokens() >= content().estimated_tokens());
 }
 #[tokio::test]
 async fn original_mcp_lease_shutdown_failure_reaches_the_product_run_outcome() {
-    let (result, _, closed) = run(true).await;
+    let (result, _, closed, _) = run(true).await;
     assert_eq!(closed, 2);
     assert!(result.unwrap_err().to_string().contains("MCP close failed"));
 }

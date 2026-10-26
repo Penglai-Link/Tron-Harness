@@ -259,20 +259,16 @@ impl PlatformDudeExecutor {
         let (model, route) = router
             .resolve_initial("", &session.session_code, &event.dude_code, None)
             .map_err(DudeError::Runtime)?;
-        let mut prompt=event.payload["content"].as_str().map(str::to_owned).unwrap_or_else(||format!("处理 {source:?} 事件。仅在有实际工作时行动；无变化的心跳保持安静。事件数据：{payload}",source=event.source,payload=event.payload));
-
-        if event.source != DudeEventSource::UserMessage {
-            prompt.push_str(&format!("\n事件数据：{}", event.payload));
-        }
-        if event.source == DudeEventSource::ThreadFeedback {
-            prompt.push_str("\n处理 Thread 反馈时，先读取 result.interactions。若已有上下文足以回答，调用 thread_answer，使用实际 session_id、interaction_id 和符合 response_schema 的 answer；不要给等待回答的 Thread 发送普通消息。若需要用户补充事实或作决定，先记录 NeedsDecision 事项变化，再调用 dude_notify 通知用户，在证据中保留此 Thread 和 interaction ID，保留等待状态。任务完成后更新对应 task 状态。没有实际进展时保持安静。");
-        }
-        if event.source == DudeEventSource::Heartbeat {
-            prompt.push_str("\n按你的角色检查需要主动推进的事项。已由任务调度触发的工作在对应 Task 会话运行；不要在心跳会话重复执行这些任务。仅在发现实际变化、需要决策或取得有用结果时通过 dude_notify 通知；无变化保持安静。");
-        }
+        // The transcript records the input, while live event data and fixed
+        // operating instructions belong to their configured contributors.
+        let prompt = if event.source == DudeEventSource::UserMessage {
+            event.payload["content"].as_str().map(str::to_owned)
+        } else {
+            None
+        }.unwrap_or_else(|| format!("{:?}", event.source));
         let agent = self
             .agent()
-            .with_runtime_input(crate::application::dude::soul::runtime_input_kind(event.source), serde_json::json!({"source":format!("{:?}",event.source),"eventId":event.event_id,"ownerDudeCode":event.dude_code,"taskCode":event.task_code,"onboarding":event.dedup_key.starts_with("soul-awakening:") && event.payload["onboarding"] == true}))
+            .with_runtime_input(crate::application::dude::soul::runtime_input_kind(event.source), serde_json::json!({"source":format!("{:?}",event.source),"eventId":event.event_id,"ownerDudeCode":event.dude_code,"taskCode":event.task_code,"payload":event.payload,"onboarding":event.dedup_key.starts_with("soul-awakening:") && event.payload["onboarding"] == true}))
             .with_auto_model_route(Some(route), Some(router))
             .with_collaboration_owner(AgentCollaborationOwner {
                 kind: "DUDE".into(),

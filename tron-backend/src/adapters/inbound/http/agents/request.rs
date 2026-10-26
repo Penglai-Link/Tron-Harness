@@ -11,8 +11,6 @@ pub struct ListToolsQuery {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateInternalAgentPolicyRequest {
     pub tool_assignment_mode: Option<String>,
-    pub tool_exposure_mode: Option<String>,
-    pub expanded_domain_persistence_mode: Option<String>,
     pub max_steps: Option<u32>,
     pub max_tool_calls: Option<u32>,
     pub max_parallel_tool_calls: Option<u32>,

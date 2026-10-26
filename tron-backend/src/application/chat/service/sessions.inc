@@ -107,6 +107,11 @@ impl ChatService {
                 && session.source_type != ChatSessionSourceType::Terminal
         });
 
+        let codes = sessions
+            .iter()
+            .map(|session| session.session_code.clone())
+            .collect::<Vec<_>>();
+        let pending_counts = self.repository().pending_input_counts(&codes)?;
         let mut grouped = BTreeMap::<String, ChatSessionGroup>::new();
         for session in sessions {
             let task_title = match session.source_type {
@@ -138,12 +143,10 @@ impl ChatService {
         }
         for group in grouped.values_mut() {
             for session in &group.sessions {
-                let pending = self
-                    .repository()
-                    .list_user_input_requests(&session.session_code)?
-                    .into_iter()
-                    .filter(|request| request.status == ChatUserInputRequestStatus::Pending)
-                    .count() as u32;
+                let pending = pending_counts
+                    .get(&session.session_code)
+                    .copied()
+                    .unwrap_or(0);
                 if pending > 0 {
                     group.pending_user_input_count += pending;
                     group
@@ -159,13 +162,32 @@ impl ChatService {
         self.repository().get_session(session_code)
     }
 
-    pub fn session_titles(&self, codes: &[String]) -> Result<Vec<crate::application::chat::ChatSessionTitle>, ChatError> {
-        let codes = codes.iter().filter(|code| !code.is_empty()).cloned().collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>();
-        if codes.is_empty() { return Ok(Vec::new()); }
+    pub fn sessions_by_codes(&self, codes: &[String]) -> Result<Vec<ChatSession>, ChatError> {
+        self.repository().sessions_by_codes(codes)
+    }
+
+    pub fn session_titles(
+        &self,
+        codes: &[String],
+    ) -> Result<Vec<crate::application::chat::ChatSessionTitle>, ChatError> {
+        let codes = codes
+            .iter()
+            .filter(|code| !code.is_empty())
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        if codes.is_empty() {
+            return Ok(Vec::new());
+        }
         self.repository().session_titles(&codes)
     }
 
     pub fn ensure_session_writable(&self, session_code: &str) -> Result<(), ChatError> {
+        if self.active_runs.snapshot(session_code).map_err(|_| ChatError::StorageFailure)?
+            .is_some_and(|run| run.operation_kind.as_deref() == Some("ContextCompaction")) {
+            return Err(ChatError::SessionRunActive);
+        }
         let session = self.repository().get_session(session_code)?;
         if session.status != ChatSessionStatus::Active
             || self
@@ -400,6 +422,7 @@ impl ChatService {
         if session.status != ChatSessionStatus::Active {
             return Err(ChatError::SessionArchived);
         }
+        self.ensure_session_writable(session_code)?;
         let title = normalized_required(command.title).ok_or(ChatError::SessionTitleRequired)?;
         let updated_at = current_timestamp();
         self.repository()

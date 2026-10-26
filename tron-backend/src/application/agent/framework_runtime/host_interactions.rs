@@ -34,19 +34,24 @@ impl FrameworkHost {
             }
             return Err(AgentError::AwaitingUserInput);
         }
-        let native = resume.iter().collect::<Vec<_>>();
         let _admission = self.0.config_lock.lock().await;
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
         let agent = self.agent().await.map_err(map_error)?;
         let mut logical_run = None;
         let mut ids = std::collections::BTreeSet::new();
-        for entry in native {
-            let id = native_id(&entry.interrupt_id)?;
-            if !ids.insert(id) {
-                return Err(invalid("duplicate interaction response"));
-            }
-            let record = agent.interaction(session, id).await.map_err(map_error)?;
+        let requested = resume
+            .iter()
+            .map(|entry| native_id(&entry.interrupt_id))
+            .collect::<Result<Vec<_>, _>>()?;
+        if requested.iter().any(|id| !ids.insert(*id)) {
+            return Err(invalid("duplicate interaction response"));
+        }
+        let records = agent
+            .interactions(session, &requested)
+            .await
+            .map_err(map_error)?;
+        for (entry, record) in resume.iter().zip(records) {
             if logical_run
                 .replace(record.run_id)
                 .is_some_and(|previous| previous != record.run_id)
@@ -118,12 +123,18 @@ pub(super) async fn apply_answers(
     let mut records = Vec::new();
     let mut logical_run = None;
     let mut ids = std::collections::BTreeSet::new();
-    for entry in entries {
-        let id = native_id(&entry.interrupt_id)?;
-        if !ids.insert(id) {
-            return Err(invalid("duplicate interaction response"));
-        }
-        let record = agent.interaction(session, id).await.map_err(map_error)?;
+    let requested = entries
+        .iter()
+        .map(|entry| native_id(&entry.interrupt_id))
+        .collect::<Result<Vec<_>, _>>()?;
+    if requested.iter().any(|id| !ids.insert(*id)) {
+        return Err(invalid("duplicate interaction response"));
+    }
+    let native = agent
+        .interactions(session, &requested)
+        .await
+        .map_err(map_error)?;
+    for ((entry, id), record) in entries.iter().zip(requested).zip(native) {
         if logical_run
             .replace(record.run_id)
             .is_some_and(|previous| previous != record.run_id)

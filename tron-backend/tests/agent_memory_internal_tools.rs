@@ -10,6 +10,7 @@ use axum::{
     body::Body,
     extract::OriginalUri,
     http::{Method, Request, StatusCode, header},
+    response::IntoResponse,
     routing::post,
 };
 use serde_json::{Map, Value, json};
@@ -69,7 +70,7 @@ async fn scripted_chat_completion(
         Arc<Mutex<VecDeque<Value>>>,
     )>,
     Json(payload): Json<Value>,
-) -> Json<Value> {
+) -> axum::response::Response {
     requests
         .lock()
         .expect("recorded model request mutex poisoned")
@@ -86,7 +87,36 @@ async fn scripted_chat_completion(
                 .unwrap_or_default();
             final_response(format!("mock: {prompt}"))
         });
-    Json(response)
+    sse_completion(&payload, response)
+}
+
+/// The product streams native model turns, so the mock serves SSE whenever the
+/// request asks for it, mirroring chat-completions chunk framing.
+fn sse_completion(payload: &Value, response: Value) -> axum::response::Response {
+    if payload["stream"] != true {
+        return Json(response).into_response();
+    }
+    let message = &response["choices"][0]["message"];
+    let mut delta = message.clone();
+    if let Some(calls) = delta["tool_calls"].as_array_mut() {
+        for (index, call) in calls.iter_mut().enumerate() {
+            call["index"] = json!(index);
+        }
+    }
+    let finish = response["choices"][0]["finish_reason"].as_str().unwrap_or(
+        if message["tool_calls"].is_array() {
+            "tool_calls"
+        } else {
+            "stop"
+        },
+    );
+    let chunk = json!({"choices":[{"index":0,"delta":delta,"finish_reason":null}]});
+    let done = json!({"choices":[{"index":0,"delta":{},"finish_reason":finish}],"usage":response["usage"]});
+    (
+        [(header::CONTENT_TYPE, "text/event-stream")],
+        format!("data: {chunk}\n\ndata: {done}\n\ndata: [DONE]\n\n"),
+    )
+        .into_response()
 }
 
 async fn mock_embedding(
@@ -123,7 +153,7 @@ async fn mock_rerank(Json(payload): Json<Value>) -> (StatusCode, Json<Value>) {
     (StatusCode::OK, Json(json!({ "results": results })))
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn memory_tool_catalog_is_visible_and_zh_cn_localized() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -214,7 +244,7 @@ async fn memory_tool_catalog_is_visible_and_zh_cn_localized() {
     assert!(save_schema["properties"].get("sourceVersion").is_none());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn main_agent_default_all_platform_tools_injects_memory_tools() {
     let model_server = recording_model_server().await;
     let app = app();
@@ -247,15 +277,32 @@ async fn main_agent_default_all_platform_tools_injects_memory_tools() {
 
     let requests = recorded_requests(&model_server);
     assert_eq!(requests.len(), 1);
+    // Gateway semantics: the model-visible schema is the stable pair; the
+    // complete platform catalog (memory, automation, rag included) is
+    // reachable through tool_search instead of the request schema.
     let tool_names = tool_names_in_request(&requests[0]);
-    assert!(tool_names.contains(&"memory_search".to_string()));
-    assert!(tool_names.contains(&"memory_save".to_string()));
-    assert!(tool_names.contains(&"memory_delete".to_string()));
-    assert!(tool_names.contains(&"automation_create".to_string()));
-    assert!(tool_names.contains(&"rag_search".to_string()));
+    assert_eq!(
+        tool_names,
+        vec!["tool_execute".to_string(), "tool_search".to_string()],
+        "{tool_names:?}"
+    );
+    let search_tool = requests[0]["tools"]
+        .as_array()
+        .and_then(|tools| {
+            tools
+                .iter()
+                .find(|tool| tool["function"]["name"] == "tool_search")
+        })
+        .expect("gateway search tool must be present");
+    assert!(
+        search_tool["function"]["description"]
+            .as_str()
+            .is_some_and(|description| description.contains("tool_execute")),
+        "the search tool must teach envelope execution"
+    );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn selected_tools_without_memory_selection_does_not_inject_memory_tools() {
     let model_server = recording_model_server().await;
     let app = app();
@@ -267,8 +314,7 @@ async fn selected_tools_without_memory_selection_does_not_inject_memory_tools() 
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
         Some(json!({
-            "toolAssignmentMode": "selected_tools",
-            "toolExposureMode": "direct_list"
+            "toolAssignmentMode": "selected_tools"
         })),
         None,
         Some(&authorization),
@@ -324,7 +370,7 @@ async fn selected_tools_without_memory_selection_does_not_inject_memory_tools() 
     assert!(!tool_names.contains(&"memory_delete".to_string()));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn selected_tools_only_injects_selected_memory_tools() {
     let model_server = recording_model_server().await;
     let app = app();
@@ -336,8 +382,7 @@ async fn selected_tools_only_injects_selected_memory_tools() {
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
         Some(json!({
-            "toolAssignmentMode": "selected_tools",
-            "toolExposureMode": "direct_list"
+            "toolAssignmentMode": "selected_tools"
         })),
         None,
         Some(&authorization),
@@ -395,11 +440,14 @@ async fn selected_tools_only_injects_selected_memory_tools() {
 
     let requests = recorded_requests(&model_server);
     assert_eq!(requests.len(), 1);
+    // Gateway semantics: selection narrows the searchable inventory, not the
+    // schema; the model-visible tools stay the stable pair.
     let tool_names = tool_names_in_request(&requests[0]);
-    assert!(tool_names.contains(&"memory_search".to_string()));
-    assert!(tool_names.contains(&"workspace_page".to_string()));
-    assert!(!tool_names.contains(&"memory_save".to_string()));
-    assert!(!tool_names.contains(&"memory_delete".to_string()));
+    assert_eq!(
+        tool_names,
+        vec!["tool_execute".to_string(), "tool_search".to_string()],
+        "{tool_names:?}"
+    );
 }
 
 #[test]
@@ -454,7 +502,7 @@ fn public_work_domain_memory_scope_keeps_agent_rag_wire_contract() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unauthorized_memory_tool_call_is_rejected_without_aborting_run() {
     let model_server = scripted_model_server(vec![
         tool_call_response(
@@ -502,7 +550,7 @@ async fn unauthorized_memory_tool_call_is_rejected_without_aborting_run() {
     assert_json_mentions(&requests[1]["messages"], "is not allowed");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn invalid_memory_code_short_formats_are_rejected() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -568,10 +616,13 @@ async fn invalid_memory_code_short_formats_are_rejected() {
         assert_eq!(body["code"], json!("SUCCESS"));
         let final_output = body["data"]["finalOutput"].as_str().unwrap_or_default();
         if case_name == "legacy public agent scope" {
-            // The public enum rejects AGENT before domain input parsing.
-            assert_eq!(
-                final_output,
-                "mock: Tool arguments do not match input schema"
+            // The public enum rejects AGENT before domain input parsing; the
+            // rejection carries the schema-guidance appendix.
+            assert!(
+                common::single_gateway_result(final_output.strip_prefix("mock: ").unwrap_or(final_output)).starts_with(
+                    "Tool arguments do not match input schema. Pass object/array parameters as JSON values, not quoted JSON strings."
+                ),
+                "{final_output}"
             );
             assert_schema_rejection_in_followup(&model_server, "memory_search");
         } else {
@@ -583,7 +634,7 @@ async fn invalid_memory_code_short_formats_are_rejected() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn memory_save_rejects_removed_pin_level_public_input() {
     let model_server = scripted_model_server(vec![tool_call_response(
         "memory.save",
@@ -620,10 +671,13 @@ async fn memory_save_rejects_removed_pin_level_public_input() {
     );
     assert_eq!(body["code"], json!("SUCCESS"));
     let final_output = body["data"]["finalOutput"].as_str().unwrap_or_default();
-    // additionalProperties=false rejects the removed field before serde input parsing.
-    assert_eq!(
-        final_output,
-        "mock: Tool arguments do not match input schema"
+    // additionalProperties=false rejects the removed field before serde input
+    // parsing; the rejection carries the schema-guidance appendix.
+    assert!(
+        common::single_gateway_result(final_output.strip_prefix("mock: ").unwrap_or(final_output)).starts_with(
+            "Tool arguments do not match input schema. Pass object/array parameters as JSON values, not quoted JSON strings."
+        ),
+        "{final_output}"
     );
     assert_schema_rejection_in_followup(&model_server, "memory_save");
 }
@@ -648,7 +702,13 @@ async fn memory_search_allows_empty_query_without_memory_code() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
-    create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    let embedding_model_code =
+        create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    // The seeded memory corpus pins Person-AI auto routes that need a live
+    // provider connection; point embeddings at the mock-backed platform model
+    // so save/search run end to end against this server. This case does not
+    // exercise rerank, so the rerank route stays unset.
+    point_memory_corpus_at_mock_models(&app, &authorization, &embedding_model_code, None).await;
 
     let response = request_with_headers(
         &app,
@@ -753,8 +813,20 @@ async fn memory_search_observation_stays_under_event_bus_limit_with_governance_m
     let app = app();
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
-    create_embedding_default(&app, &authorization, &model_server.base_url).await;
-    create_rerank_default(&app, &authorization, &model_server.base_url).await;
+    let embedding_model_code =
+        create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    let rerank_model_code =
+        create_rerank_default(&app, &authorization, &model_server.base_url).await;
+    // The seeded memory corpus pins Person-AI auto routes that need a live
+    // provider connection; point them at the mock-backed platform models so
+    // the seven saves and the query search run end to end against this server.
+    point_memory_corpus_at_mock_models(
+        &app,
+        &authorization,
+        &embedding_model_code,
+        Some(&rerank_model_code),
+    )
+    .await;
 
     // All seven save observations and the full search result are retained.
     // Their measured native history cost is 31,568 tokens, beyond the default
@@ -856,8 +928,20 @@ async fn memory_context_pack_merges_baseline_injectable_and_query_related_memori
     let app = app();
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
-    create_embedding_default(&app, &authorization, &model_server.base_url).await;
-    create_rerank_default(&app, &authorization, &model_server.base_url).await;
+    let embedding_model_code =
+        create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    let rerank_model_code =
+        create_rerank_default(&app, &authorization, &model_server.base_url).await;
+    // The seeded memory corpus pins Person-AI auto routes that need a live
+    // provider connection; point them at the mock-backed platform models so
+    // the baseline/related saves and the query search run end to end.
+    point_memory_corpus_at_mock_models(
+        &app,
+        &authorization,
+        &embedding_model_code,
+        Some(&rerank_model_code),
+    )
+    .await;
 
     let response = request_with_headers(
         &app,
@@ -973,7 +1057,13 @@ async fn memory_code_upsert_loads_current_without_default_governance_filters() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
-    create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    let embedding_model_code =
+        create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    // The seeded memory corpus pins Person-AI auto routes that need a live
+    // provider connection; point embeddings at the mock-backed platform model
+    // so the candidate saves and current lookup run end to end. This case
+    // searches by memoryCode without a query, so rerank stays unset.
+    point_memory_corpus_at_mock_models(&app, &authorization, &embedding_model_code, None).await;
 
     let response = request_with_headers(
         &app,
@@ -1068,7 +1158,12 @@ async fn user_work_domain_and_space_memory_code_short_formats_are_accepted() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
-    create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    let embedding_model_code =
+        create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    // The seeded memory corpus pins Person-AI auto routes that need a live
+    // provider connection; point embeddings at the mock-backed platform model
+    // so the three short-format saves run end to end.
+    point_memory_corpus_at_mock_models(&app, &authorization, &embedding_model_code, None).await;
 
     let response = request_with_headers(
         &app,
@@ -1180,7 +1275,12 @@ async fn memory_code_save_update_delete_search_observations_are_sanitized() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
-    create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    let embedding_model_code =
+        create_embedding_default(&app, &authorization, &model_server.base_url).await;
+    // The seeded memory corpus pins Person-AI auto routes that need a live
+    // provider connection; point them at the mock-backed platform models so
+    // the full save/update/search/delete lifecycle runs end to end.
+    point_memory_corpus_at_mock_models(&app, &authorization, &embedding_model_code, None).await;
 
     let response = request_with_headers(
         &app,
@@ -1337,7 +1437,11 @@ async fn request_with_locale(
         .expect("router should return a response")
 }
 
-async fn create_embedding_default(app: &Router, authorization_header: &str, base_url: &str) {
+async fn create_embedding_default(
+    app: &Router,
+    authorization_header: &str,
+    base_url: &str,
+) -> String {
     let create_response = request_with_headers(
         app,
         Method::POST,
@@ -1369,7 +1473,8 @@ async fn create_embedding_default(app: &Router, authorization_header: &str, base
     );
     let model_code = create_body["data"]["modelCode"]
         .as_str()
-        .expect("created embedding model should expose modelCode");
+        .expect("created embedding model should expose modelCode")
+        .to_string();
 
     let default_response = request_with_headers(
         app,
@@ -1387,9 +1492,10 @@ async fn create_embedding_default(app: &Router, authorization_header: &str, base
         StatusCode::OK,
         "unexpected embedding default response body: {default_body}"
     );
+    model_code
 }
 
-async fn create_rerank_default(app: &Router, authorization_header: &str, base_url: &str) {
+async fn create_rerank_default(app: &Router, authorization_header: &str, base_url: &str) -> String {
     let create_response = request_with_headers(
         app,
         Method::POST,
@@ -1421,7 +1527,8 @@ async fn create_rerank_default(app: &Router, authorization_header: &str, base_ur
     );
     let model_code = create_body["data"]["modelCode"]
         .as_str()
-        .expect("created rerank model should expose modelCode");
+        .expect("created rerank model should expose modelCode")
+        .to_string();
 
     let default_response = request_with_headers(
         app,
@@ -1438,6 +1545,49 @@ async fn create_rerank_default(app: &Router, authorization_header: &str, base_ur
         default_status,
         StatusCode::OK,
         "unexpected rerank default response body: {default_body}"
+    );
+    model_code
+}
+
+/// The seeded memory-card corpus pins the Person-AI embedding/rerank auto
+/// routes, which cannot resolve without a connected Person-AI provider.
+/// Memory tool tests run against the scripted mock server, so the corpus is
+/// reconfigured through the public settings endpoint to route embeddings (and
+/// optionally rerank) at the mock-backed platform models created above.
+async fn point_memory_corpus_at_mock_models(
+    app: &Router,
+    authorization_header: &str,
+    embedding_model_code: &str,
+    rerank_model_code: Option<&str>,
+) {
+    let settings_response = request_with_headers(
+        app,
+        Method::PUT,
+        "/api/v1/rag/corpora/memory-card/settings",
+        Some(json!({
+            "fulltext": true,
+            "vector": true,
+            "graph": false,
+            "embeddingModelCode": embedding_model_code,
+            "embeddingDimension": 1024,
+            "rerankModelCode": rerank_model_code,
+            "graphModelCode": null,
+            "imageDescriptionModelCode": null
+        })),
+        None,
+        Some(authorization_header),
+    )
+    .await;
+    let settings_status = settings_response.status();
+    let settings_body = response_json(settings_response).await;
+    assert_eq!(
+        settings_status,
+        StatusCode::OK,
+        "unexpected memory corpus settings response body: {settings_body}"
+    );
+    assert_eq!(
+        settings_body["data"]["embeddingModelCode"],
+        json!(embedding_model_code)
     );
 }
 
@@ -1491,6 +1641,8 @@ fn final_response(content: impl Into<String>) -> Value {
     })
 }
 
+/// The model-visible catalog is the stable `tool_search`/`tool_execute` pair;
+/// scripted tool calls address the inner memory tool through the envelope.
 fn tool_call_response(tool_name: &str, input: Value) -> Value {
     let tool_name = tool_name.replace('.', "_");
     json!({
@@ -1498,11 +1650,11 @@ fn tool_call_response(tool_name: &str, input: Value) -> Value {
             "message": {
                 "role": "assistant",
                 "tool_calls": [{
-                    "id": "call-memory",
+                    "id": format!("call-{tool_name}"),
                     "type": "function",
                     "function": {
-                        "name": tool_name,
-                        "arguments": input.to_string()
+                        "name": "tool_execute",
+                        "arguments": json!({"tool": tool_name, "arguments": common::gateway_arguments(&tool_name,input)}).to_string()
                     }
                 }]
             }
@@ -1533,9 +1685,13 @@ fn assert_schema_rejection_in_followup(server: &RecordingModelServer, tool_name:
         .rev()
         .find(|message| message["role"] == json!("tool"))
         .expect("SDK schema error must reach the next model as a tool observation");
-    assert_eq!(
-        observation["content"],
-        json!("Tool arguments do not match input schema")
+    assert!(
+        observation["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Tool arguments do not match input schema"),
+        "{}",
+        observation["content"]
     );
     assert_json_mentions(&requests[1]["messages"], tool_name);
 }
@@ -1578,7 +1734,18 @@ fn memory_observations_in_request(request: &Value) -> Vec<ParsedObservation> {
                     tool_call["id"].as_str(),
                     tool_call["function"]["name"].as_str(),
                 ) {
-                    call_names.insert(call_id.to_string(), tool_name.to_string());
+                    // Observations keep the INNER tool name, so envelope calls
+                    // are resolved to the `arguments.tool` they address.
+                    let effective_name = if tool_name == "tool_execute" {
+                        tool_call["function"]["arguments"]
+                            .as_str()
+                            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+                            .and_then(|arguments| arguments["tool"].as_str().map(str::to_string))
+                            .unwrap_or_else(|| tool_name.to_string())
+                    } else {
+                        tool_name.to_string()
+                    };
+                    call_names.insert(call_id.to_string(), effective_name);
                 }
             }
         }
@@ -1600,7 +1767,7 @@ fn parse_memory_observation_message(
             return None;
         }
         let output = message["content"].as_str()?;
-        let output = serde_json::from_str(output).unwrap_or_else(|error| {
+        let output = serde_json::from_str(&common::single_gateway_result(output)).unwrap_or_else(|error| {
             panic!("{tool_name} observation should be valid JSON: {error}; output={output}")
         });
         return Some(ParsedObservation {
@@ -1619,7 +1786,7 @@ fn parse_memory_observation(content: &str) -> Option<ParsedObservation> {
     if !tool_name.starts_with("memory_") {
         return None;
     }
-    let output = serde_json::from_str(output).unwrap_or_else(|error| {
+    let output = serde_json::from_str(&common::single_gateway_result(output)).unwrap_or_else(|error| {
         panic!("{tool_name} observation should be valid JSON: {error}; output={output}")
     });
     Some(ParsedObservation {

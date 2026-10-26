@@ -10,7 +10,8 @@ pub enum ContextReductionStrategy {
     Checkpoint,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ContextProviderPolicy {
     pub strategy: ContextReductionStrategy,
     pub trigger_ratio_bps: u32,
@@ -32,12 +33,23 @@ impl ContextProviderPolicy {
 pub struct ContextProvidersConfig {
     /// Actual message block order. Tools retain their provider-native protocol location.
     pub order: Vec<String>,
+    pub data_blocks: std::collections::BTreeMap<String, ContextDataBlockConfig>,
     pub checkpoint: ContextProviderPolicy,
     pub working: ContextProviderPolicy,
     pub history: ContextProviderPolicy,
+    /// Complete user turns retained verbatim after the history summary boundary.
+    pub history_recent_turns: usize,
     pub prices: ContextPriceInputs,
     pub max_auxiliary_calls_per_step: usize,
 }
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextDataBlockConfig {
+    pub max_tokens: Option<u32>,
+    #[serde(flatten)]
+    pub policy: ContextProviderPolicy,
+}
+
 #[derive(Debug, Clone, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ContextPriceInputs {
@@ -52,17 +64,56 @@ impl Default for ContextProvidersConfig {
         Self {
             order: [
                 "seed_prompt_prefix",
-                "application_context",
                 "current_session_checkpoint",
+                "runtime_identity",
+                "dude_onboarding",
+                "tool_domains",
+                "current_session_history",
+                "agent_directory",
+                "skills.catalog",
+                "page_context",
+                "application_context",
                 "current_session_working_state",
                 "knowledge_base",
-                "current_session_history",
+                "dude_environment",
+                "dude_wakeup",
             ]
             .map(str::to_owned)
             .to_vec(),
+            data_blocks: [
+                ("page_context", Some(2048)),
+                ("application_context", Some(16_000)),
+                ("knowledge_base", Some(1200)),
+                ("agent_directory", Some(2048)),
+                ("runtime_identity", Some(8192)),
+                ("dude_onboarding", Some(1024)),
+                ("dude_environment", Some(1536)),
+                ("dude_wakeup", Some(2048)),
+                ("skills.catalog", Some(8192)),
+                ("tool_domains", None),
+            ]
+            .into_iter()
+            .map(|(id, max_tokens)| {
+                (
+                    id.into(),
+                    ContextDataBlockConfig {
+                        max_tokens,
+                        policy: ContextProviderPolicy::new(
+                            if matches!(id, "skills.catalog" | "runtime_identity" | "tool_domains" | "agent_directory") {
+                                ContextReductionStrategy::Keep
+                            } else {
+                                ContextReductionStrategy::Bound
+                            },
+                            8000,
+                        ),
+                    },
+                )
+            })
+            .collect(),
             checkpoint: ContextProviderPolicy::new(ContextReductionStrategy::Bound, 8_000),
             working: ContextProviderPolicy::new(ContextReductionStrategy::Bound, 8_000),
             history: ContextProviderPolicy::new(ContextReductionStrategy::Checkpoint, 2_000),
+            history_recent_turns: 2,
             prices: ContextPriceInputs::default(),
             max_auxiliary_calls_per_step: 16,
         }
@@ -105,13 +156,74 @@ impl ContextPriceInputs {
 
 impl ContextProvidersConfig {
     pub fn validate(&self) -> Result<(), String> {
-        let expected = ContextProvidersConfig::default().order;
+        if self.history_recent_turns == 0 || self.history_recent_turns > 512 {
+            return Err("history recent-turn retention must be between 1 and 512".into());
+        }
+        let expected = [
+            "seed_prompt_prefix",
+            "current_session_checkpoint",
+            "current_session_history",
+            "current_session_working_state",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .chain(self.data_blocks.keys().cloned())
+        .collect::<Vec<_>>();
         let actual = self.order.iter().collect::<std::collections::BTreeSet<_>>();
         if self.order.len() != expected.len()
             || actual.len() != expected.len()
             || expected.iter().any(|id| !actual.contains(id))
         {
             return Err("context order must contain every context block exactly once".into());
+        }
+        if self.order.first().map(String::as_str) != Some("seed_prompt_prefix") {
+            return Err("fixed instructions must be first".into());
+        }
+        let history = self
+            .order
+            .iter()
+            .position(|id| id == "current_session_history")
+            .unwrap();
+        if self
+            .order
+            .iter()
+            .position(|id| id == "current_session_checkpoint")
+            .unwrap()
+            > history
+        {
+            return Err("stable checkpoint must precede history".into());
+        }
+        if self.order.iter().take(history).any(|id| {
+            !matches!(
+                id.as_str(),
+                "seed_prompt_prefix" | "current_session_checkpoint" | "runtime_identity" | "dude_onboarding" | "tool_domains"
+            )
+        }) {
+            return Err("dynamic context blocks must follow history".into());
+        }
+        let expected_data = Self::default().data_blocks;
+        if expected_data
+            .keys()
+            .any(|id| !self.data_blocks.contains_key(id))
+        {
+            return Err(
+                "every data context block requires an explicit policy"
+                    .into(),
+            );
+        }
+        for (id, block) in &self.data_blocks {
+            if id.trim().is_empty()
+                || block.max_tokens == Some(0)
+                || (block.max_tokens.is_none() && block.policy.strategy != ContextReductionStrategy::Keep)
+                || !matches!(
+                    block.policy.strategy,
+                    ContextReductionStrategy::Keep | ContextReductionStrategy::Bound
+                )
+            {
+                return Err(
+                    "context data requires a positive budget or uncapped keep strategy".into(),
+                );
+            }
         }
         for policy in [&self.checkpoint, &self.working] {
             if policy.strategy == ContextReductionStrategy::Checkpoint {
@@ -124,7 +236,10 @@ impl ContextProvidersConfig {
         ) {
             return Err("history supports only keep or checkpoint".into());
         }
-        for policy in [&self.checkpoint, &self.working, &self.history] {
+        for policy in [&self.checkpoint, &self.working, &self.history]
+            .into_iter()
+            .chain(self.data_blocks.values().map(|block| &block.policy))
+        {
             if policy.strategy != ContextReductionStrategy::Keep
                 && policy.target_ratio_bps >= policy.trigger_ratio_bps
             {
@@ -132,5 +247,53 @@ impl ContextProvidersConfig {
             }
         }
         self.prices.validate()
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+    #[test]
+    fn stable_domains_precede_history_and_dynamic_sources_follow_it() {
+        let baseline = ContextProvidersConfig::default();
+        baseline.validate().unwrap();
+        assert_eq!(baseline.data_blocks["agent_directory"].policy.strategy, ContextReductionStrategy::Keep);
+        assert_eq!(baseline.data_blocks["tool_domains"].max_tokens, None);
+        assert_eq!(baseline.data_blocks["tool_domains"].policy.strategy, ContextReductionStrategy::Keep);
+        let history = baseline.order.iter().position(|id| id == "current_session_history").unwrap();
+        assert_eq!(&baseline.order[2..4], &["runtime_identity", "dude_onboarding"]);
+        for id in baseline.order.iter().skip(history + 1) {
+            let mut changed = baseline.clone();
+            let index = changed.order.iter().position(|value| value == id).unwrap();
+            changed.order.swap(index, 1);
+            assert!(
+                changed.validate().is_err(),
+                "dynamic block admitted before history: {id}"
+            );
+        }
+        let mut reordered = baseline.clone();
+        reordered.order[history + 1..].reverse();
+        reordered.validate().unwrap();
+        reordered.data_blocks.insert(
+            "new.plugin".into(),
+            reordered.data_blocks["application_context"].clone(),
+        );
+        assert!(
+            reordered.validate().is_err(),
+            "a new contributor must also be ordered explicitly"
+        );
+        reordered.order.push("new.plugin".into());
+        reordered.validate().unwrap();
+        let mut missing = baseline.clone();
+        missing.data_blocks.remove("runtime_identity");
+        assert!(missing.validate().is_err());
+        let mut invalid = baseline;
+        invalid
+            .data_blocks
+            .get_mut("skills.catalog")
+            .unwrap()
+            .policy
+            .strategy = ContextReductionStrategy::Checkpoint;
+        assert!(invalid.validate().is_err());
     }
 }

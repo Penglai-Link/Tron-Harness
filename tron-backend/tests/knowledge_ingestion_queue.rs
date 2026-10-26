@@ -82,6 +82,41 @@ fn lease(task: &IngestionTask) -> IngestionLease {
         owner: task.lease_owner.clone().unwrap(),
     }
 }
+
+#[test]
+fn claim_continues_past_full_candidate_pages_and_missing_file_sizes() {
+    use sha2::{Digest, Sha256};
+    let (directory, queue) = fixture();
+    let connection = Connection::open(directory.path().join("queue.sqlite")).unwrap();
+    for index in 0..130 {
+        let document = format!("page-{index}");
+        let payload = json!({"id":document,"resourceCode":format!("resource-{document}"),"resourceRevision":1,"revision":0,"status":"READY"});
+        connection
+            .execute(
+                "INSERT INTO knowledge_base_documents VALUES(?1,'kb',?2,0)",
+                params![document, payload.to_string()],
+            )
+            .unwrap();
+        let mut task = queued(&document, "paging");
+        task.configuration["parsingTier"] = json!(if index < 80 { "premium" } else { "standard" });
+        task.input_config_hash = format!(
+            "{:x}",
+            Sha256::digest(format!("resource-{document}:1:{}", task.configuration).as_bytes())
+        );
+        task.file_size_bytes = (index < 32).then_some(index as u64);
+        queue.enqueue(task).unwrap();
+    }
+    let mut request = claim(IngestionStage::Parsing, "worker", 1, 2);
+    for endpoint in &mut request.parse_endpoints {
+        endpoint.supported_tiers = vec!["standard".into()];
+    }
+    let first = queue.claim(request.clone()).unwrap().unwrap();
+    assert_eq!(first.document_id, "page-80");
+    let second = queue.claim(request).unwrap().unwrap();
+    assert_eq!(second.document_id, "page-81");
+    assert_ne!(first.endpoint_id, second.endpoint_id);
+    assert_eq!(queue.get("task-page-79-paging").unwrap().state, "QUEUED");
+}
 fn complete_parse(
     q: &SqliteKnowledgeIngestionQueue,
     mut task: IngestionTask,

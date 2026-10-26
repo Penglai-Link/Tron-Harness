@@ -1,5 +1,5 @@
 import { defaultChatAnnotationLabels, zhChatAnnotationLabels } from "@eliteforge/agent-ui-chat-core";
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
+import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { useChatWorkRailLabels, useChatHistoryLabels } from "../hooks/useChatWorkRailLabels";
 import { ChatRuntimeWindow, type ChatRuntimeWindowProps, type ChatRuntimeSubmitter } from "@eliteforge/agent-ui-chat-react";
@@ -15,7 +15,10 @@ import type { ContextAssemblySnapshot } from "../model/contextAssemblyReport";
 import { ChatComposerMetrics } from "./ChatComposerMetrics";
 import { OPEN_CHAT_CONTEXT_EVENT } from "@/shared/lib/shellEvents";
 import { requestApi } from "@/shared/api/httpClient";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import "./AgentChatWindow.css";
+
+const ChatContextInspector = lazy(() => import("./ChatContextInspector").then(module => ({ default: module.ChatContextInspector })));
 
 type MappedProps = "adapter" | "attachmentDownloader" | "submitterRef" | "config" | "initialSession" | "pendingAttachments" | "onPendingAttachmentsChange" | "onSessionChange" | "onRunStateChange" | "createSendInput";
 export interface AgentChatSubmitter {
@@ -42,12 +45,16 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   const runtimeSubmitterRef = useRef<ChatRuntimeSubmitter | null>(null);
   const [activeSessionCode, setActiveSessionCode] = useState<string | null>(initialSession?.sessionCode ?? null);
   const [activeSession, setActiveSession] = useState<ChatSession | null>(initialSession ?? null);
+  const initialSessionRef = useRef(initialSession);
+  initialSessionRef.current = initialSession;
+  const [contextOpen, setContextOpen] = useState(false);
   const [composerSnapshot, setComposerSnapshot] = useState<{ sessionCode: string; metrics: ComposerMetrics | null } | null>(null);
   const metricsRequestRef = useRef(0);
   const wasRunActiveRef = useRef(false);
   useEffect(() => {
     setActiveSessionCode(initialSession?.sessionCode ?? null);
     setActiveSession(initialSession ?? null);
+    setContextOpen(false);
   }, [initialSession?.sessionCode]);
   const refreshComposerMetrics = useCallback(async (sessionCode: string) => {
     const request = ++metricsRequestRef.current;
@@ -100,13 +107,23 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     : undefined, [attachmentDownloader]);
   const handleSession = useCallback((value: Ui.ChatSession | null) => {
     setActiveSessionCode(value?.sessionId ?? null);
-    const nextSession = value ? fromUiSession(value) : null;
+    const mapped = value ? fromUiSession(value) : null;
+    const origin = initialSessionRef.current;
+    // Generic completion responses omit host ownership. Retain it only for
+    // the same session, including approval resumes and metric inspection.
+    const nextSession = mapped && origin?.sessionCode === mapped.sessionCode
+      ? { ...mapped, ownerDudeCode: mapped.ownerDudeCode ?? origin.ownerDudeCode, purpose: mapped.purpose ?? origin.purpose }
+      : mapped;
     setActiveSession(nextSession);
     onSessionChange?.(nextSession);
   }, [onSessionChange]);
   const openContext = useCallback(() => {
+    if (config.floating && activeSession?.ownerDudeCode) {
+      setContextOpen(true);
+      return;
+    }
     window.dispatchEvent(new CustomEvent(OPEN_CHAT_CONTEXT_EVENT, { detail: activeSession }));
-  }, [activeSession]);
+  }, [activeSession, config.floating]);
   const handleAttachments = useCallback((value: Ui.ChatMessageAttachment[]) =>
     onPendingAttachmentsChange?.(value.map(fromUiAttachment)), [onPendingAttachmentsChange]);
   const handleRun = useCallback((value: Ui.ChatRuntimeRunState) => {
@@ -115,7 +132,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     }
     wasRunActiveRef.current = value.active;
     onRunStateChange?.({
-      loading: value.loading, active: value.active, runCode: value.runId, sessionCode: value.sessionId, supportsSteer: value.supportsSteer,
+      loading: value.loading, active: value.active, runCode: value.runId, sessionCode: value.sessionId, supportsSteer: value.supportsSteer, operationKind: value.operationKind,
     });
   }, [onRunStateChange, refreshComposerMetrics]);
   const createInput = useCallback((value: Ui.ChatSession, content: string, files: Ui.ChatMessageAttachment[]) => {
@@ -128,11 +145,12 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
     };
     return input ? toUiInput(input) : null;
   }, [createSendInput, config.appCode, config.taskCode, config.agentCode]);
-  return <ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
+  return <><ChatRuntimeWindow {...props} adapter={uiAdapter} attachmentDownloader={downloadAttachment} submitterRef={runtimeSubmitterRef}
     footerAddon={<>{footerAddon}<ChatComposerMetrics metrics={composerSnapshot?.sessionCode === activeSessionCode ? composerSnapshot.metrics : null} onOpen={openContext} /></>}
     errorDisplay="external" onError={onError ?? feedback.error} onInfo={onInfo ?? feedback.info}
     config={{ ...config, ...inputSuggestions, defaultSessionId: config.defaultSessionCode,
       resizeHint: t("chat.floating.resizeHint"),
+      locale: config.locale ?? i18n.language,
       showReasoningCards: workPreferences.showReasoningCards,
       runningEnterSubmitMode: workPreferences.runningEnterSubmitMode,
       inputPlaceholder: "",
@@ -144,5 +162,14 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
       userInputLabels: config.userInputLabels ?? userInputLabels,
     }}
     initialSession={session} pendingAttachments={attachments} createSendInput={createInput}
-    onSessionChange={handleSession} onPendingAttachmentsChange={handleAttachments} onRunStateChange={handleRun} />;
+    onSessionChange={handleSession} onPendingAttachmentsChange={handleAttachments} onRunStateChange={handleRun} />
+    <Dialog open={contextOpen} onOpenChange={setContextOpen}>
+      <DialogContent className="flex h-[min(80dvh,900px)] flex-col sm:max-w-3xl">
+        <DialogHeader><DialogTitle>{t("chat.shortTermMemory.shortTermMemoryTab")}</DialogTitle></DialogHeader>
+        <div className="relative min-h-0 flex-1">
+          {contextOpen && activeSession?.ownerDudeCode && <Suspense fallback={null}><ChatContextInspector session={activeSession} /></Suspense>}
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>;
 }

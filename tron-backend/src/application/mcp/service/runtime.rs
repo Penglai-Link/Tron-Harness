@@ -113,14 +113,16 @@ impl McpService {
                         "MCP names collide after host mapping".into(),
                     ));
                 }
+                let domain_code = format!("mcp.{}", server.server_code);
                 tools.push(EffectiveTool {
                     tool_name: tool_name.clone(),
-                    domain_code: Some(format!("mcp.{}", server.server_code)),
+                    domain_code: Some(domain_code.clone()),
                     description: binding.descriptor.description.clone(),
                     input_schema: binding.descriptor.input_schema.clone(),
                     skill_name: None,
                     required_variable_keys: required_variable_keys(&server),
                 });
+                binding.domain_code = Some(domain_code);
                 binding.descriptor.id = format!("tron.{tool_name}");
                 binding.descriptor.call_name = tool_name;
                 if let (Some(resources), Some(owner)) = (

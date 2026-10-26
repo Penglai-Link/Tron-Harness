@@ -453,6 +453,7 @@ describe("createOpenApiChatAdapter", () => {
     expect(headers.get("X-Tron-User-Code")).toBe("USR-0001");
     expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.parse(String(init?.body))).toEqual({
+      annotations: [],
       attachments: [],
       content: "Steer the active response",
       requestedSkills: ["review"],

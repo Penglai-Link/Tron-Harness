@@ -41,14 +41,77 @@ fn id(name: &str) -> String {
     official_id(name).unwrap_or_else(|| format!("tron.{name}"))
 }
 fn visible(context: &crate::domain::agent::AgentRunContext) -> Vec<String> {
+    // Gateway descriptors are framework infrastructure without a local tool id;
+    // local exposure follows only the local business tool projection.
     context
         .tools
         .iter()
+        .filter(|tool| !eliteforge_agent_core::is_gateway_call_name(&tool.tool_name))
         .map(|tool| id(&tool.tool_name))
         .collect()
 }
 fn failed(error: impl ToString) -> fw::ToolError {
     fw::ToolError::Failed(error.to_string())
+}
+
+/// Attach the catalog domain to a binding so the gateway's `domainCode` search
+/// can list it. Blank labels stay unlabeled, exactly like bindings the host
+/// never classified; the binding's executor and exposure are preserved.
+pub(super) fn label_domain(binding: fw::ToolBinding, domain_code: Option<&str>) -> fw::ToolBinding {
+    match domain_code.map(str::trim).filter(|code| !code.is_empty()) {
+        Some(code) => binding.with_domain_code(code.to_string()),
+        None => binding,
+    }
+}
+
+/// Host-owned tool -> capability-group map for one run.
+///
+/// Framework packs mint bindings the host never registers, so the host cannot
+/// label them through `HarnessTools::lease`. Instead it publishes the run's
+/// authorized taxonomy on the run request and the framework copies it onto
+/// every wrapped inventory entry, which makes those tools listable through
+/// `tool_search { "domainCode": .. }`.
+///
+/// Each authorized tool is keyed twice: by [`id`] (the stable descriptor id
+/// this module builds, which is what the framework prefers) and by its
+/// `tool_name`, because official pack bindings own descriptor ids the host
+/// may not be able to derive. The catalog supplies the domain whenever the
+/// run's own `EffectiveTool` carries none, so framework-pack and remote tools
+/// resolve even when they never appear as product catalog records.
+pub(super) fn tool_group_labels(
+    context: &crate::domain::agent::AgentRunContext,
+) -> fw::ToolGroupLabels {
+    let mut labels = fw::ToolGroupLabels::new();
+    let mut catalog_domains: Option<BTreeMap<String, String>> = None;
+    for tool in context.authorized_tools() {
+        let domain_code = match tool
+            .domain_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|code| !code.is_empty())
+        {
+            Some(code) => Some(code.to_string()),
+            None => catalog_domains
+                .get_or_insert_with(|| {
+                    crate::application::agent::BusinessToolCatalog::list_tools(
+                        None,
+                        None,
+                        &context.locale,
+                    )
+                    .into_iter()
+                    .map(|record| (record.tool_name, record.domain_code))
+                    .collect()
+                })
+                .get(&tool.tool_name)
+                .cloned(),
+        };
+        let Some(code) = domain_code else {
+            continue;
+        };
+        labels.set(id(&tool.tool_name), code.clone());
+        labels.set(tool.tool_name.clone(), code);
+    }
+    labels
 }
 
 pub(super) struct LocalScope;
@@ -132,6 +195,23 @@ impl fw::ToolProvider for HarnessTools {
             .framework_registry()
             .take_framework_leases(&state.context.run_code);
         let mut tools = Vec::new();
+        // Catalog domains of the run's authorized tools, keyed by call name.
+        // Framework-built bindings (MCP runtime leases and native product
+        // tools alike) inherit the label here so `tool_search {"domainCode"}`
+        // can list them; the original executor is untouched.
+        let domain_codes = state
+            .context
+            .authorized_tools()
+            .iter()
+            .filter_map(|tool| {
+                let code = tool
+                    .domain_code
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|code| !code.is_empty())?;
+                Some((tool.tool_name.clone(), code.to_string()))
+            })
+            .collect::<BTreeMap<String, String>>();
         for mut lease in leases {
             // Transfer original resource callbacks to the run owner before filtering
             // bindings, so setup failures and close reports remain native.
@@ -144,9 +224,7 @@ impl fw::ToolProvider for HarnessTools {
                 {
                     continue;
                 }
-                binding.exposed &= (state.context.tool_assignment.is_some()
-                    && state.context.tool_exposure.tool_exposure_mode
-                        != Some(crate::domain::agent::ToolExposureMode::DomainDiscovery))
+                binding.exposed &= state.context.tool_assignment.is_some()
                     || state
                         .context
                         .tools
@@ -158,6 +236,10 @@ impl fw::ToolProvider for HarnessTools {
                     binding.descriptor.call_name.clone(),
                     binding.descriptor.id.clone(),
                 );
+                // Copy the label before the binding moves, so the owned map is
+                // never borrowed by the argument list of the relabel.
+                let domain_code = domain_codes.get(&binding.descriptor.call_name).cloned();
+                binding = label_domain(binding, domain_code.as_deref());
                 tools.push(binding);
             }
         }
@@ -190,6 +272,15 @@ impl fw::ToolProvider for HarnessTools {
                     name: tool.tool_name.clone(),
                 },
             );
+            // These operations edit one document or change the current interaction/
+            // execution scope. All other product and remote tools use batch input.
+            if matches!(tool.tool_name.as_str(),
+                "chat_ask_user" | "worktree_create" | "worktree_select" | "git_switch_branch"
+                | "word_create" | "word_replace_text" | "excel_write"
+                | "fs_write_text" | "fs_apply_patch" | "terminal_write"
+            ) {
+                binding.descriptor = binding.descriptor.with_single_input();
+            }
             binding.exposed = state
                 .context
                 .tools
@@ -198,6 +289,9 @@ impl fw::ToolProvider for HarnessTools {
             // Match Tron's configured parallel execution policy. Catalog authority
             // and side effects remain checked again at the native service boundary.
             binding.parallel_safe = tool.tool_name != crate::application::agent::CHAT_ASK_USER_TOOL;
+            // Carry the catalog domain so the gateway can list this product
+            // tool under its capability group, not only by keyword.
+            binding = label_domain(binding, tool.domain_code.as_deref());
             tools.push(binding);
         }
         Ok(fw::ToolLease::new(tools))
@@ -261,9 +355,9 @@ impl fw::Tool for HarnessTool {
         };
         let mut state = host.state.lock().await;
         let HostRunState { context, turn, .. } = &mut *state;
-        host.harness
-            .framework_apply_delta(context, turn, &execution.context_delta)
-            .map_err(failed)?;
+        // Tool results no longer mutate run-time tool exposure: the gateway
+        // owns discovery and the effective catalog owns authority.
+        let _ = (context, turn);
         let output = fw::ToolOutput::text(execution.observation.output);
         Ok(output)
     }
@@ -292,8 +386,11 @@ impl fw::ToolMiddleware for ToolAudit {
                 &invocation.call.id,
                 &invocation.call.arguments,
                 sequence,
+                invocation.run.extensions.get::<fw::ToolBatchItem>().as_deref(),
             )
             .map_err(failed)?;
+        let batch_item = invocation.run.extensions.get::<fw::ToolBatchItem>();
+        let source_call_id = batch_item.as_ref().map_or(invocation.call.id.as_str(), |item| item.parent_call_id.as_str());
         let input_error = state
             .context
             .messages
@@ -307,7 +404,7 @@ impl fw::ToolMiddleware for ToolAudit {
                     ..
                 } = part
                 {
-                    if id == &invocation.call.id {
+                    if id == source_call_id {
                         return input_error.clone();
                     }
                 }
@@ -348,10 +445,13 @@ impl fw::ToolResultProcessor for ToolAudit {
                     &invocation.call.id,
                     &invocation.call.arguments,
                     sequence,
+                    invocation.run.extensions.get::<fw::ToolBatchItem>().as_deref(),
                 )
                 .map_err(|error| fw::AgentError::Run(error.to_string()))?;
             sequence
         };
+        let batch_item = invocation.run.extensions.get::<fw::ToolBatchItem>();
+        let source_call_id = batch_item.as_ref().map_or(invocation.call.id.as_str(), |item| item.parent_call_id.as_str());
         let input_error = state
             .context
             .messages
@@ -365,7 +465,7 @@ impl fw::ToolResultProcessor for ToolAudit {
                     ..
                 } = part
                 {
-                    if id == &invocation.call.id {
+                    if id == source_call_id {
                         return input_error.clone();
                     }
                 }
@@ -427,11 +527,19 @@ impl fw::ToolResultProcessor for ToolAudit {
                     output,
                 },
                 result.is_error,
+                invocation.run.extensions.get::<fw::ToolBatchItem>().as_deref(),
             )
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
         // Product audit is a separate projection. Preserve native Content,
         // including Media/Resource blocks and their token accounting.
-        if matches!(result.effect, fw::ToolEffect::Continue) {
+        // In gateway mode context.tools is the public transport pair, not
+        // the activation state of inner tools. Projecting it back would hide
+        // every inner tool after the first result (including search). Native
+        // exposure effects remain authoritative and pass through unchanged.
+        let gateway = tool_catalog
+            .get(fw::TOOL_EXECUTE_CALL_NAME)
+            .is_some_and(|id| id == fw::TOOL_EXECUTE_ID);
+        if !gateway && matches!(result.effect, fw::ToolEffect::Continue) {
             result.effect = fw::ToolEffect::SetExposedTools(
                 context
                     .tools
@@ -468,13 +576,16 @@ impl local::FileReferenceReader for AttachmentReader {
 }
 
 fn emit_tool_progress(run: &fw::RunContext, invocation_id: &str, name: &str, line: &str) {
+    let parent = run.extensions.get::<fw::ToolBatchItem>();
+    let visible_invocation_id = parent.as_ref().map(|item| item.parent_invocation_id.to_string()).unwrap_or_else(||invocation_id.into());
     run.emit_output(fw::OutputEvent::ActivitySnapshot {
         id: invocation_id.into(),
         activity_type: "tron.tool.progress".into(),
         content: serde_json::Map::from_iter([
-            ("toolCallId".into(), invocation_id.into()),
+            ("toolCallId".into(), visible_invocation_id.into()),
             ("toolName".into(), name.into()),
             ("line".into(), line.into()),
+            ("batch".into(), serde_json::to_value(parent.as_deref()).expect("batch identity serializes")),
         ]),
     });
 }

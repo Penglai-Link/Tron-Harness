@@ -138,6 +138,22 @@ impl fw::ToolProvider for RemoteTools {
                 .iter()
                 .any(|tool| tool.tool_name == binding.descriptor.call_name);
         }
+        // Remote product tools (PersonAI, web, media) are discoverable through
+        // the gateway; label them with their catalog domain so the model can
+        // also list them under that capability group.
+        let tools = tools
+            .into_iter()
+            .map(|binding| {
+                let domain = context.authorized_tools().iter()
+                    .find(|tool| tool.tool_name == binding.descriptor.call_name)
+                    .and_then(|tool| tool.domain_code.clone())
+                    .or_else(|| crate::application::agent::BusinessToolCatalog::tool(
+                        &binding.descriptor.id,
+                        &context.locale,
+                    ).map(|record| record.domain_code));
+                super::super::tools::label_domain(binding, domain.as_deref())
+            })
+            .collect::<Vec<_>>();
         Ok(fw::ToolLease::new(tools))
     }
 }

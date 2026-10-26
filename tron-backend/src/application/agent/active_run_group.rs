@@ -214,6 +214,7 @@ fn snapshot(s: &GroupState) -> ActiveRunSnapshot {
         run_code: s.run_code.clone(),
         runtime_adapter_key: s.adapter.clone(),
         supports_steer: false,
+        operation_kind: None,
         state: if s.finishing {
             ActiveRunState::Finishing
         } else {

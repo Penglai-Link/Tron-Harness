@@ -99,7 +99,7 @@ async fn tool_permissions_round_trip_validate_atomically_and_reject_unknown_enum
 }
 
 #[tokio::test]
-async fn discovered_native_mcp_tools_are_listed_in_domains_catalog_and_permissions() {
+async fn unlabeled_provider_descriptors_use_native_domain_and_keep_permissions() {
     use tron_harness_capability::ToolPermissionSource;
     let app = common::app_with_state_setup(common::prepared_config(Default::default()), |s| {
         s.knowledge_bases.stop_ingestion_workers();
@@ -109,7 +109,9 @@ async fn discovered_native_mcp_tools_are_listed_in_domains_catalog_and_permissio
             "Trusted provider discovery",
             json!({"type":"object"}),
         );
-        // The source is called by the real provider's ToolPolicy admission, not an HTTP projection.
+        // Descriptor IDs are opaque. Without a host-assigned domain label, even
+        // an mcp/ prefix must fall back to native rather than invent taxonomy.
+        // Real MCP label/prompt/search agreement is covered in agent_tool_allowlist_api.
         assert_eq!(
             s.agent_management.setting(&descriptor).unwrap().tool_code,
             "mcp/fixture/query"
@@ -133,14 +135,14 @@ async fn discovered_native_mcp_tools_are_listed_in_domains_catalog_and_permissio
         .as_array()
         .unwrap()
         .iter()
-        .find(|d| d["domainCode"] == "mcp")
+        .find(|d| d["domainCode"] == "native")
         .unwrap();
     let domain_count = domain["toolCount"].as_u64().unwrap();
     let body = response_json(
         request_with_headers(
             &app,
             Method::GET,
-            "/api/v1/tools?domainCode=mcp",
+            "/api/v1/tools?domainCode=native",
             None,
             None,
             Some(&auth),

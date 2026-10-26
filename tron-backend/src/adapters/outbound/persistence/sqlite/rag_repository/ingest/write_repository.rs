@@ -5,7 +5,7 @@ use rusqlite::params;
 
 use crate::{
     application::rag::{
-        RagConfigRepository, RagIngestRepository, RagIngestWarning, RagPersistIngestCommand,
+        RagIngestRepository, RagIngestWarning, RagPersistIngestCommand,
         RagTextUnitWrite, RagTreeNodeWrite,
     },
     domain::rag::RagError,

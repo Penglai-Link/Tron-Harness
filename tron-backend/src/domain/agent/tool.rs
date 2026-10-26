@@ -8,7 +8,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{AgentRunContext, EffectiveTool};
+use super::AgentRunContext;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,29 +26,15 @@ pub struct ToolObservation {
     pub output: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolContextDelta {
-    #[serde(default)]
-    pub add_tools: Vec<EffectiveTool>,
-    #[serde(default)]
-    pub expanded_domain_codes: Vec<String>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolExecutionResult {
     pub observation: ToolObservation,
-    #[serde(default)]
-    pub context_delta: ToolContextDelta,
 }
 
 impl ToolExecutionResult {
     pub fn observation(observation: ToolObservation) -> Self {
-        Self {
-            observation,
-            context_delta: ToolContextDelta::default(),
-        }
+        Self { observation }
     }
 }
 

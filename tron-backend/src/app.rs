@@ -454,7 +454,7 @@ impl AppState {
                 Some(Arc::new(
                     crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
                 )),
-            ).with_model_router(crate::application::model_router::AgentModelRouter::new(models.clone(), model_providers.clone()).with_agent_management(agent_management.clone())),
+            ).with_framework_host(Some(agent_framework.clone())).with_model_router(crate::application::model_router::AgentModelRouter::new(models.clone(), model_providers.clone()).with_agent_management(agent_management.clone())),
         );
         agent_framework
             .bind_collaboration(&agent_collaboration_builder)

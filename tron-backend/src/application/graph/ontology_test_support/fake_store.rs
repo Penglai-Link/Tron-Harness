@@ -200,6 +200,66 @@ impl FakeStore {
 }
 
 impl OntologyStore for FakeStore {
+    fn resources_present(
+        &self,
+        scope: &ResolvedGraphScope,
+        references: &[(OntologyResourceType, String)],
+    ) -> Result<Vec<bool>, OntologyError> {
+        // Record logical checks for existing assertions, while reading the in-memory
+        // fixture in one operation under one lock.
+        let mut state = self.state.lock().expect("store state mutex poisoned");
+        Ok(references
+            .iter()
+            .map(|(kind, code)| {
+                let (present, call) = match kind {
+                    OntologyResourceType::Class => (
+                        state.classes.contains(code),
+                        StoreCall::GetClass {
+                            scope: scope.clone(),
+                            class_code: code.clone(),
+                        },
+                    ),
+                    OntologyResourceType::Property => (
+                        state.properties.contains(code),
+                        StoreCall::GetProperty {
+                            scope: scope.clone(),
+                            property_code: code.clone(),
+                        },
+                    ),
+                    OntologyResourceType::Domain => (
+                        state.domains.contains(code),
+                        StoreCall::GetDomain {
+                            scope: scope.clone(),
+                            domain_code: code.clone(),
+                        },
+                    ),
+                    OntologyResourceType::Range => (
+                        state.ranges.contains(code),
+                        StoreCall::GetRange {
+                            scope: scope.clone(),
+                            range_code: code.clone(),
+                        },
+                    ),
+                    OntologyResourceType::Constraint => (
+                        state.constraints.contains(code),
+                        StoreCall::GetConstraint {
+                            scope: scope.clone(),
+                            constraint_code: code.clone(),
+                        },
+                    ),
+                    OntologyResourceType::Shape => (
+                        state.shapes.contains(code),
+                        StoreCall::GetShape {
+                            scope: scope.clone(),
+                            shape_code: code.clone(),
+                        },
+                    ),
+                };
+                state.calls.push(call);
+                present
+            })
+            .collect())
+    }
     fn create_class(
         &self,
         scope: &ResolvedGraphScope,

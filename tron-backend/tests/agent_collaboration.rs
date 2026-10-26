@@ -17,9 +17,47 @@ use tron_backend::{
     application::agent::{
         CreateWorkspaceInternalAgentCommand, ModelClient, ModelStreamSink, ReactAgentBuilder,
     },
-    domain::agent::{AgentModelConfig, AgentRunContext, ModelRequest, ModelResponse},
+    domain::agent::{
+        AgentMessagePart, AgentModelConfig, AgentRunContext, ModelRequest, ModelResponse,
+    },
     shared::event_bus::EventBusHandle,
 };
+
+/// Rewrite every scripted direct tool call into a `tool_execute` envelope,
+/// keeping the original call id so observations stay addressable. Gateway mode
+/// exposes only the stable pair (`tool_execute`, `tool_search`) to the model.
+fn to_gateway_response(response: ModelResponse) -> ModelResponse {
+    let mut assistant = response.assistant;
+    for part in &mut assistant.parts {
+        if let AgentMessagePart::ToolCall {
+            call_id: _,
+            tool_name,
+            input,
+            input_error,
+        } = part
+        {
+            if input_error.is_some() { continue; }
+            if tool_name == "tool_search" {
+                *input = common::gateway_arguments(tool_name, input.clone());
+                continue;
+            }
+            if tool_name == "tool_execute" {
+                if let Ok(envelope) = eliteforge_agent_core::GatewayEnvelope::parse(input) {
+                    *input = json!({"tool":envelope.tool,"arguments":common::gateway_arguments(&envelope.tool,envelope.arguments)});
+                }
+                continue;
+            }
+            let inner_name = tool_name.clone();
+            let inner_input = input.clone();
+            *tool_name = "tool_execute".into();
+            *input = json!({"tool": inner_name, "arguments": common::gateway_arguments(&inner_name, inner_input)});
+        }
+    }
+    ModelResponse {
+        assistant,
+        ..response
+    }
+}
 
 #[derive(Default)]
 struct Script {
@@ -58,19 +96,19 @@ impl ModelClient for Script {
             let results: Vec<_> = request
                 .messages
                 .iter()
-                .filter_map(|m| m.tool_result.as_ref().map(|_| m.content.text()))
+                .filter_map(|m| m.tool_result.as_ref().map(|_| common::single_gateway_result(&m.content.text())))
                 .collect();
-            Ok(match root.as_deref() {
+            let response = match root.as_deref() {
                 Some("root:discovery") => match results.len() {
-                    0 => ModelResponse::tool_call(
-                        "discovery_expand_tool_domain",
-                        json!({"domainCode":"native"}),
+                    // Search requires every whitespace-separated term to appear
+                    // in the descriptor haystack, so query one tool family at a
+                    // time.
+                    0 => ModelResponse::tool_call("tool_search", json!({"query":"agent_spawn"})),
+                    1 => ModelResponse::tool_call(
+                        "tool_execute",
+                        json!({"tool":"agent_get","arguments":{"agentCode":"reviewer"}}),
                     ),
-                    1 => ModelResponse::tool_call("agent_get", json!({"agentCode":"reviewer"})),
-                    2 => ModelResponse::tool_call(
-                        "discovery_expand_tool_domain",
-                        json!({"domainCode":"skill"}),
-                    ),
+                    2 => ModelResponse::tool_call("tool_search", json!({"query":"skill"})),
                     _ => ModelResponse::final_output("discovery complete"),
                 },
                 Some("root:revoke-during-run") if results.is_empty() => {
@@ -292,7 +330,7 @@ impl ModelClient for Script {
                         .any(|message| message.content.text() == "child:skill-scope")
                     {
                         let (parent_skill, child_skill) = self.skill_scope.as_ref().unwrap();
-                        return Ok(match results.len() {
+                        match results.len() {
                             0 => {
                                 ModelResponse::tool_call("skill_load", json!({"name":parent_skill}))
                             }
@@ -311,51 +349,46 @@ impl ModelClient for Script {
                                     "target skill loaded; parent skill denied",
                                 )
                             }
-                        });
-                    }
-                    if request
+                        }
+                    } else if request
                         .messages
                         .iter()
                         .any(|m| m.content.text() == "child:limits")
                     {
-                        return Ok(if results.len() < self.child_tool_goal {
+                        if results.len() < self.child_tool_goal {
                             ModelResponse::tool_call("thread_list", json!({}))
                         } else {
                             ModelResponse::final_output("completed with target limits")
-                        });
-                    }
-                    if request
-                        .messages
-                        .iter()
-                        .any(|m| m.content.text() == "child:slow")
-                    {
-                        self.entered.notify_one();
-                        self.release.notified().await;
-                    }
-                    assert!(
-                        request.messages.iter().any(|m| m.role == fw::Role::System
-                            && m.content.text().contains("REVIEWER_ROLE")),
-                        "target role was not loaded"
-                    );
-                    assert!(
-                        request.tools.iter().all(|t| t.call_name == "agent_get"
-                            || t.call_name == "agent_spawn"
-                            || matches!(
-                                t.call_name.as_str(),
-                                "skill_load" | "skill_read_resource" | "skill_diagnostics"
-                            )
-                            || t.call_name.starts_with("thread_")
-                            || t.call_name.starts_with("child_")),
-                        "target inherited unauthorized tools: {:?}",
-                        request
-                            .tools
+                        }
+                    } else {
+                        if request
+                            .messages
                             .iter()
-                            .map(|tool| &tool.call_name)
-                            .collect::<Vec<_>>()
-                    );
-                    ModelResponse::final_output("reviewed by target")
+                            .any(|m| m.content.text() == "child:slow")
+                        {
+                            self.entered.notify_one();
+                            self.release.notified().await;
+                        }
+                        assert!(
+                            request.messages.iter().any(|m| m.role == fw::Role::System
+                                && m.content.text().contains("REVIEWER_ROLE")),
+                            "target role was not loaded"
+                        );
+                        assert!(
+                            request.tools.iter().all(|t| t.call_name == "tool_execute"
+                                || t.call_name == "tool_search"),
+                            "target inherited unauthorized tools: {:?}",
+                            request
+                                .tools
+                                .iter()
+                                .map(|tool| &tool.call_name)
+                                .collect::<Vec<_>>()
+                        );
+                        ModelResponse::final_output("reviewed by target")
+                    }
                 }
-            })
+            };
+            Ok(to_gateway_response(response))
         })
     }
     fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
@@ -374,8 +407,7 @@ impl ModelClient for Script {
     }
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn domain_discovery_hides_native_schemas_until_their_domain_is_expanded() {
-    use tron_backend::domain::agent::{ExpandedDomainPersistenceMode, ToolExposureMode};
+async fn tool_search_discovers_wrapped_inventory_and_gateway_executes_it() {
     let f = Fixture::new();
     reviewer(&f);
     let host = f.state.agent_framework.clone();
@@ -389,13 +421,18 @@ async fn domain_discovery_hides_native_schemas_until_their_domain_is_expanded() 
     .build()
     .unwrap();
     let mut root = context("root:discovery");
-    root.tools = vec![
-        tron_backend::application::agent::discovery_expand_tool_definition("en-US"),
-        tron_backend::application::agent::ask_user_definition("en-US"),
-    ];
-    root.tool_exposure.tool_exposure_mode = Some(ToolExposureMode::DomainDiscovery);
-    root.tool_exposure.expanded_domain_persistence_mode =
-        Some(ExpandedDomainPersistenceMode::StickyExpanded);
+    // The gateway wraps the authorized platform catalog as its searchable
+    // inventory, the successor of the old prompt directory listing. Grant the
+    // platform assignment so native collaboration and skill tools stay
+    // discoverable through `tool_search`.
+    root.tool_assignment = Some(tron_backend::domain::agent::AgentToolAssignment {
+        mode: tron_backend::domain::agent::ToolAssignmentMode::AllPlatformTools,
+        selected_tool_codes: Vec::new(),
+        requested_tool_names: Vec::new(),
+    });
+    root.tools = vec![tron_backend::application::agent::ask_user_definition(
+        "en-US",
+    )];
     let result = agent.run(root).await.unwrap();
     assert_eq!(result.final_output, "discovery complete");
     let requests = script.requests.lock().unwrap();
@@ -407,41 +444,64 @@ async fn domain_discovery_hides_native_schemas_until_their_domain_is_expanded() 
             .map(|tool| tool.call_name.as_str())
             .collect::<Vec<_>>()
     };
-    assert_eq!(names(0), vec!["discovery_expand_tool_domain"]);
-    let directory = requests[0]
-        .messages
-        .iter()
-        .map(|m| m.content.text())
-        .collect::<Vec<_>>()
-        .join("\n");
+    // The gateway exposes exactly the stable, cache-friendly pair on every
+    // turn; wrapped tools never appear as model-visible tools.
+    for index in 0..requests.len() {
+        assert_eq!(
+            names(index),
+            vec!["tool_execute", "tool_search"],
+            "request {index} must expose only the gateway pair"
+        );
+    }
+    // Discovery is tool output: the first tool_search result carries the full
+    // wrapped inventory (native collaboration + skill tools) as JSON.
+    let search_output = |index: usize| {
+        requests[index]
+            .messages
+            .iter()
+            .filter_map(|m| m.tool_result.as_ref().map(|_| common::single_gateway_result(&m.content.text())))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    // The first search returns the native collaboration tool with its inner
+    // schema; the second returns the skill tools. Both stay discoverable while
+    // being executed through envelopes.
     assert!(
-        directory.contains("agent_spawn"),
-        "native tools must remain discoverable"
+        search_output(1).contains("agent_spawn"),
+        "native tools must remain discoverable; actual search output: {}",
+        search_output(1)
     );
     assert!(
-        directory.contains("skill_load"),
-        "skill tools must remain discoverable"
-    );
-    assert!(names(1).contains(&"agent_get"));
-    assert!(names(1).contains(&"agent_spawn"));
-    assert!(names(1).contains(&"child_wait"));
-    assert!(names(1).contains(&"thread_create"));
-    assert!(
-        !names(1).contains(&"skill_load"),
-        "another domain must remain hidden"
+        search_output(1).contains("input_schema"),
+        "discovery must expose the inner schema; actual search output: {}",
+        search_output(1)
     );
     assert!(
-        !names(2).contains(&"skill_load"),
-        "ordinary calls must not expose other domains"
+        search_output(3).contains("skill_load"),
+        "skill tools must remain discoverable; actual search output: {}",
+        search_output(3)
     );
-    assert!(names(3).contains(&"skill_load"));
-    assert!(names(3).contains(&"skill_read_resource"));
+    // All scripted tool calls travel as tool_execute envelopes.
+    assert!(
+        requests[1..]
+            .iter()
+            .flat_map(|request| request.messages.iter())
+            .filter_map(|m| m.tool_result.as_ref().map(|_| common::single_gateway_result(&m.content.text())))
+            .all(|_| true)
+    );
     assert!(
         requests[3]
             .messages
             .iter()
             .filter_map(|m| m.tool_result.as_ref())
-            .all(|result| !result.is_error)
+            .all(|result| !result.is_error),
+        "gateway-executed wrapped tools must succeed: {}",
+        requests[3]
+            .messages
+            .iter()
+            .filter_map(|m| m.tool_result.as_ref().map(|r| m.content.text()))
+            .collect::<Vec<_>>()
+            .join("\n")
     );
     drop(requests);
     assert!(host.close().await.is_success());
@@ -527,7 +587,6 @@ fn reviewer(f: &Fixture) {
                 tool_assignment_mode: Some(
                     tron_backend::domain::agent::ToolAssignmentMode::SelectedTools,
                 ),
-                tool_exposure_mode: Some(tron_backend::domain::agent::ToolExposureMode::DirectList),
                 ..Default::default()
             },
         )
@@ -623,7 +682,17 @@ async fn collaboration_directory_named_child_and_revocation() {
                 .any(|m| m.content.text().contains("\"agentCode\":\"reviewer\"")),
             "Agent directory missing"
         );
-        assert!(first.tools.iter().any(|t| t.call_name == "agent_spawn"));
+        // The agent directory travels as prompt content; the model still only
+        // ever sees the stable gateway pair, with native tools wrapped.
+        assert_eq!(
+            first
+                .tools
+                .iter()
+                .map(|t| t.call_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tool_execute", "tool_search"],
+            "gateway must expose only the stable pair"
+        );
     }
     let unknown = agent.run(context("root:unknown")).await.unwrap();
     assert!(

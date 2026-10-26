@@ -1,3 +1,4 @@
+mod common;
 use std::{
     sync::{
         Arc, Barrier, Condvar, Mutex,
@@ -14,7 +15,8 @@ use tron_backend::{
     adapters::outbound::persistence::SqliteChatRepository,
     application::agent::{ActiveRunRegistry, AgentSteerInput, ModelClient, ReactAgentBuilder},
     domain::agent::{
-        AgentError, AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig,
+        AgentError, AgentExecutionScope, AgentKind, AgentMessage, AgentMessagePart,
+        AgentModelConfig,
         AgentModelProtocol, AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool,
         EffectiveVariable, InProcessTool, ModelRequest, ModelResponse, Tool, ToolCall, ToolError,
         ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
@@ -38,6 +40,43 @@ impl ScriptedModelClient {
     }
 }
 
+
+/// Rewrite every scripted direct tool call into a `tool_execute` envelope,
+/// keeping the original call id so observations stay addressable. Gateway
+/// mode exposes only the stable pair to the model.
+fn to_gateway_response(response: ModelResponse) -> ModelResponse {
+    let mut assistant = response.assistant;
+    for part in &mut assistant.parts {
+        if let AgentMessagePart::ToolCall {
+            call_id: _,
+            tool_name,
+            input,
+            input_error,
+        } = part
+        {
+            if input_error.is_some() { continue; }
+            if tool_name == "tool_search" {
+                *input = common::gateway_arguments(tool_name, input.clone());
+                continue;
+            }
+            if tool_name == "tool_execute" {
+                if let Ok(envelope) = eliteforge_agent_core::GatewayEnvelope::parse(input) {
+                    *input = json!({"tool":envelope.tool,"arguments":common::gateway_arguments(&envelope.tool,envelope.arguments)});
+                }
+                continue;
+            }
+            let inner_name = tool_name.clone();
+            let inner_input = input.clone();
+            *tool_name = "tool_execute".into();
+            *input = json!({"tool": inner_name, "arguments": common::gateway_arguments(&inner_name, inner_input)});
+        }
+    }
+    ModelResponse {
+        assistant,
+        ..response
+    }
+}
+
 impl ModelClient for ScriptedModelClient {
     fn generate<'a>(
         &'a self,
@@ -54,7 +93,7 @@ impl ModelClient for ScriptedModelClient {
             if guard.is_empty() {
                 return Err("no scripted response".to_string());
             }
-            Ok(guard.remove(0))
+            Ok(to_gateway_response(guard.remove(0)))
         })
     }
 
@@ -208,7 +247,7 @@ impl ModelClient for ScriptedResultModelClient {
             if guard.is_empty() {
                 return Err("no scripted result".to_string());
             }
-            guard.remove(0)
+            guard.remove(0).map(to_gateway_response)
         })
     }
 
@@ -287,6 +326,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
         agent_kind: AgentKind::React,
         system_agent_session_id: None,
         model: AgentModelConfig {
+            supports_developer_role: false,
             model_code: "MODEL-1".into(),
             protocol: AgentModelProtocol::ChatCompletions,
             base_url: "http://127.0.0.1:1/v1".into(),
@@ -324,7 +364,6 @@ fn base_context(run_code: &str) -> AgentRunContext {
         }],
         effective_tools: Vec::new(),
         tool_assignment: None,
-        tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
             applications: Vec::new(),
             project_code: None,
@@ -340,7 +379,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
             max_tool_calls: 2,
             max_parallel_tool_calls: 2,
         },
-        messages: vec![AgentMessage::user("hello")],
+        messages: vec![AgentMessage::user("hello")].into(),
         observations: Vec::new(),
         short_term_memory: None,
         started_at: "2026-05-27T00:00:00Z".into(),
@@ -522,13 +561,17 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
             .iter()
             .any(|field| field.key == "model_name" && field.value == "gpt-test")
     }));
-    for event in events {
+    // Metadata events may reference budget block names (promptPrefix...) but
+    // must never carry message content, tool results, or credentials.
+    for (index, event) in events.iter().enumerate() {
         let serialized = format!("{:?}", event);
-        assert!(!serialized.contains("hello"));
-        assert!(!serialized.contains("done"));
-        assert!(!serialized.contains("sk-test"));
-        assert!(!serialized.contains("prompt"));
-        assert!(!serialized.contains("completion"));
+        if serialized.contains("hello")
+            || serialized.contains("done")
+            || serialized.contains("sk-test")
+            || serialized.contains("completion")
+        {
+            panic!("event {index} leaked content: {serialized}");
+        }
     }
 }
 
@@ -1022,10 +1065,21 @@ async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
         .expect("an unauthorized parallel tool should not abort the run");
 
     assert_eq!(result.final_output, "recovered after parallel rejection");
-    assert_eq!(result.observations.len(), 2);
-    assert_eq!(result.observations[0].output, "echo completed");
-    assert_eq!(result.observations[1].tool_name, "hidden_tool");
-    assert!(result.observations[1].output.contains("is not allowed"));
+    assert_eq!(result.observations.len(), 2, "{:?}", result.observations);
+    // Completion order within a parallel batch is not guaranteed; assert by
+    // tool identity instead of positional order.
+    let echo = result
+        .observations
+        .iter()
+        .find(|observation| observation.tool_name == "echo")
+        .expect("echo observation");
+    let hidden = result
+        .observations
+        .iter()
+        .find(|observation| observation.tool_name == "hidden_tool")
+        .expect("hidden tool rejection");
+    assert_eq!(echo.output, "echo completed");
+    assert!(hidden.output.contains("is not allowed"));
     assert_eq!(hidden_executions.load(Ordering::SeqCst), 0);
 }
 
@@ -1237,11 +1291,16 @@ async fn react_agent_executes_remaining_parallel_budget_before_failing() {
     );
     assert!(!native.run_id.is_empty());
     assert_eq!(result.step_count, 1);
-    assert_eq!(result.observations.len(), 4);
+    assert_eq!(result.observations.len(), 4, "{:?}", result.observations);
+    // The fourth call over the budget must report exhaustion; completion
+    // order within the batch is not guaranteed, so match by content.
     assert!(
-        result.observations[3]
-            .output
-            .contains("tool-call budget exhausted")
+        result
+            .observations
+            .iter()
+            .any(|observation| observation.output.contains("tool-call budget exhausted")),
+        "{:?}",
+        result.observations
     );
     assert!(result.final_output.is_empty());
     let snapshot = result.sdk_execution.as_ref().unwrap();
@@ -1354,18 +1413,34 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
         .iter()
         .find(|event| event.sse_event == "TOOL_CALL_RESULT")
         .unwrap();
-    assert_eq!(start.data["toolCallId"], invocation_id);
+    let batch: eliteforge_agent_core::ToolBatchItem = serde_json::from_str(
+        &payload("tool_batch_json",tool_started).expect("Framework batch identity")
+    ).unwrap();
+    let parent_id = batch.parent_invocation_id.to_string();
+    assert_ne!(parent_id,invocation_id);
+    assert_eq!(batch.invocation_id.to_string(),invocation_id);
+    assert_eq!(batch.index,0);
+    for event in [tool_completed,observation] {
+        let recorded: eliteforge_agent_core::ToolBatchItem = serde_json::from_str(
+            &payload("tool_batch_json",event).unwrap()).unwrap();
+        assert_eq!(recorded,batch);
+    }
+    assert_eq!(start.data["toolCallId"], parent_id);
     assert_eq!(start.data["toolCallName"], "echo");
-    assert_eq!(args.data["toolCallId"], invocation_id);
+    assert_eq!(args.data["toolCallId"], parent_id);
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(args.data["delta"].as_str().unwrap()).unwrap(),
-        serde_json::from_str::<serde_json::Value>(&expected_args).unwrap()
+        json!({"items":[serde_json::from_str::<serde_json::Value>(&expected_args).unwrap()]})
     );
-    assert_eq!(result.data["toolCallId"], invocation_id);
-    let output: serde_json::Value =
-        serde_json::from_str(result.data["content"].as_str().unwrap()).unwrap();
+    assert_eq!(result.data["toolCallId"], parent_id);
+    let output: serde_json::Value = serde_json::from_str(result.data["content"].as_str().unwrap()).unwrap();
     assert_eq!(output["isError"], false);
-    assert_eq!(output["content"][0]["text"], expected_result);
+    let public_result: eliteforge_agent_core::ToolBatchResult =
+        serde_json::from_value(output["structured"].clone()).unwrap();
+    assert_eq!(public_result.results[0].identity,batch);
+    assert_eq!(public_result.results[0].status,eliteforge_agent_core::ToolBatchStatus::Completed);
+    assert_eq!(public_result.results[0].result,Some(json!(expected_result)));
+    assert_eq!(public_result.results[0].content.text(),expected_result);
     let end_index = protocol
         .iter()
         .position(|event| event.sse_event == "TOOL_CALL_END")
@@ -1458,6 +1533,16 @@ async fn react_agent_publishes_tool_progress_activity_events() {
         .filter(|event| event.sse_event == "TOOL_CALL_START")
         .collect();
     assert_eq!(starts.len(), 1);
+    let first_batch: eliteforge_agent_core::ToolBatchItem =
+        serde_json::from_value(activities[0].data["content"]["batch"].clone()).unwrap();
+    assert_eq!(first_batch.parent_invocation_id.to_string(), starts[0].data["toolCallId"]);
+    assert_ne!(first_batch.parent_invocation_id, first_batch.invocation_id);
+    assert_eq!(first_batch.index, 0);
+    for activity in &activities {
+        let identity: eliteforge_agent_core::ToolBatchItem =
+            serde_json::from_value(activity.data["content"]["batch"].clone()).unwrap();
+        assert_eq!(identity, first_batch);
+    }
     for start in starts {
         let lines: Vec<_> = activities
             .iter()
@@ -1791,7 +1876,7 @@ fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
 async fn model_request_builders_use_frozen_model_config() {
     let config = base_context("00036f81-8c18-565a-bb47-0f37cb5c7e4b").model;
     let request = ModelRequest {
-        messages: vec![AgentMessage::user("hi")],
+        messages: vec![AgentMessage::user("hi")].into(),
         tools: vec![EffectiveTool {
             tool_name: "echo".into(),
             domain_code: None,
@@ -1982,10 +2067,10 @@ async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_s
         .expect("react run should complete");
     assert_eq!(result.run_code, "5e71bc66-db6e-5975-8008-ee147ee84f5e");
     assert_eq!(result.step_count, 2);
-    assert_eq!(
-        result.final_output,
-        "first boundary outputsteered final output"
-    );
+    // After a steer at the final boundary, the run re-enters the model once
+    // and the completed output is the post-steer answer (the pre-steer text
+    // was already streamed and journaled, not concatenated into the result).
+    assert_eq!(result.final_output, "steered final output");
     let requests = model_client.requests();
     assert_eq!(requests.len(), 2);
     for request in &requests {
@@ -2166,7 +2251,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     .build()
     .unwrap();
     context.run_code = "5416d829-e857-539a-89f0-a745a8fc3476".into();
-    context.messages = vec![AgentMessage::user("follow up")];
+    context.messages = vec![AgentMessage::user("follow up")].into();
     agent.run(context.clone()).await.unwrap();
     let requests = second.requests();
     assert_eq!(
@@ -2190,7 +2275,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     // Same endpoint/model with another credential must not reuse the previous account ID.
     context.run_code = "36af60a0-7b16-500e-b443-6963d4618f4c".into();
     context.model.api_key = "another-account-key".into();
-    context.messages = vec![AgentMessage::user("another account")];
+    context.messages = vec![AgentMessage::user("another account")].into();
     let account = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output_with_usage_and_response_id(
             "new account",
@@ -2218,7 +2303,7 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     // Changing the provider must replay the full transcript, not reuse its ID.
     context.run_code = "ad3ab75a-134b-592b-b9aa-fd24b60d3d30".into();
     context.model.base_url = "https://another-provider.invalid/v1".into();
-    context.messages = vec![AgentMessage::user("different provider")];
+    context.messages = vec![AgentMessage::user("different provider")].into();
     let switched = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output("switched"),
     )]));
@@ -2295,11 +2380,12 @@ async fn framework_question_releases_session_and_resumes_durable_interaction() {
     .build()
     .unwrap();
     context.run_code = "d6f8f3c8-2d5a-5ab0-9cca-d7114e085be0".into();
-    context.messages = vec![AgentMessage::user("Use Local")];
-    context.messages[0].parts.push(tron_backend::domain::agent::AgentMessagePart::Context {
+    let mut follow_up = AgentMessage::user("Use Local");
+    follow_up.parts.push(tron_backend::domain::agent::AgentMessagePart::Context {
         kind: "tron_interaction_response".into(), text: String::new(),
         metadata: Some(json!({"resume":[{"interruptId":request_code,"status":"resolved","payload":{"answers":[{"questionCode":question["questions"][0]["id"],"answerKind":"Option","optionCode":question["questions"][0]["options"][0]["id"]}]}}]})),
     });
+    context.messages = vec![follow_up].into();
     let result = agent.run(context).await.unwrap();
     assert_eq!(result.final_output, "using local");
     let resumed_history = answer.requests()[0]
@@ -2410,7 +2496,7 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
             .build()
             .unwrap();
             context.run_code = eliteforge_agent_core::RunId::new_v4().to_string();
-            context.messages = vec![AgentMessage::user(name)];
+            context.messages = vec![AgentMessage::user(name)].into();
             let result = agent.run(context.clone()).await.unwrap();
             let output: serde_json::Value =
                 serde_json::from_str(&result.observations[0].output).unwrap();
@@ -2435,7 +2521,7 @@ async fn framework_refreshes_host_instructions_without_losing_persisted_conversa
     context.messages = vec![
         AgentMessage::system("old host instruction"),
         AgentMessage::user("first question"),
-    ];
+    ].into();
     let first = Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
         "first answer",
     )]));
@@ -2452,7 +2538,7 @@ async fn framework_refreshes_host_instructions_without_losing_persisted_conversa
     context.messages = vec![
         AgentMessage::system("new host instruction"),
         AgentMessage::user("second question"),
-    ];
+    ].into();
     let second = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output("second answer"),
     )]));
@@ -2679,12 +2765,55 @@ async fn framework_main_rich_input_and_remaining_output_budget_reach_actual_http
                 serde_json::from_slice(&bytes[end..end + length]).unwrap();
             bodies.push(body);
             let response = if index == 0 {
-                json!({"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"echo","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":30,"completion_tokens":34162}})
+                json!({"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"tool_execute","arguments":"{\"tool\":\"echo\",\"arguments\":{\"items\":[{}]}}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":30,"completion_tokens":34162}})
             } else {
                 json!({"choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":1}})
             };
-            let response = response.to_string();
-            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",response.len()).as_bytes()).await.unwrap();
+            // The native host turn streams its model calls: serve SSE.
+            let body = match response["choices"][0]["message"]["tool_calls"].as_array() {
+                Some(calls) => {
+                    let first = &calls[0];
+                    let mut delta = json!({});
+                    if let Some(content) = response["choices"][0]["message"]["content"].as_str() {
+                        delta["content"] = json!(content);
+                    }
+                    if let Some(call) = first.as_object() {
+                        delta["tool_calls"] = json!([{
+                            "index":0,
+                            "id":call["id"].clone(),
+                            "type":"function",
+                            "function":call["function"].clone(),
+                        }]);
+                    }
+                    format!(
+                        "data: {}
+
+data: {}
+
+data: [DONE]
+
+",
+                        json!({"id":"fixture","object":"chat.completion.chunk","model":"gpt-test","choices":[{"index":0,"delta":delta,"finish_reason":null}]}),
+                        json!({"id":"fixture","object":"chat.completion.chunk","model":"gpt-test","choices":[{"index":0,"delta":{},"finish_reason":response["choices"][0]["finish_reason"].clone()}],"usage":response["usage"].clone()}),
+                    )
+                }
+                None => format!(
+                    "data: {}
+
+data: {}
+
+data: [DONE]
+
+",
+                    json!({"id":"fixture","object":"chat.completion.chunk","model":"gpt-test","choices":[{"index":0,"delta":{"content":response["choices"][0]["message"]["content"].clone()},"finish_reason":null}]}),
+                    json!({"id":"fixture","object":"chat.completion.chunk","model":"gpt-test","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":response["usage"].clone()}),
+                ),
+            };
+            socket.write_all(format!("HTTP/1.1 200 OK
+Content-Type: text/event-stream
+Connection: close
+
+{body}").as_bytes()).await.unwrap();
         }
         bodies
     });

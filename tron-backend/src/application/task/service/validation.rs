@@ -2,11 +2,11 @@ use super::*;
 
 impl TaskService {
     pub(super) fn ensure_active_workspace(&self, workspace_code: &str) -> Result<(), TaskError> {
-        let detail = self
+        let active = self
             .workspaces
-            .get_workspace(workspace_code)
+            .workspace_is_active(workspace_code)
             .map_err(map_workspace_error)?;
-        if detail.status != WorkspaceStatus::Active {
+        if !active {
             return Err(TaskError::InvalidWorkspace);
         }
         Ok(())

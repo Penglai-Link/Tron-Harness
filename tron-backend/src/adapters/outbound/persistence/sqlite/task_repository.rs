@@ -1,7 +1,9 @@
+mod paging;
+
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::{
-    application::task::TaskRepository,
+    application::task::{TaskReadRepository, TaskRelations, TaskRepository},
     domain::task::{
         Task, TaskCodeLink, TaskError, TaskFlow, TaskFlowStatus, TaskUserAssignment,
         task_priority_from_storage, task_priority_to_storage, task_source_type_from_storage,
@@ -21,6 +23,43 @@ struct SqliteTaskRepositorySql<'a> {
 }
 pub struct SqliteTaskRepository {
     connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
+}
+
+struct SqliteTaskReader {
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
+}
+impl TaskReadRepository for SqliteTaskReader {
+    fn get_task(&self, code: &str) -> Result<Task, TaskError> {
+        let code = code.to_owned();
+        self.connection.call_read(move|c|c.query_row("SELECT id,task_code,workspace_code,parent_task_code,title,description,execution_result,flow_code,status,previous_status,priority,task_type,source_type,source_url,agent_code,model_code,progress_value,created_at,updated_at,archived_at,owner_dude_code,due_at,planned_start_at,next_followup_at,work_session_code,schedule_version FROM tasks WHERE task_code=?1",[code],row_to_task).optional().map_err(storage_error)?.ok_or(TaskError::NotFound),||TaskError::StorageFailure)
+    }
+    fn page(
+        &self,
+        query: &crate::domain::task::TaskListQuery,
+        window: Option<(usize, usize)>,
+    ) -> Result<crate::application::task::TaskReadPage, TaskError> {
+        let query = query.clone();
+        self.connection.call_read(
+            move |connection| paging::read_page(connection, &query, window),
+            || TaskError::StorageFailure,
+        )
+    }
+    fn list_tasks(&self) -> Result<Vec<Task>, TaskError> {
+        self.connection.call_read(
+            |connection| SqliteTaskRepositorySql { connection }.list_tasks(),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn relations(
+        &self,
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, TaskRelations>, TaskError> {
+        let codes = codes.to_vec();
+        self.connection.call_read(
+            move |connection| SqliteTaskRepositorySql { connection }.relations(&codes),
+            || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
 }
 
 impl<'a> SqliteTaskRepositorySql<'a> {
@@ -147,7 +186,7 @@ impl<'a> SqliteTaskRepositorySql<'a> {
     }
 }
 
-impl TaskRepository for SqliteTaskRepositorySql<'_> {
+impl SqliteTaskRepositorySql<'_> {
     fn claim_dude_task(
         &mut self,
         task_code: &str,
@@ -172,22 +211,36 @@ impl TaskRepository for SqliteTaskRepositorySql<'_> {
     }
 
     fn list_task_flows(&mut self) -> Result<Vec<TaskFlow>, TaskError> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT flow_code FROM task_flows ORDER BY flow_code ASC")
-            .map_err(storage_error)?;
-        let codes = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)?;
-        codes
-            .iter()
-            .map(|flow_code| {
-                self.read_task_flow(flow_code)?
-                    .ok_or(TaskError::StorageFailure)
+        let mut flows = std::collections::BTreeMap::<String, TaskFlow>::new();
+        let mut q = self.connection.prepare("SELECT f.flow_code,f.name,s.status_code,s.name,s.position,s.required FROM task_flows f LEFT JOIN task_flow_statuses s ON s.flow_code=f.flow_code ORDER BY f.flow_code,s.position").map_err(storage_error)?;
+        let rows = q
+            .query_map([], |r| {
+                let status = r
+                    .get::<_, Option<String>>(2)?
+                    .map(|status_code| {
+                        Ok::<_, rusqlite::Error>(TaskFlowStatus {
+                            status_code,
+                            name: r.get(3)?,
+                            position: r.get::<_, usize>(4)?,
+                            required: r.get::<_, bool>(5)?,
+                        })
+                    })
+                    .transpose()?;
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, status))
             })
-            .collect()
+            .map_err(storage_error)?;
+        for row in rows {
+            let (code, name, status) = row.map_err(storage_error)?;
+            let flow = flows.entry(code.clone()).or_insert_with(|| TaskFlow {
+                flow_code: code,
+                name,
+                statuses: Vec::new(),
+            });
+            if let Some(status) = status {
+                flow.statuses.push(status);
+            }
+        }
+        Ok(flows.into_values().collect())
     }
 
     fn get_task_flow(&mut self, flow_code: &str) -> Result<Option<TaskFlow>, TaskError> {
@@ -289,6 +342,13 @@ impl TaskRepository for SqliteTaskRepositorySql<'_> {
             .map_err(storage_error)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(storage_error)
+    }
+
+    fn relations(
+        &mut self,
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, TaskRelations>, TaskError> {
+        read_task_relations(self.connection, codes)
     }
 
     fn next_id(&mut self) -> Result<i64, TaskError> {
@@ -654,6 +714,11 @@ impl SqliteTaskRepository {
     }
 }
 impl TaskRepository for SqliteTaskRepository {
+    fn reader(&self) -> std::sync::Arc<dyn TaskReadRepository> {
+        std::sync::Arc::new(SqliteTaskReader {
+            connection: self.connection.clone(),
+        })
+    }
     fn claim_dude_task(
         &mut self,
         task_code: &str,
@@ -690,7 +755,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn list_task_flows(&mut self) -> Result<Vec<TaskFlow>, TaskError> {
-        self.connection.call(
+        self.connection.call_read(
             move |connection| SqliteTaskRepositorySql { connection }.list_task_flows(),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
@@ -769,6 +834,16 @@ impl TaskRepository for SqliteTaskRepository {
         self.connection.call(
             move |connection| SqliteTaskRepositorySql { connection }.list_tasks(),
             || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn relations(
+        &mut self,
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, TaskRelations>, TaskError> {
+        let codes = codes.to_vec();
+        self.connection.call_read(
+            move |connection| SqliteTaskRepositorySql { connection }.relations(&codes),
+            || TaskError::StorageFailure,
         )
     }
     fn next_id(&mut self) -> Result<i64, TaskError> {
@@ -906,4 +981,42 @@ impl TaskRepository for SqliteTaskRepository {
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }
+}
+
+fn read_task_relations(
+    connection: &Connection,
+    codes: &[String],
+) -> Result<std::collections::BTreeMap<String, TaskRelations>, TaskError> {
+    let mut result = std::collections::BTreeMap::<String, TaskRelations>::new();
+    if codes.is_empty() {
+        return Ok(result);
+    }
+    let selected = serde_json::to_string(codes).map_err(|_| TaskError::StorageFailure)?;
+    for (table, column, agents) in [
+        ("task_agent_links", "agent_code", true),
+        ("task_app_links", "app_code", false),
+    ] {
+        let mut q = connection.prepare(&format!("SELECT task_code,{column},linked_at FROM {table} WHERE task_code IN (SELECT value FROM json_each(?1)) ORDER BY task_code,{column}")).map_err(storage_error)?;
+        let rows = q
+            .query_map([&selected], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    TaskCodeLink {
+                        code: r.get(1)?,
+                        linked_at: timestamp_from_millis(r.get(2)?),
+                    },
+                ))
+            })
+            .map_err(storage_error)?;
+        for row in rows {
+            let (task, link) = row.map_err(storage_error)?;
+            let relations = result.entry(task).or_default();
+            if agents {
+                relations.agents.push(link);
+            } else {
+                relations.apps.push(link);
+            }
+        }
+    }
+    Ok(result)
 }

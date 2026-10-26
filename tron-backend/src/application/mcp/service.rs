@@ -107,37 +107,61 @@ impl McpService {
         enabled: bool,
         directory: &std::path::Path,
     ) -> Result<(), McpError> {
-        if self
-            .repository
-            .lock()
-            .unwrap()
-            .get_platform_server(&declaration.id)?
-            .is_some()
-        {
+        self.register_pack_servers(std::slice::from_ref(declaration), enabled, directory)
+    }
+    pub fn register_pack_servers(
+        &self,
+        declarations: &[eliteforge_agent_capability_runtime::McpDeclaration],
+        enabled: bool,
+        directory: &std::path::Path,
+    ) -> Result<(), McpError> {
+        let contributions = declarations
+            .iter()
+            .cloned()
+            .map(|declaration| (declaration, enabled, directory.to_path_buf()))
+            .collect::<Vec<_>>();
+        self.register_pack_contributions(&contributions)
+    }
+    pub(crate) fn register_pack_contributions(
+        &self,
+        declarations: &[(
+            eliteforge_agent_capability_runtime::McpDeclaration,
+            bool,
+            std::path::PathBuf,
+        )],
+    ) -> Result<(), McpError> {
+        if declarations.is_empty() {
             return Ok(());
         }
-        let (transport_kind, url, command, args) = match &declaration.transport {
-            eliteforge_agent_capability_runtime::McpDeclarationTransport::Http { url } => (
-                McpServerTransportKind::StreamableHttp,
-                url.clone(),
-                String::new(),
-                vec![],
-            ),
-            eliteforge_agent_capability_runtime::McpDeclarationTransport::Stdio {
-                program,
-                args,
-            } => (
-                McpServerTransportKind::Stdio,
-                String::new(),
-                program.clone(),
-                args.clone(),
-            ),
-        };
-        let now = current_timestamp();
-        self.repository
-            .lock()
-            .unwrap()
-            .upsert_platform_server(&PlatformMcpServerRecord {
+        let mut repository = self.repository.lock().unwrap();
+        let mut existing = repository
+            .list_platform_servers()?
+            .into_iter()
+            .map(|server| server.server_code)
+            .collect::<std::collections::BTreeSet<_>>();
+        for (declaration, enabled, directory) in declarations {
+            if !existing.insert(declaration.id.clone()) {
+                continue;
+            }
+            let (transport_kind, url, command, args) = match &declaration.transport {
+                eliteforge_agent_capability_runtime::McpDeclarationTransport::Http { url } => (
+                    McpServerTransportKind::StreamableHttp,
+                    url.clone(),
+                    String::new(),
+                    vec![],
+                ),
+                eliteforge_agent_capability_runtime::McpDeclarationTransport::Stdio {
+                    program,
+                    args,
+                } => (
+                    McpServerTransportKind::Stdio,
+                    String::new(),
+                    program.clone(),
+                    args.clone(),
+                ),
+            };
+            let now = current_timestamp();
+            repository.upsert_platform_server(&PlatformMcpServerRecord {
                 server_code: declaration.id.clone(),
                 name: declaration.id.clone(),
                 description: None,
@@ -152,13 +176,15 @@ impl McpService {
                 env_variable_refs: Default::default(),
                 env_passthrough_refs: vec![],
                 working_directory: Some(directory.display().to_string()),
-                enabled,
+                enabled: *enabled,
                 last_health_status: McpHealthStatus::NeverChecked,
                 last_health_message: None,
                 last_health_checked_at: None,
                 created_at: now.clone(),
                 updated_at: now,
-            })
+            })?;
+        }
+        Ok(())
     }
     pub fn list_platform_servers(
         &self,

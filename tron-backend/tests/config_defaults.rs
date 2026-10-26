@@ -34,7 +34,7 @@ fn application_yaml_uses_home_storage_defaults() {
             .blocks
             .seed_prompt_prefix
             .max_ratio_bps,
-        Some(5000)
+        Some(10000)
     );
     assert_eq!(
         config
@@ -43,7 +43,7 @@ fn application_yaml_uses_home_storage_defaults() {
             .blocks
             .seed_prompt_prefix
             .max_tokens,
-        Some(16000)
+        None
     );
 
     assert_eq!(config.short_term_memory.compaction.trigger_ratio_bps, 8000);
@@ -116,6 +116,8 @@ fn short_term_memory_yaml_overrides_load_policy() {
 shortTermMemory:
   context:
     defaultContextWindowTokens: 16000
+    providers:
+      historyRecentTurns: 3
     blocks:
       seedPromptPrefix:
         maxRatioBps: 2500
@@ -127,6 +129,7 @@ shortTermMemory:
         maxTokens: 300
   compaction:
     triggerRatioBps: 7500
+    maxSummaryBytes: 12345
   goalLoop:
     maxRuns: 7
 "#,
@@ -157,6 +160,7 @@ shortTermMemory:
     );
     assert!(config.short_term_memory.compaction.auto_enabled);
     assert_eq!(config.short_term_memory.compaction.trigger_ratio_bps, 7500);
+    assert_eq!(config.short_term_memory.context.providers.history_recent_turns, 3);
 
     assert_eq!(config.short_term_memory.goal_loop.max_runs, 7);
 }

@@ -13,7 +13,7 @@ use crate::{
             TaskPriority, TaskSourceType, TaskSummary, TaskType, TaskUserAssignment,
             WorkspaceTaskFlow,
         },
-        workspace::{WorkspaceError, WorkspaceStatus},
+        workspace::WorkspaceError,
     },
     shared::{
         event_bus::{BusEventDraft, EventBusHandle},
@@ -75,7 +75,44 @@ pub struct UpdateTaskStatusCommand {
     pub progress: Option<u8>,
 }
 
+#[derive(Default)]
+pub struct TaskRelations {
+    pub assignees: Vec<TaskUserAssignment>,
+    pub agents: Vec<TaskCodeLink>,
+    pub apps: Vec<TaskCodeLink>,
+}
+
+/// A bounded list page and only the descendants needed to compute its progress.
+pub struct TaskReadPage {
+    pub tasks: Vec<Task>,
+    pub page_codes: Vec<String>,
+    pub total: usize,
+    pub relations: std::collections::BTreeMap<String, TaskRelations>,
+}
+
+/// Read handles can share the WAL pool without retaining the service's write mutex.
+pub trait TaskReadRepository: Send + Sync {
+    fn get_task(&self, code: &str) -> Result<Task, TaskError>;
+    /// Filter and page in storage; None explicitly requests the complete filtered set for kanban.
+    fn page(
+        &self,
+        query: &TaskListQuery,
+        window: Option<(usize, usize)>,
+    ) -> Result<TaskReadPage, TaskError>;
+    fn list_tasks(&self) -> Result<Vec<Task>, TaskError>;
+    fn relations(
+        &self,
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, TaskRelations>, TaskError>;
+}
+
 pub trait TaskRepository: Send {
+    fn reader(&self) -> Arc<dyn TaskReadRepository>;
+    /// Batch only the selected tasks, preserving each link set's ordering.
+    fn relations(
+        &mut self,
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, TaskRelations>, TaskError>;
     fn list_tasks(&mut self) -> Result<Vec<Task>, TaskError>;
     fn claim_dude_task(
         &mut self,
@@ -111,21 +148,14 @@ pub trait TaskRepository: Send {
     fn create_task(&mut self, task: &Task) -> Result<(), TaskError>;
     fn update_task(&mut self, task: &Task) -> Result<(), TaskError>;
     /// Create the task row and replace all link sets in one storage
-    /// transaction. Storage without transactional link writes falls back to
-    /// sequential method calls.
+    /// transaction. Every storage adapter must implement this atomic operation.
     fn create_task_with_links(
         &mut self,
         task: &Task,
         user_assignments: &[TaskUserAssignment],
         agent_links: &[TaskCodeLink],
         app_links: &[TaskCodeLink],
-    ) -> Result<(), TaskError> {
-        self.create_task(task)?;
-        self.replace_user_assignments(&task.task_code, user_assignments)?;
-        self.replace_agent_links(&task.task_code, agent_links)?;
-        self.replace_app_links(&task.task_code, app_links)?;
-        Ok(())
-    }
+    ) -> Result<(), TaskError>;
     /// Update the task row and replace only the provided link sets, all in one
     /// storage transaction.
     fn update_task_with_links(
@@ -134,19 +164,7 @@ pub trait TaskRepository: Send {
         user_assignments: Option<&[TaskUserAssignment]>,
         agent_links: Option<&[TaskCodeLink]>,
         app_links: Option<&[TaskCodeLink]>,
-    ) -> Result<(), TaskError> {
-        self.update_task(task)?;
-        if let Some(entries) = user_assignments {
-            self.replace_user_assignments(&task.task_code, entries)?;
-        }
-        if let Some(entries) = agent_links {
-            self.replace_agent_links(&task.task_code, entries)?;
-        }
-        if let Some(entries) = app_links {
-            self.replace_app_links(&task.task_code, entries)?;
-        }
-        Ok(())
-    }
+    ) -> Result<(), TaskError>;
     fn list_user_assignments(
         &mut self,
         task_code: &str,
@@ -173,6 +191,7 @@ pub trait TaskRepository: Send {
 #[derive(Clone)]
 pub struct TaskService {
     repository: Arc<Mutex<Box<dyn TaskRepository>>>,
+    reader: Arc<dyn TaskReadRepository>,
     workspaces: WorkspaceService,
     apps: AppService,
     event_bus: EventBusHandle,
@@ -193,8 +212,10 @@ impl TaskService {
         apps: AppService,
         event_bus: EventBusHandle,
     ) -> Self {
+        let reader = repository.reader();
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
+            reader,
             workspaces,
             apps,
             event_bus,

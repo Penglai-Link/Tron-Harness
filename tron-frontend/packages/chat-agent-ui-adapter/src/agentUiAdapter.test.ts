@@ -14,6 +14,13 @@ const session = {
 } satisfies ChatSession & { projectCode: string; sourceCode: string };
 
 describe("Tron / Agent UI boundary", () => {
+  it("preserves the server compaction operation through the shared UI boundary", async () => {
+    const host = createMockChatAdapter();
+    host.capabilities.supportsActiveRun = true;
+    host.getActiveRun = vi.fn(async () => ({sessionCode:"SESSION", activeRun:{runCode:"COMPACT",runtimeAdapterKey:"REACT",state:"RUNNING",supportsSteer:false,operationKind:"ContextCompaction"}}));
+    const adapter = createAgentUiAdapter(host, {workspaceCode:"WORKSPACE"});
+    expect(await adapter.getActiveRun!("SESSION")).toEqual({sessionId:"SESSION",activeRun:{runId:"COMPACT",runtimeAdapterKey:"REACT",state:"RUNNING",supportsSteer:false,operationKind:"ContextCompaction"}});
+  });
   it("retains host scope and external session identity after public UI normalization", () => {
     const ui = toUiSession(session);
     expect(ui.sessionId).toBe("SESSION");

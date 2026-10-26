@@ -1,9 +1,29 @@
 use super::*;
 
 impl SqliteKnowledgeBaseRepository {
-    pub fn platform_library_summaries(&self, user: &str) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
+    pub fn acl_revisions(
+        &self,
+        ids: &[String],
+    ) -> Result<std::collections::BTreeMap<String, u64>, KnowledgeBaseError> {
+        let ids = serde_json::to_string(ids).map_err(storage)?;
+        self.connection.call_read(move |connection| {
+            let mut q = connection.prepare("SELECT id,acl_revision FROM knowledge_bases WHERE id IN (SELECT value FROM json_each(?1))").map_err(storage)?;
+            q.query_map([ids],|r|Ok((r.get(0)?,r.get(1)?))).map_err(storage)?.collect::<Result<_,_>>().map_err(storage)
+        }, || storage("database worker stopped"))
+    }
+    pub fn library_derived_resources(&self, id: &str) -> Result<Vec<String>, KnowledgeBaseError> {
+        let id = id.to_owned();
+        self.connection.call_read(move |connection| {
+            let mut q = connection.prepare("SELECT r.resource_code FROM knowledge_base_documents d JOIN knowledge_base_derived_resources r ON r.document_id=d.id WHERE d.knowledge_base_id=?1").map_err(storage)?;
+            q.query_map([id],|r|r.get(0)).map_err(storage)?.collect::<Result<_,_>>().map_err(storage)
+        }, || storage("database worker stopped"))
+    }
+    pub fn platform_library_summaries(
+        &self,
+        user: &str,
+    ) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
         let user = user.to_owned();
-        self.connection.call(move |connection| {
+        self.connection.call_read(move |connection| {
             let mut libraries = {
                 let mut statement = connection.prepare("SELECT k.payload_json,count(d.id) FROM knowledge_bases k LEFT JOIN knowledge_base_documents d ON d.knowledge_base_id=k.id WHERE k.owner_user_code=?1 GROUP BY k.id ORDER BY k.id").map_err(storage)?;
                 statement.query_map([&user], |row| Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))).map_err(storage)?
@@ -29,10 +49,14 @@ impl SqliteKnowledgeBaseRepository {
             Ok(libraries)
         }, || storage("database worker stopped"))
     }
-    pub fn authorized_libraries_with_documents(&self, user: &str, agent: &str) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
+    pub fn authorized_libraries_with_documents(
+        &self,
+        user: &str,
+        agent: &str,
+    ) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
         let user = user.to_owned();
         let agent = agent.to_owned();
-        self.connection.call(move |connection| {
+        self.connection.call_read(move |connection| {
             let mut libraries = {
                 let mut statement = connection.prepare("SELECT k.payload_json FROM knowledge_bases k WHERE k.owner_user_code=?1 AND EXISTS(SELECT 1 FROM knowledge_base_grants g WHERE g.knowledge_base_id=k.id AND g.agent_code=?2) ORDER BY k.id").map_err(storage)?;
                 statement.query_map(params![&user,&agent], |row| row.get::<_, String>(0)).map_err(storage)?
@@ -56,9 +80,12 @@ impl SqliteKnowledgeBaseRepository {
             Ok(libraries)
         }, || storage("database worker stopped"))
     }
-    pub fn platform_libraries_with_documents(&self, user: &str) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
+    pub fn platform_libraries_with_documents(
+        &self,
+        user: &str,
+    ) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
         let user = user.to_owned();
-        self.connection.call(move |connection| {
+        self.connection.call_read(move |connection| {
             let mut libraries = {
                 let mut statement = connection.prepare("SELECT payload_json FROM knowledge_bases WHERE owner_user_code=?1 ORDER BY id").map_err(storage)?;
                 statement.query_map([&user], |row| row.get::<_, String>(0)).map_err(storage)?
@@ -81,7 +108,7 @@ impl SqliteKnowledgeBaseRepository {
     }
     pub fn platform_libraries(&self, user: &str) -> Result<Vec<KnowledgeBase>, KnowledgeBaseError> {
         let user = user.to_owned();
-        self.connection.call(move |connection| {
+        self.connection.call_read(move |connection| {
             let mut statement = connection.prepare("SELECT payload_json FROM knowledge_bases WHERE owner_user_code=?1 ORDER BY id").map_err(storage)?;
             let rows = statement.query_map([user], |row| row.get::<_,String>(0)).map_err(storage)?;
             rows.map(|row| decode(&row.map_err(storage)?)).collect()

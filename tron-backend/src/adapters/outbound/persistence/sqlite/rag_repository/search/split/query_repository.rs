@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     application::rag::{
-        RagConfigRepository, RagRouteSearchQuery, RagSearchRepository, RagSearchRow,
+        RagRouteSearchQuery, RagSearchRepository, RagSearchRow,
         RagSearchTraceWrite,
     },
     domain::rag::RagError,

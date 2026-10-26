@@ -2,10 +2,6 @@ import type { ReasoningEffort } from "@/domain/model/model/ModelRegistryModel";
 export type AgentStatus = "Enabled" | "Disabled" | "Unavailable";
 
 export type ToolAssignmentMode = "all_platform_tools" | "selected_tools" | "all_read_only_tools";
-export type ToolExposureMode = "direct_list" | "domain_discovery";
-export type ExpandedDomainPersistenceMode =
-  | "sticky_expanded"
-  | "ephemeral_expanded";
 export type WorkspaceInternalAgentPolicySource =
   | "platform_default"
   | "workspace_override";
@@ -101,8 +97,6 @@ export interface WorkspaceInternalAgentRecord {
   builtIn?: boolean;
   mcpAccessMode: McpAccessMode;
   toolAssignmentMode: ToolAssignmentMode;
-  toolExposureMode: ToolExposureMode;
-  expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls: number;
@@ -135,8 +129,6 @@ export interface UpdateInternalAgentDefinitionPayload {
 
 export interface WorkspaceInternalAgentPolicyPayload {
   toolAssignmentMode?: ToolAssignmentMode;
-  toolExposureMode?: ToolExposureMode;
-  expandedDomainPersistenceMode?: ExpandedDomainPersistenceMode;
   maxSteps?: number;
   maxToolCalls?: number;
   maxParallelToolCalls?: number;

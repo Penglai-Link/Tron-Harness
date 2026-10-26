@@ -1,4 +1,4 @@
-import { toolCommandLinePreview, toolDisplayName, type ToolActionSummary } from "@eliteforge/agent-ui-chat-core";
+import { isRawToolNameOverride, toolCommandLinePreview, toolDisplayName, type ToolActionSummary } from "@eliteforge/agent-ui-chat-core";
 import type { ChatWorkRailLabels } from "@tron/chat-core";
 import { fetchToolDomains, listTools } from "@/domain/agent/api";
 import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";
@@ -47,14 +47,12 @@ export function useChatWorkRailLabels() {
       if (commandLine) {
         return t("chat.management.tool.commandSummary", { command: commandLine });
       }
-      if (runtimeName === "discovery_expand_tool_domain") {
-        const payload = typeof args === "string"
-          ? (() => { try { return JSON.parse(args) as { domainCode?: unknown }; } catch { return {}; } })()
-          : args as { domainCode?: unknown } | null;
-        const domainCode = typeof payload?.domainCode === "string" ? payload.domainCode : "";
-        return catalog.domains.get(domainCode) ?? (domainCode ? toolDisplayName(domainCode) : toolDisplayName(runtimeName));
-      }
-      const name = catalog.tools.get(runtimeName) ?? toolDisplayName(runtimeName, args);
+      // A catalogue name is only useful when it is actually a localized label:
+      // for the tools whose catalogue entry still equals the raw tool id, fall
+      // back to the presenter title in the active language.
+      const catalogName = catalog.tools.get(runtimeName);
+      const directoryName = catalogName && !isRawToolNameOverride(runtimeName, catalogName, args) ? catalogName : undefined;
+      const name = directoryName ?? toolDisplayName(runtimeName, args, undefined, i18n.language);
       if (runtimeName === "rag_search") {
         const payload = typeof args === "string"
           ? (() => { try { return JSON.parse(args) as { query?: unknown }; } catch { return {}; } })()
@@ -63,6 +61,12 @@ export function useChatWorkRailLabels() {
         if (query) return t("chat.management.tool.searchSummary", { name, query });
       }
       return name;
+    };
+    // Domain labels never render the raw domain code when the catalogue has a
+    // distinct localized name for it.
+    const resolveDomainName = (name: string) => {
+      const catalogName = catalog.domains.get(name);
+      return catalogName && !isRawToolNameOverride(name, catalogName) ? catalogName : name;
     };
     return {
       ariaLabel: t("chat.workRail.ariaLabel"),
@@ -82,8 +86,8 @@ export function useChatWorkRailLabels() {
         ariaLabel: t("chat.management.tool.stepsAria"),
         completed: (name) => t("chat.management.tool.completed", { name }),
         running: (name) => t("chat.management.tool.running", { name }),
-        domainExpanded: (name) => t("chat.management.tool.domainExpanded", { name }),
-        domainExpanding: (name) => t("chat.management.tool.domainExpanding", { name }),
+        domainExpanded: (name) => t("chat.management.tool.domainExpanded", { name: resolveDomainName(name) }),
+        domainExpanding: (name) => t("chat.management.tool.domainExpanding", { name: resolveDomainName(name) }),
         group: (count) => t("chat.management.tool.ranCommands", { count }),
         groupSummary,
         statusDone: t("chat.management.tool.badgeDone"),

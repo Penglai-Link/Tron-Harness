@@ -8,6 +8,22 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use common::{app, authenticated_bearer_token, response_json};
+use tron_backend::application::navigation::DEFAULT_NAVIGATION_MENU_TREE_ITEMS;
+
+fn menu<'a>(menus: &'a Value, code: &str) -> &'a Value {
+    fn find<'a>(menus: &'a Value, code: &str) -> Option<&'a Value> {
+        for item in menus.as_array()? {
+            if item["menuCode"] == code {
+                return Some(item);
+            }
+            if let Some(found) = find(&item["children"], code) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    find(menus, code).unwrap_or_else(|| panic!("missing menu {code} in {menus}"))
+}
 
 async fn request_json(
     app: &axum::Router,
@@ -119,13 +135,26 @@ async fn runtime_navigation_requires_profile_and_is_localized_and_separate_from_
     assert_eq!(menu_definitions.status(), StatusCode::OK);
     let definitions = response_json(menu_definitions).await;
     assert!(!definitions["data"].to_string().contains("\"CHATS\""));
-    assert_eq!(tree_payload["data"]["maxDepth"], 3);
-    assert_eq!(tree_payload["data"]["menus"][1]["menuCode"], "CORE");
-    assert_eq!(tree_payload["data"]["menus"][1]["label"], "核心");
+    assert_eq!(tree_payload["data"]["maxDepth"], 16);
+    let menus = &tree_payload["data"]["menus"];
     assert_eq!(
-        tree_payload["data"]["menus"][1]["children"][0]["pageCode"],
-        "apps.index"
+        menus
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["menuCode"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "DUDES",
+            "CHAT_NEW_SESSION",
+            "EXPLORE_MORE",
+            "CHAT_PROJECTS",
+            "CHAT_RECENTS"
+        ]
     );
+    let core = menu(menus, "CORE");
+    assert_eq!(core["label"], "核心");
+    assert_eq!(core["children"][0]["pageCode"], "apps.index");
 }
 
 #[tokio::test]
@@ -138,7 +167,6 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
         Method::POST,
         "/api/v1/admin/navigation/domains",
         Some(json!({
-            "domainCode": "COMPLIANCE",
             "name": { "zh-CN": "合规", "en-US": "Compliance" },
             "description": { "zh-CN": "合规领域", "en-US": "Compliance domain" },
             "enabled": true,
@@ -150,7 +178,9 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
     )
     .await;
     assert_eq!(create_domain.status(), StatusCode::OK);
-    assert_eq!(response_json(create_domain).await["code"], "0");
+    let domain = response_json(create_domain).await;
+    assert_eq!(domain["code"], "0");
+    let domain_code = domain["data"]["domainCode"].as_str().unwrap();
 
     let create_menu = request_json(
         &router,
@@ -270,7 +300,7 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
     let copy = request_json(
         &router,
         Method::POST,
-        "/api/v1/admin/navigation/domains/COMPLIANCE/menu-tree/copy",
+        &format!("/api/v1/admin/navigation/domains/{domain_code}/menu-tree/copy"),
         Some(json!({
             "sourceDomainCode": "ADVANCED",
             "sourceMenuCode": null,
@@ -286,7 +316,7 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
     let duplicate_copy = request_json(
         &router,
         Method::POST,
-        "/api/v1/admin/navigation/domains/COMPLIANCE/menu-tree/copy",
+        &format!("/api/v1/admin/navigation/domains/{domain_code}/menu-tree/copy"),
         Some(json!({
             "sourceDomainCode": "ADVANCED",
             "sourceMenuCode": null,
@@ -306,14 +336,14 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
     let advanced_tree_after_failed_copy = request_json(
         &router,
         Method::GET,
-        "/api/v1/admin/navigation/domains/COMPLIANCE/menu-tree",
+        &format!("/api/v1/admin/navigation/domains/{domain_code}/menu-tree"),
         None,
         Some(&token),
         None,
     )
     .await;
     let tree_payload = response_json(advanced_tree_after_failed_copy).await;
-    assert_eq!(tree_payload["data"].as_array().map(Vec::len), Some(3));
+    assert_eq!(tree_payload["data"].as_array().map(Vec::len), Some(5));
 }
 
 #[tokio::test]
@@ -326,7 +356,6 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
         Method::POST,
         "/api/v1/admin/navigation/domains",
         Some(json!({
-            "domainCode": "ARRANGEMENT",
             "name": { "zh-CN": "编排测试", "en-US": "Arrangement test" },
             "description": { "zh-CN": "编排测试领域", "en-US": "Arrangement test domain" },
             "enabled": true,
@@ -338,6 +367,9 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
     )
     .await;
     assert_eq!(create_domain.status(), StatusCode::OK);
+
+    let domain = response_json(create_domain).await;
+    let domain_code = domain["data"]["domainCode"].as_str().unwrap();
 
     for (menu_code, menu_type, translations, page_code) in [
         (
@@ -377,7 +409,7 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
     let add_group = request_json(
         &router,
         Method::POST,
-        "/api/v1/admin/navigation/domains/ARRANGEMENT/menu-items",
+        &format!("/api/v1/admin/navigation/domains/{domain_code}/menu-items"),
         Some(json!({
             "menuCode": "ARRANGEMENT_GROUP",
             "parentMenuCode": null,
@@ -392,7 +424,7 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
     let add_page = request_json(
         &router,
         Method::POST,
-        "/api/v1/admin/navigation/domains/ARRANGEMENT/menu-items",
+        &format!("/api/v1/admin/navigation/domains/{domain_code}/menu-items"),
         Some(json!({
             "menuCode": "ARRANGEMENT_PAGE",
             "parentMenuCode": null,
@@ -407,7 +439,7 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
     let move_page = request_json(
         &router,
         Method::PUT,
-        "/api/v1/admin/navigation/domains/ARRANGEMENT/menu-items/ARRANGEMENT_PAGE",
+        &format!("/api/v1/admin/navigation/domains/{domain_code}/menu-items/ARRANGEMENT_PAGE"),
         Some(json!({
             "parentMenuCode": "ARRANGEMENT_GROUP",
             "position": 0,
@@ -438,23 +470,9 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     let router = app();
     let token = authenticated_bearer_token(&router).await;
 
-    for menu_code in [
-        "CHAT_NEW_SESSION", "CHAT_PROJECTS", "CHAT_RECENTS", "CHAT_SESSIONS", "EXPLORE_MORE", "DUDES", "NOTIFICATIONS",
-        "APPS",
-        "TASKS",
-        "AUTOMATIONS",
-        "CORE",
-        "MCP_SERVERS",
-        "MODELS",
-        "AGENT_OPERATIONS",
-        "FILE_MANAGEMENT",
-        "DATA_SOURCE_MANAGEMENT",
-        "SERVER_MANAGEMENT",
-        "SERVER_ACCOUNT_MANAGEMENT",
-        "RESOURCE_MANAGEMENT",
-        "VARIABLES",
-        "DATA",
-    ] {
+    // Parents restrict deletion while children exist. The defaults are parent-first.
+    for item in DEFAULT_NAVIGATION_MENU_TREE_ITEMS.iter().rev() {
+        let menu_code = item.menu_code;
         let response = request_json(
             &router,
             Method::DELETE,
@@ -494,7 +512,10 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         restore_payload["data"]["restoredDomainCodes"],
         json!(["ADVANCED"])
     );
-    assert_eq!(restore_payload["data"]["restoredItemCount"], 21);
+    assert_eq!(
+        restore_payload["data"]["restoredItemCount"],
+        DEFAULT_NAVIGATION_MENU_TREE_ITEMS.len()
+    );
 
     let restored_tree = request_json(
         &router,
@@ -506,15 +527,44 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     )
     .await;
     let restored_payload = response_json(restored_tree).await;
-    assert_eq!(restored_payload["data"].as_array().map(Vec::len), Some(6));
-    assert_eq!(restored_payload["data"][1]["menuCode"], "CORE");
-    assert_eq!(restored_payload["data"][1]["childDisplay"], "Flyout");
-    assert_eq!(restored_payload["data"][2]["menuCode"], "AGENT_OPERATIONS");
+    let menus = &restored_payload["data"];
     assert_eq!(
-        restored_payload["data"][2]["children"][0]["menuCode"],
-        "DUDES"
+        menus
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["menuCode"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "DUDES",
+            "CHAT_NEW_SESSION",
+            "EXPLORE_MORE",
+            "CHAT_PROJECTS",
+            "CHAT_RECENTS"
+        ]
     );
-    assert!(!restored_payload["data"].as_array().unwrap().iter().any(|menu| menu["menuCode"] == "OBSERVABILITY"));
+    assert_eq!(menu(menus, "EXPLORE_MORE")["childDisplay"], "Flyout");
+    assert_eq!(menu(menus, "CORE")["childDisplay"], "Inline");
+    assert_eq!(
+        menu(menus, "AGENT_OPERATIONS")["children"][0]["menuCode"],
+        "MCP_SERVERS"
+    );
+    for expected in DEFAULT_NAVIGATION_MENU_TREE_ITEMS {
+        let siblings = expected
+            .parent_menu_code
+            .map_or(menus, |parent| &menu(menus, parent)["children"]);
+        assert_eq!(
+            siblings[expected.position as usize]["menuCode"],
+            expected.menu_code
+        );
+    }
+    assert!(
+        !menus
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["menuCode"] == "OBSERVABILITY")
+    );
     let tree_json = restored_payload["data"].to_string();
     for removed in [
         "INTERNAL_AGENTS",
@@ -643,26 +693,26 @@ async fn widgets_and_pages_share_the_domain_tree_and_explore_group() {
     let menus = tree_payload["data"]["menus"]
         .as_array()
         .expect("chat tree should have menus");
-    assert_eq!(menus[0]["menuCode"], "CHAT_SESSIONS");
-    assert_eq!(menus[0]["menuType"], "Group");
-    assert_eq!(menus[0]["childDisplay"], "Inline");
-    let children = menus[0]["children"]
-        .as_array()
-        .expect("chat sessions group should have children");
-    let widget_codes = children
-        .iter()
-        .map(|child| child["pageCode"].as_str().unwrap_or(""))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        widget_codes,
-        vec!["chat.newSession", "chat.projects", "chat.recents"]
-    );
-    for child in children {
-        assert_eq!(child["menuType"], "Widget");
-        assert!(child["url"].is_null());
+    assert_eq!(menus[0]["menuCode"], "DUDES");
+    assert_eq!(menus[0]["menuType"], "Internal");
+    assert!(!menus.iter().any(|item| item["menuCode"] == "CHAT_SESSIONS"));
+    for (code, page) in [
+        ("CHAT_NEW_SESSION", "chat.newSession"),
+        ("CHAT_PROJECTS", "chat.projects"),
+        ("CHAT_RECENTS", "chat.recents"),
+    ] {
+        let widget = menus.iter().find(|item| item["menuCode"] == code).unwrap();
+        assert_eq!(widget["menuType"], "Widget");
+        assert_eq!(widget["pageCode"], page);
+        assert_eq!(widget["childDisplay"], "Inline");
+        assert!(widget["url"].is_null());
+        assert!(widget["children"].as_array().unwrap().is_empty());
     }
 
-    let explore = menus.iter().find(|item| item["menuCode"] == "EXPLORE_MORE").unwrap();
+    let explore = menus
+        .iter()
+        .find(|item| item["menuCode"] == "EXPLORE_MORE")
+        .unwrap();
     assert_eq!(explore["childDisplay"], "Flyout");
     for (code, position) in [("CHAT_PROJECTS", 0), ("APPS", 1)] {
         let moved = request_json(&router, Method::PUT,

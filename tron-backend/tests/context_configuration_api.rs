@@ -66,24 +66,30 @@ fn item<'a>(document: &'a Value, path: &str) -> &'a Value {
         .unwrap()
 }
 
-#[tokio::test]
-async fn old_yaml_exposes_effective_context_defaults_without_writing_or_leaking_keys() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn missing_policy_sections_expose_effective_defaults_without_writing_or_leaking_keys() {
     let f = Fixture::new(
-        "shortTermMemory:\n  compaction:\n    retainedHistoryRatio: '35%'\n  context:\n    blocks:\n      seedPromptPrefix:\n        maxTokens: 3210\n",
+        "shortTermMemory:\n  context:\n    blocks:\n      seedPromptPrefix:\n        maxTokens: 3210\n",
     );
     let before = fs::read(&f.path).unwrap();
     let d = f.get().await;
     let order = &item(&d, "shortTermMemory.context.providers.order")["value"];
-    assert_eq!(order.as_array().unwrap().len(), 7);
-    assert_eq!(order[5], "knowledge_base");
+    assert_eq!(order.as_array().unwrap().len(), 14);
+    assert_eq!(item(&d, "shortTermMemory.context.providers.dataBlocks.agent_directory.strategy")["value"], "keep");
+    assert_eq!(order[11], "knowledge_base");
+    assert_eq!(order[8], "page_context");
+    assert_eq!(order[4], "tool_domains");
+    assert_eq!(order[5], "current_session_history");
     assert_eq!(order[0], "seed_prompt_prefix");
+    assert_eq!(order[2], "runtime_identity");
+    assert_eq!(order[3], "dude_onboarding");
     assert_eq!(
         item(&d, "shortTermMemory.context.providers.order")["valueType"],
         "array"
     );
     assert_eq!(
         item(&d, "shortTermMemory.context.providers.history.targetRatio")["value"],
-        "35%"
+        "20%"
     );
     assert_eq!(
         item(
@@ -101,16 +107,22 @@ async fn old_yaml_exposes_effective_context_defaults_without_writing_or_leaking_
     assert_eq!(fs::read(&f.path).unwrap(), before);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn saves_defaulted_order_and_policies_to_yaml_then_reloads_runtime_values() {
     let f = Fixture::new(
         "shortTermMemory:\n  context:\n    blocks:\n      seedPromptPrefix:\n        maxTokens: 3210\n",
     );
     let d = f.get().await;
     let mut order = item(&d, "shortTermMemory.context.providers.order")["value"].clone();
-    order.as_array_mut().unwrap().swap(0, 1);
+    let entries = order.as_array_mut().unwrap();
+    let application = entries.iter().position(|id| id == "application_context").unwrap();
+    let working = entries.iter().position(|id| id == "current_session_working_state").unwrap();
+    entries.swap(application, working);
     let (status, result) = f.put(&d["revision"], json!([
         {"path":"shortTermMemory.context.providers.order", "value":order},
+        {"path":"shortTermMemory.context.providers.dataBlocks.runtime_identity.maxTokens", "value":4096},
+        {"path":r"shortTermMemory.context.providers.dataBlocks.skills\.catalog.maxTokens", "value":2048},
+        {"path":"shortTermMemory.context.providers.dataBlocks.agent_directory.strategy", "value":"keep"},
         {"path":"shortTermMemory.context.providers.working.strategy", "value":"semantic"},
         {"path":"shortTermMemory.context.providers.working.triggerRatio", "value":"75%"},
         {"path":"shortTermMemory.context.providers.working.targetRatio", "value":"25%"},
@@ -128,7 +140,10 @@ async fn saves_defaulted_order_and_policies_to_yaml_then_reloads_runtime_values(
     let loaded = AppConfig::from_yaml_file(&f.path)
         .unwrap()
         .short_term_memory;
-    assert_eq!(loaded.context.providers.order[0], "application_context");
+    assert_eq!(loaded.context.providers.data_blocks["runtime_identity"].max_tokens, Some(4096));
+    assert_eq!(loaded.context.providers.data_blocks["skills.catalog"].max_tokens, Some(2048));
+    assert_eq!(loaded.context.providers.data_blocks["agent_directory"].policy.strategy, tron_backend::application::short_term_memory::ContextReductionStrategy::Keep);
+    assert_eq!(loaded.context.providers.order[application], "current_session_working_state");
     assert_eq!(
         loaded.context.providers.working.strategy,
         tron_backend::application::short_term_memory::ContextReductionStrategy::Semantic
@@ -161,7 +176,7 @@ async fn saves_defaulted_order_and_policies_to_yaml_then_reloads_runtime_values(
     assert_eq!(status, StatusCode::CONFLICT);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn rejects_invalid_orders_strategies_and_hysteresis_without_writing() {
     let f = Fixture::new("");
     let d = f.get().await;
@@ -185,10 +200,10 @@ async fn rejects_invalid_orders_strategies_and_hysteresis_without_writing() {
     }
 }
 
-#[tokio::test]
-async fn legacy_ratios_remain_authoritative_until_explicit_policy_override() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ratio_and_history_policy_updates_preserve_the_cache_friendly_layout() {
     let f = Fixture::new(
-        "shortTermMemory:\n  context:\n    blocks:\n      seedPromptPrefix:\n        maxRatioBps: 2500\n  compaction:\n    retainedHistoryRatio: '100%'\n",
+        "shortTermMemory:\n  context:\n    blocks:\n      seedPromptPrefix:\n        maxRatioBps: 2500\n    providers:\n      history:\n        strategy: keep\n",
     );
     let d = f.get().await;
     assert_eq!(
@@ -207,7 +222,8 @@ async fn legacy_ratios_remain_authoritative_until_explicit_policy_override() {
             &d["revision"],
             json!([
                 {"path":"shortTermMemory.context.blocks.seedPromptPrefix.maxRatio", "value":"40%"},
-                {"path":"shortTermMemory.compaction.retainedHistoryRatio", "value":"30%"}
+                {"path":"shortTermMemory.context.providers.history.strategy", "value":"checkpoint"},
+                {"path":"shortTermMemory.context.providers.history.targetRatio", "value":"30%"}
             ]),
         )
         .await;
@@ -227,7 +243,7 @@ async fn legacy_ratios_remain_authoritative_until_explicit_policy_override() {
     assert!(!fs::read_to_string(&f.path).unwrap().contains("maxRatioBps"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn auto_compaction_switch_saves_and_reloads_without_materializing_other_defaults() {
     let f = Fixture::new("");
     let d = f.get().await;
@@ -270,7 +286,7 @@ async fn auto_compaction_switch_saves_and_reloads_without_materializing_other_de
     assert_eq!(fs::read(&f.path).unwrap(), before);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn null_legacy_context_sections_support_default_view_and_explicit_update() {
     for extra in [
         "shortTermMemory: null\n",
@@ -285,7 +301,7 @@ async fn null_legacy_context_sections_support_default_view_and_explicit_update()
                 .as_array()
                 .unwrap()
                 .len(),
-            7
+            14
         );
         assert_eq!(fs::read(&f.path).unwrap(), before);
         let (status, payload) = f
@@ -326,7 +342,7 @@ fn templates_and_explicitly_selected_profile_parse_without_writing() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn explicit_null_token_cap_survives_api_save_and_runtime_reload() {
     let f = Fixture::new("");
     let before = f.get().await;
@@ -367,4 +383,20 @@ async fn explicit_null_token_cap_survives_api_save_and_runtime_reload() {
             .is_null()
     );
     assert!(yaml["shortTermMemory"]["context"]["blocks"]["seedPromptPrefix"].is_null());
+}
+
+#[test]
+fn stable_blocks_are_uncapped_and_domains_precede_history_in_shipped_configs() {
+    for file in ["application.yaml", "../electron/application.yaml"] {
+        let config = AppConfig::from_yaml_file(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(file)).unwrap();
+        let context = config.short_term_memory.context;
+        assert_eq!(context.blocks.seed_prompt_prefix.max_tokens, None);
+        assert_eq!(context.blocks.seed_prompt_prefix.max_ratio_bps, Some(10_000));
+        let domains = &context.providers.data_blocks["tool_domains"];
+        assert_eq!(domains.max_tokens, None);
+        assert_eq!(domains.policy.strategy, tron_backend::application::short_term_memory::ContextReductionStrategy::Keep);
+        let position = |id| context.providers.order.iter().position(|value| value == id).unwrap();
+        assert!(position("tool_domains") < position("current_session_history"));
+        context.providers.validate().unwrap();
+    }
 }

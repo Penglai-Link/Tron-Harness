@@ -30,8 +30,8 @@ pub use collaboration::{
 };
 pub use context::{
     AgentCollaborationOwner, AgentExecutionScope, AgentPromptPrefixSource, AgentRunContext,
-    AgentRunLimits, AgentShortTermMemoryRunContext, AgentToolAssignment, AgentToolExposureState,
-    AutoModelCandidate, AutoModelRouteContext, EffectiveSkill, EffectiveTool, EffectiveVariable,
+    AgentRunLimits, AgentShortTermMemoryRunContext, AgentToolAssignment, AutoModelCandidate,
+    AutoModelRouteContext, EffectiveSkill, EffectiveTool, EffectiveVariable,
 };
 pub use error::AgentError;
 pub use history::{
@@ -39,12 +39,11 @@ pub use history::{
 };
 pub use kind::{AgentKind, AgentModelProtocol, AgentRuntimeKind};
 pub use management::{
-    AgentManagementError, AgentRuntimeType, ExpandedDomainPersistenceMode,
-    InternalAgentPolicySource, InternalAgentToolPolicy, ManagedAgentSource, ManagedAgentType,
-    ManagedSystemAgentRecord, McpAccessMode, PlatformInternalAgentConfig,
-    RuntimeAdapterCapabilityRecord, SystemAgentModelRecord, SystemAgentRegistryEntry,
-    SystemAgentStatus, SystemAgentSyncResult, ToolAssignmentMode, ToolAvailabilityState,
-    ToolCatalogRecord, ToolDomainRecord, ToolExposureMode, ToolOperationKind,
+    AgentManagementError, AgentRuntimeType, InternalAgentPolicySource, InternalAgentToolPolicy,
+    ManagedAgentSource, ManagedAgentType, ManagedSystemAgentRecord, McpAccessMode,
+    PlatformInternalAgentConfig, RuntimeAdapterCapabilityRecord, SystemAgentModelRecord,
+    SystemAgentRegistryEntry, SystemAgentStatus, SystemAgentSyncResult, ToolAssignmentMode,
+    ToolAvailabilityState, ToolCatalogRecord, ToolDomainRecord, ToolOperationKind,
     WorkspaceInternalAgentDefinition, WorkspaceInternalAgentMcpServerAssignment,
     WorkspaceInternalAgentPolicy, WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
 };
@@ -61,7 +60,7 @@ pub use run::{
     AgentRunStatus,
 };
 pub use tool::{
-    InProcessTool, Tool, ToolContextDelta, ToolError, ToolExecutionControl, ToolExecutionFuture,
+    InProcessTool, Tool, ToolError, ToolExecutionControl, ToolExecutionFuture,
     ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
 };
 pub use tool_schema::PreparedToolSchema;

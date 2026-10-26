@@ -14,9 +14,37 @@ impl SkillRegistryService {
         roots: &[PathBuf],
         enabled: bool,
     ) -> Result<(), SkillError> {
-        for (name, path) in self.validate_pack_directories(pack, roots)? {
-            self.register_pack_skill(pack, &name, &path, enabled)?;
+        let skills = self.validate_pack_directories(pack, roots)?;
+        let now = current_timestamp();
+        let entries = skills
+            .into_iter()
+            .map(|(name, path)| RegistrySkill {
+                skill_name: name,
+                provider_pack_id: Some(pack.into()),
+                available: enabled,
+                source_ref: pack.into(),
+                source_type: SkillSourceType::BuiltIn,
+                registry_path: path.display().to_string(),
+                declared_version: None,
+                update_status: SkillUpdateStatus::Manual,
+                managed_by: SkillManagedBy::BuiltIn,
+                last_checked_at: None,
+                last_updated_at: None,
+                last_error: None,
+                created_at: now.clone(),
+                updated_at: now.clone(),
+            })
+            .collect::<Vec<_>>();
+        let mut repository = self.repository.lock().unwrap();
+        let existing = repository.list_registry_skills()?;
+        if entries.iter().any(|entry| {
+            existing.iter().any(|old| {
+                old.skill_name == entry.skill_name && old.provider_pack_id.as_deref() != Some(pack)
+            })
+        }) {
+            return Err(SkillError::DuplicateSkill);
         }
+        repository.upsert_registry_skills(&entries)?;
         Ok(())
     }
     /// Read and validate the complete contribution before changing the registry.

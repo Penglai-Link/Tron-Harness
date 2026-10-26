@@ -52,14 +52,15 @@ impl SqliteAgentEventReplayStore {
                         continue;
                     };
                     let result = blocking(storage.database.transaction(async {
+                        let keys=snapshot.keys().map(|key|format!("tron.replay-failure/{key}")).collect::<Vec<_>>();
+                        let selected=serde_json::to_string(&keys).map_err(|error|fw::StateError::Backend(error.to_string()))?;
+                        let existing=storage.database.call_read(move |c| {
+                            let mut q=c.prepare("SELECT key FROM ef_session_context WHERE session_id=?1 AND key IN (SELECT value FROM json_each(?2))")?;
+                            q.query_map(rusqlite::params![HEALTH,selected],|r|r.get::<_,String>(0))?.collect::<rusqlite::Result<std::collections::BTreeSet<_>>>()
+                        }).await.map_err(|error|fw::StateError::Backend(error.to_string()))?;
                         for (key, detail) in &snapshot {
                             let context = format!("tron.replay-failure/{key}");
-                            if storage
-                                .sessions
-                                .read_context(HEALTH, &context)
-                                .await?
-                                .is_none()
-                            {
+                            if !existing.contains(&context) {
                                 storage
                                     .sessions
                                     .write_context(
@@ -319,30 +320,35 @@ impl AgentAguiReplayStore for SqliteAgentEventReplayStore {
             }
         }
         blocking(async {
+            let mut ids = Vec::new();
             for run in unfinished.values() {
-                // Native persistence admission and terminal presentation drain
-                // are both covered by the owning host registration.
                 if (storage.native_run_active)(run) {
                     continue;
                 }
-                let live = match fw::RunId::parse_str(run) {
-                    Ok(id) => match storage.sessions.store.get_run(id).await {
-                        Ok(record) => {
-                            record.status == fw::ManagedRunStatus::Running
-                                && record.lease_until_ms > fw::lifecycle_time_ms()
-                        }
-                        Err(fw::StateError::NotFound) => false,
-                        Err(error) => return Some(error.to_string()),
-                    },
-                    Err(_) => false,
-                };
-                if !live {
-                    return Some("native execution has no terminal presentation event".into());
+                match fw::RunId::parse_str(run) {
+                    Ok(id) => ids.push(id.to_string()),
+                    Err(_) => {
+                        return Some("native execution has no terminal presentation event".into());
+                    }
                 }
             }
-            None
+            if ids.is_empty() {
+                return None;
+            }
+            let selected = match serde_json::to_string(&ids) {
+                Ok(value) => value,
+                Err(error) => return Some(error.to_string()),
+            };
+            let live=match storage.database.call_read(move |c| {
+                let mut q=c.prepare("SELECT id FROM ef_runs WHERE id IN (SELECT value FROM json_each(?1)) AND status='RUNNING' AND lease_until>?2")?;
+                q.query_map(rusqlite::params![selected,fw::lifecycle_time_ms()],|r|r.get::<_,String>(0))?.collect::<rusqlite::Result<std::collections::BTreeSet<_>>>()
+            }).await {Ok(live)=>live,Err(error)=>return Some(error.to_string())};
+            ids.iter()
+                .any(|id| !live.contains(id))
+                .then(|| "native execution has no terminal presentation event".into())
         })
     }
+
     fn replay_agui_events(&self, key: &str) -> Result<Vec<AgentAguiEvent>, String> {
         self.replay(key, "audit")
     }

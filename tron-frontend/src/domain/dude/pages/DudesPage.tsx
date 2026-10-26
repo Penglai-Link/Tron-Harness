@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { SelectInput } from "@/components/forms";
-import { SelectItem } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useTabVisibility } from "@/components/editable-tabs";
-import { AgentAvatar } from "@/domain/agent/components/AgentAvatarPicker";
+import { useTabVisibility, type EditableTab } from "@/components/editable-tabs";
+import { useRightPanelTabs, useTabPanelConfig } from "@/shared/layout/content/TabPanelRegistry";
 import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
 import { useChatHistoryLabels, useChatWorkRailLabels } from "@/domain/chat";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
@@ -26,6 +24,10 @@ import {
 } from "../api/dudeApi";
 import { DudeThreads } from "../components/DudeThreads";
 import { DudeTasks } from "../components/DudeTasks";
+import { DudeSwitcher } from "../components/DudeSwitcher";
+
+const ChatContextInspector = lazy(() => import("@/domain/chat/components/ChatContextInspector")
+  .then(module => ({ default: module.ChatContextInspector })));
 function SessionChat({
   session,
   readOnly,
@@ -129,6 +131,20 @@ export function DudesPage() {
     enabled: visible && Boolean(code) && tab === "work",
     refetchInterval: visible && tab === "work" ? 5000 : false,
   });
+  const candidateSession = tab === "conversation" ? interaction.data
+    : tab === "history" ? selectedHistory : null;
+  const inspectedSession = candidateSession?.ownerDudeCode === code ? candidateSession : null;
+  useRightPanelTabs(inspectedSession?.sessionCode);
+  const rightPanelTabs = useMemo<EditableTab[]>(() => inspectedSession ? [{
+    key: "context",
+    label: t("chat.shortTermMemory.shortTermMemoryTab"),
+    closable: false,
+    children: <Suspense fallback={null}><ChatContextInspector
+      key={`${inspectedSession.ownerDudeCode}:${inspectedSession.sessionCode}`}
+      session={inspectedSession}
+    /></Suspense>,
+  }] : [], [inspectedSession, t]);
+  useTabPanelConfig({ rightPanelTabs, rightPanelBrowserOnly: false });
   function selectTab(next: string) {
     setSearch((current) => {
       current.set("dude", code);
@@ -163,100 +179,25 @@ export function DudesPage() {
       timeStyle: "short",
     }).format(new Date(value));
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 lg:flex-row">
-      <aside
-        data-theme-anchor="card"
-        className="min-w-0 shrink-0 rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-3 shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))] lg:w-56 lg:overflow-y-auto lg:p-4"
-      >
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">{t("dude.title")}</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            nativeButton={false}
-            render={<Link to="/settings/agents?tab=dudes" />}
-          >
-            {t("dude.manage")}
-          </Button>
-        </div>
-        {dudes.isPending ? <p role="status">{t("dude.loading")}</p> : null}
-        {dudes.error ? (
-          <div role="alert">
-            {dudes.error.message}
-            <Button size="sm" onClick={() => void dudes.refetch()}>
-              {t("dude.retry")}
-            </Button>
-          </div>
-        ) : null}
-        <div className="hidden space-y-1 lg:block">
-          {dudes.data?.map((item) => (
-            <button
-              type="button"
-              key={item.dudeCode}
-              aria-pressed={code === item.dudeCode}
-              onClick={() => {
-                setSelectedHistory(null);
-                setSearch({ dude: item.dudeCode, tab: "conversation" });
-              }}
-              className={`flex w-full items-center gap-3 rounded-md px-2 py-3 text-left hover:bg-[var(--color-surface-container)] ${
-                code === item.dudeCode
-                  ? "bg-[var(--color-surface-container)]"
-                  : ""
-              }`}
-            >
-              <AgentAvatar
-                avatarId={item.avatarId}
-                className="size-9 shrink-0 rounded-md"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-sm font-medium">{item.name}</span>
-                  <Badge variant={item.enabled ? "success" : "outline"}>
-                    {t(item.enabled ? "dude.activated" : "dude.paused")}
-                  </Badge>
-                  {item.isMain ? <Badge variant="secondary">{t("dude.main")}</Badge> : null}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-        {dudes.data?.length ? (
-          <div className="mt-2 lg:hidden">
-            <SelectInput
-              aria-label={t("dude.selectDude")}
-              value={code}
-              onValueChange={(value) => {
-                if (value) setSearch({ dude: value, tab: "conversation" });
-              }}
-            >
-              {dudes.data.map((item) => (
-                <SelectItem key={item.dudeCode} value={item.dudeCode}>
-                  {item.name}
-                </SelectItem>
-              ))}
-            </SelectInput>
-          </div>
-        ) : null}
-        {dudes.data?.length === 0 ? <p>{t("dude.empty")}</p> : null}
-      </aside>
+    <section
+      aria-label={dude?.name ?? t("dude.title")}
+      data-theme-anchor="card"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-3 shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))] lg:p-4"
+    >
+      <header className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
+        <DudeSwitcher dudes={dudes.data ?? []} value={code} onValueChange={(next) => {
+          if (next === code) return;
+          setSelectedHistory(null);
+          setSearch({ dude: next, tab: "conversation" });
+        }} />
+      </header>
+      {dudes.isPending ? <p role="status">{t("dude.loading")}</p> : null}
+      {dudes.error ? <div role="alert">
+        {dudes.error.message}
+        <Button size="sm" onClick={() => void dudes.refetch()}>{t("dude.retry")}</Button>
+      </div> : null}
+      {dudes.data?.length === 0 ? <p>{t("dude.empty")}</p> : null}
       {dude ? (
-        <section
-          aria-label={dude.name}
-          data-theme-anchor="card"
-          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--tron-card-radius,8px)] border border-[var(--tron-card-border,var(--color-card-border))] bg-[var(--tron-card-bg,var(--color-elevated-surface))] text-[var(--tron-card-fg,var(--color-on-surface))] p-3 shadow-[var(--tron-card-shadow,0_18px_50px_rgba(0,0,0,0.04))] lg:p-4"
-        >
-          <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
-            <h1 className="text-base font-medium">{dude.name}</h1>
-            <Badge variant="outline">
-              {t(
-                dude.kind === "Memory"
-                  ? "dude.memory"
-                  : dude.isMain
-                  ? "dude.main"
-                  : "dude.custom"
-              )}
-            </Badge>
-          </div>
           <Tabs
             className="min-h-0 flex-1"
             value={tab}
@@ -459,8 +400,7 @@ export function DudesPage() {
               )}
             </TabsContent>
           </Tabs>
-        </section>
       ) : null}
-    </div>
+    </section>
   );
 }

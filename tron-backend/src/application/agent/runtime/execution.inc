@@ -54,6 +54,7 @@ impl ReactAgent {
         tool_name: &str,
         tool_input: Option<&serde_json::Value>,
         tool_output: Option<&str>,
+        batch: Option<&eliteforge_agent_core::ToolBatchItem>,
     ) -> Result<(), AgentError> {
         let mut payload_fields = vec![
             (
@@ -62,6 +63,12 @@ impl ReactAgent {
             ),
             ("tool_name".to_string(), compact_event_value(tool_name)),
         ];
+        if let Some(batch) = batch {
+            // Serialize the Framework identity intact; product audit does not
+            // maintain a second parent/child wire contract.
+            payload_fields.push(("tool_batch_json".into(), serde_json::to_string(batch)
+                .expect("Framework batch identity serializes")));
+        }
         if let Some(tool_input) = tool_input {
             let value = serde_json::to_string(tool_input).unwrap_or_else(|_| "{}".into());
             payload_fields.push(("tool_args_json".to_string(), value));

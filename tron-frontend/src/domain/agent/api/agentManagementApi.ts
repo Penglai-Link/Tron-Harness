@@ -46,12 +46,6 @@ type ToolAssignmentModeApi =
   | WorkspaceInternalAgentRecord["toolAssignmentMode"]
   | Uppercase<WorkspaceInternalAgentRecord["toolAssignmentMode"]>
   | "AllReadOnlyTools";
-type ToolExposureModeApi =
-  | WorkspaceInternalAgentRecord["toolExposureMode"]
-  | Uppercase<WorkspaceInternalAgentRecord["toolExposureMode"]>;
-type ExpandedDomainPersistenceModeApi =
-  | WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"]
-  | Uppercase<WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"]>;
 type WorkspaceInternalAgentSourceApi =
   | WorkspaceInternalAgentRecord["source"]
   | "PLATFORM_DEFAULT"
@@ -116,8 +110,6 @@ export interface WorkspaceInternalAgentRecordApi {
   source?: WorkspaceInternalAgentSourceApi;
   mcpAccessMode?: McpAccessModeApi;
   toolAssignmentMode: ToolAssignmentModeApi;
-  toolExposureMode: ToolExposureModeApi;
-  expandedDomainPersistenceMode: ExpandedDomainPersistenceModeApi;
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls?: number;
@@ -184,35 +176,7 @@ function normalizeToolAssignmentMode(
   }
 }
 
-function normalizeToolExposureMode(
-  mode: ToolExposureModeApi
-): WorkspaceInternalAgentRecord["toolExposureMode"] {
-  switch (mode) {
-    case "DOMAIN_DISCOVERY":
-    case "domain_discovery":
-      return "domain_discovery";
-    case "DIRECT_LIST":
-    case "direct_list":
-      return "direct_list";
-    default:
-      return "direct_list";
-  }
-}
 
-function normalizeExpandedDomainPersistenceMode(
-  mode: ExpandedDomainPersistenceModeApi
-): WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"] {
-  switch (mode) {
-    case "EPHEMERAL_EXPANDED":
-    case "ephemeral_expanded":
-      return "ephemeral_expanded";
-    case "STICKY_EXPANDED":
-    case "sticky_expanded":
-      return "sticky_expanded";
-    default:
-      return "sticky_expanded";
-  }
-}
 
 function normalizeWorkspaceInternalAgentSource(
   source: WorkspaceInternalAgentSourceApi | undefined
@@ -286,9 +250,6 @@ export function normalizeWorkspaceInternalAgentRecord(
     builtIn: record.builtIn ?? false,
     platformDefined:
       record.platformDefined ?? record.agentCode === "main-agent",
-    expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(
-      record.expandedDomainPersistenceMode
-    ),
     mcpAccessMode: normalizeMcpAccessMode(record.mcpAccessMode),
     name: record.name,
     maxSteps:
@@ -313,7 +274,6 @@ export function normalizeWorkspaceInternalAgentRecord(
       ? [...new Set(record.selectedToolCodes)]
       : [],
     toolAssignmentMode: normalizeToolAssignmentMode(record.toolAssignmentMode),
-    toolExposureMode: normalizeToolExposureMode(record.toolExposureMode),
   };
 }
 

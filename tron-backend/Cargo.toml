@@ -9,6 +9,7 @@ eliteforge-agent-capability-chunking = { path = "../.agent-deps/agent-framework/
 eliteforge-agent-capability-personai = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-personai" }
 eliteforge-agent-official-plugin-tools-web = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-web" }
 eliteforge-agent-official-plugin-tools-media = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-media" }
+eliteforge-agent-official-plugin-tools-discovery = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-discovery" }
 
 eliteforge-agent-official-plugin-otel = { path = "../.agent-deps/agent-framework/crates/plugin/observe/eliteforge-agent-official-plugin-otel", features = ["runtime"] }
 eliteforge-agent-official-plugin-otel-collector = { path = "../.agent-deps/agent-framework/crates/plugin/observe/eliteforge-agent-official-plugin-otel-collector" }
@@ -60,7 +61,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-pemfile = "2"
 webpki-roots = "1"
 redis = { version = "0.32.7", default-features = false, features = ["cluster-async", "tokio-rustls-comp"] }
-rusqlite = { version = "0.37", features = ["bundled", "load_extension"] }
+rusqlite = { version = "0.37", features = ["bundled", "load_extension", "functions"] }
 tokio-rusqlite = { version = "0.7.0", features = ["bundled"] }
 russh = { version = "0.62.6", default-features = false, features = ["ring", "rsa"] }
 serde = { version = "1", features = ["derive", "rc"] }
@@ -92,6 +93,7 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+rusqlite = { version = "0.37", features = ["trace"] }
 opentelemetry-proto = { version = "=0.32.0", default-features = false, features = ["gen-tonic-messages", "trace", "metrics", "with-serde"] }
 prost = "0.14"
 flate2 = "1"

@@ -415,17 +415,51 @@ impl ChatRepository for SqliteChatRepository {
         })
     }
 
-    fn session_titles(&mut self, codes: &[String]) -> Result<Vec<crate::application::chat::ChatSessionTitle>, ChatError> {
-        if codes.is_empty() { return Ok(Vec::new()); }
-        let codes = codes.to_vec();
+    fn session_titles(
+        &mut self,
+        codes: &[String],
+    ) -> Result<Vec<crate::application::chat::ChatSessionTitle>, ChatError> {
+        if codes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let codes = serde_json::to_string(codes).map_err(|_| ChatError::StorageFailure)?;
         blocking(async {
-            self.host.shared_database().await.map_err(chat_error)?.call(move |c| {
-                let placeholders = vec!["?"; codes.len()].join(",");
-                let mut statement = c.prepare(&format!("SELECT l.session_id,l.workspace_code,json_extract(s.record,'$.title') FROM workspace_session_links l JOIN ef_sessions s ON s.id=l.session_id WHERE l.session_id IN ({placeholders})"))?;
-                statement.query_map(rusqlite::params_from_iter(codes),|row| Ok(crate::application::chat::ChatSessionTitle {
+            self.host.shared_database().await.map_err(chat_error)?.call_read(move |c| {
+                let mut statement = c.prepare(&format!("SELECT l.session_id,l.workspace_code,json_extract(s.record,'$.title') FROM workspace_session_links l JOIN ef_sessions s ON s.id=l.session_id WHERE l.session_id IN (SELECT value FROM json_each(?1))"))?;
+                statement.query_map([codes],|row| Ok(crate::application::chat::ChatSessionTitle {
                     session_code:row.get(0)?,workspace_code:row.get(1)?,title:row.get(2)?,
                 }))?.collect::<rusqlite::Result<Vec<_>>>()
             }).await.map_err(|_| ChatError::StorageFailure)
+        })
+    }
+    fn sessions_by_codes(&mut self, codes: &[String]) -> Result<Vec<ChatSession>, ChatError> {
+        if codes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let codes = serde_json::to_string(codes).map_err(|_| ChatError::StorageFailure)?;
+        blocking(async {
+            let rows = self.host.shared_database().await.map_err(chat_error)?.call_read(move |c| {
+                let mut q = c.prepare(&format!("{SESSION_PROJECTION_SQL} WHERE l.session_id IN (SELECT value FROM json_each(?1))"))?;
+                q.query_map([codes], session_row)?.collect::<rusqlite::Result<Vec<_>>>()
+            }).await.map_err(|_| ChatError::StorageFailure)?;
+            rows.into_iter().map(chat_session_from_row).collect()
+        })
+    }
+    fn pending_input_counts(
+        &mut self,
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, u32>, ChatError> {
+        if codes.is_empty() {
+            return Ok(Default::default());
+        }
+        let codes = serde_json::to_string(codes).map_err(|_| ChatError::StorageFailure)?;
+        blocking(async {
+            self.host.shared_database().await.map_err(chat_error)?.call_read(move |c| {
+                let mut q = c.prepare("WITH requests AS (SELECT e.session_id,json_extract(e.record,'$.payload.requestCode') AS request_code FROM ef_events e WHERE e.session_id IN (SELECT value FROM json_each(?1)) AND e.kind='tron.interaction-view' GROUP BY e.session_id,request_code) SELECT requests.session_id,SUM(CASE WHEN i.answered=0 THEN 1 ELSE 0 END),SUM(i.id IS NULL) FROM requests LEFT JOIN ef_interactions i ON i.session_id=requests.session_id AND i.id=requests.request_code GROUP BY requests.session_id")?;
+                q.query_map([codes], |r| Ok((r.get::<_,String>(0)?,r.get::<_,u32>(1)?,r.get::<_,u32>(2)?)))?.collect::<rusqlite::Result<Vec<_>>>()
+            }).await.map_err(|_| ChatError::StorageFailure)?.into_iter().map(|(session,pending,missing)| {
+                if missing != 0 { Err(ChatError::StorageFailure) } else { Ok((session,pending)) }
+            }).collect()
         })
     }
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError> {
@@ -875,9 +909,44 @@ mod shared_transaction_tests {
             updated_at: "".into(),
         }
     }
-    fn seed_telemetry(repository: &SqliteChatRepository) -> eliteforge_agent_official_plugin_storage_local::SqliteDatabase {
+    #[test]
+    fn pending_counts_deduplicate_events_and_preserve_session_boundaries() {
+        let (_directory, mut repository) = fixture();
+        repository.create_session(&session("count-owner")).unwrap();
+        repository.create_session(&session("count-other")).unwrap();
+        let database = blocking(repository.host.shared_database()).unwrap();
+        let pending = fw::RunId::new_v4().to_string();
+        let answered = fw::RunId::new_v4().to_string();
+        database.call_blocking(move |c| {
+            for (id,done) in [(&pending,false),(&answered,true)] {
+                c.execute("INSERT INTO ef_interactions(id,session_id,run_id,answered,record) VALUES(?1,'count-owner','run',?2,'{}')",params![id,done])?;
+            }
+            for (sequence,session,id) in [(101,"count-owner",&pending),(102,"count-owner",&pending),(103,"count-owner",&answered),(101,"count-other",&pending)] {
+                let event=fw::SessionEvent::new(session,"tron.interaction-view",json!({"requestCode":id}));
+                c.execute("INSERT INTO ef_events(id,session_id,sequence,kind,record) VALUES(?1,?2,?3,?4,?5)",params![event.id,session,sequence,event.kind,serde_json::to_string(&event).unwrap()])?;
+            }
+            Ok::<_,rusqlite::Error>(())
+        }).unwrap();
+        let counts = repository
+            .pending_input_counts(&["count-owner".into(), "absent".into()])
+            .unwrap();
+        assert_eq!(counts.get("count-owner"), Some(&1));
+        assert!(!counts.contains_key("absent"));
+        assert!(matches!(
+            repository.pending_input_counts(&["count-other".into()]),
+            Err(ChatError::StorageFailure)
+        ));
+    }
+    fn seed_telemetry(
+        repository: &SqliteChatRepository,
+    ) -> eliteforge_agent_official_plugin_storage_local::SqliteDatabase {
         blocking(repository.host.telemetry()).unwrap();
-        blocking(eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(repository.host.telemetry_database_path())).unwrap()
+        blocking(
+            eliteforge_agent_official_plugin_storage_local::SqliteDatabase::open(
+                repository.host.telemetry_database_path(),
+            ),
+        )
+        .unwrap()
     }
     fn insert_span(database: &eliteforge_agent_official_plugin_storage_local::SqliteDatabase, trace: &str, id: &str, parent: Option<&str>, owner: Option<&str>) {
         let data = json!({"name":"tron.session.run","traceId":trace,"spanId":id,"parentSpanId":parent,"attributes":owner.map(|value|json!({"tron.session.code":value})).unwrap_or_else(||json!({}))}).to_string();

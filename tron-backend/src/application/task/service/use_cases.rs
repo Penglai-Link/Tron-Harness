@@ -21,14 +21,13 @@ impl TaskService {
     ) -> Result<PagedTaskRecords<TaskListItem>, TaskError> {
         let current = query.current.unwrap_or(1).max(1);
         let size = query.size.unwrap_or(20).clamp(1, 100);
-        let records = self.filtered_task_items(&query)?;
-        let total = records.len();
         let start = current.saturating_sub(1).saturating_mul(size);
+        let (records, total) = self.filtered_task_page(&query, Some((start, size)))?;
         Ok(PagedTaskRecords {
             current,
             size,
             total,
-            records: records.into_iter().skip(start).take(size).collect(),
+            records,
         })
     }
 

@@ -3,6 +3,7 @@ mod dashboard;
 mod triggers;
 mod query_filters;
 mod list_query;
+mod statistics;
 pub mod logs;
 use crate::adapters::outbound::persistence::sqlite::framework_storage::blocking;
 use crate::application::observability::*;
@@ -179,7 +180,7 @@ impl TraceRepository for TelemetryProjection {
         // payloads after releasing the database worker so other queries can proceed.
         let workspace = workspace.to_owned();
         let id = id.to_owned();
-        let (trace, payloads) = blocking(self.database.call(move |c| -> rusqlite::Result<_> {
+        let (trace, payloads) = blocking(self.database.call_read(move |c| -> rusqlite::Result<_> {
             use rusqlite::OptionalExtension;
             let trace = c.query_row(
                 "SELECT trace_id,started_at,ended_at,status_code,attributes,abandoned FROM ef_telemetry_traces WHERE trace_id=?1 AND (?2='' OR json_extract(attributes,'$.\"tron.workspace.code\"')=?2)",
@@ -192,72 +193,47 @@ impl TraceRepository for TelemetryProjection {
             } else { Vec::new() };
             Ok((trace, payloads))
         })).map_err(failure)?;
-        let (trace_id, started_at, ended_at, status_code, attributes, abandoned) = trace.ok_or(ObservabilityError::NotFound)?;
-        let trace = TelemetryTrace { trace_id, started_at, ended_at, status_code, abandoned,
+        let (trace_id, started_at, ended_at, status_code, attributes, abandoned) =
+            trace.ok_or(ObservabilityError::NotFound)?;
+        let trace = TelemetryTrace {
+            trace_id,
+            started_at,
+            ended_at,
+            status_code,
+            abandoned,
             attributes: serde_json::from_str(&attributes).map_err(failure)?,
         };
-        let mut spans = payloads.into_iter().map(|data| serde_json::from_str::<TelemetrySpan>(&data).map(span).map_err(failure)).collect::<Result<Vec<_>, _>>()?;
-        spans.sort_by(|a, b| a.started_at.cmp(&b.started_at).then_with(|| a.span_id.cmp(&b.span_id)));
-        Ok(TraceDetail { trace: summary(trace, &spans), spans })
+        let mut spans = payloads
+            .into_iter()
+            .map(|data| {
+                serde_json::from_str::<TelemetrySpan>(&data)
+                    .map(span)
+                    .map_err(failure)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        spans.sort_by(|a, b| {
+            a.started_at
+                .cmp(&b.started_at)
+                .then_with(|| a.span_id.cmp(&b.span_id))
+        });
+        Ok(TraceDetail {
+            trace: summary(trace, &spans),
+            spans,
+        })
     }
 
     fn metrics(&self, q: &TraceQuery) -> Result<TraceMetrics, ObservabilityError> {
-        blocking(async {
-            let f = filter(q);
-            let mut durations = Vec::new();
-            let mut failed = 0;
-            let mut offset = 0;
-            let total = loop {
-                let page = self
-                    .store
-                    .query_traces(f.clone(), offset, 5000)
-                    .await
-                    .map_err(failure)?;
-                let total = page.total;
-                let count = page.records.len();
-                for t in page.records {
-                    failed += usize::from(trace_status(&t) == "Error");
-                    if let Some(end) = t.ended_at {
-                        durations.push((end - t.started_at).max(0) as f64);
-                    }
-                }
-                offset += count;
-                if offset >= total || count == 0 {
-                    break total;
-                }
-            };
-            let sums = self
-                .store
-                .sum_span_attributes(
-                    f,
-                    "agent.model".into(),
-                    vec![
-                        "gen_ai.usage.input_tokens".into(),
-                        "gen_ai.usage.output_tokens".into(),
-                    ],
-                )
-                .await
-                .map_err(failure)?;
-            durations.sort_by(f64::total_cmp);
-            let average = if durations.is_empty() {
-                0.
-            } else {
-                durations.iter().sum::<f64>() / durations.len() as f64
-            };
-            let p95 = durations
-                .get((durations.len() * 95).div_ceil(100).saturating_sub(1))
-                .copied()
-                .unwrap_or(0.);
-            Ok(TraceMetrics {
-                trace_count: total,
-                failed_trace_count: failed,
-                input_tokens: *sums.get("gen_ai.usage.input_tokens").unwrap_or(&0),
-                output_tokens: *sums.get("gen_ai.usage.output_tokens").unwrap_or(&0),
-                average_duration_ms: average,
-                p95_duration_ms: p95,
-            })
+        let (stats, sums) = self.statistics(q, None)?;
+        Ok(TraceMetrics {
+            trace_count: stats.total,
+            failed_trace_count: *stats.classified.get("error").unwrap_or(&0),
+            input_tokens: *sums.get("gen_ai.usage.input_tokens").unwrap_or(&0),
+            output_tokens: *sums.get("gen_ai.usage.output_tokens").unwrap_or(&0),
+            average_duration_ms: stats.average_duration_ms,
+            p95_duration_ms: stats.p95_duration_ms,
         })
     }
+
 }
 impl ObservabilityRepository for TelemetryProjection {
     fn metric_points(
@@ -272,7 +248,7 @@ impl ObservabilityRepository for TelemetryProjection {
         blocking(async {
             let page = self
                 .store
-                .metric_points(name, (current - 1) * size, size)
+                .metric_points(name.into(), (current - 1) * size, size)
                 .await
                 .map_err(failure)?;
             let records = page
@@ -291,51 +267,41 @@ impl ObservabilityRepository for TelemetryProjection {
             })
         })
     }
-    fn scoped_metric_points(&self, workspace: Option<String>, name: Option<String>, current: usize, size: usize) -> Result<MetricPage, ObservabilityError> {
-        let Some(workspace) = workspace.filter(|code| !code.is_empty()) else { return self.metric_points(name, current, size); };
-        if current == 0 || current > 1_000_000 || !(1..=100).contains(&size) { return Err(ObservabilityError::InvalidQuery); }
-        let start = (current - 1) * size;
-        let mut total = 0;
-        let mut records = Vec::new();
-        let mut page_number = 1;
-        const SCAN_PAGE_SIZE: usize = 50_000;
-        loop {
-            let page = blocking(async {
-                let page = self
-                    .store
-                    .metric_points(
-                        name.clone(),
-                        (page_number - 1) * SCAN_PAGE_SIZE,
-                        SCAN_PAGE_SIZE,
-                    )
-                    .await
-                    .map_err(failure)?;
-                let records = page
-                    .records
-                    .into_iter()
-                    .map(|point| {
-                        serde_json::from_value(serde_json::to_value(point).map_err(failure)?)
-                            .map_err(failure)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok::<_, ObservabilityError>(MetricPage {
-                    current: page_number,
-                    size: SCAN_PAGE_SIZE,
-                    total: page.total,
-                    records,
-                })
-            })?;
-            let count = page.records.len();
-            for point in page.records {
-                let belongs = point.resource.get("tron.workspace.code") == Some(&workspace)
-                    || point.data.get("attributes").and_then(|v| v.as_array()).is_some_and(|attrs| attrs.iter().any(|attr| attr.get("key").and_then(|v| v.as_str()) == Some("tron.workspace.code") && attr.pointer("/value/stringValue").and_then(|v| v.as_str()) == Some(workspace.as_str())));
-                if belongs { if total >= start && records.len() < size { records.push(point); } total += 1; }
-            }
-            if page_number * SCAN_PAGE_SIZE >= page.total || count == 0 { break; }
-            page_number += 1;
+    fn scoped_metric_points(
+        &self,
+        workspace: Option<String>,
+        name: Option<String>,
+        current: usize,
+        size: usize,
+    ) -> Result<MetricPage, ObservabilityError> {
+        if current == 0 || current > 1_000_000 || !(1..=100).contains(&size) {
+            return Err(ObservabilityError::InvalidQuery);
         }
-        Ok(MetricPage { current, size, total, records })
+        let attributes = workspace
+            .filter(|c| !c.is_empty())
+            .map(|w| BTreeMap::from([("tron.workspace.code".into(), w)]))
+            .unwrap_or_default();
+        let page = blocking(self.store.metric_points(
+            eliteforge_agent_core::TelemetryMetricFilter { name, attributes },
+            (current - 1) * size,
+            size,
+        ))
+        .map_err(failure)?;
+        let records = page
+            .records
+            .into_iter()
+            .map(|p| {
+                serde_json::from_value(serde_json::to_value(p).map_err(failure)?).map_err(failure)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(MetricPage {
+            current,
+            size,
+            total: page.total,
+            records,
+        })
     }
+
     fn runtime_metrics(&self) -> Result<RuntimeMetrics, ObservabilityError> {
         blocking(async {
             let resource = BTreeMap::from([
@@ -368,7 +334,7 @@ impl ObservabilityRepository for TelemetryProjection {
                     .or(memory.as_ref().map(|p| p.timestamp)),
                 metric_point_count: self
                     .store
-                    .metric_points(None, 0, 1)
+                    .metric_points(None.into(), 0, 1)
                     .await
                     .map_err(failure)?
                     .total,

@@ -33,19 +33,28 @@ impl<'a> SqliteAppRepositorySql<'a> {
     }
 }
 
-impl AppRepository for SqliteAppRepositorySql<'_> {
-    fn list_apps(&mut self) -> Result<Vec<App>, AppError> {
+impl SqliteAppRepositorySql<'_> {
+    fn read_apps(&mut self, codes: Option<&[String]>) -> Result<Vec<App>, AppError> {
+        let selected = codes
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|_| AppError::StorageFailure)?;
+        let predicate = if selected.is_some() {
+            "app_code IN (SELECT value FROM json_each(?1))"
+        } else {
+            "?1 IS NULL"
+        };
         let mut statement = self
             .connection
-            .prepare(
+            .prepare(&format!(
                 "SELECT id, app_code, workspace_code, app_name, description, local_directory, runtime_role, repository_url, default_branch, status, created_at, updated_at, archived_at
-                 FROM apps
-                 ORDER BY app_name ASC, app_code ASC",
+                 FROM apps WHERE {predicate}
+                 ORDER BY app_name ASC, app_code ASC"),
             )
             .map_err(storage_error)?;
 
         let rows = statement
-            .query_map([], |row| {
+            .query_map([selected], |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,
@@ -101,6 +110,29 @@ impl AppRepository for SqliteAppRepositorySql<'_> {
                 },
             )
             .collect()
+    }
+}
+
+impl AppRepository for SqliteAppRepositorySql<'_> {
+    fn list_apps(&mut self) -> Result<Vec<App>, AppError> {
+        self.read_apps(None)
+    }
+    fn apps_by_codes(&mut self, codes: &[String]) -> Result<Vec<App>, AppError> {
+        self.read_apps(Some(codes))
+    }
+    fn tags_for_apps(&mut self, codes: &[String]) -> Result<Vec<AppTag>, AppError> {
+        let codes = serde_json::to_string(codes).map_err(|_| AppError::StorageFailure)?;
+        let mut q = self.connection.prepare("SELECT app_code,tag_name,linked_at FROM app_tags WHERE app_code IN (SELECT value FROM json_each(?1)) ORDER BY app_code,tag_name").map_err(storage_error)?;
+        q.query_map([codes], |row| {
+            Ok(AppTag {
+                app_code: row.get(0)?,
+                tag: row.get(1)?,
+                linked_at: timestamp_from_millis(row.get(2)?),
+            })
+        })
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)
     }
 
     fn list_app_tags(&mut self) -> Result<Vec<AppTag>, AppError> {
@@ -264,6 +296,20 @@ impl AppRepository for SqliteAppRepository {
         self.connection.call(
             move |connection| SqliteAppRepositorySql { connection }.list_app_tags(),
             || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn apps_by_codes(&mut self, codes: &[String]) -> Result<Vec<App>, AppError> {
+        let codes = codes.to_vec();
+        self.connection.call_read(
+            move |connection| SqliteAppRepositorySql { connection }.apps_by_codes(&codes),
+            || AppError::StorageFailure,
+        )
+    }
+    fn tags_for_apps(&mut self, codes: &[String]) -> Result<Vec<AppTag>, AppError> {
+        let codes = codes.to_vec();
+        self.connection.call_read(
+            move |connection| SqliteAppRepositorySql { connection }.tags_for_apps(&codes),
+            || AppError::StorageFailure,
         )
     }
     fn next_id(&mut self) -> Result<i64, AppError> {

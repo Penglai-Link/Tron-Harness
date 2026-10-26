@@ -304,6 +304,7 @@ export interface ChatActiveRun {
   runCode: string;
   runtimeAdapterKey: string;
   supportsSteer: boolean;
+  operationKind?: string | null;
   state: ChatActiveRunState;
 }
 
@@ -314,6 +315,7 @@ export interface ChatRuntimeRunState {
   runCode: string;
   sessionCode: string;
   supportsSteer: boolean;
+  operationKind?: string | null;
 }
 
 export interface ChatActiveRunResult {
@@ -497,6 +499,8 @@ export interface ChatClientConfig {
   inputPlaceholder?: string;
   queuedInputPlaceholder?: string;
   steeringInputPlaceholder?: string;
+  /** Host locale (e.g. i18n.language) used to localize chat card copy. */
+  locale?: string;
   runningEnterSubmitMode?: "steer" | "queue";
   maxFileSize?: number;
   maxLimitFile?: number;

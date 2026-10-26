@@ -27,14 +27,34 @@ pub(super) fn ensure_code_exists(
 }
 
 pub(super) fn ensure_codes_exist(
+    store: &dyn OntologyStore,
+    scope: &ResolvedGraphScope,
     resource_type: OntologyResourceType,
     resource_codes: &[String],
-    mut exists: impl FnMut(&str) -> Result<bool, OntologyError>,
 ) -> Result<(), OntologyError> {
-    for resource_code in resource_codes {
-        ensure_code_exists(resource_type, resource_code, &mut exists)?;
+    let references = resource_codes
+        .iter()
+        .map(|code| (resource_type, code.clone()))
+        .collect::<Vec<_>>();
+    ensure_references_exist(store, scope, &references)
+}
+fn ensure_references_exist(
+    store: &dyn OntologyStore,
+    scope: &ResolvedGraphScope,
+    references: &[(OntologyResourceType, String)],
+) -> Result<(), OntologyError> {
+    if references.is_empty() {
+        return Ok(());
     }
-
+    let present = store.resources_present(scope, references)?;
+    if present.len() != references.len() {
+        return Err(OntologyError::StorageFailure);
+    }
+    for ((kind, code), present) in references.iter().zip(present) {
+        if !present {
+            return Err(missing_resource(*kind, code.clone()));
+        }
+    }
     Ok(())
 }
 
@@ -57,24 +77,18 @@ pub(super) fn ensure_shape_references_exist(
     scope: &ResolvedGraphScope,
     shape: &OntologyShaclShape,
 ) -> Result<(), OntologyError> {
-    ensure_code_exists(
-        OntologyResourceType::Class,
-        &shape.target_class_code,
-        |code| Ok(store.get_class(scope, code)?.is_some()),
-    )?;
-
-    for property_constraint in &shape.property_constraints {
-        ensure_code_exists(
+    let mut references = vec![(OntologyResourceType::Class, shape.target_class_code.clone())];
+    for property in &shape.property_constraints {
+        references.push((
             OntologyResourceType::Property,
-            &property_constraint.property_code,
-            |code| Ok(store.get_property(scope, code)?.is_some()),
-        )?;
-        ensure_codes_exist(
-            OntologyResourceType::Constraint,
-            &property_constraint.constraint_codes,
-            |code| Ok(store.get_constraint(scope, code)?.is_some()),
-        )?;
+            property.property_code.clone(),
+        ));
+        references.extend(
+            property
+                .constraint_codes
+                .iter()
+                .map(|code| (OntologyResourceType::Constraint, code.clone())),
+        );
     }
-
-    Ok(())
+    ensure_references_exist(store, scope, &references)
 }

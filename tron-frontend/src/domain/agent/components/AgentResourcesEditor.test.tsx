@@ -26,7 +26,7 @@ vi.mock("@/domain/agent/components/InternalAgentKnowledgeField", () => ({ Intern
 vi.mock("@/domain/agent/components/InternalAgentAssignmentDialog", () => ({ InternalAgentAssignmentDialog: ({ onConfirm, onClose }: { onConfirm: (codes: string[]) => void; onClose: () => void }) => <div><button onClick={() => onConfirm(["tool-a"])}>Confirm tools</button><button onClick={onClose}>Cancel tools</button></div> }));
 const record = {
   agentCode: "dude-a", name: "Dude A", description: "", rolePrompt: "", platformDefined: true,
-  toolAssignmentMode: "all_platform_tools", toolExposureMode: "direct_list", expandedDomainPersistenceMode: "sticky_expanded",
+  toolAssignmentMode: "all_platform_tools",
   maxSteps: 100, maxToolCalls: 100, maxParallelToolCalls: 4, mcpAccessMode: "disabled", selectedToolCodes: [], selectedServerCodes: [], source: "platform_default",
 };
 function mount(panel: "resources" | "advanced" = "resources", creating = false) {

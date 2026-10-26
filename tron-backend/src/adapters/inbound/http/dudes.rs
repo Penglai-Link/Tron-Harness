@@ -128,8 +128,6 @@ macro_rules! dude_response {
             updated_at: i64,
             tool_assignment_mode: crate::domain::agent::ToolAssignmentMode,
             mcp_access_mode: crate::domain::agent::McpAccessMode,
-            tool_exposure_mode: crate::domain::agent::ToolExposureMode,
-            expanded_domain_persistence_mode: crate::domain::agent::ExpandedDomainPersistenceMode,
             max_steps: u32,
             max_tool_calls: u32,
             max_parallel_tool_calls: u32,
@@ -157,8 +155,6 @@ macro_rules! dude_response {
                     updated_at: d.updated_at,
                     tool_assignment_mode: p.tool_assignment_mode,
                     mcp_access_mode: p.mcp_access_mode,
-                    tool_exposure_mode: p.tool_exposure_mode,
-                    expanded_domain_persistence_mode: p.expanded_domain_persistence_mode,
                     max_steps: p.max_steps,
                     max_tool_calls: p.max_tool_calls,
                     max_parallel_tool_calls: p.max_parallel_tool_calls,
@@ -406,12 +402,27 @@ async fn sessions(
     auth: RequestAuthContext,
     Path(code): Path<String>,
 ) -> Result<Json<ApiResponse<Vec<ListDudeSessionResponse>>>, DudeApiError> {
-    let mut result = vec![];
-    for d in s.dudes.sessions(&code)? {
-        let Ok(chat) = s.chats.get_session(&d.session_code) else {continue;};
-        if chat.user_code.as_deref()!=Some(&auth.user().user_code) {continue;}
-        result.push(ListDudeSessionResponse::from_record(chat, d));
-    }
+    let sessions = s.dudes.sessions(&code)?;
+    let codes = sessions
+        .iter()
+        .map(|session| session.session_code.clone())
+        .collect::<Vec<_>>();
+    let mut chats = s
+        .chats
+        .sessions_by_codes(&codes)
+        .map_err(|_| DudeError::Storage)?
+        .into_iter()
+        .filter(|chat| chat.user_code.as_deref() == Some(&auth.user().user_code))
+        .map(|chat| (chat.session_code.clone(), chat))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let result = sessions
+        .into_iter()
+        .filter_map(|session| {
+            chats
+                .remove(&session.session_code)
+                .map(|chat| ListDudeSessionResponse::from_record(chat, session))
+        })
+        .collect::<Vec<_>>();
     Ok(Json(ApiResponse::protocol_success(result)))
 }
 #[derive(Serialize)]

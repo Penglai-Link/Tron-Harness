@@ -500,14 +500,17 @@ impl ModelProviderService {
         format!("{:x}", digest.finalize())
     }
     pub(super) fn sdk_identity_scope(&self, row: &ProviderConnectionRow) -> String {
-        self.sdk_fingerprint(
-            &serde_json::json!([
+        use sha2::{Digest, Sha256};
+        // Account identity survives process restarts and credential refreshes.
+        // Credential attempts below retain their process-local salted digest.
+        let mut digest = Sha256::new();
+        digest.update(b"tron.provider.account.v1\0");
+        digest.update(serde_json::json!([
                 row.provider_code.storage_value(),
                 row.person_ai_user_id,
                 row.server_base_url
-            ])
-            .to_string(),
-        )
+            ]).to_string().as_bytes());
+        format!("{:x}", digest.finalize())
     }
     pub(super) fn sdk_attempt_for_row(&self, row: &ProviderConnectionRow, token: &str) -> String {
         format!(

@@ -401,19 +401,44 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
             .map(|item| item.domain_code)
             .collect::<BTreeSet<_>>();
         let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&self.connection, rusqlite::TransactionBehavior::Immediate).map_err(storage_error)?;
-        let mut tree_ids = BTreeMap::new();
-        for domain_code in tree_codes {
-            let domain_id = tx
-                .query_row(
-                    "SELECT id FROM navigation_menu_trees WHERE tree_code = ?1",
-                    [domain_code],
-                    |row| row.get::<_, i64>(0),
-                )
-                .optional()
-                .map_err(storage_error)?
-                .ok_or(NavigationError::ItemNotFound)?;
-            tree_ids.insert(domain_code, domain_id);
+        let selected =
+            serde_json::to_string(&tree_codes).map_err(|_| NavigationError::StorageFailure)?;
+        let tree_ids = {
+            let mut q = tx.prepare("SELECT tree_code,id FROM navigation_menu_trees WHERE tree_code IN (SELECT value FROM json_each(?1))").map_err(storage_error)?;
+            q.query_map([&selected], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })
+            .map_err(storage_error)?
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .map_err(storage_error)?
+        };
+        if tree_ids.len() != tree_codes.len() {
+            return Err(NavigationError::ItemNotFound);
         }
+        let menus = {
+            let codes = items.iter().map(|item| item.menu_code).collect::<Vec<_>>();
+            let codes =
+                serde_json::to_string(&codes).map_err(|_| NavigationError::StorageFailure)?;
+            let mut q = tx.prepare("SELECT menu_code,id FROM navigation_menus WHERE menu_code IN (SELECT value FROM json_each(?1))").map_err(storage_error)?;
+            q.query_map([codes], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })
+            .map_err(storage_error)?
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .map_err(storage_error)?
+        };
+        let mut existing = {
+            let mut q = tx.prepare("SELECT i.tree_id,m.menu_code,i.id FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id=i.menu_id JOIN navigation_menu_trees t ON t.id=i.tree_id WHERE t.tree_code IN (SELECT value FROM json_each(?1))").map_err(storage_error)?;
+            q.query_map([selected], |r| {
+                Ok((
+                    (r.get::<_, i64>(0)?, r.get::<_, String>(1)?),
+                    r.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(storage_error)?
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .map_err(storage_error)?
+        };
         for domain_id in tree_ids.values() {
             move_positions_out_of_way(&tx, *domain_id)?;
         }
@@ -425,46 +450,21 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
                 .get(item.domain_code)
                 .copied()
                 .ok_or(NavigationError::DomainNotFound)?;
-            let exists = tx
-                .query_row(
-                    "SELECT EXISTS(
-                        SELECT 1
-                        FROM navigation_menu_tree_items i
-                        JOIN navigation_menus m ON m.id = i.menu_id
-                        WHERE i.tree_id = ?1 AND m.menu_code = ?2
-                    )",
-                    params![domain_id, item.menu_code],
-                    |row| row.get::<_, i64>(0),
-                )
-                .map_err(storage_error)?
-                == 1;
-            if exists {
+            if existing.contains_key(&(domain_id, item.menu_code.to_owned())) {
                 continue;
             }
             let parent_item_id = item
                 .parent_menu_code
-                .map(|parent_menu_code| {
-                    tx.query_row(
-                        "SELECT i.id
-                         FROM navigation_menu_tree_items i
-                         JOIN navigation_menus m ON m.id = i.menu_id
-                         WHERE i.tree_id = ?1 AND m.menu_code = ?2",
-                        params![domain_id, parent_menu_code],
-                        |row| row.get::<_, i64>(0),
-                    )
-                    .optional()
-                    .map_err(storage_error)?
-                    .ok_or(NavigationError::InvalidParent)
+                .map(|parent| {
+                    existing
+                        .get(&(domain_id, parent.to_owned()))
+                        .copied()
+                        .ok_or(NavigationError::InvalidParent)
                 })
                 .transpose()?;
-            let menu_id = tx
-                .query_row(
-                    "SELECT id FROM navigation_menus WHERE menu_code = ?1",
-                    [item.menu_code],
-                    |row| row.get::<_, i64>(0),
-                )
-                .optional()
-                .map_err(storage_error)?
+            let menu_id = menus
+                .get(item.menu_code)
+                .copied()
                 .ok_or(NavigationError::MenuNotFound)?;
             tx.execute(
                 "INSERT INTO navigation_menu_tree_items
@@ -480,6 +480,7 @@ impl NavigationRepository for SqliteNavigationRepositorySql<'_> {
                 ],
             )
             .map_err(storage_error)?;
+            existing.insert((domain_id, item.menu_code.to_owned()), next_id);
             next_id += 1;
             restored_item_count += 1;
         }

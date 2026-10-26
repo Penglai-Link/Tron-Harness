@@ -885,7 +885,7 @@ async fn composer_suggestions_follow_effective_grants_and_exclude_external_agent
         .await;
     assert_eq!(data["code"], "0");
     assert_eq!(data["data"]["skills"][0]["name"], "independent");
-    assert_eq!(data["data"]["commands"], json!(["goal"]));
+    assert_eq!(data["data"]["commands"], json!(["goal", "compact"]));
     let child = f
         .api(
             Method::GET,

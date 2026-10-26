@@ -12,7 +12,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    http::{Method, StatusCode},
+    http::{Method, StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
 };
@@ -96,15 +96,47 @@ async fn agent_chat_completion(
                 .find_map(|message| message["content"].as_str())
         })
         .unwrap_or_default();
-    Json(json!({
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": format!("automation reply: {prompt}")
-            }
-        }]
-    }))
-    .into_response()
+    sse_completion(
+        &payload,
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": format!("automation reply: {prompt}")
+                }
+            }]
+        }),
+    )
+}
+
+/// The product streams native model turns, so the mock serves SSE whenever the
+/// request asks for it, mirroring chat-completions chunk framing.
+fn sse_completion(payload: &Value, response: Value) -> Response {
+    if payload["stream"] != true {
+        return Json(response).into_response();
+    }
+    let message = &response["choices"][0]["message"];
+    let mut delta = message.clone();
+    if let Some(calls) = delta["tool_calls"].as_array_mut() {
+        for (index, call) in calls.iter_mut().enumerate() {
+            call["index"] = json!(index);
+        }
+    }
+    let finish = response["choices"][0]["finish_reason"].as_str().unwrap_or(
+        if message["tool_calls"].is_array() {
+            "tool_calls"
+        } else {
+            "stop"
+        },
+    );
+    let chunk = json!({"choices":[{"index":0,"delta":delta,"finish_reason":null}]});
+    let done =
+        json!({"choices":[{"index":0,"delta":{},"finish_reason":finish}],"usage":response["usage"]});
+    (
+        [(header::CONTENT_TYPE, "text/event-stream")],
+        format!("data: {chunk}\n\ndata: {done}\n\ndata: [DONE]\n\n"),
+    )
+        .into_response()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1096,6 +1128,7 @@ fn automation_tool_context(tools: Vec<EffectiveTool>) -> AgentRunContext {
             api_key: "sk-test".into(),
             model_name: "gpt-test".into(),
             thinking_enabled: false,
+            supports_developer_role: false,
             reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: Some(0.2),
@@ -1119,14 +1152,13 @@ fn automation_tool_context(tools: Vec<EffectiveTool>) -> AgentRunContext {
         tools,
         effective_tools: Vec::new(),
         tool_assignment: None,
-        tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits {
             max_steps: 10,
             max_tool_calls: 10,
             max_parallel_tool_calls: 4,
         },
-        messages: vec![AgentMessage::user("manage automations")],
+        messages: vec![AgentMessage::user("manage automations")].into(),
         observations: Vec::new(),
         short_term_memory: None,
         started_at: "2026-06-22T00:00:00Z".into(),

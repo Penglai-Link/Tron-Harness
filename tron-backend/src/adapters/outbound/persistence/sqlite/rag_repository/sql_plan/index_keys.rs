@@ -96,48 +96,20 @@ fn unique_indexes(
     repository: &SqliteRagRepositorySql<'_>,
     table_name: &str,
 ) -> Result<Vec<Vec<String>>, RagError> {
-    let pragma = format!("PRAGMA index_list({})", quote_identifier(table_name)?);
-    let mut statement = repository
-        .connection
-        .prepare(&pragma)
-        .map_err(storage_error)?;
-    let index_names = statement
-        .query_map([], |row| {
-            let unique = row.get::<_, i64>(2)? == 1;
-            let name = row.get::<_, String>(1)?;
-            Ok(unique.then_some(name))
+    let mut statement = repository.connection.prepare(
+        "SELECT indexes.name,columns.name FROM pragma_index_list(?1) indexes JOIN pragma_index_info(indexes.name) columns WHERE indexes.\"unique\"=1 ORDER BY indexes.seq,columns.seqno"
+    ).map_err(storage_error)?;
+    let rows = statement
+        .query_map([table_name], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-
-    let mut indexes = Vec::new();
-    for index_name in index_names {
-        let pragma = format!("PRAGMA index_info({})", quote_identifier(&index_name)?);
-        let mut statement = repository
-            .connection
-            .prepare(&pragma)
-            .map_err(storage_error)?;
-        let columns = statement
-            .query_map([], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(2)?))
-            })
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)?;
-        let mut columns = columns;
-        columns.sort_by_key(|(sequence, _)| *sequence);
-        indexes.push(
-            columns
-                .into_iter()
-                .map(|(_, column)| column)
-                .collect::<Vec<_>>(),
-        );
+        .map_err(storage_error)?;
+    let mut indexes = std::collections::BTreeMap::<String, Vec<String>>::new();
+    for row in rows {
+        let (name, column) = row.map_err(storage_error)?;
+        indexes.entry(name).or_default().push(column);
     }
-    Ok(indexes)
+    Ok(indexes.into_values().collect())
 }
 
 fn is_return_field_reserved(logical_name: &str) -> bool {

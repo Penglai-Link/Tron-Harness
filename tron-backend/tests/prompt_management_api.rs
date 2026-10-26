@@ -307,15 +307,15 @@ async fn runtime_prompt_variables_must_match_the_global_runtime_catalog() {
         Some(json!({
             "displayName": "Runtime variable prompt",
             "category": "SYSTEM",
-            "promptBody": "Visible domains: {{visible_domains}}",
+            "promptBody": "Latest message: {{user_message}}",
             "description": null,
             "enabled": true,
             "variables": [{
-                "name": "visible_domains",
-                "type": "JSON",
-                "description": "Visible tool domains",
+                "name": "user_message",
+                "type": "STRING",
+                "description": "Chat user message",
                 "sourceKind": "RUNTIME",
-                "runtimeProvider": "AGENT_VISIBLE_DOMAINS"
+                "runtimeProvider": "CHAT_USER_MESSAGE"
             }]
         })),
     )
@@ -334,23 +334,25 @@ async fn runtime_prompt_variables_must_match_the_global_runtime_catalog() {
         Some(json!({
             "displayName": "Invalid runtime prompt",
             "category": "SYSTEM",
-            "promptBody": "Visible domains: {{visible_domains}}",
+            "promptBody": "Persistence: {{persistence_mode}}",
             "description": null,
             "enabled": true,
             "variables": [{
-                "name": "visible_domains",
+                "name": "persistence_mode",
                 "type": "STRING",
-                "description": "Visible tool domains",
+                "description": "How expanded domain tools are persisted",
                 "sourceKind": "RUNTIME",
-                "runtimeProvider": "AGENT_VISIBLE_DOMAINS"
+                "runtimeProvider": "AGENT_DOMAIN_PERSISTENCE_MODE"
             }]
         })),
     )
     .await;
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    // The retired discovery persistence provider no longer deserializes, so the
+    // request body itself is rejected before variable validation runs.
     assert_eq!(
         response_json(invalid).await["code"],
-        json!("PROMPT_INPUT_INVALID")
+        json!("PROMPT_REQUEST_INVALID")
     );
 }
 
@@ -408,6 +410,93 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
             )
             .is_err()
     );
+}
+
+#[tokio::test]
+async fn domain_discovery_keeps_inventory_out_of_fixed_instructions() {
+    // Builtin prompts are seeded only for databases whose file name does not
+    // start with `tron-` (see `should_seed_builtin_prompts`), so rename the
+    // temp database exactly like the neighbouring developer-prompt test.
+    let database_url = temp_database_url("domain-discovery-runtime-contract");
+    let database_url = database_url.with_file_name(format!(
+        "seeded-{}",
+        database_url.file_name().unwrap().to_string_lossy()
+    ));
+    let router = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/prompts/detail",
+        Some(json!({ "promptCode": "SYS_AGENT_DOMAIN_DISCOVERY" })),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let detail = response_json(response).await;
+    assert_eq!(detail["data"]["category"], json!("DEVELOPER"));
+    assert_eq!(detail["data"]["runtimeRequired"], json!(true));
+    assert_eq!(
+        detail["data"]["catalogKey"],
+        json!("agent.domain-discovery")
+    );
+
+    // Dynamic inventory belongs to its configured contributor, not this prompt.
+    assert_eq!(detail["data"]["variables"], json!([]));
+    assert_eq!(detail["data"]["version"], json!(8));
+    let translations = detail["data"]["translations"]
+        .as_array()
+        .expect("builtin translations should be an array");
+    for locale in ["en-US", "zh-CN"] {
+        let translation = translations
+            .iter()
+            .find(|translation| translation["locale"] == json!(locale))
+            .unwrap_or_else(|| panic!("missing {locale} translation: {translations:?}"));
+        let body = translation["promptBody"]
+            .as_str()
+            .expect("prompt body should be text");
+        assert!(body.contains("\"items\":[{\"tool\":"), "{locale}: missing batched exact-definition example");
+        assert!(body.contains("description"), "{locale}: missing summary contract");
+        assert!(body.contains("input_schema"), "{locale}: missing definition contract");
+        assert!(body.contains("tool_domains") && !body.contains("{{visible_domains}}"), "{locale}: {body}");
+        assert!(body.contains(eliteforge_agent_core::TOOL_SEARCH_CALL_NAME), "{locale}: {body}");
+        assert!(body.contains(eliteforge_agent_core::TOOL_EXECUTE_CALL_NAME), "{locale}: {body}");
+        assert!(
+            !body.contains("discovery_expand_tool_domain"),
+            "retired discovery tool leaked into {locale}: {body}"
+        );
+    }
+
+    // Reopening a database with the previous gateway instructions must refresh
+    // both the primary body and published translations, not just clean installs.
+    Connection::open(&database_url).unwrap().execute(
+        "UPDATE prompts SET version = 6, prompt_body = 'stale gateway contract' WHERE prompt_code = 'SYS_AGENT_DOMAIN_DISCOVERY'",
+        [],
+    ).unwrap();
+    Connection::open(&database_url).unwrap().execute(
+        "UPDATE prompt_translations SET source_version = 6, prompt_body = 'stale translation' WHERE prompt_code = 'SYS_AGENT_DOMAIN_DISCOVERY'",
+        [],
+    ).unwrap();
+    drop(router);
+    let restarted = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let refreshed = post_json(
+        &restarted,
+        "/api/v1/admin/platform/prompts/detail",
+        json!({ "promptCode": "SYS_AGENT_DOMAIN_DISCOVERY" }),
+    ).await;
+    assert_eq!(refreshed["data"]["version"], json!(8));
+    assert_eq!(refreshed["data"]["promptBody"], detail["data"]["promptBody"]);
+    let refreshed_translations = refreshed["data"]["translations"].as_array().unwrap();
+    for previous in translations {
+        let current = refreshed_translations.iter()
+            .find(|value| value["locale"] == previous["locale"]).unwrap();
+        assert_eq!(current["promptBody"], previous["promptBody"]);
+        assert_eq!(current["sourceVersion"], json!(8));
+    }
 }
 
 #[tokio::test]

@@ -479,7 +479,6 @@ mod tests {
             }],
             effective_tools: Vec::new(),
             tool_assignment: None,
-            tool_exposure: Default::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
             messages: vec![AgentMessage::user("hello")].into(),

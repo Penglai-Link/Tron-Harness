@@ -498,10 +498,15 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
         let mut visible =
             BTreeMap::<crate::domain::rag::graph::GraphPartition, BTreeSet<String>>::new();
         let mut generation_ids = BTreeSet::new();
+        let corpora = self.repository.get_corpora(
+            &ranges
+                .iter()
+                .map(|range| range.corpus_id.clone())
+                .collect::<Vec<_>>(),
+        )?;
         for range in ranges.iter().filter(|r| r.graph) {
-            let corpus = self
-                .repository
-                .get_corpus(&range.corpus_id)?
+            let corpus = corpora
+                .get(&range.corpus_id)
                 .ok_or(RagError::CorpusNotFound)?;
             if !super::RagSettings::from_capabilities(&corpus.capabilities)?.graph {
                 continue;
@@ -548,12 +553,22 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
     /// Build vector partitions from published metadata inside the authorized scope.
     pub fn partition_ranges(
         &self,
-        mut range: AuthorizedRagRange,
+        range: AuthorizedRagRange,
     ) -> Result<Vec<AuthorizedRagRange>, RagError> {
         let corpus = self
             .repository
             .get_corpus(&range.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
+        self.partition_ranges_for_corpus(range, &corpus)
+    }
+    pub(crate) fn partition_ranges_for_corpus(
+        &self,
+        mut range: AuthorizedRagRange,
+        corpus: &crate::domain::rag::RagCorpusRecord,
+    ) -> Result<Vec<AuthorizedRagRange>, RagError> {
+        if range.corpus_id != corpus.corpus_id {
+            return Err(RagError::SearchScopeInvalid);
+        }
         range.filters = super::merge_search_request_filters(&corpus, &range.filters, &json!({}))?;
         let vector = range.vector;
         range.vector = false;
@@ -598,10 +613,7 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
             partition.embedding_dimension = Some(dimension);
             partition.provider_model = provider;
             partition.embedding_fingerprint = fingerprint;
-            let corpus = self
-                .repository
-                .get_corpus(&range.corpus_id)?
-                .ok_or(RagError::CorpusNotFound)?;
+
             partition.filters = super::merge_search_request_filters(
                 &corpus,
                 &range.filters,
@@ -617,6 +629,12 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
         result: &mut RagEvidenceResult,
     ) -> Result<(), RagError> {
         let mut visible = BTreeSet::new();
+        let corpora = self.repository.get_corpora(
+            &ranges
+                .iter()
+                .map(|range| range.corpus_id.clone())
+                .collect::<Vec<_>>(),
+        )?;
         for range in ranges {
             let sources = result
                 .hits
@@ -627,9 +645,8 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
             if sources.is_empty() {
                 continue;
             }
-            let corpus = self
-                .repository
-                .get_corpus(&range.corpus_id)?
+            let corpus = corpora
+                .get(&range.corpus_id)
                 .ok_or(RagError::CorpusNotFound)?;
             let filters = super::merge_search_request_filters(
                 &corpus,

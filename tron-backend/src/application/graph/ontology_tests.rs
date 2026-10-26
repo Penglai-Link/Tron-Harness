@@ -360,6 +360,10 @@ fn missing_reference_dependencies_return_typed_errors_before_writes() {
                 scope: resolved_scope(),
                 property_code: "OWNER".to_owned(),
             },
+            StoreCall::GetConstraint {
+                scope: resolved_scope(),
+                constraint_code: "OWNER_REQUIRED".to_owned(),
+            },
         ]
     );
 }

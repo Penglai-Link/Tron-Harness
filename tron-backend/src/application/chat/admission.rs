@@ -1,5 +1,5 @@
 use crate::application::agent::{
-    ActiveRunError, ActiveRunGuard, AgentInvocationError, generate_agent_run_code,
+    ActiveRunError, ActiveRunGuard, ActiveRunRegistry, AgentInvocationError, generate_agent_run_code,
 };
 
 use super::{ChatSendError, ChatService};
@@ -20,6 +20,7 @@ impl ChatService {
         session_code: &str,
         requested_run_code: Option<String>,
         agent_code: &str,
+        compacting: bool,
     ) -> Result<ChatRunReservation, ChatSendError> {
         let run_code = requested_run_code
             .map(|value| value.trim().to_string())
@@ -31,8 +32,14 @@ impl ChatService {
             ))
         })?;
         let runtime_adapter_key = runtime_adapter_key_for_agent(agent_code);
+        if compacting && runtime_adapter_key != MAIN_RUNTIME_ADAPTER_KEY {
+            return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                "Context compaction requires a native agent".into(),
+            )));
+        }
         let supports_steer = runtime_adapter_key == MAIN_RUNTIME_ADAPTER_KEY;
-        let guard = match self.active_runs.reserve(
+        let reserve = if compacting { ActiveRunRegistry::reserve_context_compaction } else { ActiveRunRegistry::reserve };
+        let guard = match reserve(&self.active_runs,
             session_code,
             &run_code,
             runtime_adapter_key,

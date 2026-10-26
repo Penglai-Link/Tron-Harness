@@ -119,7 +119,7 @@ fn is_rag_extension_shadow_table(name: &str) -> bool {
     false
 }
 
-impl RagConfigRepository for SqliteRagRepositorySql<'_> {
+impl SqliteRagRepositorySql<'_> {
     fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
         let mut statement = self
             .connection
@@ -142,6 +142,19 @@ impl RagConfigRepository for SqliteRagRepositorySql<'_> {
         collect_rows(rows)
     }
 
+    fn get_corpora(&self, ids: &[String]) -> Result<BTreeMap<String, RagCorpusRecord>, RagError> {
+        if ids.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        let ids = serde_json::to_string(ids).map_err(|_| RagError::StorageFailure)?;
+        let mut q = self.connection.prepare("SELECT corpus_id,display_name,status,description,capabilities_json,filter_schema_json,field_mapping_json,storage_binding_json FROM rag_corpora WHERE corpus_id IN (SELECT value FROM json_each(?1))").map_err(storage_error)?;
+        let rows = q.query_map([ids], map_corpus_row).map_err(storage_error)?;
+        rows.map(|row| {
+            let corpus = row.map_err(storage_error)?;
+            Ok((corpus.corpus_id.clone(), corpus))
+        })
+        .collect()
+    }
     fn get_corpus(&self, corpus_id: &str) -> Result<Option<RagCorpusRecord>, RagError> {
         let mut statement = self
             .connection
@@ -413,22 +426,31 @@ impl RagConfigRepository for SqliteRagRepository {
             || RagError::StorageFailure,
         )
     }
-    fn list_corpora_with_counts(&self) -> Result<Vec<(RagCorpusRecord, crate::application::rag::RagIndexCounts)>, RagError> {
-        self.connection.call(
+    fn list_corpora_with_counts(
+        &self,
+    ) -> Result<Vec<(RagCorpusRecord, crate::application::rag::RagIndexCounts)>, RagError> {
+        self.connection.call_read(
             move |connection| {
-                let sql = SqliteRagRepositorySql { connection };
-                sql.list_corpora()?.into_iter().map(|corpus| {
-                    let counts = sql.index_counts_for(&corpus)?;
-                    Ok((corpus, counts))
-                }).collect()
+                let transaction=crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(connection,rusqlite::TransactionBehavior::Deferred).map_err(storage_error)?;
+                let result=SqliteRagRepositorySql { connection: &transaction }.list_corpora_with_counts()?;
+                transaction.commit().map_err(storage_error)?;
+                Ok(result)
             },
             || RagError::StorageFailure,
         )
     }
+
     fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
         self.connection.call(
             move |connection| SqliteRagRepositorySql { connection }.list_corpora(),
             || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn get_corpora(&self, ids: &[String]) -> Result<BTreeMap<String, RagCorpusRecord>, RagError> {
+        let ids = ids.to_vec();
+        self.connection.call_read(
+            move |connection| SqliteRagRepositorySql { connection }.get_corpora(&ids),
+            || RagError::StorageFailure,
         )
     }
     fn get_corpus(&self, corpus_id: &str) -> Result<Option<RagCorpusRecord>, RagError> {
@@ -465,5 +487,59 @@ impl RagManagementRepository for SqliteRagRepository {
             },
             || storage_error(rusqlite::Error::InvalidQuery),
         )
+    }
+}
+
+// The internal SQL repository also supplies the config supertrait required by
+// ingestion, diagnostics and search. All read methods delegate to native queries.
+impl RagConfigRepository for SqliteRagRepositorySql<'_> {
+    fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
+        SqliteRagRepositorySql::list_corpora(self)
+    }
+    fn get_corpora(&self, ids: &[String]) -> Result<BTreeMap<String, RagCorpusRecord>, RagError> {
+        SqliteRagRepositorySql::get_corpora(self, ids)
+    }
+    fn get_corpus(&self, id: &str) -> Result<Option<RagCorpusRecord>, RagError> {
+        SqliteRagRepositorySql::get_corpus(self, id)
+    }
+    fn list_corpora_with_counts(
+        &self,
+    ) -> Result<Vec<(RagCorpusRecord, crate::application::rag::RagIndexCounts)>, RagError> {
+        SqliteRagRepositorySql::list_corpora_with_counts(self)
+    }
+    fn record_tasks(
+        &self,
+        user: &str,
+    ) -> Result<Vec<crate::application::rag::RagRecordTask>, RagError> {
+        SqliteRagRepositorySql::record_tasks(self, user)
+    }
+    fn record_task_summaries(
+        &self,
+        user: &str,
+    ) -> Result<Vec<crate::application::rag::RagRecordTask>, RagError> {
+        SqliteRagRepositorySql::record_task_summaries(self, user)
+    }
+    fn record_task(
+        &self,
+        user: &str,
+        id: &str,
+    ) -> Result<Option<crate::application::rag::RagRecordTask>, RagError> {
+        SqliteRagRepositorySql::record_task(self, user, id)
+    }
+    fn record_task_summary(
+        &self,
+        user: &str,
+        id: &str,
+    ) -> Result<Option<crate::application::rag::RagRecordTask>, RagError> {
+        SqliteRagRepositorySql::record_task_summary(self, user, id)
+    }
+    fn record_task_is_latest(
+        &self,
+        task: &crate::application::rag::RagRecordTask,
+    ) -> Result<bool, RagError> {
+        self.connection.query_row("SELECT NOT EXISTS(SELECT 1 FROM rag_record_tasks newer WHERE newer.user_code=?1 AND newer.corpus_id=?2 AND json_extract(newer.payload_json,'$.sourceCode')=?3 AND json_extract(newer.payload_json,'$.sourceVersion')=?4 AND json_extract(newer.payload_json,'$.scopeType')=?5 AND json_extract(newer.payload_json,'$.scopeCode')=?6 AND newer.rowid>(SELECT rowid FROM rag_record_tasks WHERE id=?7))",params![task.user_code,task.corpus_id,task.source_code,task.source_version,task.scope_type,task.scope_code,task.id],|r|r.get(0)).map_err(storage_error)
+    }
+    fn index_counts(&self, id: &str) -> Result<crate::application::rag::RagIndexCounts, RagError> {
+        SqliteRagRepositorySql::index_counts(self, id)
     }
 }

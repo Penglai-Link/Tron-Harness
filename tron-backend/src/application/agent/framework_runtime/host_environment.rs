@@ -26,6 +26,35 @@ impl FrameworkHost {
             eliteforge_agent_capability_runtime::CapabilityPackManager::new(&self.0.pack_root)
                 .map_err(|e| e.to_string())?;
         let installed = manager.installed().map_err(|e| e.to_string())?;
+        let mut existing_mcp = self
+            .0
+            .mcp
+            .get()
+            .map(|mcp| {
+                mcp.list_platform_servers(crate::domain::mcp::PlatformMcpServerListQuery {
+                    search: None,
+                    status: None,
+                })
+            })
+            .transpose()
+            .map_err(|e| e.to_string())?
+            .unwrap_or_default()
+            .into_iter()
+            .map(|server| server.server_code)
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut mcp_ownership = self
+            .0
+            .capability_resources
+            .get()
+            .map(|resources| resources.list())
+            .transpose()?
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|resource| resource.kind == "mcp")
+            .map(|resource| (resource.code.clone(), resource))
+            .collect::<BTreeMap<_, _>>();
+        let mut mcp_resources = Vec::new();
+        let mut mcp_declarations = Vec::new();
         let mut selected = std::collections::BTreeSet::new();
         for pack in installed.iter().rev() {
             if !selected.insert(pack.manifest.id.clone()) {
@@ -44,13 +73,13 @@ impl FrameworkHost {
                 pack.manifest.id.clone(),
                 fw::CapabilityPack::skill_sources(&managed),
             ));
-            if let (Some(mcp), Some(resources)) =
+            if let (Some(_mcp), Some(_resources)) =
                 (self.0.mcp.get(), self.0.capability_resources.get())
             {
                 let active = state.get(&pack.manifest.id).copied().unwrap_or(false);
                 for declaration in &pack.manifest.mcp {
-                    if mcp.get_platform_server(&declaration.id).is_ok()
-                        && resources.resource("mcp", &declaration.id)?.is_none()
+                    if existing_mcp.contains(&declaration.id)
+                        && !mcp_ownership.contains_key(&declaration.id)
                     {
                         return Err(format!(
                             "MCP {} conflicts with an independent server",
@@ -65,16 +94,34 @@ impl FrameworkHost {
                     {
                         *program = pack.path.join(&*program).display().to_string();
                     }
-                    mcp.register_pack_server(&declaration, active, &pack.path)
-                        .map_err(|e| e.to_string())?;
-                    resources.register(&[CapabilityResource {
+                    mcp_declarations.push((declaration.clone(), active, pack.path.clone()));
+                    existing_mcp.insert(declaration.id.clone());
+                    let resource = CapabilityResource {
                         pack_id: pack.manifest.id.clone(),
                         kind: "mcp".into(),
                         code: declaration.id.clone(),
                         available: active,
-                    }])?;
+                    };
+                    if mcp_ownership
+                        .get(&declaration.id)
+                        .is_some_and(|owner| owner.pack_id != resource.pack_id)
+                    {
+                        return Err(format!(
+                            "MCP {} conflicts with another capability pack",
+                            declaration.id
+                        ));
+                    }
+                    mcp_ownership.insert(declaration.id.clone(), resource.clone());
+                    mcp_resources.push(resource);
                 }
             }
+        }
+        if let Some(mcp) = self.0.mcp.get() {
+            mcp.register_pack_contributions(&mcp_declarations)
+                .map_err(|e| e.to_string())?;
+        }
+        if let Some(resources) = self.0.capability_resources.get() {
+            resources.register(&mcp_resources)?;
         }
         for (id, items) in sources {
             let active = state.get(&id).copied().unwrap_or(Self::builtin_pack(&id));
@@ -247,8 +294,21 @@ impl FrameworkHost {
                 .map_err(|error| error.to_string())?,
             )
             .plugin(
-                LocalStoragePlugin::new(&self.0.path, self.0.path.with_extension("artifacts"))
-                    .with_database(self.shared_database().await.map_err(|e| e.to_string())?),
+                {
+                    let mut storage = LocalStoragePlugin::new(&self.0.path, self.0.path.with_extension("artifacts"))
+                        .with_database(self.shared_database().await.map_err(|e| e.to_string())?);
+                    // Match the assembler's source-size safety guard. The owning
+                    // memory block's token quota controls summary size, not the
+                    // storage plugin's smaller general-purpose default record cap.
+                    storage.config.summaries.max_record_bytes = 16 * 1024 * 1024;
+                    storage
+                },
+            )
+            // Stable two-tool gateway: every other provider's bindings become
+            // wrapped inventory so `request.tools` stays the same pair for the
+            // whole run and provider prompt caches survive tool growth.
+            .plugin(
+                eliteforge_agent_official_plugin_tools_discovery::ToolDiscoveryPlugin::new(),
             )
             .plugin(fw::AgentLoopPlugin::named(
                 "framework.react",
@@ -393,6 +453,7 @@ impl FrameworkHost {
                 | "framework.personai"
                 | "framework.web"
                 | "framework.media"
+                | "framework.tools.discovery"
                 | "tron.harness"
         )
     }
@@ -466,6 +527,11 @@ impl FrameworkHost {
                     .providers::<fw::ToolProviderService>()
                     .into_iter()
                     .filter(|id| {
+                        // Gateway infrastructure follows the tool extension,
+                        // independently of capability-pack switches.
+                        if *id == "framework.tools.discovery" {
+                            return Self::gateway_enabled_for(extensions);
+                        }
                         selected(id)
                             && *id != "tron.onboarding-ui"
                             && enabled("tool")
@@ -513,8 +579,14 @@ impl FrameworkHost {
                 registry
                     .providers::<fw::ContextContributorService>()
                     .into_iter()
+                    .filter({
+                        let mut seen = std::collections::HashSet::new();
+                        move |id| seen.insert(*id)
+                    })
                     .filter(|id| {
                         selected(id)
+                            && (!matches!(*id, "agent.a2ui" | "skills.default")
+                                || Self::gateway_enabled_for(extensions))
                             && (*id != "agent.a2ui"
                                 || pack_enabled(
                                     eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID,

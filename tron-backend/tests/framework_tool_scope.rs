@@ -51,22 +51,31 @@ impl ModelClient for Script {
                 *next += 1;
                 step
             };
+            // Gateway mode: every wrapped tool is addressed through the
+            // stable `tool_execute` envelope.
+            let execute = |tool: &str, arguments: serde_json::Value| {
+                let arguments = if matches!(tool, "worktree_create" | "worktree_select") { arguments } else { json!({"items":[arguments]}) };
+                ModelResponse::tool_call(
+                    "tool_execute",
+                    json!({"tool":tool,"arguments":arguments}),
+                )
+            };
             Ok(match step {
-                0 => ModelResponse::tool_call(
+                0 => execute(
                     "worktree_create",
                     json!({"name":"selected","branch":"feature/selected"}),
                 ),
                 1 => {
                     std::fs::write(Path::new(&self.selected).join("value.txt"), "selected")
                         .map_err(|e| e.to_string())?;
-                    ModelResponse::tool_call("fs_read_text", json!({"path":"value.txt"}))
+                    execute("fs_read_text", json!({"path":"value.txt"}))
                 }
-                2 => ModelResponse::tool_call("bash_exec", json!({"command":"pwd"})),
-                3 => ModelResponse::tool_call("terminal_start", json!({"command":"pwd; sleep 20"})),
-                4 => ModelResponse::tool_call("worktree_select", json!({"path":self.root})),
-                5 => ModelResponse::tool_call("fs_read_text", json!({"path":"value.txt"})),
-                6 => ModelResponse::tool_call("bash_exec", json!({"command":"pwd"})),
-                7 => ModelResponse::tool_call("terminal_start", json!({"command":"pwd; sleep 20"})),
+                2 => execute("bash_exec", json!({"command":"pwd"})),
+                3 => execute("terminal_start", json!({"command":"pwd; sleep 20"})),
+                4 => execute("worktree_select", json!({"path":self.root})),
+                5 => execute("fs_read_text", json!({"path":"value.txt"})),
+                6 => execute("bash_exec", json!({"command":"pwd"})),
+                7 => execute("terminal_start", json!({"command":"pwd; sleep 20"})),
                 _ => ModelResponse::final_output("verified"),
             })
         })
@@ -133,7 +142,7 @@ async fn real_worktree_changes_rebind_native_fs_bash_and_pty_in_the_same_host_ru
         )),
     )
     .unwrap();
-    let mut context:AgentRunContext=serde_json::from_value(json!({"conversationCode":"scope-session","runCode":"scope-run","workspaceCode":"TRON_CORE","userCode":"USR-1","locale":"en-US","agentKind":"REACT",
+    let mut context:AgentRunContext=serde_json::from_value(json!({"conversationCode":"scope-session","runCode":eliteforge_agent_core::RunId::new_v4().to_string(),"workspaceCode":"TRON_CORE","userCode":"USR-1","locale":"en-US","agentKind":"REACT",
         "model":{"modelCode":"MODEL-1","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"unused","modelName":"test","maxTokens":128,"contextWindowTokens":131072},
         "variables":[],"skills":[],"tools":[],"executionScope":{},"limits":{"maxSteps":20,"maxToolCalls":20,"maxParallelToolCalls":1},"messages":[{"role":"user","parts":[{"type":"text","text":"Verify local tools after selecting each worktree."}]}],"observations":[],"startedAt":"test"})).unwrap();
     let mut app = GitApplicationDirectoryInspector.inspect(root.to_str().unwrap());
@@ -182,7 +191,7 @@ async fn real_worktree_changes_rebind_native_fs_bash_and_pty_in_the_same_host_ru
         let out = result
             .observations
             .iter()
-            .map(|o| serde_json::from_str::<Value>(&o.output).unwrap())
+            .map(|o| serde_json::from_str::<Value>(&o.output).unwrap_or_else(|error| panic!("{error}: {}", o.output)))
             .collect::<Vec<_>>();
         assert_eq!(out[1]["content"], "selected");
         assert_eq!(out[5]["content"], "main");

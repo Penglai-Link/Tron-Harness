@@ -358,13 +358,17 @@ pub fn cookie_value_from_set_cookie(set_cookie_headers: &[String], cookie_name: 
         .unwrap_or_default()
 }
 
-/// Explicit exposure for contracts that exercise the complete schema catalog.
+/// Kept for contracts that historically switched the main agent into the
+/// full catalog view. The tool gateway now always presents the stable
+/// discovery/execute pair, so the complete catalog is reachable through
+/// gateway search without any policy switch; this is now a policy touch
+/// that only confirms the endpoint still responds.
 pub async fn enable_direct_list(app: &Router) {
     let response = authenticated_request(
         app,
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
-        Some(json!({"toolExposureMode":"direct_list"})),
+        Some(json!({})),
     )
     .await;
     assert_eq!(response.status(), axum::http::StatusCode::OK);
@@ -455,4 +459,23 @@ pub async fn native_goal(database: &str, id: &str) -> eliteforge_agent_core::Goa
         .get(id)
         .await
         .unwrap()
+}
+
+/// Scripted models use the same batch-only gateway contract as production.
+pub fn gateway_arguments(name: &str, arguments: Value) -> Value {
+    if matches!(name, "chat_ask_user" | "ask_user" | "a2ui_expand" | "a2ui_publish" | "a2ui_request_input"
+        | "worktree_create" | "worktree_select" | "git_switch_branch" | "word_create" | "word_replace_text"
+        | "excel_write" | "fs_write_text" | "fs_apply_patch" | "fs_apply_unified_patch" | "terminal_write" | "system_task_write") {
+        arguments
+    } else { json!({"items":[arguments]}) }
+}
+
+/// Existing one-operation fixtures inspect their one item; batch tests inspect
+/// the complete envelope directly and do not use this helper.
+pub fn single_gateway_result(text: &str) -> String {
+    let Ok(value) = serde_json::from_str::<Value>(text) else { return text.to_string(); };
+    let Some(rows) = value.get("results").and_then(Value::as_array) else { return text.to_string(); };
+    assert_eq!(rows.len(),1,"one-item fixture received a multi-item result");
+    assert_eq!(rows[0]["index"],0);
+    rows[0]["result"].as_str().map(str::to_owned).unwrap_or_else(||rows[0]["result"].to_string())
 }

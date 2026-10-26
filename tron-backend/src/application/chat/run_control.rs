@@ -34,6 +34,7 @@ pub struct ActiveChatRunSnapshot {
     pub run_code: String,
     pub runtime_adapter_key: String,
     pub supports_steer: bool,
+    pub operation_kind: Option<String>,
     pub state: ChatActiveRunState,
 }
 
@@ -82,6 +83,7 @@ impl ChatService {
                 run_code: snapshot.run_code,
                 runtime_adapter_key: snapshot.runtime_adapter_key,
                 supports_steer: snapshot.supports_steer,
+                operation_kind: snapshot.operation_kind,
                 state: snapshot.state.into(),
             });
         Ok(GetActiveChatRunResult {

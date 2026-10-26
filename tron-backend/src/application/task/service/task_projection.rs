@@ -18,96 +18,68 @@ impl TaskService {
         &self,
         query: &TaskListQuery,
     ) -> Result<Vec<TaskListItem>, TaskError> {
+        self.filtered_task_page(query, None)
+            .map(|(records, _)| records)
+    }
+
+    pub(super) fn filtered_task_page(
+        &self,
+        query: &TaskListQuery,
+        window: Option<(usize, usize)>,
+    ) -> Result<(Vec<TaskListItem>, usize), TaskError> {
         let workspace_code = optional_trimmed(query.workspace_code.clone());
-        let owner_dude_code = optional_trimmed(query.owner_dude_code.clone());
         if let Some(workspace) = workspace_code.as_deref() {
             self.ensure_active_workspace(workspace)?;
         }
-        let include_archived = query.include_archived.unwrap_or(false);
-        let all_tasks = self.all_tasks()?;
-        let mut records = all_tasks
+        let mut page = self.reader.page(query, window)?;
+        let hierarchy = TaskHierarchy::new(&page.tasks);
+        let records = page
+            .page_codes
             .iter()
-            .filter(|task| {
-                owner_dude_code
-                    .as_ref()
-                    .is_some_and(|owner| task.owner_dude_code.as_ref() == Some(owner))
-                    || (owner_dude_code.is_none() && task.owner_dude_code.is_none())
+            .map(|code| {
+                let task = hierarchy.task(code).ok_or(TaskError::StorageFailure)?;
+                self.item_from_task(
+                    task,
+                    &hierarchy,
+                    page.relations.remove(code).unwrap_or_default(),
+                )
             })
-            .filter(|task| {
-                owner_dude_code.is_some() && workspace_code.is_none()
-                    || task.workspace_code == workspace_code
-            })
-            .filter(|task| include_archived || task.archived_at.is_none())
-            .filter(|task| {
-                query
-                    .status
-                    .as_ref()
-                    .map_or(true, |status| task.status == *status)
-            })
-            .filter(|task| {
-                query
-                    .priority
-                    .map_or(true, |priority| task.priority == priority)
-            })
-            .filter(|task| {
-                query
-                    .task_type
-                    .map_or(true, |task_type| task.task_type == task_type)
-            })
-            .filter(|task| {
-                query
-                    .source_type
-                    .map_or(true, |source_type| task.source_type == source_type)
-            })
-            .filter(|task| parent_filter_matches(task, query.parent_task_code.as_deref()))
-            .filter(|task| matches_search(task, query.search.as_deref()))
-            .map(|task| self.item_from_task(task, &all_tasks))
             .collect::<Result<Vec<_>, _>>()?;
-        if let Some(assignee_user_code) = query
-            .assignee_user_code
-            .as_deref()
-            .and_then(|value| normalized_required(value.to_owned()))
-        {
-            records.retain(|record| record.assignee_user_codes.contains(&assignee_user_code));
-        }
-        records.sort_by(|left, right| left.task_code.cmp(&right.task_code));
-        Ok(records)
+        Ok((records, page.total))
     }
 
     pub(super) fn detail_from_task(&self, task: Task) -> Result<TaskDetail, TaskError> {
         let all_tasks = self.all_tasks()?;
+        let mut relations = self.task_relations(&[task.task_code.clone()])?;
+        let links = relations.remove(&task.task_code).unwrap_or_default();
+        self.detail_with_relations(task, &TaskHierarchy::new(&all_tasks), links)
+    }
+
+    pub(super) fn detail_with_relations(
+        &self,
+        task: Task,
+        hierarchy: &TaskHierarchy<'_>,
+        links: TaskRelations,
+    ) -> Result<TaskDetail, TaskError> {
         let parent = task
             .parent_task_code
             .as_deref()
-            .and_then(|parent_code| {
-                all_tasks
-                    .iter()
-                    .find(|candidate| candidate.task_code == parent_code)
-            })
-            .map(|parent| summary_from_task(parent, &all_tasks));
-        let mut subtasks = all_tasks
+            .and_then(|code| hierarchy.task(code))
+            .map(|parent| summary_from_task(parent, hierarchy));
+        let mut subtasks = hierarchy
+            .children(&task.task_code)
             .iter()
-            .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
-            .filter(|candidate| candidate.archived_at.is_none())
-            .map(|candidate| summary_from_task(candidate, &all_tasks))
+            .map(|child| summary_from_task(child, hierarchy))
             .collect::<Vec<_>>();
         subtasks.sort_by(|left, right| left.task_code.cmp(&right.task_code));
-        let assignee_user_codes = self
-            .raw_user_assignments(&task.task_code)?
+        let assignee_user_codes = links
+            .assignees
             .into_iter()
             .map(|entry| entry.user_code)
             .collect();
-        let agent_codes = self
-            .raw_agent_links(&task.task_code)?
-            .into_iter()
-            .map(|entry| entry.code)
-            .collect();
-        let app_codes = self
-            .raw_app_links(&task.task_code)?
-            .into_iter()
-            .map(|entry| entry.code)
-            .collect();
-        let progress = effective_progress(&task, &all_tasks);
+        let agent_codes = links.agents.into_iter().map(|entry| entry.code).collect();
+        let app_codes = links.apps.into_iter().map(|entry| entry.code).collect();
+        let progress = hierarchy.progress(&task);
         Ok(TaskDetail {
             id: task.id.as_decimal_string(),
             task_code: task.task_code,
@@ -146,7 +118,8 @@ impl TaskService {
     pub(super) fn item_from_task(
         &self,
         task: &Task,
-        all_tasks: &[Task],
+        hierarchy: &TaskHierarchy<'_>,
+        links: TaskRelations,
     ) -> Result<TaskListItem, TaskError> {
         Ok(TaskListItem {
             task_code: task.task_code.clone(),
@@ -162,32 +135,20 @@ impl TaskService {
             flow_code: task.flow_code.clone(),
             status: task.status.clone(),
             priority: task.priority,
-            progress: effective_progress(task, all_tasks),
+            progress: hierarchy.progress(task),
             task_type: task.task_type,
             source_type: task.source_type,
             source_url: task.source_url.clone(),
             agent_code: task.agent_code.clone(),
             model_code: task.model_code.clone(),
-            assignee_user_codes: self
-                .raw_user_assignments(&task.task_code)?
+            assignee_user_codes: links
+                .assignees
                 .into_iter()
                 .map(|entry| entry.user_code)
                 .collect(),
-            agent_codes: self
-                .raw_agent_links(&task.task_code)?
-                .into_iter()
-                .map(|entry| entry.code)
-                .collect(),
-            app_codes: self
-                .raw_app_links(&task.task_code)?
-                .into_iter()
-                .map(|entry| entry.code)
-                .collect(),
-            subtask_count: all_tasks
-                .iter()
-                .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
-                .filter(|candidate| candidate.archived_at.is_none())
-                .count(),
+            agent_codes: links.agents.into_iter().map(|entry| entry.code).collect(),
+            app_codes: links.apps.into_iter().map(|entry| entry.code).collect(),
+            subtask_count: hierarchy.children(&task.task_code).len(),
             updated_at: task.updated_at.clone(),
             archived_at: task.archived_at.clone(),
         })

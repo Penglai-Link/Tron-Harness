@@ -40,7 +40,7 @@ export function useChatInputSuggestions(agentCode?: string, sessionCode?: string
   return useMemo<Pick<ChatClientConfig, "inputSuggestions" | "inputSuggestionLabels" | "skillSuggestionTriggers">>(() => ({
     skillSuggestionTriggers: ["$"],
     inputSuggestions: query.error ? [] : [
-      ...(query.data?.commands ?? []).map(name => ({ kind: "command" as const, name, description: t("chat.management.composer.goalSuggestion") })),
+      ...(query.data?.commands ?? []).map(name => ({ kind: "command" as const, name, description: t(`chat.management.composer.${name}Suggestion`, { defaultValue: "" }) })),
       ...(query.data?.skills ?? []).map(skill => ({ ...skill, kind: "skill" as const })),
     ],
     inputSuggestionLabels: {

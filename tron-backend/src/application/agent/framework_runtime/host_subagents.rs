@@ -84,15 +84,20 @@ impl FrameworkHost {
             .transpose()
             .map_err(|e| fw::StateError::Backend(e.to_string()))?
             .unwrap_or_default();
-        let mut items = Vec::new();
-        for record in records {
-            if record.user_code.as_deref() != Some(user) {
-                continue;
-            }
-            let run = history.run(record.run_id).await?;
-            items.push(SubagentView { record, run });
-        }
-        Ok(items)
+        let records = records
+            .into_iter()
+            .filter(|record| record.user_code.as_deref() == Some(user))
+            .collect::<Vec<_>>();
+        let ids = records
+            .iter()
+            .map(|record| record.run_id)
+            .collect::<Vec<_>>();
+        let runs = history.runs(&ids).await?;
+        Ok(records
+            .into_iter()
+            .zip(runs)
+            .map(|(record, run)| SubagentView { record, run })
+            .collect())
     }
 
     pub async fn subagent_history(

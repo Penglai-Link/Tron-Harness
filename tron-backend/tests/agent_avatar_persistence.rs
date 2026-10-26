@@ -173,7 +173,7 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
     }
     // Legacy JSON configs have no avatarId. Their other settings must survive.
     let config: PlatformInternalAgentConfig = serde_json::from_value(serde_json::json!({
-        "agentCode":"legacy", "name":"Legacy", "rolePrompt":"Keep this role", "toolAssignmentMode":"ALL_PLATFORM_TOOLS", "mcpAccessMode":"DISABLED", "toolExposureMode":"DIRECT_LIST", "expandedDomainPersistenceMode":"STICKY_EXPANDED", "maxSteps":10, "maxToolCalls":10, "maxParallelToolCalls":1, "selectedToolCodes":[], "selectedServerCodes":[]
+        "agentCode":"legacy", "name":"Legacy", "rolePrompt":"Keep this role", "toolAssignmentMode":"ALL_PLATFORM_TOOLS", "mcpAccessMode":"DISABLED", "maxSteps":10, "maxToolCalls":10, "maxParallelToolCalls":1, "selectedToolCodes":[], "selectedServerCodes":[]
     })).unwrap();
     assert_eq!(config.avatar_id, "robot");
     assert_eq!(config.role_prompt, "Keep this role");

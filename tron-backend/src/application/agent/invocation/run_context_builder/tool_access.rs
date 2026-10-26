@@ -5,13 +5,8 @@ use super::super::{
 };
 use super::{AgentInvocationError, AgentRunContextBuilder, McpWarningPublishContext};
 use crate::{
-    application::agent::{
-        BusinessToolCatalog, discovery_expand_tool_definition, tool_record_to_effective_tool,
-    },
-    domain::agent::{
-        AgentToolExposureState, EffectiveTool, InternalAgentToolPolicy, ToolAvailabilityState,
-        ToolExposureMode,
-    },
+    application::agent::tool_record_to_effective_tool,
+    domain::agent::{EffectiveTool, InternalAgentToolPolicy, ToolAvailabilityState},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -19,7 +14,6 @@ pub(super) struct PreparedToolAccess {
     pub(super) policy: Option<InternalAgentToolPolicy>,
     pub(super) tools: Vec<EffectiveTool>,
     pub(super) effective_tools: Vec<EffectiveTool>,
-    pub(super) tool_exposure: AgentToolExposureState,
     pub(super) requested_tool_names: HashSet<String>,
 }
 impl AgentRunContextBuilder {
@@ -36,7 +30,6 @@ impl AgentRunContextBuilder {
             .collect::<HashSet<_>>();
         let mut tools = requested_tools;
         let mut effective_tools = tools.clone();
-        let mut tool_exposure = AgentToolExposureState::default();
         let internal_agents = if self.platform_scope || workspace_code.is_empty() {
             self.management.all_platform_internal_agents()
         } else {
@@ -62,44 +55,20 @@ impl AgentRunContextBuilder {
                         || requested_tool_names.contains(&tool.tool_name)
                 })
                 .collect::<Vec<_>>();
-            match policy.tool_exposure_mode {
-                ToolExposureMode::DirectList => {
-                    tools = effective_tool_records
-                        .into_iter()
-                        .map(tool_record_to_effective_tool)
-                        .collect();
-                    effective_tools = tools.clone();
-                }
-                ToolExposureMode::DomainDiscovery => {
-                    let visible_domains =
-                        BusinessToolCatalog::domains_for_records(&effective_tool_records, locale);
-                    let hidden_tools = effective_tool_records
-                        .into_iter()
-                        .map(tool_record_to_effective_tool)
-                        .collect::<Vec<_>>();
-                    let discovery_tool = discovery_expand_tool_definition(locale);
-                    tools = vec![discovery_tool.clone()];
-                    effective_tools = Vec::with_capacity(hidden_tools.len() + 1);
-                    effective_tools.push(discovery_tool);
-                    effective_tools.extend(hidden_tools.iter().cloned());
-                    tool_exposure = AgentToolExposureState {
-                        tool_exposure_mode: Some(policy.tool_exposure_mode),
-                        expanded_domain_persistence_mode: Some(
-                            policy.expanded_domain_persistence_mode,
-                        ),
-                        visible_domains,
-                        hidden_tools,
-                        expanded_domain_codes: Vec::new(),
-                    };
-                }
-            }
+            // The gateway plugin owns on-demand discovery for every run, so
+            // saved exposure-mode differences collapse to one behavior: the
+            // full authorized list is the run catalog.
+            tools = effective_tool_records
+                .into_iter()
+                .map(tool_record_to_effective_tool)
+                .collect();
+            effective_tools = tools.clone();
         }
 
         Ok(PreparedToolAccess {
             policy: internal_agent_policy,
             tools,
             effective_tools,
-            tool_exposure,
             requested_tool_names,
         })
     }
@@ -107,7 +76,6 @@ impl AgentRunContextBuilder {
     pub(super) async fn materialize_mcp_tools(
         &self,
         access: &mut PreparedToolAccess,
-        locale: &str,
         variable_values: &HashMap<String, String>,
         warning_context: &McpWarningPublishContext<'_>,
     ) -> Result<(), AgentInvocationError> {
@@ -135,7 +103,7 @@ impl AgentRunContextBuilder {
             let mut records = HashMap::new();
             let discovered = self
                 .management
-                .register_tool_descriptors(&materialization.descriptors)
+                .register_labeled_tool_descriptors(&materialization.descriptors, &materialization.tools)
                 .map_err(AgentInvocationError::RuntimeFailed)?;
             for (descriptor, record) in materialization.descriptors.iter().zip(discovered) {
                 if self
@@ -162,34 +130,8 @@ impl AgentRunContextBuilder {
                     && (access.requested_tool_names.is_empty()
                         || access.requested_tool_names.contains(&tool.tool_name))
             });
-            access
-                .effective_tools
-                .extend(materialization.tools.iter().cloned());
-            if policy.tool_exposure_mode == ToolExposureMode::DomainDiscovery {
-                access
-                    .tool_exposure
-                    .hidden_tools
-                    .extend(materialization.tools);
-                let hidden = &access.tool_exposure.hidden_tools;
-                let records = self
-                    .management
-                    .list_tools(None, None, locale)
-                    .into_iter()
-                    .filter_map(|mut record| {
-                        let tool = hidden
-                            .iter()
-                            .find(|tool| tool.tool_name == record.tool_name)?;
-                        if let Some(domain) = &tool.domain_code {
-                            record.domain_code = domain.clone();
-                        }
-                        Some(record)
-                    })
-                    .collect::<Vec<_>>();
-                access.tool_exposure.visible_domains =
-                    BusinessToolCatalog::domains_for_records(&records, locale);
-            } else {
-                access.tools.extend(materialization.tools);
-            }
+            access.effective_tools.extend(materialization.tools.iter().cloned());
+            access.tools.extend(materialization.tools);
         }
 
         Ok(())

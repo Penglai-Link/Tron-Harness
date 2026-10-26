@@ -1,6 +1,5 @@
 mod ask_user;
 mod coding_tools;
-mod discovery;
 mod file_access;
 mod graph_tools;
 mod memory_tools;
@@ -37,10 +36,6 @@ use crate::{
 };
 
 pub use ask_user::{CHAT_ASK_USER_TOOL, ask_user_definition};
-pub use discovery::{
-    DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, build_domain_discovery_guidance,
-    discovery_expand_tool_definition, domain_discovery_runtime_values,
-};
 
 pub fn tool_record_to_effective_tool(record: ToolCatalogRecord) -> EffectiveTool {
     EffectiveTool {
@@ -101,7 +96,6 @@ where
     tools.extend(short_term_memory_tools::short_term_memory_tools(
         short_term_memory,
     ));
-    tools.push(discovery::discovery_tool());
 
     for tool in tools {
         registry.register(tool)?;

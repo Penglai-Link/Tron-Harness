@@ -9,7 +9,48 @@ use tron_backend::{
     config::AppConfig,
 };
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn compaction_status_locks_mutations_but_preserves_history_and_releases_on_completion() {
+    let root = tempfile::tempdir().unwrap();
+    let mut config = AppConfig::default();
+    config.database_url = root.path().join("business.sqlite").display().to_string();
+    config.graph_storage_path = root.path().join("graph").display().to_string();
+    config.resource = tron_backend::config::ResourceConfig::with_default_root(root.path().join("resources").display().to_string());
+    let state = AppState::new_with_id_provider(common::prepared_config(config), Arc::new(
+        tron_backend::shared::id::FixedSnowflakeIdProvider::new(801700000000000000),
+    )).unwrap();
+    state.knowledge_bases.stop_ingestion_workers();
+    let app = build_router_with_state(state.clone()).unwrap();
+    let created = response_json(authenticated_request(&app, Method::POST, "/api/v1/chats/sessions",
+        Some(json!({"workspaceCode":"TRON_CORE","agentCode":"main-agent"}))).await).await;
+    let session = created["data"]["sessionCode"].as_str().unwrap();
+    let run = eliteforge_agent_core::RunId::new_v4().to_string();
+    let guard = state.active_runs.register(session, &run, "REACT", true).unwrap();
+    let control = state.active_runs.control(session, &run).unwrap();
+    eliteforge_agent_core::ContextCompactionObserver::state_changed(&control, true);
+    let status_url = format!("/api/v1/chats/sessions/get-active-run?sessionCode={session}&workspaceCode=TRON_CORE");
+    let status = response_json(authenticated_request(&app, Method::GET, &status_url, None).await).await;
+    assert_eq!(status["data"]["activeRun"]["operationKind"], "ContextCompaction");
+    assert_eq!(status["data"]["activeRun"]["supportsSteer"], false);
+    for (method, path, body) in [
+        (Method::PATCH, format!("/api/v1/chats/sessions/{session}"), json!({"title":"blocked"})),
+        (Method::POST, "/api/v1/chats/sessions/stop-run".into(), json!({"sessionCode":session,"expectedRunCode":run})),
+        (Method::POST, "/api/v1/chats/sessions/steer-message".into(), json!({"sessionCode":session,"expectedRunCode":run,"content":"blocked"})),
+        (Method::POST, format!("/api/v1/chats/sessions/{session}/archive"), json!({})),
+    ] {
+        let response = authenticated_request(&app, method, &path, Some(body)).await;
+        assert_eq!(response.status(), 409, "{path}: {}", response_json(response).await);
+    }
+    let history = authenticated_request(&app, Method::POST, &format!("/api/v1/chats/sessions/{session}/history/query"), Some(json!({"size":20,"cursor":null}))).await;
+    assert_eq!(history.status(), 200, "{}", response_json(history).await);
+    drop(guard);
+    let changed = authenticated_request(&app, Method::PATCH, &format!("/api/v1/chats/sessions/{session}"), Some(json!({"title":"unlocked"}))).await;
+    assert_eq!(changed.status(), 200, "{}", response_json(changed).await);
+    let status = response_json(authenticated_request(&app, Method::GET, &status_url, None).await).await;
+    assert!(status["data"]["activeRun"].is_null());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn saved_context_assembly_is_ordered_pinned_compact_and_session_scoped() {
     let root = tempfile::tempdir().unwrap();
     let mut config = AppConfig::default();
@@ -111,4 +152,34 @@ async fn saved_context_assembly_is_ordered_pinned_compact_and_session_scoped() {
         latest,
         "reading details must not change the selected report"
     );
+    // This fixture is generated from a captured native Framework model request,
+    // including a complete historical tool exchange and a dynamic suffix.
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../.agent-deps/agent-framework/contracts/context-cache-order.json"
+    ))
+    .unwrap();
+    let saved = framework
+        .sessions()
+        .unwrap()
+        .store
+        .append_event(SessionEvent::new(session, "tron.context-view", fixture))
+        .await
+        .unwrap();
+    let (_, updated) = read(url.clone()).await;
+    assert_eq!(
+        updated["data"]["snapshot"]["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["framework.instructions", "framework.history", "dynamic"]
+    );
+    let history_detail = read(format!("/api/v1/chats/sessions/get-context-detail?sessionCode={session}&workspaceCode=TRON_CORE&snapshotSequence={}&blockCode=history",saved.sequence)).await;
+    assert_eq!(history_detail.0, 200);
+    assert!(history_detail.1.to_string().contains("prior evidence"));
+    assert!(!history_detail.1.to_string().contains("working revision A"));
+    let dynamic_detail = read(format!("/api/v1/chats/sessions/get-context-detail?sessionCode={session}&workspaceCode=TRON_CORE&snapshotSequence={}&blockCode=dynamic",saved.sequence)).await;
+    assert_eq!(dynamic_detail.0, 200);
+    assert!(dynamic_detail.1.to_string().contains("working revision A"));
 }

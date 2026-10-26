@@ -20,16 +20,11 @@ pub(super) fn eligible(task: &IngestionTask, endpoint: &ParseEndpointCapacity) -
                 .is_none_or(|tier| endpoint.supported_tiers.iter().any(|t| t == tier)))
 }
 
-pub(super) fn waiting(
+pub(super) fn waiting_validated(
     tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
     task: &mut IngestionTask,
     reason: IngestionWaitReason,
 ) -> Result<(), IngestionQueueError> {
-    match document(tx, task) {
-        Ok(_) => {}
-        Err(IngestionQueueError::Conflict | IngestionQueueError::NotFound) => return Ok(()),
-        Err(error) => return Err(error),
-    }
     if task.state == "QUEUED" && task.wait_reason.as_ref() == Some(&reason) {
         return Ok(());
     }
@@ -37,7 +32,7 @@ pub(super) fn waiting(
     task.state = "QUEUED".into();
     clear_lease(task);
     write(tx, task)?;
-    document_state(tx, task, "QUEUED", task.error.as_deref())
+    document_state_validated(tx, task, "QUEUED", task.error.as_deref())
 }
 
 pub(super) fn report(
@@ -53,15 +48,11 @@ pub(super) fn report(
             TransactionBehavior::Immediate,
         )
         .map_err(storage)?;
-    let ids = {
-        let mut stmt = tx.prepare("SELECT id FROM knowledge_base_ingestion_tasks WHERE stage IN ('Parsing','Chunking') AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0 AND ((state='QUEUED' AND retry_after_ms<=?1) OR (state='RUNNING' AND lease_until_ms<=?1)) ORDER BY rowid").map_err(storage)?;
-        stmt.query_map([now], |r| r.get::<_, String>(0))
-            .map_err(storage)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage)?
-    };
-    for id in ids {
-        let mut task = read(&tx, &id)?;
+    let tasks = candidates(&tx, "('Parsing','Chunking')", now, None, false)?;
+    for (mut task, valid) in tasks {
+        if !valid {
+            continue;
+        }
         if endpoints.iter().any(|e| eligible(&task, e)) {
             continue;
         }
@@ -108,7 +99,7 @@ pub(super) fn report(
         } else {
             IngestionWaitReason::new(WaitReasonCode::NodeSetUnavailable)
         };
-        waiting(&tx, &mut task, reason)?;
+        waiting_validated(&tx, &mut task, reason)?;
     }
     tx.commit().map_err(storage)
 }

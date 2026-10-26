@@ -1,13 +1,11 @@
 import type {
   CreateInternalAgentPayload,
-  ExpandedDomainPersistenceMode,
   ListToolsQuery,
   McpAccessMode,
   PlatformSystemAgentRecord,
   PlatformSystemAgentRescanResult,
   PlatformToolRecord,
   ToolCatalogDomainRecord,
-  ToolExposureMode,
   ToolAssignmentMode,
   WorkspaceInternalAgentMcpPolicyPayload,
   WorkspaceInternalAgentPolicyPayload,
@@ -231,7 +229,6 @@ type WorkspaceInternalAgentSeed = {
   rolePrompt: string;
   agentCode: string;
   description: string;
-  expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls: number;
@@ -240,7 +237,6 @@ type WorkspaceInternalAgentSeed = {
   selectedServerCodes: string[];
   selectedToolCodes: string[];
   toolAssignmentMode: ToolAssignmentMode;
-  toolExposureMode: ToolExposureMode;
 };
 
 const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
@@ -251,7 +247,6 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     avatarId: "red-blue-pills",
     description: "Primary platform internal agent used for workspace chat runtime policy.",
     groupName: "主智能体",
-    expandedDomainPersistenceMode: "sticky_expanded",
     maxSteps: 100,
     maxToolCalls: 100,
     maxParallelToolCalls: 10,
@@ -260,11 +255,9 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     selectedServerCodes: [],
     selectedToolCodes: [],
     toolAssignmentMode: "all_platform_tools",
-    toolExposureMode: "domain_discovery",
   },
   ...[
     { agentCode: "explore-agent", name: "探索智能体", rolePrompt: "只读探索项目和资料，提供准确、相关、可追溯的上下文。", groupName: "探索", avatarId: "fox" },
-    { agentCode: "fullstack-agent", name: "全栈工程师", rolePrompt: "完成全栈开发任务，并验证实现结果。", groupName: "开发", avatarId: "panda" },
     { agentCode: "prd-agent", name: "杨布斯", rolePrompt: "分析用户需求，制定清晰、可验证的产品方案。", groupName: "设计", avatarId: "astronaut" },
   ].map(({ agentCode, name, rolePrompt, groupName, avatarId }) => ({
     agentCode,
@@ -274,7 +267,6 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     rolePrompt,
     loopCode: "",
     avatarId,
-    expandedDomainPersistenceMode: "sticky_expanded" as const,
     maxSteps: 100,
     maxToolCalls: 100,
     maxParallelToolCalls: 10,
@@ -282,7 +274,6 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     selectedServerCodes: [],
     selectedToolCodes: [],
     toolAssignmentMode: agentCode === "explore-agent" ? "all_read_only_tools" as const : "all_platform_tools" as const,
-    toolExposureMode: "domain_discovery" as const,
   })),
 ];
 
@@ -464,7 +455,6 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     groupName: effective.groupName || null,
     builtIn: workspaceInternalAgentSeed.some((agent) => agent.agentCode === agentCode),
     platformDefined,
-    expandedDomainPersistenceMode: effective.expandedDomainPersistenceMode,
     maxSteps: effective.maxSteps,
     maxToolCalls: effective.maxToolCalls,
     maxParallelToolCalls: effective.maxParallelToolCalls,
@@ -474,7 +464,6 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     selectedToolCodes,
     source,
     toolAssignmentMode: effective.toolAssignmentMode,
-    toolExposureMode: effective.toolExposureMode,
   };
 }
 
@@ -487,8 +476,6 @@ function validateInternalAgentPatch(payload: WorkspaceInternalAgentPolicyPayload
   const invalidKey = Object.keys(payload).find((key) => {
     if ([
       "toolAssignmentMode",
-      "toolExposureMode",
-      "expandedDomainPersistenceMode",
       "maxSteps",
       "maxToolCalls",
       "maxParallelToolCalls",

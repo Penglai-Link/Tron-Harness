@@ -13,7 +13,7 @@ use crate::{
         agent::{
             AgentExecutionScope, AgentMessage, AgentModelConfig, AgentPromptPrefixSource,
             AgentRunContext, AgentRunLimits, AgentRuntimeType, AutoModelRouteContext,
-            EffectiveSkill, EffectiveVariable, ToolExposureMode, ToolRegistry,
+            EffectiveSkill, EffectiveTool, EffectiveVariable, ToolRegistry,
         },
         prompt::PromptRuntimeProvider,
         workspace::WorkspaceStatus,
@@ -22,8 +22,8 @@ use crate::{
 };
 
 use crate::application::agent::{
-    AgentInvocationCommand, AgentInvocationError, AgentManagementService,
-    ResolvedAgentRuntime, RuntimeAdapterSelection, domain_discovery_runtime_values,
+    AgentInvocationCommand, AgentInvocationError, AgentManagementService, ResolvedAgentRuntime,
+    RuntimeAdapterSelection,
 };
 
 use super::{
@@ -56,11 +56,56 @@ fn managed_system_prompt(
             }
         }
     }
-    Ok(
-        crate::domain::prompt::builtin_prompt_text(catalog_key, locale)
-            .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"))
-            .to_string(),
-    )
+    Ok(render_builtin_system_prompt(
+        catalog_key,
+        locale,
+        runtime_values,
+    )?)
+}
+
+/// Render the bundled body when no managed prompt record is available, so the
+/// fallback honours the same runtime-variable contract as the database path
+/// instead of leaking `{{placeholder}}` markers into the instructions.
+fn render_builtin_system_prompt(
+    catalog_key: &str,
+    locale: &str,
+    runtime_values: &HashMap<PromptRuntimeProvider, serde_json::Value>,
+) -> Result<String, AgentInvocationError> {
+    let definition = crate::domain::prompt::builtin_prompt(catalog_key)
+        .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"));
+    let body = definition
+        .translations
+        .get(locale)
+        .or_else(|| definition.translations.get("en-US"))
+        .map(|translation| translation.prompt_body.as_str())
+        .unwrap_or_else(|| {
+            panic!("managed system prompt has no {locale} translation: {catalog_key}")
+        });
+    let variables = crate::domain::prompt::builtin_prompt_variables(catalog_key)
+        .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"));
+    // Builtin system prompts declare runtime-provided variables only; a missing
+    // value is a contract violation, never a silently blank instruction.
+    let mut typed_values = HashMap::with_capacity(variables.len());
+    for variable in &variables {
+        let provider = variable.runtime_provider.unwrap_or_else(|| {
+            panic!(
+                "builtin system prompt variables must be runtime-provided: {catalog_key}: {}",
+                variable.name
+            )
+        });
+        let value = runtime_values.get(&provider).cloned().ok_or_else(|| {
+            AgentInvocationError::RuntimeFailed(format!(
+                "runtime variable is unavailable: {catalog_key}: {}",
+                variable.name
+            ))
+        })?;
+        typed_values.insert(variable.name.clone(), value);
+    }
+    crate::domain::prompt::render_typed_template(body, &variables, &typed_values).map_err(|error| {
+        AgentInvocationError::RuntimeFailed(format!(
+            "managed system prompt could not be rendered: {catalog_key}: {error}"
+        ))
+    })
 }
 
 fn managed_system_prompt_source(catalog_key: &str, locale: &str) -> AgentPromptPrefixSource {
@@ -77,6 +122,59 @@ fn invocation_locale(request_locale: Option<&str>) -> String {
     SupportedLocale::from_raw(request_locale.unwrap_or("zh-CN"))
         .as_str()
         .to_string()
+}
+
+/// The catalog records the run actually authorized. The whole workspace catalog
+/// is narrowed to the run's authorized tool names so a domain the agent cannot
+/// use never reaches the model, and the visible list stays stable for the run.
+fn authorized_domain_records(
+    management: &AgentManagementService,
+    authorized_tools: &[EffectiveTool],
+    locale: &str,
+) -> Vec<crate::domain::agent::ToolCatalogRecord> {
+    let mut records: HashMap<_, _> = management
+        .list_tools(None, None, locale)
+        .into_iter()
+        .map(|record| (record.tool_name.clone(), record))
+        .collect();
+    authorized_tools
+        .iter()
+        .filter_map(|tool| {
+            let code = tool
+                .domain_code
+                .as_deref()
+                .map(str::trim)
+                .filter(|code| !code.is_empty());
+            let mut record = records.remove(&tool.tool_name).or_else(|| {
+                code.map(|code| crate::domain::agent::ToolCatalogRecord {
+                    tool_code: tool.tool_name.clone(),
+                    tool_name: tool.tool_name.clone(),
+                    domain_code: code.into(),
+                    name: tool.tool_name.clone(),
+                    description: tool.description.clone(),
+                    operation_kind: crate::domain::agent::ToolOperationKind::Unknown,
+                    input_schema: tool.input_schema.clone(),
+                    module_owner: "Framework".into(),
+                    availability_state: crate::domain::agent::ToolAvailabilityState::Available,
+                    sample_result_summary: String::new(),
+                })
+            })?;
+            // Match binding labels: the run's explicit group wins over the catalog.
+            if let Some(code) = code {
+                record.domain_code = code.into();
+            }
+            Some(record)
+        })
+        .collect()
+}
+
+/// Authorized inventory is data, kept separate from stable gateway instructions.
+fn visible_domain_context(domains: &[crate::domain::agent::ToolDomainRecord]) -> AgentMessage {
+    AgentMessage::new("user", vec![crate::domain::agent::AgentMessagePart::Context {
+        kind: "tool_domains".into(),
+        text: serde_json::to_string(domains).expect("domain records serialize"),
+        metadata: None,
+    }])
 }
 
 pub(crate) struct PreparedAgentRun {
@@ -98,6 +196,7 @@ pub(crate) struct PreparedAgentRun {
 #[derive(Clone)]
 pub(crate) struct AgentRunContextBuilder {
     platform_scope: bool,
+    framework_host: Option<crate::application::agent::FrameworkHost>,
     collaboration_owner: Option<crate::domain::agent::AgentCollaborationOwner>,
     dude_work_context: Option<crate::application::dude::DudeService>,
     workspaces: WorkspaceService,
@@ -117,6 +216,11 @@ pub(crate) struct AgentRunContextBuilder {
 }
 
 impl AgentRunContextBuilder {
+    pub(crate) fn with_framework_host(mut self, host: Option<crate::application::agent::FrameworkHost>) -> Self {
+        self.framework_host = host;
+        self
+    }
+
     pub(crate) fn with_dude_work_context(
         mut self,
         dudes: Option<crate::application::dude::DudeService>,
@@ -171,6 +275,7 @@ impl AgentRunContextBuilder {
     ) -> Self {
         Self {
             platform_scope: false,
+            framework_host: None,
             collaboration_owner: None,
             dude_work_context: None,
             workspaces,
@@ -326,7 +431,6 @@ impl AgentRunContextBuilder {
 
         self.materialize_mcp_tools(
             &mut tool_access,
-            &locale,
             &variable_values,
             &McpWarningPublishContext {
                 run_code: &run_code,
@@ -356,11 +460,13 @@ impl AgentRunContextBuilder {
         let PreparedToolAccess {
             mut tools,
             mut effective_tools,
-            tool_exposure,
             ..
         } = tool_access;
 
-        if matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
+        // Standalone registries create a default host with tools enabled.
+        let gateway_enabled = matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
+            && self.framework_host.as_ref().is_none_or(|host| host.gateway_enabled());
+        if gateway_enabled
             && requested_conversation_code.is_some()
             && supports_user_input_requests
             && tools
@@ -373,7 +479,7 @@ impl AgentRunContextBuilder {
         }
 
         let mut messages = Vec::new();
-        let runtime_context_messages = Vec::new();
+        let mut runtime_context_messages = Vec::new();
         let mut prompt_prefix_sources = Vec::new();
         let empty_runtime_prompt_values = HashMap::new();
         if matches!(resolved_agent.runtime_type, AgentRuntimeType::React) {
@@ -396,7 +502,7 @@ impl AgentRunContextBuilder {
                 prompt_prefix_sources.push(None);
             }
         }
-        if matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
+        if gateway_enabled
             && requested_conversation_code.is_some()
             && supports_user_input_requests
         {
@@ -409,23 +515,42 @@ impl AgentRunContextBuilder {
             prompt_prefix_sources
                 .push(Some(managed_system_prompt_source("chat.ask-user", &locale)));
         }
-        if tool_exposure.tool_exposure_mode == Some(ToolExposureMode::DomainDiscovery)
-            && !tool_exposure.visible_domains.is_empty()
-        {
-            let persistence_mode = tool_exposure
-                .expanded_domain_persistence_mode
-                .expect("domain discovery mode should include persistence mode");
-            let runtime_values = domain_discovery_runtime_values(
-                &tool_exposure.visible_domains,
-                persistence_mode,
-                &locale,
+        if gateway_enabled {
+            // The gateway hides every wrapped tool behind `tool_search`, so the
+            // run instructions must carry the authorized domain inventory:
+            // otherwise the model cannot see the scope of its own abilities.
+            // Deriving it from the run's authorized tools (not the whole
+            // catalog) keeps unauthorized domains invisible.
+            let domain_records =
+                authorized_domain_records(&self.management, &effective_tools, &locale);
+            // Resolve fallback labels once, then give both prompt projection
+            // and leased bindings the same run-owned taxonomy.
+            let domain_labels: HashMap<_, _> = domain_records
+                .iter()
+                .map(|record| (record.tool_name.as_str(), record.domain_code.as_str()))
+                .collect();
+            for tool in tools.iter_mut().chain(effective_tools.iter_mut()) {
+                if tool.domain_code.as_deref().is_none_or(|code| code.trim().is_empty()) {
+                    tool.domain_code = domain_labels
+                        .get(tool.tool_name.as_str())
+                        .map(|code| (*code).to_owned());
+                }
+            }
+            let visible_domains =
+                crate::application::agent::BusinessToolCatalog::domains_for_records(
+                    &domain_records,
+                    &locale,
+                );
+            runtime_context_messages.push(visible_domain_context(&visible_domains));
+            messages.push(
+                AgentMessage::system(managed_system_prompt(
+                    self.prompt_service.as_ref(),
+                    "agent.domain-discovery",
+                    &locale,
+                    &empty_runtime_prompt_values,
+                )?)
+                .with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Plugin),
             );
-            messages.push(AgentMessage::system(managed_system_prompt(
-                self.prompt_service.as_ref(),
-                "agent.domain-discovery",
-                &locale,
-                &runtime_values,
-            )?).with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Plugin));
             prompt_prefix_sources.push(Some(managed_system_prompt_source(
                 "agent.domain-discovery",
                 &locale,
@@ -439,7 +564,7 @@ impl AgentRunContextBuilder {
         }
         let mut prompt_prefix_messages = messages.clone();
         let mut user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);
-        crate::application::agent::page_context::attach(
+        crate::application::agent::page_context::record_snapshot(
             &mut user_prompt_message, page_context.as_ref(), &locale,
         );
         messages.push(user_prompt_message.clone());
@@ -486,7 +611,6 @@ impl AgentRunContextBuilder {
             tools,
             effective_tools,
             tool_assignment,
-            tool_exposure,
             execution_scope: execution_scope_override.unwrap_or(AgentExecutionScope {
                 applications: Vec::new(),
                 project_code: None,
@@ -664,7 +788,7 @@ mod tests {
             ..Default::default()
         };
         let mut message = AgentMessage::user("question");
-        crate::application::agent::page_context::attach(&mut message, Some(&context), "en-US");
+        crate::application::agent::page_context::record_snapshot(&mut message, Some(&context), "en-US");
         let AgentMessagePart::Context { text, metadata, .. } = &message.parts[0] else {
             panic!("page context should be structured user data");
         };
@@ -680,5 +804,147 @@ mod tests {
         let context = crate::application::agent::AgentPageContext::default();
         assert!(crate::application::agent::page_context::normalized(Some(&context)).is_none());
         assert!(crate::application::agent::page_context::normalized(None).is_none());
+    }
+}
+
+
+#[cfg(test)]
+mod gateway_tests {
+    use super::*;
+    use eliteforge_agent_framework as fw;
+    use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct SearchFromPrompt {
+        group: String,
+        calls: AtomicUsize,
+    }
+    #[async_trait::async_trait]
+    impl fw::ChatModel for SearchFromPrompt {
+        async fn generate(
+            &self,
+            _: &str,
+            request: fw::ChatRequest,
+            _: &dyn fw::ChatStream,
+        ) -> Result<fw::ChatResponse, fw::ModelError> {
+            if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                Ok(fw::ChatResponse::tool_calls(vec![fw::ToolCall::new(
+                    "find",
+                    fw::TOOL_SEARCH_CALL_NAME,
+                    json!({"items":[{"domainCode":self.group}]}),
+                )]))
+            } else {
+                let result = request
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == fw::Role::Tool)
+                    .unwrap();
+                let data: serde_json::Value = serde_json::from_str(&result.content.text()).unwrap();
+                assert_eq!(data["results"][0]["result"]["matched"], 1);
+                assert_eq!(data["results"][0]["result"]["tools"][0]["call_name"], "mcp_example_lookup");
+                Ok(fw::ChatResponse::text("done"))
+            }
+        }
+    }
+    struct UnusedTool;
+    #[async_trait::async_trait]
+    impl fw::Tool for UnusedTool {
+        async fn call(
+            &self,
+            _: serde_json::Value,
+            _: &fw::RunContext,
+        ) -> Result<fw::ToolOutput, fw::ToolError> {
+            panic!("discovery must not execute the inner tool")
+        }
+    }
+
+    #[tokio::test]
+    async fn mcp_prompt_group_matches_gateway_search_and_survives_registration() {
+        use crate::adapters::outbound::persistence::{
+            SqliteAgentManagementRepository, SqliteWorkspaceRepository,
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("catalog.sqlite");
+        let path = path.to_str().unwrap();
+        let management = AgentManagementService::new(
+            SqliteAgentManagementRepository::connect(path).unwrap(),
+            WorkspaceService::new(SqliteWorkspaceRepository::connect(path).unwrap()),
+            &crate::config::SystemAgentConfig {
+                codex_command: String::new(),
+                opencode_command: String::new(),
+            },
+        );
+        let tool = EffectiveTool {
+            tool_name: "mcp_example_lookup".into(),
+            domain_code: Some("mcp.example".into()),
+            description: "Lookup remote items".into(),
+            input_schema: json!({"type":"object"}),
+            skill_name: None,
+            required_variable_keys: vec![],
+        };
+        let descriptor = fw::ToolDescriptor::new(
+            "tron.mcp_example_lookup",
+            &tool.tool_name,
+            &tool.description,
+            tool.input_schema.clone(),
+        );
+        // Reproduce the old generic native catalog entry before projection.
+        let old = management.register_tool_descriptor(&descriptor).unwrap();
+        assert_eq!(old.domain_code, "native");
+        for locale in ["zh-CN", "en-US"] {
+            let records =
+                authorized_domain_records(&management, std::slice::from_ref(&tool), locale);
+            let domains = crate::application::agent::BusinessToolCatalog::domains_for_records(
+                &records, locale,
+            );
+            assert_eq!(domains.len(), 1);
+            assert_eq!(domains[0].domain_code, "mcp.example");
+            assert_eq!(domains[0].sample_tools, vec![tool.tool_name.clone()]);
+            let inventory = visible_domain_context(&domains);
+            let values = HashMap::new();
+            let prompt =
+                managed_system_prompt(None, "agent.domain-discovery", locale, &values).unwrap();
+            assert!(!prompt.contains("mcp.example"));
+            assert!(serde_json::to_string(&inventory).unwrap().contains("mcp.example"));
+            let agent = eliteforge_agent_test_support::TestBuilder::default()
+                .plugin(fw::ChatModelPlugin::new(SearchFromPrompt {
+                    group: domains[0].domain_code.clone(),
+                    calls: AtomicUsize::new(0),
+                }))
+                .plugin(
+                    eliteforge_agent_official_plugin_tools_discovery::ToolDiscoveryPlugin::new()
+                        .provider(fw::StaticToolProvider::new(vec![
+                            fw::ToolBinding::new(descriptor.clone(), UnusedTool)
+                                .with_domain_code(tool.domain_code.clone().unwrap()),
+                        ])),
+                )
+                .build()
+                .await
+                .unwrap();
+            agent
+                .run(fw::RunRequest::new("mcp-group", "lookup"))
+                .await
+                .unwrap();
+            assert!(agent.framework().close().await.is_success());
+        }
+        management
+            .register_labeled_tool_descriptors(
+                std::slice::from_ref(&descriptor),
+                std::slice::from_ref(&tool),
+            )
+            .unwrap();
+        // Later permission/admission reads must not rewrite the known group.
+        assert_eq!(
+            management
+                .register_tool_descriptor(&descriptor)
+                .unwrap()
+                .domain_code,
+            "mcp.example"
+        );
+        assert_eq!(
+            management.register_tool_descriptors(&[descriptor]).unwrap()[0].domain_code,
+            "mcp.example"
+        );
     }
 }

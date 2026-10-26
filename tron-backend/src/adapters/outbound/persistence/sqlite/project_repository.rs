@@ -1,9 +1,9 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    application::project::ProjectRepository,
+    application::project::{ProjectRepository, ProjectReadRepository, ProjectReadPage},
     domain::project::{
-        Project, ProjectAppLink, ProjectError, project_status_from_storage,
+        Project, ProjectAppLink, ProjectError, ProjectView, project_status_from_storage,
         project_status_to_storage,
     },
     shared::time::{option_timestamp_to_millis, timestamp_from_millis, timestamp_to_millis},
@@ -25,7 +25,7 @@ impl<'a> SqliteProjectRepositorySql<'a> {
         Ok(Self { connection })
     }
 }
-impl ProjectRepository for SqliteProjectRepositorySql<'_> {
+impl SqliteProjectRepositorySql<'_> {
     fn next_id(&mut self) -> Result<i64, ProjectError> {
         self.connection.query_row("SELECT max(id) FROM (SELECT id FROM projects UNION ALL SELECT id FROM project_app_links)", [], |row| row.get::<_, Option<i64>>(0)).map_err(|_| ProjectError::StorageFailure).map(|value| value.unwrap_or(736_000_000_000_000_000) + 1)
     }
@@ -55,6 +55,25 @@ impl ProjectRepository for SqliteProjectRepositorySql<'_> {
             .map_err(|_| ProjectError::StorageFailure)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| ProjectError::StorageFailure)
+    }
+    fn list_links_many(&mut self, codes: &[String]) -> Result<Vec<ProjectAppLink>, ProjectError> {
+        if codes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let codes = serde_json::to_string(codes).map_err(|_| ProjectError::StorageFailure)?;
+        let mut q = self.connection.prepare("SELECT id,project_code,app_code,position,is_primary FROM project_app_links WHERE project_code IN (SELECT value FROM json_each(?1)) ORDER BY project_code,position").map_err(storage_error)?;
+        q.query_map([codes], |row| {
+            Ok(ProjectAppLink {
+                id: row.get(0)?,
+                project_code: row.get(1)?,
+                app_code: row.get(2)?,
+                position: row.get(3)?,
+                is_primary: row.get::<_, i64>(4)? == 1,
+            })
+        })
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)
     }
     fn save_project(
         &mut self,
@@ -119,6 +138,11 @@ impl SqliteProjectRepository {
     }
 }
 impl ProjectRepository for SqliteProjectRepository {
+    fn reader(&self) -> std::sync::Arc<dyn ProjectReadRepository> {
+        std::sync::Arc::new(SqliteProjectReader {
+            connection: self.connection.clone(),
+        })
+    }
     fn next_id(&mut self) -> Result<i64, ProjectError> {
         self.connection.call(
             move |connection| SqliteProjectRepositorySql { connection }.next_id(),
@@ -127,7 +151,7 @@ impl ProjectRepository for SqliteProjectRepository {
     }
     fn list_projects(&mut self, workspace_code: &str) -> Result<Vec<Project>, ProjectError> {
         let workspace_code = workspace_code.to_owned();
-        self.connection.call(
+        self.connection.call_read(
             move |connection| {
                 SqliteProjectRepositorySql { connection }.list_projects(&workspace_code)
             },
@@ -146,6 +170,13 @@ impl ProjectRepository for SqliteProjectRepository {
         self.connection.call(
             move |connection| SqliteProjectRepositorySql { connection }.list_links(&project_code),
             || storage_error(rusqlite::Error::InvalidQuery),
+        )
+    }
+    fn list_links_many(&mut self, codes: &[String]) -> Result<Vec<ProjectAppLink>, ProjectError> {
+        let codes = codes.to_vec();
+        self.connection.call_read(
+            move |connection| SqliteProjectRepositorySql { connection }.list_links_many(&codes),
+            || ProjectError::StorageFailure,
         )
     }
     fn save_project(
@@ -177,4 +208,92 @@ impl ProjectRepository for SqliteProjectRepository {
             || storage_error(rusqlite::Error::InvalidQuery),
         )
     }
+}
+
+struct SqliteProjectReader {
+    connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
+}
+impl ProjectReadRepository for SqliteProjectReader {
+    fn page_active(
+        &self,
+        workspace_code: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<ProjectReadPage, ProjectError> {
+        if !(1..=100).contains(&limit) {
+            return Err(ProjectError::StorageFailure);
+        }
+        let workspace_code = workspace_code.to_owned();
+        self.connection.call_read(move |c| {
+            let tx=crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(c,rusqlite::TransactionBehavior::Deferred).map_err(storage_error)?;
+            let total=tx.query_row("SELECT count(*) FROM projects WHERE workspace_code=?1 AND status='ACTIVE'",[&workspace_code],|r|r.get(0)).map_err(storage_error)?;
+            // The helper only borrows the connection; keep this read transaction open through both statements.
+            let records=read_active_projects(&tx,&workspace_code,Some((offset,limit)))?;
+            tx.commit().map_err(storage_error)?;Ok(ProjectReadPage {total,records})
+        },||ProjectError::StorageFailure)
+    }
+    fn list_active(&self, workspace_code: &str) -> Result<Vec<ProjectView>, ProjectError> {
+        let workspace_code = workspace_code.to_owned();
+        self.connection.call_read(
+            move |connection| read_active_projects(connection, &workspace_code, None),
+            || ProjectError::StorageFailure,
+        )
+    }
+}
+
+fn read_active_projects(
+    connection: &Connection,
+    workspace_code: &str,
+    window: Option<(usize, usize)>,
+) -> Result<Vec<ProjectView>, ProjectError> {
+    // A single statement gives project rows and ordered links one snapshot,
+    // without serializing requests behind the service's mutation mutex.
+    let (scope, args) = if let Some((offset, limit)) = window {
+        (
+            "p.project_code IN (SELECT project_code FROM projects WHERE workspace_code=?1 AND status='ACTIVE' ORDER BY updated_at DESC,id DESC LIMIT ?2 OFFSET ?3)",
+            vec![
+                rusqlite::types::Value::Text(workspace_code.to_owned()),
+                rusqlite::types::Value::Integer(i64::try_from(limit).unwrap_or(i64::MAX)),
+                rusqlite::types::Value::Integer(i64::try_from(offset).unwrap_or(i64::MAX)),
+            ],
+        )
+    } else {
+        (
+            "p.workspace_code=?1 AND p.status='ACTIVE'",
+            vec![rusqlite::types::Value::Text(workspace_code.to_owned())],
+        )
+    };
+    let mut statement=connection.prepare(&format!("SELECT p.project_code,p.workspace_code,p.name,p.status,p.created_at,p.updated_at,p.archived_at,l.app_code,l.is_primary FROM projects p LEFT JOIN project_app_links l ON l.project_code=p.project_code WHERE {scope} ORDER BY p.updated_at DESC,p.id DESC,l.position ASC")).map_err(storage_error)?;
+    let mut rows = statement
+        .query(rusqlite::params_from_iter(args))
+        .map_err(storage_error)?;
+    let mut projects = Vec::<ProjectView>::new();
+    while let Some(row) = rows.next().map_err(storage_error)? {
+        let code: String = row.get(0).map_err(storage_error)?;
+        if projects.last().is_none_or(|p| p.project_code != code) {
+            let status: String = row.get(3).map_err(storage_error)?;
+            projects.push(ProjectView {
+                project_code: code,
+                workspace_code: row.get(1).map_err(storage_error)?,
+                name: row.get(2).map_err(storage_error)?,
+                status: project_status_from_storage(&status)?,
+                created_at: timestamp_from_millis(row.get(4).map_err(storage_error)?),
+                updated_at: timestamp_from_millis(row.get(5).map_err(storage_error)?),
+                archived_at: row
+                    .get::<_, Option<i64>>(6)
+                    .map_err(storage_error)?
+                    .map(timestamp_from_millis),
+                app_codes: Vec::new(),
+                primary_app_code: None,
+            });
+        }
+        if let Some(app) = row.get::<_, Option<String>>(7).map_err(storage_error)? {
+            let project = projects.last_mut().expect("project row inserted");
+            if project.primary_app_code.is_none() && row.get::<_, bool>(8).map_err(storage_error)? {
+                project.primary_app_code = Some(app.clone());
+            }
+            project.app_codes.push(app);
+        }
+    }
+    Ok(projects)
 }

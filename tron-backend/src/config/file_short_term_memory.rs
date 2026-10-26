@@ -136,6 +136,10 @@ fn explicit_optional_tokens<'de, D: serde::Deserializer<'de>>(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CompactionPolicyFileConfig {
     auto_enabled: Option<bool>,
+    // Accept old files without applying their global byte cap. Summary token
+    // quotas now belong to each context block and determine the byte guard.
+    #[serde(rename = "maxSummaryBytes")]
+    _legacy_max_summary_bytes: Option<usize>,
     #[serde(
         default,
         rename = "triggerRatio",
@@ -155,14 +159,40 @@ struct GoalLoopFileConfig {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContextProvidersFileConfig {
     order: Option<Vec<String>>,
+    data_blocks: Option<std::collections::BTreeMap<String, ContextDataBlockFileConfig>>,
     checkpoint: Option<ContextProviderFilePolicy>,
     working: Option<ContextProviderFilePolicy>,
     history: Option<ContextProviderFilePolicy>,
+    history_recent_turns: Option<usize>,
     prices: Option<crate::application::short_term_memory::ContextPriceInputs>,
     max_auxiliary_calls_per_step: Option<usize>,
 }
 impl ContextProvidersFileConfig {
     fn apply_to(self, config: &mut crate::application::short_term_memory::ContextProvidersConfig) {
+        if let Some(blocks) = self.data_blocks {
+            for (id, value) in blocks {
+                let mut block = config
+                    .data_blocks
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or(crate::application::short_term_memory::ContextDataBlockConfig {
+                        // New plugin blocks must declare a positive cap; never inherit
+                        // an unrelated block's policy through map iteration order.
+                        max_tokens: Some(0),
+                        policy: crate::application::short_term_memory::ContextProviderPolicy {
+                            strategy: crate::application::short_term_memory::ContextReductionStrategy::Keep,
+                            trigger_ratio_bps: 10_000,
+                            target_ratio_bps: 8_000,
+                            min_gain_tokens: 1,
+                        },
+                    });
+                if let Some(cap) = value.max_tokens {
+                    block.max_tokens = cap;
+                }
+                value.policy.apply_to(&mut block.policy);
+                config.data_blocks.insert(id, block);
+            }
+        }
         if let Some(order) = self.order {
             config.order = order;
         }
@@ -175,6 +205,9 @@ impl ContextProvidersFileConfig {
         if let Some(policy) = self.history {
             policy.apply_to(&mut config.history);
         }
+        if let Some(turns) = self.history_recent_turns {
+            config.history_recent_turns = turns;
+        }
         if let Some(prices) = self.prices {
             config.prices = prices;
         }
@@ -182,6 +215,14 @@ impl ContextProvidersFileConfig {
             config.max_auxiliary_calls_per_step = calls;
         }
     }
+}
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ContextDataBlockFileConfig {
+    #[serde(default, deserialize_with = "explicit_optional_tokens")]
+    max_tokens: Option<Option<u32>>,
+    #[serde(flatten)]
+    policy: ContextProviderFilePolicy,
 }
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

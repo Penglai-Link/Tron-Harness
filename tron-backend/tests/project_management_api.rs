@@ -101,6 +101,11 @@ async fn saving_a_project_and_listing_it_returns_without_blocking() {
     let listed_json = response_json(listed).await;
     assert_eq!(listed_json["code"], "SUCCESS");
     assert_eq!(listed_json["data"][0]["name"], "Tron workspace");
+    assert_eq!(
+        listed_json["data"][0]["appCodes"],
+        json!([backend_app_code, "APP-TRON-CONSOLE"])
+    );
+    assert_eq!(listed_json["data"][0]["primaryAppCode"], backend_app_code);
 }
 
 fn temp_database_url(test_name: &str) -> PathBuf {

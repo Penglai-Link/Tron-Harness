@@ -450,9 +450,8 @@ impl NavigationService {
         for domain_code in DEFAULT_NAVIGATION_MENU_TREE_CODES {
             repository.get_menu_tree(domain_code)?;
         }
-        for item in DEFAULT_NAVIGATION_MENU_TREE_ITEMS {
-            repository.get_menu(item.menu_code)?;
-        }
+        // The repository validates all menu identities in its restoration transaction.
+        // Per-menu reads here would reintroduce N+1 above the batched storage path.
         let restored_item_count =
             repository.restore_default_menu_trees(DEFAULT_NAVIGATION_MENU_TREE_ITEMS)?;
         for domain_code in DEFAULT_NAVIGATION_MENU_TREE_CODES {

@@ -18,11 +18,9 @@ use crate::{
 };
 
 use self::codecs::{
-    expanded_domain_persistence_mode_from_storage, expanded_domain_persistence_mode_to_storage,
     mcp_access_mode_from_storage, mcp_access_mode_to_storage, runtime_type_from_storage,
     runtime_type_to_storage, storage_error, tool_assignment_mode_from_storage,
-    tool_assignment_mode_to_storage, tool_exposure_mode_from_storage,
-    tool_exposure_mode_to_storage,
+    tool_assignment_mode_to_storage,
 };
 
 struct SqliteAgentManagementRepositorySql<'a> {
@@ -84,6 +82,20 @@ fn ensure_internal_agent_code_available(
 }
 
 impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
+    fn assigned_agent_codes(
+        &mut self,
+        workspace: &str,
+        agents: &[String],
+    ) -> Result<Vec<String>, AgentManagementError> {
+        let ids =
+            serde_json::to_string(agents).map_err(|_| AgentManagementError::StorageFailure)?;
+        let mut q=self.connection.prepare("SELECT a.value FROM json_each(?1) a WHERE NOT EXISTS(SELECT 1 FROM agent_workspace_grant_policies p WHERE p.agent_code=a.value) OR EXISTS(SELECT 1 FROM agent_workspace_grants g WHERE g.agent_code=a.value AND g.workspace_code=?2) ORDER BY CAST(a.key AS INTEGER)").map_err(storage_error)?;
+        q.query_map(params![ids, workspace], |r| r.get(0))
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
+    }
+
     fn copy_initial_agent_skills(
         &mut self,
         from: &str,
@@ -133,20 +145,16 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     agent_code,
                     tool_assignment_mode,
                     mcp_access_mode,
-                    tool_exposure_mode,
-                    expanded_domain_persistence_mode,
                     max_steps,
                     max_tool_calls,
                     max_parallel_tool_calls,
                     created_at,
                     updated_at,
                     overridden_fields
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
                     tool_assignment_mode = excluded.tool_assignment_mode,
                     mcp_access_mode = excluded.mcp_access_mode,
-                    tool_exposure_mode = excluded.tool_exposure_mode,
-                    expanded_domain_persistence_mode = excluded.expanded_domain_persistence_mode,
                     max_steps = excluded.max_steps,
                     max_tool_calls = excluded.max_tool_calls,
                     max_parallel_tool_calls = excluded.max_parallel_tool_calls,
@@ -157,10 +165,6 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                 policy.agent_code,
                 tool_assignment_mode_to_storage(policy.tool_assignment_mode),
                 mcp_access_mode_to_storage(policy.mcp_access_mode),
-                tool_exposure_mode_to_storage(policy.tool_exposure_mode),
-                expanded_domain_persistence_mode_to_storage(
-                    policy.expanded_domain_persistence_mode
-                ),
                 policy.max_steps,
                 policy.max_tool_calls,
                 policy.max_parallel_tool_calls,
@@ -820,13 +824,13 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     ) -> Result<Vec<WorkspaceInternalAgentPolicy>, AgentManagementError> {
         let sql = match workspace_code {
             Some(_workspace_code) => {
-                "SELECT workspace_code, agent_code, tool_assignment_mode, mcp_access_mode, tool_exposure_mode, expanded_domain_persistence_mode, max_steps, max_tool_calls, max_parallel_tool_calls, created_at, updated_at, overridden_fields
+                "SELECT workspace_code, agent_code, tool_assignment_mode, mcp_access_mode, max_steps, max_tool_calls, max_parallel_tool_calls, created_at, updated_at, overridden_fields
                  FROM workspace_internal_agent_policies
                  WHERE workspace_code = ?1
                  ORDER BY agent_code ASC"
             }
             None => {
-                "SELECT workspace_code, agent_code, tool_assignment_mode, mcp_access_mode, tool_exposure_mode, expanded_domain_persistence_mode, max_steps, max_tool_calls, max_parallel_tool_calls, created_at, updated_at, overridden_fields
+                "SELECT workspace_code, agent_code, tool_assignment_mode, mcp_access_mode, max_steps, max_tool_calls, max_parallel_tool_calls, created_at, updated_at, overridden_fields
                  FROM workspace_internal_agent_policies
                  ORDER BY workspace_code ASC, agent_code ASC"
             }
@@ -838,19 +842,15 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                 agent_code: row.get(1)?,
                 tool_assignment_mode: tool_assignment_mode_from_storage(row.get::<_, String>(2)?),
                 mcp_access_mode: mcp_access_mode_from_storage(row.get::<_, String>(3)?),
-                tool_exposure_mode: tool_exposure_mode_from_storage(row.get::<_, String>(4)?),
-                expanded_domain_persistence_mode: expanded_domain_persistence_mode_from_storage(
-                    row.get::<_, String>(5)?,
-                ),
-                max_steps: row.get(6)?,
-                max_tool_calls: row.get(7)?,
-                max_parallel_tool_calls: row.get(8)?,
-                created_at: timestamp_from_millis(row.get(9)?),
-                updated_at: timestamp_from_millis(row.get(10)?),
-                overridden_fields: serde_json::from_str(&row.get::<_, String>(11)?).map_err(
+                max_steps: row.get(4)?,
+                max_tool_calls: row.get(5)?,
+                max_parallel_tool_calls: row.get(6)?,
+                created_at: timestamp_from_millis(row.get(7)?),
+                updated_at: timestamp_from_millis(row.get(8)?),
+                overridden_fields: serde_json::from_str(&row.get::<_, String>(9)?).map_err(
                     |e| {
                         rusqlite::Error::FromSqlConversionFailure(
-                            11,
+                            9,
                             rusqlite::types::Type::Text,
                             Box::new(e),
                         )
@@ -879,20 +879,16 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     agent_code,
                     tool_assignment_mode,
                     mcp_access_mode,
-                    tool_exposure_mode,
-                    expanded_domain_persistence_mode,
                     max_steps,
                     max_tool_calls,
                     max_parallel_tool_calls,
                     created_at,
                     updated_at,
                     overridden_fields
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
                     tool_assignment_mode = excluded.tool_assignment_mode,
                     mcp_access_mode = excluded.mcp_access_mode,
-                    tool_exposure_mode = excluded.tool_exposure_mode,
-                    expanded_domain_persistence_mode = excluded.expanded_domain_persistence_mode,
                     max_steps = excluded.max_steps,
                     max_tool_calls = excluded.max_tool_calls,
                     max_parallel_tool_calls = excluded.max_parallel_tool_calls,
@@ -903,10 +899,6 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     policy.agent_code,
                     tool_assignment_mode_to_storage(policy.tool_assignment_mode),
                     mcp_access_mode_to_storage(policy.mcp_access_mode),
-                    tool_exposure_mode_to_storage(policy.tool_exposure_mode),
-                    expanded_domain_persistence_mode_to_storage(
-                        policy.expanded_domain_persistence_mode
-                    ),
                     policy.max_steps,
                     policy.max_tool_calls,
                     policy.max_parallel_tool_calls,
@@ -1318,19 +1310,16 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
         agents: &[String],
     ) -> Result<Vec<String>, AgentManagementError> {
         let workspace = workspace.to_owned();
-        let agents =
-            serde_json::to_string(agents).map_err(|_| AgentManagementError::StorageFailure)?;
-        self.connection.call(move |connection| {
-            let mut statement = connection.prepare(
-                "SELECT a.value FROM json_each(?1) a
-                 WHERE NOT EXISTS (SELECT 1 FROM agent_workspace_grant_policies p WHERE p.agent_code=a.value)
-                    OR EXISTS (SELECT 1 FROM agent_workspace_grants g WHERE g.agent_code=a.value AND g.workspace_code=?2)"
-            ).map_err(storage_error)?;
-            let rows = statement.query_map(rusqlite::params![agents, workspace], |row| row.get(0))
-                .map_err(storage_error)?;
-            rows.collect::<Result<Vec<String>, _>>().map_err(storage_error)
-        }, || AgentManagementError::StorageFailure)
+        let agents = agents.to_owned();
+        self.connection.call_read(
+            move |connection| {
+                SqliteAgentManagementRepositorySql { connection }
+                    .assigned_agent_codes(&workspace, &agents)
+            },
+            || AgentManagementError::StorageFailure,
+        )
     }
+
     fn replace_agent_workspace_grants(
         &mut self,
         agent: &str,

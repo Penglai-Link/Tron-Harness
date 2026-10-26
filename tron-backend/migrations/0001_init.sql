@@ -1012,11 +1012,9 @@ CREATE TABLE workspace_internal_agent_policies (
     workspace_code TEXT NOT NULL,
     agent_code TEXT NOT NULL,
     tool_assignment_mode TEXT NOT NULL,
-    tool_exposure_mode TEXT NOT NULL,
-    expanded_domain_persistence_mode TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL, max_steps INTEGER NOT NULL DEFAULT 100, max_tool_calls INTEGER NOT NULL DEFAULT 100, max_parallel_tool_calls INTEGER NOT NULL DEFAULT 4, mcp_access_mode TEXT NOT NULL DEFAULT 'DISABLED', overridden_fields TEXT NOT NULL
-                 DEFAULT '["toolAssignmentMode","mcpAccessMode","toolExposureMode","expandedDomainPersistenceMode","maxSteps","maxToolCalls","maxParallelToolCalls","selectedToolCodes","selectedServerCodes"]',
+                 DEFAULT '["toolAssignmentMode","mcpAccessMode","maxSteps","maxToolCalls","maxParallelToolCalls","selectedToolCodes","selectedServerCodes"]',
     PRIMARY KEY (workspace_code, agent_code)
 );
 
@@ -1124,6 +1122,22 @@ CREATE INDEX idx_kb_ingestion_claim
  ON knowledge_base_ingestion_tasks(state,stage,retry_after_ms,lease_until_ms);
 CREATE INDEX idx_kb_ingestion_library_document
  ON knowledge_base_ingestion_tasks(knowledge_base_id,document_id);
+
+-- Workers seek a bounded size/FIFO page without sorting the entire backlog.
+CREATE INDEX idx_kb_ingestion_parse_order
+ ON knowledge_base_ingestion_tasks(
+     (json_extract(payload_json,'$.fileSizeBytes') IS NULL),
+     COALESCE(json_extract(payload_json,'$.fileSizeBytes'),0))
+ WHERE stage IN ('Parsing','Chunking')
+   AND state IN ('QUEUED','RUNNING')
+   AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0;
+CREATE INDEX idx_kb_ingestion_embed_order
+ ON knowledge_base_ingestion_tasks(
+     (json_extract(payload_json,'$.fileSizeBytes') IS NULL),
+     COALESCE(json_extract(payload_json,'$.fileSizeBytes'),0))
+ WHERE stage IN ('Embedding','Publishing')
+   AND state IN ('QUEUED','RUNNING')
+   AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0;
 
 CREATE UNIQUE INDEX idx_kb_ingestion_one_live_document
  ON knowledge_base_ingestion_tasks(document_id)
@@ -1257,6 +1271,10 @@ CREATE INDEX idx_tasks_dude_followup ON tasks(owner_dude_code, next_followup_at)
 CREATE INDEX idx_tasks_parent_task_code ON tasks(parent_task_code);
 
 CREATE INDEX idx_tasks_workspace_flow ON tasks(workspace_code, flow_code);
+
+-- Supports count and ordered pagination without decoding or sorting every task.
+CREATE INDEX idx_tasks_list_scope ON tasks(owner_dude_code, workspace_code, task_code, archived_at);
+CREATE INDEX idx_tasks_owner_list ON tasks(owner_dude_code, task_code, archived_at);
 
 CREATE INDEX idx_tasks_workspace_status ON tasks(workspace_code, status);
 

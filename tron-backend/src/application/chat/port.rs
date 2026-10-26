@@ -8,44 +8,26 @@ pub struct ChatSessionTitle {
 
 pub trait ChatRepository: Send {
     fn validate_annotation_sources(&mut self, session: &str, annotations: &[eliteforge_agent_core::MessageAnnotation]) -> Result<(), ChatError>;
-    fn session_titles(&mut self, codes: &[String]) -> Result<Vec<ChatSessionTitle>, ChatError> {
-        Ok(codes.iter().filter_map(|code| self.get_session(code).ok()).map(|session| ChatSessionTitle {
-            session_code: session.session_code, workspace_code: session.workspace_code, title: session.title,
-        }).collect())
-    }
+    fn session_titles(&mut self, codes: &[String]) -> Result<Vec<ChatSessionTitle>, ChatError>;
+    fn sessions_by_codes(&mut self, codes: &[String]) -> Result<Vec<ChatSession>, ChatError>;
+    fn pending_input_counts(
+        &mut self,
+        codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, u32>, ChatError>;
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError>;
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError>;
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError>;
-    fn find_source_session(&mut self,user:&str,source:&str)->Result<Option<ChatSession>,ChatError>{
-        Ok(self.list_sessions()?.into_iter().find(|session|session.user_code.as_deref()==Some(user) && session.source_code.as_deref()==Some(source) && session.status==crate::domain::chat::ChatSessionStatus::Active))
-    }
+    fn find_source_session(
+        &mut self,
+        user: &str,
+        source: &str,
+    ) -> Result<Option<ChatSession>, ChatError>;
     fn list_archived_sessions(
         &mut self,
         workspace_code: Option<&str>,
         offset: u32,
         limit: u32,
-    ) -> Result<(Vec<ChatSession>, u64), ChatError> {
-        let mut sessions = self
-            .list_sessions()?
-            .into_iter()
-            .filter(|session| {
-                session.status == crate::domain::chat::ChatSessionStatus::Archived
-                    && !session
-                        .source_code
-                        .as_deref()
-                        .is_some_and(|source| source.starts_with("__dude:"))
-                    && workspace_code.is_none_or(|code| session.workspace_code == code)
-            })
-            .collect::<Vec<_>>();
-        let total = sessions.len() as u64;
-        let start = usize::try_from(offset)
-            .unwrap_or(usize::MAX)
-            .min(sessions.len());
-        let end = start
-            .saturating_add(usize::try_from(limit).unwrap_or(usize::MAX))
-            .min(sessions.len());
-        Ok((sessions.drain(start..end).collect(), total))
-    }
+    ) -> Result<(Vec<ChatSession>, u64), ChatError>;
     fn get_session(&mut self, session_code: &str) -> Result<ChatSession, ChatError>;
     fn update_session_status(
         &mut self,

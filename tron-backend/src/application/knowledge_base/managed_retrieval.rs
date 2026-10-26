@@ -115,7 +115,11 @@ impl RagAccessResolver for ManagedRagAccess<'_> {
             );
         }
         for corpus in ["memory-card", "skill"] {
-            let settings = self.0.rag.settings_for_corpus(corpus)?;
+            let metadata = repository
+                .get_corpus(corpus)?
+                .ok_or(RagError::CorpusNotFound)?;
+            let settings =
+                crate::application::rag::RagSettings::from_capabilities(&metadata.capabilities)?;
             let mut scopes = BTreeMap::<(String, String), BTreeSet<String>>::new();
             for task in tasks.iter().filter(|task| task.corpus_id == corpus) {
                 scopes
@@ -135,27 +139,30 @@ impl RagAccessResolver for ManagedRagAccess<'_> {
                     filters["expiresAt"] =
                         json!({"op":"gtOrNull","value":chrono::Utc::now().timestamp_millis()});
                 }
-                ranges.extend(self.0.rag.partition_ranges(AuthorizedRagRange {
-                    corpus_id: corpus.into(),
-                    scopes: vec![RagSearchScope {
-                        scope_type,
-                        scope_code,
-                    }],
-                    source_version: "v1".into(),
-                    filters,
-                    embedding_model_code: settings.embedding_model_code.clone(),
-                    embedding_dimension: Some(TRON_VECTOR_INDEX_DIMENSION),
-                    provider_model: None,
-                    embedding_fingerprint: None,
-                    return_fields: if corpus == "memory-card" {
-                        vec!["expiresAt".into()]
-                    } else {
-                        vec![]
+                ranges.extend(self.0.rag.partition_ranges_for_corpus(
+                    AuthorizedRagRange {
+                        corpus_id: corpus.into(),
+                        scopes: vec![RagSearchScope {
+                            scope_type,
+                            scope_code,
+                        }],
+                        source_version: "v1".into(),
+                        filters,
+                        embedding_model_code: settings.embedding_model_code.clone(),
+                        embedding_dimension: Some(TRON_VECTOR_INDEX_DIMENSION),
+                        provider_model: None,
+                        embedding_fingerprint: None,
+                        return_fields: if corpus == "memory-card" {
+                            vec!["expiresAt".into()]
+                        } else {
+                            vec![]
+                        },
+                        fulltext: settings.fulltext,
+                        vector: settings.vector,
+                        graph: settings.graph,
                     },
-                    fulltext: settings.fulltext,
-                    vector: settings.vector,
-                    graph: settings.graph,
-                })?);
+                    &metadata,
+                )?);
             }
         }
         Ok(ranges)

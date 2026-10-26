@@ -115,11 +115,8 @@ shortTermMemory:
     defaultContextWindowTokens: 32000
     blocks:
       seedPromptPrefix:
-        # Protected instructions plus application context share this pool. Keep
-        # it generous relative to the post-tool-schema remainder so default
-        # (32k) windows still admit the full system prompt set.
-        maxRatio: "80%"
-        maxTokens: 16000
+        maxRatio: "100%"
+        maxTokens: null
       currentSessionCheckpoint:
         maxRatio: "20%"
         maxTokens: 6000
@@ -133,11 +130,80 @@ shortTermMemory:
     providers:
       order:
         - seed_prompt_prefix
-        - application_context
         - current_session_checkpoint
+        - runtime_identity
+        - dude_onboarding
+        - tool_domains
+        - current_session_history
+        - agent_directory
+        - skills.catalog
+        - page_context
+        - application_context
         - current_session_working_state
         - knowledge_base
-        - current_session_history
+        - dude_environment
+        - dude_wakeup
+      dataBlocks:
+        page_context:
+          maxTokens: 2048
+          strategy: bound
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        tool_domains:
+          maxTokens: null
+          strategy: keep
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        application_context:
+          maxTokens: 16000
+          strategy: bound
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        knowledge_base:
+          maxTokens: 1200
+          strategy: bound
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        agent_directory:
+          maxTokens: 2048
+          strategy: keep
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        runtime_identity:
+          maxTokens: 8192
+          strategy: keep
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        dude_onboarding:
+          maxTokens: 1024
+          strategy: bound
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        dude_environment:
+          maxTokens: 1536
+          strategy: bound
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        dude_wakeup:
+          maxTokens: 2048
+          strategy: bound
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
+        skills.catalog:
+          maxTokens: 8192
+          strategy: keep
+          triggerRatio: "100%"
+          targetRatio: "80%"
+          minGainTokens: 1
       checkpoint:
         strategy: bound
         triggerRatio: "100%"
@@ -153,6 +219,7 @@ shortTermMemory:
         triggerRatio: "100%"
         targetRatio: "20%"
         minGainTokens: 1
+      historyRecentTurns: 2
       maxAuxiliaryCallsPerStep: 16
   compaction:
     autoEnabled: true

@@ -125,6 +125,21 @@ mod tests {
     use super::BusinessToolCatalog;
 
     #[test]
+    fn domain_samples_preserve_actual_call_names_including_aliases() {
+        for locale in ["zh-CN", "en-US"] {
+            let mut model = BusinessToolCatalog::tool("model.page", locale).unwrap();
+            for (domain, call_name) in [("model", "model_page"), ("custom.remote", "remote.lookup-v2")] {
+                model.domain_code = domain.into();
+                model.tool_name = call_name.into();
+                let domains = BusinessToolCatalog::domains_for_records(&[model.clone()], locale);
+                assert_eq!(domains.len(), 1);
+                assert_eq!(domains[0].sample_tools, vec![call_name.to_owned()]);
+                assert!(!domains[0].sample_tools.contains(&model.tool_code));
+            }
+        }
+    }
+
+    #[test]
     fn framework_tools_share_catalog_identity_and_discovery_domains() {
         for descriptor in super::official_remote_descriptors() {
             let record = BusinessToolCatalog::tool(&descriptor.id, "en-US")

@@ -161,6 +161,25 @@ impl GrafeoOntologyStore {
 }
 
 impl OntologyStore for GrafeoOntologyStore {
+    fn resources_present(
+        &self,
+        scope: &ResolvedGraphScope,
+        references: &[(OntologyResourceType, String)],
+    ) -> Result<Vec<bool>, OntologyError> {
+        if references.is_empty() {
+            return Ok(Vec::new());
+        }
+        let session = self.core.session_for_scope(scope).map_err(storage_error)?;
+        let visible = load_resources(&session)?
+            .into_iter()
+            .filter(|record| visible_scope_match(record, scope))
+            .map(|record| (record.resource_type.as_str(), record.resource_code))
+            .collect::<std::collections::HashSet<_>>();
+        Ok(references
+            .iter()
+            .map(|(kind, code)| visible.contains(&(kind.as_str(), code.clone())))
+            .collect())
+    }
     fn create_class(
         &self,
         scope: &ResolvedGraphScope,

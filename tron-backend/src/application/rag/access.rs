@@ -111,15 +111,21 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
         ranges.retain(|range| {
             input.corpus_ids.is_empty() || input.corpus_ids.contains(&range.corpus_id)
         });
+        let metadata = self.repository.get_corpora(
+            &ranges
+                .iter()
+                .map(|range| range.corpus_id.clone())
+                .collect::<Vec<_>>(),
+        )?;
         let corpora = ranges
             .iter()
             .map(|range| {
-                self.repository
-                    .get_corpus(&range.corpus_id)?
+                metadata
+                    .get(&range.corpus_id)
                     .ok_or(RagError::CorpusNotFound)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        validate_request_filters_for_corpora(&corpora.iter().collect::<Vec<_>>(), &input.filters)?;
+        validate_request_filters_for_corpora(&corpora, &input.filters)?;
         let mut rerank = None;
         for (range, corpus) in ranges.iter_mut().zip(&corpora) {
             range.filters = merge_search_request_filters(corpus, &range.filters, &input.filters)?;
@@ -194,10 +200,15 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
         current_ranges.retain(|range| {
             input.corpus_ids.is_empty() || input.corpus_ids.contains(&range.corpus_id)
         });
+        let corpora = self.repository.get_corpora(
+            &current_ranges
+                .iter()
+                .map(|range| range.corpus_id.clone())
+                .collect::<Vec<_>>(),
+        )?;
         for range in &mut current_ranges {
-            let corpus = self
-                .repository
-                .get_corpus(&range.corpus_id)?
+            let corpus = corpora
+                .get(&range.corpus_id)
                 .ok_or(RagError::CorpusNotFound)?;
             range.filters = merge_search_request_filters(&corpus, &range.filters, &input.filters)?;
         }

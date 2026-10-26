@@ -47,11 +47,16 @@ pub(super) fn update(
         .blocks
         .iter()
         .any(|block| matches!(block.outcome, fw::ContextBlockOutcome::Reduced));
-    projection.compaction_trigger_reached = window
-        .report
-        .blocks
-        .iter()
-        .any(|block| block.compression_trigger != fw::ContextCompressionTrigger::None);
+    // A trigger records what happened during assembly, including manual /compact.
+    // Inspector health describes the final admitted window, after that work.
+    projection.compaction_trigger_reached = current_compaction_pressure(&window.report, config);
+    projection.compaction_trigger_tokens = config.compaction.auto_enabled.then(|| {
+        threshold_tokens(
+            window.report.input_capacity,
+            config.compaction.trigger_ratio_bps,
+        )
+        .min(u32::MAX as usize) as u32
+    });
     let tokens = |id: &str| {
         window
             .report
@@ -70,7 +75,7 @@ pub(super) fn update(
     };
     let history_cap = cap(fw::HISTORY_BLOCK).unwrap_or(0);
     // Allocation lends unused space to history. It is not the configured ceiling
-    // of the protected instructions/application pool shown by the inspector.
+    // of the protected instruction block shown by the inspector.
     let seed_config = &config.context.blocks.seed_prompt_prefix;
     let available = fw::ContextBudget {
         max_tokens: window
@@ -134,12 +139,8 @@ pub(super) fn update(
         report.output_token_reserve = projection.output_token_reserve;
         report.application_context_tokens = tokens("application_context");
         report.application_context_message_count = count("application_context");
-        report.prompt_prefix_message_count = count(fw::INSTRUCTIONS_BLOCK)
-            .saturating_add(count("seed_prompt_prefix"))
-            .saturating_add(report.application_context_message_count);
-        report.prompt_prefix_tokens = tokens(fw::INSTRUCTIONS_BLOCK)
-            .saturating_add(tokens("seed_prompt_prefix"))
-            .saturating_add(report.application_context_tokens);
+        report.prompt_prefix_message_count = count(fw::INSTRUCTIONS_BLOCK);
+        report.prompt_prefix_tokens = tokens(fw::INSTRUCTIONS_BLOCK);
         report.checkpoint_tokens = tokens("current_session_checkpoint");
         report.working_state_tokens = tokens("current_session_working_state");
         report.recent_transcript_tokens = tokens(fw::HISTORY_BLOCK);
@@ -175,9 +176,148 @@ pub(super) fn update(
         report.estimated_input_tokens = projection.estimated_tokens;
         report.input_budget_exceeded = false;
         report.compaction_trigger_reached = projection.compaction_trigger_reached;
+        report.compaction_trigger_ratio_bps = config
+            .compaction
+            .auto_enabled
+            .then_some(config.compaction.trigger_ratio_bps);
+        report.compaction_trigger_tokens = projection.compaction_trigger_tokens;
         report.checkpoint_budget_tokens = Some(checkpoint_cap);
         report.working_state_budget_tokens = Some(working_cap);
         report.current_session_history_budget_tokens = cap(fw::HISTORY_BLOCK);
     }
     Ok(())
+}
+
+fn threshold_tokens(capacity: usize, ratio_bps: u32) -> usize {
+    ((capacity as u128 * ratio_bps.min(10_000) as u128) / 10_000) as usize
+}
+
+fn current_compaction_pressure(
+    report: &fw::ContextAssemblyReport,
+    config: &ShortTermMemoryConfig,
+) -> bool {
+    use crate::application::short_term_memory::ContextReductionStrategy as Strategy;
+    if config.compaction.auto_enabled
+        && report.estimated_input_tokens > 0
+        && report.estimated_input_tokens
+            >= threshold_tokens(report.input_capacity, config.compaction.trigger_ratio_bps)
+    {
+        return true;
+    }
+    report.blocks.iter().any(|block| {
+        let policy = match block.id.as_str() {
+            fw::HISTORY_BLOCK if config.compaction.auto_enabled => {
+                &config.context.providers.history
+            }
+            "current_session_checkpoint" => &config.context.providers.checkpoint,
+            "current_session_working_state" => &config.context.providers.working,
+            id => match config.context.providers.data_blocks.get(id) {
+                Some(data) => &data.policy,
+                None => return false,
+            },
+        };
+        // History borrows remaining capacity; other blocks use their configured cap,
+        // matching the Framework's threshold calculation before shared allocation.
+        let capacity = if block.id == fw::HISTORY_BLOCK {
+            block.allocated_tokens
+        } else {
+            block.configured_tokens.unwrap_or(block.allocated_tokens)
+        };
+        policy.strategy != Strategy::Keep
+            && block.final_tokens > 0
+            && block.final_tokens >= threshold_tokens(capacity, policy.trigger_ratio_bps)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn report() -> fw::ContextAssemblyReport {
+        fw::ContextAssemblyReport {
+            model: fw::ModelRef::new("test", "test"),
+            stage: "test".into(),
+            step: 1,
+            attempt: 1,
+            node_execution: None,
+            input_capacity: 100_000,
+            protocol_tokens: 100,
+            estimated_input_tokens: 1100,
+            blocks: vec![fw::ContextBlockReport {
+                kind: fw::ContextSourceKind::Data,
+                sources: vec![],
+                id: fw::HISTORY_BLOCK.into(),
+                position: 0,
+                source_version: None,
+                original_tokens: Some(90_000),
+                configured_tokens: Some(90_000),
+                allocated_tokens: 90_000,
+                reduction_budget_tokens: Some(90_000),
+                final_tokens: 1000,
+                final_message_count: 2,
+                outcome: fw::ContextBlockOutcome::Reduced,
+                compression_trigger: fw::ContextCompressionTrigger::Global,
+            }],
+        }
+    }
+
+    #[test]
+    fn context_health_uses_final_usage_instead_of_past_manual_or_automatic_trigger() {
+        let config = ShortTermMemoryConfig::default();
+        let mut report = report();
+        assert!(!current_compaction_pressure(&report, &config));
+        report.blocks[0].compression_trigger = fw::ContextCompressionTrigger::Block;
+        assert!(!current_compaction_pressure(&report, &config));
+        report.blocks[0].outcome = fw::ContextBlockOutcome::NoGain;
+        report.blocks[0].final_tokens = 0;
+        assert!(!current_compaction_pressure(&report, &config));
+    }
+
+    #[test]
+    fn context_health_checks_configured_total_and_individual_block_thresholds() {
+        let mut config = ShortTermMemoryConfig::default();
+        config.compaction.trigger_ratio_bps = 7500;
+        let mut report = report();
+        report.estimated_input_tokens = 74_999;
+        assert!(!current_compaction_pressure(&report, &config));
+        report.estimated_input_tokens = 75_000;
+        assert!(current_compaction_pressure(&report, &config));
+        report.estimated_input_tokens = 1100;
+        let block = &mut report.blocks[0];
+        block.id = "page_context".into();
+        block.configured_tokens = Some(2000);
+        block.allocated_tokens = 1000;
+        config
+            .context
+            .providers
+            .data_blocks
+            .get_mut("page_context")
+            .unwrap()
+            .policy
+            .trigger_ratio_bps = 9000;
+        report.blocks[0].final_tokens = 1799;
+        assert!(!current_compaction_pressure(&report, &config));
+        report.blocks[0].final_tokens = 1800;
+        assert!(current_compaction_pressure(&report, &config));
+        config
+            .context
+            .providers
+            .data_blocks
+            .get_mut("page_context")
+            .unwrap()
+            .policy
+            .strategy = crate::application::short_term_memory::ContextReductionStrategy::Keep;
+        assert!(!current_compaction_pressure(&report, &config));
+    }
+
+    #[test]
+    fn context_health_history_uses_remaining_quota_and_respects_disabled_auto_compaction() {
+        let mut config = ShortTermMemoryConfig::default();
+        let mut report = report();
+        report.blocks[0].allocated_tokens = 1000;
+        assert!(current_compaction_pressure(&report, &config));
+        config.compaction.auto_enabled = false;
+        report.estimated_input_tokens = 99_000;
+        assert!(!current_compaction_pressure(&report, &config));
+    }
 }

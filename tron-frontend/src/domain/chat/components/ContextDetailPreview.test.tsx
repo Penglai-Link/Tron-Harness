@@ -12,6 +12,101 @@ it("keeps raw prompt content separate from budget and provenance reports", () =>
 });
 
 describe.each(["zh-CN", "en-US"])("context inspector in %s", (locale) => {
+  it("renders runtime data with readable labels and omits empty control fields", async () => {
+    await i18n.changeLanguage(locale);
+    const messages = [{ role: "user", parts: [{ type: "text", text: JSON.stringify({
+      userCode: "user-1", workspaceCode: "", toolCount: 0,
+      eventKind: "USER_PROMPT", event: { annotations: [], requestedSkills: [], resume: [] },
+      relatedWork: [], nameConfirmed: false,
+    }) }] }];
+    const { container } = render(<ContextDetailPreview block="dude_environment" value={{ messages }} />);
+    expect(screen.getByText(locale === "zh-CN" ? "用户身份" : "User identity")).toBeTruthy();
+    expect(screen.getByText(locale === "zh-CN" ? "普通用户消息" : "User message")).toBeTruthy();
+    expect(screen.getByText("0")).toBeTruthy();
+    expect(screen.getByText(locale === "zh-CN" ? "否" : "No")).toBeTruthy();
+    expect(container.textContent).not.toContain("annotations");
+    expect(container.textContent).not.toContain("requestedSkills");
+    expect(container.textContent).not.toContain("resume");
+    expect(contextDetailRawValue("dude_environment", { messages })).toEqual(messages);
+  });
+
+  it("does not misread an inner scope as a full truncated runtime document", async () => {
+    await i18n.changeLanguage(locale);
+    const text = '{"userCode":"user-1","scope":{"applications":[]},"availableTools":["tool_a","tool_b';
+    const messages = [{ role: "user", parts: [{ type: "text", text: `[Runtime reference data: dude_environment]\n${text}` }] }];
+    const { container } = render(<ContextDetailPreview block="dude_environment" value={{ messages }} />);
+    expect(screen.getByRole("note").textContent).toContain(locale === "zh-CN" ? "已被截断" : "truncated");
+    expect(container.querySelector("pre")?.textContent).toBe(text);
+    expect(container.querySelector("dl")).toBeNull();
+    expect(contextDetailRawValue("dude_environment", { messages })).toEqual(messages);
+  });
+
+  it("previews trigger evidence separately from instructions and keeps bracketed prose readable", async () => {
+    await i18n.changeLanguage(locale);
+    const { container } = render(<ContextDetailPreview block="dude_wakeup" value={{ messages: [{ role: "user", parts: [{ type: "text", text: JSON.stringify({
+      event: { source: "ThreadFeedback", taskCode: "task-1", payload: { summary: "[Thread] needs an answer" } },
+      relatedWork: [{ summary: "Confirm a release", requestedAction: "Choose a time", evidence: ["interaction-1"] }],
+    }) }] }] }} />);
+    expect(screen.getByText(locale === "zh-CN" ? "后台执行反馈" : "Background execution feedback")).toBeTruthy();
+    expect(screen.getByText("[Thread] needs an answer")).toBeTruthy();
+    expect(screen.getByText("Confirm a release")).toBeTruthy();
+    expect(screen.getByText("interaction-1")).toBeTruthy();
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(container.textContent).not.toContain("dude_wakeup");
+  });
+
+  it("does not mistake bracketed instructions for truncated JSON", async () => {
+    await i18n.changeLanguage(locale);
+    render(<ContextDetailPreview block="systemPrompt" value={{ messages: [{ role: "system", parts: [{ type: "text", text: "[Role] You are an assistant." }] }] }} />);
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.getByText("[Role] You are an assistant.")).toBeTruthy();
+  });
+
+  it.each(["context", "wrappedText", "json", "boundedText"])("makes tool domains readable from %s without changing raw data", async (format) => {
+    await i18n.changeLanguage(locale);
+    const domains = [{ domainCode: "app", name: "Application tools", description: "Manage workspace applications.", toolCount: 5, sampleTools: ["app_page"], hasMutationTools: true }];
+    const context = { type: "context", kind: "tool_domains", text: JSON.stringify(domains) };
+    const part = format === "context" ? context
+      : format === "json" ? { type: "Json", value: { tronMessagePart: context } }
+      : { type: "text", text: format === "wrappedText" ? JSON.stringify({ tronMessagePart: context })
+        : `[Runtime reference data: tool_domains]\n${JSON.stringify(domains)}` };
+    const messages = [{ role: "user", parts: [part] }];
+    const { container } = render(<ContextDetailPreview block="tool_domains" value={{ messages }} />);
+    expect(screen.getByText("Application tools")).toBeTruthy();
+    expect(screen.getByText("Manage workspace applications.")).toBeTruthy();
+    expect(container.textContent).toContain(locale === "zh-CN" ? "5 个工具" : "5 tools");
+    expect(container.textContent).toContain(locale === "zh-CN" ? "含修改工具" : "Can modify");
+    expect(container.querySelector("details")?.open).toBe(false);
+    expect(screen.getByText("app_page")).toBeTruthy();
+    expect(container.textContent).not.toContain("tronMessagePart");
+    expect(container.textContent).not.toContain("domainCode");
+    expect(contextDetailRawValue("tool_domains", { messages })).toEqual(messages);
+  });
+
+  it("unwraps typed context in other contributor previews", async () => {
+    await i18n.changeLanguage(locale);
+    const part = { type: "context", kind: "current_session_working_state", text: "Current goal: review this project" };
+    const { container } = render(<ContextDetailPreview block="current_session_working_state" value={{ messages: [
+      { role: "user", parts: [{ type: "text", text: JSON.stringify({ tronMessagePart: part }) }] },
+    ] }} />);
+    expect(container.textContent).toContain("Current goal: review this project");
+    expect(container.textContent).not.toContain("tronMessagePart");
+  });
+
+  it("labels truncated historical domain snapshots and hides the transport wrapper", async () => {
+    await i18n.changeLanguage(locale);
+    const domains = [{ domainCode: "app", name: "Application tools", description: "Manage applications", toolCount: 5, sampleTools: ["app_page"] }, { domainCode: "incomplete", name: "Missing details" }];
+    const encoded = JSON.stringify({ tronMessagePart: { type: "context", kind: "tool_domains", text: JSON.stringify(domains) } });
+    const text = encoded.slice(0, encoded.indexOf("incomplete") + 3);
+    const messages = [{ role: "user", parts: [{ type: "text", text }] }];
+    const { container } = render(<ContextDetailPreview block="tool_domains" value={{ messages }} />);
+    expect(screen.getByText("Application tools")).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toContain(locale === "zh-CN" ? "已被截断" : "truncated");
+    expect(container.textContent).not.toContain("Missing details");
+    expect(container.textContent).not.toContain("tronMessagePart");
+    expect(contextDetailRawValue("tool_domains", { messages })).toEqual(messages);
+  });
+
   it("reads the native tool envelope and shows its actual name and parameter schema", async () => {
     await i18n.changeLanguage(locale);
     render(<ContextDetailPreview block="toolSchema" value={{ blockCode: "toolSchema", tools: [{ toolName: "chat_ask_user", description: "Ask a question", inputSchema: { type: "object", required: ["questions"], properties: { questions: { type: "array", description: "Questions for the user" } } } }], budgetBreakdown: { toolSchemaTokens: 435 } }} />);

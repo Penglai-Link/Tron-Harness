@@ -27,6 +27,7 @@ impl KnowledgeDocumentParser for ExistingParse {
     }
     async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
         Ok(ParsingCapabilities {
+            default_ocr_mode: OcrMode::Auto,
             default_tier: ParsingTier::Standard,
             available_tiers: vec![ParsingTier::Standard],
             parser_version: "4.0.10".into(),
@@ -605,6 +606,7 @@ impl KnowledgeDocumentParser for OfficialBasicParse {
     }
     async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
         Ok(ParsingCapabilities {
+            default_ocr_mode: OcrMode::Auto,
             default_tier: ParsingTier::Basic,
             available_tiers: vec![ParsingTier::Basic],
             parser_version: "4.0.10".into(),
@@ -657,12 +659,33 @@ async fn official_basic_known_failure_stays_failed_private_and_unpublished() {
     let repo = SqliteKnowledgeBaseRepository::connect(&f.state.config.database_url).unwrap();
     let mut recorded = repo.document(&kb.id, &doc.id).unwrap();
     let revision = recorded.revision;
-    recorded.parser_failure = Some(reason.into());
+    recorded
+        .parsing_artifact
+        .as_mut()
+        .expect("preview persists its parsing artifact")
+        .fidelity_issues
+        .push(
+            tron_backend::application::knowledge_base::fidelity::FidelityIssue {
+                source_region: None,
+                candidate_region: None,
+                candidate_excerpt: Some("177 mmol/L".into()),
+                kind: "RECORDED_UPSTREAM_FAILURE".into(),
+                page: Some(5),
+                blocks: Vec::new(),
+                source_excerpt: reason.into(),
+                image_resource_codes: Vec::new(),
+            },
+        );
     recorded.revision += 1;
     repo.save_document(&kb.id, &recorded, revision).unwrap();
     let failed = service.index(USER, &kb.id, &doc.id).await.unwrap();
     assert_eq!(failed.status, "FAILED");
-    assert_eq!(failed.error.as_deref(), Some(reason));
+    assert!(
+        failed
+            .error
+            .as_deref()
+            .is_some_and(|message| message.contains(reason))
+    );
     assert!(failed.active_source_code.is_none());
     assert_eq!(failed.index_revision, 0);
     assert_eq!(f.client.calls.load(Ordering::SeqCst), 0);

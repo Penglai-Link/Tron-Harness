@@ -18,7 +18,7 @@ pub use dto::{
 };
 pub use native_service::ShortTermMemoryService;
 pub use provider_config::{
-    ContextPriceInputs, ContextProviderPolicy, ContextProvidersConfig, ContextReductionStrategy,
+    ContextDataBlockConfig, ContextPriceInputs, ContextProviderPolicy, ContextProvidersConfig, ContextReductionStrategy,
 };
 pub(crate) use redaction::redact_sensitive_text;
 

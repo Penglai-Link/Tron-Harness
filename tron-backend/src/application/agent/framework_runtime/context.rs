@@ -4,7 +4,6 @@ use super::model::HostExecution;
 use crate::domain::agent::{AgentModelProtocol, EffectiveTool};
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
-use eliteforge_agent_core::ContextAssembler;
 
 pub(super) struct TronContext;
 #[async_trait]
@@ -14,17 +13,6 @@ impl fw::ContextPreparationPolicy for TronContext {
         input: &fw::ContextAssemblyInput<'_>,
         reductions: usize,
     ) -> Result<fw::ContextPreparation, fw::AgentError> {
-        if input
-            .run
-            .extensions
-            .get::<super::external::ExternalExecution>()
-            .is_some()
-        {
-            return fw::DefaultContextAssembler::new(fw::ContextLayout::default(), vec![])?
-                .assemble(input)
-                .await
-                .map(fw::ContextPreparation::Ready);
-        }
         let host = HostExecution::from_extensions(&input.run.extensions)?;
         let mut state = host.state.lock().await;
         super::model::synchronize_selected_model(
@@ -72,7 +60,7 @@ impl fw::ContextPreparationPolicy for TronContext {
             .context
             .messages
             .iter()
-            .take_while(|message| message.role == "system")
+            .take_while(|message| super::messages::is_prompt_prefix(message))
             .count();
         let prefix = state.trusted_prefix.clone();
         std::sync::Arc::make_mut(&mut state.context.messages).splice(..old_prefix_len, prefix);
@@ -108,7 +96,8 @@ impl fw::ContextPreparationPolicy for TronContext {
             ));
         }
         let auxiliary_calls = state.context_auxiliary_calls.as_ref().unwrap().1.clone();
-        let force = state.context_force_compression;
+        let manual = input.run.extensions.get::<fw::ContextCompactionRequest>().is_some();
+        let force = state.context_force_compression || manual;
         let onboarding = state.onboarding;
         let previous_messages = state
             .prepared
@@ -116,18 +105,9 @@ impl fw::ContextPreparationPolicy for TronContext {
             .map(|prepared| prepared.messages.clone());
         // No host mutex may be held while a reducer invokes an auxiliary model.
         drop(state);
-        let assembled = if onboarding {
-            let dudes = host.harness.framework_dudes().ok_or_else(|| fw::AgentError::Run("Dude service unavailable".into()))?;
-            super::onboarding::assemble(input, &context, &dudes).await
-        } else { super::context_providers::assemble(
-            input,
-            host.clone(),
-            &context,
-            &projection,
-            force,
-            auxiliary_calls,
-        )
-        .await };
+        let assembled = super::context_providers::assemble(
+            input, host.clone(), &context, &projection, force, auxiliary_calls, onboarding,
+        ).await;
         let window = match assembled {
             Ok(window) => window,
             Err(error) => match error.primary() {
@@ -147,7 +127,7 @@ impl fw::ContextPreparationPolicy for TronContext {
             .collect::<Result<Vec<_>, _>>()
             .map_err(fw::AgentError::InvalidConfiguration)?
             .into();
-        if force && previous_messages.as_ref() == Some(&projection.messages) {
+        if force && !manual && previous_messages.as_ref() == Some(&projection.messages) {
             return Err(fw::ModelError::ContextOverflow(
                 "configured context strategies reproduced the failed model input".into(),
             )

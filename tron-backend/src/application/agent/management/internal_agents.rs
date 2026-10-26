@@ -127,8 +127,6 @@ impl AgentManagementService {
                 .unwrap_or(InternalAgentPolicySource::PlatformDefault),
                 tool_assignment_mode: mode,
                 mcp_access_mode: policy.mcp_access_mode,
-                tool_exposure_mode: policy.tool_exposure_mode,
-                expanded_domain_persistence_mode: policy.expanded_domain_persistence_mode,
                 max_steps: policy.max_steps,
                 max_tool_calls: policy.max_tool_calls,
                 max_parallel_tool_calls: policy.max_parallel_tool_calls,
@@ -179,11 +177,6 @@ impl AgentManagementService {
         let mut overridden_fields = self.saved_override_fields(workspace_code, agent_code)?;
         for (field, changed) in [
             ("toolAssignmentMode", command.tool_assignment_mode.is_some()),
-            ("toolExposureMode", command.tool_exposure_mode.is_some()),
-            (
-                "expandedDomainPersistenceMode",
-                command.expanded_domain_persistence_mode.is_some(),
-            ),
             ("maxSteps", command.max_steps.is_some()),
             ("maxToolCalls", command.max_tool_calls.is_some()),
             (
@@ -203,12 +196,6 @@ impl AgentManagementService {
                 .tool_assignment_mode
                 .unwrap_or(current.tool_assignment_mode),
             mcp_access_mode: current.mcp_access_mode,
-            tool_exposure_mode: command
-                .tool_exposure_mode
-                .unwrap_or(current.tool_exposure_mode),
-            expanded_domain_persistence_mode: command
-                .expanded_domain_persistence_mode
-                .unwrap_or(current.expanded_domain_persistence_mode),
             max_steps: command.max_steps.unwrap_or(current.max_steps),
             max_tool_calls: command.max_tool_calls.unwrap_or(current.max_tool_calls),
             max_parallel_tool_calls: command
@@ -266,8 +253,6 @@ impl AgentManagementService {
             agent_code: definition.agent_code.clone(),
             tool_assignment_mode: current.tool_assignment_mode,
             mcp_access_mode: command.mcp_access_mode.unwrap_or(current.mcp_access_mode),
-            tool_exposure_mode: current.tool_exposure_mode,
-            expanded_domain_persistence_mode: current.expanded_domain_persistence_mode,
             max_steps: current.max_steps,
             max_tool_calls: current.max_tool_calls,
             max_parallel_tool_calls: current.max_parallel_tool_calls,
@@ -442,10 +427,6 @@ fn merge_policy(
             match field.as_str() {
                 "toolAssignmentMode" => base.tool_assignment_mode = saved.tool_assignment_mode,
                 "mcpAccessMode" => base.mcp_access_mode = saved.mcp_access_mode,
-                "toolExposureMode" => base.tool_exposure_mode = saved.tool_exposure_mode,
-                "expandedDomainPersistenceMode" => {
-                    base.expanded_domain_persistence_mode = saved.expanded_domain_persistence_mode
-                }
                 "maxSteps" => base.max_steps = saved.max_steps,
                 "maxToolCalls" => base.max_tool_calls = saved.max_tool_calls,
                 "maxParallelToolCalls" => {
@@ -468,8 +449,6 @@ fn to_internal_policy_record(
         agent_code: definition.agent_code.clone(),
         tool_assignment_mode: definition.tool_assignment_mode,
         mcp_access_mode: definition.mcp_access_mode,
-        tool_exposure_mode: definition.tool_exposure_mode,
-        expanded_domain_persistence_mode: definition.expanded_domain_persistence_mode,
         max_steps: definition.max_steps,
         max_tool_calls: definition.max_tool_calls,
         max_parallel_tool_calls: definition.max_parallel_tool_calls,

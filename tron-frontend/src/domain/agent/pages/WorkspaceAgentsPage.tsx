@@ -122,7 +122,6 @@ interface InternalAgentDraft {
   loopCode: string;
   name: string;
   rolePrompt: string;
-  expandedDomainPersistenceMode: WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"];
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls: number;
@@ -130,7 +129,6 @@ interface InternalAgentDraft {
   selectedServerCodes: string[];
   selectedToolCodes: string[];
   toolAssignmentMode: WorkspaceInternalAgentRecord["toolAssignmentMode"];
-  toolExposureMode: WorkspaceInternalAgentRecord["toolExposureMode"];
 }
 
 type InternalSaveState = "idle" | "pending" | "saving" | "saved" | "error";
@@ -187,7 +185,6 @@ function draftFromRecord(
     description: record.description,
     rolePrompt: record.rolePrompt,
     loopCode: record.loopCode || "",
-    expandedDomainPersistenceMode: record.expandedDomainPersistenceMode,
     maxSteps: record.maxSteps,
     maxToolCalls: record.maxToolCalls,
     maxParallelToolCalls: record.maxParallelToolCalls,
@@ -195,7 +192,6 @@ function draftFromRecord(
     selectedServerCodes: normalizeServerCodes(record.selectedServerCodes),
     selectedToolCodes: normalizeToolCodes(record.selectedToolCodes),
     toolAssignmentMode: record.toolAssignmentMode,
-    toolExposureMode: record.toolExposureMode,
   };
 }
 
@@ -231,9 +227,6 @@ function hasDraftChanges(
     (record.loopCode || "") !== draft.loopCode ||
     record.rolePrompt !== draft.rolePrompt ||
     record.toolAssignmentMode !== draft.toolAssignmentMode ||
-    record.toolExposureMode !== draft.toolExposureMode ||
-    record.expandedDomainPersistenceMode !==
-      draft.expandedDomainPersistenceMode ||
     record.maxSteps !== draft.maxSteps ||
     record.maxToolCalls !== draft.maxToolCalls ||
     record.maxParallelToolCalls !== draft.maxParallelToolCalls ||
@@ -824,15 +817,6 @@ export function WorkspaceAgentsPage({
     const payload: WorkspaceInternalAgentPolicyPayload = {};
     if (row.toolAssignmentMode !== draft.toolAssignmentMode) {
       payload.toolAssignmentMode = draft.toolAssignmentMode;
-    }
-    if (row.toolExposureMode !== draft.toolExposureMode) {
-      payload.toolExposureMode = draft.toolExposureMode;
-    }
-    if (
-      row.expandedDomainPersistenceMode !== draft.expandedDomainPersistenceMode
-    ) {
-      payload.expandedDomainPersistenceMode =
-        draft.expandedDomainPersistenceMode;
     }
     if (row.maxSteps !== draft.maxSteps) {
       payload.maxSteps = draft.maxSteps;

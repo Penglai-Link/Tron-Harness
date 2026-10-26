@@ -30,6 +30,7 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
       return { sessionId: value.sessionCode, activeRun: value.activeRun ? {
         runId: value.activeRun.runCode, runtimeAdapterKey: value.activeRun.runtimeAdapterKey,
         state: value.activeRun.state, supportsSteer: value.activeRun.supportsSteer,
+        ...(value.activeRun.operationKind ? { operationKind: value.activeRun.operationKind } : {}),
       } : null };
     } : undefined,
     streamMessage: async (session, input, events, signal) => toUiResult(await uiRequest(

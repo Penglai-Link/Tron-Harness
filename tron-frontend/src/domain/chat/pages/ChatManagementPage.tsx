@@ -32,7 +32,6 @@ import {
   createChatSession,
   useChatAguiEvents,
   useChatAguiProtocolEvents,
-  createChatCompaction,
   cancelChatSessionGoal,
   clearChatSessionGoal,
   pauseChatSessionGoal,
@@ -85,7 +84,7 @@ import {
   type ChatRuntimeRunState,
   type ChatSession as RuntimeChatSession,
 } from "@tron/chat-core";
-import { truncateLabel } from "@eliteforge/agent-ui-chat-core";
+import { contextBlockPlacements, truncateLabel, type ContextBlockPlacement } from "@eliteforge/agent-ui-chat-core";
 import { inferChatAgentCodeFromModel } from "../model/chatAgentCode";
 import {
   canClearGoalStatus,
@@ -1364,6 +1363,7 @@ function goalVerdictLabel(value: string | null | undefined, translate: (key: str
 type ContextBlockColor = "seed" | "tool" | "checkpoint" | "state" | "history";
 
 interface ContextMemoryBlockItem {
+  placement?: ContextBlockPlacement | "protocol";
   code: string;
   color: ContextBlockColor;
   detailCode?: ContextDetailBlock;
@@ -1371,8 +1371,6 @@ interface ContextMemoryBlockItem {
   snapshotSequence?: string;
   order: number;
   sources?: { id: string; name: string }[];
-  status?: string;
-  statusTone?: "warning" | "error";
   limitDescription?: string;
   allocationTokens?: number | null;
   limitTokens: number | null;
@@ -1385,11 +1383,15 @@ const contributorLabelKeys: Record<string, string> = {
   "framework.instructions": "systemPromptName",
   seed_prompt_prefix: "systemPromptName",
   application_context: "applicationContextName",
+  page_context: "pageContextName",
   current_session_checkpoint: "checkpointName",
   current_session_working_state: "workingStateName",
   "framework.history": "sessionHistoryName",
   runtime_identity: "runtimeIdentityName",
   "skills.catalog": "skillsCatalogName",
+  "tool_domains": "toolDomainsName",
+  "skills.guidance": "skillsGuidanceName",
+  "dude.guidance": "dudeGuidanceName",
   "a2ui.guidance": "a2uiGuidanceName",
   knowledge_base: "knowledgeBaseName",
   agent_directory: "agentDirectoryName",
@@ -1403,6 +1405,7 @@ export function buildReportedContextMemoryBlocks(
   translate: (key: string, options?: Record<string, unknown>) => string,
 ): ContextMemoryBlockItem[] {
   const prefix = "chat.shortTermMemory.contextPanel.";
+  const placements = contextBlockPlacements(snapshot.blocks);
   const label = (id: string) => contributorLabelKeys[id] ? translate(prefix + contributorLabelKeys[id]) : id;
   const detailAliases: Record<string, ContextDetailBlock> = {
     "framework.instructions": "systemPrompt", seed_prompt_prefix: "systemPrompt",
@@ -1410,6 +1413,7 @@ export function buildReportedContextMemoryBlocks(
   };
   const blocks: ContextMemoryBlockItem[] = [...snapshot.blocks].sort((left,right) => left.position-right.position).map((block, index) => ({
     code: block.id,
+    placement: placements.get(block.id),
     color: block.id === "framework.history" ? "history" : "seed",
     detailCode: block.detailValue !== undefined || snapshot.snapshotSequence ? detailAliases[block.id] ?? block.id : undefined,
     detailValue: block.detailValue,
@@ -1422,14 +1426,13 @@ export function buildReportedContextMemoryBlocks(
     name: label(block.id),
     tokens: block.finalTokens,
     stat: translate(prefix + "messageCount", { count: block.messageCount }),
-    status: block.outcome !== "Kept" ? translate(prefix + "outcomes." + block.outcome, { defaultValue: block.outcome }) : undefined,
-    statusTone: block.outcome === "Failed" ? "error" : "warning",
-    limitDescription: block.reason || (block.originalTokens !== null && block.originalTokens !== block.finalTokens
+    limitDescription: block.reason || (block.originalTokens !== null && block.originalTokens > block.finalTokens
       ? translate(prefix + "reductionStat", { original: formatCompactTokenCount(block.originalTokens), final: formatCompactTokenCount(block.finalTokens) }) : undefined),
   }));
   const protocolLimit = snapshot.budgetBreakdown?.toolSchemaBudgetTokens;
   if (snapshot.protocolTokens !== null) blocks.push({
     code: "protocol",
+    placement: "protocol",
     order: blocks.length + 1,
     color: "tool",
     detailCode: snapshot.toolsDetail !== undefined || snapshot.snapshotSequence ? "toolSchema" : undefined,
@@ -1504,10 +1507,10 @@ function ContextOverviewPanel({
             {statusLabel}
           </Badge> : null}
           <button
-            aria-label={t("chat.shortTermMemory.createCheckpoint")}
+            aria-label={t("chat.shortTermMemory.compactMemory")}
             className={iconButtonClass()}
             disabled={!session || !onCreateCompaction || compactionBusy}
-            title={t("chat.shortTermMemory.createCheckpoint")}
+            title={t("chat.shortTermMemory.compactMemory")}
             type="button"
             onClick={onCreateCompaction}
           >
@@ -1602,7 +1605,7 @@ function ContextStructurePanel({
   return (
     <div>
       {blocks.map((block) => (
-        <ContextMemoryBlockRow block={block} dudeCode={dudeCode} key={block.code} sessionCode={sessionCode} />
+        <ContextMemoryBlockRow key={block.code} block={block} dudeCode={dudeCode} sessionCode={sessionCode} />
       ))}
     </div>
   );
@@ -1673,7 +1676,6 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
             {block.order ? <span className="shrink-0 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{block.order}.</span> : null}
             <span className="min-w-0 break-words text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]" title={block.code === "protocol" ? undefined : block.code}>{block.name}</span>
             {block.stat ? <span className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</span> : null}
-            {block.status ? <span className={cn("text-[10px] font-medium", block.statusTone === "error" ? "text-[var(--color-error)]" : "text-[var(--color-warning)]")}>{block.status}</span> : null}
           </button>
           {block.code === "protocol" ? (
             <InfoTooltip ariaLabel={block.name} align="start">
@@ -1696,9 +1698,9 @@ function ContextMemoryBlockRow({ block, dudeCode, sessionCode }: { block: Contex
         <span
           className="shrink-0 font-mono text-[11px]"
           data-testid={`context-budget-${block.code}`}
-          title={`${block.tokens} / ${block.limitTokens ?? "-"}`}
+          title={block.limitTokens == null ? String(block.tokens) : `${block.tokens} / ${block.limitTokens}`}
         >
-          {formatTokenLimit(block.tokens, block.limitTokens)}
+          {block.limitTokens == null ? formatCompactTokenCount(block.tokens) : formatTokenLimit(block.tokens, block.limitTokens)}
         </span>
       </div>
       {hasCapacity ? <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]" role="progressbar" aria-label={block.name} aria-valuenow={Math.min(block.tokens, block.limitTokens!)} aria-valuemin={0} aria-valuemax={block.limitTokens!}>
@@ -2749,7 +2751,7 @@ export function ChatManagementPage() {
   const [selectedAgentCode, setSelectedAgentCode] = useState(mainChatAgentOption.agentCode);
   const agentSelectionSessionRef = useRef("");
   const [agentsLoading, setAgentsLoading] = useState(false);
-  const [compactingSessionCode, setCompactingSessionCode] = useState("");
+  const compactingSessionCode = runtimeRunState?.active && runtimeRunState.operationKind === "ContextCompaction" ? runtimeRunState.sessionCode : "";
   const [goalActionSessionCode, setGoalActionSessionCode] = useState("");
   const [pendingAttachmentsBySessionCode, setPendingAttachmentsBySessionCode] = useState<
     Record<string, ChatMessageAttachment[]>
@@ -3329,7 +3331,7 @@ export function ChatManagementPage() {
       compactionBusy: compactingSessionCode === activeSession.sessionCode,
       contextEvents: contextAguiEvents,
       goal: activeGoal,
-      goalBusy: goalActionSessionCode === activeSession.sessionCode,
+      goalBusy: goalActionSessionCode === activeSession.sessionCode || compactingSessionCode === activeSession.sessionCode,
       goalStatus,
       latestCompaction,
       latestCompactionStatus,
@@ -3421,7 +3423,7 @@ export function ChatManagementPage() {
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
   }), [aguiWorkReplayPreferences.recentTurnLimit]);
   const transcriptFooterAddon = useMemo(() => (
-    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
+    <fieldset disabled={compactingSessionCode === activeSession?.sessionCode} className="m-0 flex min-w-0 max-w-full flex-wrap items-center gap-1 border-0 p-0">
         <input
           className="hidden"
           ref={attachmentFileInputRef}
@@ -3497,8 +3499,9 @@ export function ChatManagementPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
-    </div>
+    </fieldset>
   ), [
+    compactingSessionCode,
     agentScopedModels,
     agentSelectionLocked,
     agentsLoading,
@@ -3578,26 +3581,8 @@ export function ChatManagementPage() {
   }
 
   async function handleCreateCompaction() {
-    if (!activeSession || compactingSessionCode) return;
-    const sessionCode = activeSession.sessionCode;
-    setCompactingSessionCode(sessionCode);
-    try {
-      await createChatCompaction({
-        modelCode: selectedModel?.modelCode ?? selectedMainAgentModel?.modelCode ?? null,
-        sessionCode,
-        reason: "manual",
-      });
-      setShortTermMemoryRefreshKey((current) => current + 1);
-      toast.success(t("chat.shortTermMemory.messages.created"), {
-        title: t("chat.shortTermMemory.messages.createdTitle"),
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("chat.shortTermMemory.messages.failed"), {
-        title: t("chat.shortTermMemory.messages.failedTitle"),
-      });
-    } finally {
-      setCompactingSessionCode("");
-    }
+    if (!activeSession || sending) return;
+    await submitterRef.current?.submit({ content: "/compact" });
   }
 
   async function runGoalAction(action: () => Promise<unknown>, successMessage: string) {

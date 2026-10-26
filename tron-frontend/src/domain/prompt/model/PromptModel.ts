@@ -3,7 +3,6 @@ export type PromptVariableType = "STRING" | "NUMBER" | "BOOLEAN" | "JSON";
 export type PromptVariableSourceKind = "MANAGED" | "RUNTIME";
 export type PromptRuntimeProvider =
   | "AGENT_VISIBLE_DOMAINS"
-  | "AGENT_DOMAIN_PERSISTENCE_MODE"
   | "CHAT_USER_MESSAGE"
   | "TERMINAL_EXPLAIN_COMMAND"
   | "TERMINAL_EXPLAIN_OUTPUT"

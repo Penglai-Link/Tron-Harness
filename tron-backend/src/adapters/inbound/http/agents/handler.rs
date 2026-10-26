@@ -16,8 +16,8 @@ use crate::{
     domain::mcp::WorkspaceMcpServerListQuery,
     domain::{
         agent::{
-            AgentRunHistoryQuery, AgentRunHistoryRecord, ExpandedDomainPersistenceMode,
-            McpAccessMode, ToolAssignmentMode, ToolExposureMode,
+            AgentRunHistoryQuery, AgentRunHistoryRecord,
+            McpAccessMode, ToolAssignmentMode,
         },
         model_provider::ProviderModelRunSnapshotView,
     },
@@ -452,19 +452,8 @@ pub(super) fn to_internal_agent_policy_command(
         Some(value) => Some(parse_tool_assignment_mode(&value)?),
         None => None,
     };
-    let tool_exposure_mode = match request.tool_exposure_mode {
-        Some(value) => Some(parse_tool_exposure_mode(&value)?),
-        None => None,
-    };
-    let expanded_domain_persistence_mode = match request.expanded_domain_persistence_mode {
-        Some(value) => Some(parse_expanded_domain_persistence_mode(&value)?),
-        None => None,
-    };
-
     Ok(UpdateWorkspaceInternalAgentPolicyCommand {
         tool_assignment_mode,
-        tool_exposure_mode,
-        expanded_domain_persistence_mode,
         max_steps: request.max_steps,
         max_tool_calls: request.max_tool_calls,
         max_parallel_tool_calls: request.max_parallel_tool_calls,
@@ -492,30 +481,6 @@ fn parse_tool_assignment_mode(
         _ => Err((
             "AGENT_TOOL_ASSIGNMENT_MODE_INVALID",
             "invalid tool assignment mode",
-        )),
-    }
-}
-
-fn parse_tool_exposure_mode(raw: &str) -> Result<ToolExposureMode, (&'static str, &'static str)> {
-    match normalize_mode_token(raw).as_str() {
-        "direct_list" => Ok(ToolExposureMode::DirectList),
-        "domain_discovery" => Ok(ToolExposureMode::DomainDiscovery),
-        _ => Err((
-            "AGENT_TOOL_EXPOSURE_MODE_INVALID",
-            "invalid tool exposure mode",
-        )),
-    }
-}
-
-fn parse_expanded_domain_persistence_mode(
-    raw: &str,
-) -> Result<ExpandedDomainPersistenceMode, (&'static str, &'static str)> {
-    match normalize_mode_token(raw).as_str() {
-        "sticky_expanded" => Ok(ExpandedDomainPersistenceMode::StickyExpanded),
-        "ephemeral_expanded" => Ok(ExpandedDomainPersistenceMode::EphemeralExpanded),
-        _ => Err((
-            "AGENT_TOOL_EXPANDED_DOMAIN_PERSISTENCE_MODE_INVALID",
-            "invalid expanded domain persistence mode",
         )),
     }
 }

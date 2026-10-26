@@ -34,14 +34,28 @@ impl SqliteKnowledgeBaseRepository {
             let revision:u64=tx.query_row("SELECT revision FROM knowledge_evaluation_datasets WHERE knowledge_base_id=?1",[&kb],|r|r.get(0)).map_err(storage)?;
             if revision != run.dataset_revision {return Err(KnowledgeBaseError::Conflict);}
             let table=format!("rag_{kb}_units");
+            let selected = encode(&documents.iter().map(|document|&document.original.id).collect::<Vec<_>>())?;
+            let originals = {
+                let mut q=tx.prepare("SELECT id,revision,payload_json FROM knowledge_base_documents WHERE knowledge_base_id=?1 AND id IN (SELECT value FROM json_each(?2))").map_err(storage)?;
+                q.query_map(params![kb,selected],|r|Ok((r.get::<_,String>(0)?,r.get::<_,u64>(1)?,r.get::<_,String>(2)?))).map_err(storage)?.map(|row| {
+                    let (id,revision,raw)=row.map_err(storage)?;
+                    Ok((id,(revision,decode::<KnowledgeBaseDocument>(&raw)?)))
+                }).collect::<Result<std::collections::BTreeMap<_,_>,KnowledgeBaseError>>()?
+            };
+            let busy = {
+                let mut q=tx.prepare("SELECT DISTINCT document_id FROM knowledge_base_ingestion_tasks WHERE knowledge_base_id=?1 AND state IN ('RUNNING','QUEUED','CANCEL_REQUESTED')").map_err(storage)?;
+                q.query_map([&kb],|r|r.get::<_,String>(0)).map_err(storage)?.collect::<Result<std::collections::BTreeSet<_>,_>>().map_err(storage)?
+            };
+            let sources=documents.iter().map(|document|document.ready.active_source_code.as_deref().ok_or(KnowledgeBaseError::Conflict)).collect::<Result<Vec<_>,_>>()?;
+            let counts = {
+                let mut q=tx.prepare(&format!("SELECT source_code,count(*) FROM \"{table}\" WHERE source_status='STAGING' AND source_code IN (SELECT value FROM json_each(?1)) GROUP BY source_code")).map_err(storage)?;
+                q.query_map([encode(&sources)?],|r|Ok((r.get::<_,String>(0)?,r.get::<_,usize>(1)?))).map_err(storage)?.collect::<Result<std::collections::BTreeMap<_,_>,_>>().map_err(storage)?
+            };
             for document in &documents {
-                let raw:Option<String>=tx.query_row("SELECT payload_json FROM knowledge_base_documents WHERE id=?1 AND knowledge_base_id=?2 AND revision=?3",params![document.original.id,kb,document.original.revision],|r|r.get(0)).optional().map_err(storage)?;
-                let current:KnowledgeBaseDocument=decode(&raw.ok_or(KnowledgeBaseError::Conflict)?)?;
-                if current.resource_code!=document.original.resource_code || current.resource_revision!=document.original.resource_revision || current.active_source_code!=document.original.active_source_code || current.status!="READY" {return Err(KnowledgeBaseError::Conflict);}
-                let busy:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM knowledge_base_ingestion_tasks WHERE document_id=?1 AND state IN ('RUNNING','QUEUED','CANCEL_REQUESTED'))",[&current.id],|r|r.get(0)).map_err(storage)?;
-                if busy{return Err(KnowledgeBaseError::Conflict);}
+                let (revision,current)=originals.get(&document.original.id).ok_or(KnowledgeBaseError::Conflict)?;
+                if *revision!=document.original.revision || current.resource_code!=document.original.resource_code || current.resource_revision!=document.original.resource_revision || current.active_source_code!=document.original.active_source_code || current.status!="READY" || busy.contains(&current.id) {return Err(KnowledgeBaseError::Conflict);}
                 let source=document.ready.active_source_code.as_deref().ok_or(KnowledgeBaseError::Conflict)?;
-                let count:usize=tx.query_row(&format!("SELECT count(*) FROM \"{table}\" WHERE source_code=?1 AND source_status='STAGING'"),[source],|r|r.get(0)).map_err(storage)?;
+                let count=counts.get(source).copied().unwrap_or(0);
                 if count==0 || count!=document.ready.chunk_count{return Err(KnowledgeBaseError::Conflict);}
                 if let Some(dimension)=document.ready.embedding_dimension {
                     super::super::knowledge_ingestion_queue::validate_knowledge_vectors(&tx,&kb,source,count,dimension).map_err(|e|storage(format!("{e:?}")))?;

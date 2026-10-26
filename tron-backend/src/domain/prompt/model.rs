@@ -86,8 +86,8 @@ impl PromptVariableSourceKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PromptRuntimeProvider {
+    /// The tool domains (capability groups) currently visible to an agent run.
     AgentVisibleDomains,
-    AgentDomainPersistenceMode,
     ChatUserMessage,
     TerminalExplainCommand,
     TerminalExplainOutput,
@@ -103,7 +103,6 @@ impl PromptRuntimeProvider {
     pub fn code(self) -> &'static str {
         match self {
             Self::AgentVisibleDomains => "AGENT_VISIBLE_DOMAINS",
-            Self::AgentDomainPersistenceMode => "AGENT_DOMAIN_PERSISTENCE_MODE",
             Self::ChatUserMessage => "CHAT_USER_MESSAGE",
             Self::TerminalExplainCommand => "TERMINAL_EXPLAIN_COMMAND",
             Self::TerminalExplainOutput => "TERMINAL_EXPLAIN_OUTPUT",
@@ -119,7 +118,6 @@ impl PromptRuntimeProvider {
     pub fn from_code(value: &str) -> Option<Self> {
         match value {
             "AGENT_VISIBLE_DOMAINS" => Some(Self::AgentVisibleDomains),
-            "AGENT_DOMAIN_PERSISTENCE_MODE" => Some(Self::AgentDomainPersistenceMode),
             "CHAT_USER_MESSAGE" => Some(Self::ChatUserMessage),
             "TERMINAL_EXPLAIN_COMMAND" => Some(Self::TerminalExplainCommand),
             "TERMINAL_EXPLAIN_OUTPUT" => Some(Self::TerminalExplainOutput),
@@ -136,7 +134,6 @@ impl PromptRuntimeProvider {
     pub fn source_label(self) -> &'static str {
         match self {
             Self::AgentVisibleDomains => "Agent tool domains",
-            Self::AgentDomainPersistenceMode => "Agent domain persistence mode",
             Self::ChatUserMessage => "Chat user message",
             Self::TerminalExplainCommand => "Terminal command",
             Self::TerminalExplainOutput => "Terminal output",

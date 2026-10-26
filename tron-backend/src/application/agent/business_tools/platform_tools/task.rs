@@ -418,7 +418,7 @@ mod tests {
     use super::*;
     use crate::domain::agent::{
         AgentCollaborationOwner, AgentExecutionScope, AgentKind, AgentModelConfig,
-        AgentModelProtocol, AgentRunLimits, AgentToolExposureState,
+        AgentModelProtocol, AgentRunLimits,
     };
     use serde_json::json;
 
@@ -464,7 +464,6 @@ mod tests {
             tools: vec![],
             effective_tools: vec![],
             tool_assignment: None,
-            tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
             messages: vec![].into(),

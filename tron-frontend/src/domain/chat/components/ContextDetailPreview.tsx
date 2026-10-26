@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toolDomainsPreview } from "../model/toolDomainsPreview";
 
 // Contributor IDs are extensible; the familiar aliases keep their richer previews.
 export type ContextDetailBlock = "systemPrompt" | "toolSchema" | "applicationContext" | "history" | (string & {});
@@ -24,6 +25,13 @@ function parse(value: unknown): unknown {
   try { return JSON.parse(value); } catch { return value; }
 }
 
+function hasContent(value: unknown): boolean {
+  if (value == null || value === "") return false;
+  if (Array.isArray(value)) return value.some(hasContent);
+  if (record(value)) return Object.values(value).some(hasContent);
+  return true;
+}
+
 function taggedContent(text: string, tag: string): string | null {
   const match = text.trim().match(new RegExp(`^<${tag}>([\\s\\S]*?)</${tag}>$`));
   return match?.[1]?.trim() ?? null;
@@ -38,19 +46,35 @@ function StructuredContent({ value }: { value: unknown }) {
   const { t } = useTranslation("pages");
   if (value == null) return null;
   if (typeof value === "string") return <MarkdownContent content={value} className="text-xs leading-6 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs" />;
-  if (Array.isArray(value)) return <div className="space-y-3">{value.map((item, index) => <StructuredContent key={index} value={item} />)}</div>;
+  if (Array.isArray(value)) {
+    const items = value.filter(hasContent);
+    if (!items.length) return null;
+    const content = <div className="space-y-2">{items.map((item, index) => <StructuredContent key={index} value={item} />)}</div>;
+    return items.length > 10 ? <details><summary className="cursor-pointer text-xs text-[var(--color-on-surface-variant)]">{t(`${keyPrefix}dataItemCount`, { count: items.length })}</summary>{content}</details> : content;
+  }
   if (!record(value)) return <span>{typeof value === "boolean" ? t(`chat.applications.preview.${value ? "yes" : "no"}`) : String(value)}</span>;
-  return <dl className="space-y-2">{Object.entries(value).filter(([, item]) => item != null).map(([key, item]) => (
+  return <dl className="space-y-2">{Object.entries(value).filter(([, item]) => hasContent(item)).map(([key, item]) => (
     <div className="min-w-0" key={key}>
-      <dt className="text-xs font-medium text-[var(--color-on-surface-variant)]">{t(`chat.applications.preview.fields.${key}`, { defaultValue: key })}</dt>
+      <dt className="text-xs font-medium text-[var(--color-on-surface-variant)]">{t(`${keyPrefix}dataFields.${key}`, { defaultValue: t(`chat.applications.preview.fields.${key}`, { defaultValue: key }) })}</dt>
       <dd className="min-w-0 whitespace-pre-wrap break-words text-xs leading-6">{key === "status" && typeof item === "string" && ["Ready", "NotGit", "MissingDirectory", "Unavailable"].includes(item)
         ? t(item === "Ready" ? "chat.applications.preview.ready" : `chat.applications.status.${item}`)
-        : <StructuredContent value={item} />}</dd>
+        : typeof item === "string" && ["eventKind", "kind", "source"].includes(key)
+          ? t(`${keyPrefix}dataValues.${item}`, { defaultValue: item })
+          : <StructuredContent value={item} />}</dd>
     </div>
   ))}</dl>;
 }
 
-function PromptContent({ text }: { text: string }) {
+function PromptContent({ text: source }: { text: string }) {
+  const { t } = useTranslation("pages");
+  const text = source.replace(/^\[Runtime reference data: [^\]\n]+\]\s*\n/, "");
+  const trimmed = text.trim();
+  // A cut JSON document cannot be reconstructed from a complete nested object.
+  // Preserve the actual retained text instead of rendering a misleading subset.
+  if (/^(?:\{\s*"|\[\s*[{"\d-])/.test(trimmed) && typeof parse(trimmed) === "string") return <div className="space-y-2">
+    <p role="note" className="text-xs text-[var(--color-on-surface-variant)]">{t(`${keyPrefix}truncatedData`)}</p>
+    <pre className="whitespace-pre-wrap break-words text-xs leading-6">{text}</pre>
+  </div>;
   // JSON catalog data may be embedded directly in prompt prose. Preserve the
   // prose and show its structured value without adding another framed surface.
   for (let start = 0; start < text.length; start += 1) {
@@ -84,8 +108,22 @@ function PromptContent({ text }: { text: string }) {
   return <MarkdownContent content={text} className="text-xs leading-6 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs" />;
 }
 
-function MessagePart({ part }: { part: RecordValue }) {
+function previewPart(part: RecordValue): RecordValue {
+  const value = part.type === "text" ? parse(part.text)
+    : part.type === "Json" || part.type === "json" ? part.value : null;
+  if (record(value) && record(value.tronMessagePart)
+    && value.tronMessagePart.type === "context"
+    && typeof value.tronMessagePart.text === "string") return value.tronMessagePart;
+  return part;
+}
+
+function MessagePart({ part: input, block }: { part: RecordValue; block?: ContextDetailBlock }) {
   const { t } = useTranslation("pages");
+  const part = previewPart(input);
+  if (part.kind === "tool_domains" || block === "tool_domains") {
+    const preview = toolDomainsPreview(part.text);
+    if (preview) return <ToolDomainsPreview {...preview} />;
+  }
   if (part.type === "text") return <PromptContent text={String(part.text ?? "")} />;
   if (part.type === "context") {
     const value = parse(part.text);
@@ -95,7 +133,7 @@ function MessagePart({ part }: { part: RecordValue }) {
         {Object.values(value.answer.answers).map((answer, index) => <StructuredContent key={index} value={record(answer) ? answer.text ?? answer : answer} />)}
       </div>;
     }
-    return <StructuredContent value={value} />;
+    return typeof value === "string" ? <PromptContent text={value} /> : <StructuredContent value={value} />;
   }
   if (part.type === "toolCall" || part.type === "toolResult") return <div className="space-y-2">
     <p className="text-xs font-medium">{t(`${keyPrefix}${part.type === "toolCall" ? "historyToolCall" : "historyToolResult"}`)} · <code>{String(part.tool_name ?? "")}</code></p>
@@ -107,18 +145,17 @@ function MessagePart({ part }: { part: RecordValue }) {
   return null;
 }
 
-function MessagesPreview({ value, history = false, systemPrompt = false, onOpenPrompt }: { value: unknown; history?: boolean; systemPrompt?: boolean; onOpenPrompt?: (code: string) => void }) {
+function MessagesPreview({ value, block, history = false, systemPrompt = false, onOpenPrompt }: { value: unknown; block?: ContextDetailBlock; history?: boolean; systemPrompt?: boolean; onOpenPrompt?: (code: string) => void }) {
   const { t } = useTranslation("pages");
   const messages = record(value) ? records(value.messages) : [];
   if (!messages.length) return <Empty label={t(`${keyPrefix}${history ? "historyEmpty" : systemPrompt ? "detailPromptEmpty" : "contributorEmpty"}`)} />;
   return <div className="divide-y divide-[var(--color-outline-variant)]">
-    {history ? <p className="pb-3 text-xs text-[var(--color-on-surface-variant)]">{t(`${keyPrefix}historyNote`)}</p> : null}
     {messages.map((message, index) => <section className="space-y-3 py-4 first:pt-0 last:pb-0" key={index}>
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-xs font-semibold">{t(`${keyPrefix}detailPromptMessage`, { index: index + 1 })} · {t(`${keyPrefix}roles.${String(message.role)}`, { defaultValue: String(message.role) })}</h3>
         {typeof message.promptCode === "string" && onOpenPrompt ? <button type="button" className="text-xs text-[var(--color-primary)] hover:underline" onClick={() => onOpenPrompt(message.promptCode as string)}>{t(`${keyPrefix}detailPromptManagement`)}</button> : null}
       </div>
-      <div className="space-y-3 text-xs leading-6">{records(message.parts).map((part, partIndex) => <MessagePart key={partIndex} part={part} />)}</div>
+      <div className="space-y-3 text-xs leading-6">{records(message.parts).map((part, partIndex) => <MessagePart key={partIndex} part={part} block={block} />)}</div>
     </section>)}
   </div>;
 }
@@ -166,13 +203,14 @@ function ApplicationScopePreview({ scope }: { scope: RecordValue }) {
   return <Empty label={t("chat.applications.noSnapshot")} />;
 }
 
-function ToolDomainsPreview({ domains }: { domains: RecordValue[] }) {
+function ToolDomainsPreview({ domains, truncated = false }: { domains: RecordValue[]; truncated?: boolean }) {
   const { t } = useTranslation("pages");
   return <section className="space-y-2">
     <div className="flex items-baseline justify-between gap-3">
       <h3 className="text-xs font-semibold">{t("chat.applications.preview.toolDomains")}</h3>
-      <span className="shrink-0 text-[11px] text-[var(--color-on-surface-variant)]">{t("chat.applications.preview.domainCount", { count: domains.length })}</span>
+      <span className="shrink-0 text-[11px] text-[var(--color-on-surface-variant)]">{t(`chat.applications.preview.${truncated ? "completeDomainCount" : "domainCount"}`, { count: domains.length })}</span>
     </div>
+    {truncated ? <p role="note" className="text-xs leading-5 text-[var(--color-on-surface-variant)]">{t("chat.applications.preview.domainsTruncated")}</p> : null}
     <div className="divide-y divide-[var(--color-outline-variant)] border-y border-[var(--color-outline-variant)]">
       {domains.map((domain, index) => {
         const code = typeof domain.domainCode === "string" ? domain.domainCode : "";
@@ -197,8 +235,9 @@ function ToolDomainsPreview({ domains }: { domains: RecordValue[] }) {
   </section>;
 }
 
-function ApplicationMessagePart({ part }: { part: RecordValue }) {
+function ApplicationMessagePart({ part: input }: { part: RecordValue }) {
   const { t } = useTranslation("pages");
+  const part = previewPart(input);
   const text = typeof part.text === "string" ? part.text : null;
   if (text) {
     const directory = taggedContent(text, "available_tool_domains");
@@ -229,6 +268,6 @@ function ApplicationPreview({ value }: { value: unknown }) {
 
 export function ContextDetailPreview({ block, value, onOpenPrompt }: { block: ContextDetailBlock; value: unknown; onOpenPrompt?: (code: string) => void }) {
   if (block === "toolSchema") return <ToolPreview value={value} />;
-  if (block === "applicationContext") return <ApplicationPreview value={value} />;
-  return <MessagesPreview value={value} history={block === "history"} systemPrompt={block === "systemPrompt"} onOpenPrompt={onOpenPrompt} />;
+  if (block === "applicationContext" || block === "application_context") return <ApplicationPreview value={value} />;
+  return <MessagesPreview value={value} block={block} history={block === "history" || block === "framework.history"} systemPrompt={block === "systemPrompt" || block === "framework.instructions"} onOpenPrompt={onOpenPrompt} />;
 }

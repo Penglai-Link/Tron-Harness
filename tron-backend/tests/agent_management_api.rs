@@ -59,13 +59,30 @@ fn app_with_config(config: AppConfig) -> Router {
 
 // Associate native provider results with their exact assistant call, rather than
 // treating tool output as a synthetic user message containing a tool-name prefix.
-fn provider_tool_result<'a>(messages: &'a [Value], name: &str) -> &'a str {
+fn provider_tool_result(messages: &[Value], name: &str) -> String {
+    // Tool execution goes through the `tool_execute` gateway: the assistant
+    // call is the envelope and the inner tool is addressed by its arguments.
     let calls: Vec<_> = messages
         .iter()
         .filter(|message| message["role"] == json!("assistant"))
         .filter_map(|message| message["tool_calls"].as_array())
         .flatten()
-        .filter(|call| call["function"]["name"] == json!(name))
+        .filter(|call| {
+            // `tool_search` is addressed directly; wrapped tools run through
+            // the `tool_execute` envelope with the inner name in arguments.
+            if call["function"]["name"] == json!(name)
+                && (name == "tool_search" || name == "tool_execute")
+            {
+                return true;
+            }
+            call["function"]["name"] == json!("tool_execute")
+                && call["function"]["arguments"]
+                    .as_str()
+                    .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+                    .and_then(|arguments| arguments["tool"].as_str().map(str::to_string))
+                    .as_deref()
+                    == Some(name)
+        })
         .collect();
     assert_eq!(
         calls.len(),
@@ -85,9 +102,9 @@ fn provider_tool_result<'a>(messages: &'a [Value], name: &str) -> &'a str {
         1,
         "expected one native result for {name}/{id}: {messages:?}"
     );
-    results[0]["content"]
+    common::single_gateway_result(results[0]["content"]
         .as_str()
-        .expect("tool output must be text")
+        .expect("tool output must be text"))
 }
 
 struct RecordingModelServer {
@@ -358,7 +375,61 @@ async fn scripted_chat_completion(
                 }]
             })
         });
-    model_completion(&payload, response)
+    model_completion(&payload, to_gateway_response(response))
+}
+
+/// The product exposes exactly the stable `tool_search`/`tool_execute` pair,
+/// so scripted direct tool calls are rewritten into `tool_execute` envelopes.
+/// The inner tool keeps its identity through the call id so observations stay
+/// individually addressable. Already-gateway calls pass through unchanged.
+fn to_gateway_response(mut response: Value) -> Value {
+    let Some(calls) = response
+        .pointer_mut("/choices/0/message/tool_calls")
+        .and_then(|calls| calls.as_array_mut())
+    else {
+        return response;
+    };
+    for call in calls.iter_mut() {
+        let is_gateway = call
+            .pointer("/function/name")
+            .and_then(|name| name.as_str())
+            .is_some_and(|name| name == "tool_execute" || name == "tool_search");
+        if is_gateway {
+            let name=call["function"]["name"].as_str().unwrap();
+            let raw=call["function"]["arguments"].as_str().unwrap_or("{}");
+            let input:Value=serde_json::from_str(raw).unwrap();
+            let input=if name=="tool_search" { common::gateway_arguments(name,input) } else {
+                let envelope=eliteforge_agent_core::GatewayEnvelope::parse(&input).unwrap();
+                json!({"tool":envelope.tool,"arguments":common::gateway_arguments(&envelope.tool,envelope.arguments)})
+            };
+            call["function"]["arguments"]=json!(input.to_string());
+            continue;
+        }
+        let inner_name = call
+            .pointer("/function/name")
+            .and_then(|name| name.as_str().unwrap_or_default().to_string().into())
+            .unwrap_or_else(|| "unknown".into());
+        let inner_arguments = call
+            .pointer("/function/arguments")
+            .and_then(|raw| raw.as_str())
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+            .unwrap_or_else(|| json!({}));
+        let call_id = call
+            .get("id")
+            .and_then(|id| id.as_str())
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| format!("call_{inner_name}"));
+        let envelope = json!({
+            "id": call_id,
+            "type": "function",
+            "function": {
+                "name": "tool_execute",
+                "arguments": json!({"tool": inner_name, "arguments": common::gateway_arguments(&inner_name,inner_arguments)}).to_string(),
+            },
+        });
+        *call = envelope;
+    }
+    response
 }
 
 fn temp_database_url(test_name: &str) -> String {
@@ -955,11 +1026,11 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
                 "message": {
                     "role": "assistant",
                     "tool_calls": [{
-                        "id": "call_discovery_expand_tool_domain",
+                        "id": "call_tool_search",
                         "type": "function",
                         "function": {
-                            "name": "discovery_expand_tool_domain",
-                            "arguments": "{\"domainCode\":\"workspace\"}"
+                            "name": "tool_search",
+                            "arguments": "{\"query\":\"workspace\"}"
                         }
                     }]
                 }
@@ -999,8 +1070,6 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
         Some(json!({
-            "toolExposureMode": "domain_discovery",
-            "expandedDomainPersistenceMode": "sticky_expanded"
         })),
         None,
         Some(&authorization),
@@ -1042,89 +1111,529 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         .clone();
     assert_eq!(recorded_requests.len(), 3);
 
-    let first_tools = recorded_requests[0]["tools"]
-        .as_array()
-        .expect("first request tools should be an array");
-    assert!(
-        first_tools
+    // The gateway pair is the complete model-visible catalog for the whole
+    // run: request 0 before any tool ran, request 1 after discovery, request
+    // 2 after execution — all identical, cache-stable by construction.
+    for (index, request) in recorded_requests.iter().enumerate() {
+        let tools = request["tools"]
+            .as_array()
+            .unwrap_or_else(|| panic!("request {index} tools should be an array"));
+        let names: Vec<_> = tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("discovery_expand_tool_domain"))
-    );
-    assert!(
-        !first_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("fs_write_text")),
-        "workspace tools must remain hidden before domain expansion"
-    );
+            .map(|tool| tool["function"]["name"].clone())
+            .collect();
+        assert_eq!(
+            names,
+            vec![json!("tool_execute"), json!("tool_search")],
+            "request {index} must expose exactly the gateway pair"
+        );
+    }
     let first_messages = recorded_requests[0]["messages"]
         .as_array()
         .expect("first request messages should be an array");
-    assert!(first_messages.iter().any(|message| {
-        message["role"] == json!("system")
-            && message["content"].as_str().is_some_and(|content| {
-                content.contains("discovery_expand_tool_domain")
-                    && (content.contains("never call hidden tools directly before expanding")
-                        || content.contains("不要在展开领域前直接调用隐藏工具"))
-            })
-    }));
-
-    let second_tools = recorded_requests[1]["tools"]
-        .as_array()
-        .expect("second request tools should be an array");
     assert!(
-        second_tools
-            .iter()
-            .any(|tool| { tool["function"]["name"] == json!("discovery_expand_tool_domain") })
+        !first_messages.iter().any(|message| {
+            message["role"] == json!("system")
+                && message["content"].as_str().is_some_and(|content| {
+                    content.contains("never call hidden tools directly before expanding")
+                        || content.contains("不要在展开领域前直接调用隐藏工具")
+                })
+        }),
+        "the discovery-era instruction is retired with the gateway"
     );
-    assert!(
-        second_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("workspace_page"))
-    );
-    assert!(
-        second_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("workspace_get"))
-    );
-    for removed_tool in [
-        "workspace_create",
-        "workspace_update",
-        "workspace_delete",
-        "workspace_restore",
-    ] {
-        assert!(
-            second_tools
-                .iter()
-                .all(|tool| tool["function"]["name"] != json!(removed_tool)),
-            "{removed_tool} should not be available from workspace domain discovery"
-        );
-    }
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
-    let expansion_result = provider_tool_result(second_messages, "discovery_expand_tool_domain");
-    let expansion: Value = serde_json::from_str(expansion_result).expect("expansion result JSON");
-    assert_eq!(expansion["status"], json!("expanded"));
-    assert_eq!(expansion["domainCode"], json!("workspace"));
+    // Gateway discovery: the search result is a tool OUTPUT listing inventory
+    // descriptors; the schema of every request stays the stable pair.
+    let search_result = provider_tool_result(second_messages, "tool_search");
+    let search: Value = serde_json::from_str(&search_result).expect("search result JSON");
     assert!(
-        expansion["toolCount"]
-            .as_u64()
-            .is_some_and(|count| count > 0)
+        search["tools"]
+            .as_array()
+            .is_some_and(|tools| !tools.is_empty()),
+        "search should return inventory descriptors: {search_result}"
     );
-    assert!(!expansion_result.contains("inputSchema"));
-    assert!(expansion.get("tools").is_none());
+    assert!(
+        search["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["call_name"] == json!("workspace_page")),
+        "workspace_page should be discoverable: {search_result}"
+    );
 
     let third_messages = recorded_requests[2]["messages"]
         .as_array()
         .expect("third request messages should be an array");
     let workspace_result: Value =
-        serde_json::from_str(provider_tool_result(third_messages, "workspace_page"))
+        serde_json::from_str(&provider_tool_result(third_messages, "workspace_page"))
             .expect("workspace page result JSON");
     assert!(
         workspace_result["records"]
             .as_array()
             .is_some_and(|records| !records.is_empty())
     );
+}
+
+/// The agent must know the scope of its abilities: the run instructions list
+/// the authorized capability groups and never a domain the policy did not
+/// grant, and `domainCode` search then lists exactly that group.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_domain() {
+    let codex_command = temp_command_path("codex-domain-inventory");
+    let opencode_command = temp_command_path("opencode-domain-inventory");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let model_server = scripted_model_server(vec![
+        // List one capability group by its domainCode; matching is case-insensitive.
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "id": "call_tool_search",
+                        "type": "function",
+                        "function": {
+                            "name": "tool_search",
+                            "arguments": "{\"domainCode\":\"WORKSPACE\",\"limit\":20}"
+                        }
+                    }]
+                }
+            }]
+        }),
+        // The keyword path still discovers the same wrapped inventory.
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "id": "call_tool_search",
+                        "type": "function",
+                        "function": {
+                            "name": "tool_search",
+                            "arguments": "{\"query\":\"workspace\"}"
+                        }
+                    }]
+                }
+            }]
+        }),
+        // Execute a tool discovered through the group listing.
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "id": "call_workspace_page",
+                        "type": "function",
+                        "function": {
+                            "name": "workspace_page",
+                            "arguments": "{}"
+                        }
+                    }]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "inventory verified"
+                }
+            }]
+        }),
+    ])
+    .await;
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    // Narrow the saved policy to the workspace domain: `app` stays in the
+    // catalog but is not granted to this run.
+    let patch_policy = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
+        Some(json!({ "toolAssignmentMode": "selected_tools" })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_policy.status(), StatusCode::OK);
+    let assign = request_with_headers(
+        &app,
+        Method::PUT,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/tool-assignments",
+        Some(json!({ "toolCodes": ["workspace.page", "workspace.get"] })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(assign.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(assign).await["data"]["selectedToolCodes"],
+        // Assignment codes are normalized by sorting.
+        json!(["workspace.get", "workspace.page"])
+    );
+
+    let model_url = model_server.base_url.clone();
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "List the tools you can reach.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let run_status = run_response.status();
+    let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
+    assert_eq!(
+        run_body["data"]["finalOutput"],
+        json!("inventory verified"),
+        "{run_body}"
+    );
+
+    let recorded = model_server
+        .requests
+        .lock()
+        .expect("recorded model requests mutex poisoned")
+        .clone();
+    assert_eq!(recorded.len(), 4, "one request per model step");
+
+    // The model-visible list is the stable pair on every single step.
+    for (index, request) in recorded.iter().enumerate() {
+        let names: Vec<Value> = request["tools"]
+            .as_array()
+            .unwrap_or_else(|| panic!("request {index} tools should be an array"))
+            .iter()
+            .map(|tool| tool["function"]["name"].clone())
+            .collect();
+        assert_eq!(
+            names,
+            vec![json!("tool_execute"), json!("tool_search")],
+            "request {index} must expose exactly the gateway pair"
+        );
+    }
+
+    // The inventory reaches the model before its first decision: the granted
+    // group and its tools, without the ungranted `app` group.
+    let system_messages: Vec<&str> = recorded[0]["messages"]
+        .as_array()
+        .expect("first request messages should be an array")
+        .iter()
+        .filter(|message| message["role"] == json!("system"))
+        .filter_map(|message| message["content"].as_str())
+        .collect();
+    let instructions = system_messages.join("\n");
+    let inventory = system_messages
+        .iter()
+        .find(|message| message.contains("\"domainCode\":\"workspace\""))
+        .unwrap_or_else(|| {
+            panic!("authorized domain missing from the run instructions: {instructions}")
+        });
+    assert!(
+        !instructions.contains("{{visible_domains}}"),
+        "placeholder leaked into the run instructions: {instructions}"
+    );
+    assert!(
+        inventory.contains("workspace.page") && inventory.contains("workspace.get"),
+        "domain tool codes missing from the run instructions: {inventory}"
+    );
+    assert!(
+        !inventory.contains("\"domainCode\":\"app\""),
+        "unauthorized domain leaked into the run instructions: {inventory}"
+    );
+    assert!(
+        inventory.contains("tool_search") && inventory.contains("tool_execute"),
+        "gateway contract missing from the run instructions: {inventory}"
+    );
+
+    let latest_tool_output = |request: &Value| -> String {
+        request["messages"]
+            .as_array()
+            .expect("request messages should be an array")
+            .iter()
+            .filter(|message| message["role"] == json!("tool"))
+            .last()
+            .and_then(|message| message["content"].as_str())
+            .expect("the newest step should have a tool result")
+            .to_string()
+    };
+
+    // Grouping: `domainCode` lists that group's wrapped tools only.
+    let domain_search: Value =
+        serde_json::from_str(&common::single_gateway_result(&latest_tool_output(&recorded[1]))).expect("domain search result JSON");
+    let grouped: Vec<String> = domain_search["tools"]
+        .as_array()
+        .expect("grouped tools should be an array")
+        .iter()
+        .filter_map(|tool| tool["call_name"].as_str().map(str::to_string))
+        .collect();
+    assert!(
+        grouped.contains(&"workspace_page".to_string())
+            && grouped.contains(&"workspace_get".to_string()),
+        "the granted group should list its own tools: {domain_search}"
+    );
+    assert!(
+        !grouped.contains(&"app_page".to_string()),
+        "another domain's tool leaked into the group listing: {domain_search}"
+    );
+    assert_eq!(domain_search["matched"], json!(2), "{domain_search}");
+    assert_eq!(domain_search["truncated"], json!(false), "{domain_search}");
+    assert!(
+        domain_search["tools"]
+            .as_array()
+            .expect("grouped tools should be an array")
+            .iter()
+            .all(|tool| tool["input_schema"].is_object()),
+        "discovery must expose each tool's input schema: {domain_search}"
+    );
+
+    // Keyword discovery still reaches the same wrapped tool.
+    let keyword_search: Value = serde_json::from_str(&common::single_gateway_result(&latest_tool_output(&recorded[2])))
+        .expect("keyword search result JSON");
+    assert!(
+        keyword_search["tools"]
+            .as_array()
+            .expect("keyword tools should be an array")
+            .iter()
+            .any(|tool| tool["call_name"] == json!("workspace_page")),
+        "the keyword path should still discover workspace_page: {keyword_search}"
+    );
+
+    // The discovered wrapped tool executes through the gateway envelope.
+    let executed: Value = serde_json::from_str(&common::single_gateway_result(&latest_tool_output(&recorded[3])))
+        .expect("workspace page result JSON");
+    assert!(
+        executed["records"]
+            .as_array()
+            .is_some_and(|records| !records.is_empty()),
+        "{executed}"
+    );
+}
+
+/// One scripted `tool_search` call that lists a single capability group.
+fn domain_search_response(domain_code: &str) -> Value {
+    json!({
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": format!("call_tool_search_{domain_code}"),
+                    "type": "function",
+                    "function": {
+                        "name": "tool_search",
+                        "arguments": json!({ "domainCode": domain_code, "limit": 20 }).to_string()
+                    }
+                }]
+            }
+        }]
+    })
+}
+
+/// Domain codes advertised by the rendered `agent.domain-discovery` inventory.
+fn advertised_domain_codes(instructions: &str) -> Vec<String> {
+    instructions.lines().filter_map(|line|serde_json::from_str::<Vec<Value>>(line).ok())
+        .flatten().filter_map(|domain|domain["domainCode"].as_str().map(str::to_owned)).collect()
+}
+
+/// The host owns the tool taxonomy. Framework packs (bash/fs/search/terminal,
+/// collaboration, skills, a2ui, remote plugins) mint bindings the host never
+/// registers, so they carry no host per-binding label; the run request must
+/// publish the authorized tool -> domain map instead. This proves that the
+/// published taxonomy makes a framework-pack tool listable by `domainCode`,
+/// that every advertised domain lists at least one tool, and that the
+/// model-visible catalog stays the gateway pair on every step.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn host_taxonomy_makes_framework_pack_tools_domain_listable() {
+    let codex_command = temp_command_path("codex-host-taxonomy");
+    let opencode_command = temp_command_path("opencode-host-taxonomy");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    // One `domainCode` search per advertised group: bash/fs/search are
+    // framework-pack tools (no host per-binding label), workspace is a
+    // product-catalog tool.
+    let model_server = scripted_model_server(vec![
+        domain_search_response("bash"),
+        domain_search_response("fs"),
+        domain_search_response("search"),
+        domain_search_response("workspace"),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "taxonomy verified"
+                }
+            }]
+        }),
+    ])
+    .await;
+
+    let mut config = test_config(&codex_command, &opencode_command);
+    // Builtin prompts are seeded only when the database file name does not start
+    // with `tron-` (see `src/app/builders.rs::should_seed_builtin_prompts`), so
+    // rename the temp database exactly like the neighbouring prompt tests.
+    let database = PathBuf::from(&config.database_url);
+    config.database_url = database
+        .with_file_name(format!(
+            "seeded-{}",
+            database.file_name().unwrap().to_string_lossy()
+        ))
+        .display()
+        .to_string();
+    let app = app_with_config(config);
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    // Narrow the saved policy so the run authorizes exactly one representative
+    // per framework pack plus one product tool.
+    let patch_policy = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
+        Some(json!({ "toolAssignmentMode": "selected_tools" })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_policy.status(), StatusCode::OK);
+    let assign = request_with_headers(
+        &app,
+        Method::PUT,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/tool-assignments",
+        Some(json!({
+            "toolCodes": ["bash.exec", "fs.read_text", "search.grep", "workspace.page"]
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(assign.status(), StatusCode::OK);
+
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "List every capability group you can reach.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let run_status = run_response.status();
+    let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
+    assert_eq!(
+        run_body["data"]["finalOutput"],
+        json!("taxonomy verified"),
+        "{run_body}"
+    );
+
+    let recorded = model_server
+        .requests
+        .lock()
+        .expect("recorded model requests mutex poisoned")
+        .clone();
+    assert_eq!(recorded.len(), 5, "one request per model step");
+
+    // The model-visible catalog is the stable gateway pair on every step.
+    for (index, request) in recorded.iter().enumerate() {
+        let names: Vec<Value> = request["tools"]
+            .as_array()
+            .unwrap_or_else(|| panic!("request {index} tools should be an array"))
+            .iter()
+            .map(|tool| tool["function"]["name"].clone())
+            .collect();
+        assert_eq!(
+            names,
+            vec![json!("tool_execute"), json!("tool_search")],
+            "request {index} must expose exactly the gateway pair"
+        );
+    }
+
+    let instructions = recorded[0]["messages"]
+        .as_array()
+        .expect("first request messages should be an array")
+        .iter()
+        .filter(|message| message["role"] == json!("system"))
+        .filter_map(|message| message["content"].as_str())
+        .find(|content| content.contains("\"domainCode\":\""))
+        .unwrap_or_else(|| panic!("run instructions must carry the domain inventory"))
+        .to_string();
+    let mut advertised = advertised_domain_codes(&instructions);
+    advertised.sort();
+    advertised.dedup();
+    assert_eq!(
+        advertised,
+        vec!["bash", "fs", "search", "workspace"],
+        "only the authorized capability groups may be advertised: {instructions}"
+    );
+
+    // Every advertised group lists at least one wrapped tool; the
+    // framework-pack members prove the host taxonomy crossed the pack boundary.
+    let latest_tool_output = |request: &Value| -> String {
+        request["messages"]
+            .as_array()
+            .expect("request messages should be an array")
+            .iter()
+            .filter(|message| message["role"] == json!("tool"))
+            .last()
+            .and_then(|message| message["content"].as_str())
+            .expect("the newest step should have a tool result")
+            .to_string()
+    };
+    for (index, (domain_code, tool_name)) in [
+        ("bash", "bash_exec"),
+        ("fs", "fs_read_text"),
+        ("search", "search_grep"),
+        ("workspace", "workspace_page"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let listing: Value = serde_json::from_str(&common::single_gateway_result(&latest_tool_output(&recorded[index + 1])))
+            .unwrap_or_else(|error| panic!("`{domain_code}` search result JSON: {error}"));
+        assert_eq!(
+            listing["matched"],
+            json!(1),
+            "`{domain_code}` must list its wrapped tool: {listing}"
+        );
+        assert_eq!(listing["truncated"], json!(false), "{listing}");
+        let call_names: Vec<&str> = listing["tools"]
+            .as_array()
+            .expect("grouped tools should be an array")
+            .iter()
+            .filter_map(|tool| tool["call_name"].as_str())
+            .collect();
+        assert_eq!(
+            call_names,
+            vec![tool_name],
+            "`{domain_code}` must list exactly {tool_name}: {listing}"
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1174,10 +1683,7 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
         &app,
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
-        Some(json!({
-            "toolExposureMode": "domain_discovery",
-            "expandedDomainPersistenceMode": "sticky_expanded"
-        })),
+        Some(json!({})),
         None,
         Some(&authorization),
     )
@@ -1218,36 +1724,34 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
         .clone();
     assert_eq!(recorded_requests.len(), 2);
 
-    let first_tools = recorded_requests[0]["tools"]
-        .as_array()
-        .expect("first request tools should be an array");
-    assert!(
-        first_tools
+    // Gateway semantics: the schema never contains inner tools; execution is
+    // authorized by the product catalog, not by schema visibility.
+    for (index, request) in recorded_requests.iter().enumerate() {
+        let tools = request["tools"]
+            .as_array()
+            .unwrap_or_else(|| panic!("request {index} tools should be an array"));
+        let names: Vec<_> = tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("discovery_expand_tool_domain"))
-    );
-    assert!(
-        !first_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("fs_write_text")),
-        "workspace tools must remain hidden before domain expansion"
-    );
-
-    let second_tools = recorded_requests[1]["tools"]
-        .as_array()
-        .expect("second request tools should be an array");
-    assert!(
-        second_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("fs_write_text"))
-    );
+            .map(|tool| tool["function"]["name"].clone())
+            .collect();
+        assert_eq!(
+            names,
+            vec![json!("tool_execute"), json!("tool_search")],
+            "request {index} must expose exactly the gateway pair"
+        );
+        assert!(
+            !request.to_string().contains("\"name\":\"fs_write_text\""),
+            "inner tools must never appear in the schema: {index}"
+        );
+    }
     let second_request = recorded_requests[1].to_string();
+    // fs_write_text stayed authorized: its envelope executed through the
+    // gateway even though it was never part of any request schema.
+    assert!(second_request.contains("fs_write_text"), "{second_request}");
     assert!(
-        second_request.contains("Tool arguments do not match input schema"),
+        !second_request.contains("fs_write_text is not allowed"),
         "{second_request}"
     );
-    assert!(second_request.contains("fs_write_text"));
-    assert!(!second_request.contains("is not allowed"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1400,13 +1904,19 @@ Progressive disclosure instructions loaded.\n",
         .expect("recorded scripted model request mutex poisoned")
         .clone();
     assert_eq!(recorded_requests.len(), 2);
+    // Gateway semantics: skill_view is envelope inventory, never a schema
+    // entry; its result still flows back through tool_execute.
     let first_tools = recorded_requests[0]["tools"]
         .as_array()
         .expect("first request tools should be an array");
-    assert!(
-        first_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("skill_view"))
+    let names: Vec<_> = first_tools
+        .iter()
+        .map(|tool| tool["function"]["name"].clone())
+        .collect();
+    assert_eq!(
+        names,
+        vec![json!("tool_execute"), json!("tool_search")],
+        "only the gateway pair is model-visible"
     );
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
@@ -1438,10 +1948,7 @@ async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schem
         &app,
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
-        Some(json!({
-            "toolExposureMode": "domain_discovery",
-            "expandedDomainPersistenceMode": "sticky_expanded"
-        })),
+        Some(json!({})),
         None,
         Some(&authorization),
     )
@@ -1479,29 +1986,39 @@ async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schem
     let tools = recorded_requests[0]["tools"]
         .as_array()
         .expect("tools should be an array");
-    let discovery_tool = tools
+    let names: Vec<_> = tools
         .iter()
-        .find(|tool| tool["function"]["name"] == json!("discovery_expand_tool_domain"))
-        .expect("discovery tool must be exposed");
+        .map(|tool| tool["function"]["name"].clone())
+        .collect();
     assert_eq!(
-        discovery_tool["function"]["description"],
-        json!("展开一个可见工具领域，加载其中可直接调用的具体工具。")
+        names,
+        vec![json!("tool_execute"), json!("tool_search")],
+        "only the gateway pair is model-visible"
     );
-    assert_eq!(
-        discovery_tool["function"]["parameters"]["properties"]["domainCode"]["description"],
-        json!("需要展开的可见领域编码。")
+    // The gateway pair is locale-independent on purpose: the schema is the
+    // stable cache anchor. Request locale flows through the system messages.
+    let search_tool = tools
+        .iter()
+        .find(|tool| tool["function"]["name"] == json!("tool_search"))
+        .expect("gateway search must be exposed");
+    assert!(
+        search_tool["function"]["description"]
+            .as_str()
+            .is_some_and(|description| description.contains("tool_execute")),
+        "search description must teach the execute envelope"
     );
-
     let messages = recorded_requests[0]["messages"]
         .as_array()
         .expect("messages should be an array");
-    assert!(messages.iter().any(|message| {
-        message["role"] == json!("system")
-            && message["content"].as_str().is_some_and(|content| {
-                content.contains("使用可见但尚未展开的领域前")
-                    && content.contains("discovery_expand_tool_domain")
-            })
-    }));
+    assert!(
+        messages.iter().any(|message| {
+            message["role"] == json!("system")
+                && message["content"]
+                    .as_str()
+                    .is_some_and(|content| content.contains("主智能体"))
+        }),
+        "the zh-CN locale must localize the system prompt"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1929,13 +2446,9 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         json!("ALL_ENABLED_SERVERS")
     );
     assert_eq!(get_body["data"]["selectedServerCodes"], json!([]));
-    assert_eq!(
-        get_body["data"]["toolExposureMode"],
-        json!("DOMAIN_DISCOVERY")
-    );
     assert_eq!(get_body["data"]["maxSteps"], json!(100));
     assert_eq!(get_body["data"]["maxToolCalls"], json!(100));
-    assert_eq!(get_body["data"]["maxParallelToolCalls"], json!(4));
+    assert_eq!(get_body["data"]["maxParallelToolCalls"], json!(10));
 
     let create_knowledge_server = request_with_headers(
         &app,
@@ -1982,8 +2495,6 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
         Some(json!({
             "toolAssignmentMode": "selected_tools",
-            "toolExposureMode": "direct_list",
-            "expandedDomainPersistenceMode": "ephemeral_expanded",
             "maxSteps": 12,
             "maxToolCalls": 6,
             "maxParallelToolCalls": 3
@@ -1997,10 +2508,6 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(
         patched["data"]["toolAssignmentMode"],
         json!("SELECTED_TOOLS")
-    );
-    assert_eq!(
-        patched["data"]["expandedDomainPersistenceMode"],
-        json!("EPHEMERAL_EXPANDED")
     );
     assert_eq!(patched["data"]["maxSteps"], json!(12));
     assert_eq!(patched["data"]["maxToolCalls"], json!(6));
@@ -2120,7 +2627,7 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(reset["data"]["source"], json!("PLATFORM_DEFAULT"));
     assert_eq!(reset["data"]["maxSteps"], json!(100));
     assert_eq!(reset["data"]["maxToolCalls"], json!(100));
-    assert_eq!(reset["data"]["maxParallelToolCalls"], json!(4));
+    assert_eq!(reset["data"]["maxParallelToolCalls"], json!(10));
     assert_eq!(reset["data"]["mcpAccessMode"], json!("ALL_ENABLED_SERVERS"));
     assert_eq!(reset["data"]["selectedServerCodes"], json!([]));
 }
@@ -2168,7 +2675,6 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
             "maxSteps": 1,
             "maxToolCalls": 1,
             "toolAssignmentMode": "selected_tools",
-            "toolExposureMode": "direct_list"
         })),
         None,
         Some(&authorization),
@@ -2230,15 +2736,22 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
         1,
         "the step limit must stop the second model call"
     );
+    // The stable gateway pair is the model-visible catalog; task_create runs
+    // through the tool_execute envelope, not the request schema.
     let tool_names: Vec<_> = requests[0]["tools"]
         .as_array()
         .unwrap()
         .iter()
         .map(|tool| tool["function"]["name"].as_str().unwrap())
         .collect();
-    assert!(tool_names.contains(&"task_create"));
-    assert!(!tool_names.contains(&"task_page"));
-    assert!(!tool_names.contains(&"app_page"));
+    assert_eq!(
+        tool_names
+            .iter()
+            .filter(|n| **n != "tool_search" && **n != "tool_execute")
+            .count(),
+        0,
+        "only the gateway pair may be model-visible: {tool_names:?}"
+    );
     // Tool observations are deliberately omitted from the HTTP DTO. A real
     // product-side effect proves the single permitted invocation executed.
     let tasks = request_with_headers(
@@ -2427,13 +2940,19 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
         .lock()
         .expect("recorded scripted model request mutex poisoned")
         .clone();
+    // Gateway semantics: MCP tools are envelope inventory, never schema
+    // entries; the MCP transport still serves tools/list and tools/call.
     let first_run_tools = recorded_model_requests[0]["tools"]
         .as_array()
         .expect("first run tools should be an array");
-    assert!(
-        first_run_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("mcp_knowledge_tools_search_docs"))
+    let first_names: Vec<_> = first_run_tools
+        .iter()
+        .map(|tool| tool["function"]["name"].clone())
+        .collect();
+    assert_eq!(
+        first_names,
+        vec![json!("tool_execute"), json!("tool_search")],
+        "first run must expose exactly the gateway pair"
     );
 
     let recorded_mcp_requests = mcp_requests
@@ -2479,13 +2998,19 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
         .lock()
         .expect("recorded second-run model request mutex poisoned")
         .clone();
+    // The schema is identical (cache-stable) with or without MCP servers;
+    // the disabled server only leaves the gateway inventory.
     let second_run_tools = second_run_requests[0]["tools"]
         .as_array()
         .expect("second run tools should be an array");
-    assert!(
-        second_run_tools
-            .iter()
-            .all(|tool| tool["function"]["name"] != json!("mcp_knowledge_tools_search_docs"))
+    let second_names: Vec<_> = second_run_tools
+        .iter()
+        .map(|tool| tool["function"]["name"].clone())
+        .collect();
+    assert_eq!(
+        second_names,
+        vec![json!("tool_execute"), json!("tool_search")],
+        "second run must expose exactly the gateway pair"
     );
 }
 
@@ -2612,35 +3137,28 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
         .clone();
     assert_eq!(recorded_requests.len(), 2);
 
-    let first_tools = recorded_requests[0]["tools"]
-        .as_array()
-        .expect("first request tools should be an array");
-    assert!(
-        first_tools
+    // Gateway semantics: coding tools run through envelopes; the schema is
+    // the stable pair for every request of the run.
+    for (index, request) in recorded_requests.iter().enumerate() {
+        let tools = request["tools"]
+            .as_array()
+            .unwrap_or_else(|| panic!("request {index} tools should be an array"));
+        let names: Vec<_> = tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("bash_exec"))
-    );
-    assert!(
-        first_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("fs_read_text"))
-    );
-    assert!(
-        first_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("search_glob"))
-    );
-    assert!(
-        first_tools
-            .iter()
-            .any(|tool| tool["function"]["name"] == json!("search_path"))
-    );
+            .map(|tool| tool["function"]["name"].clone())
+            .collect();
+        assert_eq!(
+            names,
+            vec![json!("tool_execute"), json!("tool_search")],
+            "request {index} must expose exactly the gateway pair"
+        );
+    }
 
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
     let command_result: Value =
-        serde_json::from_str(provider_tool_result(second_messages, "bash_exec"))
+        serde_json::from_str(&provider_tool_result(second_messages, "bash_exec"))
             .expect("command result JSON");
     assert_eq!(command_result["exitCode"], json!(0));
     assert!(
@@ -2650,7 +3168,7 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
         "{command_result}"
     );
     let file_result: Value =
-        serde_json::from_str(provider_tool_result(second_messages, "fs_read_text"))
+        serde_json::from_str(&provider_tool_result(second_messages, "fs_read_text"))
             .expect("file result JSON");
     assert!(
         file_result["content"]
@@ -2827,7 +3345,7 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
         .as_array()
         .expect("second request messages should be an array");
     for name in ["app_page", "task_page"] {
-        let page: Value = serde_json::from_str(provider_tool_result(second_messages, name))
+        let page: Value = serde_json::from_str(&provider_tool_result(second_messages, name))
             .expect("page result JSON");
         assert_eq!(page["current"], json!(huge_current), "{name}: {page}");
         assert_eq!(page["records"], json!([]), "{name}: {page}");
@@ -3075,7 +3593,9 @@ async fn builtin_internal_agents_have_default_react_loop_assigned() {
         .filter(|agent| agent["builtIn"] == json!(true))
         .collect();
 
-    assert!(builtins.len() >= 4, "expected the built-in internal agents");
+    let mut codes = builtins.iter().map(|agent| agent["agentCode"].as_str().unwrap()).collect::<Vec<_>>();
+    codes.sort_unstable();
+    assert_eq!(codes, ["explore-agent", "main-agent", "prd-agent"]);
     for agent in builtins {
         assert_eq!(
             agent["loopCode"],

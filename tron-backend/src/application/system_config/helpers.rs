@@ -154,6 +154,7 @@ fn collect_leaf_paths(value: &Value, prefix: &str, paths: &mut Vec<String>) {
         Value::Mapping(mapping) => {
             for (key, value) in mapping {
                 let Some(key) = key.as_str() else { continue };
+                let key = key.replace('\\', "\\\\").replace('.', "\\.");
                 let path = if prefix.is_empty() {
                     key.to_owned()
                 } else {
@@ -192,8 +193,8 @@ pub(super) fn changed_leaf_paths(current: &Value, next: &Value) -> Vec<String> {
 
 pub(super) fn value_at_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     let mut current = value;
-    for segment in path.split('.') {
-        let key = segment.split('[').next().unwrap_or(segment);
+    for segment in path_segments(path) {
+        let key = segment.split('[').next().unwrap_or(&segment);
         current = current.as_mapping()?.get(Value::String(key.to_owned()))?;
         for index in segment.match_indices('[').filter_map(|(start, _)| {
             segment[start + 1..]
@@ -214,7 +215,7 @@ pub(super) fn set_value_at_path(
     next: serde_json::Value,
 ) -> Result<(), SystemConfigError> {
     let mut current = value;
-    let segments: Vec<_> = path.split('.').collect();
+    let segments = path_segments(path);
     for (position, segment) in segments.iter().enumerate() {
         if current.is_null() {
             *current = Value::Mapping(Default::default());
@@ -265,6 +266,27 @@ pub(super) fn set_value_at_path(
     Err(SystemConfigError::InvalidField(path.into()))
 }
 
+// Contributor IDs may contain dots (for example skills.catalog). Paths escape
+// mapping-key dots so edits target the same leaf displayed by config_items.
+fn path_segments(path: &str) -> Vec<String> {
+    let mut segments = vec![String::new()];
+    let mut escaped = false;
+    for character in path.chars() {
+        if escaped {
+            segments.last_mut().unwrap().push(character);
+            escaped = false;
+        } else if character == '\\' {
+            escaped = true;
+        } else if character == '.' {
+            segments.push(String::new());
+        } else {
+            segments.last_mut().unwrap().push(character);
+        }
+    }
+    if escaped { segments.last_mut().unwrap().push('\\'); }
+    segments
+}
+
 /// Display effective context settings, but do not materialize defaults on GET.
 pub(super) fn effective_context_value(
     content: &str,
@@ -293,6 +315,11 @@ pub(super) fn effective_context_value(
     };
     let blocks = &config.context.blocks;
     let providers = &config.context.providers;
+    let data_blocks = providers.data_blocks.iter().map(|(id, block)| {
+        let mut value = policy(&block.policy);
+        value["maxTokens"] = json!(block.max_tokens);
+        (id.clone(), value)
+    }).collect::<serde_json::Map<_, _>>();
     for (field, projected) in [
         (
             "shortTermMemory.context.blocks",
@@ -306,7 +333,7 @@ pub(super) fn effective_context_value(
         (
             "shortTermMemory.context.providers",
             json!({
-                "order": providers.order, "checkpoint": policy(&providers.checkpoint),
+                "order": providers.order, "dataBlocks": data_blocks, "checkpoint": policy(&providers.checkpoint),
                 "working": policy(&providers.working),
                 "history": policy(&providers.history), "prices": providers.prices,
                 "maxAuxiliaryCallsPerStep": providers.max_auxiliary_calls_per_step

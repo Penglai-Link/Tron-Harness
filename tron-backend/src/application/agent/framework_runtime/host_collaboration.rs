@@ -541,7 +541,6 @@ impl Runtime {
         request.limits.max_model_calls_per_step =
             Some((request.limits.max_model_retries + 1).max(3));
         request.limits.max_overflow_recoveries = harness.framework_overflow_limit();
-        request.limits.allow_unexposed_tools = true;
         request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
         request.limits.max_context_tokens =
             context.model.context_window_tokens.unwrap_or(128_000) as usize;
@@ -556,6 +555,12 @@ impl Runtime {
             .extensions
             .insert(fw::ToolResultProcessorService(Arc::new(ToolAudit)));
         host.attach_skill_access(context, &mut request)?;
+        // Collaboration/subagent runs resolve their own authorized tool set
+        // (`authorize_tools` above), so the same host-owned taxonomy map is
+        // published for their packs; nested node runs inherit it.
+        request
+            .extensions
+            .insert(super::super::tools::tool_group_labels(context));
         request.extensions.insert(HostExecution {
             harness: harness.clone(),
             state: Arc::new(Mutex::new(HostRunState::new(context.clone()))),

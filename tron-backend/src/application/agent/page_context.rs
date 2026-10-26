@@ -1,6 +1,15 @@
-//! A page snapshot belongs to one user input, never to the mutable run prefix.
+//! Submission snapshots are persisted with their input as contributor source
+//! records. Only the latest input's snapshot enters the separate page block;
+//! snapshots never enter model history or its compression input.
 use super::dto::{AgentPageContext, AgentPageTarget};
 use crate::domain::agent::{AgentMessage, AgentMessagePart};
+
+pub(crate) const PAGE_CONTEXT_BLOCK: &str = "page_context";
+const SNAPSHOT_KIND: &str = "tron_ui_page_context";
+
+pub(crate) fn is_snapshot(part: &AgentMessagePart) -> bool {
+    matches!(part, AgentMessagePart::Context { kind, .. } if kind == SNAPSHOT_KIND)
+}
 
 fn compact(value: Option<&str>, limit: usize) -> Option<String> {
     let text: String = value?
@@ -72,7 +81,7 @@ pub(crate) fn normalized(snapshot: Option<&AgentPageContext>) -> Option<AgentPag
     Some(result)
 }
 
-pub(crate) fn attach(
+pub(crate) fn record_snapshot(
     message: &mut AgentMessage,
     snapshot: Option<&AgentPageContext>,
     locale: &str,
@@ -89,7 +98,7 @@ pub(crate) fn attach(
     message.parts.insert(
         0,
         AgentMessagePart::Context {
-            kind: "tron_ui_page_context".into(),
+            kind: SNAPSHOT_KIND.into(),
             text: format!("{label}: {metadata}"),
             metadata: Some(metadata),
         },

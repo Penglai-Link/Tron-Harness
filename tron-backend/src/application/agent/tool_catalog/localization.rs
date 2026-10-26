@@ -48,7 +48,7 @@ pub(super) fn localize_domain_record(
     let sample_tools = items
         .iter()
         .take(SAMPLE_TOOL_WINDOW)
-        .map(|tool| tool.tool_code.clone())
+        .map(|tool| tool.tool_name.clone())
         .collect::<Vec<_>>();
     if let Some(definition) = domain_definitions()
         .into_iter()

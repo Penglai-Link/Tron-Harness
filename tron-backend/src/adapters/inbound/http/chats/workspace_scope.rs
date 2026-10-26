@@ -138,6 +138,9 @@ pub async fn require_workspace(
             if chat.status != ChatSessionStatus::Active {
                 return chat_error_response(ChatError::SessionArchived);
             }
+            if request.method() != axum::http::Method::GET && !path.ends_with("/history/query") && !replay {
+                if let Err(error) = state.chats.ensure_session_writable(code) { return chat_error_response(error); }
+            }
         }
         if runs && path == "/api/v1/agents/runs" {
             // Native chat admission derives ownership from the persisted session.
@@ -323,6 +326,9 @@ pub async fn require_workspace(
         }
         if record.status != ChatSessionStatus::Active {
             return chat_error_response(ChatError::SessionArchived);
+        }
+        if request.method() != axum::http::Method::GET && !path.ends_with("/history/query") && !replay {
+            if let Err(error) = state.chats.ensure_session_writable(&session) { return chat_error_response(error); }
         }
     }
     next.run(request).await

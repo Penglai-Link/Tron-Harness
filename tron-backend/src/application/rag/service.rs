@@ -22,42 +22,28 @@ pub trait RagConfigRepository {
         Err(RagError::StorageFailure)
     }
     /// List metadata without loading document bodies or vector checkpoints.
-    fn record_task_summaries(&self, user: &str) -> Result<Vec<super::RagRecordTask>, RagError> {
-        self.record_tasks(user)
-    }
-    fn record_task(&self, user: &str, id: &str) -> Result<Option<super::RagRecordTask>, RagError> {
-        Ok(self
-            .record_tasks(user)?
-            .into_iter()
-            .find(|task| task.id == id))
-    }
-    fn record_task_summary(&self, user: &str, id: &str) -> Result<Option<super::RagRecordTask>, RagError> {
-        self.record_task(user, id)
-    }
-    fn record_task_is_latest(&self, task: &super::RagRecordTask) -> Result<bool, RagError> {
-        Ok(!self.record_tasks(&task.user_code)?.iter().any(|other| {
-            other.id != task.id
-                && other.corpus_id == task.corpus_id
-                && other.source_code == task.source_code
-                && other.source_version == task.source_version
-                && other.scope_type == task.scope_type
-                && other.scope_code == task.scope_code
-                && other.created_at >= task.created_at
-        }))
-    }
+    fn record_task_summaries(&self, user: &str) -> Result<Vec<super::RagRecordTask>, RagError>;
+    fn record_task(&self, user: &str, id: &str) -> Result<Option<super::RagRecordTask>, RagError>;
+    fn record_task_summary(
+        &self,
+        user: &str,
+        id: &str,
+    ) -> Result<Option<super::RagRecordTask>, RagError>;
+    fn record_task_is_latest(&self, task: &super::RagRecordTask) -> Result<bool, RagError>;
     fn claim_record_task(&self, _user: &str, _id: &str) -> Result<bool, RagError> {
         Err(RagError::StorageFailure)
     }
     fn index_counts(&self, _corpus: &str) -> Result<super::RagIndexCounts, RagError> {
         Err(RagError::StorageFailure)
     }
-    fn list_corpora_with_counts(&self) -> Result<Vec<(RagCorpusRecord, super::RagIndexCounts)>, RagError> {
-        self.list_corpora()?.into_iter().map(|corpus| {
-            let counts = self.index_counts(&corpus.corpus_id)?;
-            Ok((corpus, counts))
-        }).collect()
-    }
+    fn list_corpora_with_counts(
+        &self,
+    ) -> Result<Vec<(RagCorpusRecord, super::RagIndexCounts)>, RagError>;
     fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError>;
+    fn get_corpora(
+        &self,
+        ids: &[String],
+    ) -> Result<std::collections::BTreeMap<String, RagCorpusRecord>, RagError>;
     fn get_corpus(&self, corpus_id: &str) -> Result<Option<RagCorpusRecord>, RagError>;
 }
 
@@ -130,6 +116,14 @@ where
             .list_corpora()
     }
 
+    fn get_corpora(
+        &self,
+        ids: &[String],
+    ) -> Result<std::collections::BTreeMap<String, RagCorpusRecord>, RagError> {
+        self.lock()
+            .map_err(|_| RagError::StorageFailure)?
+            .get_corpora(ids)
+    }
     fn get_corpus(&self, corpus_id: &str) -> Result<Option<RagCorpusRecord>, RagError> {
         self.lock()
             .expect("RAG repository mutex poisoned")

@@ -1,4 +1,4 @@
-use super::{RagConfigRepository, RagError, SqliteRagRepositorySql};
+use super::{RagError, SqliteRagRepositorySql};
 use crate::application::rag::{RagIndexCounts, RagRecordTask};
 use rusqlite::{OptionalExtension, params};
 
@@ -165,5 +165,263 @@ impl SqliteRagRepositorySql<'_> {
             vector_count,
             graph_count,
         })
+    }
+}
+
+impl SqliteRagRepositorySql<'_> {
+    /// Three SQL statements for the catalogue, its schema metadata and all counts.
+    /// VALUES avoids SQLite's compound-SELECT limit for large corpus batches.
+    pub(super) fn list_corpora_with_counts(
+        &self,
+    ) -> Result<Vec<(crate::domain::rag::RagCorpusRecord, RagIndexCounts)>, RagError> {
+        use std::collections::{BTreeMap, BTreeSet};
+        let corpora = self.list_corpora()?;
+        if corpora.is_empty() {
+            return Ok(Vec::new());
+        }
+        let tables = corpora
+            .iter()
+            .flat_map(|corpus| {
+                ["source", "textUnit", "fulltext", "vector", "tree"]
+                    .into_iter()
+                    .filter_map(move |segment| {
+                        corpus
+                            .storage_binding
+                            .sqlite_table_for_segment(segment)
+                            .map(str::to_owned)
+                    })
+            })
+            .collect::<BTreeSet<_>>();
+        let inspected = corpora
+            .iter()
+            .flat_map(|corpus| {
+                ["source", "textUnit"]
+                    .into_iter()
+                    .filter_map(move |segment| {
+                        corpus
+                            .storage_binding
+                            .sqlite_table_for_segment(segment)
+                            .map(str::to_owned)
+                    })
+            })
+            .collect::<BTreeSet<_>>();
+        let mut schema = BTreeMap::<String, BTreeSet<String>>::new();
+        let mut vector_tables = BTreeMap::<String, String>::new();
+        {
+            let mut q = self
+                .connection
+                .prepare("SELECT name,sql FROM sqlite_schema WHERE type='table'")
+                .map_err(super::storage_error)?;
+            let names = q
+                .query_map([], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+                })
+                .map_err(super::storage_error)?
+                .collect::<Result<BTreeMap<_, _>, _>>()
+                .map_err(super::storage_error)?;
+            for (table, definition) in &names {
+                let vector = table
+                    .rsplit_once("_vec_d")
+                    .is_some_and(|(base, dimension)| {
+                        tables.contains(base) && dimension.parse::<usize>().is_ok()
+                    });
+                if !tables.contains(table) && !vector {
+                    continue;
+                }
+                // Preparing a zero-row projection exposes column metadata without
+                // stepping a SELECT, traversing table rows or invoking per-table PRAGMAs.
+                let columns = if inspected.contains(table) {
+                    let quoted = super::sql_plan::quote_identifier(&table)?;
+                    let statement = self
+                        .connection
+                        .prepare(&format!("SELECT * FROM {quoted} LIMIT 0"))
+                        .map_err(super::storage_error)?;
+                    statement
+                        .column_names()
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect()
+                } else {
+                    BTreeSet::new()
+                };
+                if vector {
+                    // vec0 scans issue an internal SELECT per virtual table. Its native
+                    // row-ID index contains exactly the live vectors; joining it avoids
+                    // those hidden queries and never loads embedding payloads.
+                    let rowids = format!("{table}_rowids");
+                    let native_vec = definition
+                        .as_ref()
+                        .is_some_and(|sql| sql.to_ascii_lowercase().contains("using vec0"));
+                    let storage = if native_vec {
+                        if !names.contains_key(&rowids) {
+                            return Err(RagError::StorageBindingInvalid);
+                        }
+                        rowids
+                    } else {
+                        table.clone()
+                    };
+                    vector_tables.insert(table.clone(), storage);
+                }
+                schema.insert(table.clone(), columns);
+            }
+        }
+        // Keep per-source metadata inside SQLite: return only aggregate counts.
+        self.connection
+            .create_scalar_function(
+                "tron_rag_index_settings_changed",
+                2,
+                rusqlite::functions::FunctionFlags::SQLITE_UTF8
+                    | rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
+                |context| {
+                    let saved: String = context.get(0)?;
+                    let desired: String = context.get(1)?;
+                    let saved: serde_json::Value = serde_json::from_str(&saved)
+                        .map_err(|e| rusqlite::Error::UserFunctionError(Box::new(e)))?;
+                    let desired: crate::application::rag::RagSettings =
+                        serde_json::from_str(&desired)
+                            .map_err(|e| rusqlite::Error::UserFunctionError(Box::new(e)))?;
+                    let old = serde_json::from_value::<crate::application::rag::RagSettings>(
+                        saved["indexSettings"].clone(),
+                    )
+                    .ok();
+                    Ok(old.is_none_or(|old| {
+                        old.fulltext != desired.fulltext
+                            || old.vector != desired.vector
+                            || old.graph != desired.graph
+                            || (desired.vector
+                                && (old.embedding_model_code != desired.embedding_model_code
+                                    || old.embedding_dimension != desired.embedding_dimension))
+                            || (desired.graph && old.graph_model_code != desired.graph_model_code)
+                            || old.image_description_model_code
+                                != desired.image_description_model_code
+                    }))
+                },
+            )
+            .map_err(super::storage_error)?;
+        let mut values = Vec::new();
+        let mut bindings = Vec::<String>::new();
+        for (index, corpus) in corpora.iter().enumerate() {
+            let config =
+                crate::application::rag::RagSettings::from_capabilities(&corpus.capabilities)?;
+            bindings.push(corpus.corpus_id.clone());
+            bindings.push(serde_json::to_string(&config).map_err(|_| RagError::StorageFailure)?);
+            let Some(table) = corpus.storage_binding.sqlite_table_for_segment("textUnit") else {
+                values.push(format!(
+                    "({index},'{{}}',0*length(?{}),0,0*length(?{}))",
+                    index * 2 + 1,
+                    index * 2 + 2
+                ));
+                continue;
+            };
+            let unit_table = table;
+            let source_table = corpus
+                .storage_binding
+                .sqlite_table_for_segment("source")
+                .filter(|source| *source != unit_table);
+            let unit_columns = schema
+                .get(unit_table)
+                .ok_or(RagError::StorageBindingInvalid)?;
+            let source_columns = schema
+                .get(source_table.unwrap_or(unit_table))
+                .ok_or(RagError::StorageBindingInvalid)?;
+            let choose = |columns: &BTreeSet<String>, names: &[&str]| {
+                names
+                    .iter()
+                    .find(|name| columns.contains(**name))
+                    .map(|s| s.to_string())
+                    .ok_or(RagError::StorageBindingInvalid)
+            };
+            let status = super::sql_plan::quote_identifier(&choose(
+                unit_columns,
+                &["text_unit_status", "status"],
+            )?)?;
+            let source_status = super::sql_plan::quote_identifier(&choose(
+                source_columns,
+                &["source_status", "status"],
+            )?)?;
+            let table = super::sql_plan::quote_identifier(unit_table)?;
+            let (join, alias) = if let Some(source) = source_table {
+                (
+                    format!(
+                        " JOIN {} src ON src.source_code=units.source_code AND src.source_version=units.source_version AND src.scope_type=units.scope_type AND src.scope_code=units.scope_code",
+                        super::sql_plan::quote_identifier(source)?
+                    ),
+                    "src",
+                )
+            } else {
+                (String::new(), "units")
+            };
+            let active = format!("units.{status}='ACTIVE' AND {alias}.{source_status}='ACTIVE'");
+            let base = format!(
+                "(SELECT json_object('sourceCount',COUNT(DISTINCT units.source_code),'chunkCount',COUNT(*)) FROM {table} units {join} WHERE {active})"
+            );
+            let prefix = format!(
+                "{}_vec_d",
+                corpus
+                    .storage_binding
+                    .sqlite_table_for_segment("vector")
+                    .unwrap_or(unit_table)
+            );
+            let vectors=vector_tables.iter().filter(|(name,_)|name.strip_prefix(&prefix).is_some_and(|suffix|suffix.parse::<usize>().is_ok())).map(|(_,physical)|super::sql_plan::quote_identifier(physical).map(|name|format!("(SELECT COUNT(*) FROM {name} vec JOIN {table} units ON units.id=vec.rowid {join} WHERE {active})"))).collect::<Result<Vec<_>,_>>()?;
+            let vectors = if vectors.is_empty() {
+                "0".into()
+            } else {
+                vectors.join("+")
+            };
+            let metadata = super::sql_plan::quote_identifier(&choose(
+                source_columns,
+                &["source_metadata", "metadata"],
+            )?)?;
+            let graph = if config.graph {
+                format!(
+                    "(SELECT COUNT(DISTINCT p.entity_id) FROM rag_graph_node_projections p JOIN rag_graph_generations g ON g.generation_id=p.generation_id JOIN rag_graph_active_sources a ON a.generation_id=g.generation_id WHERE g.corpus_id=?{} AND g.state='Active' AND EXISTS(SELECT 1 FROM {table} units {join} WHERE {active} AND units.source_code=g.source_code AND units.source_version=g.source_version AND units.scope_type=g.scope_type AND units.scope_code=g.scope_code AND json_extract({alias}.{metadata},'$.graphGenerationId')=g.generation_id))",
+                    index * 2 + 1
+                )
+            } else {
+                format!("0*length(?{})", index * 2 + 1)
+            };
+            let saved = format!(
+                "(SELECT COUNT(*) FROM (SELECT DISTINCT {alias}.{metadata} AS metadata FROM {table} units {join} WHERE {active}) WHERE tron_rag_index_settings_changed(metadata,?{}))",
+                index * 2 + 2
+            );
+            values.push(format!("({index},{base},{vectors},{graph},{saved})"));
+        }
+        let sql = format!(
+            "WITH counts(ordinal,base,vectors,graph,settings) AS (VALUES {}) SELECT ordinal,base,vectors,graph,settings FROM counts ORDER BY ordinal",
+            values.join(",")
+        );
+        let mut q = self
+            .connection
+            .prepare(&sql)
+            .map_err(super::storage_error)?;
+        let rows = q
+            .query_map(rusqlite::params_from_iter(bindings), |r| {
+                Ok((
+                    r.get::<_, usize>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, usize>(2)?,
+                    r.get::<_, usize>(3)?,
+                    r.get::<_, usize>(4)?,
+                ))
+            })
+            .map_err(super::storage_error)?;
+        let mut result = Vec::new();
+        for row in rows {
+            let (index, base, vector_count, graph_count, rebuild_source_count) =
+                row.map_err(super::storage_error)?;
+            let base: serde_json::Value =
+                serde_json::from_str(&base).map_err(|_| RagError::StorageFailure)?;
+            result.push((
+                corpora[index].clone(),
+                RagIndexCounts {
+                    source_count: base["sourceCount"].as_u64().unwrap_or(0) as usize,
+                    chunk_count: base["chunkCount"].as_u64().unwrap_or(0) as usize,
+                    vector_count,
+                    graph_count,
+                    rebuild_source_count,
+                },
+            ));
+        }
+        Ok(result)
     }
 }

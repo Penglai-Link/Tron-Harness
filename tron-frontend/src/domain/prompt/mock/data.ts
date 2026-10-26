@@ -22,7 +22,6 @@ const runtimeVariableProviders: Record<string, PromptRuntimeProvider> = {
   command: "TERMINAL_EXPLAIN_COMMAND",
   current_command: "TERMINAL_CURRENT_COMMAND",
   output: "TERMINAL_EXPLAIN_OUTPUT",
-  persistence_mode: "AGENT_DOMAIN_PERSISTENCE_MODE",
   source_text: "RAG_TREE_SOURCE_TEXT",
   task_context: "TASK_CONTEXT",
   title: "RAG_TREE_TITLE",
@@ -67,27 +66,15 @@ function initialPlatformPrompts() {
   ];
   const builtinSeeds: Array<[string, string, PromptCategory, string, boolean]> = [
     ["SYS_CHAT_ASK_USER", "Interactive user input contract", "SYSTEM", "When material clarification is required, call chat_ask_user and stop the turn.", true],
-    ["SYS_AGENT_DOMAIN_DISCOVERY", "Domain discovery guidance", "SYSTEM", "You may call only tools explicitly listed in the current tool list. Before using a visible but not yet expanded domain, first call `discovery_expand_tool_domain` and pass that domain's `domainCode`; after receiving the updated tool list, call a tool provided in it. Never guess tool names or request parameters, never call hidden tools directly before expanding the domain, and carefully review the tool-call examples.", true],
     ["SYS_CHAT_SESSION_TITLE", "Chat title generation", "TEMPLATE", "Generate a concise chat title from the user's first message. {{user_message}}", false],
     ["SYS_TERMINAL_COMMAND_EXACT", "Exact terminal command instruction", "TEMPLATE", "Return exactly one executable shell command for {{user_request}}.", false],
     ["SYS_TASK_EXECUTION", "Task execution instruction", "TEMPLATE", "Execute the following task and provide the final result: {{task_context}}", true],
   ];
   return [
     ...prompts,
-    ...builtinSeeds.map(([code, name, category, body, runtimeRequired]) => {
-      const prompt = makePrompt(code, name, category, body, true, runtimeRequired);
-      if (code === "SYS_AGENT_DOMAIN_DISCOVERY") {
-        prompt.version = 2;
-        prompt.translations = (prompt.translations ?? []).map((translation) => ({
-          ...translation,
-          promptBody: translation.locale === "zh-CN"
-            ? "你只能调用当前工具列表中明确提供的工具。使用可见但尚未展开的领域前，先调用 `discovery_expand_tool_domain` 并传入该领域的 domainCode；收到更新后的工具列表后，再调用其中提供的工具。绝不要猜测工具名和请求参数，也不要在展开领域前直接调用隐藏工具，注意仔细看工具调用示例说明。"
-            : body,
-          sourceVersion: 2,
-        }));
-      }
-      return prompt;
-    }),
+    ...builtinSeeds.map(([code, name, category, body, runtimeRequired]) =>
+      makePrompt(code, name, category, body, true, runtimeRequired)
+    ),
   ];
 }
 

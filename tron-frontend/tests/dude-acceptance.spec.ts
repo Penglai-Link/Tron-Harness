@@ -109,7 +109,7 @@ test.beforeAll(async () => {
     if (payload.stream && !summaryRequest && input.includes("acceptance-askuser") && !questionIssued) {
       questionIssued = true;
       response.writeHead(200, { "Content-Type": "text/event-stream" });
-      response.write(`data: ${JSON.stringify({ id: "dude-question", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "dude-question-call", type: "function", function: { name: "chat_ask_user", arguments: JSON.stringify({ intro: "Choose the acceptance target", questions: [{ question: "Which target should I use?", options: [{ label: "Acceptance Local" }, { label: "Acceptance Remote" }] }] }) } }] }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 } })}\n\n`);
+      response.write(`data: ${JSON.stringify({ id: "dude-question", choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "dude-question-call", type: "function", function: { name: "tool_execute", arguments: JSON.stringify({ tool: "chat_ask_user", arguments: { intro: "Choose the acceptance target", questions: [{ question: "Which target should I use?", options: [{ label: "Acceptance Local" }, { label: "Acceptance Remote" }] }] } }) } }] }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 } })}\n\n`);
       response.end("data: [DONE]\n\n");
       return;
     }

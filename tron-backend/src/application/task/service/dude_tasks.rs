@@ -10,15 +10,35 @@ pub(super) fn default_planned_start(now_ms: i64, due_at: Option<i64>) -> i64 {
 
 impl TaskService {
     pub fn due_dude_tasks(&self, now_ms: i64) -> Result<Vec<TaskDetail>, TaskError> {
-        self.all_tasks()?
-            .into_iter()
+        let all = self.all_tasks()?;
+        let hierarchy = TaskHierarchy::new(&all);
+        let selected = all
+            .iter()
             .filter(|task| {
                 task.owner_dude_code.is_some()
                     && task.archived_at.is_none()
                     && task.status != crate::domain::task::CLOSED_STATUS_CODE
                     && task.next_followup_at.is_some_and(|next| next <= now_ms)
             })
-            .map(|task| self.detail_from_task(task))
+            .collect::<Vec<_>>();
+        let codes = selected
+            .iter()
+            .map(|task| task.task_code.clone())
+            .collect::<Vec<_>>();
+        let mut relations = self
+            .repository
+            .lock()
+            .expect("task repository mutex poisoned")
+            .relations(&codes)?;
+        selected
+            .into_iter()
+            .map(|task| {
+                self.detail_with_relations(
+                    task.clone(),
+                    &hierarchy,
+                    relations.remove(&task.task_code).unwrap_or_default(),
+                )
+            })
             .collect()
     }
 

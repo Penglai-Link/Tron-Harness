@@ -48,7 +48,9 @@ async fn chat_question_resume_drains_native_execution_with_and_without_restart()
                     }
                     let first = main_calls.fetch_add(1, Ordering::SeqCst) == 0;
                     let delta = if first {
-                        json!({"tool_calls":[{"index":0,"id":"lease-question-call","type":"function","function":{"name":"chat_ask_user","arguments":json!({"intro":"Choose the acceptance target","questions":[{"question":"Which target should I use?","options":[{"label":"Acceptance Local"},{"label":"Acceptance Remote"}]}]}).to_string()}}]})
+                        // Gateway mode: wrapped tools travel as tool_execute
+                        // envelopes while the call id stays addressable.
+                        json!({"tool_calls":[{"index":0,"id":"lease-question-call","type":"function","function":{"name":"tool_execute","arguments":json!({"tool":"chat_ask_user","arguments":{"intro":"Choose the acceptance target","questions":[{"question":"Which target should I use?","options":[{"label":"Acceptance Local"},{"label":"Acceptance Remote"}]}]}}).to_string()}}]})
                     } else { json!({"content":"framework-question-resumed"}) };
                     let chunk = json!({"id":"question-response","choices":[{"index":0,"delta":delta,"finish_reason":if first {"tool_calls"} else {"stop"}}],"usage":{"prompt_tokens":240,"completion_tokens":32,"total_tokens":272}});
                     let stream=async_stream::stream! {yield Ok::<Event,Infallible>(Event::default().data(chunk.to_string()));yield Ok::<Event,Infallible>(Event::default().data("[DONE]"));};

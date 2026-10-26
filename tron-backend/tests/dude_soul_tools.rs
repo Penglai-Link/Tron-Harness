@@ -83,10 +83,9 @@ impl Fixture {
                 .collect(),
             effective_tools: vec![],
             tool_assignment: None,
-            tool_exposure: Default::default(),
             execution_scope: Default::default(),
             limits: Default::default(),
-            messages: vec![],
+            messages: vec![].into(),
             observations: vec![],
             started_at: "2026-10-14T00:00:00Z".into(),
             short_term_memory: Some(AgentShortTermMemoryRunContext {

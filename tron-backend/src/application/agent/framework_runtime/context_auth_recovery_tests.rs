@@ -131,8 +131,8 @@ impl ModelClient for ProtectedTurnClient {
         Box::pin(async move {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(ModelResponse::tool_call(
-                "echo",
-                serde_json::json!({"value":"only"}),
+                "tool_execute",
+                serde_json::json!({"tool":"echo","arguments":{"items":[{"value":"only"}]}}),
             ))
         })
     }

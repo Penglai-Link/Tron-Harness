@@ -85,27 +85,130 @@ fn document(
         return Err(IngestionQueueError::Conflict);
     }
     let value: Value = serde_json::from_str(&raw).map_err(storage)?;
-    // Use the immutable identity already captured at enqueue, including original
-    // resource code. Document id and revision alone can repeat after deletion.
-    let resource_code = value["resourceCode"]
-        .as_str()
-        .ok_or(IngestionQueueError::Conflict)?;
+    validate_document_identity(
+        task,
+        revision,
+        value["resourceCode"].as_str(),
+        value["resourceRevision"].as_u64(),
+    )?;
+    Ok(value)
+}
+fn validate_document_identity(
+    task: &IngestionTask,
+    revision: u64,
+    resource_code: Option<&str>,
+    resource_revision: Option<u64>,
+) -> Result<(), IngestionQueueError> {
+    let code = resource_code.ok_or(IngestionQueueError::Conflict)?;
     let identity = format!(
         "{:x}",
         Sha256::digest(
-            format!(
-                "{}:{}:{}",
-                resource_code, task.resource_revision, task.configuration
-            )
-            .as_bytes()
+            format!("{}:{}:{}", code, task.resource_revision, task.configuration).as_bytes()
         )
     );
-    if value["resourceRevision"].as_u64() != Some(task.resource_revision)
+    if revision != task.document_revision
+        || resource_revision != Some(task.resource_revision)
         || identity != task.input_config_hash
     {
         return Err(IngestionQueueError::Conflict);
     }
-    Ok(value)
+    Ok(())
+}
+
+// One worker needs only the first eligible task. Bound decoded payloads while
+// preserving a stable size/FIFO cursor when earlier pages cannot use its nodes.
+const CANDIDATE_PAGE_SIZE: usize = 64;
+struct CandidateCursor {
+    missing_size: i64,
+    size: rusqlite::types::Value,
+    rowid: i64,
+}
+fn candidate_page(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    stages: &str,
+    now: i64,
+    requested: Option<&str>,
+    size_order: bool,
+    after: Option<&CandidateCursor>,
+    limit: Option<usize>,
+) -> Result<(Vec<(IngestionTask, bool)>, Option<CandidateCursor>), IngestionQueueError> {
+    let (missing, size) = if size_order {
+        (
+            "json_extract(t.payload_json,'$.fileSizeBytes') IS NULL",
+            "COALESCE(json_extract(t.payload_json,'$.fileSizeBytes'),0)",
+        )
+    } else {
+        ("0", "0")
+    };
+    let requested_filter = if requested.is_some() {
+        "AND t.id=?2"
+    } else {
+        ""
+    };
+    let boundary = if after.is_some() {
+        format!("AND ({missing},{size},t.rowid)>(?3,?4,?5)")
+    } else {
+        String::new()
+    };
+    // Without statistics SQLite can prefer the state lookup plus a full sort.
+    // Priority pages must walk their ordered partial index even on a fresh database.
+    let index = match (size_order, stages, requested.is_some()) {
+        (true, "('Parsing','Chunking')", false) => "INDEXED BY idx_kb_ingestion_parse_order",
+        (true, "('Embedding','Publishing')", false) => "INDEXED BY idx_kb_ingestion_embed_order",
+        _ => "",
+    };
+    let mut q = tx.prepare(&format!("SELECT t.payload_json,d.revision,json_extract(d.payload_json,'$.resourceCode'),json_extract(d.payload_json,'$.resourceRevision'),t.rowid,{missing} AS size_missing,{size} AS size_key FROM knowledge_base_ingestion_tasks t {index} LEFT JOIN knowledge_base_documents d ON d.id=t.document_id AND d.knowledge_base_id=t.knowledge_base_id WHERE t.stage IN {stages} AND t.state IN ('QUEUED','RUNNING') AND COALESCE(json_extract(t.payload_json,'$.cancellationPending'),0)=0 AND ((t.state='QUEUED' AND t.retry_after_ms<=?1) OR (t.state='RUNNING' AND t.lease_until_ms<=?1)) {requested_filter} {boundary} ORDER BY size_missing,size_key,t.rowid LIMIT ?6")).map_err(storage)?;
+    let mut rows = q
+        .query(params![
+            now,
+            requested,
+            after.map(|cursor| cursor.missing_size),
+            after
+                .map(|cursor| cursor.size.clone())
+                .unwrap_or(rusqlite::types::Value::Integer(0)),
+            after.map_or(0, |cursor| cursor.rowid),
+            limit.map_or(-1, |limit| limit as i64)
+        ])
+        .map_err(storage)?;
+    let mut tasks = Vec::new();
+    let mut cursor = None;
+    while let Some(row) = rows.next().map_err(storage)? {
+        let raw: String = row.get(0).map_err(storage)?;
+        let revision: Option<u64> = row.get(1).map_err(storage)?;
+        let code: Option<String> = row.get(2).map_err(storage)?;
+        let resource_revision: Option<u64> = row.get(3).map_err(storage)?;
+        let task: IngestionTask = serde_json::from_str(&raw).map_err(storage)?;
+        let valid = revision.is_some_and(|revision| {
+            validate_document_identity(&task, revision, code.as_deref(), resource_revision).is_ok()
+        });
+        tasks.push((task, valid));
+        cursor = Some(CandidateCursor {
+            rowid: row.get(4).map_err(storage)?,
+            missing_size: row.get(5).map_err(storage)?,
+            size: row.get(6).map_err(storage)?,
+        });
+    }
+    Ok((tasks, cursor))
+}
+fn candidates(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    stages: &str,
+    now: i64,
+    requested: Option<&str>,
+    size_order: bool,
+) -> Result<Vec<(IngestionTask, bool)>, IngestionQueueError> {
+    candidate_page(tx, stages, now, requested, size_order, None, None).map(|(tasks, _)| tasks)
+}
+
+fn document_state_validated(
+    tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
+    task: &IngestionTask,
+    state: &str,
+    error: Option<&str>,
+) -> Result<(), IngestionQueueError> {
+    tx.execute("UPDATE knowledge_base_documents SET payload_json=json_set(payload_json,'$.status',?1,'$.error',?2,'$.waitReason',json(?3)) WHERE id=?4 AND knowledge_base_id=?5 AND revision=?6",
+        params![state,error,serde_json::to_string(&task.wait_reason).map_err(storage)?,task.document_id,task.knowledge_base_id,task.document_revision]).map_err(storage)?;
+    Ok(())
 }
 fn document_state(
     tx: &crate::adapters::outbound::persistence::sqlite::framework_storage::BusinessTransaction<'_>,
@@ -335,37 +438,53 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
         } else {
             false
         };
-        let ids = {
-            // Only eligible, unleased work competes for a slot. Keep FIFO for
-            // equal sizes; old tasks without a size follow known-size files.
-            let mut stmt = tx
-                .prepare(&format!(
-                    "SELECT id FROM knowledge_base_ingestion_tasks
-                 WHERE stage IN {stages}
-                   AND COALESCE(json_extract(payload_json,'$.cancellationPending'),0)=0
-                   AND ((state='QUEUED' AND retry_after_ms<=?1)
-                     OR (state='RUNNING' AND lease_until_ms<=?1))
-                 ORDER BY json_extract(payload_json,'$.fileSizeBytes') IS NULL,
-                          json_extract(payload_json,'$.fileSizeBytes'), rowid"
-                ))
+        // Occupancy is stable under this immediate transaction; a claim returns
+        // immediately after allocating one slot.
+        let mut nodes = std::collections::BTreeMap::<String, usize>::new();
+        let mut groups = std::collections::BTreeMap::<String, usize>::new();
+        if parse && !global_busy {
+            let mut q = tx.prepare("SELECT endpoint_id,resource_group,stage,count(*) FROM knowledge_base_ingestion_tasks WHERE state='RUNNING' AND lease_until_ms>?1 GROUP BY endpoint_id,resource_group,stage").map_err(storage)?;
+            let rows = q
+                .query_map([claim.now_ms], |r| {
+                    Ok((
+                        r.get::<_, Option<String>>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, usize>(3)?,
+                    ))
+                })
                 .map_err(storage)?;
-            stmt.query_map([claim.now_ms], |r| r.get::<_, String>(0))
-                .map_err(storage)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(storage)?
-        };
-        for id in ids {
-            if claim
-                .task_id
-                .as_ref()
-                .is_some_and(|requested| requested != &id)
-            {
-                continue;
+            for row in rows {
+                let (node, group, stage, count) = row.map_err(storage)?;
+                if let Some(group) = group {
+                    *groups.entry(group).or_default() += count;
+                }
+                if matches!(stage.as_str(), "Parsing" | "Chunking")
+                    && let Some(node) = node
+                {
+                    *nodes.entry(node).or_default() += count;
+                }
             }
-            let mut task = read(&tx, &id)?;
-            match document(&tx, &task) {
-                Ok(_) => {}
-                Err(IngestionQueueError::Conflict | IngestionQueueError::NotFound) => {
+        }
+        let mut cursor = None;
+        loop {
+            let (tasks, next) = candidate_page(
+                &tx,
+                stages,
+                claim.now_ms,
+                claim.task_id.as_deref(),
+                true,
+                cursor.as_ref(),
+                Some(CANDIDATE_PAGE_SIZE),
+            )?;
+            let count = tasks.len();
+            if count == 0 {
+                break;
+            }
+            cursor = next;
+            for (mut task, valid) in tasks {
+                let id = task.id.clone();
+                if !valid {
                     task.cancellation_pending = matches!(
                         task.stage,
                         IngestionStage::Parsing | IngestionStage::Chunking
@@ -377,100 +496,103 @@ impl SqliteKnowledgeIngestionQueueSql<'_> {
                     write(&tx, &task)?;
                     continue;
                 }
-                Err(error) => return Err(error),
-            }
-            if global_busy || group_busy {
-                if !parse
-                    || claim
-                        .parse_endpoints
-                        .iter()
-                        .any(|e| availability::eligible(&task, e))
-                {
-                    availability::waiting(
-                        &tx,
-                        &mut task,
-                        IngestionWaitReason::new(if group_busy {
-                            WaitReasonCode::EmbeddingGroupCapacity
-                        } else if parse {
-                            WaitReasonCode::ParseGlobalCapacity
-                        } else {
-                            WaitReasonCode::EmbeddingGlobalCapacity
-                        }),
-                    )?;
-                }
-                continue;
-            }
-            if parse {
-                let mut available = Vec::new();
-                for endpoint in &claim.parse_endpoints {
-                    if !availability::eligible(&task, endpoint) {
-                        continue;
-                    }
-                    let node_count: usize = tx.query_row("SELECT count(*) FROM knowledge_base_ingestion_tasks WHERE state='RUNNING' AND lease_until_ms>?1 AND endpoint_id=?2 AND stage IN ('Parsing','Chunking')",params![claim.now_ms,endpoint.endpoint_id],|r|r.get(0)).map_err(storage)?;
-                    let group_count: usize = tx.query_row("SELECT count(*) FROM knowledge_base_ingestion_tasks WHERE state='RUNNING' AND lease_until_ms>?1 AND resource_group=?2",params![claim.now_ms,endpoint.resource_group],|r|r.get(0)).map_err(storage)?;
-                    if node_count < endpoint.capacity
-                        && group_count < endpoint.resource_group_capacity
+                if global_busy || group_busy {
+                    if !parse
+                        || claim
+                            .parse_endpoints
+                            .iter()
+                            .any(|e| availability::eligible(&task, e))
                     {
-                        available.push((node_count as f64 / endpoint.weight as f64, endpoint));
-                    }
-                }
-                available.sort_by(|a, b| a.0.total_cmp(&b.0));
-                let Some((_, endpoint)) = available.first() else {
-                    if claim
-                        .parse_endpoints
-                        .iter()
-                        .any(|e| availability::eligible(&task, e))
-                    {
-                        availability::waiting(
+                        availability::waiting_validated(
                             &tx,
                             &mut task,
-                            IngestionWaitReason::new(WaitReasonCode::NodeCapacity),
+                            IngestionWaitReason::new(if group_busy {
+                                WaitReasonCode::EmbeddingGroupCapacity
+                            } else if parse {
+                                WaitReasonCode::ParseGlobalCapacity
+                            } else {
+                                WaitReasonCode::EmbeddingGlobalCapacity
+                            }),
                         )?;
                     }
                     continue;
-                };
-                task.endpoint_id = Some(endpoint.endpoint_id.clone());
-                tx.execute(
-                    "UPDATE knowledge_base_ingestion_tasks SET resource_group=?1 WHERE id=?2",
-                    params![endpoint.resource_group, id],
-                )
-                .map_err(storage)?;
-            } else {
-                tx.execute(
-                    "UPDATE knowledge_base_ingestion_tasks SET resource_group=?1 WHERE id=?2",
-                    params![
-                        claim
-                            .embedding_resource_group
-                            .as_ref()
-                            .map(|(group, _)| group),
-                        id
-                    ],
-                )
-                .map_err(storage)?;
+                }
+                if parse {
+                    let mut available = Vec::new();
+                    for endpoint in &claim.parse_endpoints {
+                        if !availability::eligible(&task, endpoint) {
+                            continue;
+                        }
+                        let node_count = nodes.get(&endpoint.endpoint_id).copied().unwrap_or(0);
+                        let group_count =
+                            groups.get(&endpoint.resource_group).copied().unwrap_or(0);
+                        if node_count < endpoint.capacity
+                            && group_count < endpoint.resource_group_capacity
+                        {
+                            available.push((node_count as f64 / endpoint.weight as f64, endpoint));
+                        }
+                    }
+                    available.sort_by(|a, b| a.0.total_cmp(&b.0));
+                    let Some((_, endpoint)) = available.first() else {
+                        if claim
+                            .parse_endpoints
+                            .iter()
+                            .any(|e| availability::eligible(&task, e))
+                        {
+                            availability::waiting_validated(
+                                &tx,
+                                &mut task,
+                                IngestionWaitReason::new(WaitReasonCode::NodeCapacity),
+                            )?;
+                        }
+                        continue;
+                    };
+                    task.endpoint_id = Some(endpoint.endpoint_id.clone());
+                    tx.execute(
+                        "UPDATE knowledge_base_ingestion_tasks SET resource_group=?1 WHERE id=?2",
+                        params![endpoint.resource_group, id],
+                    )
+                    .map_err(storage)?;
+                } else {
+                    tx.execute(
+                        "UPDATE knowledge_base_ingestion_tasks SET resource_group=?1 WHERE id=?2",
+                        params![
+                            claim
+                                .embedding_resource_group
+                                .as_ref()
+                                .map(|(group, _)| group),
+                            id
+                        ],
+                    )
+                    .map_err(storage)?;
+                }
+                task.attempt = task
+                    .attempt
+                    .checked_add(1)
+                    .ok_or_else(|| IngestionQueueError::Invalid("Attempt overflow".into()))?;
+                task.state = "RUNNING".into();
+                task.lease_owner = Some(claim.owner.clone());
+                task.lease_until_ms = claim.now_ms.saturating_add(claim.lease_ms);
+                task.error = None;
+                task.wait_reason = None;
+                write(&tx, &task)?;
+                document_state_validated(
+                    &tx,
+                    &task,
+                    match task.stage {
+                        IngestionStage::Parsing => "PARSING",
+                        IngestionStage::Chunking => "CHUNKING",
+                        IngestionStage::Embedding => "EMBEDDING",
+                        IngestionStage::Publishing => "PUBLISHING",
+                    },
+                    None,
+                )?;
+                tx.commit().map_err(storage)?;
+                return Ok(Some(task));
             }
-            task.attempt = task
-                .attempt
-                .checked_add(1)
-                .ok_or_else(|| IngestionQueueError::Invalid("Attempt overflow".into()))?;
-            task.state = "RUNNING".into();
-            task.lease_owner = Some(claim.owner.clone());
-            task.lease_until_ms = claim.now_ms.saturating_add(claim.lease_ms);
-            task.error = None;
-            task.wait_reason = None;
-            write(&tx, &task)?;
-            document_state(
-                &tx,
-                &task,
-                match task.stage {
-                    IngestionStage::Parsing => "PARSING",
-                    IngestionStage::Chunking => "CHUNKING",
-                    IngestionStage::Embedding => "EMBEDDING",
-                    IngestionStage::Publishing => "PUBLISHING",
-                },
-                None,
-            )?;
-            tx.commit().map_err(storage)?;
-            return Ok(Some(task));
+            if count < CANDIDATE_PAGE_SIZE {
+                break;
+            }
         }
         tx.commit().map_err(storage)?;
         Ok(None)

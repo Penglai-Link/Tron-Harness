@@ -240,7 +240,7 @@ async fn observability_collector_persists_sdk_metrics_and_real_process_samples()
     telemetry.flush().await;
     let store = telemetry.store.clone();
     let points = store
-        .metric_points(Some("test.requests".into()), 0, 100)
+        .metric_points(Some("test.requests".into()).into(), 0, 100)
         .await
         .unwrap();
     assert_eq!(points.total, 1);
@@ -249,7 +249,7 @@ async fn observability_collector_persists_sdk_metrics_and_real_process_samples()
     assert!(points.records[0].monotonic);
     assert_eq!(points.records[0].data["asInt"], "23");
     let hist = store
-        .metric_points(Some("test.duration".into()), 0, 100)
+        .metric_points(Some("test.duration".into()).into(), 0, 100)
         .await
         .unwrap();
     assert_eq!(hist.records[0].kind, "Histogram");
@@ -340,7 +340,7 @@ async fn observability_otlp_auth_validation_retries_and_profile_isolation() {
     }
     assert_eq!(
         a.store
-            .metric_points(Some("external.gauge".into()), 0, 15)
+            .metric_points(Some("external.gauge".into()).into(), 0, 15)
             .await
             .unwrap()
             .total,
@@ -348,7 +348,7 @@ async fn observability_otlp_auth_validation_retries_and_profile_isolation() {
     );
     assert_eq!(
         b.store
-            .metric_points(Some("external.gauge".into()), 0, 15)
+            .metric_points(Some("external.gauge".into()).into(), 0, 15)
             .await
             .unwrap()
             .total,

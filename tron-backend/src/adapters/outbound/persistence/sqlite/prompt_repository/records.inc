@@ -117,60 +117,74 @@ fn replace_translations(
 
 fn load_variables(
     connection: &Connection,
-    prompt_code: &str,
-) -> Result<Vec<PromptVariable>, PromptError> {
+) -> Result<std::collections::BTreeMap<String, Vec<PromptVariable>>, PromptError> {
     let mut statement = connection
         .prepare(
             "SELECT variable_name, variable_type, description, source_kind,
-                    managed_variable_key, runtime_provider FROM prompt_variables
-         WHERE prompt_code = ?1 ORDER BY position",
+                    managed_variable_key, runtime_provider, prompt_code FROM prompt_variables
+         ORDER BY prompt_code, position",
         )
         .map_err(storage_error)?;
-    statement
-        .query_map(params![prompt_code], |row| {
-            Ok(PromptVariable {
-                name: row.get(0)?,
-                variable_type: variable_type_from_storage(&row.get::<_, String>(1)?)?,
-                description: row.get(2)?,
-                source_kind: variable_source_kind_from_storage(&row.get::<_, String>(3)?)?,
-                managed_variable_key: row.get(4)?,
-                runtime_provider: row
-                    .get::<_, Option<String>>(5)?
-                    .map(|value| runtime_provider_from_storage(&value))
-                    .transpose()?,
-            })
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(6)?,
+                PromptVariable {
+                    name: row.get(0)?,
+                    variable_type: variable_type_from_storage(&row.get::<_, String>(1)?)?,
+                    description: row.get(2)?,
+                    source_kind: variable_source_kind_from_storage(&row.get::<_, String>(3)?)?,
+                    managed_variable_key: row.get(4)?,
+                    runtime_provider: row
+                        .get::<_, Option<String>>(5)?
+                        .map(|value| runtime_provider_from_storage(&value))
+                        .transpose()?,
+                },
+            ))
         })
         .map_err(storage_error)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)
+        .map_err(storage_error)?;
+    let mut grouped = std::collections::BTreeMap::<String, Vec<PromptVariable>>::new();
+    for (code, record) in rows {
+        grouped.entry(code).or_default().push(record);
+    }
+    Ok(grouped)
 }
 
 fn load_translations(
     connection: &Connection,
-    prompt_code: &str,
-) -> Result<Vec<PromptTranslation>, PromptError> {
+) -> Result<std::collections::BTreeMap<String, Vec<PromptTranslation>>, PromptError> {
     let mut statement = connection
         .prepare(
             "SELECT locale, display_name, prompt_body, description,
-                    translation_status, source_version, updated_at
-             FROM prompt_translations WHERE prompt_code = ?1 ORDER BY locale",
+                    translation_status, source_version, updated_at, prompt_code
+             FROM prompt_translations ORDER BY prompt_code, locale",
         )
         .map_err(storage_error)?;
-    statement
-        .query_map(params![prompt_code], |row| {
-            Ok(PromptTranslation {
-                locale: row.get(0)?,
-                display_name: row.get(1)?,
-                prompt_body: row.get(2)?,
-                description: row.get(3)?,
-                status: translation_status_from_storage(&row.get::<_, String>(4)?)?,
-                source_version: row.get(5)?,
-                updated_at: timestamp_from_millis(row.get(6)?),
-            })
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(7)?,
+                PromptTranslation {
+                    locale: row.get(0)?,
+                    display_name: row.get(1)?,
+                    prompt_body: row.get(2)?,
+                    description: row.get(3)?,
+                    status: translation_status_from_storage(&row.get::<_, String>(4)?)?,
+                    source_version: row.get(5)?,
+                    updated_at: timestamp_from_millis(row.get(6)?),
+                },
+            ))
         })
         .map_err(storage_error)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)
+        .map_err(storage_error)?;
+    let mut grouped = std::collections::BTreeMap::<String, Vec<PromptTranslation>>::new();
+    for (code, record) in rows {
+        grouped.entry(code).or_default().push(record);
+    }
+    Ok(grouped)
 }
 
 fn decode_prompt(row: &rusqlite::Row<'_>) -> rusqlite::Result<Prompt> {

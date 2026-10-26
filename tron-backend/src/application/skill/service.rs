@@ -39,17 +39,13 @@ pub struct InstallSkillCommand {
 pub trait SkillRegistryRepository: Send {
     fn list_registry_skills(&mut self) -> Result<Vec<RegistrySkill>, SkillError>;
     fn upsert_registry_skill(&mut self, skill: &RegistrySkill) -> Result<(), SkillError>;
+    fn upsert_registry_skills(&mut self, skills: &[RegistrySkill]) -> Result<(), SkillError>;
     fn delete_registry_skill(&mut self, skill_name: &str) -> Result<bool, SkillError>;
     fn list_assignments(&mut self) -> Result<Vec<AgentSkillAssignment>, SkillError>;
     fn replace_agent_skills(&mut self, agent: &str, names: &[String]) -> Result<(), SkillError>;
     fn replace_skill_agents(&mut self, name: &str, agents: &[String]) -> Result<(), SkillError>;
     fn initialize_agent_skills(&mut self, agent: &str) -> Result<(), SkillError>;
-    fn initialize_agents_skills(&mut self, agents: &[String]) -> Result<(), SkillError> {
-        for agent in agents {
-            self.initialize_agent_skills(agent)?;
-        }
-        Ok(())
-    }
+    fn initialize_agents_skills(&mut self, agents: &[String]) -> Result<(), SkillError>;
     fn delete_pack_skills(&mut self, pack: &str) -> Result<Vec<String>, SkillError>;
     fn get_rag_index_state(
         &mut self,

@@ -12,10 +12,13 @@ use common::{app, app_with_config, authenticated_request, response_json};
 #[tokio::test]
 async fn platform_prompt_variable_options_expose_registered_runtime_variables() {
     let router = app();
+    // The domain-discovery prompt's inventory variable is registered again, and
+    // surviving RUNTIME options such as the terminal `user_request` variable
+    // must still be exposed.
     let platform_runtime_response = authenticated_request(
         &router,
         Method::GET,
-        "/api/v1/admin/platform/variables/prompt-options?search=visible_domains",
+        "/api/v1/admin/platform/variables/prompt-options?search=user_request",
         None,
     )
     .await;
@@ -26,10 +29,33 @@ async fn platform_prompt_variable_options_expose_registered_runtime_variables() 
             .expect("platform runtime prompt options should be an array")
             .iter()
             .any(|option| {
-                option["key"] == json!("visible_domains")
+                option["key"] == json!("user_request")
                     && option["sourceKind"] == json!("RUNTIME")
             })
     );
+
+    let visible_domains_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/admin/platform/variables/prompt-options?search=visible_domains",
+        None,
+    )
+    .await;
+    assert_eq!(visible_domains_response.status(), StatusCode::OK);
+    let options = response_json(visible_domains_response).await;
+    let visible_domains = options["data"]
+        .as_array()
+        .expect("platform runtime prompt options should be an array")
+        .iter()
+        .find(|option| option["key"] == json!("visible_domains"))
+        .unwrap_or_else(|| panic!("visible_domains runtime option missing: {options}"));
+    assert_eq!(visible_domains["type"], json!("JSON"));
+    assert_eq!(visible_domains["sourceKind"], json!("RUNTIME"));
+    assert_eq!(
+        visible_domains["runtimeProvider"],
+        json!("AGENT_VISIBLE_DOMAINS")
+    );
+    assert_eq!(visible_domains["sourceLabel"], json!("Agent tool domains"));
 }
 
 #[tokio::test]

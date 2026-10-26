@@ -1156,6 +1156,28 @@ async fn personai_tool_context_rejects_logged_out_and_stale_account_snapshots() 
     assert!(state.lock().unwrap().steps.is_empty());
     server.abort();
 }
+
+#[tokio::test]
+async fn compaction_account_identity_survives_restart_but_credential_attempts_remain_fenced() {
+    let (service, _, server) = fixture().await;
+    let before = service.sdk_model_authorization_scope().unwrap();
+    let mut reopened = service.clone();
+    reopened.model_attempt_salt = Arc::new("a different process salt".into());
+    assert_eq!(before, reopened.sdk_model_authorization_scope().unwrap());
+    assert_ne!(service.sdk_credential_attempt("fixture-token"), reopened.sdk_credential_attempt("fixture-token"));
+    service.connection.call(|connection| {
+        connection.execute("UPDATE provider_connections SET person_ai_user_id='a-different-account' WHERE provider_code='PersonAi'", []).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    let account = reopened.sdk_model_authorization_scope().unwrap();
+    assert_ne!(before, account);
+    service.connection.call(|connection| {
+        connection.execute("UPDATE provider_connections SET server_base_url='https://different.example' WHERE provider_code='PersonAi'", []).unwrap();
+        Ok::<_, ModelProviderError>(())
+    }, || ModelProviderError::Storage).unwrap();
+    assert_ne!(account, reopened.sdk_model_authorization_scope().unwrap());
+    server.abort();
+}
 use std::collections::HashSet;
 
 #[tokio::test]

@@ -40,6 +40,32 @@ fn archive() -> Vec<u8> {
     }
     zip.finish().unwrap().into_inner()
 }
+/// Gateway mode: every request exposes exactly the stable pair.
+fn assert_stable_tools(request: &fw::ChatRequest) {
+    assert_eq!(request.tools.len(), 2);
+    assert!(
+        request
+            .tools
+            .iter()
+            .any(|t| t.id == "framework.tools.search" && t.call_name == "tool_search")
+    );
+    assert!(
+        request
+            .tools
+            .iter()
+            .any(|t| t.id == "framework.tools.execute" && t.call_name == "tool_execute")
+    );
+}
+
+/// Gateway-mode models address every wrapped tool through `tool_execute`.
+fn gateway_call(id: &str, tool: &str, arguments: serde_json::Value) -> ModelResponse {
+    ModelResponse::tool_call_with_id(
+        id,
+        "tool_execute",
+        json!({"tool": tool, "arguments": if matches!(tool,"a2ui_expand"|"a2ui_publish"|"a2ui_request_input"|"chat_ask_user") { arguments } else { json!({"items":[arguments]}) }}),
+    )
+}
+
 struct Client {
     mode: u8,
     step: AtomicUsize,
@@ -64,43 +90,35 @@ impl ModelClient for Client {
             let step = self.step.fetch_add(1, Ordering::SeqCst);
             self.requests.lock().unwrap().push(request.clone());
             Ok(match (self.mode, step) {
-                (0, 0) | (1, 0) => {
-                    ModelResponse::tool_call_with_id("load", "skill_load", json!({"name":"review"}))
-                }
-                (0, 1) => ModelResponse::tool_call_with_id(
+                (0, 0) | (1, 0) => gateway_call("load", "skill_load", json!({"name":"review"})),
+                (0, 1) => gateway_call(
                     "read",
                     "skill_read_resource",
                     json!({"name":"review","path":"guide.md"}),
                 ),
-                (6, 0) => ModelResponse::tool_call_with_id(
+                (6, 0) => gateway_call(
                     "tron-theme",
                     "skill_load",
                     json!({"name":"tron-theme-spec"}),
                 ),
-                (6, 1) => ModelResponse::tool_call_with_id(
+                (6, 1) => gateway_call(
                     "tron-resource",
                     "skill_read_resource",
                     json!({"name":"tron-theme-spec","path":"references/agent-ui.md"}),
                 ),
-                (4, 0) => ModelResponse::tool_call_with_id(
-                    "a2ui-skill",
-                    "skill_load",
-                    json!({"name":"a2ui-interface"}),
-                ),
-                (4, 1) => ModelResponse::tool_call_with_id("a2ui-expand", "a2ui_expand", json!({})),
-                (4, 2) => ModelResponse::tool_call_with_id(
+                (4, 0) => {
+                    gateway_call("a2ui-skill", "skill_load", json!({"name":"a2ui-interface"}))
+                }
+                (4, 1) => gateway_call("a2ui-expand", "a2ui_expand", json!({})),
+                (4, 2) => gateway_call(
                     "a2ui-report",
                     "a2ui_publish",
                     json!({"mode":"Display","messages":[{"version":"v0.9.1","createSurface":{"surfaceId":"report","catalogId":"https://eliteforge.dev/a2ui/v0.9.1/agent"}},{"version":"v0.9.1","updateComponents":{"surfaceId":"report","components":[{"id":"root","component":"Text","text":"Report ready"}]}}]}),
                 ),
-                (5, 0) => ModelResponse::tool_call_with_id(
-                    "unauthorized-skill",
-                    "skill_load",
-                    json!({"name":"review"}),
-                ),
-                (2, 0) | (3, 0) => {
-                    ModelResponse::tool_call_with_id("registered", "skill_load", json!({}))
+                (5, 0) => {
+                    gateway_call("unauthorized-skill", "skill_load", json!({"name":"review"}))
                 }
+                (2, 0) | (3, 0) => gateway_call("registered", "skill_load", json!({})),
                 _ => ModelResponse::final_output("done"),
             })
         })
@@ -252,19 +270,8 @@ async fn managed_skills_use_original_native_tools_with_product_acl_without_dupli
     let requests = client.requests.lock().unwrap();
     assert_eq!(requests.len(), 3);
     for request in requests.iter() {
-        assert_eq!(request.tools.len(), 2);
-        assert!(
-            request
-                .tools
-                .iter()
-                .any(|t| t.id == "skills.load" && t.call_name == "skill_load")
-        );
-        assert!(
-            request
-                .tools
-                .iter()
-                .any(|t| t.id == "skills.read_resource" && t.call_name == "skill_read_resource")
-        );
+        // The stable gateway pair replaces direct skill-tool exposure.
+        assert_stable_tools(request);
         assert!(
             request
                 .messages
@@ -285,7 +292,10 @@ async fn managed_skills_without_workspace_tool_acl_are_filtered_and_cannot_execu
     );
     let requests = client.requests.lock().unwrap();
     assert_eq!(requests.len(), 2);
-    assert!(requests.iter().all(|r| r.tools.is_empty()));
+    // No wrapped tools remain, but the gateway pair stays as infrastructure.
+    for r in requests.iter() {
+        assert_stable_tools(r);
+    }
     let tool = requests[1]
         .messages
         .iter()
@@ -299,8 +309,7 @@ async fn actual_registered_product_skill_override_remains_authoritative() {
     assert_eq!(selected, 1);
     assert_eq!(result.observations[0].output, "ACTUAL_REGISTERED_PRODUCT");
     let requests = client.requests.lock().unwrap();
-    assert_eq!(requests[0].tools.len(), 1);
-    assert_eq!(requests[0].tools[0].id, "tron.skill_load");
+    assert_stable_tools(&requests[0]);
 }
 #[tokio::test]
 async fn original_framework_backed_skill_registration_retains_executor_and_lease_close() {
@@ -311,8 +320,7 @@ async fn original_framework_backed_skill_registration_retains_executor_and_lease
         "ORIGINAL_REGISTERED_SDK_LEASE"
     );
     let requests = client.requests.lock().unwrap();
-    assert_eq!(requests[0].tools.len(), 1);
-    assert_eq!(requests[0].tools[0].id, "tron.skill_load");
+    assert_stable_tools(&requests[0]);
 }
 
 #[tokio::test]
@@ -325,7 +333,9 @@ async fn disabling_harness_keeps_managed_tool_acl_and_original_authorized_execut
             .contains("NATIVE_MANAGED_INSTRUCTIONS")
     );
     let requests = denied_client.requests.lock().unwrap();
-    assert!(requests.iter().all(|request| request.tools.is_empty()));
+    for request in requests.iter() {
+        assert_stable_tools(request);
+    }
     assert!(
         requests[1]
             .messages
@@ -352,17 +362,13 @@ async fn disabling_harness_keeps_managed_tool_acl_and_original_authorized_execut
             .contains("NATIVE_MANAGED_RESOURCE")
     );
     let requests = allowed_client.requests.lock().unwrap();
-    assert_eq!(requests[0].tools.len(), 2);
-    assert!(
-        requests[0]
-            .tools
-            .iter()
-            .any(|tool| tool.id == "skills.load")
-    );
+    // The gateway pair is the visible catalog; the skill tools execute as
+    // envelope arguments and stay out of request.tools.
+    assert_stable_tools(&requests[0]);
 }
 
 #[tokio::test]
-async fn disabling_tool_extension_denies_managed_tools_but_keeps_context_capability() {
+async fn disabling_tool_extension_denies_managed_tools_and_hides_tool_guidance() {
     let (result, client, _) = run_with_profile(0, true, false).await;
     assert_eq!(result.final_output, "done");
     assert_eq!(result.observations.len(), 2);
@@ -379,11 +385,11 @@ async fn disabling_tool_extension_denies_managed_tools_but_keeps_context_capabil
     let requests = client.requests.lock().unwrap();
     assert!(requests.iter().all(|request| request.tools.is_empty()));
     assert!(
-        requests.iter().any(|request| request
+        !requests.iter().any(|request| request
             .messages
             .iter()
             .any(|message| message.content.text().contains("<available_skills>"))),
-        "the managed context plugin must survive tool extension disablement"
+        "disabled tools must not leave skill-loading guidance in model context"
     );
     for request in requests.iter().skip(1) {
         assert!(
@@ -450,12 +456,14 @@ async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_i
         assert_eq!(result.final_output, "done");
         let requests = client.requests.lock().unwrap();
         let first = &requests[0];
+        // Gateway mode: a2ui tools are wrapped inventory, never directly
+        // exposed; the stable pair is present exactly when tools are enabled.
         assert_eq!(
             first
                 .tools
                 .iter()
-                .any(|tool| tool.call_name == "a2ui_expand"),
-            enabled
+                .any(|tool| tool.call_name == "tool_execute"),
+            tools_enabled
         );
         assert!(
             !first
@@ -477,7 +485,12 @@ async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_i
                     .iter()
                     .any(|o| o.output.contains("# A2UI interface"))
             );
-            assert!(requests[2].tools.iter().any(|t| t.id == "a2ui.publish"));
+            assert!(
+                requests[2]
+                    .tools
+                    .iter()
+                    .any(|t| t.id == "framework.tools.execute")
+            );
             let f = host.storage_framework().await.unwrap();
             assert!(
                 f.services()

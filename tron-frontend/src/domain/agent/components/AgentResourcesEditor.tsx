@@ -17,7 +17,7 @@ import { InternalAgentAssignmentDialog, type InternalAgentAssignmentKind } from 
 import { AgentPolicyFields, newAgentPolicyDraft, type AgentPolicyDraft } from "./AgentPolicyFields";
 
 export interface AgentResourcesEditorHandle { validate(): void; save(createdCode?: string): Promise<void> }
-const policyKeys = ["toolAssignmentMode", "toolExposureMode", "expandedDomainPersistenceMode", "maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const;
+const policyKeys = ["toolAssignmentMode", "maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const;
 const copy = (value: AgentPolicyDraft): AgentPolicyDraft => ({ ...value, selectedToolCodes: [...value.selectedToolCodes], selectedServerCodes: [...value.selectedServerCodes] });
 const sameCodes = (a: string[], b: string[]) => a.length === b.length && a.every((code) => b.includes(code));
 

@@ -7,7 +7,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
   test(`Draft workspace and knowledge access inside the agent editor in ${locale}`, async ({ page }, testInfo) => {
     await routeResourceUiShellApi(page); await seedResourceUiShell(page, locale);
     const zh = locale === "zh-CN";
-    const defaults = { builtIn:false, groupName:null as string | null, avatarId:"robot", description:"", rolePrompt:"", platformDefined:true, source:"PLATFORM_DEFAULT", toolAssignmentMode:"ALL_PLATFORM_TOOLS", mcpAccessMode:"DISABLED", toolExposureMode:"DOMAIN_DISCOVERY", expandedDomainPersistenceMode:"STICKY_EXPANDED", maxSteps:100,maxToolCalls:100,maxParallelToolCalls:4,selectedToolCodes:[],selectedServerCodes:[] };
+    const defaults = { builtIn:false, groupName:null as string | null, avatarId:"robot", description:"", rolePrompt:"", platformDefined:true, source:"PLATFORM_DEFAULT", toolAssignmentMode:"ALL_PLATFORM_TOOLS", mcpAccessMode:"DISABLED", maxSteps:100,maxToolCalls:100,maxParallelToolCalls:10,selectedToolCodes:[],selectedServerCodes:[] };
     let agents = [{...defaults,builtIn:true,agentCode:"main-agent",name:"Main Agent"}, {...defaults,builtIn:true,agentCode:"builtin-inspector",name:"Builtin Inspector",groupName:"Builtins"}];
     let groups: string[] = [];
     const calls: string[] = [];

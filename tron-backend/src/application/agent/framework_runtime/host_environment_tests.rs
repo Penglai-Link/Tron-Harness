@@ -212,3 +212,45 @@ async fn capability_selection_changes_preserve_conversation_storage() {
     assert!(!host.capability_state().0.contains_key("missing.package"));
     assert!(host.close().await.is_success());
 }
+
+
+#[tokio::test]
+async fn gateway_selection_and_prompt_enablement_follow_tool_extension() {
+    let host = FrameworkHost::temporary(None).unwrap();
+    host.prepare_artifacts().unwrap();
+    let (mut packs, extensions) = host.capability_state();
+    // It is infrastructure, so a stale private pack flag must not disable it.
+    packs.insert("framework.tools.discovery".into(), false);
+    let framework = host
+        .framework_builder(&packs, &extensions)
+        .await
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    for enabled in [true, false, true] {
+        host.set_extension_enabled("tool", enabled).await.unwrap();
+        let (_, extensions) = host.capability_state();
+        let selection = host
+            .main_selection(&framework, &packs, &extensions)
+            .unwrap();
+        let providers = selection.tool_providers.unwrap();
+        assert_eq!(
+            providers.iter().any(|id| id == "framework.tools.discovery"),
+            enabled
+        );
+        assert_eq!(host.gateway_enabled(), enabled);
+        if !enabled {
+            assert!(providers.is_empty());
+            assert!(
+                !selection
+                    .context_sources
+                    .unwrap()
+                    .iter()
+                    .any(|id| matches!(id.as_str(), "skills.default" | "agent.a2ui"))
+            );
+        }
+    }
+    assert!(framework.close().await.is_success());
+    assert!(host.close().await.is_success());
+}

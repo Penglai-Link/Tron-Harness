@@ -208,6 +208,7 @@ impl AgentInvocationService {
             self.auto_model_route.clone(),
             self.directory_inspector.clone(),
         )
+        .with_framework_host(self.framework_host.clone())
         .with_execution_identity(self.platform_scope, self.collaboration_owner.clone())
         .with_dude_work_context(self.dude_work_context.clone());
         match &self.auto_model_router {

@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
-    AgentKind, AgentMessage, AgentModelConfig, ExpandedDomainPersistenceMode, ToolDomainRecord,
-    ToolExposureMode, ToolObservation,
-};
+use super::{AgentKind, AgentMessage, AgentModelConfig, ToolObservation};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,23 +33,6 @@ pub struct EffectiveTool {
     pub input_schema: Value,
     pub skill_name: Option<String>,
     pub required_variable_keys: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentToolExposureState {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_exposure_mode: Option<ToolExposureMode>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expanded_domain_persistence_mode: Option<ExpandedDomainPersistenceMode>,
-    #[serde(default)]
-    pub visible_domains: Vec<ToolDomainRecord>,
-    /// Effective tool schemas withheld from the current model request until
-    /// their domain is expanded. This is an exposure concern, not permission.
-    #[serde(default)]
-    pub hidden_tools: Vec<EffectiveTool>,
-    #[serde(default)]
-    pub expanded_domain_codes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -187,7 +167,6 @@ pub struct AgentRunContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_assignment: Option<AgentToolAssignment>,
     #[serde(default)]
-    pub tool_exposure: AgentToolExposureState,
     pub execution_scope: AgentExecutionScope,
     pub limits: AgentRunLimits,
     /// Shared transcript snapshot. Clones across preparation, turn state and
@@ -263,25 +242,16 @@ impl AgentRunContext {
     }
 
     pub fn is_tool_authorized(&self, tool_name: &str) -> bool {
-        let explicitly_authorized = self
-            .authorized_tools()
+        self.authorized_tools()
             .iter()
-            .any(|tool| tool.tool_name == tool_name);
-        let hidden_but_policy_authorized = self.tool_exposure.tool_exposure_mode
-            == Some(ToolExposureMode::DomainDiscovery)
-            && self
-                .tool_exposure
-                .hidden_tools
-                .iter()
-                .any(|tool| tool.tool_name == tool_name);
-
-        explicitly_authorized || hidden_but_policy_authorized
+            .any(|tool| tool.tool_name == tool_name)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::agent::AgentModelProtocol;
     use serde_json::json;
 
     fn tool(name: &str, domain: &str) -> EffectiveTool {
@@ -296,8 +266,8 @@ mod tests {
     }
 
     #[test]
-    fn domain_discovery_hidden_tools_remain_policy_authorized_without_effective_snapshot() {
-        let context = AgentRunContext {
+    fn tool_authority_follows_the_effective_snapshot_then_the_catalog() {
+        let mut context = AgentRunContext {
             system_agent_fast_mode: false,
             collaboration_owner: None,
             agent_code: None,
@@ -308,11 +278,11 @@ mod tests {
             locale: "en-US".into(),
             request_id: None,
             stream_key: None,
-            agent_kind: super::super::AgentKind::React,
+            agent_kind: super::AgentKind::React,
             system_agent_session_id: None,
             model: AgentModelConfig {
                 model_code: "test".into(),
-                protocol: super::super::AgentModelProtocol::ChatCompletions,
+                protocol: AgentModelProtocol::ChatCompletions,
                 base_url: String::new(),
                 api_path: None,
                 api_key: String::new(),
@@ -330,14 +300,9 @@ mod tests {
             auto_model_route: None,
             variables: Vec::new(),
             skills: Vec::new(),
-            tools: vec![tool("discovery_expand_tool_domain", "discovery")],
+            tools: vec![tool("bash_exec", "bash")],
             effective_tools: Vec::new(),
             tool_assignment: None,
-            tool_exposure: AgentToolExposureState {
-                tool_exposure_mode: Some(ToolExposureMode::DomainDiscovery),
-                hidden_tools: vec![tool("bash_exec", "bash")],
-                ..AgentToolExposureState::default()
-            },
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
             messages: Vec::new().into(),
@@ -346,9 +311,14 @@ mod tests {
             started_at: String::new(),
         };
 
+        // Without an effective snapshot the catalog is authoritative.
         assert!(context.is_tool_authorized("bash_exec"));
-        assert!(context.is_tool_authorized("discovery_expand_tool_domain"));
-        assert!(!context.is_tool_authorized("workspace_delete"));
+        assert!(!context.is_tool_authorized("todo_update"));
+        // An effective snapshot narrows authority: only its tools stay
+        // authorized even when the catalog is broader.
+        context.effective_tools = vec![tool("todo_update", "planning")];
+        assert!(context.is_tool_authorized("todo_update"));
+        assert!(!context.is_tool_authorized("bash_exec"));
     }
 }
 

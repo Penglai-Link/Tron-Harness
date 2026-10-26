@@ -234,6 +234,14 @@ impl FrameworkHost {
         self.0.knowledge_bases.get().cloned()
     }
 
+    pub(crate) fn gateway_enabled(&self) -> bool {
+        Self::gateway_enabled_for(&self.0.extension_state.read().unwrap())
+    }
+
+    pub(super) fn gateway_enabled_for(extensions: &BTreeMap<String, bool>) -> bool {
+        extensions.get("tool").copied().unwrap_or(true)
+    }
+
     pub fn capability_state(&self) -> (BTreeMap<String, bool>, BTreeMap<String, bool>) {
         (
             self.0.capability_state.read().unwrap().clone(),
@@ -801,7 +809,13 @@ impl FrameworkHost {
                 if !providers.iter().any(|p| p == "tron.harness.tools") || !providers.iter().any(|p| p == "agent.a2ui") {
                     return Err(fw::AgentError::InvalidConfiguration("Soul onboarding requires Tron tools and A2UI".into()));
                 }
-                selection.tool_providers = Some(vec!["tron.harness.tools".into(), "tron.onboarding-ui".into()]);
+                selection.tool_providers = Some(vec![
+                    "tron.harness.tools".into(),
+                    "tron.onboarding-ui".into(),
+                    // Onboarding keeps the stable gateway pair for its model
+                    // requests; all other wrapped providers drop off.
+                    "framework.tools.discovery".into(),
+                ]);
                 selection.skills_from_host = false;
                 // A2UI negotiation uses SkillAccess even when no skill tools are leased.
                 selection.skills = Some(vec![eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into()]);

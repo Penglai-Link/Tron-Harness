@@ -23,7 +23,6 @@ const now = "2026-05-18T00:00:00Z";
 
 const runtimePromptVariableOptions: PromptVariableOption[] = [
   ["visible_domains", "JSON", "Visible tool domains and their operations.", "AGENT_VISIBLE_DOMAINS", "Agent tool domains"],
-  ["persistence_mode", "STRING", "How expanded domain tools are persisted.", "AGENT_DOMAIN_PERSISTENCE_MODE", "Agent domain persistence mode"],
   ["user_message", "STRING", "The first user message.", "CHAT_USER_MESSAGE", "Chat user message"],
   ["command", "STRING", "Command being analyzed.", "TERMINAL_EXPLAIN_COMMAND", "Terminal command"],
   ["output", "STRING", "Command output being analyzed.", "TERMINAL_EXPLAIN_OUTPUT", "Terminal output"],

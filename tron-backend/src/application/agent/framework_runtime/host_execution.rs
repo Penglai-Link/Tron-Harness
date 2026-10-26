@@ -88,7 +88,7 @@ impl FrameworkHost {
             || {
                 history
                     .iter()
-                    .take_while(|message| message.role == "system")
+                    .take_while(|message| super::super::messages::is_prompt_prefix(message))
                     .count()
             },
             |memory| memory.prompt_prefix.len().min(history.len()),
@@ -149,7 +149,12 @@ impl FrameworkHost {
                 .await
                 .map_err(map_error)?;
         }
+        let compact = current.plain_text_content().trim().eq_ignore_ascii_case("/compact")
+            || context.short_term_memory.as_ref().and_then(|memory| memory.input_metadata.as_ref())
+                .and_then(|metadata| metadata.get("contextCompaction"))
+                .and_then(serde_json::Value::as_bool).unwrap_or(false);
         let mut request = fw::RunRequest::new(&session, input);
+        if compact { request.extensions.insert(fw::ContextCompactionRequest); }
         let memory = context.short_term_memory.as_ref();
         request.annotations = memory.and_then(|input| input.input_metadata.as_ref())
             .and_then(|metadata| metadata.get("annotations"))
@@ -237,19 +242,16 @@ impl FrameworkHost {
             },
         );
         if let Some(prompts) = self.0.prompt_service.get() {
+            let mut keys = vec![
+                "agent.goal-judge", "memory.context-summary", "skills.guidance",
+                "a2ui.guidance", "agent.directory-guidance",
+            ];
+            if context.is_owning_dude() {
+                keys.extend_from_slice(super::super::dude_context::DudeGuidance::prompt_keys(false));
+                keys.extend_from_slice(super::super::dude_context::DudeGuidance::prompt_keys(true));
+            }
             let resolved = prompts.runtime_prompt_texts(
-                &[
-                    "agent.goal-judge",
-                    "memory.context-summary",
-                    "skills.guidance",
-                    "a2ui.guidance",
-                    "dude.identity-guidance",
-                    "dude.ui-page-context",
-                    "dude.soul-guidance",
-                    "dude.onboarding-language",
-                    "dude.initial-setup",
-                    "agent.directory-guidance",
-                ],
+                &keys,
                 &context.locale,
                 &std::collections::HashMap::new(),
             )
@@ -314,8 +316,6 @@ impl FrameworkHost {
         request.limits.max_steps = context.limits.max_steps as usize;
         request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
         request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
-        // Domain discovery controls schema exposure; the effective catalog owns authority.
-        request.limits.allow_unexposed_tools = true;
         request.limits.max_parallel_tools = context.limits.max_parallel_tool_calls.max(1) as usize;
         request.limits.max_context_messages = context
             .messages
@@ -369,6 +369,13 @@ impl FrameworkHost {
         } else {
             self.attach_skill_access(&context, &mut request).map_err(map_error)?;
         }
+        // Framework-pack bindings (bash/fs/search/terminal, collaboration,
+        // skills, a2ui, remote plugins) are minted inside the packs, so the
+        // host publishes this run's authorized taxonomy here instead of
+        // labelling each pack binding individually.
+        request
+            .extensions
+            .insert(super::super::tools::tool_group_labels(&context));
         request.extensions.insert(HostExecution {
             harness: harness.clone(),
             state: state.clone(),
@@ -400,6 +407,7 @@ impl FrameworkHost {
                 ))));
         }
         if let Some(control) = steering {
+            request.extensions.insert(fw::ContextCompactionObserverBinding(Arc::new(control.clone())));
             request
                 .extensions
                 .insert(fw::LiveInputSourceService(Arc::new(HostSteering {

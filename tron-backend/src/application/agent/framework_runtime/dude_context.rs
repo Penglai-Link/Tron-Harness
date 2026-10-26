@@ -1,4 +1,4 @@
-//! Live platform identity: never captured in the run prefix or summary cache.
+//! Live platform data and managed instructions, assembled through the shared layout.
 use crate::{
     application::dude::DudeService,
     domain::{agent::AgentRunContext, dude::SoulState},
@@ -16,14 +16,6 @@ pub(super) struct DudeContributor {
 impl fw::ContextContributor for DudeContributor {
     fn block_id(&self) -> &str {
         self.id
-    }
-
-    fn kind(&self) -> fw::ContextSourceKind {
-        if self.id == "runtime_identity" {
-            fw::ContextSourceKind::Instruction
-        } else {
-            fw::ContextSourceKind::Data
-        }
     }
 
     async fn contribute(
@@ -55,52 +47,26 @@ impl fw::ContextContributor for DudeContributor {
                     .and_then(|service| service.runtime_name(code, &ctx.workspace_code))
                     .unwrap_or_else(|| code.into())
             };
-            let mut guidance = managed_guidance(input, "dude.identity-guidance", &ctx.locale)?;
-            if let Some(soul) = &soul {
-                guidance.push('\n');
-                guidance.push_str(&managed_guidance(
-                    input,
-                    "dude.ui-page-context",
-                    &ctx.locale,
-                )?);
-                guidance.push('\n');
-                guidance.push_str(&managed_guidance(input, "dude.soul-guidance", &ctx.locale)?);
-                if soul.state != SoulState::Ready {
-                    guidance.push('\n');
-                    guidance.push_str(&managed_guidance(
-                        input,
-                        "dude.onboarding-language",
-                        &ctx.locale,
-                    )?);
-                }
-            }
             let data = json!({
                 "identity": {
                     "agentCode": code,
                     "name": name,
                     "nameConfirmed": soul.as_ref().is_none_or(|value| value.name_confirmed),
+                    "soulState": soul.as_ref().map(|value| value.state),
                     "kind": if own { "Dude" } else { "Agent" },
                 },
                 "currentSoul": soul.as_ref().map(|value| value.markdown.as_str()),
                 "interfaceLanguage": ctx.locale,
             });
-            let messages = vec![
-                fw::Message::system(guidance)
-                    .with_instruction_origin(fw::InstructionOrigin::Plugin),
-                fw::Message::user(format!("Current identity and soul data: {data}")),
-            ];
-            let mut tokens = 0usize;
-            for message in &messages {
-                tokens =
-                    tokens.saturating_add(input.estimator.message(input.model, message).await?);
-            }
-            if tokens > 8192 {
-                return Err(fw::ContextError::BudgetExceeded(
-                    "identity and soul exceed their protected budget".into(),
-                )
-                .into());
-            }
-            return Ok(fw::ContextBlock::instructions_with_data(self.id, messages));
+            let messages = vec![fw::Message::user(format!(
+                "Current identity and soul data: {data}"
+            ))];
+            return Ok(fw::ContextBlock {
+                id: self.id.into(),
+                messages,
+                trust: fw::ContextTrust::Data,
+                source_version: None,
+            });
         }
 
         let text = match self.id {
@@ -124,10 +90,6 @@ impl fw::ContextContributor for DudeContributor {
                 "userCode": ctx.user_code,
                 "workspaceCode": ctx.workspace_code,
                 "scope": ctx.execution_scope,
-                "toolCount": ctx.authorized_tools().len(),
-                "availableTools": ctx.authorized_tools().iter().take(60).map(|tool| tool.tool_name.as_str()).collect::<Vec<_>>(),
-                "domains": ctx.tool_exposure.visible_domains.iter().take(16).collect::<Vec<_>>(),
-                "limits": ctx.limits,
             })
             .to_string(),
             "dude_wakeup" if own => {
@@ -138,16 +100,89 @@ impl fw::ContextContributor for DudeContributor {
                     .ok_or_else(|| fw::AgentError::Run("Dude service unavailable".into()))?
                     .work_execution_context(code, ctx.user_code.as_deref().unwrap_or(""))
                     .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-                json!({
-                    "eventKind": memory.map(|value| &value.input_kind),
-                    "event": memory.and_then(|value| value.input_metadata.as_ref()),
-                    "relatedWork": work,
-                })
-                .to_string()
+                let event = trigger_event(memory.and_then(|value| value.input_metadata.as_ref()));
+                let mut data = serde_json::Map::new();
+                if let Some(event) = event {
+                    data.insert("event".into(), event);
+                }
+                if !work.is_empty() {
+                    data.insert("relatedWork".into(), json!(work));
+                }
+                if data.is_empty() {
+                    String::new()
+                } else {
+                    serde_json::Value::Object(data).to_string()
+                }
             }
             _ => String::new(),
         };
-        Ok(fw::ContextBlock::data(self.id, text))
+        Ok(fw::ContextBlock {
+            id: self.id.into(),
+            messages: if text.is_empty() { Vec::new() } else { vec![fw::Message::user(text)] },
+            trust: fw::ContextTrust::Data,
+            source_version: None,
+        })
+    }
+}
+
+// Ordinary user text already belongs to history. Transport controls (resume,
+// annotations and client capabilities) are not model-visible trigger data.
+fn trigger_event(metadata: Option<&serde_json::Value>) -> Option<serde_json::Value> {
+    let metadata = metadata?.as_object()?;
+    let source = metadata.get("source")?.as_str()?;
+    if source.is_empty() || source == "UserMessage" {
+        return None;
+    }
+    let event = ["source", "eventId", "taskCode", "payload"]
+        .into_iter()
+        .filter_map(|key| {
+            metadata.get(key).filter(|value| !value.is_null()).map(|value| (key.into(), value.clone()))
+        })
+        .collect::<serde_json::Map<_, _>>();
+    Some(serde_json::Value::Object(event))
+}
+
+pub(super) struct DudeGuidance {
+    pub locale: String,
+    pub onboarding: bool,
+}
+impl DudeGuidance {
+    pub(super) fn prompt_keys(onboarding: bool) -> &'static [&'static str] {
+        if onboarding {
+            &["dude.initial-setup"]
+        } else {
+            &[
+                "dude.identity-guidance",
+                "dude.ui-page-context",
+                "dude.event-guidance",
+                "dude.soul-guidance",
+                "dude.onboarding-language",
+            ]
+        }
+    }
+}
+#[async_trait::async_trait]
+impl fw::ContextContributor for DudeGuidance {
+    fn kind(&self) -> fw::ContextSourceKind {
+        fw::ContextSourceKind::Instruction
+    }
+    fn block_id(&self) -> &str {
+        "dude.guidance"
+    }
+    async fn contribute(
+        &self,
+        input: &fw::ContextInput<'_>,
+    ) -> Result<fw::ContextBlock, fw::AgentError> {
+        let keys = Self::prompt_keys(self.onboarding);
+        let messages = keys
+            .iter()
+            .map(|key| {
+                managed_guidance(input, key, &self.locale).map(|text| {
+                    fw::Message::system(text).with_instruction_origin(fw::InstructionOrigin::Plugin)
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(fw::ContextBlock::instructions(self.block_id(), messages))
     }
 }
 
@@ -160,4 +195,26 @@ fn managed_guidance(
         fw::AgentError::InvalidConfiguration(format!("bundled developer prompt is missing: {key}"))
     })?;
     fw::ManagedDeveloperPrompts::resolve(input.run, key, fallback)
+}
+
+#[cfg(test)]
+mod trigger_tests {
+    use super::*;
+
+    #[test]
+    fn user_input_and_transport_controls_do_not_create_a_wakeup() {
+        assert_eq!(trigger_event(None), None);
+        assert_eq!(trigger_event(Some(&json!({"annotations":[],"requestedSkills":[],"resume":[],"contextCompaction":false}))), None);
+        assert_eq!(trigger_event(Some(&json!({"source":"UserMessage","payload":{"content":"already in history"}}))), None);
+    }
+
+    #[test]
+    fn background_trigger_keeps_event_evidence_without_transport_controls() {
+        let event = trigger_event(Some(&json!({
+            "source":"ThreadFeedback", "eventId":"event-1", "taskCode":"task-1",
+            "payload":{"result":{"interactions":[{"id":"interaction-1"}]}},
+            "resume":[], "annotations":[], "contextCompaction":false,
+        }))).unwrap();
+        assert_eq!(event, json!({"source":"ThreadFeedback","eventId":"event-1","taskCode":"task-1","payload":{"result":{"interactions":[{"id":"interaction-1"}]}}}));
+    }
 }

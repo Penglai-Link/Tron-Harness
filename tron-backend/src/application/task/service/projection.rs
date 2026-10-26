@@ -24,60 +24,103 @@ pub(super) fn normalized_code_links(codes: Vec<String>) -> Vec<TaskCodeLink> {
         })
         .collect()
 }
-pub(super) fn parent_filter_matches(task: &Task, parent_task_code: Option<&str>) -> bool {
-    let Some(parent_filter) = parent_task_code.map(str::trim) else {
-        return true;
-    };
-    if parent_filter.is_empty() {
-        return true;
-    }
-    if parent_filter.eq_ignore_ascii_case("__ROOT__") {
-        return task.parent_task_code.is_none();
-    }
-    task.parent_task_code.as_deref() == Some(parent_filter)
+
+/// One adjacency index and one bottom-up progress calculation per projection.
+/// A large task tree must not rescan every task for every parent and child.
+pub(super) struct TaskHierarchy<'a> {
+    tasks: std::collections::BTreeMap<&'a str, &'a Task>,
+    children: std::collections::BTreeMap<&'a str, Vec<&'a Task>>,
+    progress: std::collections::BTreeMap<&'a str, u8>,
 }
-pub(super) fn summary_from_task(task: &Task, all_tasks: &[Task]) -> TaskSummary {
+impl<'a> TaskHierarchy<'a> {
+    pub(super) fn new(tasks: &'a [Task]) -> Self {
+        let mut hierarchy = Self {
+            tasks: tasks
+                .iter()
+                .map(|task| (task.task_code.as_str(), task))
+                .collect(),
+            children: Default::default(),
+            progress: Default::default(),
+        };
+        for task in tasks.iter().filter(|task| task.archived_at.is_none()) {
+            if let Some(parent) = task.parent_task_code.as_deref() {
+                hierarchy.children.entry(parent).or_default().push(task);
+            }
+        }
+        for task in tasks {
+            if hierarchy.progress.contains_key(task.task_code.as_str()) {
+                continue;
+            }
+            let mut stack = vec![(task, false)];
+            let mut visiting = HashSet::new();
+            while let Some((task, expanded)) = stack.pop() {
+                let code = task.task_code.as_str();
+                if hierarchy.progress.contains_key(code) {
+                    continue;
+                }
+                let children = hierarchy
+                    .children
+                    .get(code)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default();
+                if expanded {
+                    let total = children
+                        .iter()
+                        .map(|child| {
+                            usize::from(
+                                hierarchy
+                                    .progress
+                                    .get(child.task_code.as_str())
+                                    .copied()
+                                    .unwrap_or(child.progress),
+                            )
+                        })
+                        .sum::<usize>();
+                    let value = if children.is_empty() {
+                        task.progress
+                    } else {
+                        ((total + children.len() / 2) / children.len()) as u8
+                    };
+                    hierarchy.progress.insert(code, value);
+                    visiting.remove(code);
+                } else if visiting.insert(code) {
+                    stack.push((task, true));
+                    stack.extend(children.iter().map(|child| (*child, false)));
+                } else {
+                    // Persisted corruption must not recurse forever.
+                    hierarchy.progress.insert(code, task.progress);
+                }
+            }
+        }
+        hierarchy
+    }
+    pub(super) fn task(&self, code: &str) -> Option<&Task> {
+        self.tasks.get(code).copied()
+    }
+    pub(super) fn children(&self, code: &str) -> &[&Task] {
+        self.children
+            .get(code)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+    pub(super) fn progress(&self, task: &Task) -> u8 {
+        self.progress
+            .get(task.task_code.as_str())
+            .copied()
+            .unwrap_or(task.progress)
+    }
+}
+pub(super) fn summary_from_task(task: &Task, hierarchy: &TaskHierarchy<'_>) -> TaskSummary {
     TaskSummary {
         task_code: task.task_code.clone(),
         title: task.title.clone(),
         status: task.status.clone(),
         priority: task.priority,
-        progress: effective_progress(task, all_tasks),
+        progress: hierarchy.progress(task),
         task_type: task.task_type,
     }
 }
-pub(super) fn effective_progress(task: &Task, all_tasks: &[Task]) -> u8 {
-    let active_subtasks = all_tasks
-        .iter()
-        .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
-        .filter(|candidate| candidate.archived_at.is_none())
-        .collect::<Vec<_>>();
-    if active_subtasks.is_empty() {
-        return task.progress;
-    }
-    let total = active_subtasks
-        .iter()
-        .map(|candidate| usize::from(effective_progress(candidate, all_tasks)))
-        .sum::<usize>();
-    ((total + (active_subtasks.len() / 2)) / active_subtasks.len()) as u8
-}
-pub(super) fn matches_search(task: &Task, search: Option<&str>) -> bool {
-    let Some(search) = search.map(str::trim).filter(|value| !value.is_empty()) else {
-        return true;
-    };
-    let search = search.to_lowercase();
-    [
-        task.task_code.as_str(),
-        task.workspace_code.as_deref().unwrap_or_default(),
-        task.title.as_str(),
-        task.description.as_deref().unwrap_or_default(),
-        task.execution_result.as_deref().unwrap_or_default(),
-        task.source_url.as_deref().unwrap_or_default(),
-    ]
-    .join(" ")
-    .to_lowercase()
-    .contains(&search)
-}
+
 pub(super) fn map_workspace_error(error: WorkspaceError) -> TaskError {
     match error {
         WorkspaceError::NotFound | WorkspaceError::ArchivedMutationDenied => {
@@ -91,5 +134,73 @@ pub(super) fn map_app_error(error: AppError) -> TaskError {
     match error {
         AppError::StorageFailure => TaskError::StorageFailure,
         _ => TaskError::InvalidApp,
+    }
+}
+
+#[cfg(test)]
+mod hierarchy_tests {
+    use super::*;
+    fn task(code: String, parent: Option<String>, progress: u8) -> Task {
+        Task {
+            id: crate::shared::id::SnowflakeId::new(1),
+            task_code: code,
+            workspace_code: None,
+            owner_dude_code: None,
+            due_at: None,
+            planned_start_at: None,
+            next_followup_at: None,
+            work_session_code: None,
+            schedule_version: 0,
+            parent_task_code: parent,
+            title: "task".into(),
+            description: None,
+            execution_result: None,
+            flow_code: "default".into(),
+            status: "todo".into(),
+            previous_status: None,
+            priority: TaskPriority::Medium,
+            task_type: TaskType::General,
+            source_type: TaskSourceType::Internal,
+            source_url: None,
+            agent_code: "main-agent".into(),
+            model_code: None,
+            progress,
+            created_at: String::new(),
+            updated_at: String::new(),
+            archived_at: None,
+        }
+    }
+    #[test]
+    fn deep_task_trees_are_computed_without_recursive_rescans() {
+        let mut tasks = (0..10_000)
+            .map(|i| {
+                task(
+                    format!("task-{i}"),
+                    if i > 0 {
+                        Some(format!("task-{}", i - 1))
+                    } else {
+                        None
+                    },
+                    if i == 9_999 { 73 } else { 5 },
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut archived = task("archived".into(), Some("task-0".into()), 100);
+        archived.archived_at = Some("archived".into());
+        tasks.push(archived);
+        let hierarchy = TaskHierarchy::new(&tasks);
+        assert_eq!(hierarchy.progress(&tasks[0]), 73);
+        assert_eq!(hierarchy.children("task-0").len(), 1);
+        assert!(
+            tasks[..10_000]
+                .iter()
+                .all(|task| hierarchy.progress(task) == 73)
+        );
+        let cyclic = vec![
+            task("a".into(), Some("b".into()), 10),
+            task("b".into(), Some("a".into()), 20),
+        ];
+        let hierarchy = TaskHierarchy::new(&cyclic);
+        assert_eq!(hierarchy.children("a").len(), 1);
     }
 }

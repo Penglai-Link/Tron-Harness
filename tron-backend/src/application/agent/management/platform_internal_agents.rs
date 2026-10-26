@@ -298,12 +298,6 @@ impl AgentManagementService {
             if let Some(value) = command.tool_assignment_mode {
                 config.tool_assignment_mode = value;
             }
-            if let Some(value) = command.tool_exposure_mode {
-                config.tool_exposure_mode = value;
-            }
-            if let Some(value) = command.expanded_domain_persistence_mode {
-                config.expanded_domain_persistence_mode = value;
-            }
             if let Some(value) = command.max_steps {
                 config.max_steps = value;
             }
@@ -405,8 +399,6 @@ fn platform_view(
         source: InternalAgentPolicySource::PlatformDefault,
         tool_assignment_mode: config.tool_assignment_mode,
         mcp_access_mode: config.mcp_access_mode,
-        tool_exposure_mode: config.tool_exposure_mode,
-        expanded_domain_persistence_mode: config.expanded_domain_persistence_mode,
         max_steps: config.max_steps,
         max_tool_calls: config.max_tool_calls,
         max_parallel_tool_calls: config.max_parallel_tool_calls,
@@ -432,8 +424,6 @@ fn default_config(
         group_name: definition.group_name,
         tool_assignment_mode: definition.tool_assignment_mode,
         mcp_access_mode: definition.mcp_access_mode,
-        tool_exposure_mode: definition.tool_exposure_mode,
-        expanded_domain_persistence_mode: definition.expanded_domain_persistence_mode,
         max_steps: definition.max_steps,
         max_tool_calls: definition.max_tool_calls,
         max_parallel_tool_calls: definition.max_parallel_tool_calls,

@@ -53,7 +53,12 @@ pub struct MoveWorkspaceCommand {
     pub parent_workspace_code: Option<String>,
 }
 
+pub trait WorkspaceReadRepository: Send + Sync {
+    fn is_active(&self, workspace_code: &str) -> Result<bool, WorkspaceError>;
+}
+
 pub trait WorkspaceRepository: Send {
+    fn reader(&self) -> Arc<dyn WorkspaceReadRepository>;
     fn list_workspaces(&mut self) -> Result<Vec<Workspace>, WorkspaceError>;
     fn next_id(&mut self) -> Result<i64, WorkspaceError>;
     fn create_workspace(&mut self, workspace: &Workspace) -> Result<(), WorkspaceError>;
@@ -73,6 +78,7 @@ pub trait WorkspaceRepository: Send {
 #[derive(Clone)]
 pub struct WorkspaceService {
     repository: Arc<Mutex<Box<dyn WorkspaceRepository>>>,
+    reader: Arc<dyn WorkspaceReadRepository>,
     event_bus: EventBusHandle,
 }
 
@@ -85,7 +91,9 @@ impl WorkspaceService {
         repository: impl WorkspaceRepository + 'static,
         event_bus: EventBusHandle,
     ) -> Self {
+        let reader = repository.reader();
         Self {
+            reader,
             repository: Arc::new(Mutex::new(Box::new(repository))),
             event_bus,
         }
@@ -104,7 +112,7 @@ impl WorkspaceService {
     }
 
     pub fn workspace_is_active(&self, workspace_code: &str) -> Result<bool, WorkspaceError> {
-        Ok(self.get_workspace_record(workspace_code)?.status == WorkspaceStatus::Active)
+        self.reader.is_active(workspace_code)
     }
 
     pub fn ensure_default_workspace(

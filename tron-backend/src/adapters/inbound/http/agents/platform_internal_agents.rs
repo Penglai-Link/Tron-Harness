@@ -9,8 +9,8 @@ use crate::{
         CreateWorkspaceInternalAgentCommand, UpdateWorkspaceInternalAgentDefinitionCommand,
     },
     domain::agent::{
-        AgentManagementError, ExpandedDomainPersistenceMode, InternalAgentPolicySource,
-        InternalAgentToolPolicy, McpAccessMode, ToolAssignmentMode, ToolExposureMode,
+        AgentManagementError, InternalAgentPolicySource,
+        InternalAgentToolPolicy, McpAccessMode, ToolAssignmentMode,
     },
     response::ApiResponse,
 };
@@ -78,8 +78,6 @@ pub struct PlatformInternalAgentView {
     built_in: bool,
     source: InternalAgentPolicySource,
     tool_assignment_mode: ToolAssignmentMode,
-    tool_exposure_mode: ToolExposureMode,
-    expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
     mcp_access_mode: McpAccessMode,
     max_steps: u32,
     max_tool_calls: u32,
@@ -106,8 +104,6 @@ impl From<InternalAgentToolPolicy> for PlatformInternalAgentView {
             built_in: record.built_in,
             source: record.source,
             tool_assignment_mode: record.tool_assignment_mode,
-            tool_exposure_mode: record.tool_exposure_mode,
-            expanded_domain_persistence_mode: record.expanded_domain_persistence_mode,
             mcp_access_mode: record.mcp_access_mode,
             max_steps: record.max_steps,
             max_tool_calls: record.max_tool_calls,
@@ -144,8 +140,6 @@ endpoint_response!(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdatePlatformInternalAgentPolicyRequest {
     tool_assignment_mode: Option<String>,
-    tool_exposure_mode: Option<String>,
-    expanded_domain_persistence_mode: Option<String>,
     max_steps: Option<u32>,
     max_tool_calls: Option<u32>,
     max_parallel_tool_calls: Option<u32>,
@@ -239,8 +233,6 @@ pub async fn update_platform_internal_agent_policy(
     let command =
         match super::handler::to_internal_agent_policy_command(UpdateInternalAgentPolicyRequest {
             tool_assignment_mode: request.tool_assignment_mode,
-            tool_exposure_mode: request.tool_exposure_mode,
-            expanded_domain_persistence_mode: request.expanded_domain_persistence_mode,
             max_steps: request.max_steps,
             max_tool_calls: request.max_tool_calls,
             max_parallel_tool_calls: request.max_parallel_tool_calls,

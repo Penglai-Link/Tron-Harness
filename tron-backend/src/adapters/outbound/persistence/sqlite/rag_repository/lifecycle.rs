@@ -3,7 +3,7 @@ use rusqlite::params;
 
 use crate::{
     application::rag::{
-        RagConfigRepository, RagDeactivateSourceCommand, RagSourceLifecycleRepository,
+        RagDeactivateSourceCommand, RagSourceLifecycleRepository,
     },
     domain::rag::RagError,
 };

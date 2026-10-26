@@ -4,7 +4,12 @@ use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
 
 impl DashboardRepository for TelemetryProjection {
     fn dashboard(&self, workspace: &str) -> Result<ObservabilityDashboard, ObservabilityError> {
-        let q = TraceQuery { filters: Default::default(), category: None, sorts: Vec::new(), sort_by: Default::default(), sort_direction: Default::default(),
+        let q = TraceQuery {
+            filters: Default::default(),
+            category: None,
+            sorts: Vec::new(),
+            sort_by: Default::default(),
+            sort_direction: Default::default(),
             workspace_code: workspace.into(),
             session_code: None,
             trace_id: None,
@@ -13,82 +18,24 @@ impl DashboardRepository for TelemetryProjection {
         };
         let runtime = self.runtime_metrics()?;
         let sampled_at = now();
-        let (
-            trace_count,
-            failed_trace_count,
-            running_trace_count,
-            input_tokens,
-            output_tokens,
-            average_duration_ms,
-            p95_duration_ms,
-            recent_requests,
-        ) = blocking(async {
-            let trace_filter = filter(&q);
-            let mut buckets = request_buckets(sampled_at);
-            let mut running = 0;
-            let mut failed = 0;
-            let mut durations = Vec::new();
-            let mut offset = 0;
-            let total = loop {
-                let page = self
-                    .store
-                    .query_traces(trace_filter.clone(), offset, 5000)
-                    .await
-                    .map_err(failure)?;
-                let total = page.total;
-                let count = page.records.len();
-                for trace in page.records {
-                    let status = trace_status(&trace);
-                    running += usize::from(status == "Running");
-                    failed += usize::from(status == "Error");
-                    record_request(
-                        &mut buckets,
-                        trace.started_at,
-                        status == "Error",
-                        sampled_at,
-                    );
-                    if let Some(ended_at) = trace.ended_at {
-                        durations.push((ended_at - trace.started_at).max(0) as f64);
-                    }
-                }
-                offset += count;
-                if offset >= total || count == 0 {
-                    break total;
-                }
-            };
-            let sums = self
-                .store
-                .sum_span_attributes(
-                    trace_filter,
-                    "agent.model".into(),
-                    vec![
-                        "gen_ai.usage.input_tokens".into(),
-                        "gen_ai.usage.output_tokens".into(),
-                    ],
-                )
-                .await
-                .map_err(failure)?;
-            durations.sort_by(f64::total_cmp);
-            let average = if durations.is_empty() {
-                0.
-            } else {
-                durations.iter().sum::<f64>() / durations.len() as f64
-            };
-            let p95 = durations
-                .get((durations.len() * 95).div_ceil(100).saturating_sub(1))
-                .copied()
-                .unwrap_or(0.);
-            Ok::<_, ObservabilityError>((
-                total,
-                failed,
-                running,
-                *sums.get("gen_ai.usage.input_tokens").unwrap_or(&0),
-                *sums.get("gen_ai.usage.output_tokens").unwrap_or(&0),
-                average,
-                p95,
-                buckets,
-            ))
-        })?;
+        let (stats, sums) = self.statistics(&q, Some(sampled_at))?;
+        let trace_count = stats.total;
+        let failed_trace_count = *stats.classified.get("error").unwrap_or(&0);
+        let running_trace_count = *stats.classified.get("running").unwrap_or(&0);
+        let input_tokens = *sums.get("gen_ai.usage.input_tokens").unwrap_or(&0);
+        let output_tokens = *sums.get("gen_ai.usage.output_tokens").unwrap_or(&0);
+        let average_duration_ms = stats.average_duration_ms;
+        let p95_duration_ms = stats.p95_duration_ms;
+        let mut recent_requests = request_buckets(sampled_at);
+        for bucket in stats.buckets {
+            if let Some(target) = recent_requests
+                .iter_mut()
+                .find(|b| b.started_at == bucket.started_at)
+            {
+                target.requests = bucket.total;
+                target.errors = *bucket.classified.get("error").unwrap_or(&0);
+            }
+        }
         let metric_point_count = if workspace.is_empty() {
             runtime.metric_point_count
         } else {
@@ -130,6 +77,7 @@ fn request_buckets(at: i64) -> Vec<RequestBucket> {
         })
         .collect()
 }
+#[cfg(test)]
 fn record_request(buckets: &mut [RequestBucket], started: i64, error: bool, at: i64) {
     if started > at {
         return;

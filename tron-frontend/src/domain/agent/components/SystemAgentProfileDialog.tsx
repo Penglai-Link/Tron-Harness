@@ -10,6 +10,7 @@ import { SelectItem } from "@/components/ui/select";
 import { Combobox, ComboboxInput, ComboboxPopup, ComboboxList, ComboboxItem, ComboboxEmpty } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PlatformSystemAgentRecord, SystemAgentProfilePayload } from "../model";
 
@@ -105,14 +106,13 @@ export function SystemAgentProfileDialog({ agents, record, onSave, onClose }: {
             {effortOptions.map((value) => <SelectItem key={value} value={value}>{t(`common:reasoningEffort.values.${value}`)}</SelectItem>)}
           </SelectInput>
         </Field>}
-        {isCodex && <div className="space-y-2">
-          <div className="flex items-center justify-between gap-4">
+        {isCodex && <div className="flex items-center justify-between gap-4">
+          <div className="inline-flex items-center gap-1.5">
             <label htmlFor="system-agent-fast-mode" className="text-sm font-medium">{text("fastMode")}</label>
-            <Switch id="system-agent-fast-mode" checked={fastMode} disabled={busy} onCheckedChange={setFastMode} aria-describedby="system-agent-fast-mode-help" />
+            <InfoTooltip ariaLabel={text("fastMode")}>{text("fastModeHelp")}</InfoTooltip>
           </div>
-          <p id="system-agent-fast-mode-help" className="text-xs text-[var(--color-on-surface-variant)]">{text("fastModeHelp")}</p>
+          <Switch id="system-agent-fast-mode" checked={fastMode} disabled={busy} onCheckedChange={setFastMode} />
         </div>}
-        <p className="text-xs text-[var(--color-on-surface-variant)]">{text("help")}</p>
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{text("cancel")}</Button>
           <Button type="submit" disabled={busy || !codeValid || !name.trim() || !modelValid || !baseAgentCode}>{text(busy ? "saving" : "save")}</Button>

@@ -17,7 +17,7 @@ pub(crate) fn sdk_config(config: &AgentModelConfig) -> Result<sdk::AgentModelCon
     Ok(config)
 }
 
-fn native_request(admitted: &fw::ChatRequest) -> Result<sdk::ModelRequest, String> {
+pub(crate) fn native_request(admitted: &fw::ChatRequest) -> Result<sdk::ModelRequest, String> {
     let messages = admitted
         .messages
         .iter()

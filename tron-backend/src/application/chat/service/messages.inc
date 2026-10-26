@@ -60,6 +60,7 @@ impl ChatService {
         eliteforge_agent_core::validate_annotations(&command.annotations).map_err(|_| ChatSendError::Chat(ChatError::AnnotationsInvalid))?;
         let annotations = command.annotations;
         let content = normalized_optional(command.content).unwrap_or_default();
+        let context_compaction = content.trim().eq_ignore_ascii_case("/compact");
         let attachments =
             normalize_chat_attachments(command.attachments).map_err(ChatSendError::Chat)?;
         if content.is_empty() && attachments.is_empty() && annotations.is_empty() && command.resume.is_empty() {
@@ -120,6 +121,7 @@ impl ChatService {
             session_code,
             command.run_code.clone(),
             &effective_agent_code,
+            context_compaction,
         )?;
         let run_code = reservation.run_code;
         let runtime_adapter_key = reservation.runtime_adapter_key;
@@ -150,6 +152,7 @@ impl ChatService {
         };
         if should_generate_title
             && !content.is_empty()
+            && !context_compaction
             && let Some(llm_runtime) = llm_runtime
         {
             let chat_service = self.clone();
@@ -203,7 +206,7 @@ impl ChatService {
             page_context: command.page_context,
             supports_user_input_requests,
             transcript_input_kind: None,
-            transcript_input_metadata: Some(json!({"annotations": annotations, "requestedSkills": requested_skills, "resume": command.resume, "a2uiClientCapabilities":command.client_capabilities.and_then(|c|c.a2ui),"a2uiMetadata":command.a2ui_metadata})),
+            transcript_input_metadata: Some(json!({"annotations": annotations, "requestedSkills": requested_skills, "resume": command.resume, "a2uiClientCapabilities":command.client_capabilities.and_then(|c|c.a2ui),"a2uiMetadata":command.a2ui_metadata,"contextCompaction": context_compaction})),
         };
         let mut run = if let Some(sink) = sink {
             agent
@@ -272,7 +275,7 @@ impl ChatService {
                 &updated_at,
             )
             .map_err(ChatSendError::Chat)?;
-        if !awaiting_user_input && let Some(short_term_memory) = agent.short_term_memory() {
+        if !awaiting_user_input && !context_compaction && let Some(short_term_memory) = agent.short_term_memory() {
             let goal_result = self
                 .run_goal_continuations(
                     session_code,

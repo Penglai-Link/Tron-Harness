@@ -33,6 +33,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
   const electronPaths = new Map(), startupEvents = [], configOptions = [];
   let quitCalls = 0, killCalls = 0;
   let loginEnabled = true;
+  let notifyStartupChange = () => {};
   const handlers = new Map();
   const mainDir = path.resolve(__dirname, "../main");
   const helpers = require("../main/helpers.cjs");
@@ -116,10 +117,26 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
       };
       if (name === "./updater.cjs") return { createUpdater: () => ({}), UPDATE_STATUS_EVENT: "updater-status" };
       if (name === "./linux-desktop.cjs") return {
-        createLinuxDesktop: options => require("../main/linux-desktop.cjs").createLinuxDesktop({
-          ...options, startup: scenario.packaged ? linuxStartup : null,
-          hasTrayHost: () => !scenario.noTrayHost
-        })
+        createLinuxDesktop: options => {
+          const desktop = require("../main/linux-desktop.cjs").createLinuxDesktop({
+            ...options, startup: scenario.packaged ? linuxStartup : null,
+            hasTrayHost: () => !scenario.noTrayHost
+          });
+          const initialize = desktop.initialize;
+          desktop.initialize = () => {
+            const watch = fs.watch;
+            // Deliver the filesystem boundary explicitly; macOS can coalesce
+            // rapid writes to the simulated Linux startup file.
+            fs.watch = (_directory, _options, listener) => {
+              notifyStartupChange = () => listener("change", path.basename(linuxStartup.filename));
+              const watcher = new EventEmitter();
+              watcher.close = () => {};
+              return watcher;
+            };
+            try { initialize(); } finally { fs.watch = watch; }
+          };
+          return desktop;
+        }
       };
       return require(name.startsWith(".") ? path.resolve(mainDir, name) : name);
     }
@@ -194,6 +211,7 @@ test(`bootstrap and lifecycle: ${scenario.name}`, async () => {
         // Desktop startup settings modify the same file; the menu follows it.
         const menuUpdated = once(tray, "menu-updated");
         linuxStartup.setEnabled(true);
+        notifyStartupChange();
         await menuUpdated;
         assert.equal(loginCalls.length, 0, "Linux must not use Windows login APIs");
       }

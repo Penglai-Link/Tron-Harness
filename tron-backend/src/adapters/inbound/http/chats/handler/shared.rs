@@ -159,7 +159,7 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
             "archived chat sessions cannot be changed or resumed".into()
         }
         ChatSendError::Chat(ChatError::SessionRunActive) => {
-            "running chat sessions cannot be archived".into()
+            "this operation is unavailable while the chat session is running".into()
         }
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "session title is required".into(),
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "workspaceCode is required".into(),

@@ -30,12 +30,12 @@ use crate::{
     config::SystemAgentConfig,
     domain::{
         agent::{
-            AgentManagementError, AgentRuntimeType, ExpandedDomainPersistenceMode,
-            InternalAgentPolicySource, InternalAgentToolPolicy, ManagedAgentSource,
-            ManagedAgentType, ManagedSystemAgentRecord, McpAccessMode, PlatformInternalAgentConfig,
+            AgentManagementError, AgentRuntimeType, InternalAgentPolicySource,
+            InternalAgentToolPolicy, ManagedAgentSource, ManagedAgentType,
+            ManagedSystemAgentRecord, McpAccessMode, PlatformInternalAgentConfig,
             RuntimeAdapterCapabilityRecord, SystemAgentModelRecord, SystemAgentRegistryEntry,
             SystemAgentStatus, SystemAgentSyncResult, ToolAssignmentMode, ToolCatalogRecord,
-            ToolDomainRecord, ToolExposureMode, WorkspaceInternalAgentDefinition,
+            ToolDomainRecord, WorkspaceInternalAgentDefinition,
             WorkspaceInternalAgentMcpServerAssignment, WorkspaceInternalAgentPolicy,
             WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
         },
@@ -47,8 +47,6 @@ use crate::{
 #[derive(Debug, Clone, Default)]
 pub struct UpdateWorkspaceInternalAgentPolicyCommand {
     pub tool_assignment_mode: Option<ToolAssignmentMode>,
-    pub tool_exposure_mode: Option<ToolExposureMode>,
-    pub expanded_domain_persistence_mode: Option<ExpandedDomainPersistenceMode>,
     pub max_steps: Option<u32>,
     pub max_tool_calls: Option<u32>,
     pub max_parallel_tool_calls: Option<u32>,
@@ -191,18 +189,7 @@ pub trait AgentManagementRepository: Send {
         &mut self,
         workspace: &str,
         agents: &[String],
-    ) -> Result<Vec<String>, AgentManagementError> {
-        let mut assigned = Vec::new();
-        for agent in agents {
-            if self
-                .agent_workspace_grants(agent)?
-                .is_none_or(|grants| grants.iter().any(|code| code == workspace))
-            {
-                assigned.push(agent.clone());
-            }
-        }
-        Ok(assigned)
-    }
+    ) -> Result<Vec<String>, AgentManagementError>;
     fn replace_agent_workspace_grants(
         &mut self,
         _agent: &str,

@@ -1,9 +1,9 @@
-//! Live authorized Agent metadata. Budget reduction keeps the complete identity index.
+//! Complete live authorized Agent metadata; supplied through the configured keep policy.
 use super::super::host::collaboration::Runtime;
 use eliteforge_agent_core as fw;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Entry {
     agent_code: String,
@@ -12,7 +12,7 @@ struct Entry {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     responsibility: String,
 }
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize)]
 struct Directory {
     agents: Vec<Entry>,
 }
@@ -43,7 +43,7 @@ impl fw::ContextContributor for AgentDirectoryContributor {
                 .map(|agent| Entry {
                     agent_code: agent.agent_code,
                     name: agent.name,
-                    responsibility: agent.description.chars().take(200).collect(),
+                    responsibility: agent.description,
                 })
                 .collect(),
         };
@@ -53,49 +53,5 @@ impl fw::ContextContributor for AgentDirectoryContributor {
             source_version: None,
             messages: vec![directory.message()?],
         })
-    }
-}
-
-/// Shorten responsibilities uniformly; never drop an authorized code or name.
-pub(super) struct AgentDirectoryReducer;
-#[async_trait::async_trait]
-impl fw::ContextReducer for AgentDirectoryReducer {
-    async fn reduce(
-        &self,
-        input: &fw::ContextReductionInput<'_>,
-    ) -> Result<Vec<fw::Message>, fw::AgentError> {
-        input.run.check_cancelled()?;
-        let original = input.block.messages.first().ok_or_else(|| {
-            fw::AgentError::InvalidConfiguration("Agent directory snapshot is missing".into())
-        })?;
-        let mut directory: Directory = serde_json::from_str(&original.content.text())
-            .map_err(|error| fw::AgentError::InvalidConfiguration(error.to_string()))?;
-        let target = input
-            .compression
-            .map_or(input.budget.max_tokens, |compression| {
-                compression.target_tokens.min(input.budget.max_tokens)
-            });
-        for detail_limit in [200, 96, 64, 32, 16, 0] {
-            input.run.check_cancelled()?;
-            for entry in &mut directory.agents {
-                entry.responsibility = entry.responsibility.chars().take(detail_limit).collect();
-            }
-            let message = directory.message()?;
-            if input.budget.max_messages > 0
-                && input.estimator.message(input.model, &message).await? <= target
-            {
-                return Ok(vec![message]);
-            }
-        }
-        let message = directory.message()?;
-        if input.budget.max_messages > 0
-            && input.estimator.message(input.model, &message).await? <= target
-        {
-            return Ok(vec![message]);
-        }
-        Err(fw::ContextError::BudgetExceeded(format!(
-            "Agent directory budget cannot fit all {} authorized Agent codes; increase the directory budget",
-            directory.agents.len()
-        )).into())
     }
 }

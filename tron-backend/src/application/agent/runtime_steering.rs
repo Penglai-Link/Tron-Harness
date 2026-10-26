@@ -37,7 +37,7 @@ pub(super) fn record_inputs(
         .into_iter()
         .map(|input| {
             let mut message = user_prompt_message(input.content, &input.attachments);
-            super::super::page_context::attach(
+            super::super::page_context::record_snapshot(
                 &mut message,
                 input.page_context.as_ref(),
                 &context.locale,

@@ -48,16 +48,24 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
             return Err(GraphQueryError::Forbidden);
         }
         ranges.retain(|r| corpus_ids.is_empty() || corpus_ids.contains(&r.corpus_id));
+        let metadata = self
+            .repository
+            .get_corpora(
+                &ranges
+                    .iter()
+                    .map(|range| range.corpus_id.clone())
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(GraphQueryError::from_rag)?;
         let corpora = ranges
             .iter()
             .map(|range| {
-                self.repository
-                    .get_corpus(&range.corpus_id)
-                    .map_err(GraphQueryError::from_rag)?
+                metadata
+                    .get(&range.corpus_id)
                     .ok_or(GraphQueryError::SnapshotChanged)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        validate_request_filters_for_corpora(&corpora.iter().collect::<Vec<_>>(), filters)
+        validate_request_filters_for_corpora(&corpora, filters)
             .map_err(GraphQueryError::from_rag)?;
         for (range, corpus) in ranges.iter_mut().zip(corpora) {
             let enabled = RagSettings::from_capabilities(&corpus.capabilities)
@@ -80,11 +88,18 @@ impl<R: RagSearchRepository + Clone, E: Clone> RagService<R, E> {
     ) -> Result<AuthorizedGraphSnapshot, GraphQueryError> {
         let mut permitted = BTreeSet::new();
         let mut partitions = BTreeSet::new();
+        let corpora = self
+            .repository
+            .get_corpora(
+                &ranges
+                    .iter()
+                    .map(|range| range.corpus_id.clone())
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(GraphQueryError::from_rag)?;
         for range in &ranges {
-            let corpus = self
-                .repository
-                .get_corpus(&range.corpus_id)
-                .map_err(GraphQueryError::from_rag)?
+            let corpus = corpora
+                .get(&range.corpus_id)
                 .ok_or(GraphQueryError::SnapshotChanged)?;
             if !range.graph
                 || !RagSettings::from_capabilities(&corpus.capabilities)

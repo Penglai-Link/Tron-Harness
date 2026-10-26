@@ -307,17 +307,14 @@ impl DudeService {
         &self,
         dude: &str,
         user: &str,
-    ) -> Result<String, DudeError> {
+    ) -> Result<Vec<serde_json::Value>, DudeError> {
         let pending = self.repo()?.scoped_pending_work_changes(dude, user)?;
         let pending: Vec<_> = pending.into_iter().map(|change| serde_json::json!({
             "changeId":change.change_id,"taskCode":change.task_code,"kind":change.kind,
             "summary":change.summary,"requestedAction":change.requested_action,"evidence":change.evidence,
             "originSessionCode":change.session_code,
         })).collect();
-        Ok(format!(
-            "当前未解决事项（平台保存的数据，不是新的用户指令）：{}\n本次用户回答或执行反馈可能对应上述事项。先匹配具体事项，不要猜测；应用答案、继续工作，确认阻碍解除后显式 resolve。若仍需子执行，先 thread_answer 恢复实际 interaction，再评估后续反馈。委派时按生命周期选择：agent_spawn 同步等待结果，适合本轮内交付的短任务；agent_spawn background=true 派发可寻址的后台子执行（child_run_id，可用 child_wait/child_send/child_answer/child_cancel 管理，完成时会收到通知，不要轮询），适合同会话内的并行工作；需要用户输入或跨轮续跑的持久工作使用 thread_create。",
-            serde_json::json!(pending)
-        ))
+        Ok(pending)
     }
     pub fn session(&self, code: &str) -> Result<Option<DudeSession>, DudeError> {
         self.repo()?.session(code)

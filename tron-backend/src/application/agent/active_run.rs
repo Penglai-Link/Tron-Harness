@@ -53,6 +53,7 @@ pub struct ActiveRunSnapshot {
     pub run_code: String,
     pub runtime_adapter_key: String,
     pub supports_steer: bool,
+    pub operation_kind: Option<String>,
     pub state: ActiveRunState,
 }
 
@@ -106,6 +107,8 @@ struct ActiveRunEntry {
 struct ActiveRunMutableState {
     starting: bool,
     finishing: bool,
+    context_compaction: bool,
+    compaction_phase: bool,
     pending: VecDeque<AgentSteerInput>,
 }
 
@@ -142,6 +145,7 @@ impl ActiveRunRegistry {
             runtime_adapter_key,
             supports_steer,
             false,
+            false,
         )
     }
 
@@ -158,7 +162,12 @@ impl ActiveRunRegistry {
             runtime_adapter_key,
             supports_steer,
             true,
+            false,
         )
+    }
+
+    pub(crate) fn reserve_context_compaction(&self, session: &str, run: &str, adapter: &str, steer: bool) -> Result<ActiveRunGuard, ActiveRunError> {
+        self.insert(session, run, adapter, steer, true, true)
     }
 
     fn insert(
@@ -168,6 +177,7 @@ impl ActiveRunRegistry {
         runtime_adapter_key: &str,
         supports_steer: bool,
         starting: bool,
+        context_compaction: bool,
     ) -> Result<ActiveRunGuard, ActiveRunError> {
         let _admission = self
             .inner
@@ -200,6 +210,7 @@ impl ActiveRunRegistry {
             cancellation_sender,
             state: Mutex::new(ActiveRunMutableState {
                 starting,
+                context_compaction,
                 ..ActiveRunMutableState::default()
             }),
         });
@@ -300,12 +311,12 @@ impl ActiveRunRegistry {
             let Some(entry) = entry else {
                 return self.group_snapshot(session_code);
             };
-            let (starting, finishing) = {
+            let (starting, finishing, compacting) = {
                 let state = entry
                     .state
                     .lock()
                     .map_err(|_| ActiveRunError::RegistryUnavailable)?;
-                (state.starting, state.finishing)
+                (state.starting, state.finishing, state.context_compaction || state.compaction_phase)
             };
             let still_current = self
                 .inner
@@ -318,7 +329,8 @@ impl ActiveRunRegistry {
                 return Ok(Some(ActiveRunSnapshot {
                     run_code: entry.run_code.clone(),
                     runtime_adapter_key: entry.runtime_adapter_key.clone(),
-                    supports_steer: entry.supports_steer && !starting && !finishing,
+                    supports_steer: entry.supports_steer && !starting && !finishing && !compacting,
+                    operation_kind: compacting.then(|| "ContextCompaction".into()),
                     state: if finishing {
                         ActiveRunState::Finishing
                     } else {
@@ -348,7 +360,7 @@ impl ActiveRunRegistry {
                 .state
                 .lock()
                 .map_err(|_| ActiveRunError::RegistryUnavailable)?;
-            if state.finishing {
+            if state.finishing || state.context_compaction || state.compaction_phase {
                 return Err(ActiveRunError::RunFinishing);
             }
             state.finishing = true;
@@ -359,6 +371,7 @@ impl ActiveRunRegistry {
             run_code: entry.run_code.clone(),
             runtime_adapter_key: entry.runtime_adapter_key.clone(),
             supports_steer: entry.supports_steer,
+            operation_kind: None,
             state: ActiveRunState::Finishing,
         })
     }
@@ -456,7 +469,7 @@ impl ActiveRunEntry {
             .state
             .lock()
             .map_err(|_| ActiveRunError::RegistryUnavailable)?;
-        if state.finishing {
+        if state.finishing || state.context_compaction || state.compaction_phase {
             return Err(ActiveRunError::RunFinishing);
         }
         if state.starting {
@@ -479,7 +492,7 @@ impl ActiveRunControl {
             .state
             .lock()
             .map_err(|_| ActiveRunError::RegistryUnavailable)?;
-        if state.finishing {
+        if state.finishing || state.context_compaction || state.compaction_phase {
             return Ok(Vec::new());
         }
         Ok(state.pending.drain(..).collect())
@@ -616,5 +629,30 @@ mod tests {
             registry.control("SESSION-1", "RUN-1"),
             Err(ActiveRunError::NoActiveRun)
         ));
+    }
+}
+
+impl eliteforge_agent_core::ContextCompactionObserver for ActiveRunControl {
+    fn state_changed(&self, active: bool) {
+        if let Ok(mut state) = self.entry.state.lock() { state.compaction_phase = active; }
+    }
+}
+
+#[cfg(test)]
+mod compaction_tests {
+    use super::*;
+    #[test]
+    fn compaction_is_exclusive_from_admission_and_releases_after_failure_or_completion() {
+        let registry = ActiveRunRegistry::new();
+        let guard = registry.reserve_context_compaction("session", "run", "REACT", true).unwrap();
+        let snapshot = registry.snapshot("session").unwrap().unwrap();
+        assert_eq!(snapshot.operation_kind.as_deref(), Some("ContextCompaction"));
+        assert!(!snapshot.supports_steer);
+        assert!(matches!(registry.reserve("session", "other", "REACT", true), Err(ActiveRunError::AlreadyActive)));
+        assert!(matches!(registry.request_stop("session", "run"), Err(ActiveRunError::RunFinishing)));
+        assert!(matches!(registry.entry("session").unwrap().accept_steer(|| -> Result<((), AgentSteerInput), ()> { panic!("steer admission must remain closed") }), Err(ActiveRunError::RunFinishing)));
+        drop(guard);
+        assert!(registry.snapshot("session").unwrap().is_none());
+        assert!(registry.reserve("session", "after", "REACT", true).is_ok());
     }
 }

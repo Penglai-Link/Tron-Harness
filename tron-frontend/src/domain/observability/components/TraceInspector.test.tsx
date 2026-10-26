@@ -15,6 +15,8 @@ it("switches detail views and shows input, cached, output, and total tokens", ()
     { spanId: "child", parentSpanId: "root", name: "agent.tool", startedAt: 200, durationMs: 300, status: "Error", attributes: { tool: "search" }, events: [], links: [] },
   ] };
   render(<MemoryRouter><TraceInspector detail={detail} /></MemoryRouter>);
+  expect(screen.getByRole("table")).toBeTruthy();
+  fireEvent.click(screen.getByRole("tab", { name: "waterfall" }));
   fireEvent.click(screen.getByRole("button", { name: "select child" }));
   expect(screen.getByText("waterfall:child")).toBeTruthy();
   fireEvent.click(screen.getByRole("tab", { name: "topology" }));

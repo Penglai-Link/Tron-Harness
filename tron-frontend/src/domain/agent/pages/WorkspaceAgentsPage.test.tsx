@@ -123,8 +123,8 @@ beforeEach(() => {
   fixture.storedTools = [];
   fixture.record = {
     agentCode: "main-agent", name: "Main Agent", description: "Fixture", rolePrompt: "", groupName: "主智能体", platformDefined: true,
-    mcpAccessMode: "disabled", toolAssignmentMode: "all_platform_tools", toolExposureMode: "direct_list",
-    expandedDomainPersistenceMode: "sticky_expanded", maxSteps: 10, maxToolCalls: 10, maxParallelToolCalls: 1,
+    mcpAccessMode: "disabled", toolAssignmentMode: "all_platform_tools",
+    maxSteps: 10, maxToolCalls: 10, maxParallelToolCalls: 1,
     selectedServerCodes: [], selectedToolCodes: ["bash.exec", "fs.read_text"], source: "platform_default",
   };
   fixture.assign.mockImplementation(async (_workspace: string, _agent: string, tools: string[]) => {

@@ -391,7 +391,7 @@ mod tests {
 
     use crate::domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
-        AgentRunContext, AgentRunLimits, AgentToolExposureState, EffectiveSkill, EffectiveTool,
+        AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool,
         EffectiveVariable, ModelResponse, ToolObservation,
     };
 
@@ -451,7 +451,6 @@ mod tests {
             }],
             effective_tools: Vec::new(),
             tool_assignment: None,
-            tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
             messages: vec![

@@ -50,6 +50,8 @@ pub struct UpdateAppCommand {
 pub trait AppRepository: Send {
     fn list_apps(&mut self) -> Result<Vec<App>, AppError>;
     fn list_app_tags(&mut self) -> Result<Vec<AppTag>, AppError>;
+    fn apps_by_codes(&mut self, codes: &[String]) -> Result<Vec<App>, AppError>;
+    fn tags_for_apps(&mut self, codes: &[String]) -> Result<Vec<AppTag>, AppError>;
     fn next_id(&mut self) -> Result<i64, AppError>;
     fn create_app(&mut self, app: &App) -> Result<(), AppError>;
     fn update_app(&mut self, app: &App) -> Result<(), AppError>;
@@ -88,6 +90,39 @@ impl AppService {
         }
     }
 
+    /// Resolve a set of applications and their tags once, in caller order.
+    pub fn get_apps(&self, codes: &[String]) -> Result<Vec<AppDetail>, AppError> {
+        if codes.is_empty() {
+            return Ok(Vec::new());
+        }
+        for code in codes {
+            validate_app_code(code)?;
+        }
+        let codes = codes
+            .iter()
+            .map(|code| code.trim().to_owned())
+            .collect::<Vec<_>>();
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("app repository mutex poisoned");
+        let apps = repository
+            .apps_by_codes(&codes)?
+            .into_iter()
+            .map(|app| (app.app_code.clone(), app))
+            .collect::<BTreeMap<_, _>>();
+        let mut tags = BTreeMap::<String, Vec<String>>::new();
+        for tag in repository.tags_for_apps(&codes)? {
+            tags.entry(tag.app_code).or_default().push(tag.tag);
+        }
+        codes
+            .iter()
+            .map(|code| {
+                let app = apps.get(code).cloned().ok_or(AppError::NotFound)?;
+                Ok(Self::detail_with_tags(app, &tags))
+            })
+            .collect()
+    }
     fn filtered_apps(
         &self,
         workspace_code: &str,
@@ -115,8 +150,23 @@ impl AppService {
     }
 
     fn detail_from_app(&self, app: App) -> Result<AppDetail, AppError> {
-        let tags_by_code = self.tags_by_code()?;
-        Ok(AppDetail {
+        let mut tags_by_code = BTreeMap::<String, Vec<String>>::new();
+        for tag in self
+            .repository
+            .lock()
+            .expect("app repository mutex poisoned")
+            .tags_for_apps(&[app.app_code.clone()])?
+        {
+            tags_by_code.entry(tag.app_code).or_default().push(tag.tag);
+        }
+        for tags in tags_by_code.values_mut() {
+            tags.sort();
+        }
+        Ok(Self::detail_with_tags(app, &tags_by_code))
+    }
+
+    fn detail_with_tags(app: App, tags_by_code: &BTreeMap<String, Vec<String>>) -> AppDetail {
+        AppDetail {
             id: app.id.as_decimal_string(),
             app_code: app.app_code.clone(),
             workspace_code: app.workspace_code,
@@ -131,7 +181,7 @@ impl AppService {
             created_at: app.created_at,
             updated_at: app.updated_at,
             archived_at: app.archived_at,
-        })
+        }
     }
 
     fn list_item_from_app(
@@ -197,9 +247,12 @@ impl AppService {
 
     fn get_app_record(&self, app_code: &str) -> Result<App, AppError> {
         validate_app_code(app_code)?;
-        self.all_apps()?
+        self.repository
+            .lock()
+            .expect("app repository mutex poisoned")
+            .apps_by_codes(&[app_code.trim().to_owned()])?
             .into_iter()
-            .find(|app| app.app_code == app_code.trim())
+            .next()
             .ok_or(AppError::NotFound)
     }
 }

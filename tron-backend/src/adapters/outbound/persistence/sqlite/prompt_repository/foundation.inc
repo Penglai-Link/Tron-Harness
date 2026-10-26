@@ -34,25 +34,32 @@ impl<'a> SqlitePromptRepositorySql<'a> {
 
 impl PromptRepository for SqlitePromptRepositorySql<'_> {
     fn list_prompts(&mut self) -> Result<Vec<Prompt>, PromptError> {
+        let snapshot = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(
+            &self.connection, rusqlite::TransactionBehavior::Deferred,
+        ).map_err(storage_error)?;
         let mut prompts =
             {
-                let mut statement = self.connection.prepare(
+                let mut statement = snapshot.prepare(
                 "SELECT id, prompt_code, display_name, category, prompt_body, description,
                         enabled, version,
                         created_at, updated_at, built_in, runtime_required, catalog_key
                  FROM prompts
                  ORDER BY display_name, prompt_code",
-            ).map_err(storage_error)?;
-                statement
-                    .query_map([], decode_prompt)
-                    .map_err(storage_error)?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(storage_error)?
-            };
+                )
+                .map_err(storage_error)?;
+            statement
+                .query_map([], decode_prompt)
+                .map_err(storage_error)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(storage_error)?
+        };
+        let mut variables = load_variables(&snapshot)?;
+        let mut translations = load_translations(&snapshot)?;
         for prompt in &mut prompts {
-            prompt.variables = load_variables(&self.connection, &prompt.prompt_code)?;
-            prompt.translations = load_translations(&self.connection, &prompt.prompt_code)?;
+            prompt.variables = variables.remove(&prompt.prompt_code).unwrap_or_default();
+            prompt.translations = translations.remove(&prompt.prompt_code).unwrap_or_default();
         }
+        snapshot.commit().map_err(storage_error)?;
         Ok(prompts)
     }
 
@@ -119,7 +126,7 @@ impl SqlitePromptRepository {
 }
 impl PromptRepository for SqlitePromptRepository {
     fn list_prompts(&mut self) -> Result<Vec<Prompt>, PromptError> {
-        self.connection.call(
+        self.connection.call_read(
             move |connection| SqlitePromptRepositorySql { connection }.list_prompts(),
             || storage_error(rusqlite::Error::InvalidQuery),
         )
