@@ -167,18 +167,18 @@
     "promptCode": "DEV_SKILLS_GUIDANCE",
     "displayName": "Skill use guidance",
     "category": "DEVELOPER",
-    "version": 2,
+    "version": 3,
     "runtimeRequired": true,
     "translations": {
       "en-US": {
         "displayName": "Skill use guidance",
         "description": "Skill use guidance.",
-        "promptBody": "Available skills are metadata only. Load a skill by calling `tool_execute` with `{\"tool\":\"skill_load\",\"arguments\":{\"items\":[{...}]}}` before following its instructions. After loading it, read a listed file by calling `tool_execute` with `{\"tool\":\"skill_read_resource\",\"arguments\":{\"items\":[{...}]}}` when needed. Loading a skill never executes scripts. Explicitly selected skills must be followed after loading, but selection never grants tool permissions or executes scripts."
+        "promptBody": "Available skills are metadata only. Call `tool_execute` with `{\"tool\":\"skill_load\",\"arguments\":{\"items\":[{...}]}}` when you need skill instructions or resource paths. Read a listed file when needed by calling `tool_execute` with `{\"tool\":\"skill_read_resource\",\"arguments\":{\"items\":[{...}]}}`; a prior skill_load in this run is not required. Loading a skill never executes scripts. Explicitly selected skills must be followed after loading, but selection never grants tool permissions or executes scripts."
       },
       "zh-CN": {
         "displayName": "技能使用指引",
         "description": "技能使用指引。",
-        "promptBody": "可用技能目录只是元数据。遵循技能指令之前，先调用 `tool_execute`（参数 `{\"tool\":\"skill_load\",\"arguments\":{\"items\":[{...}]}}`）加载技能；加载后需要读取所列文件时，再调用 `tool_execute`（参数 `{\"tool\":\"skill_read_resource\",\"arguments\":{\"items\":[{...}]}}`）。加载技能不会执行脚本。用户明确选择的技能在加载后应遵循，但选择技能不会授予工具权限或执行脚本。"
+        "promptBody": "可用技能目录只是元数据。需要技能指令或资源路径时，调用 `tool_execute`（参数 `{\"tool\":\"skill_load\",\"arguments\":{\"items\":[{...}]}}`）加载技能；需要读取所列文件时，调用 `tool_execute`（参数 `{\"tool\":\"skill_read_resource\",\"arguments\":{\"items\":[{...}]}}`），无需本轮先加载技能。加载技能不会执行脚本。用户明确选择的技能在加载后应遵循，但选择技能不会授予工具权限或执行脚本。"
       }
     }
   },
@@ -207,18 +207,18 @@
     "promptCode": "DEV_A2UI_GUIDANCE",
     "displayName": "A2UI guidance",
     "category": "DEVELOPER",
-    "version": 2,
+    "version": 4,
     "runtimeRequired": true,
     "translations": {
       "en-US": {
         "displayName": "A2UI guidance",
         "description": "Rules for negotiated interactive interfaces.",
-        "promptBody": "A2UI interactive interfaces are available. Use text for ordinary answers. Use native ask-user for clarification and questionnaires; the built-in QuestionCard owns layout and navigation, so do not rebuild it from atomic components. Native tool policy owns approvals and their ApprovalCard projection. For reports, custom structured forms or reusable query controls, load the a2ui-interface skill by calling `tool_execute` with `{\"tool\":\"skill_load\",\"arguments\":{\"items\":[{...}]}}`, then call `tool_execute` with `{\"tool\":\"a2ui_expand\",\"arguments\":{...}}` to expose the UI tools. Display is read-only; SubmitOnce resumes the original run; Reusable actions start another run. Follow the user's requested language and presentation preference."
+        "promptBody": "A2UI interactive interfaces are available. Proactively consider and prefer them when structured input, comparison, exploration, repeated queries or a visual report would help the user, even if a UI was not explicitly requested. Use ordinary text when clearer, and respect the user's presentation preference. Use native ask-user for clarification and questionnaires; the built-in QuestionCard owns layout and navigation, so do not rebuild it from atomic components. Native tool policy owns approvals and their ApprovalCard projection. For reports, custom structured forms or reusable query controls, load the a2ui-interface skill by calling `tool_execute` with `{\"tool\":\"skill_load\",\"arguments\":{\"items\":[{...}]}}`, then use `tool_search` with the `a2ui` domain and `tool_execute` to discover and execute the UI tools. Display is read-only; SubmitOnce resumes the original run; Reusable actions start another run. Follow the user's requested language and presentation preference."
       },
       "zh-CN": {
         "displayName": "A2UI 指引",
         "description": "协商后的交互界面使用规则。",
-        "promptBody": "可以使用 A2UI 交互界面。普通回答使用文本；澄清问题和问卷使用原生提问工具。内置 QuestionCard 负责布局和导航，不要用基础组件重新实现。原生工具策略负责审批及 ApprovalCard 展示。报告、自定义结构化表单或可重复使用的查询控件需要先调用 `tool_execute`（参数 `{\"tool\":\"skill_load\",\"arguments\":{\"items\":[{...}]}}`）加载 a2ui-interface 技能，再调用 `tool_execute`（参数 `{\"tool\":\"a2ui_expand\",\"arguments\":{...}}`）展开界面工具。展示界面是只读的；SubmitOnce 恢复原运行；Reusable 操作启动新运行。遵循用户要求的语言和呈现偏好。"
+        "promptBody": "可以使用 A2UI 交互界面。主动判断结构化输入、对比、探索、重复查询或可视化报告是否能帮助用户；即使用户没有明确要求界面，也应在合适时优先使用。简单回答或文字更清楚时使用文本，并尊重用户的呈现偏好。澄清问题和问卷使用原生提问工具。内置 QuestionCard 负责布局和导航，不要用基础组件重新实现。原生工具策略负责审批及 ApprovalCard 展示。报告、自定义结构化表单或可重复使用的查询控件需要先调用 `tool_execute`（参数 `{\"tool\":\"skill_load\",\"arguments\":{\"items\":[{...}]}}`）加载 a2ui-interface 技能，再通过 `tool_search` 搜索 `a2ui` 领域，并使用 `tool_execute` 调用界面工具。展示界面是只读的；SubmitOnce 恢复原运行；Reusable 操作启动新运行。遵循用户要求的语言和呈现偏好。"
       }
     }
   },

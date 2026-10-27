@@ -463,7 +463,7 @@ pub async fn native_goal(database: &str, id: &str) -> eliteforge_agent_core::Goa
 
 /// Scripted models use the same batch-only gateway contract as production.
 pub fn gateway_arguments(name: &str, arguments: Value) -> Value {
-    if matches!(name, "chat_ask_user" | "ask_user" | "a2ui_expand" | "a2ui_publish" | "a2ui_request_input"
+    if matches!(name, "chat_ask_user" | "ask_user" | "a2ui_publish" | "a2ui_request_input"
         | "worktree_create" | "worktree_select" | "git_switch_branch" | "word_create" | "word_replace_text"
         | "excel_write" | "fs_write_text" | "fs_apply_patch" | "fs_apply_unified_patch" | "terminal_write" | "system_task_write") {
         arguments

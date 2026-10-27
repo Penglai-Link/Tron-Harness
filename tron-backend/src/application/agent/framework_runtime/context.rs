@@ -170,6 +170,32 @@ impl fw::ContextPreparationPolicy for TronContext {
     }
 }
 
+// Use the vendor tokenizer only for the matching model. Other models retain
+// the framework's conservative estimate until their tokenizer is configured.
+fn glm_tokenizer(model: &fw::ModelRef) -> Option<&'static tokenizers::Tokenizer> {
+    if !model.model.to_ascii_lowercase().ends_with("glm-5.3-flash") {
+        return None;
+    }
+    static TOKENIZER: std::sync::OnceLock<Option<tokenizers::Tokenizer>> = std::sync::OnceLock::new();
+    TOKENIZER.get_or_init(|| {
+        use std::io::Read;
+        let data = include_bytes!("../../../../resources/tokenizers/glm-5.3-flash.tokenizer.json.gz");
+        let mut json = Vec::new();
+        flate2::read::GzDecoder::new(&data[..]).read_to_end(&mut json).ok()?;
+        tokenizers::Tokenizer::from_bytes(json).ok()
+    }).as_ref()
+}
+
+fn model_text_tokens(model: &fw::ModelRef, text: &str) -> usize {
+    glm_tokenizer(model)
+        .and_then(|tokenizer| tokenizer.encode(text, false).ok())
+        .map_or_else(|| fw::estimate_unicode_text_tokens(text), |encoding| encoding.len())
+}
+
+fn model_json_tokens<T: serde::Serialize>(model: &fw::ModelRef, value: &T) -> usize {
+    serde_json::to_string(value).map_or(usize::MAX, |text| model_text_tokens(model, &text))
+}
+
 pub(super) struct TronTokenEstimator;
 #[async_trait]
 impl fw::TokenEstimator for TronTokenEstimator {
@@ -178,20 +204,61 @@ impl fw::TokenEstimator for TronTokenEstimator {
         model: &fw::ModelRef,
         message: &fw::Message,
     ) -> Result<usize, fw::ModelError> {
-        // Do not max this with byte counts: that would undo text-aware admission.
-        fw::TokenEstimator::message(&fw::UnicodeTokenEstimator, model, message).await
+        // Count the host message projection that is sent to the model, not
+        // its lossless history wrappers. In particular, raw reasoning and
+        // encoded tool calls are retained for history but not sent as text.
+        let native = super::messages::decode(message).map_err(fw::ModelError::Fatal)?;
+        let text = if message.role == fw::Role::Tool {
+            // Provider-backed tool IDs send only the output. Generated legacy
+            // IDs fall back to the host's textual tool representation.
+            if message.tool_call_id.as_deref().is_some_and(|id| !id.starts_with("generated_call_")) {
+                native.first_tool_output().unwrap_or_default().to_owned()
+            } else {
+                native.text_content()
+            }
+        } else {
+            native.plain_text_content()
+        };
+        let mut projected = message.clone();
+        let mut blocks = vec![fw::ContentBlock::Text { text }];
+        if message.role == fw::Role::User {
+            blocks.extend(message.content.0.iter().filter(|block| matches!(block, fw::ContentBlock::Media { .. })).cloned());
+        }
+        projected.content = fw::Content(blocks);
+        // These fields support history and UI rendering; the provider receives
+        // the tool output above and top-level calls, not the sidecar copies.
+        projected.structured = None;
+        projected.tool_result = None;
+        if projected.model_context.as_ref().is_some_and(|context| context.format == "framework.provider-metrics.v1") {
+            projected.model_context = None;
+        }
+        let mut count = fw::TokenEstimator::message(&fw::UnicodeTokenEstimator, model, &projected).await?;
+        if glm_tokenizer(model).is_some() {
+            let text = match &projected.content.0[0] { fw::ContentBlock::Text { text } => text, _ => unreachable!() };
+            count = count.saturating_sub(fw::estimate_unicode_text_tokens(text)).saturating_add(model_text_tokens(model, text));
+            for call in &projected.tool_calls {
+                let arguments = serde_json::to_string(&call.arguments).unwrap_or_default();
+                for part in [&call.id, &call.call_name, &arguments] {
+                    count = count.saturating_sub(fw::estimate_unicode_text_tokens(part)).saturating_add(model_text_tokens(model, part));
+                }
+            }
+        }
+        Ok(count)
     }
     async fn options(
         &self,
         model: &fw::ModelRef,
         options: &fw::GenerationOptions,
     ) -> Result<usize, fw::ModelError> {
+        if glm_tokenizer(model).is_some() {
+            return Ok(options.output_schema.as_ref().map_or(0, |schema| model_json_tokens(model, schema)));
+        }
         fw::TokenEstimator::options(&fw::UnicodeTokenEstimator, model, options).await
     }
 
     async fn tools(
         &self,
-        _: &fw::ModelRef,
+        model: &fw::ModelRef,
         tools: &[fw::ToolDescriptor],
     ) -> Result<usize, fw::ModelError> {
         let native: Vec<_> = tools
@@ -210,6 +277,54 @@ impl fw::TokenEstimator for TronTokenEstimator {
         let snapshot = crate::application::agent::ToolSchemaCache::default()
             .prepare(AgentModelProtocol::ChatCompletions, &native, u32::MAX)
             .map_err(fw::ModelError::Fatal)?;
+        if glm_tokenizer(model).is_some() {
+            return Ok(model_json_tokens(model, snapshot.payload()));
+        }
         Ok(snapshot.estimated_tokens() as usize)
+    }
+}
+
+#[cfg(test)]
+mod token_estimator_tests {
+    use super::*;
+    use fw::TokenEstimator;
+
+    #[tokio::test]
+    async fn excludes_history_only_parts_but_counts_visible_content_and_calls() {
+        let model = fw::ModelRef::new("test", "test");
+        let mut clean = fw::Message::new(fw::Role::Assistant, fw::Content(vec![
+            fw::ContentBlock::Text { text: "visible answer".into() },
+        ]));
+        clean.tool_calls.push(fw::ToolCall::new("call-1", "lookup", serde_json::json!({"query":"a2ui"})));
+        let mut recorded = clean.clone();
+        recorded.content.0.push(fw::ContentBlock::Json { value: serde_json::json!({"tronMessagePart": {"type":"reasoning", "text":"x".repeat(20000)}}) });
+        recorded.content.0.push(fw::ContentBlock::Json { value: serde_json::json!({"tronMessagePart": {"type":"toolCall", "call_id":"call-1", "tool_name":"lookup", "input":{"query":"a2ui"}}}) });
+        recorded.model_context = Some(fw::ModelMessageContext { model: model.clone(), protocol: "test".into(), format: "framework.provider-metrics.v1".into(), data: serde_json::json!({"padding":"x".repeat(20000)}) });
+        let baseline = TronTokenEstimator.message(&model, &clean).await.unwrap();
+        assert_eq!(TronTokenEstimator.message(&model, &recorded).await.unwrap(), baseline);
+        clean.tool_calls.clear();
+        assert!(baseline > TronTokenEstimator.message(&model, &clean).await.unwrap());
+        recorded.content.0.push(fw::ContentBlock::Text { text: "more visible content".into() });
+        assert!(TronTokenEstimator.message(&model, &recorded).await.unwrap() > baseline);
+    }
+
+    #[test]
+    fn glm_flash_uses_vendor_tokenizer_only_for_matching_model() {
+        let glm = fw::ModelRef::new("test", "PERSON_AI:FIXED:High:glm_plan/glm-5.3-flash");
+        let other = fw::ModelRef::new("test", "other-model");
+        assert!(glm_tokenizer(&glm).is_some());
+        assert!(glm_tokenizer(&other).is_none());
+        let sample = r#"{"items":[{"name":"example","count":123}]}"#;
+        assert!(model_text_tokens(&glm, sample) < fw::estimate_unicode_text_tokens(sample));
+        assert_eq!(model_text_tokens(&other, sample), fw::estimate_unicode_text_tokens(sample));
+    }
+
+    #[tokio::test]
+    async fn counts_tool_output_without_history_metadata() {
+        let model = fw::ModelRef::new("test", "test");
+        let mut message = fw::Message::new(fw::Role::Tool, fw::Content(vec![fw::ContentBlock::Text { text: "small result".into() }]));
+        message.tool_call_id = Some("call-1".into());
+        let estimate = TronTokenEstimator.message(&model, &message).await.unwrap();
+        assert_eq!(estimate, 16 + fw::estimate_unicode_text_tokens("small result"));
     }
 }

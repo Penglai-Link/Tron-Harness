@@ -31,9 +31,6 @@ pub(super) fn official_id(name: &str) -> Option<String> {
         .into_iter()
         .chain(crate::application::agent::tool_catalog::official_remote_descriptors())
         .chain(eliteforge_agent_official_plugin_a2ui::tool_descriptors())
-        .chain(std::iter::once(
-            eliteforge_agent_official_plugin_a2ui::expand_descriptor(),
-        ))
         .find(|tool| tool.call_name == official_name(name))
         .map(|tool| tool.id)
 }

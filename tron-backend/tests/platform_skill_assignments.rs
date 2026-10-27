@@ -107,6 +107,22 @@ impl Fixture {
     }
 }
 #[tokio::test]
+async fn a2ui_plugin_registers_its_skill_and_respects_assignments() {
+    let f = Fixture::new();
+    let skill = f.state.skills.get_registry_skill("a2ui-interface").unwrap();
+    assert_eq!(skill.provider_pack_id.as_deref(), Some("framework.a2ui"));
+    assert!(skill.available);
+    assert!(std::path::Path::new(&skill.registry_path).join("SKILL.md").is_file());
+    assert!(f.assigned("main-agent").contains(&"a2ui-interface".into()));
+
+    f.state.skills.replace_skill_agents("a2ui-interface", &[]).unwrap();
+    f.state.agent_framework.sync_capability_resources().unwrap();
+    assert!(!f.assigned("main-agent").contains(&"a2ui-interface".into()));
+    f.state.skills.replace_skill_agents("a2ui-interface", &["main-agent".into()]).unwrap();
+    assert!(f.assigned("main-agent").contains(&"a2ui-interface".into()));
+}
+
+#[tokio::test]
 async fn builtin_defaults_are_once_only_and_bidirectional_replacements_are_atomic() {
     let f = Fixture::new();
     f.agent("child-reader");

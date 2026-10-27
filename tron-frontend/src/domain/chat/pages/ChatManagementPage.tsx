@@ -1391,6 +1391,7 @@ const contributorLabelKeys: Record<string, string> = {
   "skills.catalog": "skillsCatalogName",
   "tool_domains": "toolDomainsName",
   "skills.guidance": "skillsGuidanceName",
+  "agent.directory-guidance": "directoryGuidanceName",
   "dude.guidance": "dudeGuidanceName",
   "a2ui.guidance": "a2uiGuidanceName",
   knowledge_base: "knowledgeBaseName",
@@ -2688,6 +2689,7 @@ export function ChatManagementPage() {
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
   const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);
   const [shortTermMemoryRefreshKey, setShortTermMemoryRefreshKey] = useState(0);
+  const [goalPollKey, setGoalPollKey] = useState(0);
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>(() => orderSessionGroups(groups));
   const [activeSessionCode, setActiveSessionCode] = useState("");
@@ -2716,7 +2718,7 @@ export function ChatManagementPage() {
   }));
   const shortTermMemoryTodosState = useChatSessionTodosState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
   const latestCompactionState = useChatLatestCompactionState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
-  const activeGoalState = useChatSessionLatestGoalState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
+  const activeGoalState = useChatSessionLatestGoalState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey + goalPollKey);
   const shortTermMemoryTodos = shortTermMemoryTodosState.data;
   const latestCompaction = latestCompactionState.data;
   const activeGoal = activeGoalState.data;
@@ -2921,6 +2923,11 @@ export function ChatManagementPage() {
   }, []);
 
   const sending = currentSessionRunActive;
+  useEffect(() => {
+    if (!currentSessionRunActive || !activeSession?.sessionCode) return;
+    const timer = window.setInterval(() => setGoalPollKey((key) => key + 1), 3000);
+    return () => window.clearInterval(timer);
+  }, [activeSession?.sessionCode, currentSessionRunActive]);
   const handleRuntimeRunStateChange = useCallback((state: ChatRuntimeRunState) => {
     setRuntimeRunState(state);
     if (state.sessionCode) {
@@ -3613,7 +3620,7 @@ export function ChatManagementPage() {
     );
   }
 
-  async function handleCreateGoal(input: SetChatSessionGoalInput) {
+  async function handleCreateGoal(input: SetChatSessionGoalInput, showWorkspace = true) {
     if (sending) return false;
     if (!selectedModel) {
       toast.warning(t("chat.management.toasts.selectModelFirst"), { title: t("chat.management.toasts.modelRequiredTitle") });
@@ -3624,7 +3631,7 @@ export function ChatManagementPage() {
       t("chat.shortTermMemory.messages.goalSet"),
     );
     if (created) {
-      openRightSidebar();
+      if (showWorkspace) openRightSidebar();
       await submitterRef.current?.submit({ content: input.objective });
     }
     return created;
@@ -3710,6 +3717,24 @@ export function ChatManagementPage() {
             showAttachmentControl={false}
             showHeader={false}
             footerAddon={transcriptFooterAddon}
+            goal={activeGoal && activeGoal.goal.sessionCode === activeSession?.sessionCode && activeGoal.goal.status !== "CLEARED" ? {
+              label: t("chat.shortTermMemory.goal"),
+              objective: activeGoal.goal.objectiveMarkdown,
+              status: t(`chat.shortTermMemory.goalStatuses.${activeGoal.goal.status}`),
+              progress: t("chat.shortTermMemory.goalRunCount", { used: activeGoal.goal.runsUsed, max: activeGoal.goal.maxRuns }),
+              busy: goalActionSessionCode === activeSession.sessionCode || compactingSessionCode === activeSession.sessionCode,
+              labels: {
+                pause: t("chat.shortTermMemory.pauseGoal"),
+                resume: t("chat.shortTermMemory.resumeGoal"),
+                restart: t("chat.shortTermMemory.restartGoal"),
+                delete: t("chat.shortTermMemory.deleteGoal"),
+              },
+              onPause: activeGoal.goal.status === "ACTIVE" ? () => { void handlePauseGoal({ sessionCode: activeGoal.goal.sessionCode, goalCode: activeGoal.goal.goalCode }); } : undefined,
+              resumeDisabled: sending,
+              onResume: activeGoal.goal.status === "PAUSED" || activeGoal.goal.status === "BLOCKED" ? () => { void handleResumeGoal({ sessionCode: activeGoal.goal.sessionCode, goalCode: activeGoal.goal.goalCode }); } : undefined,
+              onRestart: canStartNewGoalFromStatus(activeGoal.goal.status) && !sending ? () => { void handleCreateGoal({ sessionCode: activeGoal.goal.sessionCode, objective: activeGoal.goal.objectiveMarkdown, maxRuns: activeGoal.goal.maxRuns }, false); } : undefined,
+              onDelete: () => { void handleClearGoal({ sessionCode: activeGoal.goal.sessionCode, goalCode: activeGoal.goal.goalCode }); },
+            } : null}
             renderMarkdownLink={({ href, children }) => (
               <MarkdownLink
                 href={href}

@@ -14,13 +14,13 @@ impl FrameworkHost {
             tron_harness_capability::TronHarness::new(Arc::new(HarnessTools), []).capability_pack();
         sources.push((
             "tron.harness".into(),
-            fw::CapabilityPack::skill_sources(&harness),
+            fw::CapabilityPack::registry_skill_sources(&harness),
         ));
         let a2ui =
             eliteforge_agent_official_plugin_a2ui::A2uiPack::new().map_err(|e| e.to_string())?;
         sources.push((
             "framework.a2ui".into(),
-            fw::CapabilityPack::skill_sources(&a2ui),
+            fw::CapabilityPack::registry_skill_sources(&a2ui),
         ));
         let manager =
             eliteforge_agent_capability_runtime::CapabilityPackManager::new(&self.0.pack_root)
@@ -71,7 +71,7 @@ impl FrameworkHost {
                 .map_err(|e| e.to_string())?;
             sources.push((
                 pack.manifest.id.clone(),
-                fw::CapabilityPack::skill_sources(&managed),
+                fw::CapabilityPack::registry_skill_sources(&managed),
             ));
             if let (Some(_mcp), Some(_resources)) =
                 (self.0.mcp.get(), self.0.capability_resources.get())

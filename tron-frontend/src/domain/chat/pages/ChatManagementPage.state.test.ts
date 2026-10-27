@@ -91,6 +91,21 @@ describe("chat model default selection", () => {
 });
 
 describe("plugin assembly report", () => {
+  it("labels instruction sources without treating them as individual messages", () => {
+    const snapshot = contextAssemblySnapshot({ contextReport: { input_capacity: 32000, blocks: [{
+      id: "framework.instructions", position: 0, allocated_tokens: 6000,
+      final_tokens: 5000, final_message_count: 5,
+      sources: [{ id: "framework.instructions" }, { id: "agent.directory-guidance" }, { id: "skills.guidance" }, { id: "a2ui.guidance" }],
+    }] } })!;
+    const block = buildReportedContextMemoryBlocks(snapshot, key => key)[0];
+    expect(block.stat).toBe("chat.shortTermMemory.contextPanel.messageCount");
+    expect(block.sources?.map(source => source.name)).toEqual([
+      "chat.shortTermMemory.contextPanel.baseInstructionsName",
+      "chat.shortTermMemory.contextPanel.directoryGuidanceName",
+      "chat.shortTermMemory.contextPanel.skillsGuidanceName",
+      "chat.shortTermMemory.contextPanel.a2uiGuidanceName",
+    ]);
+  });
   it("renders the shared page contributor in live and saved Dude assembly order", () => {
     const blocks = ["framework.instructions", "framework.history", "agent_directory", "skills.catalog", "page_context", "dude_environment"]
       .map((id, position) => ({ id, position, allocated_tokens: 100, configured_tokens: 2048, final_tokens: 30, final_message_count: 1 }));

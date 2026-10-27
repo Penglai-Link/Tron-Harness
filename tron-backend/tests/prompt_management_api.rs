@@ -93,6 +93,37 @@ async fn developer_prompts_are_managed_separately_from_system_prompts() {
 }
 
 #[tokio::test]
+async fn a2ui_guidance_upgrade_refreshes_existing_builtin_translations() {
+    let database_url = temp_database_url("a2ui-guidance-upgrade");
+    let database_url = database_url.with_file_name(format!("seeded-{}", database_url.file_name().unwrap().to_string_lossy()));
+    let router = app_with_config(AppConfig { database_url: database_url.to_string_lossy().into_owned(), ..AppConfig::default() });
+    Connection::open(&database_url).unwrap().execute(
+        "UPDATE prompts SET version = 2, prompt_body = 'old guidance' WHERE prompt_code = 'DEV_A2UI_GUIDANCE'",
+        [],
+    ).unwrap();
+    Connection::open(&database_url).unwrap().execute(
+        "UPDATE prompt_translations SET source_version = 2, prompt_body = 'old guidance' WHERE prompt_code = 'DEV_A2UI_GUIDANCE'",
+        [],
+    ).unwrap();
+    drop(router);
+    let restarted = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let refreshed = post_json(&restarted, "/api/v1/admin/platform/prompts/detail", json!({ "promptCode": "DEV_A2UI_GUIDANCE" })).await;
+    assert_eq!(refreshed["data"]["version"], json!(4));
+    let translations = refreshed["data"]["translations"].as_array().unwrap();
+    for (locale, expected) in [("en-US", "Proactively consider"), ("zh-CN", "主动判断")] {
+        let translation = translations.iter().find(|value| value["locale"] == locale).unwrap();
+        assert_eq!(translation["sourceVersion"], json!(4));
+        let body = translation["promptBody"].as_str().unwrap();
+        assert!(body.contains(expected));
+        assert!(body.contains("tool_search"));
+        assert!(!body.contains("a2ui_expand"));
+    }
+}
+
+#[tokio::test]
 async fn platform_prompt_lifecycle_uses_global_records_and_prompt_local_envelopes() {
     let (router, database_url) = prompt_app("platform-prompt-lifecycle");
     let created = post_json(

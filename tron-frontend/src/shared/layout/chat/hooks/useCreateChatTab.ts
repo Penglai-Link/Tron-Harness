@@ -9,6 +9,20 @@ export function useCreateChatTab(workspaceCode: string, projectCode?: string) {
 
   function create() {
     if (!workspaceCode) return;
+    const tabs = useTabStore.getState();
+    const existingDraft = tabs.tabs.find((tab) => {
+      if (!tab.activeNav?.startsWith("chat-draft:")) return false;
+      const [pathname, search = ""] = tab.path.split("?");
+      if (pathname !== "/chats") return false;
+      const params = new URLSearchParams(search);
+      return Boolean(params.get("draftCode"))
+        && (!projectCode || params.get("projectCode") === projectCode);
+    });
+    if (existingDraft) {
+      tabs.setActiveTab(existingDraft.id);
+      navigate(existingDraft.path);
+      return;
+    }
     const draftCode = crypto.randomUUID();
     const params = new URLSearchParams({ draftCode });
     if (projectCode) params.set("projectCode", projectCode);

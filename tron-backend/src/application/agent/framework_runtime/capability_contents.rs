@@ -85,11 +85,7 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             ThreadListTool::descriptor(),
             ThreadCloseTool::descriptor(),
         ],
-        "framework.a2ui" => {
-            let mut tools = eliteforge_agent_official_plugin_a2ui::tool_descriptors();
-            tools.push(eliteforge_agent_official_plugin_a2ui::expand_descriptor());
-            tools
-        }
+        "framework.a2ui" => eliteforge_agent_official_plugin_a2ui::tool_descriptors(),
         "framework.personai" => eliteforge_agent_capability_personai::personai_tool_catalog(),
         "framework.web" => vec![eliteforge_agent_official_plugin_tools_web::web_fetch_descriptor()],
         "framework.media" => eliteforge_agent_official_plugin_tools_media::media_tool_catalog(),

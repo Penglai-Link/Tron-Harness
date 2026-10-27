@@ -162,6 +162,16 @@ impl FrameworkHost {
         self.0.prompt_service.set(service)
             .unwrap_or_else(|_| panic!("prompt service already bound"));
     }
+    #[cfg(test)]
+    pub(super) fn bind_test_skill_registry(
+        &self,
+        service: crate::application::skill::SkillRegistryService,
+    ) {
+        self.0
+            .skill_registry
+            .set(service)
+            .unwrap_or_else(|_| panic!("skills already bound"));
+    }
     pub fn bind_skills(
         &self,
         service: crate::application::skill::SkillRegistryService,

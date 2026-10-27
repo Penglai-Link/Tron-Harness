@@ -3,7 +3,7 @@ export function gatewayArguments(name: string, value: unknown): unknown {
   const args = value as Record<string, unknown>;
   if (name === "tool_search") return Array.isArray(args.items) ? args : { items: [args] };
   if (name === "tool_execute") {
-    if (["chat_ask_user", "ask_user", "a2ui_expand", "a2ui_publish", "a2ui_request_input", "worktree_create", "worktree_select", "git_switch_branch", "word_create", "word_replace_text", "excel_write", "fs_write_text", "fs_apply_patch", "fs_apply_unified_patch", "terminal_write", "system_task_write"].includes(String(args.tool))) return value;
+    if (["chat_ask_user", "ask_user", "a2ui_publish", "a2ui_request_input", "worktree_create", "worktree_select", "git_switch_branch", "word_create", "word_replace_text", "excel_write", "fs_write_text", "fs_apply_patch", "fs_apply_unified_patch", "terminal_write", "system_task_write"].includes(String(args.tool))) return value;
     const arguments_ = args.arguments as Record<string, unknown>;
     return { ...args, arguments: Array.isArray(arguments_?.items) ? arguments_ : { items: [arguments_] } };
   }

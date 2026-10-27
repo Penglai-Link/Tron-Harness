@@ -62,7 +62,7 @@ fn gateway_call(id: &str, tool: &str, arguments: serde_json::Value) -> ModelResp
     ModelResponse::tool_call_with_id(
         id,
         "tool_execute",
-        json!({"tool": tool, "arguments": if matches!(tool,"a2ui_expand"|"a2ui_publish"|"a2ui_request_input"|"chat_ask_user") { arguments } else { json!({"items":[arguments]}) }}),
+        json!({"tool": tool, "arguments": if matches!(tool,"a2ui_publish"|"a2ui_request_input"|"chat_ask_user") { arguments } else { json!({"items":[arguments]}) }}),
     )
 }
 
@@ -109,7 +109,7 @@ impl ModelClient for Client {
                 (4, 0) => {
                     gateway_call("a2ui-skill", "skill_load", json!({"name":"a2ui-interface"}))
                 }
-                (4, 1) => gateway_call("a2ui-expand", "a2ui_expand", json!({})),
+                (4, 1) => ModelResponse::tool_call_with_id("a2ui-search", "tool_search", json!({"items":[{"domainCode":"a2ui"}]})),
                 (4, 2) => gateway_call(
                     "a2ui-report",
                     "a2ui_publish",
@@ -403,16 +403,41 @@ async fn disabling_tool_extension_denies_managed_tools_and_hides_tool_guidance()
 }
 
 #[tokio::test]
-async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_injection() {
-    for (client_support, pack_enabled, tools_enabled, try_other_skill) in [
-        (true, true, true, false),
-        (false, true, true, false),
-        (true, false, true, false),
-        (true, true, false, false),
-        (true, true, true, true),
+async fn a2ui_plugin_owns_guidance_skills_and_gateway_discovery_without_product_schema_injection() {
+    for (client_support, pack_enabled, tools_enabled, try_other_skill, registry_bound, revoke_a2ui) in [
+        (true, true, true, false, false, false),
+        (false, true, true, false, false, false),
+        (true, false, true, false, false, false),
+        (true, true, false, false, false, false),
+        (true, true, true, true, false, false),
+        (true, true, true, false, true, false),
+        (false, true, true, false, true, false),
+        (true, false, true, false, true, false),
+        (true, true, false, false, true, false),
+        (true, true, true, true, true, false),
+        (true, true, true, false, true, true),
     ] {
-        let enabled = client_support && pack_enabled && tools_enabled;
+        let enabled = client_support && pack_enabled && tools_enabled && !revoke_a2ui;
         let host = FrameworkHost::temporary(None).unwrap();
+        let bound_skills = if registry_bound {
+            use crate::adapters::outbound::persistence::{SqliteAgentManagementRepository, SqliteSkillRegistryRepository, SqliteWorkspaceRepository};
+            use crate::application::{agent::AgentManagementService, skill::SkillRegistryService, workspace::WorkspaceService};
+            let database = std::env::temp_dir().join(format!("tron-a2ui-skills-{}.sqlite", fw::RunId::new_v4()));
+            let path = database.to_str().unwrap();
+            let agents = AgentManagementService::new(
+                SqliteAgentManagementRepository::connect(path).unwrap(),
+                WorkspaceService::new(SqliteWorkspaceRepository::connect(path).unwrap()),
+                &crate::config::AppConfig::default().system_agents,
+            );
+            agents.initialize_default_main_loop().unwrap();
+            let skills = SkillRegistryService::new(SqliteSkillRegistryRepository::connect(path).unwrap(), std::env::temp_dir().join(format!("tron-a2ui-skills-{}", fw::RunId::new_v4())));
+            skills.bind_agents(agents);
+            host.bind_test_skill_registry(skills.clone());
+            host.sync_capability_resources().unwrap();
+            let builtin = skills.get_registry_skill("a2ui-interface").unwrap();
+            assert_eq!(builtin.provider_pack_id.as_deref(), Some("framework.a2ui"));
+            Some(skills)
+        } else { None };
         host.set_pack_enabled(
             eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID,
             pack_enabled,
@@ -428,6 +453,17 @@ async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_i
         host.set_pack_enabled("fixture.managed-skills", true)
             .await
             .unwrap();
+        if registry_bound {
+            host.sync_capability_resources().unwrap();
+        }
+        if try_other_skill {
+            if let Some(skills) = &bound_skills {
+                skills.replace_skill_agents("review", &[]).unwrap();
+            }
+        }
+        if revoke_a2ui {
+            bound_skills.as_ref().unwrap().replace_skill_agents("a2ui-interface", &[]).unwrap();
+        }
         let client = Arc::new(Client {
             mode: if try_other_skill {
                 5
@@ -478,6 +514,11 @@ async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_i
             enabled
         );
         if enabled && !try_other_skill {
+            let catalog = first.messages.iter()
+                .map(|message| message.content.text())
+                .find(|text| text.contains("<available_skills>"))
+                .expect("the model should receive a skill catalog");
+            assert!(catalog.contains("a2ui-interface"), "A2UI must appear in the skill catalog");
             assert_eq!(requests.len(), 4);
             assert!(
                 result
@@ -485,6 +526,10 @@ async fn a2ui_plugin_owns_guidance_skills_and_expansion_without_product_schema_i
                     .iter()
                     .any(|o| o.output.contains("# A2UI interface"))
             );
+            let discovery = result.observations.iter().find(|o| o.output.contains("a2ui_publish")).expect("domain search must discover A2UI tools");
+            assert!(discovery.output.contains("a2ui_request_input"));
+            assert!(!discovery.output.contains("a2ui_expand"));
+            assert!(result.observations.iter().any(|o| o.output.contains("A2UI surface published")), "publishing through the gateway succeeds");
             assert!(
                 requests[2]
                     .tools

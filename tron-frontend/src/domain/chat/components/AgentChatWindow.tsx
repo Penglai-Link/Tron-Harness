@@ -7,6 +7,7 @@ import type * as Ui from "@eliteforge/agent-ui-chat-core";
 import type { ChatAdapter, ChatClientConfig, ChatMessageAttachment, ChatRuntimeRunState, ChatSession, SendChatMessageInput } from "@tron/chat-core";
 import { createAgentUiAdapter } from "@tron/chat-agent-ui-adapter";
 import { fromUiAttachment, fromUiSession, toUiAttachment, toUiInput, toUiSession } from "@tron/chat-agent-ui-adapter";
+import { useChatContextRefreshInterval } from "../hooks/useChatContextRefreshInterval";
 import { useChatInputSuggestions } from "@/domain/chat/hooks/useChatInputSuggestions";
 import { useChatFeedback } from "@/domain/chat/hooks/useChatFeedback";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
@@ -51,6 +52,8 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   const [composerSnapshot, setComposerSnapshot] = useState<{ sessionCode: string; metrics: ComposerMetrics | null } | null>(null);
   const metricsRequestRef = useRef(0);
   const wasRunActiveRef = useRef(false);
+  const [metricsRunSessionCode, setMetricsRunSessionCode] = useState<string | null>(null);
+  const metricsRefreshKey = useChatContextRefreshInterval(activeSessionCode ?? "", Boolean(activeSessionCode && metricsRunSessionCode === activeSessionCode));
   useEffect(() => {
     setActiveSessionCode(initialSession?.sessionCode ?? null);
     setActiveSession(initialSession ?? null);
@@ -74,7 +77,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   }, [adapter, activeSession?.ownerDudeCode]);
   useEffect(() => {
     if (activeSessionCode) void refreshComposerMetrics(activeSessionCode);
-  }, [activeSessionCode, refreshComposerMetrics]);
+  }, [activeSessionCode, metricsRefreshKey, refreshComposerMetrics]);
   useImperativeHandle(submitterRef, () => ({
     submit: (input) => runtimeSubmitterRef.current?.submit({
       content: input.content, attachments: input.attachments?.map(toUiAttachment),
@@ -127,6 +130,7 @@ export function AgentChatWindow({ adapter, attachmentDownloader, submitterRef, c
   const handleAttachments = useCallback((value: Ui.ChatMessageAttachment[]) =>
     onPendingAttachmentsChange?.(value.map(fromUiAttachment)), [onPendingAttachmentsChange]);
   const handleRun = useCallback((value: Ui.ChatRuntimeRunState) => {
+    setMetricsRunSessionCode(value.active ? value.sessionId ?? null : null);
     if (wasRunActiveRef.current && !value.active && value.sessionId) {
       void refreshComposerMetrics(value.sessionId);
     }
