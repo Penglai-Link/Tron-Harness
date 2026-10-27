@@ -187,6 +187,10 @@ pub trait AgentRuntime: Send + Sync {
     fn session_scope(&self) -> Option<String> {
         None
     }
+    /// Explicit transport directory, used only when the run has no assigned directory.
+    fn configured_working_directory(&self) -> Option<String> {
+        None
+    }
     fn capabilities(&self) -> RuntimeCapabilities;
 
     fn start<'a>(

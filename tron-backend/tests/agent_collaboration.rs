@@ -156,6 +156,9 @@ impl ModelClient for Script {
                     "agent_spawn",
                     json!({"agentCode":"reviewer", "task":"child:slow"}),
                 ),
+                Some("root:system-directory") if results.is_empty() => ModelResponse::tool_call(
+                    "agent_spawn", json!({"agentCode":"codex-fast", "task":"child:external", "workingDirectory":"child-task"}),
+                ),
                 Some("root:system-fast" | "root:system-deep") if results.is_empty() => {
                     ModelResponse::tool_call(
                         "agent_spawn",

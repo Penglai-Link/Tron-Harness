@@ -53,6 +53,8 @@ mod host_shutdown;
 mod host_snapshot;
 #[path = "host_storage.rs"]
 mod host_storage;
+#[path = "host_working_directory.rs"]
+mod host_working_directory;
 #[path = "host_summary.rs"]
 mod host_summary;
 #[path = "host_remote_tools.rs"]

@@ -253,6 +253,12 @@ impl AgentRunContextBuilder {
         self.model_router.clone()
     }
 
+    pub(crate) fn directory_inspector(
+        &self,
+    ) -> Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>> {
+        self.directory_inspector.clone()
+    }
+
     pub(crate) fn agent_management(&self) -> &AgentManagementService {
         &self.management
     }
@@ -585,8 +591,6 @@ impl AgentRunContextBuilder {
             .and_then(|scope| scope.app_code.clone())
             .or_else(|| app.as_ref().map(|app| app.app_code.clone()));
         let task_code = requested_task_code;
-        let runtime_selection =
-            runtime_selection_for_agent(&resolved_agent, local_directory.clone())?;
         let requested_system_agent_session_id =
             normalize_optional(requested_system_agent_session_id);
         let mut context = AgentRunContext {
@@ -627,6 +631,14 @@ impl AgentRunContextBuilder {
             short_term_memory: None,
             started_at: chrono::Utc::now().to_rfc3339(),
         };
+        if let Some(host) = &self.framework_host {
+            host.prepare_working_directory(&mut context)
+                .map_err(AgentInvocationError::RuntimeNotStarted)?;
+        }
+        let runtime_selection = runtime_selection_for_agent(
+            &resolved_agent,
+            context.execution_scope.local_directory.clone(),
+        )?;
         if let Some(message) =
             crate::application::agent::execution_context_message(&context.execution_scope)
         {

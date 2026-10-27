@@ -10,6 +10,7 @@ pub enum AgentInvocationError {
     RunStopped,
     SessionBusy(String),
     RuntimeFailed(String),
+    RuntimeNotStarted(String),
     RuntimeSecretDeliveryUntrusted,
     RuntimeVariableResolutionFailed(VariableError),
     ModelFailed(String),
@@ -29,7 +30,7 @@ impl AgentInvocationError {
             Self::HistoryStorageFailed => "AGENT_HISTORY_STORAGE_FAILED",
             Self::RunStopped => "AGENT_RUN_STOPPED",
             Self::SessionBusy(_) => "RUN_ALREADY_ACTIVE",
-            Self::RuntimeFailed(_) => "AGENT_RUNTIME_FAILED",
+            Self::RuntimeFailed(_) | Self::RuntimeNotStarted(_) => "AGENT_RUNTIME_FAILED",
             Self::RuntimeSecretDeliveryUntrusted => "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",
             Self::RuntimeVariableResolutionFailed(error) => match error {
                 VariableError::DecryptFailed => "VARIABLE_RUNTIME_DECRYPT_FAILED",
@@ -57,6 +58,7 @@ impl AgentInvocationError {
             Self::RunStopped => "agent run was stopped".into(),
             Self::SessionBusy(_) => "session already has an active agent run".into(),
             Self::RuntimeFailed(message)
+            | Self::RuntimeNotStarted(message)
             | Self::ModelFailed(message)
             | Self::ToolFailed(message)
             | Self::EmptyFinalOutput(message) => message.clone(),

@@ -31,6 +31,9 @@ impl FrameworkHost {
         steering: Option<ActiveRunControl>,
         registration: host_control::NativeRegistration,
     ) -> Result<AgentRunResult, AgentError> {
+        self.prepare_working_directory(&mut context)
+            .map_err(AgentError::InvalidConfiguration)?;
+        crate::application::agent::execution_context::sync_execution_context(&mut context);
         collaboration::authorize_tools(self, &mut context);
         let onboarding = super::super::onboarding::active(&context, harness.framework_dudes().as_ref());
         if onboarding { super::super::onboarding::narrow(&mut context); }
@@ -329,9 +332,9 @@ impl FrameworkHost {
             .max_tokens
             .filter(|value| *value > 0)
             .unwrap_or_else(|| self.invocation_config().default_output_tokens);
-        request.limits.max_total_tokens = (request.limits.max_context_tokens as u64
-            + u64::from(request.limits.max_model_output_tokens))
-        .saturating_mul(request.limits.max_steps as u64);
+        // Context capacity is not a cumulative usage quota. Tron does not
+        // configure a run-wide token ceiling.
+        request.limits.max_total_tokens = fw::RunLimits::UNLIMITED_TOKENS;
         let invocation = self.invocation_config();
         request.limits.model_timeout = Duration::from_secs(invocation.agent_model_timeout_seconds);
         request.limits.run_timeout = Duration::from_secs(invocation.agent_run_timeout_seconds);

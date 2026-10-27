@@ -78,15 +78,27 @@ impl SystemCliRuntime {
         let result = ExternalCli::new(
             self.kind,
             &self.command_name,
-            self.working_directory.clone(),
+            context
+                .execution_scope
+                .local_directory
+                .clone()
+                .or_else(|| self.working_directory.clone()),
         )
-        .with_reasoning_effort(context.model.reasoning_effort.map(|effort| effort.provider_value().to_owned()))
+        .with_reasoning_effort(
+            context
+                .model
+                .reasoning_effort
+                .map(|effort| effort.provider_value().to_owned()),
+        )
         .with_fast_mode(context.system_agent_fast_mode)
         .invoke(request, sink)
         .await
         .map_err(|error| match error {
             eliteforge_agent_capability_external::TransportError::PromptRequired => {
                 AgentInvocationError::PromptRequired
+            }
+            eliteforge_agent_capability_external::TransportError::NotStarted(message) => {
+                AgentInvocationError::RuntimeNotStarted(message)
             }
             error => AgentInvocationError::RuntimeFailed(error.to_string()),
         })?;
@@ -129,6 +141,10 @@ impl AgentRuntime for SystemCliRuntime {
 
     fn key(&self) -> RuntimeAdapterKey {
         self.key
+    }
+
+    fn configured_working_directory(&self) -> Option<String> {
+        self.working_directory.clone()
     }
 
     fn capabilities(&self) -> RuntimeCapabilities {

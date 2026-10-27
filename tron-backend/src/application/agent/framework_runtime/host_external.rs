@@ -11,11 +11,17 @@ impl FrameworkHost {
     pub(crate) async fn run_external(
         &self,
         transport: Arc<dyn crate::application::agent::AgentRuntime>,
-        context: AgentRunContext,
+        mut context: AgentRunContext,
         sink: Option<ModelStreamSink>,
         resume: bool,
     ) -> Result<AgentRunResult, crate::application::agent::AgentInvocationError> {
         use crate::application::agent::AgentInvocationError;
+        if context.execution_scope.local_directory.is_none() {
+            context.execution_scope.local_directory = transport.configured_working_directory();
+        }
+        self.prepare_working_directory(&mut context)
+            .map_err(AgentInvocationError::RuntimeNotStarted)?;
+        crate::application::agent::execution_context::sync_execution_context(&mut context);
         let registration = self
             .reserve_native(&context.run_code)
             .map_err(|error| match error {

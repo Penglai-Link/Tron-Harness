@@ -370,7 +370,14 @@ impl Runtime {
             .resume
             .as_ref()
             .map(|resume| resume.run_id.to_string());
-        command.execution_scope_override = Some(base.execution_scope.clone());
+        let mut execution_scope = base.execution_scope.clone();
+        if let Some(directory) = request.working_directory.take() {
+            if matches!(session_preparation, SessionPreparation::Existing) {
+                return Err(failure("an existing thread keeps its bound working directory"));
+            }
+            execution_scope = host.delegated_execution_scope(base, &directory).map_err(failure)?;
+        }
+        command.execution_scope_override = Some(execution_scope);
         // Collaboration uses native sessions; no product chat or checkpoint is fabricated.
         let collaboration_owner = threads::owner(base);
         let mut prepared = self

@@ -167,3 +167,22 @@ pub(crate) fn framework_file_reference(
         },
     )
 }
+
+/// Resolve a delegated task directory using exactly the caller's path authority.
+pub(crate) fn delegated_working_directory(
+    context: &crate::domain::agent::AgentRunContext,
+    raw: &str,
+) -> Result<String, crate::domain::agent::ToolError> {
+    let path = coding_tools::resolve_path(context, raw)?;
+    std::fs::create_dir_all(&path).map_err(|error| {
+        crate::domain::agent::ToolError::ExecutionFailed(format!(
+            "could not prepare delegated working directory: {error}"
+        ))
+    })?;
+    let canonical = path.canonicalize().map_err(|error| {
+        crate::domain::agent::ToolError::ExecutionFailed(error.to_string())
+    })?;
+    // Check resolved symlinks as well as lexical relative paths.
+    coding_tools::resolve_path(context, &canonical.to_string_lossy())?;
+    Ok(canonical.to_string_lossy().into_owned())
+}

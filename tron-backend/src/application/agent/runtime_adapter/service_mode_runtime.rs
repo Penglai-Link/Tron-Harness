@@ -57,7 +57,11 @@ impl ServiceModeRuntime {
             let body = serde_json::to_value(ServiceModeRunRequest {
                 action: action.into(),
                 requested_session_id,
-                working_directory: self.working_directory.clone(),
+                working_directory: context
+                    .execution_scope
+                    .local_directory
+                    .clone()
+                    .or_else(|| self.working_directory.clone()),
                 context,
             })
             .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
@@ -109,6 +113,10 @@ impl AgentRuntime for ServiceModeRuntime {
 
     fn key(&self) -> RuntimeAdapterKey {
         self.key
+    }
+
+    fn configured_working_directory(&self) -> Option<String> {
+        self.working_directory.clone()
     }
 
     fn capabilities(&self) -> RuntimeCapabilities {

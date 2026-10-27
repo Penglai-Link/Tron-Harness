@@ -47,7 +47,8 @@ pub fn agent_error_response(error: AgentInvocationError) -> Response {
             "AGENT_RUN_STOPPED",
             "agent run was stopped".to_string(),
         ),
-        AgentInvocationError::RuntimeFailed(message) => {
+        AgentInvocationError::RuntimeFailed(message)
+        | AgentInvocationError::RuntimeNotStarted(message) => {
             (StatusCode::BAD_REQUEST, "AGENT_RUNTIME_FAILED", message)
         }
         error @ AgentInvocationError::RuntimeVariableResolutionFailed(_) => (

@@ -58,9 +58,13 @@ impl fw::ExternalAgent for HostExternalAgent {
                 .iter_mut()
                 .rfind(|message| message.role == "user")
         {
-            message.parts.push(crate::domain::agent::AgentMessagePart::Context {
-                kind: "conversation_annotations".into(), text: value.to_string(), metadata: Some(value),
-            });
+            message
+                .parts
+                .push(crate::domain::agent::AgentMessagePart::Context {
+                    kind: "conversation_annotations".into(),
+                    text: value.to_string(),
+                    metadata: Some(value),
+                });
         }
         let session = request.session.map(|session| session.session_id);
         context.system_agent_session_id = session.clone();
@@ -162,6 +166,12 @@ impl fw::ExternalAgent for HostExternalAgent {
                     }
                 }),
             }),
+            Err(AgentInvocationError::RuntimeNotStarted(message)) => {
+                Err(fw::AgentError::ExternalNotStarted(message.clone()))
+            }
+            Err(AgentInvocationError::PromptRequired) => Err(fw::AgentError::ExternalNotStarted(
+                "prompt is required".into(),
+            )),
             Err(error) => Err(fw::AgentError::Run(format!("{error:?}"))),
         };
         *execution

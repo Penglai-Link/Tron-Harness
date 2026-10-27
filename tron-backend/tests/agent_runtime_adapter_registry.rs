@@ -391,6 +391,24 @@ async fn service_mode_runtime_factory_supports_start_resume_and_cancel() {
 }
 
 #[tokio::test]
+async fn service_runtime_uses_the_directory_assigned_to_the_run() {
+    let server = service_runtime_mock_server().await;
+    let runtime = registry().resolve(RuntimeAdapterSelection::CodexAppServer {
+        endpoint: server.base_url.clone(),
+        working_directory: Some("/transport-default".into()),
+    });
+    let mut context = base_context();
+    context.execution_scope.local_directory = Some("/parent-selected-task".into());
+    runtime.start(context, None).await.unwrap();
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(requests[0]["workingDirectory"], "/parent-selected-task");
+    assert_eq!(
+        requests[0]["context"]["executionScope"]["localDirectory"],
+        "/parent-selected-task"
+    );
+}
+
+#[tokio::test]
 async fn executor_stop_cancels_in_flight_service_runtime_by_run_code() {
     let server = service_runtime_mock_server_with_start_delay(2_000).await;
     let runtime_registry = registry();
@@ -608,6 +626,7 @@ async fn cli_adapters_restore_native_sessions_after_host_restart() {
         let directory = tempfile::tempdir().unwrap();
         let executable = directory.path().join("agent");
         let log = directory.path().join("argv.txt");
+        let cwd_log = directory.path().join("cwd.txt");
         let event = if codex {
             r#"echo '{"type":"thread.started","thread_id":"cli-session"}'
 echo '{"type":"item.completed","item":{"type":"agent_message","text":"cli reply"}}'"#
@@ -618,8 +637,9 @@ echo '{"type":"text","part":{"text":"cli reply"}}'"#
         std::fs::write(
             &executable,
             format!(
-                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\n{event}\n",
-                log.display()
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\npwd -P >> '{}'\n{event}\n",
+                log.display(),
+                cwd_log.display()
             ),
         )
         .unwrap();
@@ -652,8 +672,19 @@ echo '{"type":"text","part":{"text":"cli reply"}}'"#
             assert_eq!(result.final_output, "cli reply");
             host.close().await;
         }
+        let expected_cwd = std::fs::canonicalize(directory.path()).unwrap();
+        let cwd = std::fs::read_to_string(cwd_log).unwrap();
+        assert_eq!(cwd.lines().count(), 2);
+        for actual in cwd.lines() {
+            assert_eq!(std::path::Path::new(actual), expected_cwd);
+        }
         let argv = std::fs::read_to_string(log).unwrap();
-        let lines: Vec<_> = argv.lines().collect();
+        // Prompts contain multiline execution context; only command headers are invocations.
+        let lines: Vec<_> = argv
+            .lines()
+            .filter(|line| line.starts_with(if codex { "exec " } else { "run " }))
+            .collect();
+        assert_eq!(lines.len(), 2, "{argv}");
         assert!(!lines[0].contains("cli-session"));
         assert!(lines[1].contains("cli-session"), "{argv}");
         if codex {
@@ -1086,4 +1117,31 @@ async fn closing_host_releases_native_bindings_even_when_outer_future_is_not_pol
     let error = react.start(base_context(), None).await.unwrap_err();
     assert!(format!("{error:?}").contains("host is closed"));
     assert!(!directory.path().join("unused.sqlite3").exists());
+}
+
+#[tokio::test]
+async fn cli_startup_errors_keep_the_known_unspent_classification() {
+    let registry = registry();
+    for selection in [
+        RuntimeAdapterSelection::CodexExec {
+            command_name: "must-not-spawn".into(),
+            working_directory: None,
+        },
+        RuntimeAdapterSelection::OpenCodeRun {
+            command_name: "must-not-spawn".into(),
+            working_directory: None,
+        },
+    ] {
+        let runtime = registry.resolve(selection);
+        let mut context = base_context();
+        let directory = tempfile::tempdir().unwrap();
+        context.execution_scope.local_directory =
+            Some(directory.path().join("missing").to_string_lossy().into_owned());
+        let error = runtime.start(context, None).await.unwrap_err();
+        assert!(
+            matches!(error, AgentInvocationError::RuntimeNotStarted(_)),
+            "{error:?}"
+        );
+        assert!(error.message().contains("is unavailable"));
+    }
 }

@@ -7,6 +7,7 @@ use tron_backend::{
 
 fn seed_external(f: &Fixture) -> std::path::PathBuf {
     let log = f.directory.path().join("external-argv.txt");
+    let cwd_log = f.directory.path().join("external-cwd.txt");
     let events = [
         r#"{"type":"thread.started","thread_id":"external-session"}"#,
         r#"{"type":"item.completed","item":{"type":"agent_message","text":"external subscription reply"}}"#,
@@ -23,9 +24,11 @@ fn seed_external(f: &Fixture) -> std::path::PathBuf {
             fn main() {{
                 let mut log = std::fs::OpenOptions::new().append(true).create(true).open({:?}).unwrap();
                 writeln!(log, "{{}}", std::env::args().skip(1).collect::<Vec<_>>().join(" ")).unwrap();
+                let mut cwd = std::fs::OpenOptions::new().append(true).create(true).open({:?}).unwrap();
+                writeln!(cwd, "{{}}", std::env::current_dir().unwrap().canonicalize().unwrap().display()).unwrap();
                 for event in {:?} {{ println!("{{event}}"); }}
             }}
-        "#, log.to_string_lossy(), events)).unwrap();
+        "#, log.to_string_lossy(), cwd_log.to_string_lossy(), events)).unwrap();
         let compiled = std::process::Command::new("rustc")
             .arg("--edition=2024")
             .arg(&source)
@@ -45,6 +48,7 @@ fn seed_external(f: &Fixture) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let executable = f.directory.path().join("fake-codex");
         let mut script = format!("#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\n", log.display());
+        script.push_str(&format!("pwd -P >> '{}'\n", cwd_log.display()));
         for event in events {
             script.push_str(&format!("echo '{event}'\n"));
         }
@@ -247,4 +251,105 @@ async fn system_agent_profile_http_crud_keeps_model_identity_and_rejects_duplica
         StatusCode::NOT_FOUND
     );
     f.state.agent_framework.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unavailable_explicit_directory_does_not_exhaust_parent_or_spawn_in_process_cwd() {
+    let f = Fixture::new();
+    let log = seed_external(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    // Explicit missing targets remain errors instead of falling back to the managed workspace.
+    let mut root = context("root:system-fast");
+    root.execution_scope.local_directory = Some(f.directory.path().join("missing-target").to_string_lossy().into_owned());
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        agent.run(root),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(
+        result
+            .final_output
+            .contains("is unavailable"),
+        "{}",
+        result.final_output
+    );
+    assert!(
+        !result.final_output.contains("budget exhausted"),
+        "{}",
+        result.final_output
+    );
+    assert!(
+        !log.exists(),
+        "the external executable must not have started"
+    );
+    assert_eq!(
+        script.requests.lock().unwrap().len(),
+        2,
+        "parent must receive the tool error and respond"
+    );
+    if let Some(snapshot) = result.sdk_execution {
+        assert_eq!(
+            snapshot.limits["max_total_tokens"].as_u64().unwrap(),
+            fw::RunLimits::UNLIMITED_TOKENS
+        );
+    } else {
+        panic!("execution snapshot must be available");
+    }
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ordinary_chat_and_dude_delegate_from_their_managed_directory() {
+    for dude in [false, true] {
+        let f = Fixture::new();
+        seed_external(&f);
+        let script = Arc::new(Script::default());
+        let host = f.state.agent_framework.clone();
+        let agent = ReactAgentBuilder::new(script.clone(), f.state.agent_tool_registry.clone(), EventBusHandle::disabled())
+            .with_framework_host(Some(host.clone())).build().unwrap();
+        let mut root = context("root:system-fast");
+        if dude {
+            root.collaboration_owner = Some(tron_backend::domain::agent::AgentCollaborationOwner {
+                kind:"DUDE".into(), code:"main-dude".into(), origin_session_code:root.conversation_code.clone(), task_code:None,
+            });
+        }
+        let result = tokio::time::timeout(std::time::Duration::from_secs(30), agent.run(root)).await.unwrap().unwrap();
+        assert!(result.final_output.contains("external subscription reply"), "{}", result.final_output);
+        let cwd = std::fs::read_to_string(f.directory.path().join("external-cwd.txt")).unwrap();
+        let directory = std::path::Path::new(cwd.trim());
+        assert!(directory.is_dir());
+        assert!(directory.components().any(|part| part.as_os_str() == if dude {"dudes"} else {"sessions"}), "{cwd}");
+        assert_ne!(directory, std::env::current_dir().unwrap());
+        assert!(script.requests.lock().unwrap()[0].messages.iter().any(|m| m.content.protocol_text().contains(cwd.trim())), "main agent must see the real default cwd");
+        assert!(host.close().await.is_success());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn parent_selected_child_directory_is_the_actual_process_cwd() {
+    let f = Fixture::new();
+    seed_external(&f);
+    let script = Arc::new(Script::default());
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(script, f.state.agent_tool_registry.clone(), EventBusHandle::disabled())
+        .with_framework_host(Some(host.clone())).build().unwrap();
+    let mut root = context("root:system-directory");
+    root.execution_scope.local_directory = Some(f.directory.path().canonicalize().unwrap().to_string_lossy().into_owned());
+    root.execution_scope.allowed_local_directories = vec![root.execution_scope.local_directory.clone().unwrap()];
+    let result = agent.run(root).await.unwrap();
+    assert!(result.final_output.contains("external subscription reply"), "{}", result.final_output);
+    let cwd = std::fs::read_to_string(f.directory.path().join("external-cwd.txt")).unwrap();
+    assert_eq!(std::path::Path::new(cwd.trim()), f.directory.path().join("child-task").canonicalize().unwrap());
+    assert!(host.close().await.is_success());
 }
