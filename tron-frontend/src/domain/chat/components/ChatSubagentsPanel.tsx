@@ -3,7 +3,9 @@ import { ShinyText } from "@/shared/motion";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { historyText } from "@eliteforge/agent-ui-chat-core";
+import { historyMessages, type ChatWorkRailLabels, type ChatHistoryLabels, type SessionHistory } from "@eliteforge/agent-ui-chat-core";
+import { ChatPanel } from "@eliteforge/agent-ui-chat-react";
+import { useChatHistoryLabels } from "../hooks/useChatWorkRailLabels";
 import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/components/markdown-content";
 import { useTabVisibility } from "@/components/editable-tabs/TabVisibilityContext";
@@ -11,10 +13,12 @@ import { useChatSubagentDetail, useChatSubagents } from "../hooks/useChatSubagen
 import type { ChatSubagent, ChatSubagentDetail } from "../model/ChatSubagent";
 import { SubagentAvatar } from "./SubagentAvatar";
 
-export function ChatSubagentsPanel({ sessionCode, workspaceCode, data }: {
+export function ChatSubagentsPanel({ sessionCode, workspaceCode, data, workRailLabels, historyLabels }: {
   sessionCode: string;
   workspaceCode: string;
   data?: ReturnType<typeof useChatSubagents>;
+  workRailLabels?: ChatWorkRailLabels;
+  historyLabels?: ChatHistoryLabels;
 }) {
   const { t } = useTranslation("pages");
   const visible = useTabVisibility();
@@ -22,7 +26,7 @@ export function ChatSubagentsPanel({ sessionCode, workspaceCode, data }: {
   const { items, loading, error } = data ?? queried;
   const [selected, setSelected] = useState("");
   const item = items.find((item) => item.runId === selected);
-  if (item) return <SubagentSession key={`${sessionCode}:${selected}`} parent={sessionCode} workspace={workspaceCode} item={item} onBack={() => setSelected("")} />;
+  if (item) return <SubagentSession key={`${sessionCode}:${selected}`} parent={sessionCode} workspace={workspaceCode} item={item} workRailLabels={workRailLabels} historyLabels={historyLabels} onBack={() => setSelected("")} />;
   return <section className="h-full overflow-y-auto p-4" aria-label={t("chat.subagents.title")}>
     {error ? <p role="alert" className="py-3 text-sm text-[var(--color-error)]">{t("chat.subagents.loadFailed")}</p> : null}
     {loading ? <p role="status" className="py-3 text-sm text-[var(--color-on-surface-variant)]"><ShinyText>{t("chat.subagents.loading")}</ShinyText></p> : null}
@@ -42,7 +46,10 @@ export function ChatSubagentsPanel({ sessionCode, workspaceCode, data }: {
   </section>;
 }
 
-function SubagentSession({ parent, workspace, item, onBack }: { parent: string; workspace: string; item: ChatSubagent; onBack: () => void }) {
+function SubagentSession({ parent, workspace, item, onBack, workRailLabels, historyLabels }: {
+  parent: string; workspace: string; item: ChatSubagent; onBack: () => void;
+  workRailLabels?: ChatWorkRailLabels; historyLabels?: ChatHistoryLabels;
+}) {
   const { t } = useTranslation("pages");
   const visible = useTabVisibility();
   const { detail, error } = useChatSubagentDetail(parent, workspace, item.runId, visible);
@@ -52,44 +59,54 @@ function SubagentSession({ parent, workspace, item, onBack }: { parent: string; 
       <SubagentAvatar avatarId={item.avatarId} name={item.agentName} status={detail?.status ?? item.status} />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.agentName}</span>
     </header>
-    <div className="flex-1 space-y-5 overflow-y-auto p-4">
-      <section><h3 className="mb-1 text-xs font-medium text-[var(--color-on-surface-variant)]">{t("chat.subagents.task")}</h3><MarkdownContent content={item.task} /></section>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <section className="max-h-40 shrink-0 overflow-y-auto px-4 py-3">
+        <h3 className="mb-1 text-xs font-medium text-[var(--color-on-surface-variant)]">{t("chat.subagents.task")}</h3>
+        <MarkdownContent content={item.task} />
+      </section>
       {error ? <p role="alert" className="text-sm text-[var(--color-error)]">{t("chat.subagents.loadFailed")}</p> : null}
       {!detail && !error ? <p role="status" className="text-sm">{t("chat.subagents.loading")}</p> : null}
-      {detail ? <SubagentTranscript detail={detail} /> : null}
+      {detail ? <SubagentTranscript detail={detail} item={item} workRailLabels={workRailLabels} historyLabels={historyLabels} /> : null}
     </div>
   </section>;
 }
 
-function SubagentTranscript({ detail }: { detail: ChatSubagentDetail }) {
-  const { t } = useTranslation("pages");
-  const liveText = useMemo(() => {
-    // This stream belongs to the selected temporary session only.
-    const texts = new Map<string, string>();
-    for (const event of detail.events) {
-      if (event.type === "TEXT_MESSAGE_CONTENT" && typeof event.messageId === "string" && typeof event.delta === "string") {
-        texts.set(event.messageId, (texts.get(event.messageId) ?? "") + event.delta);
-      }
-    }
-    return [...texts.values()].at(-1) ?? "";
-  }, [detail.events]);
-  const messages = detail.records.messages.filter((message) => message.role === "Assistant");
-  const committedText = messages.map((message) => historyText(message.content));
-  const showLive = detail.status === "Running" && liveText && !committedText.includes(liveText);
-  return <div className="space-y-5" data-subagent-session={detail.sessionId}>
-    {messages.map((message) => {
-      const reasoning = message.content.filter((block) => block.type === "Reasoning").map((block) => "text" in block ? block.text : "").join("");
-      const tools = detail.records.toolInvocations.filter((tool) => tool.messageId === message.id);
-      return <section key={message.id} className="min-w-0 space-y-2">
-        {reasoning ? <details className="text-sm text-[var(--color-on-surface-variant)]"><summary className="cursor-pointer py-1">{t("chat.subagents.reasoning")}</summary><MarkdownContent content={reasoning} /></details> : null}
-        {historyText(message.content) ? <MarkdownContent content={historyText(message.content)} /> : null}
-        {tools.map((tool) => <details key={tool.id} className="text-sm">
-          <summary className="cursor-pointer py-1"><span>{tool.toolName}</span><span className="ml-2 text-xs text-[var(--color-on-surface-variant)]">{t(`chat.subagents.statuses.${tool.status}`)}</span></summary>
-          {historyText(tool.content) ? <MarkdownContent content={historyText(tool.content)} /> : null}
-        </details>)}
-      </section>;
-    })}
-    {showLive ? <MarkdownContent content={liveText} /> : null}
-    {detail.status === "Waiting" ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.subagents.waiting")}</p> : null}
+const ignoreInput = () => {};
+
+function SubagentTranscript({ detail, item, workRailLabels, historyLabels }: {
+  detail: ChatSubagentDetail; item: ChatSubagent;
+  workRailLabels?: ChatWorkRailLabels; historyLabels?: ChatHistoryLabels;
+}) {
+  const { i18n, t } = useTranslation("pages");
+  const fallbackHistoryLabels = useChatHistoryLabels();
+  const messages = useMemo(() => {
+    const run = {
+      id: detail.runId, sessionId: detail.sessionId, parentRunId: null, rootRunId: detail.runId,
+      status: detail.status, startedAtMs: item.startedAtMs, finishedAtMs: item.finishedAtMs, error: null,
+    };
+    // Native run envelopes carry transport bookkeeping, not user-authored
+    // structured content. Keep genuine structured messages in the shared view.
+    const records = { ...detail.records, messages: detail.records.messages.filter(message => message.role !== "User").map(message => {
+      const value = message.structured as { runCode?: unknown; observations?: unknown } | null;
+      return value?.runCode === detail.runId && Array.isArray(value.observations)
+        ? { ...message, structured: null } : message;
+    }) };
+    const history: SessionHistory = {
+      sessionId: detail.sessionId, version: detail.runId, nextCursor: null,
+      runs: [run], records, pendingInteractions: [],
+      activeRuns: detail.status === "Running" || detail.status === "Waiting" ? [run] : [],
+    };
+    return historyMessages(history).map(message => message.role === "ASSISTANT" ? { ...message, actor: item.agentName } : message);
+  }, [detail, item]);
+  const session = useMemo(() => ({
+    id: detail.sessionId, sessionId: detail.sessionId, title: item.agentName, status: "ACTIVE" as const,
+    createdAt: new Date(item.startedAtMs).toISOString(), updatedAt: new Date(item.finishedAtMs ?? item.startedAtMs).toISOString(),
+  }), [detail.sessionId, item]);
+  return <div className="min-h-0 flex-1" data-subagent-session={detail.sessionId}>
+    <ChatPanel session={session} messages={messages} protocolEvents={detail.events}
+      locale={i18n.language} workRailLabels={workRailLabels} historyLabels={historyLabels ?? fallbackHistoryLabels}
+      showHeader={false} showHistoryRail={false} showComposer={false} showStop={false} a2uiDisabled
+      draft="" onDraftChange={ignoreInput} onSend={ignoreInput} />
+    {detail.status === "Waiting" ? <p role="status" className="px-4 text-sm text-[var(--color-on-surface-variant)]">{t("chat.subagents.waiting")}</p> : null}
   </div>;
 }

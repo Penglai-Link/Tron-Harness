@@ -36,6 +36,9 @@ impl SystemCliRuntime {
         &self,
         context: AgentRunContext,
         sink: Option<ModelStreamSink>,
+        observation_sink: Option<
+            std::sync::Arc<dyn Fn(crate::domain::agent::ToolObservation) + Send + Sync>,
+        >,
     ) -> Result<AgentRunResult, AgentInvocationError> {
         let request = ExternalCliRequest {
             prompt: prompt_from_context(&context),
@@ -66,10 +69,14 @@ impl SystemCliRuntime {
                     if observations.len() >= 1024 || output.len() > 256 * 1024 {
                         observed_overflow.store(true, std::sync::atomic::Ordering::Release);
                     } else {
-                        observations.push(crate::domain::agent::ToolObservation {
+                        let observation = crate::domain::agent::ToolObservation {
                             tool_name: format!("external_{:?}", event.kind),
                             output,
-                        });
+                        };
+                        if let Some(sink) = &observation_sink {
+                            sink(observation.clone());
+                        }
+                        observations.push(observation);
                     }
                 }
             },
@@ -151,13 +158,27 @@ impl AgentRuntime for SystemCliRuntime {
         self.capabilities
     }
 
+    fn run_observed<'a>(
+        &'a self,
+        session: Option<&'a str>,
+        mut context: AgentRunContext,
+        sink: Option<ModelStreamSink>,
+        observations: std::sync::Arc<dyn Fn(crate::domain::agent::ToolObservation) + Send + Sync>,
+    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
+    {
+        if let Some(session) = session {
+            context.system_agent_session_id = Some(session.to_owned());
+        }
+        Box::pin(async move { self.invoke(context, sink, Some(observations)).await })
+    }
+
     fn start<'a>(
         &'a self,
         context: AgentRunContext,
         sink: Option<ModelStreamSink>,
     ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
     {
-        Box::pin(async move { self.invoke(context, sink).await })
+        Box::pin(async move { self.invoke(context, sink, None).await })
     }
 
     fn resume<'a>(
@@ -176,7 +197,7 @@ impl AgentRuntime for SystemCliRuntime {
             });
         }
         context.system_agent_session_id = Some(session_id.to_string());
-        Box::pin(async move { self.invoke(context, sink).await })
+        Box::pin(async move { self.invoke(context, sink, None).await })
     }
 
     fn cancel<'a>(

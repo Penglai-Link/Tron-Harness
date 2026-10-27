@@ -301,6 +301,9 @@ impl FrameworkHost {
                     // memory block's token quota controls summary size, not the
                     // storage plugin's smaller general-purpose default record cap.
                     storage.config.summaries.max_record_bytes = 16 * 1024 * 1024;
+                    // Persistent product conversations are not an in-memory cache:
+                    // normal saved history must not block every new chat/child at 1024.
+                    storage.config.conversations.max_sessions = usize::MAX;
                     storage
                 },
             )

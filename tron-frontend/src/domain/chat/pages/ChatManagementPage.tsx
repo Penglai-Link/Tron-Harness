@@ -3406,10 +3406,10 @@ export function ChatManagementPage() {
       { key: "context", label: t("chat.shortTermMemory.shortTermMemoryTab"), closable: false, children: <ChatSessionContextPanel snapshot={snapshot} onCreateCompaction={handleCreateCompactionForRightPanel} /> },
     ];
     if (snapshot.session.workspaceCode && subagents.items.length > 0) {
-      tabs.push({ key: "subagents", label: t("chat.subagents.title"), closable: false, children: <ChatSubagentsPanel key={snapshot.session.sessionCode} sessionCode={snapshot.session.sessionCode} workspaceCode={snapshot.session.workspaceCode} data={subagents} /> });
+      tabs.push({ key: "subagents", label: t("chat.subagents.title"), closable: false, children: <ChatSubagentsPanel key={snapshot.session.sessionCode} sessionCode={snapshot.session.sessionCode} workspaceCode={snapshot.session.workspaceCode} data={subagents} workRailLabels={workRailLabels} historyLabels={historyLabels} /> });
     }
     return tabs;
-  }, [activeSession?.sessionCode, handleCreateCompactionForRightPanel, rightPanel, rightPanelSnapshots, subagents, t]);
+  }, [activeSession?.sessionCode, handleCreateCompactionForRightPanel, rightPanel, rightPanelSnapshots, subagents, workRailLabels, historyLabels, t]);
   const downloadPendingAttachment = useCallback(
     (attachment: ChatMessageAttachment) => {
       const file = draftResources.file(attachment);

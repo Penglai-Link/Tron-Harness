@@ -191,6 +191,19 @@ pub trait AgentRuntime: Send + Sync {
     fn configured_working_directory(&self) -> Option<String> {
         None
     }
+    /// Native observations travel separately from model text and reasoning.
+    fn run_observed<'a>(
+        &'a self,
+        session: Option<&'a str>,
+        context: AgentRunContext,
+        sink: Option<ModelStreamSink>,
+        _observations: Arc<dyn Fn(crate::domain::agent::ToolObservation) + Send + Sync>,
+    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>> {
+        match session {
+            Some(session) => self.resume(session, context, sink),
+            None => self.start(context, sink),
+        }
+    }
     fn capabilities(&self) -> RuntimeCapabilities;
 
     fn start<'a>(

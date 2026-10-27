@@ -81,17 +81,22 @@ impl fw::ExternalAgent for HostExternalAgent {
                 sink(event);
             }
         });
-        let invocation = async {
-            match session {
-                Some(session) => {
-                    execution
-                        .transport
-                        .resume(&session, context, Some(observed))
-                        .await
+        let (observation_sender, mut observation_receiver) = tokio::sync::mpsc::channel(1024);
+        let observation_overflow = overflow.clone();
+        let observations = Arc::new(move |observation| {
+            if let Some(event) = observation_event(&observation) {
+                if observation_sender.try_send(event).is_err() {
+                    observation_overflow.store(true, std::sync::atomic::Ordering::Release);
                 }
-                None => execution.transport.start(context, Some(observed)).await,
             }
-        };
+        });
+        let invocation = execution.transport.run_observed(
+            session.as_deref(),
+            context,
+            Some(observed),
+            observations,
+        );
+        let mut observed_events = std::collections::HashSet::new();
         tokio::pin!(invocation);
         let result = loop {
             if overflow.load(std::sync::atomic::Ordering::Acquire) {
@@ -101,6 +106,10 @@ impl fw::ExternalAgent for HostExternalAgent {
             }
             tokio::select! {
                 result = &mut invocation => break result,
+                Some(event) = observation_receiver.recv() => {
+                    observed_events.insert(serde_json::to_string(&event).expect("serializable observation"));
+                    sink.emit(event).await;
+                },
                 event = receiver.recv() => match event {
                     Some(event) => forward_event(event, sink).await,
                     None => break invocation.await,
@@ -110,6 +119,11 @@ impl fw::ExternalAgent for HostExternalAgent {
         while let Ok(event) = receiver.try_recv() {
             forward_event(event, sink).await;
         }
+        while let Ok(event) = observation_receiver.try_recv() {
+            observed_events
+                .insert(serde_json::to_string(&event).expect("serializable observation"));
+            sink.emit(event).await;
+        }
         if overflow.load(std::sync::atomic::Ordering::Acquire) {
             return Err(fw::AgentError::Run(
                 "external stream exceeded bounded event capacity".into(),
@@ -117,24 +131,12 @@ impl fw::ExternalAgent for HostExternalAgent {
         }
         if let Ok(result) = &result {
             for observation in &result.observations {
-                let value: serde_json::Value =
-                    serde_json::from_str(&observation.output).unwrap_or_default();
-                let event = match observation.tool_name.as_str() {
-                    "external_ToolObserved" => Some(fw::ExternalAgentEvent::Tool {
-                        name: value["delta"].as_str().unwrap_or("external").into(),
-                        detail: value["detail"].clone(),
-                    }),
-                    "external_ApprovalObserved" => Some(fw::ExternalAgentEvent::Approval {
-                        detail: value["detail"].clone(),
-                    }),
-                    "external_Status" => Some(fw::ExternalAgentEvent::Status(
-                        value["delta"].as_str().unwrap_or_default().into(),
-                    )),
-                    "external_SessionObserved" => None, // authoritative session comes from the transport result
-                    _ => None,
-                };
-                if let Some(event) = event {
-                    sink.emit(event).await;
+                if let Some(event) = observation_event(observation) {
+                    if observed_events
+                        .insert(serde_json::to_string(&event).expect("serializable observation"))
+                    {
+                        sink.emit(event).await;
+                    }
                 }
             }
         }
@@ -182,6 +184,25 @@ impl fw::ExternalAgent for HostExternalAgent {
         response
     }
 }
+fn observation_event(
+    observation: &crate::domain::agent::ToolObservation,
+) -> Option<fw::ExternalAgentEvent> {
+    let value: serde_json::Value = serde_json::from_str(&observation.output).ok()?;
+    match observation.tool_name.as_str() {
+        "external_ToolObserved" => Some(fw::ExternalAgentEvent::Tool {
+            name: value["delta"].as_str().unwrap_or("external").into(),
+            detail: value["detail"].clone(),
+        }),
+        "external_ApprovalObserved" => Some(fw::ExternalAgentEvent::Approval {
+            detail: value["detail"].clone(),
+        }),
+        "external_Status" => Some(fw::ExternalAgentEvent::Status(
+            value["delta"].as_str().unwrap_or_default().into(),
+        )),
+        _ => None,
+    }
+}
+
 async fn forward_event(
     event: crate::domain::agent::ModelStreamEvent,
     sink: &dyn fw::ExternalAgentEventSink,

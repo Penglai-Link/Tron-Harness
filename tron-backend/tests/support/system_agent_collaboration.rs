@@ -10,6 +10,8 @@ fn seed_external(f: &Fixture) -> std::path::PathBuf {
     let cwd_log = f.directory.path().join("external-cwd.txt");
     let events = [
         r#"{"type":"thread.started","thread_id":"external-session"}"#,
+        r#"{"type":"item.started","item":{"id":"item-command","type":"command_execution","status":"in_progress"}}"#,
+        r#"{"type":"item.completed","item":{"id":"item-command","type":"command_execution","status":"completed","exit_code":0}}"#,
         r#"{"type":"item.completed","item":{"type":"agent_message","text":"external subscription reply"}}"#,
         r#"{"type":"turn.completed","usage":{"input_tokens":11,"output_tokens":17}}"#,
     ];
@@ -324,6 +326,7 @@ async fn ordinary_chat_and_dude_delegate_from_their_managed_directory() {
                 kind:"DUDE".into(), code:"main-dude".into(), origin_session_code:root.conversation_code.clone(), task_code:None,
             });
         }
+        let parent_run = root.run_code.clone();
         let result = tokio::time::timeout(std::time::Duration::from_secs(30), agent.run(root)).await.unwrap().unwrap();
         assert!(result.final_output.contains("external subscription reply"), "{}", result.final_output);
         let cwd = std::fs::read_to_string(f.directory.path().join("external-cwd.txt")).unwrap();
@@ -332,6 +335,15 @@ async fn ordinary_chat_and_dude_delegate_from_their_managed_directory() {
         assert!(directory.components().any(|part| part.as_os_str() == if dude {"dudes"} else {"sessions"}), "{cwd}");
         assert_ne!(directory, std::env::current_dir().unwrap());
         assert!(script.requests.lock().unwrap()[0].messages.iter().any(|m| m.content.protocol_text().contains(cwd.trim())), "main agent must see the real default cwd");
+        let children = host.subagents(&parent_run, USER).await.unwrap();
+        assert_eq!(children.len(), 1);
+        let (_, history) = host.subagent_history(&parent_run, children[0].record.run_id, USER).await.unwrap();
+        assert_eq!(history.records.tool_invocations.len(), 1, "native start/completion must be one call");
+        assert_eq!(history.records.tool_invocations[0].status, fw::HistoryStatus::Completed);
+        assert_eq!(history.records.tool_invocations[0].call_id, "item-command");
+        let events = f.state.agent_presentation.protocol_events(&children[0].record.session_id).unwrap();
+        assert_eq!(events.iter().filter(|event| event.data["type"] == "TOOL_CALL_START").count(), 1);
+        assert_eq!(events.iter().filter(|event| event.data["type"] == "TOOL_CALL_RESULT").count(), 1);
         assert!(host.close().await.is_success());
     }
 }

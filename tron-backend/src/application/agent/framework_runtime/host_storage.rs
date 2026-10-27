@@ -76,6 +76,28 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn persistent_history_does_not_block_a_new_conversation_after_1024() {
+        let host = FrameworkHost::temporary(None).unwrap();
+        let framework = host.framework().await.unwrap();
+        let database = host.shared_database().await.unwrap();
+        database.call(|connection| {
+            connection.execute_batch("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<1024)
+                INSERT INTO ef_conversations(session,branch,generation,revision,messages,accessed)
+                SELECT 'saved-' || i,'main','fixture-generation',0,'[]',0 FROM n")
+        }).await.unwrap();
+        let services = framework.services().unwrap();
+        let store = services.get::<fw::ConversationStoreService>().unwrap();
+        let mut conversation = store.0.open("new-child-after-saved-history").await.unwrap();
+        conversation.finish(fw::ConversationOutcome::Completed).await.unwrap();
+        drop(conversation);
+        let count: u64 = database.call(|connection| {
+            connection.query_row("SELECT count(*) FROM ef_conversations", [], |row| row.get(0))
+        }).await.unwrap();
+        assert_eq!(count, 1025, "saved history must remain intact");
+        assert!(host.close().await.is_success());
+    }
+
+    #[tokio::test]
     async fn recovered_run_no_longer_blocks_the_next_chat_turn() {
         let host = FrameworkHost::temporary(None).unwrap();
         let framework = host.framework().await.unwrap();
