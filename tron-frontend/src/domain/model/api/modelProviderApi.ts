@@ -21,7 +21,8 @@ export type ProviderCatalogProtocol =
   | "EMBEDDINGS";
 
 export interface ModelProviderConnection {
-  providerCode: ModelProviderCode;
+  providerCode: string;
+  source?: "PersonAi" | "Custom";
   personAiUserId: string | null;
   personAiUsername: string | null;
   displayName: string;

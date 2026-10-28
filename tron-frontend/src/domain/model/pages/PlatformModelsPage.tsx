@@ -292,7 +292,7 @@ export function PlatformModelsPage() {
           {
             id: "protocol",
             header: pageT("columns.protocol", "Protocol"),
-              render: (row) => pageT(`protocol.${row.protocol === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : row.protocol === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : row.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(row.protocol, row.modelType)),
+              render: (row) => pageT(`protocol.${row.protocol === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : row.protocol === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : row.protocol === "RESPONSES" ? "responses" : row.protocol === "ANTHROPIC" ? "anthropic" : row.protocol === "GEMINI" ? "gemini" : "rerank"}`, formatModelProtocol(row.protocol, row.modelType)),
           },
           {
             id: "type",
@@ -390,7 +390,7 @@ export function PlatformModelsPage() {
               type="button"
               role="menuitem"
               className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyCode === openMenuRow.modelCode}
+              disabled={rowBusyCode === openMenuRow.modelCode || Boolean(openMenuRow.providerId)}
               onClick={() => {
                 void handleDuplicate(openMenuRow);
               }}
@@ -403,16 +403,16 @@ export function PlatformModelsPage() {
               className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
               onClick={() => {
                 setOpenRowMenu(null);
-                navigate(`/settings/models/detail?modelCode=${encodeURIComponent(openMenuRow.modelCode)}&mode=edit`);
+                navigate(openMenuRow.providerId ? `/settings/model-providers/detail?providerCode=${encodeURIComponent(openMenuRow.providerId)}` : `/settings/models/detail?modelCode=${encodeURIComponent(openMenuRow.modelCode)}&mode=edit`);
               }}
             >
-              {pageT("actions.edit", "Edit")}
+              {openMenuRow.providerId ? t("pages:configuredProviders.manageProvider") : pageT("actions.edit", "Edit")}
             </button>
             <button
               type="button"
               role="menuitem"
               className="block w-full rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyCode === openMenuRow.modelCode}
+              disabled={rowBusyCode === openMenuRow.modelCode || Boolean(openMenuRow.providerId)}
               onClick={() => {
                 void handleDelete(openMenuRow);
               }}

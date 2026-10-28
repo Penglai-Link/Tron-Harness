@@ -152,7 +152,7 @@ export function PlatformModelDetailsPage() {
   useEffect(() => {
     if (!selectedRecord) return;
     setForm(modelFormFromRecord(selectedRecord));
-    setEditing(startsInEditMode);
+    setEditing(startsInEditMode && !selectedRecord.providerId);
     setVerifyPreview(null);
   }, [selectedRecord, startsInEditMode]);
 
@@ -344,10 +344,11 @@ export function PlatformModelDetailsPage() {
           </>
         ) : (
           <>
-            <Button variant="secondary" onClick={() => setEditing(true)}>
-
+            {selectedRecord.providerId ? <Button variant="secondary" onClick={() => navigate(`/settings/model-providers/detail?providerCode=${encodeURIComponent(selectedRecord.providerId!)}`)}>
+              {t("pages:configuredProviders.manageProvider")}
+            </Button> : <Button variant="secondary" onClick={() => setEditing(true)}>
               {pageT("actions.edit", "Edit")}
-            </Button>
+            </Button>}
             <Button variant="secondary" disabled={verifying} aria-busy={verifying} onClick={() => void runVerify()}>
 
               {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
@@ -362,16 +363,17 @@ export function PlatformModelDetailsPage() {
 
               {selectedRecord.enabled ? pageT("actions.disable", "Disable") : pageT("actions.enable", "Enable")}
             </Button>
-            <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
+            {!selectedRecord.providerId && <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
 
               {deleting ? pageT("actions.deleting", "Deleting...") : pageT("actions.delete", "Delete")}
-            </Button>
+            </Button>}
           </>
         )}
       />
 
       <div className="max-w-5xl space-y-5">
         <VerifyStatusCard record={verifyStatusRecord} />
+        {selectedRecord.providerId && <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:configuredProviders.managedModel")}</p>}
 
         <SurfaceCard className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
@@ -403,7 +405,7 @@ export function PlatformModelDetailsPage() {
                 <ReadValue>{selectedRecord.vendor}</ReadValue>
               </Field>
               <Field label={pageT("form.protocol", "Protocol")}>
-                <ReadValue>{pageT(`protocol.${selectedRecord.protocol === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : selectedRecord.protocol === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : selectedRecord.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType))}</ReadValue>
+                <ReadValue>{pageT(`protocol.${selectedRecord.protocol === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : selectedRecord.protocol === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : selectedRecord.protocol === "RESPONSES" ? "responses" : selectedRecord.protocol === "ANTHROPIC" ? "anthropic" : selectedRecord.protocol === "GEMINI" ? "gemini" : "rerank"}`, formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType))}</ReadValue>
               </Field>
               <Field label={pageT("form.modelType", "Model Type")}>
                 <ReadValue>{normalizeModelCapabilities(selectedRecord.modelCapabilities, selectedRecord.modelType).map((capability) => pageT(`capabilities.${capability}`, formatModelCapability(capability))).join(", ")}</ReadValue>

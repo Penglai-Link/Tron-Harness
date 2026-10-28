@@ -125,6 +125,8 @@ const modelCapabilityOptionMap = new Map(
 );
 
 const validModelTypesByProtocol: Record<ModelProtocol, ModelType[]> = {
+  ANTHROPIC: ["TEXT"],
+  GEMINI: ["TEXT"],
   OPENAI_COMPATIBLE: ["TEXT"],
   OPENAI_COMPATIBLE_EMBEDDING: ["EMBEDDING"],
   RESPONSES: ["TEXT", "IMAGE"],
@@ -141,6 +143,10 @@ export function formatModelProtocol(value: ModelProtocol, modelType?: ModelType)
       return "OpenAI Compatible - Response";
     case "RERANK":
       return "OpenAI Compatible - Rerank";
+    case "ANTHROPIC":
+      return "Anthropic Messages";
+    case "GEMINI":
+      return "Google Gemini";
     default:
       return value;
   }
@@ -171,6 +177,8 @@ export function getModelProtocolOptions(): ModelProtocolOption[] {
     { label: formatModelProtocol("OPENAI_COMPATIBLE"), modelType: "TEXT", protocol: "OPENAI_COMPATIBLE", value: "OPENAI_COMPATIBLE" },
     { label: formatModelProtocol("OPENAI_COMPATIBLE_EMBEDDING"), modelType: "EMBEDDING", protocol: "OPENAI_COMPATIBLE_EMBEDDING", value: "OPENAI_COMPATIBLE_EMBEDDING" },
     { label: formatModelProtocol("RESPONSES", "TEXT"), modelType: "TEXT", protocol: "RESPONSES", value: "RESPONSES" },
+    { label: formatModelProtocol("ANTHROPIC"), modelType: "TEXT", protocol: "ANTHROPIC", value: "ANTHROPIC" },
+    { label: formatModelProtocol("GEMINI"), modelType: "TEXT", protocol: "GEMINI", value: "GEMINI" },
     { label: formatModelProtocol("RERANK", "RERANK"), modelType: "RERANK", protocol: "RERANK", value: "RERANK" },
   ];
 }
@@ -257,7 +265,11 @@ export function getDefaultApiPathForProtocol(protocol: ModelProtocol, modelType:
       return "/embeddings";
     case "RERANK":
       return "/rerank";
-    default:
+    case "ANTHROPIC":
+      return "/messages";
+    case "GEMINI":
+      return "";
+    case "RESPONSES":
       return "/responses";
   }
 }

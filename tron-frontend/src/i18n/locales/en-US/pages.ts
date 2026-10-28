@@ -1,7 +1,9 @@
+import { configuredProviders } from "./configuredProviders";
 import { knowledgeQuality } from "./knowledgeQuality";
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
+  configuredProviders,
   knowledgeQuality,
   agentActivation: { active: "Active", disabled: "Disabled" },
   awakening: {"queuePlaceholder": "Enter to queue · Shift+Enter for newline", "steerPlaceholder": "Enter to queue · ⌘/Ctrl+Enter to steer · Shift+Enter for newline", "startTimeout": "Dude has not started responding yet. Retry, set up manually, or skip for now.", "startFailed": "Awakening could not start. Retry or set up manually.", "skip": "SKIP", "title": "A new connection", "subtitle": "Let’s get to know each other.", "later": "Continue later", "manual": "Set up manually", "backToChat": "Back to conversation", "enter": "Enter Tron", "connecting": "Waking your Dude…", "continue": "Continue awakening"},
@@ -5242,6 +5244,8 @@ export const pages = {
       itemLabel: "models",
     },
     protocol: {
+      anthropic: "Anthropic Messages",
+      gemini: "Google Gemini",
       openaiCompatible: {
         chat: "OpenAI Compatible - Chat",
         embedding: "OpenAI Compatible - Embedding",

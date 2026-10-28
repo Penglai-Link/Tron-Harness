@@ -727,7 +727,18 @@ const registeredRoutes: AppRoute[] = [
     settingsNav: "Model Providers",
   },
   {
+    pageId: "settings.modelProviderNew",
+    route: "/settings/model-providers/new",
+    activeNav: "Settings",
+    title: "Add Model Provider",
+    titleTranslationKey: "pages:configuredProviders.createTitle",
+    archetype: "form",
+    layout: "settings",
+    settingsNav: "Model Providers",
+  },
+  {
     pageId: "settings.modelProviderDetail",
+    pageContextTarget: { source: "query", parameter: "providerCode" },
     route: "/settings/model-providers/detail",
     activeNav: "Settings",
     title: "Model Provider Detail",

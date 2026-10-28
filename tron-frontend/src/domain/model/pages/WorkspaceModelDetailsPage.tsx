@@ -117,6 +117,7 @@ export function WorkspaceModelDetailsPage() {
   const toggleableRecord = verifiableRecord;
   const removableRecord = Boolean(
     selectedRecord
+    && !selectedRecord.providerId
     && (selectedRecord.sourceKind === "LOCAL" || selectedRecord.sourceKind === "OVERRIDE"),
   );
   const duplicateDisplayName = form.displayName.trim()
@@ -387,6 +388,7 @@ export function WorkspaceModelDetailsPage() {
           </>
         ) : (
           <>
+            {selectedRecord.providerId && <Button variant="outline" size="lg" onClick={() => navigate(`/settings/model-providers/detail?providerCode=${encodeURIComponent(selectedRecord.providerId!)}`)}>{t("pages:configuredProviders.manageProvider")}</Button>}
             {editableDefinition ? (
               <Button
                 variant="outline"
@@ -433,6 +435,7 @@ export function WorkspaceModelDetailsPage() {
 
       <div className="max-w-5xl space-y-5">
         <VerifyStatusCard record={verifyStatusRecord} />
+        {selectedRecord.providerId && <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:configuredProviders.managedModel")}</p>}
 
         <SurfaceCard className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
@@ -470,7 +473,7 @@ export function WorkspaceModelDetailsPage() {
                 <ReadValue>{selectedRecord.vendor}</ReadValue>
               </Field>
               <Field label={pageT("form.protocol", "Protocol")}>
-                <ReadValue>{pageT(`protocol.${selectedRecord.protocol === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : selectedRecord.protocol === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : selectedRecord.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType))}</ReadValue>
+                <ReadValue>{pageT(`protocol.${selectedRecord.protocol === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : selectedRecord.protocol === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : selectedRecord.protocol === "RESPONSES" ? "responses" : selectedRecord.protocol === "ANTHROPIC" ? "anthropic" : selectedRecord.protocol === "GEMINI" ? "gemini" : "rerank"}`, formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType))}</ReadValue>
               </Field>
               <Field label={pageT("form.modelType", "Model Type")}>
                 <ReadValue>{normalizeModelCapabilities(selectedRecord.modelCapabilities, selectedRecord.modelType).map((capability) => pageT(`capabilities.${capability}`, formatModelCapability(capability))).join(", ")}</ReadValue>
