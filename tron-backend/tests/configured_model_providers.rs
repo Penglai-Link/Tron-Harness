@@ -723,26 +723,22 @@ impl Drop for ProtocolServer {
 }
 
 async fn protocol_request(
-    State(state): State<ProtocolServerState>,
-    uri: Uri,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Json<Value> {
+    State(state): State<ProtocolServerState>, uri: Uri, headers: HeaderMap, Json(body): Json<Value>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
     state.requests.lock().unwrap().push((uri, headers, body));
-    if state.anthropic {
-        Json(json!({
-            "id": "msg-provider-test", "type": "message", "role": "assistant",
-            "model": "same-remote-model", "content": [{"type":"text", "text":"OK"}],
-            "stop_reason": "end_turn", "stop_sequence": null,
-            "usage": {"input_tokens":5, "output_tokens":1}
-        }))
+    let data = if state.anthropic {
+        [("message_start", json!({"type":"message_start","message":{"id":"m1","usage":{"input_tokens":5,"output_tokens":0}}})),
+         ("content_block_start", json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}})),
+         ("content_block_delta", json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}})),
+         ("content_block_stop", json!({"type":"content_block_stop","index":0})),
+         ("message_delta", json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}})),
+         ("message_stop", json!({"type":"message_stop"}))]
+        .into_iter().map(|(event,data)|format!("event: {event}\ndata: {data}\n\n")).collect::<String>()
     } else {
-        Json(json!({
-            "candidates": [{"content":{"parts":[{"text":"OK"}], "role":"model"}, "finishReason":"STOP", "index":0}],
-            "usageMetadata": {"promptTokenCount":5, "candidatesTokenCount":1, "totalTokenCount":6},
-            "modelVersion":"same-remote-model", "responseId":"response-provider-test"
-        }))
-    }
+        format!("data: {}\n\n",json!({"candidates":[{"content":{"parts":[{"text":"OK"}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":1,"totalTokenCount":6}}))
+    };
+    ([(axum::http::header::CONTENT_TYPE,"text/event-stream")], data).into_response()
 }
 
 async fn protocol_server(anthropic: bool) -> ProtocolServer {
@@ -823,7 +819,7 @@ async fn platform_verification_uses_production_clients_for_anthropic_and_gemini(
         } else {
             assert!(
                 uri.path()
-                    .ends_with("/models/same-remote-model:generateContent")
+                    .ends_with("/models/same-remote-model:streamGenerateContent")
             );
             assert!(
                 headers

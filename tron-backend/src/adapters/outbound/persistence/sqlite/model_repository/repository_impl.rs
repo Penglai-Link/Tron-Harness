@@ -1,8 +1,8 @@
 use super::storage::*;
 use super::*;
 
-impl ModelRepository for SqliteModelRepositorySql<'_> {
-    fn list_models(&mut self) -> Result<Vec<Model>, ModelError> {
+impl SqliteModelRepositorySql<'_> {
+    pub(super) fn list_models(&mut self) -> Result<Vec<Model>, ModelError> {
         let mut statement = self
             .connection
             .prepare(
@@ -81,7 +81,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
             .map_err(storage_error)
     }
 
-    fn next_id(&mut self) -> Result<i64, ModelError> {
+    pub(super) fn next_id(&mut self) -> Result<i64, ModelError> {
         let max_id: i64 = self
             .connection
             .query_row("SELECT max(id) FROM models", [], |row| {
@@ -92,7 +92,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
         Ok(max_id + 1)
     }
 
-    fn create_model(&mut self, model: &Model) -> Result<(), ModelError> {
+    pub(super) fn create_model(&mut self, model: &Model) -> Result<(), ModelError> {
         self.connection
             .execute(
                 "INSERT INTO models (
@@ -152,7 +152,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
         Ok(())
     }
 
-    fn update_model(&mut self, model: &Model) -> Result<(), ModelError> {
+    pub(super) fn update_model(&mut self, model: &Model) -> Result<(), ModelError> {
         let updated_rows = self
             .connection
             .execute(
@@ -231,7 +231,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
         Ok(())
     }
 
-    fn delete_model(&mut self, model_code: &str) -> Result<bool, ModelError> {
+    pub(super) fn delete_model(&mut self, model_code: &str) -> Result<bool, ModelError> {
         let deleted_rows = self
             .connection
             .execute(
@@ -242,7 +242,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
         Ok(deleted_rows > 0)
     }
 
-    fn list_workspace_default_assignments(
+    pub(super) fn list_workspace_default_assignments(
         &mut self,
     ) -> Result<Vec<WorkspaceDefaultModelAssignment>, ModelError> {
         let mut statement = self
@@ -268,7 +268,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
             .map_err(storage_error)
     }
 
-    fn list_platform_default_assignments(
+    pub(super) fn list_platform_default_assignments(
         &mut self,
     ) -> Result<Vec<PlatformDefaultModelAssignment>, ModelError> {
         let mut statement = self
@@ -293,7 +293,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
             .map_err(storage_error)
     }
 
-    fn upsert_workspace_default_assignment(
+    pub(super) fn upsert_workspace_default_assignment(
         &mut self,
         assignment: &WorkspaceDefaultModelAssignment,
     ) -> Result<(), ModelError> {
@@ -314,7 +314,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
         Ok(())
     }
 
-    fn upsert_platform_default_assignment(
+    pub(super) fn upsert_platform_default_assignment(
         &mut self,
         assignment: &PlatformDefaultModelAssignment,
     ) -> Result<(), ModelError> {
@@ -334,7 +334,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
         Ok(())
     }
 
-    fn delete_workspace_default_assignments_by_model_code(
+    pub(super) fn delete_workspace_default_assignments_by_model_code(
         &mut self,
         model_code: &str,
     ) -> Result<(), ModelError> {
@@ -347,7 +347,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
         Ok(())
     }
 
-    fn delete_workspace_default_assignments_by_workspace_and_model_code(
+    pub(super) fn delete_workspace_default_assignments_by_workspace_and_model_code(
         &mut self,
         workspace_code: &str,
         model_code: &str,
@@ -362,7 +362,7 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
         Ok(())
     }
 
-    fn delete_platform_default_assignments_by_model_code(
+    pub(super) fn delete_platform_default_assignments_by_model_code(
         &mut self,
         model_code: &str,
     ) -> Result<(), ModelError> {
