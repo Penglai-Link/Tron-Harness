@@ -777,7 +777,7 @@ async fn platform_verification_uses_production_clients_for_anthropic_and_gemini(
             &fixture.router,
             Method::POST,
             &format!("/api/v1/admin/platform/models/{}/verify", code(&created, 0)),
-            Some(json!({})),
+            None,
             StatusCode::OK,
         )
         .await;

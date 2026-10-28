@@ -222,7 +222,7 @@ impl ModelService {
                 scope_kind: ModelScopeKind::Platform,
                 workspace_code: None,
                 model_code,
-                display_name: config.name.clone(),
+                display_name: format!("{} · {}/{}", config.name, provider_id, config.model_id),
                 vendor: command.display_name.clone(),
                 protocol: command.protocol.model_protocol(),
                 model_type: ModelType::Text,
