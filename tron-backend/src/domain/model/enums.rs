@@ -33,6 +33,8 @@ pub enum ModelProtocol {
     #[serde(rename = "OPENAI_COMPATIBLE_EMBEDDING")]
     OpenAiCompatibleEmbedding,
     Responses,
+    Anthropic,
+    Gemini,
     Rerank,
 }
 

@@ -16,7 +16,8 @@ impl ModelService {
                 .into_iter()
                 .map(|model| {
                     let key = model.api_key_ref.clone();
-                    (build_platform_view(model, &defaults), key)
+                    let headers = model.request_headers.clone();
+                    (build_platform_view(model, &defaults), key, headers)
                 })
                 .collect::<Vec<_>>()
         } else {
@@ -24,19 +25,25 @@ impl ModelService {
             self.resolve_workspace_catalog_state(&workspace)?
                 .records
                 .into_iter()
-                .map(|r| (r.view, r.definition_model.api_key_ref))
+                .map(|r| {
+                    (
+                        r.view,
+                        r.definition_model.api_key_ref,
+                        r.definition_model.request_headers,
+                    )
+                })
                 .collect()
         };
         records
             .into_iter()
-            .filter(|(view, _)| {
+            .filter(|(view, _, _)| {
                 view.enabled
                     && view.model_type == ModelType::Text
                     && view.context_window_tokens.is_some_and(|n| n > 0)
                     && (allowed.is_empty() || allowed.contains(&view.model_code))
             })
-            .filter_map(|(view, key)| match self.reveal_api_key_ref(&key) {
-                Ok(key) => agent_model_config_from_view(&view, &key).map(|mut config| {
+            .filter_map(|(view, key, headers)| match self.reveal_api_key_ref(&key) {
+                Ok(key) => agent_model_config_from_view(&view, &key, &headers).map(|mut config| {
                     config.reasoning_effort = reasoning;
                     Ok(config)
                 }),
@@ -153,7 +160,13 @@ impl ModelService {
     ) -> Result<Option<AgentModelConfig>, ModelError> {
         if workspace_code.is_empty() {
             let requested = model_code.map(str::trim).filter(|code| !code.is_empty());
-            let views = self.list_platform_models()?;
+            let models = self.all_models()?;
+            let defaults =
+                resolve_platform_defaults(&models, &self.all_platform_default_assignments()?);
+            let views = platform_models(&models)
+                .into_iter()
+                .map(|model| build_platform_view(model, &defaults))
+                .collect::<Vec<_>>();
             let Some(view) = views.iter().find(|view| {
                 view.enabled
                     && view.model_type == ModelType::Text
@@ -166,13 +179,12 @@ impl ModelService {
             {
                 return Err(ModelError::ReasoningEffortUnsupported);
             }
-            let models = self.all_models()?;
             let model = models
                 .iter()
                 .find(|model| model.model_code == view.model_code)
                 .ok_or(ModelError::NotFound)?;
             let api_key = self.reveal_api_key_ref(&model.api_key_ref)?;
-            let mut config = agent_model_config_from_view(view, &api_key);
+            let mut config = agent_model_config_from_view(view, &api_key, &model.request_headers);
             if let (Some(config), Some(effort)) = (&mut config, reasoning_effort) {
                 config.reasoning_effort = Some(effort);
             }
@@ -209,7 +221,11 @@ impl ModelService {
             return Err(ModelError::ReasoningEffortUnsupported);
         }
         let api_key = self.reveal_api_key_ref(&record.definition_model.api_key_ref)?;
-        let mut config = agent_model_config_from_view(&record.view, &api_key);
+        let mut config = agent_model_config_from_view(
+            &record.view,
+            &api_key,
+            &record.definition_model.request_headers,
+        );
         if let (Some(config), Some(reasoning_effort)) = (&mut config, reasoning_effort) {
             config.reasoning_effort = Some(reasoning_effort);
         }
@@ -224,7 +240,12 @@ impl ModelService {
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
         if workspace_code == "PLATFORM" {
             let models = self.all_models()?;
-            let views = self.list_platform_models()?;
+            let defaults =
+                resolve_platform_defaults(&models, &self.all_platform_default_assignments()?);
+            let views = platform_models(&models)
+                .into_iter()
+                .map(|model| build_platform_view(model, &defaults))
+                .collect::<Vec<_>>();
             let requested = model_code.map(str::trim).filter(|code| !code.is_empty());
             let view = views.iter().find(|view| {
                 view.enabled
@@ -239,7 +260,8 @@ impl ModelService {
                 .find(|model| model.model_code == view.model_code)
                 .ok_or(ModelError::NotFound)?;
             let api_key = self.reveal_api_key_ref(&model.api_key_ref)?;
-            return Ok(runtime_model_config_from_view(view, &api_key));
+            let config = runtime_model_config_from_view(view, &api_key, &model.request_headers);
+            return Ok(config);
         }
         let workspace = self.active_workspace_detail(workspace_code)?;
         let catalog_state = self.resolve_workspace_catalog_state(&workspace)?;
@@ -267,7 +289,12 @@ impl ModelService {
         };
 
         let api_key = self.reveal_api_key_ref(&record.definition_model.api_key_ref)?;
-        Ok(runtime_model_config_from_view(&record.view, &api_key))
+        let config = runtime_model_config_from_view(
+            &record.view,
+            &api_key,
+            &record.definition_model.request_headers,
+        );
+        Ok(config)
     }
 
     pub fn create_workspace_model(
@@ -340,6 +367,7 @@ impl ModelService {
         workspace_code: &str,
         model_code: &str,
     ) -> Result<ModelView, ModelError> {
+        self.ensure_independent_model(model_code)?;
         let (workspace, catalog_state, resolved) =
             self.resolve_workspace_record_state(workspace_code, model_code)?;
 
@@ -376,6 +404,7 @@ impl ModelService {
         model_code: &str,
         command: ModelCommand,
     ) -> Result<ModelView, ModelError> {
+        self.ensure_independent_model(model_code)?;
         let workspace = self.active_workspace_detail(workspace_code)?;
         let spec = normalize_model_spec(command, true, false)?;
         let catalog_state = self.resolve_workspace_catalog_state(&workspace)?;
@@ -485,6 +514,7 @@ impl ModelService {
         model_code: &str,
         command: ModelCommand,
     ) -> Result<ModelView, ModelError> {
+        self.ensure_independent_model(model_code)?;
         let workspace = self.active_workspace_detail(workspace_code)?;
         let spec = normalize_model_spec(command, true, false)?;
         let catalog_state = self.resolve_workspace_catalog_state(&workspace)?;

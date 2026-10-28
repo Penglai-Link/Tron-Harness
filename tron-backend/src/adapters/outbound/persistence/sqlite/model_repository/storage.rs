@@ -98,6 +98,8 @@ pub(super) fn protocol_to_storage(value: ModelProtocol) -> &'static str {
         ModelProtocol::OpenAiCompatible => "OPENAI_COMPATIBLE",
         ModelProtocol::OpenAiCompatibleEmbedding => "OPENAI_COMPATIBLE_EMBEDDING",
         ModelProtocol::Responses => "RESPONSES",
+        ModelProtocol::Anthropic => "ANTHROPIC",
+        ModelProtocol::Gemini => "GEMINI",
         ModelProtocol::Rerank => "RERANK",
     }
 }
@@ -107,6 +109,8 @@ pub(super) fn protocol_from_storage(value: &str) -> Result<ModelProtocol, ModelE
         "OPENAI_COMPATIBLE" => Ok(ModelProtocol::OpenAiCompatible),
         "OPENAI_COMPATIBLE_EMBEDDING" => Ok(ModelProtocol::OpenAiCompatibleEmbedding),
         "RESPONSES" => Ok(ModelProtocol::Responses),
+        "ANTHROPIC" => Ok(ModelProtocol::Anthropic),
+        "GEMINI" => Ok(ModelProtocol::Gemini),
         "RERANK" => Ok(ModelProtocol::Rerank),
         _ => Err(ModelError::StorageFailure),
     }

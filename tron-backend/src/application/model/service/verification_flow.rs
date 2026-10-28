@@ -13,11 +13,26 @@ impl ModelService {
         use eliteforge_agent_official_plugin_model_http as sdk;
         let api_key = self.resolve_api_key_value(model)?;
         let method_label = format!("POST {}", url.path());
+        let native_chat = matches!(
+            model.protocol,
+            ModelProtocol::Anthropic | ModelProtocol::Gemini
+        );
         let config = sdk::AgentModelConfig {
-            model_code: model.model_code.clone(),
-            protocol: sdk::AgentModelProtocol::ChatCompletions,
+            request_headers: model.request_headers.clone(),
+            model_code: "probe".into(),
+            protocol: match model.protocol {
+                ModelProtocol::Responses => sdk::AgentModelProtocol::Responses,
+                ModelProtocol::Anthropic => sdk::AgentModelProtocol::Anthropic,
+                ModelProtocol::Gemini => sdk::AgentModelProtocol::Gemini,
+                ModelProtocol::OpenAiCompatibleEmbedding => sdk::AgentModelProtocol::Embeddings,
+                _ => sdk::AgentModelProtocol::ChatCompletions,
+            },
             base_url: model.base_url.clone(),
-            api_path: Some(endpoint_path),
+            api_path: if native_chat {
+                None
+            } else {
+                Some(endpoint_path)
+            },
             api_key,
             model_name: model.model_name.clone(),
             thinking_enabled: false,
@@ -31,19 +46,29 @@ impl ModelService {
             max_retries: model.max_retries,
         };
         let factory = self.verification_factory.clone();
-        let connection = fw::ModelConnection::new(
-            "probe",
-            Arc::new(sdk::HttpProbeModel { config, factory }),
-            vec![fw::ModelDescriptor::new("probe")],
-        );
+        let descriptor = sdk::model_descriptor(&config);
+        let adapter: Arc<dyn fw::ChatModel> = if native_chat {
+            Arc::new(sdk::ProtocolChatModel {
+                config,
+                factory,
+                streaming: false,
+            })
+        } else {
+            Arc::new(sdk::HttpProbeModel { config, factory })
+        };
+        let connection = fw::ModelConnection::new("probe", adapter, vec![descriptor]);
         let runtime = eliteforge_agent_framework::ModelRuntime::new(
             eliteforge_agent_framework::ModelRuntimeUpdate::new("probe", 0, vec![connection]),
         )
         .map_err(|error| ModelError::VerificationFailed(error.to_string()))?;
         let request = fw::ChatRequest {
-            messages: vec![fw::Message::user(fw::Content(vec![
-                fw::ContentBlock::Json { value: payload },
-            ]))],
+            messages: if native_chat {
+                vec![fw::Message::user("Respond with OK.")]
+            } else {
+                vec![fw::Message::user(fw::Content(vec![
+                    fw::ContentBlock::Json { value: payload },
+                ]))]
+            },
             tools: vec![],
             extensions: Default::default(),
             options: fw::GenerationOptions {
@@ -102,9 +127,6 @@ impl ModelService {
 
     fn resolve_api_key_value(&self, model: &Model) -> Result<String, ModelError> {
         let reference = model.api_key_ref.trim();
-        if reference.is_empty() {
-            return Err(ModelError::ApiKeyRefRequired);
-        }
         self.reveal_api_key_ref(reference)
     }
 

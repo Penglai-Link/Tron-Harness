@@ -57,10 +57,13 @@ impl ModelService {
     }
 
     pub fn duplicate_platform_model(&self, model_code: &str) -> Result<ModelView, ModelError> {
+        self.ensure_independent_model(model_code)?;
         let models = self.all_models()?;
         let source = find_platform_model(&models, model_code)?.clone();
         let id = self.next_id()?;
         let duplicated = Model {
+            provider_id: None,
+            request_headers: Default::default(),
             id: SnowflakeId::new(id),
             scope_kind: ModelScopeKind::Platform,
             workspace_code: None,
@@ -118,6 +121,7 @@ impl ModelService {
         model_code: &str,
         command: ModelCommand,
     ) -> Result<ModelView, ModelError> {
+        self.ensure_independent_model(model_code)?;
         let spec = normalize_model_spec(command, false, false)?;
         let models = self.all_models()?;
         ensure_platform_display_name_unique(&models, &spec.display_name, Some(model_code))?;
@@ -158,6 +162,7 @@ impl ModelService {
         model_code: &str,
         command: ModelCommand,
     ) -> Result<ModelView, ModelError> {
+        self.ensure_independent_model(model_code)?;
         let spec = normalize_model_spec(command, false, false)?;
         let models = self.all_models()?;
         let existing = find_platform_model(&models, model_code)?.clone();
@@ -206,6 +211,7 @@ impl ModelService {
         &self,
         model_code: &str,
     ) -> Result<ModelMutationResult, ModelError> {
+        self.ensure_independent_model(model_code)?;
         let models = self.all_models()?;
         find_platform_model(&models, model_code)?;
         let dependent_model_codes = models

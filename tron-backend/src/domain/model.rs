@@ -1,3 +1,5 @@
+mod configured_provider;
+pub use configured_provider::*;
 mod aggregate;
 mod enums;
 mod error;

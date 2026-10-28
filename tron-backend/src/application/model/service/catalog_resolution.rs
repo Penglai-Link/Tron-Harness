@@ -25,6 +25,7 @@ pub(super) fn build_platform_view(
         .get(&model_type)
         .is_some_and(|value| value == &model_code);
     ModelView {
+        provider_id: model.provider_id.clone(),
         scope_kind: ModelScopeKind::Platform,
         workspace_code: None,
         model_code,
@@ -77,13 +78,17 @@ pub(super) fn build_workspace_source_label(source_kind: ModelViewSourceKind) -> 
 pub(super) fn agent_model_config_from_view(
     view: &ModelView,
     api_key: &str,
+    headers: &std::collections::BTreeMap<String, String>,
 ) -> Option<AgentModelConfig> {
     let protocol = match (view.protocol, view.model_type) {
         (ModelProtocol::OpenAiCompatible, ModelType::Text) => AgentModelProtocol::ChatCompletions,
         (ModelProtocol::Responses, ModelType::Text) => AgentModelProtocol::Responses,
+        (ModelProtocol::Anthropic, ModelType::Text) => AgentModelProtocol::Anthropic,
+        (ModelProtocol::Gemini, ModelType::Text) => AgentModelProtocol::Gemini,
         _ => return None,
     };
     Some(AgentModelConfig {
+        request_headers: headers.clone(),
         model_code: view.model_code.clone(),
         protocol,
         base_url: view.base_url.clone(),
@@ -91,7 +96,9 @@ pub(super) fn agent_model_config_from_view(
         api_key: api_key.to_string(),
         model_name: view.model_name.clone(),
         thinking_enabled: view.thinking_enabled,
-        supports_developer_role: view.model_capabilities.contains(&ModelCapability::SupportsDeveloperRole),
+        supports_developer_role: view
+            .model_capabilities
+            .contains(&ModelCapability::SupportsDeveloperRole),
         reasoning_effort: view.default_reasoning_effort,
         responses_stateful_enabled: view.responses_stateful_enabled,
         temperature: view.temperature,
@@ -105,13 +112,17 @@ pub(super) fn agent_model_config_from_view(
 pub(super) fn runtime_model_config_from_view(
     view: &ModelView,
     api_key: &str,
+    headers: &std::collections::BTreeMap<String, String>,
 ) -> Option<RuntimeModelConfig> {
     match (view.protocol, view.model_type) {
         (ModelProtocol::OpenAiCompatible, ModelType::Text)
         | (ModelProtocol::OpenAiCompatibleEmbedding, ModelType::Embedding)
         | (ModelProtocol::Responses, ModelType::Text)
+        | (ModelProtocol::Anthropic, ModelType::Text)
+        | (ModelProtocol::Gemini, ModelType::Text)
         | (ModelProtocol::Responses, ModelType::Image)
         | (ModelProtocol::Rerank, ModelType::Rerank) => Some(RuntimeModelConfig {
+            request_headers: headers.clone(),
             model_code: view.model_code.clone(),
             protocol: view.protocol,
             model_type: view.model_type,
@@ -120,7 +131,9 @@ pub(super) fn runtime_model_config_from_view(
             api_key: api_key.to_string(),
             model_name: view.model_name.clone(),
             thinking_enabled: view.thinking_enabled,
-            supports_developer_role: view.model_capabilities.contains(&ModelCapability::SupportsDeveloperRole),
+            supports_developer_role: view
+                .model_capabilities
+                .contains(&ModelCapability::SupportsDeveloperRole),
             reasoning_effort: view.default_reasoning_effort,
             responses_stateful_enabled: view.responses_stateful_enabled,
             temperature: view.temperature,
@@ -167,6 +180,7 @@ pub(super) fn build_workspace_effective_view(
         .unwrap_or_default();
 
     ModelView {
+        provider_id: config_model.provider_id.clone(),
         scope_kind: ModelScopeKind::Workspace,
         workspace_code: Some(workspace.workspace_code.clone()),
         model_code: visible_model_code.to_string(),

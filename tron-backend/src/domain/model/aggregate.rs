@@ -7,6 +7,8 @@ use super::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Model {
+    pub provider_id: Option<String>,
+    pub request_headers: std::collections::BTreeMap<String, String>,
     pub id: SnowflakeId,
     pub scope_kind: ModelScopeKind,
     pub workspace_code: Option<String>,

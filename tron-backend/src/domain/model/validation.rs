@@ -59,6 +59,8 @@ pub fn protocol_model_type_allowed(protocol: ModelProtocol, model_type: ModelTyp
                 ModelType::Embedding
             )
             | (ModelProtocol::Responses, ModelType::Text)
+            | (ModelProtocol::Anthropic, ModelType::Text)
+            | (ModelProtocol::Gemini, ModelType::Text)
             | (ModelProtocol::Responses, ModelType::Image)
             | (ModelProtocol::Rerank, ModelType::Rerank)
     )

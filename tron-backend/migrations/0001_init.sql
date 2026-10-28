@@ -225,6 +225,17 @@ CREATE TABLE models (
     updated_at INTEGER NOT NULL
 , model_capabilities TEXT NULL, responses_stateful_enabled INTEGER NOT NULL DEFAULT 0, supported_reasoning_efforts TEXT NOT NULL DEFAULT '[]', default_reasoning_effort TEXT);
 
+CREATE TABLE configured_model_providers (
+    provider_id TEXT PRIMARY KEY,
+    configuration_json TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE TABLE configured_provider_models (
+    provider_id TEXT NOT NULL REFERENCES configured_model_providers(provider_id) ON DELETE CASCADE,
+    model_code TEXT NOT NULL UNIQUE REFERENCES models(model_code) ON DELETE CASCADE,
+    PRIMARY KEY (provider_id, model_code)
+);
+
 CREATE TABLE navigation_domain_translations (
     id INTEGER PRIMARY KEY CHECK (id > 0),
     domain_id INTEGER NOT NULL REFERENCES navigation_domains(id) ON DELETE CASCADE,

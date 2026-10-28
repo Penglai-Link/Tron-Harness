@@ -17,6 +17,7 @@ use crate::{
     },
 };
 
+mod configured_providers;
 mod repository_impl;
 mod storage;
 
@@ -25,7 +26,7 @@ use storage::storage_error;
 const MODEL_ID_SEED: i64 = 734_600_000_000_000_000;
 
 struct SqliteModelRepositorySql<'a> {
-    connection: &'a mut Connection,
+    connection: &'a Connection,
 }
 pub struct SqliteModelRepository {
     connection: crate::adapters::outbound::persistence::sqlite::framework_storage::SharedDatabase,
