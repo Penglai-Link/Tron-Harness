@@ -1330,5 +1330,7 @@ function defaultVerifyPath(protocol: ModelProtocol, modelType: ModelType) {
   if (protocol === "OPENAI_COMPATIBLE" && modelType === "TEXT") return "/chat/completions";
   if (protocol === "OPENAI_COMPATIBLE_EMBEDDING") return "/embeddings";
   if (protocol === "RERANK" && modelType === "RERANK") return "/rerank";
+  if (protocol === "ANTHROPIC") return "/messages";
+  if (protocol === "GEMINI") return "";
   return "/responses";
 }

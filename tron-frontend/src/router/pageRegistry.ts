@@ -312,6 +312,11 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.ModelProvidersPage,
     }))
   ),
+  "settings.modelProviderNew": lazy(() =>
+    import("@/domain/model/pages/ConfiguredProviderPage").then((module) => ({
+      default: module.CreateConfiguredProviderPage,
+    }))
+  ),
   "settings.modelProviderDetail": lazy(() =>
     import("@/domain/model/pages/ModelProviderDetailsPage").then((module) => ({
       default: module.ModelProviderDetailsPage,

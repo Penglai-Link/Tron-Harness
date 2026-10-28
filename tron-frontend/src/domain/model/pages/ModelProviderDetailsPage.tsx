@@ -23,6 +23,8 @@ import {
 } from "@/domain/model/api";
 import { ModelProviderStatusBadge } from "@/domain/model/components/ModelProviderStatusBadge";
 
+import { ConfiguredProviderPage } from "./ConfiguredProviderPage";
+
 const personAiProviderCode = "PersonAi" as const;
 
 function detailPath(authorizationSessionId?: string) {
@@ -50,6 +52,15 @@ function DetailLabel({
 }
 
 export function ModelProviderDetailsPage() {
+  const [params] = useSearchParams();
+  const providerCode = params.get("providerCode") ?? personAiProviderCode;
+  if (providerCode !== personAiProviderCode) {
+    return <ConfiguredProviderPage key={providerCode} providerId={providerCode} />;
+  }
+  return <PersonAiProviderDetailsPage />;
+}
+
+function PersonAiProviderDetailsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const toast = useToast();

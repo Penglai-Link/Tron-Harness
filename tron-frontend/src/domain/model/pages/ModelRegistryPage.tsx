@@ -90,6 +90,10 @@ export function ModelRegistryPage() {
         return pageT("protocol.openaiCompatible.embedding", "OpenAI Compatible - Embedding");
       case "RESPONSES":
         return pageT("protocol.responses", "OpenAI Compatible - Response");
+      case "ANTHROPIC":
+        return pageT("protocol.anthropic", "Anthropic Messages");
+      case "GEMINI":
+        return pageT("protocol.gemini", "Google Gemini");
       case "RERANK":
         return pageT("protocol.rerank", "OpenAI Compatible - Rerank");
       default:
@@ -495,7 +499,7 @@ export function ModelRegistryPage() {
                           </DropdownMenuItem>
                         ) : null}
                         <DropdownMenuItem
-                          disabled={isBusy}
+                          disabled={isBusy || Boolean(row.providerId)}
                           onClick={(event) => {
                             event.stopPropagation();
                             void handleDuplicate(row);
@@ -506,10 +510,10 @@ export function ModelRegistryPage() {
                         <DropdownMenuItem
                           onClick={(event) => {
                             event.stopPropagation();
-                            navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}&mode=edit`);
+                            navigate(row.providerId ? `/settings/model-providers/detail?providerCode=${encodeURIComponent(row.providerId)}` : `/models/detail?modelCode=${encodeURIComponent(row.modelCode)}&mode=edit`);
                           }}
                         >
-                          {pageT("actions.edit", "Edit")}
+                          {row.providerId ? t("pages:configuredProviders.manageProvider") : pageT("actions.edit", "Edit")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={isBusy}
@@ -529,7 +533,7 @@ export function ModelRegistryPage() {
                         >
                           {pageT("actions.verify", "Verify")}
                         </DropdownMenuItem>
-                        {row.sourceKind === "LOCAL" || row.sourceKind === "OVERRIDE" ? (
+                        {!row.providerId && (row.sourceKind === "LOCAL" || row.sourceKind === "OVERRIDE") ? (
                           <DropdownMenuItem
                             variant="destructive"
                             disabled={isBusy}

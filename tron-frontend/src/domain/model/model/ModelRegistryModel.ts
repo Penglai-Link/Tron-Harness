@@ -4,6 +4,8 @@ export type ModelProtocol =
   | "OPENAI_COMPATIBLE"
   | "OPENAI_COMPATIBLE_EMBEDDING"
   | "RESPONSES"
+  | "ANTHROPIC"
+  | "GEMINI"
   | "RERANK";
 export type ModelType = "TEXT" | "EMBEDDING" | "RERANK" | "IMAGE";
 export type ModelVerifyStatus = "SUCCEEDED" | "FAILED";
@@ -55,6 +57,7 @@ export interface ModelWorkspacePathItem {
 }
 
 export interface ModelRecord {
+  providerId?: string | null;
   scopeKind: ModelScopeKind;
   workspaceCode: string | null;
   modelCode: string;

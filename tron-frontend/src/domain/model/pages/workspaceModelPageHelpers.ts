@@ -7,6 +7,7 @@ import type {
 export function isWorkspaceOwnedRecord(record: ModelRecord | null, workspaceCode: string) {
   return Boolean(
     record
+    && !record.providerId
     && record.workspaceCode === workspaceCode
     && (record.sourceKind === "LOCAL" || record.sourceKind === "OVERRIDE"),
   );
@@ -15,6 +16,7 @@ export function isWorkspaceOwnedRecord(record: ModelRecord | null, workspaceCode
 export function isEditableWorkspaceLocalRecord(record: ModelRecord | null, workspaceCode: string) {
   return Boolean(
     record
+    && !record.providerId
     && record.workspaceCode === workspaceCode
     && record.sourceKind === "LOCAL",
   );
@@ -23,6 +25,7 @@ export function isEditableWorkspaceLocalRecord(record: ModelRecord | null, works
 export function isEditableWorkspaceDefinitionRecord(record: ModelRecord | null, workspaceCode: string) {
   return Boolean(
     record
+    && !record.providerId
     && record.workspaceCode === workspaceCode
     && record.sourceKind !== "PLATFORM",
   );

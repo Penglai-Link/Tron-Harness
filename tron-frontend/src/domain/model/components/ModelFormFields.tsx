@@ -321,7 +321,7 @@ export function ModelFormFields({
             {protocolOptions.map((item) => (
               <SelectItem key={item.value} value={item.value}>
                 {pageT(
-                  `protocol.${item.value === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : item.value === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : item.value === "RESPONSES" ? "responses" : "rerank"}`,
+                  `protocol.${item.value === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : item.value === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : item.value === "RESPONSES" ? "responses" : item.value === "ANTHROPIC" ? "anthropic" : item.value === "GEMINI" ? "gemini" : "rerank"}`,
                   item.label,
                 )}
               </SelectItem>

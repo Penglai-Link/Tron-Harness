@@ -4,8 +4,10 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { useTabVisibility } from "@/components/editable-tabs";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader, useLocaleFormatters } from "@/shared";
@@ -24,6 +26,7 @@ export function ModelProvidersPage() {
   const toast = useToast();
   const { t } = useTranslation("pages");
   const { formatDateTime } = useLocaleFormatters();
+  const visible = useTabVisibility();
   const [records, setRecords] = useState<ModelProviderConnection[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,8 +46,8 @@ export function ModelProvidersPage() {
   }, [t, toast]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (visible) void load();
+  }, [load, visible]);
 
   const columns = useMemo<DataTableColumn<ModelProviderConnection>[]>(
     () => [
@@ -70,11 +73,18 @@ export function ModelProvidersPage() {
         ),
       },
       {
+        id: "source",
+        header: t("configuredProviders.source"),
+        render: (provider) => t(provider.source === "Custom" ? "configuredProviders.custom" : "configuredProviders.plugin"),
+      },
+      {
         id: "status",
         header: t("modelProviders.columns.connectionStatus"),
-        render: (provider) => (
-          <ModelProviderStatusBadge status={provider.status} />
-        ),
+        render: (provider) => provider.source === "Custom" ? (
+          <Badge variant={provider.status === "Connected" ? "success" : "outline"}>
+            {t(provider.status === "Connected" ? "configuredProviders.enabled" : "configuredProviders.disabled")}
+          </Badge>
+        ) : <ModelProviderStatusBadge status={provider.status} />,
       },
       {
         id: "catalogModelCount",
@@ -90,7 +100,7 @@ export function ModelProvidersPage() {
                 dateStyle: "medium",
                 timeStyle: "short",
               })
-            : t("modelProviders.values.neverSynced"),
+            : t(provider.source === "Custom" ? "modelProviders.values.dash" : "modelProviders.values.neverSynced"),
       },
       {
         id: "authorizationExpiresAt",
@@ -134,6 +144,13 @@ export function ModelProvidersPage() {
       <PageHeader
         title={t("modelProviders.titles.providers")}
         actions={
+          <>
+          <Button variant="secondary" onClick={() => navigate("/settings/model-providers/new?source=catalog")}>
+            {t("configuredProviders.actions.fromCatalog")}
+          </Button>
+          <Button onClick={() => navigate("/settings/model-providers/new")}>
+            {t("configuredProviders.actions.custom")}
+          </Button>
           <Button
             disabled={loading}
             variant="secondary"
@@ -142,6 +159,7 @@ export function ModelProvidersPage() {
 
             {t("modelProviders.actions.refresh")}
           </Button>
+          </>
         }
       />
 
@@ -175,7 +193,7 @@ export function ModelProvidersPage() {
         title={t("modelProviders.columns.provider")}
         toolbar={
           <InfoTooltip ariaLabel={t("modelProviders.aria.providerListHelp")}>
-            {t("modelProviders.help.providerList")}
+            {t("configuredProviders.listHelp")}
           </InfoTooltip>
         }
       />

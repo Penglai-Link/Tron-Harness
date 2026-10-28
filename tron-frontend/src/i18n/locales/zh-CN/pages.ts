@@ -1,7 +1,9 @@
+import { configuredProviders } from "./configuredProviders";
 import { knowledgeQuality } from "./knowledgeQuality";
 import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
+  configuredProviders,
   knowledgeQuality,
   agentActivation: { active: "激活", disabled: "禁用" },
   awakening: {"queuePlaceholder": "Enter 加入队列 · Shift+Enter 换行", "steerPlaceholder": "Enter 加入队列 · ⌘/Ctrl+Enter 立即调整当前回复 · Shift+Enter 换行", "startTimeout": "Dude 尚未开始响应。可以重试、手动填写或暂时跳过。", "startFailed": "唤醒未能开始，请重试或手动填写。", "skip": "SKIP", "title": "初次见面", "subtitle": "先认识彼此，再一起开始。", "later": "稍后继续", "manual": "手动填写", "backToChat": "返回对话", "enter": "进入首页", "connecting": "正在唤醒你的 Dude…", "continue": "继续建立灵魂"},
@@ -5029,6 +5031,8 @@ export const pages = {
       itemLabel: "模型",
     },
     protocol: {
+      anthropic: "Anthropic Messages",
+      gemini: "Google Gemini",
       openaiCompatible: {
         chat: "OpenAI 兼容 - 对话",
         embedding: "OpenAI 兼容 - 向量",
