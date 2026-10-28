@@ -232,6 +232,8 @@ pub(super) fn duplicate_workspace_source_model(
     display_name: String,
 ) -> Model {
     Model {
+        provider_id: None,
+        request_headers: Default::default(),
         id: SnowflakeId::new(id),
         scope_kind: ModelScopeKind::Workspace,
         workspace_code: Some(workspace.workspace_code.clone()),
@@ -280,6 +282,8 @@ pub(super) fn workspace_status_patch_model(
     enabled: bool,
 ) -> Model {
     Model {
+        provider_id: None,
+        request_headers: Default::default(),
         id: SnowflakeId::new(id),
         scope_kind: ModelScopeKind::Workspace,
         workspace_code: Some(workspace.workspace_code.clone()),
@@ -361,6 +365,8 @@ pub(super) fn workspace_override_model(
     fallback_api_key_ref: &str,
 ) -> Model {
     Model {
+        provider_id: None,
+        request_headers: Default::default(),
         id: SnowflakeId::new(id),
         scope_kind: ModelScopeKind::Workspace,
         workspace_code: Some(workspace.workspace_code.clone()),
@@ -471,6 +477,8 @@ pub(super) fn build_platform_model_from_spec(
     model_code: String,
 ) -> Model {
     Model {
+        provider_id: None,
+        request_headers: Default::default(),
         id: SnowflakeId::new(id),
         scope_kind: ModelScopeKind::Platform,
         workspace_code: None,
@@ -514,6 +522,8 @@ pub(super) fn build_workspace_local_model_from_spec(
     model_code: String,
 ) -> Model {
     Model {
+        provider_id: None,
+        request_headers: Default::default(),
         id: SnowflakeId::new(id),
         scope_kind: ModelScopeKind::Workspace,
         workspace_code: Some(workspace_code.to_string()),

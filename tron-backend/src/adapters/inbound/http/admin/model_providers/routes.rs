@@ -66,6 +66,21 @@ pub fn public_routes() -> Router<AppState> {
 
 pub fn profile_routes() -> Router<AppState> {
     Router::new()
+        .route(
+            "/api/v1/model-providers/configured",
+            get(super::configured::list).post(super::configured::create),
+        )
+        .route(
+            "/api/v1/model-providers/configured/{provider_id}",
+            get(super::configured::get)
+                .put(super::configured::update)
+                .delete(super::configured::delete),
+        )
+        .route("/api/v1/model-providers/presets", get(super::presets::list))
+        .route(
+            "/api/v1/model-providers/presets/{preset_id}/models",
+            get(super::presets::models),
+        )
         .route("/api/v1/model-providers", get(list_provider_connections))
         .route(
             "/api/v1/model-providers/{provider_code}",

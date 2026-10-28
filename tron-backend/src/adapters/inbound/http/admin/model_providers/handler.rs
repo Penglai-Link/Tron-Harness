@@ -37,11 +37,28 @@ struct AuthorizationPollResponse {
     profile_id: Option<String>,
 }
 
-pub async fn list_provider_connections(State(state): State<AppState>) -> Response {
-    match state.model_providers.list_connections() {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
-        Err(error) => model_provider_error_response(error),
-    }
+pub async fn list_provider_connections(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Response {
+    let existing = match state.model_providers.list_connections() {
+        Ok(records) => records,
+        Err(error) => return model_provider_error_response(error),
+    };
+    let configured = match state.models.list_configured_providers() {
+        Ok(records) => records,
+        Err(error) => return super::configured::error_response(error, &headers),
+    };
+    let records = existing
+        .into_iter()
+        .map(super::configured::ProviderListResponse::from)
+        .chain(
+            configured
+                .into_iter()
+                .map(super::configured::ProviderListResponse::from),
+        )
+        .collect::<Vec<_>>();
+    Json(ApiResponse::protocol_success(records)).into_response()
 }
 
 pub async fn get_provider_connection(

@@ -13,6 +13,7 @@ use super::{
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelView {
+    pub provider_id: Option<String>,
     pub scope_kind: ModelScopeKind,
     pub workspace_code: Option<String>,
     pub model_code: String,

@@ -2,10 +2,45 @@ use super::*;
 
 impl ModelService {
     pub(super) fn all_models(&self) -> Result<Vec<Model>, ModelError> {
-        self.repository
+        let mut repository = self
+            .repository
             .lock()
-            .expect("model repository mutex poisoned")
-            .list_models()
+            .expect("model repository mutex poisoned");
+        let (mut models, providers) = repository.model_configuration_snapshot()?;
+        let root_enabled: HashMap<_, _> = models
+            .iter()
+            .map(|model| (model.model_code.clone(), model.enabled))
+            .collect();
+        let bindings: HashMap<_, _> = providers
+            .iter()
+            .flat_map(|provider| {
+                provider.models.iter().filter_map(move |model| {
+                    model.model_code.as_deref().map(|code| (code, provider))
+                })
+            })
+            .collect();
+        for model in &mut models {
+            let connection = bindings.get(model.model_code.as_str()).or_else(|| {
+                model
+                    .source_model_code
+                    .as_deref()
+                    .and_then(|code| bindings.get(code))
+            });
+            if let Some(provider) = connection {
+                model.provider_id = Some(provider.provider_id.clone());
+                model.request_headers = provider.request_headers.clone();
+                model.base_url = provider.base_url.clone();
+                model.api_path = None;
+                model.api_key_ref = provider.encrypted_api_key.clone();
+                model.protocol = provider.protocol.model_protocol();
+                model.vendor = provider.display_name.clone();
+                model.enabled &= provider.enabled;
+                if let Some(source) = &model.source_model_code {
+                    model.enabled &= root_enabled.get(source).copied().unwrap_or(false);
+                }
+            }
+        }
+        Ok(models)
     }
 
     pub(super) fn all_workspace_default_assignments(

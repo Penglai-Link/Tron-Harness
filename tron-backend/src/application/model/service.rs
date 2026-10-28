@@ -26,6 +26,8 @@ use crate::{
 };
 
 mod catalog_resolution;
+mod configured_providers;
+pub use configured_providers::*;
 mod enabled_state;
 mod model_factory;
 mod platform_use_cases;
@@ -68,6 +70,7 @@ pub struct ModelCommand {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeModelConfig {
+    pub request_headers: std::collections::BTreeMap<String, String>,
     pub model_code: String,
     pub protocol: ModelProtocol,
     pub model_type: ModelType,
@@ -92,6 +95,45 @@ pub struct SetAllowInheritanceCommand {
 }
 
 pub trait ModelRepository: Send {
+    fn model_configuration_snapshot(
+        &mut self,
+    ) -> Result<
+        (
+            Vec<Model>,
+            Vec<crate::domain::model::ConfiguredModelProvider>,
+        ),
+        ModelError,
+    > {
+        Ok((
+            self.list_models()?,
+            self.list_configured_providers()
+                .map_err(|_| ModelError::StorageFailure)?,
+        ))
+    }
+
+    fn list_configured_providers(
+        &mut self,
+    ) -> Result<
+        Vec<crate::domain::model::ConfiguredModelProvider>,
+        crate::domain::model::ConfiguredProviderError,
+    > {
+        Ok(Vec::new())
+    }
+    fn save_configured_provider(
+        &mut self,
+        _provider: &crate::domain::model::ConfiguredModelProvider,
+        _expected_updated_at: Option<i64>,
+        _models: &[Model],
+    ) -> Result<(), crate::domain::model::ConfiguredProviderError> {
+        Err(crate::domain::model::ConfiguredProviderError::Storage)
+    }
+    fn delete_configured_provider(
+        &mut self,
+        _provider_id: &str,
+    ) -> Result<(), crate::domain::model::ConfiguredProviderError> {
+        Err(crate::domain::model::ConfiguredProviderError::Storage)
+    }
+
     fn list_models(&mut self) -> Result<Vec<Model>, ModelError>;
     fn next_id(&mut self) -> Result<i64, ModelError>;
     fn create_model(&mut self, model: &Model) -> Result<(), ModelError>;

@@ -18,8 +18,7 @@ impl ModelService {
             self.delete_workspace_default_assignments_by_model_code(model_code)?;
             self.delete_platform_default_assignments_by_model_code(model_code)?;
         }
-        let defaults_by_type = self.platform_default_map()?;
-        Ok(build_platform_view(platform, &defaults_by_type))
+        self.get_platform_model(model_code)
     }
 
     pub(super) fn set_workspace_enabled(

@@ -22,6 +22,8 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
                 let model_type = model_type_from_storage(row.get::<_, String>(7)?.as_str())
                     .map_err(|_| rusqlite::Error::InvalidQuery)?;
                 Ok(Model {
+                    provider_id: None,
+                    request_headers: Default::default(),
                     id: SnowflakeId::new(row.get::<_, i64>(0)?),
                     scope_kind: scope_kind_from_storage(row.get::<_, String>(1)?.as_str())
                         .map_err(|_| rusqlite::Error::InvalidQuery)?,
@@ -102,7 +104,11 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
                     last_verify_message, source_kind, source_model_code, allow_inheritance, created_at,
                     updated_at
                 ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
+                    CASE WHEN EXISTS(SELECT 1 FROM configured_provider_models WHERE model_code=?4 OR model_code=?30) THEN '' ELSE ?10 END,
+                    CASE WHEN EXISTS(SELECT 1 FROM configured_provider_models WHERE model_code=?4 OR model_code=?30) THEN NULL ELSE ?11 END,
+                    CASE WHEN EXISTS(SELECT 1 FROM configured_provider_models WHERE model_code=?4 OR model_code=?30) THEN '' ELSE ?12 END,
+                    ?13, ?14, ?15, ?16,
                     ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31,
                     ?32, ?33
                 )",
@@ -158,9 +164,9 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
                     protocol = ?6,
                     model_type = ?7,
                      model_capabilities = ?8,
-                     base_url = ?9,
-                    api_path = ?10,
-                    api_key_ref = ?11,
+                     base_url = CASE WHEN EXISTS(SELECT 1 FROM configured_provider_models WHERE model_code=?1 OR model_code=?29) THEN '' ELSE ?9 END,
+                    api_path = CASE WHEN EXISTS(SELECT 1 FROM configured_provider_models WHERE model_code=?1 OR model_code=?29) THEN NULL ELSE ?10 END,
+                    api_key_ref = CASE WHEN EXISTS(SELECT 1 FROM configured_provider_models WHERE model_code=?1 OR model_code=?29) THEN '' ELSE ?11 END,
                     model_name = ?12,
                      enabled = ?13,
                      description = ?14,
@@ -371,6 +377,53 @@ impl ModelRepository for SqliteModelRepositorySql<'_> {
 }
 
 impl ModelRepository for SqliteModelRepository {
+    fn model_configuration_snapshot(
+        &mut self,
+    ) -> Result<
+        (
+            Vec<Model>,
+            Vec<crate::domain::model::ConfiguredModelProvider>,
+        ),
+        ModelError,
+    > {
+        self.connection.call(
+            |connection| {
+                let transaction = connection.transaction().map_err(storage_error)?;
+                let models = SqliteModelRepositorySql {
+                    connection: &transaction,
+                }
+                .list_models()?;
+                let providers = configured_providers::read_providers(&transaction)
+                    .map_err(|_| ModelError::StorageFailure)?;
+                transaction.commit().map_err(storage_error)?;
+                Ok((models, providers))
+            },
+            || ModelError::StorageFailure,
+        )
+    }
+    fn list_configured_providers(
+        &mut self,
+    ) -> Result<
+        Vec<crate::domain::model::ConfiguredModelProvider>,
+        crate::domain::model::ConfiguredProviderError,
+    > {
+        self.read_configured_providers()
+    }
+    fn save_configured_provider(
+        &mut self,
+        provider: &crate::domain::model::ConfiguredModelProvider,
+        expected_updated_at: Option<i64>,
+        models: &[Model],
+    ) -> Result<(), crate::domain::model::ConfiguredProviderError> {
+        self.write_configured_provider(provider, expected_updated_at, models)
+    }
+    fn delete_configured_provider(
+        &mut self,
+        provider_id: &str,
+    ) -> Result<(), crate::domain::model::ConfiguredProviderError> {
+        self.remove_configured_provider(provider_id)
+    }
+
     fn list_models(&mut self) -> Result<Vec<Model>, ModelError> {
         self.connection.call(
             move |connection| SqliteModelRepositorySql { connection }.list_models(),
