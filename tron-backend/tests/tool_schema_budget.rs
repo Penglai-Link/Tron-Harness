@@ -56,6 +56,7 @@ fn context() -> AgentRunContext {
             base_url: "http://127.0.0.1:1".into(),
             api_path: None,
             api_key: "test".into(),
+            request_headers: Default::default(),
             model_name: "test".into(),
             thinking_enabled: false,
             reasoning_effort: None,

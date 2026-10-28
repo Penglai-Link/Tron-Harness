@@ -235,6 +235,7 @@ mod tests {
                 base_url: "http://localhost".into(),
                 api_path: None,
                 api_key: "sk-test".into(),
+                request_headers: Default::default(),
                 model_name: "gpt-test".into(),
                 thinking_enabled: false,
                 supports_developer_role: false,

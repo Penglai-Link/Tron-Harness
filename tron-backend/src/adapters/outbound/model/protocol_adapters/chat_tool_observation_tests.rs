@@ -13,6 +13,7 @@ fn chat_config() -> AgentModelConfig {
         base_url: "https://provider.test/v1".into(),
         api_path: None,
         api_key: "sk-test".into(),
+        request_headers: Default::default(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
         supports_developer_role: false,

@@ -1,33 +1,21 @@
 use std::sync::Arc;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::domain::agent::{AgentModelProtocol, EffectiveTool, ModelRequest, PreparedToolSchema};
 
-/// Shared by measurement and protocol adapters so they use the same fields and wrappers.
+/// Use the SDK's protocol projection for budget estimation; wire encoding stays
+/// inside the model plugin, including protocols implemented through GenAI.
 pub fn tool_schema_payload(protocol: AgentModelProtocol, tools: &[EffectiveTool]) -> Value {
-    Value::Array(
-        tools
-            .iter()
-            .map(|tool| match protocol {
-                AgentModelProtocol::ChatCompletions => json!({
-                    "type": "function",
-                    "function": {
-                        "name": tool.tool_name,
-                        "description": tool.description,
-                        "parameters": tool.input_schema,
-                    },
-                }),
-                AgentModelProtocol::Responses => json!({
-                    "type": "function",
-                    "name": tool.tool_name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema,
-                }),
-                AgentModelProtocol::Embeddings => Value::Null,
-            })
-            .collect(),
-    )
+    let tools = tools
+        .iter()
+        .map(|tool| eliteforge_agent_official_plugin_model_http::EffectiveTool {
+            tool_name: tool.tool_name.clone(),
+            description: tool.description.clone(),
+            input_schema: tool.input_schema.clone(),
+        })
+        .collect::<Vec<_>>();
+    eliteforge_agent_official_plugin_model_http::tool_schema_payload(protocol.into(), &tools)
 }
 
 pub fn request_tool_schema_payload(protocol: AgentModelProtocol, request: &ModelRequest) -> Value {
@@ -86,5 +74,36 @@ impl ToolSchemaCache {
         }
         self.current = Some(Arc::clone(&snapshot));
         Ok(snapshot)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn native_provider_tools_are_counted_and_budget_rejection_keeps_the_previous_snapshot() {
+        let tool = EffectiveTool {
+            tool_name: "lookup".into(),
+            domain_code: None,
+            description: "Look up a document by its identifier".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+                "required": ["id"],
+            }),
+            skill_name: None,
+            required_variable_keys: Vec::new(),
+        };
+        for protocol in [AgentModelProtocol::Anthropic, AgentModelProtocol::Gemini] {
+            let mut cache = ToolSchemaCache::default();
+            let accepted = cache.prepare(protocol, &[tool.clone()], u32::MAX).unwrap();
+            assert!(accepted.estimated_tokens() > 0);
+            assert!(accepted.payload().to_string().contains("lookup"));
+            assert!(accepted.payload().to_string().contains("required"));
+            assert!(cache.prepare(protocol, &[tool.clone()], 0).is_err());
+            assert!(Arc::ptr_eq(&accepted, &cache.current().unwrap()));
+        }
     }
 }

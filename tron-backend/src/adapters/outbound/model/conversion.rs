@@ -25,19 +25,27 @@ use crate::domain::agent::AgentModelProtocol;
 // Shared enums
 // ---------------------------------------------------------------------------
 
-fn sdk_protocol(protocol: AgentModelProtocol) -> sdk::AgentModelProtocol {
-    match protocol {
-        AgentModelProtocol::ChatCompletions => sdk::AgentModelProtocol::ChatCompletions,
-        AgentModelProtocol::Responses => sdk::AgentModelProtocol::Responses,
-        AgentModelProtocol::Embeddings => sdk::AgentModelProtocol::Embeddings,
+impl From<AgentModelProtocol> for sdk::AgentModelProtocol {
+    fn from(protocol: AgentModelProtocol) -> Self {
+        match protocol {
+            AgentModelProtocol::ChatCompletions => Self::ChatCompletions,
+            AgentModelProtocol::Responses => Self::Responses,
+            AgentModelProtocol::Embeddings => Self::Embeddings,
+            AgentModelProtocol::Anthropic => Self::Anthropic,
+            AgentModelProtocol::Gemini => Self::Gemini,
+        }
     }
 }
 
-fn domain_protocol(protocol: sdk::AgentModelProtocol) -> AgentModelProtocol {
-    match protocol {
-        sdk::AgentModelProtocol::ChatCompletions => AgentModelProtocol::ChatCompletions,
-        sdk::AgentModelProtocol::Responses => AgentModelProtocol::Responses,
-        sdk::AgentModelProtocol::Embeddings => AgentModelProtocol::Embeddings,
+impl From<sdk::AgentModelProtocol> for AgentModelProtocol {
+    fn from(protocol: sdk::AgentModelProtocol) -> Self {
+        match protocol {
+            sdk::AgentModelProtocol::ChatCompletions => Self::ChatCompletions,
+            sdk::AgentModelProtocol::Responses => Self::Responses,
+            sdk::AgentModelProtocol::Embeddings => Self::Embeddings,
+            sdk::AgentModelProtocol::Anthropic => Self::Anthropic,
+            sdk::AgentModelProtocol::Gemini => Self::Gemini,
+        }
     }
 }
 
@@ -90,10 +98,11 @@ impl From<&AgentModelConfig> for sdk::AgentModelConfig {
     fn from(config: &AgentModelConfig) -> Self {
         Self {
             model_code: config.model_code.clone(),
-            protocol: sdk_protocol(config.protocol),
+            protocol: config.protocol.into(),
             base_url: config.base_url.clone(),
             api_path: config.api_path.clone(),
             api_key: config.api_key.clone(),
+            request_headers: config.request_headers.clone(),
             model_name: config.model_name.clone(),
             thinking_enabled: config.thinking_enabled,
             supports_developer_role: config.supports_developer_role,
@@ -112,10 +121,11 @@ impl From<&sdk::AgentModelConfig> for AgentModelConfig {
     fn from(config: &sdk::AgentModelConfig) -> Self {
         Self {
             model_code: config.model_code.clone(),
-            protocol: domain_protocol(config.protocol),
+            protocol: config.protocol.into(),
             base_url: config.base_url.clone(),
             api_path: config.api_path.clone(),
             api_key: config.api_key.clone(),
+            request_headers: config.request_headers.clone(),
             model_name: config.model_name.clone(),
             thinking_enabled: config.thinking_enabled,
             supports_developer_role: config.supports_developer_role,
@@ -505,6 +515,43 @@ impl From<sdk::ModelStreamEvent> for ModelStreamEvent {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn custom_provider_protocol_and_headers_survive_both_bridge_directions() {
+        for (protocol, expected_protocol) in [
+            ("CHAT_COMPLETIONS", "openai.chat-completions"),
+            ("RESPONSES", "openai.responses"),
+            ("ANTHROPIC", "anthropic.messages"),
+            ("GEMINI", "gemini.generate-content"),
+        ] {
+            let config: AgentModelConfig = serde_json::from_value(json!({
+                "modelCode": "custom-model",
+                "protocol": protocol,
+                "baseUrl": "https://custom-provider.test/api/v1",
+                "apiPath": null,
+                "apiKey": "fixture-key",
+                "requestHeaders": {"X-Provider-Project": "project-a"},
+                "modelName": "remote-model-id",
+                "maxTokens": 4096,
+                "contextWindowTokens": 128000,
+            }))
+            .unwrap();
+            let wire = sdk::AgentModelConfig::from(&config);
+            assert_eq!(sdk::model_protocol(&wire), expected_protocol);
+            assert_eq!(wire.request_headers["X-Provider-Project"], "project-a");
+            assert_eq!(wire.model_name, "remote-model-id");
+            assert_eq!(AgentModelConfig::from(&wire), config);
+            let legacy: AgentModelConfig = serde_json::from_value(json!({
+                "modelCode": "legacy",
+                "protocol": protocol,
+                "baseUrl": "https://custom-provider.test",
+                "apiKey": "fixture-key",
+                "modelName": "remote-model-id",
+            }))
+            .unwrap();
+            assert!(legacy.request_headers.is_empty());
+        }
+    }
 
     #[test]
     fn developer_instruction_origin_survives_domain_http_bridge() {

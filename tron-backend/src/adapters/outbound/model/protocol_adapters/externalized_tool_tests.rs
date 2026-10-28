@@ -14,6 +14,7 @@ fn request_builders_send_externalized_tool_notice_to_providers() {
         base_url: "https://provider.test/v1".into(),
         api_path: None,
         api_key: "sk-test".into(),
+        request_headers: Default::default(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
         supports_developer_role: false,

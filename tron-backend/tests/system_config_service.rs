@@ -631,6 +631,7 @@ async fn embedding_timeout_changes_apply_to_the_next_http_call_without_rebuildin
         base_url: url,
         api_path: None,
         api_key: "fixture".into(),
+        request_headers: Default::default(),
         model_name: "fixture".into(),
         thinking_enabled: false,
         reasoning_effort: None,

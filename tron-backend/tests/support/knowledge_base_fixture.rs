@@ -265,6 +265,7 @@ impl LlmRuntimeModelResolver for EmbeddingResolver {
             base_url: "http://fixture.invalid/v1".into(),
             api_path: None,
             api_key: "synthetic-key".into(),
+            request_headers: Default::default(),
             model_name: "fixture-embedding".into(),
             thinking_enabled: false,
             reasoning_effort: None,

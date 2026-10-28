@@ -71,6 +71,7 @@ fn config(code: &str) -> RuntimeModelConfig {
         base_url: "http://model.test".into(),
         api_path: None,
         api_key: "test".into(),
+        request_headers: Default::default(),
         model_name: code.into(),
         thinking_enabled: true,
         supports_developer_role: false,

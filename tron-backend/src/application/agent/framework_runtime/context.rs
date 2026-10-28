@@ -272,15 +272,27 @@ impl fw::TokenEstimator for TronTokenEstimator {
                 required_variable_keys: Vec::new(),
             })
             .collect();
-        // ChatCompletions has the larger wrapper. Final provider dispatch also
-        // validates its exact schema budget through Tron's protocol cache.
-        let snapshot = crate::application::agent::ToolSchemaCache::default()
-            .prepare(AgentModelProtocol::ChatCompletions, &native, u32::MAX)
-            .map_err(fw::ModelError::Fatal)?;
-        if glm_tokenizer(model).is_some() {
-            return Ok(model_json_tokens(model, snapshot.payload()));
+        // The framework estimator does not receive a connection's protocol.
+        // Use the largest SDK projection across supported chat protocols, then
+        // validate the selected protocol again in the turn's schema cache.
+        let mut estimate = 0;
+        for protocol in [
+            AgentModelProtocol::ChatCompletions,
+            AgentModelProtocol::Responses,
+            AgentModelProtocol::Anthropic,
+            AgentModelProtocol::Gemini,
+        ] {
+            let snapshot = crate::application::agent::ToolSchemaCache::default()
+                .prepare(protocol, &native, u32::MAX)
+                .map_err(fw::ModelError::Fatal)?;
+            let tokens = if glm_tokenizer(model).is_some() {
+                model_json_tokens(model, snapshot.payload())
+            } else {
+                snapshot.estimated_tokens() as usize
+            };
+            estimate = estimate.max(tokens);
         }
-        Ok(snapshot.estimated_tokens() as usize)
+        Ok(estimate)
     }
 }
 

@@ -23,6 +23,8 @@ pub(super) fn protocol(config: &AgentModelConfig) -> &'static str {
         crate::domain::agent::AgentModelProtocol::Responses => "openai.responses",
         crate::domain::agent::AgentModelProtocol::ChatCompletions => "openai.chat-completions",
         crate::domain::agent::AgentModelProtocol::Embeddings => "openai.embeddings",
+        crate::domain::agent::AgentModelProtocol::Anthropic => "anthropic.messages",
+        crate::domain::agent::AgentModelProtocol::Gemini => "gemini.generate-content",
     }
 }
 fn reference(

@@ -1118,6 +1118,7 @@ fn automation_tool_context(tools: Vec<EffectiveTool>) -> AgentRunContext {
             base_url: "http://127.0.0.1:1/v1".into(),
             api_path: None,
             api_key: "sk-test".into(),
+            request_headers: Default::default(),
             model_name: "gpt-test".into(),
             thinking_enabled: false,
             supports_developer_role: false,

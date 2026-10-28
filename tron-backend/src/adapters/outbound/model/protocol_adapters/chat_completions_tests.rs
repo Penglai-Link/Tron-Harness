@@ -15,6 +15,7 @@ fn chat_stream_request_asks_for_usage_chunk_and_thinking() {
         base_url: "https://provider.test/v1".into(),
         api_path: None,
         api_key: "sk-test".into(),
+        request_headers: Default::default(),
         model_name: "gpt-test".into(),
         thinking_enabled: true,
         supports_developer_role: false,

@@ -447,6 +447,7 @@ mod tests {
                 base_url: String::new(),
                 api_path: None,
                 api_key: String::new(),
+                request_headers: Default::default(),
                 model_name: "test".into(),
                 thinking_enabled: false,
                 supports_developer_role: false,

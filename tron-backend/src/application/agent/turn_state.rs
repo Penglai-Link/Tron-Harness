@@ -22,7 +22,9 @@ pub enum TurnStateAdapter {
 impl TurnStateAdapter {
     pub fn new(protocol: AgentModelProtocol, responses_stateful_enabled: bool) -> Self {
         match protocol {
-            AgentModelProtocol::ChatCompletions => Self::Chat(ChatTranscriptState::default()),
+            AgentModelProtocol::ChatCompletions
+            | AgentModelProtocol::Anthropic
+            | AgentModelProtocol::Gemini => Self::Chat(ChatTranscriptState::default()),
             AgentModelProtocol::Responses => {
                 if responses_stateful_enabled {
                     Self::Responses(ResponsesItemState::default())
@@ -418,6 +420,7 @@ mod tests {
                 base_url: "https://provider.test/v1".into(),
                 api_path: None,
                 api_key: "sk-test".into(),
+                request_headers: Default::default(),
                 model_name: "qwen-test".into(),
                 thinking_enabled: false,
                 supports_developer_role: false,
@@ -461,6 +464,30 @@ mod tests {
             observations: Vec::new(),
             short_term_memory: None,
             started_at: "2026-06-04T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn native_provider_protocols_keep_full_history_without_responses_continuation() {
+        for protocol in [AgentModelProtocol::Anthropic, AgentModelProtocol::Gemini] {
+            let mut context = responses_context();
+            context.model.protocol = protocol;
+            let mut state = TurnStateAdapter::new(protocol, true);
+            assert_eq!(state.kind(), TurnStateKind::Chat);
+            state.apply_model_response(
+                &ModelResponse::final_output_with_usage_and_response_id(
+                    "first answer",
+                    None,
+                    Some("provider-response-id".into()),
+                ),
+                context.messages.len(),
+            );
+            let mut messages = context.messages.as_ref().clone();
+            messages.push(AgentMessage::user("next turn"));
+            let request = state.build_request(&context, &messages, false, None);
+            assert_eq!(request.messages, messages);
+            assert_eq!(request.previous_response_id, None);
+            assert_eq!(request.response_input_items, None);
         }
     }
 

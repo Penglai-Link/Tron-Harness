@@ -657,6 +657,7 @@ fn resource_tool_context(
             base_url: "http://127.0.0.1:1/v1".to_string(),
             api_path: None,
             api_key: "test".to_string(),
+            request_headers: Default::default(),
             model_name: "test".to_string(),
             thinking_enabled: false,
             supports_developer_role: false,

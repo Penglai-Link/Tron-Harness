@@ -115,5 +115,7 @@ fn protocol_code(protocol: AgentModelProtocol) -> &'static str {
         AgentModelProtocol::ChatCompletions => "chatCompletions",
         AgentModelProtocol::Responses => "responses",
         AgentModelProtocol::Embeddings => "embeddings",
+        AgentModelProtocol::Anthropic => "anthropic",
+        AgentModelProtocol::Gemini => "gemini",
     }
 }

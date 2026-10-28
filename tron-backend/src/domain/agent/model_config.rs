@@ -12,6 +12,8 @@ pub struct AgentModelConfig {
     pub base_url: String,
     pub api_path: Option<String>,
     pub api_key: String,
+    #[serde(default)]
+    pub request_headers: std::collections::BTreeMap<String, String>,
     pub model_name: String,
     #[serde(default)]
     pub thinking_enabled: bool,

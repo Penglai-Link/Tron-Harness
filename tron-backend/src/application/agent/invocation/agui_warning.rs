@@ -105,6 +105,7 @@ mod tests {
             base_url: "http://127.0.0.1:1/v1".into(),
             api_path: None,
             api_key: String::new(),
+            request_headers: Default::default(),
             model_name: model_name.into(),
             thinking_enabled: false,
             supports_developer_role: false,

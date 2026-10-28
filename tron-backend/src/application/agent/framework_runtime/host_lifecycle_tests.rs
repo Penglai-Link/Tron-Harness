@@ -431,6 +431,7 @@ fn test_context(max_retries: u32) -> AgentRunContext {
             base_url: "http://127.0.0.1:1/v1".into(),
             api_path: None,
             api_key: "sk-test".into(),
+            request_headers: Default::default(),
             model_name: "test-model".into(),
             thinking_enabled: false,
             supports_developer_role: false,

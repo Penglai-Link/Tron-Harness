@@ -438,11 +438,10 @@ impl sdk::ModelTransportFactory for HttpModelProviderClient {
         &self,
         config: &sdk::AgentModelConfig,
     ) -> Result<Arc<dyn sdk::ModelTransport>, fw::ModelError> {
-        Ok(Arc::new(sdk::HttpModelTransport::new(
-            self.client.clone(),
-            &config.base_url,
-            &config.api_key,
-        )))
+        Ok(Arc::new(
+            sdk::HttpModelTransport::new(self.client.clone(), &config.base_url, &config.api_key)
+                .with_headers(&config.request_headers)?,
+        ))
     }
 }
 
@@ -549,6 +548,8 @@ mod controlled_native_tests {
                 let n = socket.read(&mut buf).await.unwrap();
                 data.extend_from_slice(&buf[..n]);
             }
+            let headers = String::from_utf8_lossy(&data[..end]).to_ascii_lowercase();
+            assert!(headers.contains("x-provider-project: project-a"));
             let body: serde_json::Value = serde_json::from_slice(&data[end..end + len]).unwrap();
             assert!(body.to_string().contains("data:image/png;base64,aW1hZ2U="));
             assert!(body.to_string().contains("reference data"));
@@ -556,7 +557,7 @@ mod controlled_native_tests {
             let answer = r#"{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":1}}"#;
             socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}",answer.len()).as_bytes()).await.unwrap();
         });
-        let config:AgentModelConfig=serde_json::from_value(serde_json::json!({"modelCode":"fixture","protocol":"CHAT_COMPLETIONS","baseUrl":url,"apiKey":"fixture","modelName":"fixture","contextWindowTokens":128000})).unwrap();
+        let config:AgentModelConfig=serde_json::from_value(serde_json::json!({"modelCode":"fixture","protocol":"CHAT_COMPLETIONS","baseUrl":url,"apiKey":"fixture","requestHeaders":{"X-Provider-Project":"project-a"},"modelName":"fixture","contextWindowTokens":128000})).unwrap();
         let request:ModelRequest=serde_json::from_value(serde_json::json!({"messages":[{"role":"user","parts":[{"type":"text","text":"inspect reference data"},{"type":"image","mime_type":"image/png","data":"aW1hZ2U="}]}],"tools":[]})).unwrap();
         let client = HttpModelClient::new(Arc::new(HttpModelProviderClient::new(
             sdk::ModelHttpClient::new(),

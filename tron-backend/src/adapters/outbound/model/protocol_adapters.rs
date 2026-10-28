@@ -107,6 +107,9 @@ pub fn adapter_for_protocol(
         AgentModelProtocol::ChatCompletions => &ChatCompletionsAdapter,
         AgentModelProtocol::Responses => &ResponsesAdapter,
         AgentModelProtocol::Embeddings => &EmbeddingsAdapter,
+        // These protocols are executed by the SDK's GenAI adapter. They do not
+        // expose a second product-level wire encoder or response parser.
+        AgentModelProtocol::Anthropic | AgentModelProtocol::Gemini => return None,
     })
 }
 pub fn chat_completions_request(config: &AgentModelConfig, request: &ModelRequest) -> Value {

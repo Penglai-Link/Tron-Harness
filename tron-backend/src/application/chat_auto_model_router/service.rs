@@ -328,7 +328,10 @@ fn route_candidate(candidate: &Candidate) -> fw::AutoRouteCandidate {
     let mut data = fw::AutoRouteCandidate::new(fw::ModelRef::new("tron.chat", &candidate.key));
     data.protocol = match candidate.config.protocol {
         crate::domain::agent::AgentModelProtocol::Responses => "openai.responses",
-        _ => "openai.chat-completions",
+        crate::domain::agent::AgentModelProtocol::ChatCompletions => "openai.chat-completions",
+        crate::domain::agent::AgentModelProtocol::Embeddings => "openai.embeddings",
+        crate::domain::agent::AgentModelProtocol::Anthropic => "anthropic.messages",
+        crate::domain::agent::AgentModelProtocol::Gemini => "gemini.generate-content",
     }
     .into();
     data.context_window_tokens = candidate.config.context_window_tokens.map(|v| v as usize);

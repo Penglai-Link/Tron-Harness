@@ -458,6 +458,7 @@ pub(crate) fn build_system_runtime_model_config(
         base_url: "http://system-agent.internal".into(),
         api_path: None,
         api_key: "sk-system-agent".into(),
+        request_headers: Default::default(),
         model_name: model_name.to_string(),
         thinking_enabled: true,
         supports_developer_role: false,

@@ -226,10 +226,14 @@ pub(super) fn person_ai_agent_config(
                 AgentModelProtocol::Responses => "responses",
                 AgentModelProtocol::ChatCompletions => "chat/completions",
                 AgentModelProtocol::Embeddings => "embeddings",
+                AgentModelProtocol::Anthropic | AgentModelProtocol::Gemini => {
+                    unreachable!("PersonAI exposes only OpenAI-compatible protocols")
+                }
             }
             .into(),
         ),
         api_key: String::new(),
+        request_headers: Default::default(),
         model_name: model_name.into(),
         thinking_enabled: reasoning_effort.is_some(),
         supports_developer_role: false,
@@ -295,11 +299,14 @@ pub(super) fn runtime_config_from_agent(config: AgentModelConfig) -> RuntimeMode
             AgentModelProtocol::Responses => ModelProtocol::Responses,
             AgentModelProtocol::ChatCompletions => ModelProtocol::OpenAiCompatible,
             AgentModelProtocol::Embeddings => ModelProtocol::OpenAiCompatibleEmbedding,
+            AgentModelProtocol::Anthropic => ModelProtocol::Anthropic,
+            AgentModelProtocol::Gemini => ModelProtocol::Gemini,
         },
         model_type: ModelType::Text,
         base_url: config.base_url,
         api_path: config.api_path,
         api_key: config.api_key,
+        request_headers: config.request_headers,
         model_name: config.model_name,
         thinking_enabled: config.thinking_enabled,
         supports_developer_role: config.supports_developer_role,

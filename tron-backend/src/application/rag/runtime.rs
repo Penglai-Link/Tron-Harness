@@ -239,6 +239,7 @@ mod tests {
                 base_url: "https://provider.invalid".into(),
                 api_path: None,
                 api_key: String::new(),
+                request_headers: Default::default(),
                 thinking_enabled: false,
                 supports_developer_role: false,
                 reasoning_effort: None,

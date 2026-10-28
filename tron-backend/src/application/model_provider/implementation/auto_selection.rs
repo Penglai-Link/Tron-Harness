@@ -38,7 +38,10 @@ impl ModelProviderService {
                 ));
                 candidate.protocol = match preferred_protocol(&option.protocols) {
                     AgentModelProtocol::Responses => "openai.responses",
-                    _ => "openai.chat-completions",
+                    AgentModelProtocol::ChatCompletions => "openai.chat-completions",
+                    AgentModelProtocol::Embeddings => "openai.embeddings",
+                    AgentModelProtocol::Anthropic => "anthropic.messages",
+                    AgentModelProtocol::Gemini => "gemini.generate-content",
                 }
                 .into();
                 candidate.context_window_tokens = option.context_window_tokens.map(|n| n as usize);
@@ -323,6 +326,7 @@ pub(super) fn person_ai_embedding_config(code: &str) -> RuntimeModelConfig {
         base_url: "https://person-ai.invalid".into(),
         api_path: Some("embeddings".into()),
         api_key: String::new(),
+        request_headers: Default::default(),
         model_name: code.into(),
         thinking_enabled: false,
         supports_developer_role: false,
@@ -344,6 +348,7 @@ pub(super) fn person_ai_rerank_config(id: &str) -> RuntimeModelConfig {
         base_url: "https://person-ai.invalid".into(),
         api_path: Some("/rerank".into()),
         api_key: String::new(),
+        request_headers: Default::default(),
         model_name: id.into(),
         thinking_enabled: false,
         supports_developer_role: false,

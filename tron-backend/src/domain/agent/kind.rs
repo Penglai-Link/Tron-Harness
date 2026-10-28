@@ -19,4 +19,6 @@ pub enum AgentModelProtocol {
     ChatCompletions,
     Responses,
     Embeddings,
+    Anthropic,
+    Gemini,
 }
