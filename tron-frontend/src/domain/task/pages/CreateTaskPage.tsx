@@ -27,8 +27,7 @@ import { TaskAppSelectionField, TaskExecutionModelSelect } from "@/domain/task/c
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api";
 import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
-import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
-import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
+import { fetchModelSelectOptions } from "@/domain/model/api/modelApi";
 import {
   automationModelCodeFromOption,
   automationModelOptionsForAgent,
@@ -65,7 +64,7 @@ export function CreateTaskPage() {
   const [selectedModelOptionCode, setSelectedModelOptionCode] = useState(() =>
     optionCodeForAutomationModel(mainAutomationAgentOption.agentCode, null, "workspace"),
   );
-  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<ReturnType<typeof getWorkspaceSelectOptions>>(() => []);
+  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchModelSelectOptions>>>(() => []);
   const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
   const [selectedAppCodes, setSelectedAppCodes] = useState<string[]>([]);
   const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
@@ -127,9 +126,7 @@ export function CreateTaskPage() {
     const internalAgentsPromise = getServiceDataSource("agent") === "api"
       ? fetchWorkspaceInternalAgents(activeWorkspaceCode)
       : Promise.resolve(listWorkspaceInternalAgentsMock(activeWorkspaceCode));
-    const modelsPromise = getServiceDataSource("model") === "api"
-      ? fetchWorkspaceSelectOptions(activeWorkspaceCode)
-      : Promise.resolve(getWorkspaceSelectOptions(activeWorkspaceCode));
+    const modelsPromise = fetchModelSelectOptions(activeWorkspaceCode);
 
     Promise.all([agentsPromise, internalAgentsPromise, modelsPromise])
       .then(([agents, internalAgents, models]) => {

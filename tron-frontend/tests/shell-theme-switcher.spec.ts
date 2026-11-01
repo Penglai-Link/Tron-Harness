@@ -133,7 +133,7 @@ async function routeThemeApi(
   await page.route("**/api/v1/chats/session-groups?*", route => fulfillJson(route, successEnvelope([])));
   const data = options.workspaceSwitcherData ?? getWorkspaceSwitcherMock();
   await page.route("**/api/v1/admin/workspaces/switcher", route => fulfillJson(route, successEnvelope(data)));
-  await page.route("**/api/v1/admin/platform/models", route => fulfillJson(route, successEnvelope([])));
+  await page.route("**/api/v1/model-providers/select-options**", route => fulfillJson(route, successEnvelope([])));
   await page.route("**/api/v1/knowledge-bases/platform", route => fulfillJson(route, successEnvelope([])));
 }
 

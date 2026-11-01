@@ -12,7 +12,7 @@ import { listCapabilityPacks, type CapabilityPackRecord } from "../api/capabilit
 
 export function CapabilityPackDetailPage() {
   const { packId } = useParams<{ packId: string }>();
-  const { t } = useTranslation(["shell", "pages"]);
+  const { t, i18n } = useTranslation(["shell", "pages"]);
   const [record, setRecord] = useState<CapabilityPackRecord>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -30,7 +30,7 @@ export function CapabilityPackDetailPage() {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [packId, revision]);
+  }, [packId, revision, i18n.resolvedLanguage]);
 
   const groups = new Map<string, NonNullable<CapabilityPackRecord["contents"]>>();
   for (const item of record?.contents ?? []) {
@@ -66,8 +66,9 @@ export function CapabilityPackDetailPage() {
         {Array.from(groups, ([kind, items]) => <TabsContent key={kind} value={kind}>
           <ul className="grid gap-4">{items.map((item, index) => <li key={`${item.name}-${index}`}>
             <SurfaceCard>
-            <h2 className="break-all font-mono text-sm font-semibold">{item.name}</h2>
-            <p className="mt-2 max-w-4xl whitespace-pre-wrap break-words text-sm text-[var(--color-on-surface-variant)]">{capabilityDescription(t, item.kind, item.name, item.description) || pageT("noDescription")}</p>
+            <h2 className="break-words text-sm font-semibold">{item.displayName ?? item.name}</h2>
+            {item.displayName && item.displayName !== item.name && <p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{item.name}</p>}
+            <p className="mt-2 max-w-4xl whitespace-pre-wrap break-words text-sm text-[var(--color-on-surface-variant)]">{(item.kind === "Tool" ? item.description : capabilityDescription(t, item.kind, item.name, item.description)) || pageT("noDescription")}</p>
             {item.kind === "Plugin" ? <div className="mt-4 border-l-2 border-[var(--color-outline-variant)] pl-4">
               <h3 className="text-xs font-medium text-[var(--color-on-surface-variant)]">{pageT("pluginProvides")}</h3>
               {item.provides?.length ? <ul className="mt-2 space-y-3">{item.provides.map((name) => {

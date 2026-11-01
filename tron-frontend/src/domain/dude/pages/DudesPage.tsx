@@ -25,6 +25,7 @@ import {
 import { DudeThreads } from "../components/DudeThreads";
 import { DudeTasks } from "../components/DudeTasks";
 import { DudeSwitcher } from "../components/DudeSwitcher";
+import "./DudesPage.css";
 
 const ChatContextInspector = lazy(() => import("@/domain/chat/components/ChatContextInspector")
   .then(module => ({ default: module.ChatContextInspector })));
@@ -82,7 +83,7 @@ function SessionChat({
     modelSelection: { kind: "Auto" },
   });
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="dude-session-chat flex h-full min-h-0 min-w-0 flex-col">
       <AgentChatWindow
         showHeader={false}
         adapter={adapter}

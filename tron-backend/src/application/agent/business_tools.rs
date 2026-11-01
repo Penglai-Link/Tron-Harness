@@ -19,7 +19,6 @@ use crate::{
         automation::AutomationService,
         mcp::McpService,
         memory::MemoryService,
-        model::ModelService,
         prompt::PromptService,
         rag::{
             RagDiagnosticsRepository, RagEmbeddingRuntime, RagIngestRepository,
@@ -54,7 +53,6 @@ pub fn register_default_agent_tools<R, E>(
     apps: AppService,
     automations: AutomationService,
     tasks: TaskService,
-    models: ModelService,
     skills: SkillRegistryService,
     variables: VariableService,
     resources: ResourceService,
@@ -83,7 +81,6 @@ where
         apps,
         automations,
         tasks,
-        models,
         skills,
         variables,
         resources.clone(),
@@ -179,9 +176,9 @@ pub(crate) fn delegated_working_directory(
             "could not prepare delegated working directory: {error}"
         ))
     })?;
-    let canonical = path.canonicalize().map_err(|error| {
-        crate::domain::agent::ToolError::ExecutionFailed(error.to_string())
-    })?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|error| crate::domain::agent::ToolError::ExecutionFailed(error.to_string()))?;
     // Check resolved symlinks as well as lexical relative paths.
     coding_tools::resolve_path(context, &canonical.to_string_lossy())?;
     Ok(canonical.to_string_lossy().into_owned())

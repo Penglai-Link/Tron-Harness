@@ -1,17 +1,4 @@
 &[
-    (
-        "agent.toolCatalog.tools.model.disable.sampleResultSummary",
-        "Returns the disabled model.",
-    ),
-    ("agent.toolCatalog.tools.model.delete.name", "Delete model"),
-    (
-        "agent.toolCatalog.tools.model.delete.description",
-        "Delete a workspace model or override.",
-    ),
-    (
-        "agent.toolCatalog.tools.model.delete.sampleResultSummary",
-        "Returns the model delete result.",
-    ),
     ("agent.toolCatalog.tools.skill.page.name", "Page skills"),
     (
         "agent.toolCatalog.tools.skill.page.description",
@@ -148,90 +135,6 @@
     (
         "agent.toolCatalog.tools.platform.variable.delete.sampleResultSummary",
         "Returns the platform variable delete result.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.page.name",
-        "Page platform models",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.page.description",
-        "Page models configured in platform settings.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.page.sampleResultSummary",
-        "Returns paged platform models.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.get.name",
-        "Get platform model",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.get.description",
-        "Read one platform model configuration.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.get.sampleResultSummary",
-        "Returns one platform model.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.create.name",
-        "Create platform model",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.create.description",
-        "Create a model in platform settings.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.create.sampleResultSummary",
-        "Returns the created platform model.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.update.name",
-        "Update platform model",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.update.description",
-        "Update a platform model configuration.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.update.sampleResultSummary",
-        "Returns the updated platform model.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.enable.name",
-        "Enable platform model",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.enable.description",
-        "Enable a platform model.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.enable.sampleResultSummary",
-        "Returns the enabled platform model.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.disable.name",
-        "Disable platform model",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.disable.description",
-        "Disable a platform model.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.disable.sampleResultSummary",
-        "Returns the disabled platform model.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.delete.name",
-        "Delete platform model",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.delete.description",
-        "Delete a platform model.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.delete.sampleResultSummary",
-        "Returns the platform model delete result.",
     ),
     (
         "agent.toolCatalog.tools.platform.prompt.page.name",

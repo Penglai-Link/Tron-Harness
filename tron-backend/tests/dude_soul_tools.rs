@@ -77,8 +77,9 @@ impl Fixture {
             auto_model_route: None,
             variables: vec![],
             skills: vec![],
-            tools: BusinessToolCatalog::list_tools(Some("dude"), None, "en-US")
+            tools: BusinessToolCatalog::list_tools(None, None, "en-US")
                 .into_iter()
+                .filter(|tool| tool.domain_code.starts_with("dude_"))
                 .map(tool_record_to_effective_tool)
                 .collect(),
             effective_tools: vec![],
@@ -116,6 +117,34 @@ impl Fixture {
     fn update(&self, input: Value, ctx: &AgentRunContext) -> Result<Value, ToolError> {
         self.call("dude_soul_update", input, ctx)
     }
+    fn task(&self) -> String {
+        use tron_backend::{
+            application::task::CreateTaskCommand,
+            domain::task::{TaskPriority, TaskSourceType, TaskType},
+        };
+        self.state
+            .tasks
+            .create_task(CreateTaskCommand {
+                workspace_code: None,
+                owner_dude_code: Some(self.code.clone()),
+                due_at: None,
+                parent_task_code: None,
+                title: "Notification milestone".into(),
+                description: None,
+                priority: TaskPriority::Medium,
+                task_type: TaskType::General,
+                source_type: TaskSourceType::Internal,
+                source_url: None,
+                agent_code: None,
+                model_code: None,
+                assignee_user_codes: vec![],
+                agent_codes: vec![],
+                app_codes: vec![],
+            })
+            .unwrap()
+            .task_code
+    }
+
 }
 
 #[tokio::test]
@@ -383,4 +412,295 @@ async fn initial_soul_preserves_onboarding_language_instead_of_interface_or_seed
         let read = f.call("dude_soul_read", json!({}), &context).unwrap();
         assert_eq!(read["markdown"], markdown);
     }
+}
+
+#[tokio::test]
+async fn platform_memory_tools_work_without_workspace_and_keep_scope_boundaries() {
+    use tron_backend::application::rag::RagSettings;
+    let f = Fixture::new();
+    f.state
+        .rag
+        .configure_corpus(
+            "memory-card",
+            RagSettings {
+                vector: false,
+                graph: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let mut ctx = f.context("Remember my notification preference");
+    ctx.tools = BusinessToolCatalog::list_tools(None, None, "en-US")
+        .into_iter()
+        .map(tool_record_to_effective_tool)
+        .collect();
+    let call = |name: &str, input: Value, context: &AgentRunContext| -> Result<Value, ToolError> {
+        f.state
+            .agent_tool_registry
+            .execute_allowed(
+                ToolRequest {
+                    tool_name: name.into(),
+                    input,
+                    invocation_id: None,
+                },
+                context,
+            )
+            .map(|result| serde_json::from_str(&result.observation.output).unwrap())
+    };
+    assert!(ctx.workspace_code.is_empty());
+    let saved = call(
+        "dude_memory_save",
+        json!({"text":"One notification per milestone", "semanticKey":"notification-preference"}),
+        &ctx,
+    )
+    .unwrap();
+    assert_eq!(saved["scope"], "USER");
+    assert_eq!(saved["scopeCode"], "USR-AUTH-0001");
+    let code = saved["memoryCode"].as_str().unwrap();
+    call(
+        "dude_memory_save",
+        json!({"memoryCode":code, "text":"Reuse notification receipts across sessions"}),
+        &ctx,
+    )
+    .unwrap();
+    call(
+        "dude_memory_save",
+        json!({"scope":"WORK_DOMAIN", "text":"Shared workflow preference"}),
+        &ctx,
+    )
+    .unwrap();
+    let mut space = ctx.clone();
+    space.workspace_code = "TRON_CORE".into();
+    space.collaboration_owner = None;
+    let space_memory = call(
+        "memory_save",
+        json!({"workspaceCode":"TRON_CORE", "scope":"SPACE", "text":"Workspace private"}),
+        &space,
+    )
+    .unwrap();
+    let mut other = ctx.clone();
+    other.user_code = Some("USR-OTHER".into());
+    call("dude_memory_save", json!({"text":"Other user private"}), &other).unwrap();
+    let found = call("dude_memory_search", json!({}), &ctx).unwrap();
+    assert_eq!(found["count"], 2, "{found}");
+    assert!(
+        found["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["scope"] != "SPACE")
+    );
+    let pack = call(
+        "dude_memory_search",
+        json!({"mode":"CONTEXT_PACK", "scope":"USER"}),
+        &ctx,
+    )
+    .unwrap();
+    assert_eq!(pack["count"], 1, "{pack}");
+    assert!(pack["contextPack"]["items"].is_array());
+    for input in [
+        json!({"scope":"SPACE"}),
+        json!({"scope":"SPACE", "scopeCode":"TRON_CORE"}),
+        json!({"memoryCode":space_memory["memoryCode"]}),
+    ] {
+        assert!(call("dude_memory_search", input, &ctx).is_err());
+    }
+    for input in [
+        json!({"scope":"SPACE", "text":"Invalid"}),
+        json!({"scope":"SPACE", "scopeCode":"TRON_CORE", "text":"Invalid"}),
+        json!({"workspaceCode":"TRON_CORE", "text":"Invalid"}),
+    ] {
+        assert!(call("dude_memory_save", input, &ctx).is_err());
+    }
+    assert!(
+        call(
+            "dude_memory_delete",
+            json!({"memoryCode":space_memory["memoryCode"], "reason":"Outside scope"}),
+            &ctx
+        )
+        .is_err()
+    );
+    call(
+        "dude_memory_delete",
+        json!({"memoryCode":code, "reason":"Superseded"}),
+        &ctx,
+    )
+    .unwrap();
+    assert_eq!(
+        call("dude_memory_search", json!({"memoryCode":code}), &ctx).unwrap()["count"],
+        0
+    );
+    ctx.user_code = None;
+    assert!(
+        call("dude_memory_search", json!({}), &ctx)
+            .unwrap_err()
+            .to_string()
+            .contains("userCode")
+    );
+}
+
+#[tokio::test]
+async fn dude_task_tools_require_owner_and_do_not_accept_workspace() {
+    let f = Fixture::new();
+    let mut context = f.context("Manage my tasks");
+    context.tools = BusinessToolCatalog::list_tools(None, None, "en-US")
+        .into_iter().map(tool_record_to_effective_tool).collect();
+    let call = |name: &str, input: Value, ctx: &AgentRunContext| {
+        f.state.agent_tool_registry.execute_allowed(ToolRequest {
+            tool_name: name.into(), input, invocation_id: None,
+        }, ctx)
+    };
+    let created = call("dude_task_create", json!({"title":"Owned task"}), &context).unwrap();
+    let result: Value = serde_json::from_str(&created.observation.output).unwrap();
+    assert_eq!(result["ownerDudeCode"], f.code);
+    assert!(result["workspaceCode"].is_null());
+    let task_code = result["taskCode"].as_str().expect("created task code");
+    let updated = call("dude_task_update", json!({"taskCode":task_code, "title":"Updated task"}), &context).unwrap();
+    let updated: Value = serde_json::from_str(&updated.observation.output).unwrap();
+    assert_eq!(updated["title"], "Updated task");
+    assert!(call("dude_task_page", json!({}), &context).is_ok());
+    assert!(call("dude_task_delete", json!({"taskCode":task_code}), &context).is_ok());
+    assert!(call("dude_task_restore", json!({"taskCode":task_code}), &context).is_ok());
+    assert!(call("dude_task_create", json!({"title":"Bad", "workspaceCode":"TRON_CORE"}), &context).is_err());
+    assert!(call("task_create", json!({"title":"Bad", "workspaceCode":"TRON_CORE"}), &context).is_err());
+    let mut other = context.clone();
+    other.collaboration_owner = None;
+    assert!(call("dude_task_page", json!({}), &other).is_err());
+}
+
+#[tokio::test]
+async fn progress_notifications_reuse_the_result_across_sessions_and_can_be_resolved() {
+    use tron_backend::application::task::UpdateTaskStatusCommand;
+    let f = Fixture::new();
+    let ctx = f.context("Send one test notification");
+    let task = f.task();
+    f.call("dude_work_change", json!({"operation":"recordResult", "taskCode":task, "result":"Notification delivery is ready for verification"}), &ctx).unwrap();
+    let record = |key: &str, context: &AgentRunContext| {
+        f.call("dude_work_change", json!({"operation":"record", "taskCode":task, "changeKey":key, "kind":"Progress", "summary":"Verify delivery", "evidence":[format!("event:{key}")]}), context).unwrap()
+    };
+    let first = record("interactive-delivery", &ctx);
+    let mut background = ctx.clone();
+    background.conversation_code = Some("background-task-session".into());
+    background
+        .collaboration_owner
+        .as_mut()
+        .unwrap()
+        .origin_session_code = background.conversation_code.clone();
+    f.state
+        .tasks
+        .update_status(
+            &task,
+            UpdateTaskStatusCommand {
+                status: "IN_PROGRESS".into(),
+                progress: Some(20),
+            },
+        )
+        .unwrap();
+    let second = record("reminder-delivery", &background);
+    assert_eq!(first["changeId"], second["changeId"]);
+    let notify = |id: &Value| {
+        f.call(
+            "dude_notify",
+            json!({"changeId":id, "title":"Test", "body":"Delivery test"}),
+            &ctx,
+        )
+        .unwrap()
+    };
+    let notice = notify(&second["changeId"]);
+    f.state
+        .tasks
+        .update_status(
+            &task,
+            UpdateTaskStatusCommand {
+                status: "IN_PROGRESS".into(),
+                progress: Some(60),
+            },
+        )
+        .unwrap();
+    let third = record("heartbeat-delivery", &background);
+    assert_eq!(third["notification"]["id"], notice["id"]);
+    assert_eq!(notify(&third["changeId"])["id"], notice["id"]);
+    assert_eq!(f.state.dudes.notifications().unwrap().len(), 1);
+    f.state
+        .tasks
+        .update_status(
+            &task,
+            UpdateTaskStatusCommand {
+                status: "CLOSED".into(),
+                progress: None,
+            },
+        )
+        .unwrap();
+    f.state
+        .dudes
+        .update_notification(notice["id"].as_str().unwrap(), true, true)
+        .unwrap();
+    let resolved = f.call("dude_work_change", json!({"operation":"resolve", "changeId":first["changeId"], "resolution":"User confirmed delivery", "evidence":["interaction:receipt"]}), &ctx).unwrap();
+    assert!(resolved["resolvedAt"].is_number());
+    let retry = f.call("dude_work_change", json!({"operation":"resolve", "changeId":first["changeId"], "resolution":"Retry", "evidence":["interaction:receipt"]}), &ctx).unwrap();
+    assert_eq!(retry["resolvedAt"], resolved["resolvedAt"]);
+    let completed = f.call("dude_work_change", json!({"operation":"record", "taskCode":task, "changeKey":"completed-delivery", "kind":"Completed", "summary":"Delivery verified", "evidence":["interaction:receipt"]}), &ctx).unwrap();
+    notify(&completed["changeId"]);
+    f.call("dude_work_change", json!({"operation":"resolve", "changeId":completed["changeId"], "resolution":"Acknowledged", "evidence":["interaction:receipt"]}), &ctx).unwrap();
+    let notices = f.state.dudes.notifications().unwrap();
+    assert_eq!(notices.len(), 2);
+    assert!(notices.iter().all(|notice| notice.resolved_at.is_some()));
+    let archived = notices
+        .iter()
+        .find(|item| Some(item.id.as_str()) == notice["id"].as_str())
+        .unwrap();
+    assert!(archived.read_at.is_some());
+    assert!(archived.archived_at.is_some());
+    assert_eq!(notify(&first["changeId"])["id"], notice["id"]);
+    assert_eq!(f.state.dudes.notifications().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn a_new_concrete_result_is_a_new_milestone_and_stale_results_cannot_notify() {
+    let f = Fixture::new();
+    let ctx = f.context("Report real results");
+    let task = f.task();
+    let result = |text: &str| {
+        f.call(
+            "dude_work_change",
+            json!({"operation":"recordResult", "taskCode":task, "result":text}),
+            &ctx,
+        )
+        .unwrap()
+    };
+    let record = |key: &str| {
+        f.call("dude_work_change", json!({"operation":"record", "taskCode":task, "changeKey":key, "kind":"Progress", "summary":"Milestone", "evidence":["artifact:1"]}), &ctx).unwrap()
+    };
+    result("First deliverable");
+    let first = record("first");
+    result("Second deliverable");
+    let second = record("second");
+    assert_ne!(first["changeId"], second["changeId"]);
+    assert!(
+        f.call(
+            "dude_notify",
+            json!({"changeId":first["changeId"], "title":"Old", "body":"Stale"}),
+            &ctx
+        )
+        .is_err()
+    );
+    f.call(
+        "dude_notify",
+        json!({"changeId":second["changeId"], "title":"New", "body":"Current"}),
+        &ctx,
+    )
+    .unwrap();
+    assert_eq!(f.state.dudes.notifications().unwrap().len(), 1);
+    for key in ["deployment-window", "access-approval"] {
+        let decision = f.call("dude_work_change", json!({
+            "operation":"record", "taskCode":task, "changeKey":key,
+            "kind":"NeedsDecision", "summary":key, "requestedAction":key,
+            "evidence":[format!("interaction:{key}")],
+        }), &ctx).unwrap();
+        f.call("dude_notify", json!({
+            "changeId":decision["changeId"], "title":key, "body":key,
+        }), &ctx).unwrap();
+    }
+    assert_eq!(f.state.dudes.notifications().unwrap().len(), 3,
+        "distinct decisions must not be merged merely because they share a task/result");
 }

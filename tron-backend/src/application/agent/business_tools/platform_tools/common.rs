@@ -61,7 +61,7 @@ pub(super) fn ensure_workspace_match(
     )))
 }
 
-pub(super) fn resolve_workspace_code(
+pub(in crate::application::agent::business_tools) fn resolve_workspace_code(
     requested_workspace_code: &Option<String>,
     context: &AgentRunContext,
 ) -> Result<String, ToolError> {
@@ -69,23 +69,16 @@ pub(super) fn resolve_workspace_code(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or(context.workspace_code.as_str());
+        .unwrap_or("");
     if workspace_code.trim().is_empty() {
         return Err(ToolError::ExecutionFailed(
             "workspaceCode is required".to_string(),
         ));
     }
+    if context.is_owning_dude() || workspace_code != context.workspace_code.trim() {
+        return Err(ToolError::ExecutionFailed("workspaceCode is outside the current authorized execution scope".into()));
+    }
     Ok(workspace_code.to_string())
-}
-
-pub(super) fn required_string(
-    value: Option<String>,
-    field_name: &str,
-) -> Result<String, ToolError> {
-    value
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| ToolError::ExecutionFailed(format!("{field_name} is required")))
 }
 
 pub(super) fn optional_trimmed(value: Option<String>) -> Option<String> {

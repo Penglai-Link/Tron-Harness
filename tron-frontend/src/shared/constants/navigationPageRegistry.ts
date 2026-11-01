@@ -1,4 +1,5 @@
 export const navigationPageRegistry: Record<string, string> = {
+  "settings.automaticRouters": "/settings/automatic-routers",
   "dudes.index": "/dudes",
   "notifications.index": "/notifications",
   "agents.index": "/agents",
@@ -10,7 +11,6 @@ export const navigationPageRegistry: Record<string, string> = {
   "knowledgeGraph.index": "/knowledge-graph",
   "mcpServers.index": "/mcp-servers",
   "memory.index": "/memory",
-  "models.index": "/models",
   "observability.logs": "/settings/observability/logs",
   "observability.dashboard": "/settings/observability/dashboard",
   "observability.traces": "/settings/observability/traces",

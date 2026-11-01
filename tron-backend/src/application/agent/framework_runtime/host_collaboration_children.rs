@@ -1,5 +1,5 @@
-//! Addressable in-memory lifecycle for detached child runs spawned by
-//! `agent_spawn(background=true)`.
+//! Addressable in-memory lifecycle for synchronous and background child runs.
+//! Paused children remain registered so child_answer resumes their checkpoint.
 //!
 //! Detached children keep the delegation semantics of spawn (lineage, depth,
 //! subagent records, live presentation) while owning an independent
@@ -111,13 +111,25 @@ impl Runtime {
         request: fw::RunRequest,
         parent: &fw::RunContext,
     ) -> Result<fw::DetachedChildSummary, fw::AgentError> {
+        self.spawn_registered_child(request, parent, true).await
+    }
+    pub(super) async fn spawn_registered_child(
+        &self,
+        request: fw::RunRequest,
+        parent: &fw::RunContext,
+        detached: bool,
+    ) -> Result<fw::DetachedChildSummary, fw::AgentError> {
         let session = format!("tool-child-{}", fw::RunId::new_v4());
         let (agent, mut request, prepared) = self
             .prepare_new(
                 request,
                 session.clone(),
                 parent,
-                ExecutionLimits::AgentDefinitionDetached,
+                if detached {
+                    ExecutionLimits::AgentDefinitionDetached
+                } else {
+                    ExecutionLimits::AgentDefinition
+                },
             )
             .await?;
         let host = self.host()?;
@@ -146,11 +158,15 @@ impl Runtime {
         let admission = host.0.config_lock.lock().await;
         host.ensure_open().map_err(failure)?;
         self.authorize(&code)?;
-        let (child_handle, stream) = agent
-            .start_child_detached_with_output_owned::<eliteforge_agent_official_plugin_agui::AgUiStream>(
-                request, parent,
-            )
-            .await?;
+        let (child_handle, stream) = if detached {
+            agent.start_child_detached_with_output_owned::<eliteforge_agent_official_plugin_agui::AgUiStream>(request, parent).await?
+        } else {
+            agent
+                .start_child_with_output_owned::<eliteforge_agent_official_plugin_agui::AgUiStream>(
+                    request, parent,
+                )
+                .await?
+        };
         drop(admission);
         let run_id = child_handle.run_id();
         let control = child_handle.control();
@@ -205,7 +221,11 @@ impl Runtime {
                 // them before refusing new work.
                 children.retain(|_, child| {
                     let state = child.state.lock().unwrap();
-                    !(state.delivered && state.summary.status != fw::ChildRunStatus::Running)
+                    !(state.delivered
+                        && !matches!(
+                            state.summary.status,
+                            fw::ChildRunStatus::Running | fw::ChildRunStatus::AwaitingInput
+                        ))
                 });
             }
             if children.len() >= MAX_DETACHED_CHILDREN {
@@ -383,9 +403,31 @@ impl Runtime {
             if state.summary.status != fw::ChildRunStatus::AwaitingInput {
                 return Err(failure("child run is not awaiting input"));
             }
+            let current = state.completion.borrow();
+            if !current.as_ref().is_some_and(|(_, result)| {
+                result.as_ref().is_ok_and(|result| {
+                    result
+                        .result
+                        .interactions
+                        .iter()
+                        .any(|request| request.id == interaction)
+                })
+            }) {
+                return Err(failure(
+                    "interaction is not pending on the current child execution",
+                ));
+            }
         }
         let session = child.state.lock().unwrap().summary.session_id.clone();
-        let request = child.agent.answer(&session, interaction, value).await?;
+        let request = child
+            .agent
+            .answer_with_provenance(
+                &session,
+                interaction,
+                value,
+                Some(self.answer_provenance(parent, interaction)),
+            )
+            .await?;
         let (_, request, _) = self
             .prepare_existing(
                 request,
@@ -395,8 +437,13 @@ impl Runtime {
                 ExecutionLimits::Request,
             )
             .await?;
-        drop(_transition);
-        self.launch_child_run(child, request).await
+        // Keep the transition owned until the resumed execution is registered.
+        // A competing answer cannot consume the same pause before admission.
+        {
+            let mut state = child.state.lock().unwrap();
+            state.parent_run_code = self.context.run_code.clone();
+        }
+        self.launch_child_run(child.clone(), request).await
     }
     /// Restart one detached child for a resumed execution. Resumed runs are
     /// native root executions of the child session, mirroring thread answers.
@@ -415,7 +462,7 @@ impl Runtime {
         let summary = {
             let mut state = child.state.lock().unwrap();
             state.summary.status = fw::ChildRunStatus::Running;
-            state.summary.child_run_id = run_id;
+            state.delivered = false;
             state.control = control;
             state.completion = completion;
             state.execution_sequence = state.execution_sequence.saturating_add(1);
@@ -512,6 +559,12 @@ impl FrameworkHost {
             return;
         }
         let outcome = match &notification.result {
+            Ok(result) if result.result.status == fw::RunStatus::AwaitingInput => {
+                format!(
+                    "等待调用方回答。用 child_wait 获取完整交互，再用 child_answer 回答。interactions={}",
+                    serde_json::to_string(&result.result.interactions).unwrap_or_default()
+                )
+            }
             Ok(result) => format!("{}", result.result.output),
             Err(error) => error.clone(),
         };

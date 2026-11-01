@@ -30,6 +30,7 @@ function sessionFromProfile(profile: {
   personAiUserId: string;
   personAiUsername: string;
 }, avatarUrl: string | null, account: {
+  nickname?: string | null;
   vipLevel: number | null;
   remainingPoints: number | null;
 } | null): AuthSession {
@@ -39,7 +40,7 @@ function sessionFromProfile(profile: {
     provider: { code: "person-ai", name: "PersonAI", type: "internal" },
     user: {
       avatarUrl,
-      displayName: profile.personAiUsername,
+      displayName: account?.nickname?.trim() || profile.personAiUsername,
       email: "",
       status: "active",
       userCode: profile.personAiUserId,

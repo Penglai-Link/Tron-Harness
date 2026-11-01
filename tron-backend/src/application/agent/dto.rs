@@ -71,6 +71,8 @@ pub struct AgentInvocationResult {
     pub reasoning_effort: Option<ReasoningEffort>,
     pub status: &'static str,
     pub final_output: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub final_message_ids: Vec<String>,
     pub step_count: u32,
     pub token_usage: Option<ModelTokenUsage>,
     pub latest_request_estimate: Option<TokenEstimateSnapshot>,

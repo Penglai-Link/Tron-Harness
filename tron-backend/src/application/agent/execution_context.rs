@@ -50,7 +50,7 @@ pub async fn refresh_execution_context(
                 .iter()
                 .rev()
                 .filter(|observation| {
-                    observation.tool_name == "bash_exec"
+                    observation.tool_name == "command_exec"
                         || observation.tool_name.starts_with("fs_")
                         || observation.tool_name == "worktree_select"
                         || observation.tool_name == "worktree_create"
@@ -85,9 +85,10 @@ pub async fn refresh_execution_context(
             // A delegated subdirectory remains its process cwd while its selected
             // application/worktree stays unchanged. A deliberate worktree switch wins.
             let preserve_subdirectory = previous_primary.as_deref() == Some(root.as_str())
-                && scope.local_directory.as_deref().is_some_and(|cwd| {
-                    std::path::Path::new(cwd).starts_with(&root)
-                });
+                && scope
+                    .local_directory
+                    .as_deref()
+                    .is_some_and(|cwd| std::path::Path::new(cwd).starts_with(&root));
             if !preserve_subdirectory {
                 scope.local_directory = Some(root);
             }
@@ -141,7 +142,10 @@ pub(crate) fn sync_execution_context(context: &mut crate::domain::agent::AgentRu
             true
         }
     }
-    let inserted = replace(&mut std::sync::Arc::make_mut(&mut context.messages), &message);
+    let inserted = replace(
+        &mut std::sync::Arc::make_mut(&mut context.messages),
+        &message,
+    );
     if let Some(memory) = context.short_term_memory.as_mut() {
         if replace(&mut memory.prompt_prefix, &message) {
             memory.prompt_prefix_sources.insert(0, None);

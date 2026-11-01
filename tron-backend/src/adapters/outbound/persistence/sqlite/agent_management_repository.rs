@@ -150,8 +150,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     max_parallel_tool_calls,
                     created_at,
                     updated_at,
-                    overridden_fields
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    overridden_fields, selected_category_codes
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
                     tool_assignment_mode = excluded.tool_assignment_mode,
                     mcp_access_mode = excluded.mcp_access_mode,
@@ -159,6 +159,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     max_tool_calls = excluded.max_tool_calls,
                     max_parallel_tool_calls = excluded.max_parallel_tool_calls,
                     overridden_fields = excluded.overridden_fields,
+                    selected_category_codes = excluded.selected_category_codes,
                     updated_at = excluded.updated_at",
             params![
                 policy.workspace_code,
@@ -171,6 +172,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                 timestamp_to_millis(&policy.created_at),
                 timestamp_to_millis(&policy.updated_at),
                 serde_json::to_string(&policy.overridden_fields)
+                    .map_err(|_| AgentManagementError::StorageFailure)?,
+                serde_json::to_string(&policy.selected_category_codes)
                     .map_err(|_| AgentManagementError::StorageFailure)?,
             ],
         )
@@ -280,59 +283,6 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         Ok(())
     }
 
-    fn list_loop_designs(
-        &mut self,
-    ) -> Result<Vec<crate::domain::agent::loop_design::LoopDesign>, AgentManagementError> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT config_json FROM agent_loop_designs ORDER BY loop_code")
-            .map_err(storage_error)?;
-        let rows = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(storage_error)?;
-        rows.map(|row| {
-            serde_json::from_str(&row.map_err(storage_error)?)
-                .map_err(|_| AgentManagementError::StorageFailure)
-        })
-        .collect()
-    }
-    fn save_loop_design(
-        &mut self,
-        design: &crate::domain::agent::loop_design::LoopDesign,
-        expected: u32,
-    ) -> Result<(), AgentManagementError> {
-        let json =
-            serde_json::to_string(design).map_err(|_| AgentManagementError::StorageFailure)?;
-        let count = if expected == 0 {
-            self.connection.execute("INSERT OR IGNORE INTO agent_loop_designs(loop_code, version, config_json) VALUES(?1, ?2, ?3)", params![design.loop_code, design.version, json])
-        } else {
-            self.connection.execute("UPDATE agent_loop_designs SET version=?2, config_json=?3 WHERE loop_code=?1 AND version=?4", params![design.loop_code, design.version, json, expected])
-        }.map_err(storage_error)?;
-        if count == 0 {
-            return Err(AgentManagementError::LoopConflict);
-        }
-        Ok(())
-    }
-    fn delete_loop_design(&mut self, code: &str) -> Result<(), AgentManagementError> {
-        let transaction = super::framework_storage::business_transaction(
-            self.connection,
-            rusqlite::TransactionBehavior::Immediate,
-        )
-        .map_err(storage_error)?;
-        let used: bool = transaction.query_row("SELECT EXISTS(SELECT 1 FROM workspace_internal_agent_definitions WHERE loop_code=?1) OR EXISTS(SELECT 1 FROM platform_internal_agent_configs WHERE json_extract(config_json, '$.loopCode')=?1)", [code], |r| r.get(0)).map_err(storage_error)?;
-        if used {
-            return Err(AgentManagementError::LoopInUse);
-        }
-        if transaction
-            .execute("DELETE FROM agent_loop_designs WHERE loop_code=?1", [code])
-            .map_err(storage_error)?
-            == 0
-        {
-            return Err(AgentManagementError::LoopNotFound);
-        }
-        transaction.commit().map_err(storage_error)
-    }
-
     fn agent_workspace_grants(
         &mut self,
         agent: &str,
@@ -420,8 +370,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         transaction
             .execute(
                 "INSERT INTO workspace_internal_agent_definitions
-             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id, group_name, candidate_model_codes_json, description)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, avatar_id, group_name, candidate_model_codes_json, description)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     definition.workspace_code,
                     definition.agent_code,
@@ -429,7 +379,6 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     definition.role_prompt,
                     timestamp_to_millis(&definition.created_at),
                     timestamp_to_millis(&definition.updated_at),
-                    definition.loop_code,
                     definition.avatar_id,
                     definition.group_name,
                     serde_json::to_string(&definition.candidate_model_codes).map_err(|_| AgentManagementError::StorageFailure)?, definition.description
@@ -542,7 +491,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id, group_name, candidate_model_codes_json, description
+                "SELECT workspace_code, agent_code, name, role_prompt, created_at, updated_at, avatar_id, group_name, candidate_model_codes_json, description
              FROM workspace_internal_agent_definitions WHERE workspace_code = ?1
              ORDER BY created_at, agent_code",
             )
@@ -552,19 +501,18 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                 Ok(WorkspaceInternalAgentDefinition {
                     workspace_code: row.get(0)?,
                     agent_code: row.get(1)?,
-                    loop_code: row.get(6)?,
-                    avatar_id: row.get(7)?,
-                    group_name: row.get(8)?,
-                    candidate_model_codes: serde_json::from_str(&row.get::<_, String>(9)?)
+                    avatar_id: row.get(6)?,
+                    group_name: row.get(7)?,
+                    candidate_model_codes: serde_json::from_str(&row.get::<_, String>(8)?)
                         .map_err(|error| {
                             rusqlite::Error::FromSqlConversionFailure(
-                                9,
+                                8,
                                 rusqlite::types::Type::Text,
                                 Box::new(error),
                             )
                         })?,
                     name: row.get(2)?,
-                    description: row.get(10)?,
+                    description: row.get(9)?,
                     role_prompt: row.get(3)?,
                     created_at: timestamp_from_millis(row.get(4)?),
                     updated_at: timestamp_from_millis(row.get(5)?),
@@ -581,13 +529,13 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     ) -> Result<(), AgentManagementError> {
         self.connection.execute(
             "INSERT INTO workspace_internal_agent_definitions
-             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, loop_code, avatar_id, group_name, candidate_model_codes_json, description)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+             (workspace_code, agent_code, name, role_prompt, created_at, updated_at, avatar_id, group_name, candidate_model_codes_json, description)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
-             name = excluded.name, description = excluded.description, role_prompt = excluded.role_prompt, loop_code = excluded.loop_code, avatar_id = excluded.avatar_id, group_name = excluded.group_name, candidate_model_codes_json = excluded.candidate_model_codes_json, updated_at = excluded.updated_at",
+             name = excluded.name, description = excluded.description, role_prompt = excluded.role_prompt, avatar_id = excluded.avatar_id, group_name = excluded.group_name, candidate_model_codes_json = excluded.candidate_model_codes_json, updated_at = excluded.updated_at",
             params![definition.workspace_code, definition.agent_code, definition.name,
                 definition.role_prompt, timestamp_to_millis(&definition.created_at),
-                timestamp_to_millis(&definition.updated_at), definition.loop_code, definition.avatar_id, definition.group_name, serde_json::to_string(&definition.candidate_model_codes).map_err(|_| AgentManagementError::StorageFailure)?, definition.description],
+                timestamp_to_millis(&definition.updated_at), definition.avatar_id, definition.group_name, serde_json::to_string(&definition.candidate_model_codes).map_err(|_| AgentManagementError::StorageFailure)?, definition.description],
         ).map_err(storage_error)?;
         Ok(())
     }
@@ -624,7 +572,10 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
             .query_map([], |row| {
                 Ok(SystemAgentRegistryEntry {
                     fast_mode: row.get::<_, i64>(15)? != 0,
-                    reasoning_effort: row.get::<_, Option<String>>(13)?.as_deref().and_then(crate::domain::reasoning::ReasoningEffort::from_storage_value),
+                    reasoning_effort: row
+                        .get::<_, Option<String>>(13)?
+                        .as_deref()
+                        .and_then(crate::domain::reasoning::ReasoningEffort::from_storage_value),
                     avatar_id: row.get(14)?,
                     agent_code: row.get(0)?,
                     base_agent_code: row.get(11)?,
@@ -824,13 +775,13 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
     ) -> Result<Vec<WorkspaceInternalAgentPolicy>, AgentManagementError> {
         let sql = match workspace_code {
             Some(_workspace_code) => {
-                "SELECT workspace_code, agent_code, tool_assignment_mode, mcp_access_mode, max_steps, max_tool_calls, max_parallel_tool_calls, created_at, updated_at, overridden_fields
+                "SELECT workspace_code, agent_code, tool_assignment_mode, mcp_access_mode, max_steps, max_tool_calls, max_parallel_tool_calls, created_at, updated_at, overridden_fields, selected_category_codes
                  FROM workspace_internal_agent_policies
                  WHERE workspace_code = ?1
                  ORDER BY agent_code ASC"
             }
             None => {
-                "SELECT workspace_code, agent_code, tool_assignment_mode, mcp_access_mode, max_steps, max_tool_calls, max_parallel_tool_calls, created_at, updated_at, overridden_fields
+                "SELECT workspace_code, agent_code, tool_assignment_mode, mcp_access_mode, max_steps, max_tool_calls, max_parallel_tool_calls, created_at, updated_at, overridden_fields, selected_category_codes
                  FROM workspace_internal_agent_policies
                  ORDER BY workspace_code ASC, agent_code ASC"
             }
@@ -841,6 +792,15 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                 workspace_code: row.get(0)?,
                 agent_code: row.get(1)?,
                 tool_assignment_mode: tool_assignment_mode_from_storage(row.get::<_, String>(2)?),
+                selected_category_codes: serde_json::from_str(&row.get::<_, String>(10)?).map_err(
+                    |e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            10,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    },
+                )?,
                 mcp_access_mode: mcp_access_mode_from_storage(row.get::<_, String>(3)?),
                 max_steps: row.get(4)?,
                 max_tool_calls: row.get(5)?,
@@ -884,8 +844,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     max_parallel_tool_calls,
                     created_at,
                     updated_at,
-                    overridden_fields
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    overridden_fields, selected_category_codes
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
                     tool_assignment_mode = excluded.tool_assignment_mode,
                     mcp_access_mode = excluded.mcp_access_mode,
@@ -893,6 +853,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     max_tool_calls = excluded.max_tool_calls,
                     max_parallel_tool_calls = excluded.max_parallel_tool_calls,
                     overridden_fields = excluded.overridden_fields,
+                    selected_category_codes = excluded.selected_category_codes,
                     updated_at = excluded.updated_at",
                 params![
                     policy.workspace_code,
@@ -905,6 +866,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepositorySql<'_> {
                     timestamp_to_millis(&policy.created_at),
                     timestamp_to_millis(&policy.updated_at),
                     serde_json::to_string(&policy.overridden_fields)
+                        .map_err(|_| AgentManagementError::StorageFailure)?,
+                    serde_json::to_string(&policy.selected_category_codes)
                         .map_err(|_| AgentManagementError::StorageFailure)?,
                 ],
             )
@@ -1257,38 +1220,6 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
                 SqliteAgentManagementRepositorySql { connection }.remember_discovered_tool(&tool)
             },
             || storage_error(rusqlite::Error::InvalidQuery),
-        )
-    }
-
-    fn list_loop_designs(
-        &mut self,
-    ) -> Result<Vec<crate::domain::agent::loop_design::LoopDesign>, AgentManagementError> {
-        self.connection.call(
-            move |connection| SqliteAgentManagementRepositorySql { connection }.list_loop_designs(),
-            || AgentManagementError::StorageFailure,
-        )
-    }
-    fn save_loop_design(
-        &mut self,
-        design: &crate::domain::agent::loop_design::LoopDesign,
-        expected: u32,
-    ) -> Result<(), AgentManagementError> {
-        let design = design.clone();
-        self.connection.call(
-            move |connection| {
-                SqliteAgentManagementRepositorySql { connection }
-                    .save_loop_design(&design, expected)
-            },
-            || AgentManagementError::StorageFailure,
-        )
-    }
-    fn delete_loop_design(&mut self, code: &str) -> Result<(), AgentManagementError> {
-        let code = code.to_owned();
-        self.connection.call(
-            move |connection| {
-                SqliteAgentManagementRepositorySql { connection }.delete_loop_design(&code)
-            },
-            || AgentManagementError::StorageFailure,
         )
     }
 

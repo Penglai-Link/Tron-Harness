@@ -196,7 +196,11 @@ fn chain_step(
         Some(digest) => hasher.update(digest),
         None => hasher.update(CHAIN_DOMAIN),
     }
-    serde_json::to_writer(DigestWriter(&mut hasher), message).map_err(|error| error.to_string())?;
+    // Group IDs are local execution identities, not provider input; the same
+    // response can be restored with an equivalent framework-assigned ID.
+    let mut provider_message = message.clone();
+    provider_message.output_group_id = None;
+    serde_json::to_writer(DigestWriter(&mut hasher), &provider_message).map_err(|error| error.to_string())?;
     Ok(hasher.finalize().into())
 }
 

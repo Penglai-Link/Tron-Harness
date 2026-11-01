@@ -123,6 +123,7 @@ impl McpService {
                     required_variable_keys: required_variable_keys(&server),
                 });
                 binding.domain_code = Some(domain_code);
+                binding.category = Some(crate::application::agent::builtin_category("tron.platform"));
                 binding.descriptor.id = format!("tron.{tool_name}");
                 binding.descriptor.call_name = tool_name;
                 if let (Some(resources), Some(owner)) = (

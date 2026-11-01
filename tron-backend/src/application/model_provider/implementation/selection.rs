@@ -405,7 +405,7 @@ impl ModelProviderService {
             )));
         }
         let default = if requested.is_none() {
-            self.default_selection(workspace_code, ModelType::Embedding)?
+            self.default_selection(workspace_code, ModelType::TextEmbedding)?
         } else {
             None
         };
@@ -459,7 +459,7 @@ impl ModelProviderService {
         if requested.is_some_and(|code| code != "PERSON_AI:ROUTE:RerankAuto") {
             return Ok(None);
         }
-        let selection = self.default_selection(workspace_code, ModelType::Rerank)?;
+        let selection = self.default_selection(workspace_code, ModelType::TextRerank)?;
         if requested.is_none()
             && !selection.is_some_and(|selection| {
                 selection.provider_code == Some(ModelProviderCode::PersonAi)

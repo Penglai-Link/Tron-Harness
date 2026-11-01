@@ -157,21 +157,6 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.WorkspaceMcpServersPage,
     }))
   ),
-  "models.detail": lazy(() =>
-    import("@/domain/model/pages/WorkspaceModelDetailsPage").then((module) => ({
-      default: module.WorkspaceModelDetailsPage,
-    }))
-  ),
-  "models.index": lazy(() =>
-    import("@/domain/model/pages/ModelRegistryPage").then((module) => ({
-      default: module.ModelRegistryPage,
-    }))
-  ),
-  "models.new": lazy(() =>
-    import("@/domain/model/pages/CreateWorkspaceModelPage").then((module) => ({
-      default: module.CreateWorkspaceModelPage,
-    }))
-  ),
   "rag.index": lazy(() =>
     import("@/domain/rag/pages/RagPage").then((module) => ({
       default: module.RagPage,
@@ -287,11 +272,6 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.PlatformMcpServersPage,
     }))
   ),
-  "settings.models": lazy(() =>
-    import("@/domain/model/pages/PlatformModelsPage").then((module) => ({
-      default: module.PlatformModelsPage,
-    }))
-  ),
   "settings.taskFlows": lazy(() =>
     import("@/domain/task/pages/TaskFlowsPage").then((module) => ({
       default: module.TaskFlowsPage,
@@ -307,6 +287,7 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.TaskFlowEditorPage,
     }))
   ),
+  "settings.automaticRouters": lazy(() => import("@/domain/model/pages/AutomaticRoutersPage").then(module => ({ default: module.AutomaticRoutersPage }))),
   "settings.modelProviders": lazy(() =>
     import("@/domain/model/pages/ModelProvidersPage").then((module) => ({
       default: module.ModelProvidersPage,
@@ -330,16 +311,6 @@ export const routePages: Record<string, RoutePageComponent> = {
   "settings.modelProviderSyncRuns": lazy(() =>
     import("@/domain/model/pages/ModelProviderSyncRunsPage").then((module) => ({
       default: module.ModelProviderSyncRunsPage,
-    }))
-  ),
-  "settings.modelsDetail": lazy(() =>
-    import("@/domain/model/pages/PlatformModelDetailsPage").then((module) => ({
-      default: module.PlatformModelDetailsPage,
-    }))
-  ),
-  "settings.modelsNew": lazy(() =>
-    import("@/domain/model/pages/CreatePlatformModelPage").then((module) => ({
-      default: module.CreatePlatformModelPage,
     }))
   ),
   "settings.prompts": lazy(() =>

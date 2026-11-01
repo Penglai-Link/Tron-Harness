@@ -88,7 +88,9 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
     let address = listener
         .local_addr()
         .expect("agent mock server should expose address");
-    let app = Router::new().route("/v1/chat/completions", post(agent_chat_completion));
+    let app = Router::new()
+        .route("/v1/chat/completions", post(agent_chat_completion))
+        .route("/v1/responses", post(agent_responses_completion));
     let task = tokio::spawn(async move {
         axum::serve(listener, app)
             .await
@@ -98,6 +100,56 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
         base_url: format!("http://{address}/v1"),
         _task: task,
     }
+}
+
+async fn agent_responses_completion() -> axum::response::Response {
+    let progress = json!({"type":"message","id":"progress","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"Checking files"}]});
+    let answer = json!({"type":"message","id":"answer","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"All done"}]});
+    let events = [
+        json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"progress","role":"assistant"}}),
+        json!({"type":"response.output_text.delta","output_index":0,"item_id":"progress","delta":"Checking files"}),
+        json!({"type":"response.output_item.done","output_index":0,"item":progress}),
+        json!({"type":"response.output_item.added","output_index":1,"item":{"type":"message","id":"answer","role":"assistant","phase":"final_answer"}}),
+        json!({"type":"response.output_text.delta","output_index":1,"item_id":"answer","delta":"All done"}),
+        json!({"type":"response.output_item.done","output_index":1,"item":answer}),
+        json!({"type":"response.completed","response":{"id":"response-fixture","status":"completed","output":[progress,answer]}}),
+    ];
+    let mut body = events.iter().map(|event| format!("data: {event}\n\n")).collect::<String>();
+    body.push_str("data: [DONE]\n\n");
+    (StatusCode::OK, [(axum::http::header::CONTENT_TYPE, "text/event-stream")], body).into_response()
+}
+
+#[tokio::test]
+async fn responses_phases_are_preserved_in_agui_replay() {
+    let app = app();
+    let server = agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let session = "CONV-RESPONSES-PHASE";
+    let activated = request_with_headers(&app, Method::POST, &format!("/api/v1/agents/agui/streams/{session}"), None, None, Some(&authorization)).await;
+    assert_eq!(activated.status(), StatusCode::OK);
+    let started = request_with_headers(&app, Method::POST, "/api/v1/agents/runs", Some(json!({
+        "prompt":"Inspect files", "workspaceCode":"TRON_CORE", "conversationCode":session,
+        "model":{"modelCode":"PHASE_MODEL","protocol":"RESPONSES","baseUrl":server.base_url,"apiKey":"fixture-key","modelName":"fixture"}
+    })), None, Some(&authorization)).await;
+    assert_eq!(started.status(), StatusCode::OK);
+    let events = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let response = request_with_headers(&app, Method::GET, &format!("/api/v1/agents/agui/streams/{session}/protocol-events"), None, None, Some(&authorization)).await;
+            let body = response_json(response).await;
+            let events = body["data"].as_array().cloned().unwrap_or_default();
+            if events.iter().any(|event| event["sseEvent"] == "RUN_FINISHED" || event["sseEvent"] == "RUN_ERROR") { break events; }
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        }
+    }).await.expect("run should finish");
+    assert!(!events.iter().any(|event| event["sseEvent"] == "RUN_ERROR"), "{events:?}");
+    let ends: Vec<_> = events.iter().filter(|event| event["sseEvent"] == "TEXT_MESSAGE_END").collect();
+    assert_eq!(ends.len(), 2, "{events:?}");
+    assert_eq!(ends[0]["data"]["metadata"]["framework"]["message"]["phase"], "commentary");
+    assert_eq!(ends[1]["data"]["metadata"]["framework"]["message"]["phase"], "final_answer");
+    assert_ne!(ends[0]["data"]["messageId"], ends[1]["data"]["messageId"]);
+    let finished = events.iter().find(|event| event["sseEvent"] == "RUN_FINISHED").unwrap();
+    assert_eq!(finished["data"]["metadata"]["framework"]["finalMessageIds"][0], ends[1]["data"]["messageId"]);
 }
 
 async fn agent_chat_completion(

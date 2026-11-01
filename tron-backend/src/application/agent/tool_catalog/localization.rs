@@ -22,10 +22,23 @@ pub(super) fn localize_tool_record(
     locale: SupportedLocale,
     definition: ToolCatalogDefinition,
 ) -> ToolCatalogRecord {
-    ToolCatalogRecord {
+    let mut record = ToolCatalogRecord {
+        display: None,
         tool_code: definition.tool_code.to_string(),
         tool_name: definition.tool_name,
         domain_code: definition.domain_code.to_string(),
+        category: Some(super::builtin_category(definition.category_code)),
+        source: eliteforge_agent_core::ToolSource {
+            provider_id: Some(
+                if matches!(definition.category_code, "tron.platform" | "tron.dude") {
+                    super::HARNESS_TOOL_PROVIDER_ID
+                } else {
+                    definition.module_owner
+                }
+                .to_owned(),
+            ),
+            ..Default::default()
+        },
         name: translate(locale, definition.name_i18n_key).to_string(),
         description: translate(locale, definition.description_i18n_key).to_string(),
         operation_kind: definition.operation_kind,
@@ -34,7 +47,39 @@ pub(super) fn localize_tool_record(
         availability_state: definition.availability_state,
         sample_result_summary: translate(locale, definition.sample_result_summary_i18n_key)
             .to_string(),
+    };
+    if record.domain_code == "dude_memory" {
+        record.description = match locale {
+            SupportedLocale::ZhCn => "管理当前用户或工作领域的记忆。".into(),
+            _ => "Manage memories for the current user or work domain.".into(),
+        };
+        record.input_schema["description"] = record.description.clone().into();
+        if let Some(scope) = record.input_schema.pointer_mut("/properties/scope") {
+            scope["description"] = match locale {
+                SupportedLocale::ZhCn => "选择用户或工作领域记忆。",
+                _ => "Choose user or work-domain memory.",
+            }.into();
+        }
+    } else if record.domain_code == "dude_task" {
+        record.description = match locale {
+            SupportedLocale::ZhCn => "管理当前 Dude 负责的平台任务。".into(),
+            _ => "Manage platform tasks owned by the current Dude.".into(),
+        };
+        record.input_schema["description"] = record.description.clone().into();
     }
+    // These are explicit host aliases for official local bindings. Resources
+    // come from that provider, while Tron keeps its stable ACL identities.
+    if matches!(definition.module_owner, "coding" | "terminal") {
+        static CATALOG: std::sync::OnceLock<Vec<eliteforge_agent_core::ToolDescriptor>> = std::sync::OnceLock::new();
+        if let Some(descriptor)=CATALOG.get_or_init(eliteforge_agent_official_plugin_tools_local::local_tool_catalog).iter().find(|d|d.call_name==record.tool_name) {
+            record.display=descriptor.display.clone();
+            let resolved=descriptor.resolve_display(match locale {SupportedLocale::ZhCn=>"zh-CN",SupportedLocale::EnUs=>"en-US"});
+            record.name=resolved.name;
+            record.description=resolved.description;
+            record.input_schema=resolved.input_schema;
+        }
+    }
+    record
 }
 
 pub(super) fn localize_domain_record(
@@ -74,8 +119,8 @@ pub(super) fn localize_domain_record(
             _ => format!("{domain_code} Tools"),
         },
         description: match locale {
-            SupportedLocale::ZhCn => format!("{domain_code} 领域下的业务工具。"),
-            SupportedLocale::EnUs => format!("Business tools under the {domain_code} domain."),
+            SupportedLocale::ZhCn => format!("可用工具：{}。", sample_tools.join("、")),
+            SupportedLocale::EnUs => format!("Available tools: {}.", sample_tools.join(", ")),
         },
         tool_count: items.len(),
         sample_tools,

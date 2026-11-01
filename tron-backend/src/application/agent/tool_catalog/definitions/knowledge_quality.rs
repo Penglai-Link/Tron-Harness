@@ -73,7 +73,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
                 "agent.toolCatalog.quality.cancel.summary",
             ),
         };
-        tools.push(ToolCatalogDefinition{tool_code:code,tool_name:name.into(),domain_code:"rag",name_i18n_key:title,description_i18n_key:description,operation_kind:kind,input_schema:schema(description,json!([]),json!({"type":"object","required":required,"properties":properties,"additionalProperties":false})),module_owner:"knowledge-quality",availability_state:ToolAvailabilityState::Available,sample_result_summary_i18n_key:summary});
+        tools.push(ToolCatalogDefinition{tool_code:code,tool_name:name.into(),domain_code:"harness_rag", category_code: "tron.platform",name_i18n_key:title,description_i18n_key:description,operation_kind:kind,input_schema:schema(description,json!([]),json!({"type":"object","required":required,"properties":properties,"additionalProperties":false})),module_owner:"knowledge-quality",availability_state:ToolAvailabilityState::Available,sample_result_summary_i18n_key:summary});
     }
     tools
 }

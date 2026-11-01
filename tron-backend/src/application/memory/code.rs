@@ -337,11 +337,13 @@ pub(super) fn resolve_scope_code(
         validate_scope_code(scope, &value, context)?;
         return Ok(value);
     }
-    Ok(match scope {
+    let scope_code = match scope {
         MemoryScope::User => context.user_code.clone(),
         MemoryScope::WorkDomain => context.work_domain_code.clone(),
         MemoryScope::Space => context.workspace_code.clone(),
-    })
+    };
+    validate_scope_code(scope, &scope_code, context)?;
+    Ok(scope_code)
 }
 
 pub(super) fn validate_scope_code(
@@ -354,6 +356,12 @@ pub(super) fn validate_scope_code(
         MemoryScope::WorkDomain => context.work_domain_code.as_str(),
         MemoryScope::Space => context.workspace_code.as_str(),
     };
+    if expected.trim().is_empty() {
+        return Err(MemoryError::Validation(format!(
+            "{} memory requires a bound scope in the current agent run context",
+            scope.as_public()
+        )));
+    }
     if scope_code == expected {
         Ok(())
     } else {

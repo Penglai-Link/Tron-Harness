@@ -12,6 +12,7 @@ fn paused(kind: AgentNativeInteractionKind, presentation: Option<Value>) -> Agen
         reasoning_effort: None,
         status: "AWAITING_USER_INPUT",
         final_output: String::new(),
+        final_message_ids: Vec::new(),
         step_count: 1,
         token_usage: None,
         latest_request_estimate: None,

@@ -22,7 +22,7 @@ async fn knowledge_base_defaults_and_graph_only_publication_use_real_source_gene
     use tron_backend::application::rag::graph::RagGraphIndexRepository;
     let f=Fixture::new();let kb=f.service.create(USER,"Service manual","").unwrap();
     let settings=f.state.rag.settings_for_corpus(&kb.id).unwrap();assert!(settings.graph);
-    assert_eq!(settings.embedding_model_code.as_deref(),Some("PERSON_AI:ROUTE:MultimodalEmbeddingAuto"));
+    assert_eq!(settings.embedding_model_code.as_deref(),Some("AUTO:MultimodalEmbedding"));
     f.state.rag.configure_corpus(&kb.id,RagSettings{fulltext:true,vector:false,..settings.clone()}).unwrap();
     let doc=f.service.upload(USER,&kb.id,"manual.md",b"# Services\nAlpha calls Beta.").unwrap();
     let ready=f.service.index(USER,&kb.id,&doc.id).await.unwrap();assert_eq!(ready.status,"READY","{:?}",ready.error);
@@ -1080,6 +1080,49 @@ async fn library_settings_http_roundtrip_is_owner_scoped_and_localized() {
     .await;
     assert_eq!(status, 404, "{error}");
     assert_eq!(error["data"], json!({}));
+}
+
+#[tokio::test]
+async fn local_text_indexing_does_not_reconstruct_a_remote_parser() {
+    use std::sync::Arc;
+    use tron_backend::application::knowledge_base::{KnowledgeBaseError, parsing::*};
+    struct StrictRemoteParser;
+    #[async_trait::async_trait]
+    impl KnowledgeDocumentParser for StrictRemoteParser {
+        fn task_snapshot(
+            &self,
+            _: &serde_json::Value,
+        ) -> Result<Option<Arc<dyn KnowledgeDocumentParser>>, KnowledgeBaseError> {
+            panic!("local text must not reconstruct the remote parser")
+        }
+        fn default_tier(&self) -> ParsingTier {
+            ParsingTier::Standard
+        }
+        async fn capabilities(&self) -> Result<ParsingCapabilities, KnowledgeBaseError> {
+            panic!("local text must not query the remote parser")
+        }
+        async fn parse(
+            &self,
+            _: &str,
+            _: &[u8],
+            _: Option<ParsingTier>,
+        ) -> Result<StructuredParse, KnowledgeBaseError> {
+            panic!("local text must not use the remote parser")
+        }
+    }
+    let f = Fixture::new();
+    let service = f
+        .service
+        .clone()
+        .with_document_parser(Arc::new(StrictRemoteParser));
+    let kb = service.create(USER, "Local text", "").unwrap();
+    let document = service
+        .upload(USER, &kb.id, "guide.md", b"# Guide\n\nLocal text is searchable.")
+        .unwrap();
+    assert!(document.parse_plan.as_ref().unwrap().features.local_text);
+    let indexed = service.index(USER, &kb.id, &document.id).await.unwrap();
+    assert_eq!(indexed.status, "READY", "{:?}", indexed.error);
+    service.stop_ingestion_workers();
 }
 
 #[tokio::test]

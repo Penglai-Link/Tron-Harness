@@ -14,11 +14,12 @@ pub(super) fn definition(
         tool_code,
         tool_name: tool_code.replace('.', "_"),
         domain_code,
+        category_code: if tool_code.starts_with("dude.") { "tron.dude" } else { "tron.platform" },
         name_i18n_key: tool_key(tool_code, "name"),
         description_i18n_key: tool_key(tool_code, "description"),
         operation_kind,
         input_schema,
-        module_owner: domain_code,
+        module_owner: domain_code.strip_prefix("harness_").unwrap_or(domain_code),
         availability_state: ToolAvailabilityState::Available,
         sample_result_summary_i18n_key: tool_key(tool_code, "sampleResultSummary"),
     }
@@ -143,36 +144,6 @@ fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
         ("task.restore", "sampleResultSummary") => {
             "agent.toolCatalog.tools.task.restore.sampleResultSummary"
         }
-        ("model.page", "name") => "agent.toolCatalog.tools.model.page.name",
-        ("model.page", "description") => "agent.toolCatalog.tools.model.page.description",
-        ("model.page", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.model.page.sampleResultSummary"
-        }
-        ("model.create", "name") => "agent.toolCatalog.tools.model.create.name",
-        ("model.create", "description") => "agent.toolCatalog.tools.model.create.description",
-        ("model.create", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.model.create.sampleResultSummary"
-        }
-        ("model.update", "name") => "agent.toolCatalog.tools.model.update.name",
-        ("model.update", "description") => "agent.toolCatalog.tools.model.update.description",
-        ("model.update", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.model.update.sampleResultSummary"
-        }
-        ("model.enable", "name") => "agent.toolCatalog.tools.model.enable.name",
-        ("model.enable", "description") => "agent.toolCatalog.tools.model.enable.description",
-        ("model.enable", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.model.enable.sampleResultSummary"
-        }
-        ("model.disable", "name") => "agent.toolCatalog.tools.model.disable.name",
-        ("model.disable", "description") => "agent.toolCatalog.tools.model.disable.description",
-        ("model.disable", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.model.disable.sampleResultSummary"
-        }
-        ("model.delete", "name") => "agent.toolCatalog.tools.model.delete.name",
-        ("model.delete", "description") => "agent.toolCatalog.tools.model.delete.description",
-        ("model.delete", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.model.delete.sampleResultSummary"
-        }
         ("skill.page", "name") => "agent.toolCatalog.tools.skill.page.name",
         ("skill.page", "description") => "agent.toolCatalog.tools.skill.page.description",
         ("skill.page", "sampleResultSummary") => {
@@ -236,55 +207,6 @@ fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
         }
         ("platform.variable.delete", "sampleResultSummary") => {
             "agent.toolCatalog.tools.platform.variable.delete.sampleResultSummary"
-        }
-        ("platform.model.page", "name") => "agent.toolCatalog.tools.platform.model.page.name",
-        ("platform.model.page", "description") => {
-            "agent.toolCatalog.tools.platform.model.page.description"
-        }
-        ("platform.model.page", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.model.page.sampleResultSummary"
-        }
-        ("platform.model.get", "name") => "agent.toolCatalog.tools.platform.model.get.name",
-        ("platform.model.get", "description") => {
-            "agent.toolCatalog.tools.platform.model.get.description"
-        }
-        ("platform.model.get", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.model.get.sampleResultSummary"
-        }
-        ("platform.model.create", "name") => "agent.toolCatalog.tools.platform.model.create.name",
-        ("platform.model.create", "description") => {
-            "agent.toolCatalog.tools.platform.model.create.description"
-        }
-        ("platform.model.create", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.model.create.sampleResultSummary"
-        }
-        ("platform.model.update", "name") => "agent.toolCatalog.tools.platform.model.update.name",
-        ("platform.model.update", "description") => {
-            "agent.toolCatalog.tools.platform.model.update.description"
-        }
-        ("platform.model.update", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.model.update.sampleResultSummary"
-        }
-        ("platform.model.enable", "name") => "agent.toolCatalog.tools.platform.model.enable.name",
-        ("platform.model.enable", "description") => {
-            "agent.toolCatalog.tools.platform.model.enable.description"
-        }
-        ("platform.model.enable", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.model.enable.sampleResultSummary"
-        }
-        ("platform.model.disable", "name") => "agent.toolCatalog.tools.platform.model.disable.name",
-        ("platform.model.disable", "description") => {
-            "agent.toolCatalog.tools.platform.model.disable.description"
-        }
-        ("platform.model.disable", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.model.disable.sampleResultSummary"
-        }
-        ("platform.model.delete", "name") => "agent.toolCatalog.tools.platform.model.delete.name",
-        ("platform.model.delete", "description") => {
-            "agent.toolCatalog.tools.platform.model.delete.description"
-        }
-        ("platform.model.delete", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.model.delete.sampleResultSummary"
         }
         ("platform.prompt.page", "name") => "agent.toolCatalog.tools.platform.prompt.page.name",
         ("platform.prompt.page", "description") => {

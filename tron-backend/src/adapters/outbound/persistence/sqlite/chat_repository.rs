@@ -246,6 +246,70 @@ impl SqliteChatRepository {
             Ok(Self { host })
         })
     }
+    fn delete_session_internal(&mut self, id: &str, heartbeat_retention: bool) -> Result<(), ChatError> {
+        blocking(async {
+            self.link(id).await?;
+            let db = self.host.shared_database().await.map_err(chat_error)?;
+            let sessions = self
+                .framework()
+                .await?
+                .sessions()
+                .map_err(|_| ChatError::StorageFailure)?;
+            let code = id.to_owned();
+            if !heartbeat_retention {
+                self.host.telemetry().await.map_err(|_| ChatError::StorageFailure)?;
+                let telemetry_path = self.host.telemetry_database_path().to_string_lossy().into_owned();
+                db.call(move |c| {
+                    let attached: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM pragma_database_list WHERE name='telemetry')",[],|r|r.get(0))?;
+                    if !attached { c.execute("ATTACH DATABASE ?1 AS telemetry",[telemetry_path])?; }
+                    Ok::<_,rusqlite::Error>(())
+                }).await.map_err(|_| ChatError::StorageFailure)?;
+            }
+            db.transaction(async {
+                let record=sessions.get(id).await?;
+                if record.status!=fw::SessionStatus::Archived {return Err(fw::StateError::Invalid("session must be archived".into()));}
+                if self.framework().await.map_err(|e|fw::StateError::Backend(e.to_string()))?.goals().map_err(|e|fw::StateError::Backend(e.to_string()))?.active(id).await?.is_some_and(|goal| goal.status == fw::GoalStatus::Active) {
+                    return Err(fw::StateError::Busy);
+                }
+                let guard_code = code.clone();
+                let blocked = db.call(move |c| c.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND (
+                        EXISTS(SELECT 1 FROM dude_events e WHERE (e.session_code=s.session_code OR e.event_id=s.correlation_key) AND (e.source!='Heartbeat' OR e.status IN ('Queued','Running','AwaitingInput')))
+                        OR EXISTS(SELECT 1 FROM tasks t WHERE t.work_session_code=s.session_code)
+                        OR EXISTS(SELECT 1 FROM collaboration_threads t WHERE t.session_id=s.session_code)
+                        OR EXISTS(SELECT 1 FROM dude_work_changes w WHERE json_extract(w.record_json,'$.sessionCode')=s.session_code AND json_extract(w.record_json,'$.resolvedAt') IS NULL)))",
+                    [&guard_code], |r| r.get::<_, bool>(0),
+                )).await.map_err(|e|fw::StateError::Backend(e.to_string()))?;
+                if blocked { return Err(fw::StateError::Busy); }
+                if heartbeat_retention {
+                    let guard_code = code.clone();
+                    let expired = db.call(move |c| c.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND EXISTS(SELECT 1 FROM dude_sessions n WHERE n.dude_code=s.dude_code AND n.purpose='Heartbeat' AND n.rowid>s.rowid LIMIT 1 OFFSET 19))",
+                        [&guard_code], |r| r.get::<_, bool>(0),
+                    )).await.map_err(|e|fw::StateError::Backend(e.to_string()))?;
+                    if !expired { return Err(fw::StateError::Busy); }
+                }
+                sessions.delete(id).await?;
+                db.call(move|c| {
+                    // Observability has its own retention policy. Avoid scanning the
+                    // telemetry database for each automatically expired heartbeat.
+                    if !heartbeat_retention { delete_session_telemetry(c, &code)?; }
+                    c.execute("DELETE FROM dude_events WHERE source='Heartbeat' AND EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat' AND (dude_events.session_code=s.session_code OR dude_events.event_id=s.correlation_key))",[&code])?;
+                    c.execute("DELETE FROM dude_sessions WHERE session_code=?1 AND purpose='Heartbeat'",[&code])?;
+                    c.execute("DELETE FROM resource_chat_session_attachments WHERE session_code=?1",[&code])?;
+                    for (table, sql) in [
+                        ("chat_session_auto_model_routes", "DELETE FROM chat_session_auto_model_routes WHERE session_code=?1"),
+                        ("provider_model_run_snapshots", "DELETE FROM provider_model_run_snapshots WHERE session_code=?1"),
+                        ("automation_execution_records", "UPDATE automation_execution_records SET session_code=NULL WHERE session_code=?1"),
+                    ] {
+                        if c.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",[table],|r|r.get::<_,bool>(0))? { c.execute(sql,[&code])?; }
+                    }
+                    c.execute("DELETE FROM workspace_session_links WHERE session_id=?1",[&code])?;
+                    Ok::<_,rusqlite::Error>(())
+                }).await.map_err(|e|fw::StateError::Backend(e.to_string()))?; Ok(())
+            }).await.map_err(chat_error)
+        })
+    }
     pub(crate) async fn ensure_run_session(
         host: &FrameworkHost,
         context: &crate::domain::agent::AgentRunContext,
@@ -483,44 +547,10 @@ impl ChatRepository for SqliteChatRepository {
         })
     }
     fn delete_session(&mut self, id: &str) -> Result<(), ChatError> {
-        blocking(async {
-            self.link(id).await?;
-            let db = self.host.shared_database().await.map_err(chat_error)?;
-            let sessions = self
-                .framework()
-                .await?
-                .sessions()
-                .map_err(|_| ChatError::StorageFailure)?;
-            let code = id.to_owned();
-            self.host.telemetry().await.map_err(|_| ChatError::StorageFailure)?;
-            let telemetry_path = self.host.telemetry_database_path().to_string_lossy().into_owned();
-            db.call(move |c| {
-                let attached: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM pragma_database_list WHERE name='telemetry')",[],|r|r.get(0))?;
-                if !attached { c.execute("ATTACH DATABASE ?1 AS telemetry",[telemetry_path])?; }
-                Ok::<_,rusqlite::Error>(())
-            }).await.map_err(|_| ChatError::StorageFailure)?;
-            db.transaction(async {
-                let record=sessions.get(id).await?;
-                if record.status!=fw::SessionStatus::Archived {return Err(fw::StateError::Invalid("session must be archived".into()));}
-                if self.framework().await.map_err(|e|fw::StateError::Backend(e.to_string()))?.goals().map_err(|e|fw::StateError::Backend(e.to_string()))?.active(id).await?.is_some_and(|goal| goal.status == fw::GoalStatus::Active) {
-                    return Err(fw::StateError::Busy);
-                }
-                sessions.delete(id).await?;
-                db.call(move|c| {
-                    delete_session_telemetry(c, &code)?;
-                    c.execute("DELETE FROM resource_chat_session_attachments WHERE session_code=?1",[&code])?;
-                    for (table, sql) in [
-                        ("chat_session_auto_model_routes", "DELETE FROM chat_session_auto_model_routes WHERE session_code=?1"),
-                        ("provider_model_run_snapshots", "DELETE FROM provider_model_run_snapshots WHERE session_code=?1"),
-                        ("automation_execution_records", "UPDATE automation_execution_records SET session_code=NULL WHERE session_code=?1"),
-                    ] {
-                        if c.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",[table],|r|r.get::<_,bool>(0))? { c.execute(sql,[&code])?; }
-                    }
-                    c.execute("DELETE FROM workspace_session_links WHERE session_id=?1",[&code])?;
-                    Ok::<_,rusqlite::Error>(())
-                }).await.map_err(|e|fw::StateError::Backend(e.to_string()))?; Ok(())
-            }).await.map_err(chat_error)
-        })
+        self.delete_session_internal(id, false)
+    }
+    fn delete_expired_heartbeat_session(&mut self, id: &str) -> Result<(), ChatError> {
+        self.delete_session_internal(id, true)
     }
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError> {
         blocking(async {
@@ -1020,6 +1050,97 @@ mod shared_transaction_tests {
             "ws-a"
         );
     }
+    #[test]
+    fn heartbeat_deletion_rejects_pending_events_then_removes_history_and_metadata() {
+        let (_directory, mut repository) = fixture();
+        repository.create_session(&session("heartbeat-delete")).unwrap();
+        repository.update_session_status("heartbeat-delete", ChatSessionStatus::Archived, "").unwrap();
+        let database = blocking(repository.host.shared_database()).unwrap();
+        database.call_blocking(|c| {
+            c.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at) VALUES('main-dude','{}',1,5,0)", [])?;
+            c.execute("INSERT INTO dude_sessions(session_code,dude_code,purpose,correlation_key,record_json) VALUES('heartbeat-delete','main-dude','Heartbeat','heartbeat-event','{}')", [])?;
+            c.execute("INSERT INTO dude_events(event_id,dude_code,dedup_key,source,session_code,status,available_at,record_json) VALUES('heartbeat-event','main-dude','heartbeat-event','Heartbeat','heartbeat-delete','Queued',0,'{}')", [])?;
+            Ok::<_, rusqlite::Error>(())
+        }).unwrap();
+        assert!(repository.delete_session("heartbeat-delete").is_err());
+        assert!(repository.get_session("heartbeat-delete").is_ok());
+        database.call_blocking(|c| c.execute("UPDATE dude_events SET status='Completed' WHERE event_id='heartbeat-event'", [])).unwrap();
+        repository.delete_session("heartbeat-delete").unwrap();
+        let counts = database.call_blocking(|c| -> rusqlite::Result<(i64, i64)> { Ok((
+            c.query_row("SELECT COUNT(*) FROM dude_sessions WHERE session_code='heartbeat-delete'", [], |r| r.get(0))?,
+            c.query_row("SELECT COUNT(*) FROM dude_events WHERE event_id='heartbeat-event'", [], |r| r.get(0))?,
+        )) }).unwrap();
+        assert_eq!(counts, (0, 0));
+        assert!(matches!(repository.get_session("heartbeat-delete"), Err(ChatError::SessionNotFound)));
+    }
+
+    #[test]
+    fn heartbeat_retention_is_per_dude_and_preserves_active_and_non_heartbeat_sessions() {
+        use crate::application::dude::DudeRepository;
+        let (directory, repository) = fixture();
+        blocking(repository.framework()).unwrap();
+        let database = blocking(repository.host.shared_database()).unwrap();
+        database.call_blocking(|c| {
+            for dude in ["dude-a", "dude-b"] {
+                c.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at) VALUES(?1,'{}',1,5,0)", [dude])?;
+                for i in 0..23 {
+                    let code = format!("{dude}-{i}");
+                    c.execute("INSERT INTO dude_sessions(session_code,dude_code,purpose,correlation_key,record_json) VALUES(?1,?2,'Heartbeat',?1,'{}')", params![code,dude])?;
+                    c.execute("INSERT INTO workspace_session_links(session_id,workspace_code,business_json) VALUES(?1,'','{}')", [&code])?;
+                }
+            }
+            c.execute("INSERT INTO dude_sessions(session_code,dude_code,purpose,correlation_key,record_json) VALUES('interactive','dude-a','Interactive','interactive','{}')", [])?;
+            c.execute("INSERT INTO dude_events(event_id,dude_code,dedup_key,source,session_code,status,available_at,record_json) VALUES('pending','dude-a','pending','Heartbeat','dude-a-0','Running',0,'{}')", [])?;
+            c.execute("DELETE FROM workspace_session_links WHERE session_id='dude-b-0'", [])?;
+            Ok::<_, rusqlite::Error>(())
+        }).unwrap();
+        let mut dudes = crate::adapters::outbound::persistence::sqlite::SqliteDudeRepository::connect(directory.path().join("tron.sqlite3").to_str().unwrap()).unwrap();
+        let candidates = dudes.expired_heartbeat_sessions().unwrap();
+        assert_eq!(candidates, vec!["dude-a-1", "dude-a-2", "dude-b-0", "dude-b-1", "dude-b-2"]);
+        dudes.delete_empty_heartbeat_session("dude-b-0").unwrap();
+        dudes.delete_empty_heartbeat_session("dude-a-0").unwrap();
+        let (old, active, interactive) = database.call_blocking(|c| -> rusqlite::Result<(i64, i64, i64)> { Ok((
+            c.query_row("SELECT COUNT(*) FROM dude_sessions WHERE session_code='dude-b-0'", [], |r| r.get(0))?,
+            c.query_row("SELECT COUNT(*) FROM dude_sessions WHERE session_code='dude-a-0'", [], |r| r.get(0))?,
+            c.query_row("SELECT COUNT(*) FROM dude_sessions WHERE session_code='interactive'", [], |r| r.get(0))?,
+        )) }).unwrap();
+        assert_eq!((old, active, interactive), (0, 1, 1));
+    }
+
+    #[test]
+    fn heartbeat_retention_removes_old_session_history_and_survives_reopen() {
+        use crate::application::dude::DudeRepository;
+        let (directory, mut chats) = fixture();
+        let database = blocking(chats.host.shared_database()).unwrap();
+        database.call_blocking(|c| c.execute("INSERT INTO dudes(dude_code,record_json,enabled,heartbeat_minutes,next_heartbeat_at) VALUES('retention-dude','{}',1,5,0)", [])).unwrap();
+        for i in 0..22 {
+            let code = format!("retention-{i}");
+            chats.create_session(&session(&code)).unwrap();
+            database.call_blocking(move |c| {
+                c.execute("INSERT INTO dude_sessions(session_code,dude_code,purpose,correlation_key,record_json) VALUES(?1,'retention-dude','Heartbeat',?1,'{}')", [&code])?;
+                Ok::<_, rusqlite::Error>(())
+            }).unwrap();
+        }
+        let path = directory.path().join("tron.sqlite3");
+        let mut dudes = crate::adapters::outbound::persistence::sqlite::SqliteDudeRepository::connect(path.to_str().unwrap()).unwrap();
+        let candidates = dudes.expired_heartbeat_sessions().unwrap();
+        assert_eq!(candidates, vec!["retention-0", "retention-1"]);
+        chats.update_session_status("retention-21", ChatSessionStatus::Archived, "").unwrap();
+        assert!(chats.delete_expired_heartbeat_session("retention-21").is_err());
+        for code in candidates {
+            chats.update_session_status(&code, ChatSessionStatus::Archived, "").unwrap();
+            chats.delete_expired_heartbeat_session(&code).unwrap();
+        }
+        drop(dudes);
+        let mut reopened = crate::adapters::outbound::persistence::sqlite::SqliteDudeRepository::connect(path.to_str().unwrap()).unwrap();
+        assert!(reopened.expired_heartbeat_sessions().unwrap().is_empty());
+        let counts: (i64, i64) = database.call_blocking(|c| -> rusqlite::Result<(i64, i64)> { Ok((
+            c.query_row("SELECT COUNT(*) FROM dude_sessions WHERE dude_code='retention-dude'", [], |r| r.get(0))?,
+            c.query_row("SELECT COUNT(*) FROM ef_sessions WHERE id LIKE 'retention-%'", [], |r| r.get(0))?,
+        )) }).unwrap();
+        assert_eq!(counts, (20, 20));
+    }
+
     #[test]
     fn delete_failure_rolls_back_session_history_and_business_link_then_can_retry() {
         let (_directory, mut repository) = fixture();

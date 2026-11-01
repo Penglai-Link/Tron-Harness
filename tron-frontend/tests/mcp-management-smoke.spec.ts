@@ -80,7 +80,7 @@ async function blockApiRequests(page: Page) {
       return;
     }
     if (path === "/api/v1/observability/browser-spans") { await route.fulfill({status:204}); return; }
-    if (path === "/api/v1/notifications" || path === "/api/v1/apps/workspaces/TRON_CORE/options" || path === "/api/v1/chats/session-groups" || path === "/api/v1/models/workspaces/TRON_CORE/select-options" || path === "/api/v1/admin/workspaces/options" || path === "/api/v1/dudes" || path === "/api/v1/knowledge-bases/agent-grants/main-agent" || path === "/api/v1/agents/registry/internal/main-agent/skills") {
+    if (path === "/api/v1/notifications" || path === "/api/v1/apps/workspaces/TRON_CORE/options" || path === "/api/v1/chats/session-groups" || path === "/api/v1/model-providers/select-options" || path === "/api/v1/admin/workspaces/options" || path === "/api/v1/dudes" || path === "/api/v1/knowledge-bases/agent-grants/main-agent" || path === "/api/v1/agents/registry/internal/main-agent/skills") {
       await route.fulfill({json:{code:"SUCCESS", data:path.endsWith("/options") ? [{workspaceCode:"TRON_CORE",name:"Tron Core",label:"Tron Core",status:"Active"}] : []}}); return;
     }
     requests.push(route.request().url());

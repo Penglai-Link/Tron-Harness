@@ -165,6 +165,9 @@ impl ModelClient for ThinkingModel {
                 sink(ModelStreamEvent {
                     kind: self.kind,
                     delta: delta.into(),
+                    output_index: None,
+                    item_id: None,
+                    phase: None,
                 });
             }
             self.entered.notify_one();

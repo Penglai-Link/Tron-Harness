@@ -203,6 +203,28 @@ pub async fn get_trace(
                 span.attributes.insert("tron.agent.name".into(), name);
             }
         }
+        // Older telemetry recorded error kinds only. Recover the root run's
+        // own failure from Framework history when it is still available.
+        if detail.trace.status == "Error"
+            && let Ok(run_id) = eliteforge_agent_core::RunId::parse_str(&detail.trace.run_code)
+            && let Ok(framework) = state.agent_framework.storage_framework().await
+            && let Ok(history) = framework.history()
+            && let Ok(run) = history.run(run_id).await
+            && let Some(message) = run.error.as_deref().filter(|message| !message.trim().is_empty())
+        {
+            let message = crate::application::short_term_memory::redact_sensitive_text(message);
+            for span in &mut detail.spans {
+                let same_run = span.attributes.get("agent.run.id") == Some(&detail.trace.run_code)
+                    || span.attributes.get("tron.run.code") == Some(&detail.trace.run_code);
+                let root_dude = span.name == "tron.dude.execute"
+                    && detail.trace.root_span_id.as_deref() == Some(&span.span_id);
+                if span.status == "Error"
+                    && (root_dude || (same_run && matches!(span.name.as_str(), "agent.run" | "tron.session.run")))
+                {
+                    span.attributes.insert("tron.run.error.message".into(), message.clone());
+                }
+            }
+        }
         Ok(detail)
     }
     .await;

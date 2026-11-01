@@ -119,6 +119,7 @@ impl SystemCliRuntime {
             conversation_code: context.conversation_code,
             workspace_code: context.workspace_code,
             final_output: result.output,
+            final_message_ids: Vec::new(),
             step_count: 1,
             token_usage: result.usage.map(|usage| ModelTokenUsage {
                 input_tokens: usage.input_tokens,

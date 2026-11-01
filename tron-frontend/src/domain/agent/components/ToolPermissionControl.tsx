@@ -9,7 +9,7 @@ export function ToolPermissionControl({ value, name, disabled, onChange }: {
 }) {
   const { t } = useTranslation("pages");
   const prefix = "settingsTools.permissions";
-  return <div className="min-w-[250px] space-y-2">
+  return <div className="min-w-0 space-y-2">
     <div className="flex flex-wrap gap-1" role="group" aria-label={t(`${prefix}.label`, { tool: name })}>
       {(["run", "ask", "no"] as const).map((permission) => <Button key={permission} type="button" size="sm"
         disabled={disabled} aria-pressed={value.permission === permission}

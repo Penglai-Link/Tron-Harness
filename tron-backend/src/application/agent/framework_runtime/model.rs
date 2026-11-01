@@ -15,7 +15,7 @@ pub(super) struct HostRunState {
     pub trusted_prefix: Vec<crate::domain::agent::AgentMessage>,
     /// Actual admitted native IDs for product exposure audits; never an executor.
     pub tool_catalog: std::collections::BTreeMap<String, String>,
-    pub pending_tool_descriptors: Vec<fw::ToolDescriptor>,
+    pub pending_tool_bindings: Vec<fw::ToolBinding>,
     pub tool_sequence: u32,
     pub tool_sequences: std::collections::BTreeMap<String, u32>,
     pub error: Option<crate::domain::agent::AgentError>,
@@ -55,7 +55,7 @@ impl HostRunState {
             product_tool_authority,
             trusted_prefix,
             tool_catalog: Default::default(),
-            pending_tool_descriptors: Vec::new(),
+            pending_tool_bindings: Vec::new(),
             tool_sequence: 0,
             tool_sequences: Default::default(),
             error: None,
@@ -206,10 +206,8 @@ impl fw::ChatModel for TronChatModel {
         let callback_overflow = overflow.clone();
         let sink = host.sink.clone();
         let callback: ModelStreamSink = Arc::new(move |event| {
-            if event.delta.is_empty()
-                || (event.kind != crate::domain::agent::ModelStreamEventKind::Text
-                    && event.delta.trim().is_empty())
-            {
+            if matches!(event.kind, crate::domain::agent::ModelStreamEventKind::Text | crate::domain::agent::ModelStreamEventKind::Reasoning | crate::domain::agent::ModelStreamEventKind::ReasoningSummary)
+                && (event.delta.is_empty() || (event.kind != crate::domain::agent::ModelStreamEventKind::Text && event.delta.trim().is_empty())) {
                 return;
             }
             // Raw chain-of-thought is internal evidence: present the reasoning
@@ -259,13 +257,7 @@ impl fw::ChatModel for TronChatModel {
                         biased;
                         event = receiver.recv() => {
                             if let Some(event) = event {
-                                match event.kind {
-                                    crate::domain::agent::ModelStreamEventKind::Text => stream.text_delta(&event.delta).await,
-                                    // Presented reasoning is the summary; raw
-                                    // chain-of-thought never reaches public streams.
-                                    crate::domain::agent::ModelStreamEventKind::ReasoningSummary => stream.reasoning_delta(&event.delta).await,
-                                    crate::domain::agent::ModelStreamEventKind::Reasoning => {}
-                                }
+                                emit_model_event(stream, event).await;
                             } else {
                                 break invocation.await;
                             }
@@ -296,15 +288,7 @@ impl fw::ChatModel for TronChatModel {
             }
         };
         while let Ok(event) = receiver.try_recv() {
-            match event.kind {
-                crate::domain::agent::ModelStreamEventKind::Text => {
-                    stream.text_delta(&event.delta).await
-                }
-                crate::domain::agent::ModelStreamEventKind::ReasoningSummary
-                | crate::domain::agent::ModelStreamEventKind::Reasoning => {
-                    stream.reasoning_delta(&event.delta).await
-                }
-            }
+            emit_model_event(stream, event).await;
         }
         if overflow.load(std::sync::atomic::Ordering::Acquire) {
             *native_error = Some(crate::domain::agent::AgentError::InvalidConfiguration(
@@ -326,7 +310,9 @@ impl fw::ChatModel for TronChatModel {
         *audit = Some(usage_audit);
         if response.finish == crate::domain::agent::ModelFinish::Final {
             let text = response.output_text();
-            if text.trim().is_empty() {
+            // Segmented responses still need to reach the Framework so it can
+            // persist late phase metadata before reporting an incomplete run.
+            if text.trim().is_empty() && response.output_items.is_empty() {
                 let message = last_tool_failure.as_ref().map(|failure| format!("agent completed without an assistant response; last tool failure: {failure}"))
                     .unwrap_or_else(|| "agent completed without an assistant response".into());
                 *native_error = Some(crate::domain::agent::AgentError::EmptyFinalOutput(
@@ -339,9 +325,9 @@ impl fw::ChatModel for TronChatModel {
         let message =
             super::messages::encode(&response.assistant).map_err(fw::ModelError::Fatal)?;
         let persisted_messages: std::borrow::Cow<'_, [crate::domain::agent::AgentMessage]> =
-            if response.finish == crate::domain::agent::ModelFinish::Final {
+            if matches!(response.finish, crate::domain::agent::ModelFinish::Final | crate::domain::agent::ModelFinish::Continue) {
                 let mut messages = context.messages.as_ref().clone();
-                messages.push(response.assistant.clone());
+                messages.extend(response.transcript_messages());
                 turn.apply_model_response(&response, messages.len());
                 std::borrow::Cow::Owned(messages)
             } else {
@@ -361,8 +347,17 @@ impl fw::ChatModel for TronChatModel {
             cached_input_tokens: usage.cached_input_tokens.map(u64::from),
             reasoning_tokens: usage.reasoning_tokens.map(u64::from),
         });
+        let mut tool_index = 0;
+        let output_items = response.output_items.iter().filter_map(|item| match item {
+            crate::domain::agent::ModelOutputItem::Message { output_index, item_id, phase, text } => Some(fw::ModelOutputItem::Message { output_index: *output_index, item_id: item_id.clone(), phase: phase.clone(), content: text.clone().into() }),
+            crate::domain::agent::ModelOutputItem::ReasoningSummary { output_index, text } => Some(fw::ModelOutputItem::ReasoningSummary { output_index: *output_index, text: text.clone() }),
+            crate::domain::agent::ModelOutputItem::ToolCall { output_index, .. } => { let call = message.tool_calls.get(tool_index).cloned(); tool_index += 1; call.map(|call| fw::ModelOutputItem::ToolCall { output_index: *output_index, call }) },
+        }).collect();
+        let segmented_content = (!response.output_items.is_empty()).then(|| fw::Content::from(response.output_text()));
         let result = fw::ChatResponse {
-            public_content: Some(fw::Content(
+            output_items,
+            disposition: Some(match response.finish { crate::domain::agent::ModelFinish::Final => fw::ModelDisposition::Final, crate::domain::agent::ModelFinish::ToolCalls => fw::ModelDisposition::ToolCalls, crate::domain::agent::ModelFinish::Continue => fw::ModelDisposition::Continue }),
+            public_content: segmented_content.clone().or_else(|| Some(fw::Content(
                 message
                     .content
                     .0
@@ -380,7 +375,7 @@ impl fw::ChatModel for TronChatModel {
                     })
                     .cloned()
                     .collect(),
-            )),
+            ))),
             reasoning: {
                 let text: String = response
                     .assistant
@@ -396,7 +391,7 @@ impl fw::ChatModel for TronChatModel {
                     .collect();
                 (!text.is_empty()).then_some(text)
             },
-            content: message.content,
+            content: segmented_content.unwrap_or(message.content),
             structured: None,
             tool_calls: message.tool_calls,
             usage: fw::Usage {
@@ -409,6 +404,18 @@ impl fw::ChatModel for TronChatModel {
             Some(metrics) => result.with_provider_metrics(metrics),
             None => result,
         })
+    }
+}
+
+async fn emit_model_event(stream: &dyn fw::ChatStream, event: crate::domain::agent::ModelStreamEvent) {
+    use crate::domain::agent::ModelStreamEventKind;
+    match event.kind {
+        ModelStreamEventKind::Text => if let Some(index) = event.output_index { stream.message_delta(index, &event.delta).await } else { stream.text_delta(&event.delta).await },
+        ModelStreamEventKind::ReasoningSummary => stream.reasoning_delta(&event.delta).await,
+        ModelStreamEventKind::Reasoning => {},
+        ModelStreamEventKind::MessageStart => if let Some(index) = event.output_index { stream.message_start(index, event.phase.as_deref()).await },
+        ModelStreamEventKind::MessageEnd => if let Some(index) = event.output_index { stream.message_end(index, event.phase.as_deref(), &event.delta).await },
+        ModelStreamEventKind::ToolBoundary => if let Some(index) = event.output_index { stream.tool_boundary(index).await },
     }
 }
 

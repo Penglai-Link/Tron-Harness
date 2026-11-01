@@ -19,23 +19,26 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             .ok_or(RagError::CorpusNotFound)?;
         let filters = merge_search_request_filters(&corpus, &json!({}), &request.filters)?;
         let settings = RagSettings::from_capabilities(&corpus.capabilities)?;
+        let mut scopes = vec![
+            RagSearchScope {
+                scope_type: "USER".into(),
+                scope_code: request.access_context.user_code.clone(),
+            },
+            RagSearchScope {
+                scope_type: "AGENT".into(),
+                scope_code: request.access_context.agent_code.clone(),
+            },
+        ];
+        if !request.workspace_code.trim().is_empty() {
+            scopes.push(RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: request.workspace_code.clone(),
+            });
+        }
         let ranges = self.partition_ranges(AuthorizedRagRange {
             corpus_id: "memory-card".into(),
             source_version: "v1".into(),
-            scopes: vec![
-                RagSearchScope {
-                    scope_type: "USER".into(),
-                    scope_code: request.access_context.user_code.clone(),
-                },
-                RagSearchScope {
-                    scope_type: "SPACE".into(),
-                    scope_code: request.workspace_code.clone(),
-                },
-                RagSearchScope {
-                    scope_type: "AGENT".into(),
-                    scope_code: request.access_context.agent_code.clone(),
-                },
-            ],
+            scopes,
             filters,
             embedding_model_code: settings.embedding_model_code.clone(),
             embedding_dimension: Some(

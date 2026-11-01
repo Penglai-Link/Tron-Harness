@@ -17,6 +17,310 @@ struct HumanScript {
     questions: AtomicUsize,
     session_id: Mutex<Option<String>>,
 }
+
+#[derive(Default)]
+struct ChildAnswerScript {
+    answered: AtomicBool,
+}
+
+#[derive(Default)]
+struct ThreadAnswerScript {
+    received: AtomicBool,
+}
+
+impl ModelClient for ThreadAnswerScript {
+    fn generate<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        _: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async { Err("native execution required".into()) })
+    }
+    fn generate_native_once<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        request: &'a fw::ChatRequest,
+        _: &'a ModelRequest,
+        _: Option<ModelStreamSink>,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let child = request
+                .messages
+                .iter()
+                .any(|message| message.content.text() == "thread:ask-parent");
+            let tool_messages: Vec<_> = request
+                .messages
+                .iter()
+                .filter(|message| message.tool_result.is_some())
+                .collect();
+            if child {
+                if tool_messages.is_empty() {
+                    return Ok(to_gateway_response(ModelResponse::tool_call(
+                        "ask_caller",
+                        json!({"question":"Which target?"}),
+                    )));
+                }
+                assert!(
+                    serde_json::to_string(&request.messages)
+                        .unwrap()
+                        .contains("acceptance-target"),
+                    "thread must receive the answer: {:?}",
+                    request
+                        .messages
+                        .iter()
+                        .filter(|message| message.role != fw::Role::System)
+                        .collect::<Vec<_>>()
+                );
+                self.received.store(true, Ordering::Release);
+                return Ok(ModelResponse::final_output("thread received answer"));
+            }
+            let results: Vec<Value> = tool_messages
+                .iter()
+                .map(|message| {
+                    serde_json::from_str(&common::single_gateway_result(&message.content.text()))
+                        .unwrap()
+                })
+                .collect();
+            if results.is_empty() {
+                return Ok(to_gateway_response(ModelResponse::tool_call(
+                    "thread_create",
+                    json!({"agentCode":"reviewer","task":"thread:ask-parent","title":"Interactive acceptance"}),
+                )));
+            }
+            let session = results
+                .iter()
+                .find_map(|result| result["session_id"].as_str())
+                .expect("thread ID");
+            let latest = results.last().unwrap();
+            if latest["output"] == "thread received answer" {
+                return Ok(ModelResponse::final_output("Parent answered the thread"));
+            }
+            if let Some(interaction) = latest["interactions"]
+                .as_array()
+                .and_then(|items| items.first())
+            {
+                return Ok(to_gateway_response(ModelResponse::tool_call(
+                    "thread_answer",
+                    json!({"session_id":session,"interaction_id":interaction["id"],"answer":"acceptance-target"}),
+                )));
+            }
+            Ok(to_gateway_response(ModelResponse::tool_call(
+                "thread_wait",
+                json!({"session_id":session}),
+            )))
+        })
+    }
+    fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
+    fn close_observed<'a>(
+        &'a self,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
+
+#[derive(Default)]
+struct ChildSteeringScript {
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+    started: AtomicBool,
+    received: AtomicBool,
+}
+
+impl ModelClient for ChildSteeringScript {
+    fn generate<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        _: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async { Err("native execution required".into()) })
+    }
+    fn generate_native_once<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        request: &'a fw::ChatRequest,
+        _: &'a ModelRequest,
+        _: Option<ModelStreamSink>,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let child = request
+                .messages
+                .iter()
+                .any(|message| message.content.text() == "child:steering-test");
+            if child {
+                if request
+                    .messages
+                    .iter()
+                    .any(|message| message.content.text().contains("steering: revised target"))
+                {
+                    self.received.store(true, Ordering::Release);
+                    return Ok(ModelResponse::final_output("child received steering"));
+                }
+                self.started.store(true, Ordering::Release);
+                self.entered.notify_one();
+                self.release.notified().await;
+                return Ok(ModelResponse::tool_call(
+                    "tool_search",
+                    json!({"items":[{"domainCode":"harness_workspace"}]}),
+                ));
+            }
+            let results: Vec<Value> = request
+                .messages
+                .iter()
+                .filter(|message| message.tool_result.is_some())
+                .map(|message| {
+                    serde_json::from_str(&common::single_gateway_result(&message.content.text()))
+                        .unwrap()
+                })
+                .collect();
+            if results.is_empty() {
+                return Ok(to_gateway_response(ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer","task":"child:steering-test","background":true}),
+                )));
+            }
+            let child_id = results
+                .iter()
+                .find_map(|result| result["child_run_id"].as_str())
+                .expect("child ID");
+            if results.last().unwrap()["output"] == "child received steering" {
+                return Ok(ModelResponse::final_output("Parent steered the child"));
+            }
+            if results.len() == 1 {
+                if !self.started.load(Ordering::Acquire) {
+                    self.entered.notified().await;
+                }
+                return Ok(to_gateway_response(ModelResponse::tool_call(
+                    "child_send",
+                    json!({"child_run_id":child_id,"message":"steering: revised target"}),
+                )));
+            }
+            self.release.notify_one();
+            Ok(to_gateway_response(ModelResponse::tool_call(
+                "child_wait",
+                json!({"child_run_id":child_id}),
+            )))
+        })
+    }
+    fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
+    fn close_observed<'a>(
+        &'a self,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
+impl ModelClient for ChildAnswerScript {
+    fn generate<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        _: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async { Err("native execution required".into()) })
+    }
+    fn generate_native_once<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        request: &'a fw::ChatRequest,
+        _: &'a ModelRequest,
+        _: Option<ModelStreamSink>,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let tool_messages: Vec<_> = request
+                .messages
+                .iter()
+                .filter(|message| message.tool_result.is_some())
+                .collect();
+            if request
+                .messages
+                .iter()
+                .any(|message| message.content.text() == "child:ask-dude")
+            {
+                return Ok(if tool_messages.is_empty() {
+                    to_gateway_response(ModelResponse::tool_call(
+                        "ask_caller",
+                        json!({"question":"Which target?"}),
+                    ))
+                } else {
+                    assert!(
+                        tool_messages.iter().all(|message| !message
+                            .tool_result
+                            .as_ref()
+                            .unwrap()
+                            .is_error),
+                        "caller interaction failed"
+                    );
+                    ModelResponse::final_output("child:answered")
+                });
+            }
+            let results: Vec<Value> = tool_messages
+                .iter()
+                .map(|message| {
+                    let text = common::single_gateway_result(&message.content.text());
+                    serde_json::from_str(&text).unwrap_or_else(|error| {
+                        panic!("invalid parent tool result {text}: {error}")
+                    })
+                })
+                .collect();
+            if results.is_empty() {
+                return Ok(to_gateway_response(ModelResponse::tool_call(
+                    "agent_spawn",
+                    json!({"agentCode":"reviewer","task":"child:ask-dude","background":true}),
+                )));
+            }
+            let child = results
+                .iter()
+                .find_map(|value| value["child_run_id"].as_str())
+                .expect("child ID");
+            let latest = results.last().unwrap();
+            if latest["output"] == "child:answered" {
+                return Ok(ModelResponse::final_output("Dude answered the child"));
+            }
+            if let Some(interaction) = latest["interactions"]
+                .as_array()
+                .and_then(|items| items.first())
+            {
+                self.answered.store(true, Ordering::Release);
+                return Ok(to_gateway_response(ModelResponse::tool_call(
+                    "child_answer",
+                    json!({"child_run_id":child,"interaction_id":interaction["id"],"answer":"staging"}),
+                )));
+            }
+            Ok(to_gateway_response(ModelResponse::tool_call(
+                "child_wait",
+                json!({"child_run_id":child}),
+            )))
+        })
+    }
+    fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
+    fn close_observed<'a>(
+        &'a self,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
 impl ModelClient for HumanScript {
     fn generate<'a>(
         &'a self,
@@ -36,7 +340,11 @@ impl ModelClient for HumanScript {
             let results: Vec<_> = request
                 .messages
                 .iter()
-                .filter_map(|m| m.tool_result.as_ref().map(|_| common::single_gateway_result(&m.content.text())))
+                .filter_map(|m| {
+                    m.tool_result
+                        .as_ref()
+                        .map(|_| common::single_gateway_result(&m.content.text()))
+                })
                 .collect();
             if request
                 .messages
@@ -90,8 +398,8 @@ impl ModelClient for HumanScript {
                 return Ok(ModelResponse::tool_call(
                     "tool_execute",
                     json!({
-                        "tool":"chat_ask_user",
-                        "arguments":{"intro":"Choose deployment target","questions":[{"question":"Which target?","options":[{"label":"Staging"},{"label":"Production"}]}]}
+                        "tool":"ask_caller",
+                        "arguments":{"question":"Which deployment target?"}
                     }),
                 ));
             }
@@ -169,6 +477,265 @@ fn intervention_service(f: &Fixture, model: Arc<HumanScript>) -> AgentInvocation
 // Match the production runtime: synchronous STM reads must yield while native parent/child work owns async storage gates.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_native_ownership() {
+    run_dude_thread_intervention(false).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn platform_dude_without_workspace_delegates_and_resumes_a_thread() {
+    run_dude_thread_intervention(true).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn platform_dude_can_cancel_a_child_and_cannot_message_one_that_has_finished() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let host = f.state.agent_framework.clone();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(Script::default()),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    for (index, prompt, expected) in [
+        (0, "root:detached-cancel", "cancel"),
+        (1, "root:detached-steer", "is not running"),
+    ] {
+        let session = format!("platform-dude-child-{index}");
+        f.state
+            .chats
+            .ensure_dude_session(
+                &tron_backend::domain::dude::DudeSession {
+                    session_code: session.clone(),
+                    dude_code: "main-dude".into(),
+                    purpose: tron_backend::domain::dude::DudeSessionPurpose::Task,
+                    correlation_key: format!("platform-child-{index}"),
+                    title: "Dude child test".into(),
+                    workspace_code: None,
+                    created_at: 0,
+                    updated_at: 0,
+                },
+                Some(USER.into()),
+            )
+            .unwrap();
+        let mut parent = context(prompt);
+        parent.workspace_code.clear();
+        parent.agent_code = Some("main-dude".into());
+        parent.conversation_code = Some(session.clone());
+        parent.collaboration_owner = Some(AgentCollaborationOwner {
+            kind: "DUDE".into(),
+            code: "main-dude".into(),
+            origin_session_code: Some(session),
+            task_code: None,
+        });
+        let result = tokio::time::timeout(Duration::from_secs(60), agent.run(parent))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            result.final_output.to_lowercase().contains(expected),
+            "{}",
+            result.final_output
+        );
+    }
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn platform_dude_answers_a_background_child_without_a_workspace() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let host = f.state.agent_framework.clone();
+    let script = Arc::new(ChildAnswerScript::default());
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let session = "platform-dude-answer-child";
+    f.state
+        .chats
+        .ensure_dude_session(
+            &tron_backend::domain::dude::DudeSession {
+                session_code: session.into(),
+                dude_code: "main-dude".into(),
+                purpose: tron_backend::domain::dude::DudeSessionPurpose::Task,
+                correlation_key: "answer-child".into(),
+                title: "Dude child answer".into(),
+                workspace_code: None,
+                created_at: 0,
+                updated_at: 0,
+            },
+            Some(USER.into()),
+        )
+        .unwrap();
+    let mut parent = context("root:dude-answer");
+    parent.workspace_code.clear();
+    parent.agent_code = Some("main-dude".into());
+    parent.conversation_code = Some(session.into());
+    parent.collaboration_owner = Some(AgentCollaborationOwner {
+        kind: "DUDE".into(),
+        code: "main-dude".into(),
+        origin_session_code: Some(session.into()),
+        task_code: None,
+    });
+    let result = tokio::time::timeout(Duration::from_secs(60), agent.run(parent))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.final_output, "Dude answered the child");
+    assert!(script.answered.load(Ordering::Acquire));
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn ordinary_agent_answers_a_delegated_thread() {
+    run_thread_answer(false).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn platform_dude_answers_a_delegated_thread_without_a_workspace() {
+    run_thread_answer(true).await;
+}
+
+async fn run_thread_answer(dude: bool) {
+    let f = Fixture::new();
+    reviewer(&f);
+    let host = f.state.agent_framework.clone();
+    let script = Arc::new(ThreadAnswerScript::default());
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let mut parent = context("root:thread-answer");
+    if dude {
+        let session = "platform-dude-thread-answer";
+        f.state
+            .chats
+            .ensure_dude_session(
+                &tron_backend::domain::dude::DudeSession {
+                    session_code: session.into(),
+                    dude_code: "main-dude".into(),
+                    purpose: tron_backend::domain::dude::DudeSessionPurpose::Task,
+                    correlation_key: "thread-answer".into(),
+                    title: "Dude thread answer".into(),
+                    workspace_code: None,
+                    created_at: 0,
+                    updated_at: 0,
+                },
+                Some(USER.into()),
+            )
+            .unwrap();
+        parent.workspace_code.clear();
+        parent.agent_code = Some("main-dude".into());
+        parent.conversation_code = Some(session.into());
+        parent.collaboration_owner = Some(AgentCollaborationOwner {
+            kind: "DUDE".into(),
+            code: "main-dude".into(),
+            origin_session_code: Some(session.into()),
+            task_code: None,
+        });
+    }
+    let result = tokio::time::timeout(Duration::from_secs(60), agent.run(parent))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.final_output, "Parent answered the thread");
+    assert!(script.received.load(Ordering::Acquire));
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn ordinary_agent_steers_a_running_child() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let host = f.state.agent_framework.clone();
+    let script = Arc::new(ChildSteeringScript::default());
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let result = tokio::time::timeout(
+        Duration::from_secs(60),
+        agent.run(context("root:ordinary-steering")),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(result.final_output, "Parent steered the child");
+    assert!(
+        script.received.load(Ordering::Acquire),
+        "child must receive the steering message"
+    );
+    assert!(host.close().await.is_success());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn platform_dude_steers_a_running_child_without_a_workspace() {
+    let f = Fixture::new();
+    reviewer(&f);
+    let host = f.state.agent_framework.clone();
+    let script = Arc::new(ChildSteeringScript::default());
+    let agent = ReactAgentBuilder::new(
+        script.clone(),
+        f.state.agent_tool_registry.clone(),
+        EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let session = "platform-dude-steer-child";
+    f.state
+        .chats
+        .ensure_dude_session(
+            &tron_backend::domain::dude::DudeSession {
+                session_code: session.into(),
+                dude_code: "main-dude".into(),
+                purpose: tron_backend::domain::dude::DudeSessionPurpose::Task,
+                correlation_key: "steer-child".into(),
+                title: "Dude child steering".into(),
+                workspace_code: None,
+                created_at: 0,
+                updated_at: 0,
+            },
+            Some(USER.into()),
+        )
+        .unwrap();
+    let mut parent = context("root:dude-steering");
+    parent.workspace_code.clear();
+    parent.agent_code = Some("main-dude".into());
+    parent.conversation_code = Some(session.into());
+    parent.collaboration_owner = Some(AgentCollaborationOwner {
+        kind: "DUDE".into(),
+        code: "main-dude".into(),
+        origin_session_code: Some(session.into()),
+        task_code: None,
+    });
+    let result = tokio::time::timeout(Duration::from_secs(60), agent.run(parent))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.final_output, "Parent steered the child");
+    assert!(
+        script.received.load(Ordering::Acquire),
+        "child must receive the steering message"
+    );
+    assert!(host.close().await.is_success());
+}
+
+async fn run_dude_thread_intervention(platform_scope: bool) {
     let f = Fixture::new();
     reviewer(&f);
     let script = Arc::new(HumanScript::default());
@@ -199,7 +766,11 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
                 purpose: tron_backend::domain::dude::DudeSessionPurpose::Task,
                 correlation_key: "dude-task".into(),
                 title: "Dude work".into(),
-                workspace_code: Some(WORKSPACE.into()),
+                workspace_code: if platform_scope {
+                    None
+                } else {
+                    Some(WORKSPACE.into())
+                },
                 created_at: 0,
                 updated_at: 0,
             },
@@ -207,6 +778,9 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
         )
         .unwrap();
     let mut parent = context("root:dude-native");
+    if platform_scope {
+        parent.workspace_code.clear();
+    }
     parent.agent_code = Some("main-dude".into());
     parent.conversation_code = Some("original-dude-work-session".into());
     parent.collaboration_owner = Some(AgentCollaborationOwner {
@@ -250,10 +824,11 @@ async fn dude_thread_survives_parent_exit_and_human_answer_and_message_keep_nati
     assert_eq!(first.owner.task_code.as_deref(), Some("dude-task"));
     assert_eq!(first.origin_session_code, "original-dude-work-session");
     let interaction = &first.result.as_ref().unwrap().interactions[0];
-    let question = interaction.presentation.as_ref().unwrap()["questions"][0]["id"]
-        .as_str()
-        .unwrap();
-    let answer = json!({"answers":{(question):{"text":"Staging"}}});
+    assert_eq!(
+        interaction.presentation.as_ref().unwrap()["kind"],
+        "ask_caller"
+    );
+    let answer = json!("Staging");
     let service = intervention_service(&f, script.clone());
     assert!(
         host.dude_thread_history("other-dude", &id, Default::default())

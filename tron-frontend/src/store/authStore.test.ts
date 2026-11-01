@@ -29,6 +29,12 @@ beforeEach(() => {
 });
 
 describe("401 recovery", () => {
+  it("displays a nickname while preserving the account identifier", async () => {
+    mocks.token.mockResolvedValue({ token: "fresh" });
+    mocks.bootstrap.mockResolvedValue({ activeProfile: { status: "ACTIVE", personAiUserId: "u", personAiUsername: "account" }, avatarUrl: null, account: { nickname: "昵称", vipLevel: 1, remainingPoints: 12.5 } });
+    expect(await useAuthStore.getState().ensureSessionFresh()).toBe(true);
+    expect(useAuthStore.getState().session?.user).toMatchObject({ displayName: "昵称", username: "account", remainingPoints: 12.5 });
+  });
   it("loads time zones from the database-backed bootstrap and resets on logout", async () => {
     mocks.token.mockResolvedValue({ token: "fresh" });
     mocks.bootstrap.mockResolvedValue({

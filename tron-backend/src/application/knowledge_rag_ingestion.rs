@@ -180,7 +180,11 @@ impl AppRagService {
             task.stage,
             IngestionStage::Parsing | IngestionStage::Chunking
         ) {
-            let task_parser = if task.configuration["reuseParsedOnly"] == true {
+            let local_text = doc
+                .parse_plan
+                .as_ref()
+                .is_some_and(|plan| plan.features.local_text);
+            let task_parser = if task.configuration["reuseParsedOnly"] == true || local_text {
                 None
             } else {
                 host.parser

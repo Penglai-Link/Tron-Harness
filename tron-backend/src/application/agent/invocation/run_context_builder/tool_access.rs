@@ -45,7 +45,7 @@ impl AgentRunContextBuilder {
             // Saved policy owns internal-agent authority. Request DTOs only narrow
             // that authority by name; their descriptions/schemas are never trusted.
             // An empty request keeps the legacy contract: use the saved policy.
-            let effective_tool_records = self
+            let mut effective_tool_records = self
                 .management
                 .tools_by_codes(&policy.selected_tool_codes, locale)
                 .into_iter()
@@ -55,6 +55,17 @@ impl AgentRunContextBuilder {
                         || requested_tool_names.contains(&tool.tool_name)
                 })
                 .collect::<Vec<_>>();
+            if self.collaboration_owner.as_ref().is_some_and(|owner| owner.kind == "DUDE" && owner.code == agent_code) {
+                let aliases = effective_tool_records.iter()
+                    .filter_map(|tool| crate::application::agent::dude_tool_replacement(&tool.tool_code))
+                    .map(str::to_owned).collect::<Vec<_>>();
+                effective_tool_records.retain(|tool| !crate::application::agent::tool_catalog::dude_workspace_tool(tool));
+                effective_tool_records.extend(self.management.tools_by_codes(&aliases, locale).into_iter().filter(|tool| tool.availability_state == ToolAvailabilityState::Available));
+                let mut seen = HashSet::new();
+                effective_tool_records.retain(|tool| seen.insert(tool.tool_code.clone()));
+            } else {
+                effective_tool_records.retain(|tool| !tool.category.as_ref().is_some_and(|category| category.code == "tron.dude"));
+            }
             // The gateway plugin owns on-demand discovery for every run, so
             // saved exposure-mode differences collapse to one behavior: the
             // full authorized list is the run catalog.
@@ -103,7 +114,10 @@ impl AgentRunContextBuilder {
             let mut records = HashMap::new();
             let discovered = self
                 .management
-                .register_labeled_tool_descriptors(&materialization.descriptors, &materialization.tools)
+                .register_labeled_tool_descriptors(
+                    &materialization.descriptors,
+                    &materialization.tools,
+                )
                 .map_err(AgentInvocationError::RuntimeFailed)?;
             for (descriptor, record) in materialization.descriptors.iter().zip(discovered) {
                 if self
@@ -123,14 +137,18 @@ impl AgentRunContextBuilder {
                 .collect::<Vec<_>>();
             materialization.tools.retain(|tool| {
                 records.get(&tool.tool_name).is_some_and(|record| {
-                    policy
-                        .tool_assignment_mode
-                        .selects(record, &server_tool_codes)
+                    policy.tool_assignment_mode.selects_policy(
+                        record,
+                        &server_tool_codes,
+                        &policy.selected_category_codes,
+                    )
                 }) && permitted.contains(&tool.tool_name)
                     && (access.requested_tool_names.is_empty()
                         || access.requested_tool_names.contains(&tool.tool_name))
             });
-            access.effective_tools.extend(materialization.tools.iter().cloned());
+            access
+                .effective_tools
+                .extend(materialization.tools.iter().cloned());
             access.tools.extend(materialization.tools);
         }
 

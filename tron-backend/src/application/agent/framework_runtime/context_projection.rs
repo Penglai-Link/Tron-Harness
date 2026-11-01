@@ -239,7 +239,6 @@ mod tests {
             stage: "test".into(),
             step: 1,
             attempt: 1,
-            node_execution: None,
             input_capacity: 100_000,
             protocol_tokens: 100,
             estimated_input_tokens: 1100,

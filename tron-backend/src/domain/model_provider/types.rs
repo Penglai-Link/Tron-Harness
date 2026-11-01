@@ -413,10 +413,11 @@ pub struct ProviderModelSelectOption {
     pub is_default: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderAccountBalanceView {
+    pub nickname: Option<String>,
     pub username: Option<String>,
     pub vip_level: Option<i32>,
-    pub remaining_points: Option<i64>,
+    pub remaining_points: Option<f64>,
 }

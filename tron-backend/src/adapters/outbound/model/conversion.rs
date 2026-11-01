@@ -13,7 +13,7 @@
 //!   (`domain_code`, `skill_name`, `required_variable_keys`) are dropped, as
 //!   serde ignored them.
 use crate::domain::agent::{
-    AgentMessage, AgentMessagePart, AgentModelConfig, EffectiveTool, ModelFinish, ModelRequest,
+    AgentMessage, AgentMessagePart, AgentModelConfig, EffectiveTool, ModelFinish, ModelOutputItem, ModelRequest,
     ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage,
 };
 use crate::domain::reasoning::ReasoningEffort;
@@ -79,6 +79,7 @@ fn domain_finish(finish: sdk::ModelFinish) -> ModelFinish {
     match finish {
         sdk::ModelFinish::Final => ModelFinish::Final,
         sdk::ModelFinish::ToolCalls => ModelFinish::ToolCalls,
+        sdk::ModelFinish::Continue => ModelFinish::Continue,
     }
 }
 
@@ -87,6 +88,9 @@ fn domain_stream_kind(kind: sdk::ModelStreamEventKind) -> ModelStreamEventKind {
         sdk::ModelStreamEventKind::Text => ModelStreamEventKind::Text,
         sdk::ModelStreamEventKind::Reasoning => ModelStreamEventKind::Reasoning,
         sdk::ModelStreamEventKind::ReasoningSummary => ModelStreamEventKind::ReasoningSummary,
+        sdk::ModelStreamEventKind::MessageStart => ModelStreamEventKind::MessageStart,
+        sdk::ModelStreamEventKind::MessageEnd => ModelStreamEventKind::MessageEnd,
+        sdk::ModelStreamEventKind::ToolBoundary => ModelStreamEventKind::ToolBoundary,
     }
 }
 
@@ -321,6 +325,8 @@ impl From<&AgentMessage> for sdk::AgentMessage {
             annotations: message.annotations.clone(),
             instruction_origin: message.instruction_origin,
             role: message.role.clone(),
+            phase: message.phase.clone(),
+            output_group_id: message.output_group_id.clone(),
             parts: message
                 .parts
                 .iter()
@@ -336,6 +342,8 @@ impl From<AgentMessage> for sdk::AgentMessage {
             annotations: message.annotations,
             instruction_origin: message.instruction_origin,
             role: message.role,
+            phase: message.phase,
+            output_group_id: message.output_group_id,
             parts: message.parts.into_iter().map(Into::into).collect(),
         }
     }
@@ -347,6 +355,8 @@ impl From<sdk::AgentMessage> for AgentMessage {
             annotations: message.annotations,
             instruction_origin: message.instruction_origin,
             role: message.role,
+            phase: message.phase,
+            output_group_id: message.output_group_id,
             parts: message.parts.into_iter().map(Into::into).collect(),
         }
     }
@@ -439,6 +449,25 @@ impl From<sdk::ModelRequest> for ModelRequest {
 // Responses and stream events
 // ---------------------------------------------------------------------------
 
+impl From<sdk::ModelOutputItem> for ModelOutputItem {
+    fn from(item: sdk::ModelOutputItem) -> Self {
+        match item {
+            sdk::ModelOutputItem::Message { output_index, item_id, phase, text } => Self::Message { output_index, item_id, phase, text },
+            sdk::ModelOutputItem::ReasoningSummary { output_index, text } => Self::ReasoningSummary { output_index, text },
+            sdk::ModelOutputItem::ToolCall { output_index, call } => Self::ToolCall { output_index, call: crate::domain::agent::ToolCall { call_id: call.call_id, tool_name: call.tool_name, input: call.input, input_error: call.input_error } },
+        }
+    }
+}
+impl From<ModelOutputItem> for sdk::ModelOutputItem {
+    fn from(item: ModelOutputItem) -> Self {
+        match item {
+            ModelOutputItem::Message { output_index, item_id, phase, text } => Self::Message { output_index, item_id, phase, text },
+            ModelOutputItem::ReasoningSummary { output_index, text } => Self::ReasoningSummary { output_index, text },
+            ModelOutputItem::ToolCall { output_index, call } => Self::ToolCall { output_index, call: sdk::ToolCall { call_id: call.call_id, tool_name: call.tool_name, input: call.input, input_error: call.input_error } },
+        }
+    }
+}
+
 impl From<sdk::ModelFinish> for ModelFinish {
     fn from(finish: sdk::ModelFinish) -> Self {
         domain_finish(finish)
@@ -450,6 +479,7 @@ impl From<ModelFinish> for sdk::ModelFinish {
         match finish {
             ModelFinish::Final => Self::Final,
             ModelFinish::ToolCalls => Self::ToolCalls,
+            ModelFinish::Continue => Self::Continue,
         }
     }
 }
@@ -483,6 +513,7 @@ impl From<sdk::ModelResponse> for ModelResponse {
         Self {
             assistant: response.assistant.into(),
             finish: response.finish.into(),
+            output_items: response.output_items.into_iter().map(Into::into).collect(),
             token_usage: response.token_usage.map(Into::into),
             system_agent_session_id: response.system_agent_session_id,
             response_id: response.response_id,
@@ -495,6 +526,7 @@ impl From<ModelResponse> for sdk::ModelResponse {
         Self {
             assistant: response.assistant.into(),
             finish: response.finish.into(),
+            output_items: response.output_items.into_iter().map(Into::into).collect(),
             token_usage: response.token_usage.map(Into::into),
             system_agent_session_id: response.system_agent_session_id,
             response_id: response.response_id,
@@ -507,6 +539,9 @@ impl From<sdk::ModelStreamEvent> for ModelStreamEvent {
         Self {
             kind: domain_stream_kind(event.kind),
             delta: event.delta,
+            output_index: event.output_index,
+            item_id: event.item_id,
+            phase: event.phase,
         }
     }
 }
@@ -571,6 +606,8 @@ mod tests {
             annotations: Vec::new(),
             instruction_origin: None,
             role: "user".into(),
+            phase: None,
+            output_group_id: None,
             parts: vec![
                 AgentMessagePart::Text {
                     text: "hello".into(),
@@ -643,6 +680,7 @@ mod tests {
         let domain_response = ModelResponse {
             assistant: domain_message,
             finish: ModelFinish::ToolCalls,
+            output_items: vec![ModelOutputItem::Message { output_index: 1, item_id: Some("item-1".into()), phase: Some("commentary".into()), text: "progress".into() }],
             token_usage: Some(ModelTokenUsage {
                 input_tokens: 10,
                 output_tokens: 5,

@@ -4,9 +4,8 @@ use eliteforge_agent_core::{self as fw, StateStore};
 use eliteforge_agent_official_plugin_storage_local::{SqliteOptions, SqliteStateStore};
 use std::time::Duration;
 impl FrameworkHost {
-    /// A process restart can leave the latest checkpoint nonterminal even after
-    /// its managed run has been fenced as RecoveryRequired. Finish that orphan
-    /// before admitting a new turn; only the expired lease holder is replaced.
+    /// A failed or interrupted run can leave a nonterminal checkpoint behind.
+    /// Finish it under a new lease before admitting another turn in the session.
     pub(super) async fn recover_interrupted_checkpoint(
         &self,
         session_code: &str,
@@ -20,7 +19,7 @@ impl FrameworkHost {
         let state = SqliteStateStore::with_database(database, SqliteOptions::default())
             .await
             .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
-        let Some(mut head) = state
+        let Some(head) = state
             .latest_scope(session_code, "main")
             .await
             .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?
@@ -35,19 +34,42 @@ impl FrameworkHost {
             .get_run(head.run_id)
             .await
             .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
-        if run.status != fw::ManagedRunStatus::RecoveryRequired {
-            return Ok(());
-        }
+        let terminal = match &run.status {
+            fw::ManagedRunStatus::Failed => fw::ExecutionStatus::Failed,
+            fw::ManagedRunStatus::Cancelled | fw::ManagedRunStatus::RecoveryRequired => {
+                fw::ExecutionStatus::Cancelled
+            }
+            _ => return Ok(()),
+        };
+        let original_status = run.status;
         let lease = state
             .claim(head.run_id, fw::RunId::new_v4(), Duration::from_secs(30))
             .await
-            .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
-        let revision = head.revision;
-        head.status = fw::ExecutionStatus::Cancelled;
-        let commit = state.commit(&lease, revision, head).await;
+            .map_err(|error| match error {
+                fw::StateError::Busy => AgentError::SessionBusy(session_code.into()),
+                error => AgentError::InvalidConfiguration(error.to_string()),
+            })?;
+        let result = async {
+            // Reload after taking the fencing lease so a previous owner cannot
+            // change the checkpoint between our inspection and commit.
+            let mut current = state.load(head.run_id).await?;
+            let run = sessions.store.get_run(head.run_id).await?;
+            if run.status != original_status {
+                return Err(fw::StateError::Busy);
+            }
+            let revision = current.revision;
+            current.status = terminal;
+            state.commit(&lease, revision, current).await?;
+            Ok(())
+        }
+        .await;
         let release = state.release(&lease).await;
-        commit.map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
+        result.map_err(|error| match error {
+            fw::StateError::Busy => AgentError::SessionBusy(session_code.into()),
+            error => AgentError::InvalidConfiguration(error.to_string()),
+        })?;
         release.map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
+        tracing::info!(session_code, run_id = %head.run_id, "Recovered interrupted checkpoint");
         Ok(())
     }
 

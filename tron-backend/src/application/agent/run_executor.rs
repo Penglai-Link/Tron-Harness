@@ -413,6 +413,7 @@ mod tests {
             conversation_code: Some("CONV-1".into()),
             workspace_code: "TRON_CORE".into(),
             final_output: output.into(),
+            final_message_ids: Vec::new(),
             step_count: 1,
             token_usage: None,
             latest_request_estimate: None,

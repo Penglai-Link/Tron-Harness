@@ -19,6 +19,38 @@ impl SqliteDudeRepository {
     ) -> Result<T, DudeError> {
         self.database.call(f, || DudeError::Storage)
     }
+    fn retry_event(
+        &self,
+        event: &DudeEvent,
+        now: i64,
+        delay_ms: i64,
+        error: &str,
+        busy: bool,
+    ) -> Result<(), DudeError> {
+        let event = event.clone();
+        let error = error.to_owned();
+        self.call(move |c| {
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let json: Option<String> = tx.query_row(
+                "SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",
+                params![event.event_id, event.lease_token, now], |r| r.get(0),
+            ).optional().map_err(storage)?;
+            let mut record: DudeEvent = decode(json.ok_or(DudeError::Conflict)?)?;
+            record.status = DudeEventStatus::Queued;
+            record.available_at = now + delay_ms;
+            record.lease_until = None;
+            record.lease_token = None;
+            record.result = Some(error);
+            if busy {
+                record.attempts = record.attempts.saturating_sub(1);
+            }
+            tx.execute(
+                "UPDATE dude_events SET status='Queued',available_at=?2,lease_until=NULL,lease_token=NULL,attempts=?3,record_json=?4 WHERE event_id=?1",
+                params![record.event_id, record.available_at, record.attempts, encode(&record)?],
+            ).map_err(storage)?;
+            tx.commit().map_err(storage)
+        })
+    }
 }
 // Validate against the same transaction that stores the assessment or delivery.
 fn validate_work_snapshot(
@@ -33,6 +65,13 @@ fn validate_work_snapshot(
     let (status, progress, result) = state.ok_or(DudeError::NotFound)?;
     if change.kind.actionable() {
         if status == crate::domain::task::CLOSED_STATUS_CODE {
+            return Err(DudeError::Conflict);
+        }
+    } else if change.kind == WorkChangeKind::Progress {
+        if status == crate::domain::task::CLOSED_STATUS_CODE
+            || result.as_deref().map(str::trim)
+                != change.task_snapshot["executionResult"].as_str().map(str::trim)
+        {
             return Err(DudeError::Conflict);
         }
     } else if serde_json::json!({"status":status,"progress":progress,"executionResult":result})
@@ -72,6 +111,27 @@ fn load_events(
         .map(|r| decode(r.map_err(storage)?))
         .collect()
 }
+
+fn prune_completed_heartbeat_events(
+    connection: &rusqlite::Connection,
+    dude_code: Option<&str>,
+) -> Result<usize, DudeError> {
+    connection
+        .execute(
+            "DELETE FROM dude_events
+             WHERE source='Heartbeat' AND status IN ('Completed','Failed')
+               AND (?1 IS NULL OR dude_code=?1)
+               AND EXISTS (
+                   SELECT 1 FROM dude_events newer
+                   WHERE newer.dude_code=dude_events.dude_code
+                     AND newer.source='Heartbeat' AND newer.rowid>dude_events.rowid
+                   LIMIT 1 OFFSET ?2
+               )",
+            params![dude_code, (HEARTBEAT_HISTORY_LIMIT - 1) as i64],
+        )
+        .map_err(storage)
+}
+
 impl DudeRepository for SqliteDudeRepository {
     fn soul(&mut self, code: &str) -> Result<DudeSoul, DudeError> {
         let code=code.to_owned();
@@ -199,6 +259,59 @@ impl DudeRepository for SqliteDudeRepository {
                 .collect()
         })
     }
+    fn expired_heartbeat_sessions(&mut self) -> Result<Vec<String>, DudeError> {
+        self.call(|c| {
+            let mut query = c.prepare(
+                "SELECT s.session_code FROM dude_sessions s
+                 WHERE s.purpose='Heartbeat'
+                   AND EXISTS (SELECT 1 FROM dude_sessions newer
+                        WHERE newer.dude_code=s.dude_code AND newer.purpose='Heartbeat'
+                          AND newer.rowid>s.rowid LIMIT 1 OFFSET 19)
+                   AND NOT EXISTS (SELECT 1 FROM dude_events e WHERE (e.session_code=s.session_code OR e.event_id=s.correlation_key)
+                                   AND (e.source!='Heartbeat' OR e.status IN ('Queued','Running','AwaitingInput')))
+                   AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.work_session_code=s.session_code)
+                   AND NOT EXISTS (SELECT 1 FROM collaboration_threads t WHERE t.session_id=s.session_code)
+                   AND NOT EXISTS (SELECT 1 FROM dude_work_changes w WHERE json_extract(w.record_json,'$.sessionCode')=s.session_code AND json_extract(w.record_json,'$.resolvedAt') IS NULL)
+                   AND (EXISTS (SELECT 1 FROM workspace_session_links l WHERE l.session_id=s.session_code)
+                        OR (NOT EXISTS (SELECT 1 FROM ef_sessions f WHERE f.id=s.session_code)
+                            AND NOT EXISTS (SELECT 1 FROM ef_runs r WHERE r.session_id=s.session_code OR r.owner_session_id=s.session_code)
+                            AND NOT EXISTS (SELECT 1 FROM ef_events e WHERE e.session_id=s.session_code)
+                            AND NOT EXISTS (SELECT 1 FROM ef_conversations c WHERE c.session=s.session_code)
+                            AND NOT EXISTS (SELECT 1 FROM ef_checkpoints c WHERE c.session_id=s.session_code)
+                            AND NOT EXISTS (SELECT 1 FROM ef_history_runs h WHERE h.session_id=s.session_code)))
+                 ORDER BY s.rowid LIMIT 50"
+            ).map_err(storage)?;
+            let rows = query.query_map([], |row| row.get(0)).map_err(storage)?
+                .collect::<Result<Vec<String>, _>>().map_err(storage)?;
+            Ok(rows)
+        })
+    }
+    fn delete_empty_heartbeat_session(&mut self, code: &str) -> Result<(), DudeError> {
+        let code = code.to_owned();
+        self.call(move |c| {
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            let eligible: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND s.purpose='Heartbeat'
+                 AND EXISTS(SELECT 1 FROM dude_sessions n WHERE n.dude_code=s.dude_code AND n.purpose='Heartbeat' AND n.rowid>s.rowid LIMIT 1 OFFSET 19)
+                 AND NOT EXISTS(SELECT 1 FROM workspace_session_links l WHERE l.session_id=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM ef_sessions f WHERE f.id=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM ef_runs r WHERE r.session_id=s.session_code OR r.owner_session_id=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM ef_events e WHERE e.session_id=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM ef_conversations c WHERE c.session=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM ef_checkpoints c WHERE c.session_id=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM ef_history_runs h WHERE h.session_id=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM dude_events e WHERE (e.session_code=s.session_code OR e.event_id=s.correlation_key) AND (e.source!='Heartbeat' OR e.status IN ('Queued','Running','AwaitingInput')))
+                 AND NOT EXISTS(SELECT 1 FROM tasks t WHERE t.work_session_code=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM collaboration_threads t WHERE t.session_id=s.session_code)
+                 AND NOT EXISTS(SELECT 1 FROM dude_work_changes w WHERE json_extract(w.record_json,'$.sessionCode')=s.session_code AND json_extract(w.record_json,'$.resolvedAt') IS NULL))", [&code], |r| r.get(0)
+            ).map_err(storage)?;
+            if eligible {
+                tx.execute("DELETE FROM dude_events WHERE source='Heartbeat' AND EXISTS(SELECT 1 FROM dude_sessions s WHERE s.session_code=?1 AND (dude_events.session_code=s.session_code OR dude_events.event_id=s.correlation_key))", [&code]).map_err(storage)?;
+                tx.execute("DELETE FROM dude_sessions WHERE session_code=?1 AND purpose='Heartbeat'", [&code]).map_err(storage)?;
+            }
+            tx.commit().map_err(storage)
+        })
+    }
     fn session(&mut self, code: &str) -> Result<Option<DudeSession>, DudeError> {
         let code = code.to_owned();
         self.call(move |c| {
@@ -215,11 +328,42 @@ impl DudeRepository for SqliteDudeRepository {
     }
     fn enqueue(&mut self, e: &DudeEvent) -> Result<DudeEvent, DudeError> {
         let e = e.clone();
-        self.call(move|c|{c.execute("INSERT INTO dude_events(event_id,dude_code,dedup_key,source,session_code,status,available_at,record_json) VALUES(?1,?2,?3,?4,?5,'Queued',?6,?7) ON CONFLICT(dedup_key) DO NOTHING",params![e.event_id,e.dude_code,e.dedup_key,format!("{:?}",e.source),e.session_code,e.available_at,encode(&e)?]).map_err(storage)?;decode(c.query_row("SELECT record_json FROM dude_events WHERE dedup_key=?1",[e.dedup_key],|r|r.get(0)).map_err(storage)?)})
+        self.call(move |c| {
+            let tx = business_transaction(c, rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
+            tx.execute("INSERT INTO dude_events(event_id,dude_code,dedup_key,source,session_code,status,available_at,record_json) VALUES(?1,?2,?3,?4,?5,'Queued',?6,?7) ON CONFLICT(dedup_key) DO NOTHING",params![e.event_id,e.dude_code,e.dedup_key,format!("{:?}",e.source),e.session_code,e.available_at,encode(&e)?]).map_err(storage)?;
+            let record = tx.query_row("SELECT record_json FROM dude_events WHERE dedup_key=?1", [&e.dedup_key], |r| r.get::<_, String>(0)).map_err(storage)?;
+            let result = decode(record)?;
+            if e.source == DudeEventSource::Heartbeat {
+                prune_completed_heartbeat_events(&tx, Some(&e.dude_code))?;
+            }
+            tx.commit().map_err(storage)?;
+            Ok(result)
+        })
     }
     fn events(&mut self, code: &str) -> Result<Vec<DudeEvent>, DudeError> {
         let code = code.to_owned();
         self.call(move|c|load_events(c,"SELECT record_json FROM dude_events WHERE dude_code=?1 ORDER BY rowid DESC LIMIT 200",&code))
+    }
+    fn activity_events(&mut self, code: &str) -> Result<Vec<DudeEvent>, DudeError> {
+        let code = code.to_owned();
+        self.call(move |c| {
+            let mut query = c.prepare(
+                "SELECT event.record_json FROM dude_events event
+                 WHERE event.dude_code=?1 AND (event.source!='Heartbeat' OR event.rowid IN (
+                     SELECT heartbeat.rowid FROM dude_events heartbeat
+                     WHERE heartbeat.dude_code=?1 AND heartbeat.source='Heartbeat'
+                     ORDER BY heartbeat.rowid DESC LIMIT ?2
+                 ))
+                 ORDER BY event.rowid DESC LIMIT 200",
+            ).map_err(storage)?;
+            query.query_map(params![code, HEARTBEAT_HISTORY_LIMIT as i64], |row| row.get::<_, String>(0))
+                .map_err(storage)?
+                .map(|row| decode(row.map_err(storage)?))
+                .collect()
+        })
+    }
+    fn prune_heartbeat_events(&mut self) -> Result<usize, DudeError> {
+        self.call(|c| prune_completed_heartbeat_events(c, None))
     }
     fn claim(&mut self, now: i64, lease_ms: i64) -> Result<Option<DudeEvent>, DudeError> {
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
@@ -237,6 +381,7 @@ impl DudeRepository for SqliteDudeRepository {
     ) -> Result<(), DudeError> {
         let (id, token, result) = (id.to_owned(), token.to_owned(), result.to_owned());
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![id,token,now],|r|r.get(0)).optional().map_err(storage)?;let mut e:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;e.status=status;e.result=Some(result);e.lease_until=None;e.lease_token=None;if tx.execute("UPDATE dude_events SET status=?3,lease_until=NULL,lease_token=NULL,record_json=?4 WHERE event_id=?1 AND lease_token=?2",params![id,token,format!("{status:?}"),encode(&e)?]).map_err(storage)?!=1{return Err(DudeError::Conflict)}
+if e.source == DudeEventSource::Heartbeat && matches!(status, DudeEventStatus::Completed | DudeEventStatus::Failed) { prune_completed_heartbeat_events(&tx, Some(&e.dude_code))?; }
 tx.commit().map_err(storage)})
     }
     fn attach_session(&mut self, id: &str, token: &str, session: &str) -> Result<(), DudeError> {
@@ -261,16 +406,10 @@ tx.commit().map_err(storage)})
         delay_ms: i64,
         error: &str,
     ) -> Result<(), DudeError> {
-        let event = event.clone();
-        let error = error.to_owned();
-        self.call(move|c| {
-            let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;
-            let json:Option<String>=tx.query_row("SELECT record_json FROM dude_events WHERE event_id=?1 AND lease_token=?2 AND status='Running' AND lease_until>=?3",params![event.event_id,event.lease_token,now],|r|r.get(0)).optional().map_err(storage)?;
-            let mut record:DudeEvent=decode(json.ok_or(DudeError::Conflict)?)?;
-            record.status=DudeEventStatus::Queued;record.available_at=now+delay_ms;record.lease_until=None;record.lease_token=None;record.result=Some(error);
-            tx.execute("UPDATE dude_events SET status='Queued',available_at=?2,lease_until=NULL,lease_token=NULL,record_json=?3 WHERE event_id=?1",params![record.event_id,record.available_at,encode(&record)?]).map_err(storage)?;
-            tx.commit().map_err(storage)
-        })
+        self.retry_event(event, now, delay_ms, error, false)
+    }
+    fn defer_busy(&mut self, event: &DudeEvent, now: i64, delay_ms: i64) -> Result<(), DudeError> {
+        self.retry_event(event, now, delay_ms, "Waiting for the current Dude run", true)
     }
     fn resolve_awaiting_input(
         &mut self,
@@ -286,7 +425,7 @@ tx.commit().map_err(storage)})
             for json in rows {
                 let mut event:DudeEvent=decode(json)?;event.status=DudeEventStatus::Completed;event.result=Some(summary.clone());
                 tx.execute("UPDATE dude_events SET status='Completed',record_json=?2 WHERE event_id=?1",params![event.event_id,encode(&event)?]).map_err(storage)?;
-
+                if event.source == DudeEventSource::Heartbeat { prune_completed_heartbeat_events(&tx, Some(&event.dude_code))?; }
             }
             tx.commit().map_err(storage)
         })
@@ -294,7 +433,7 @@ tx.commit().map_err(storage)})
     fn schedule_heartbeats(&mut self, now: i64) -> Result<(), DudeError> {
         self.call(move|c|{let tx=business_transaction(c,rusqlite::TransactionBehavior::Immediate).map_err(storage)?;let rows={let mut q=tx.prepare("SELECT dude_code,heartbeat_minutes,next_heartbeat_at FROM dudes WHERE enabled=1 AND next_heartbeat_at<=?1").map_err(storage)?;q.query_map([now],|r|Ok((r.get::<_,String>(0)?,r.get::<_,u32>(1)?,r.get::<_,i64>(2)?))).map_err(storage)?.collect::<Result<Vec<_>,_>>().map_err(storage)?};
  for(code,cadence,scheduled)in rows{let busy:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM dude_events WHERE dude_code=?1 AND source='Heartbeat' AND status IN ('Queued','Running'))",[&code],|r|r.get(0)).map_err(storage)?;
- if !busy{let e=DudeEvent{event_id:eliteforge_agent_core::SessionRecord::new("").id,dude_code:code.clone(),source:DudeEventSource::Heartbeat,dedup_key:format!("heartbeat:{code}:{scheduled}"),session_code:None,task_code:None,workspace_code:None,payload:serde_json::json!({"scheduledAt":scheduled}),status:DudeEventStatus::Queued,available_at:now,lease_until:None,lease_token:None,attempts:0,result:None,created_at:now};tx.execute("INSERT INTO dude_events(event_id,dude_code,dedup_key,source,status,available_at,record_json) VALUES(?1,?2,?3,'Heartbeat','Queued',?4,?5)",params![e.event_id,code,e.dedup_key,now,encode(&e)?]).map_err(storage)?;}
+ if !busy{let e=DudeEvent{event_id:eliteforge_agent_core::SessionRecord::new("").id,dude_code:code.clone(),source:DudeEventSource::Heartbeat,dedup_key:format!("heartbeat:{code}:{scheduled}"),session_code:None,task_code:None,workspace_code:None,payload:serde_json::json!({"scheduledAt":scheduled}),status:DudeEventStatus::Queued,available_at:now,lease_until:None,lease_token:None,attempts:0,result:None,created_at:now};tx.execute("INSERT INTO dude_events(event_id,dude_code,dedup_key,source,status,available_at,record_json) VALUES(?1,?2,?3,'Heartbeat','Queued',?4,?5)",params![e.event_id,code,e.dedup_key,now,encode(&e)?]).map_err(storage)?;prune_completed_heartbeat_events(&tx,Some(&code))?;}
  tx.execute("UPDATE dudes SET next_heartbeat_at=?2 WHERE dude_code=?1",params![code,now+i64::from(cadence)*60000]).map_err(storage)?;}
  tx.commit().map_err(storage)})
     }
@@ -369,6 +508,17 @@ tx.commit().map_err(storage)})
             q.query_map(params![dude,user],|r|r.get::<_,String>(0)).map_err(storage)?.map(|r|decode(r.map_err(storage)?)).collect()
         })
     }
+    fn scoped_recent_work_changes(
+        &mut self,
+        dude: &str,
+        user: &str,
+    ) -> Result<Vec<DudeWorkChange>, DudeError> {
+        let (dude, user) = (dude.to_owned(), user.to_owned());
+        self.call(move |c| {
+            let mut query = c.prepare("SELECT w.record_json FROM dude_work_changes w JOIN workspace_session_links s ON s.session_id=json_extract(w.record_json,'$.sessionCode') WHERE w.dude_code=?1 AND json_extract(s.business_json,'$.user_code')=?2 ORDER BY w.created_at DESC,w.change_id DESC LIMIT 32").map_err(storage)?;
+            query.query_map(params![dude, user], |row| row.get::<_, String>(0)).map_err(storage)?.map(|row| decode(row.map_err(storage)?)).collect()
+        })
+    }
     fn pending_work_changes(&mut self, dude: &str) -> Result<Vec<DudeWorkChange>, DudeError> {
         let dude = dude.to_owned();
         self.call(move |c| {
@@ -423,9 +573,6 @@ tx.commit().map_err(storage)})
                 .optional()
                 .map_err(storage)?;
             let mut change: DudeWorkChange = decode(json.ok_or(DudeError::NotFound)?)?;
-            if !change.kind.actionable() {
-                return Err(DudeError::Invalid);
-            }
             if change.resolved_at.is_some() {
                 return Ok(change);
             }

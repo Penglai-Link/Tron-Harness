@@ -65,10 +65,6 @@ pub(super) fn map_agent_error(
         ),
         AgentManagementError::InternalAgentCodeInvalid
         | AgentManagementError::InternalAgentCodeConflict
-        | AgentManagementError::LoopInvalid
-        | AgentManagementError::LoopNotFound
-        | AgentManagementError::LoopConflict
-        | AgentManagementError::LoopInUse
         | AgentManagementError::BuiltinAgentReadOnly
         | AgentManagementError::PlatformAgentReadOnly
         | AgentManagementError::InternalAgentGroupInvalid

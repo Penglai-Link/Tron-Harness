@@ -225,6 +225,27 @@ impl Runtime {
                 tracing::warn!(%error, "Thread feedback remains pending");
             }
             if let Some(origin) = &origin {
+                if thread
+                    .context
+                    .collaboration_owner
+                    .as_ref()
+                    .is_none_or(|owner| owner.kind != "DUDE")
+                {
+                    if let Ok(result) = &result {
+                        if result.interactions.iter().any(|interaction| {
+                            interaction
+                                .presentation
+                                .as_ref()
+                                .is_some_and(|value| value["kind"] == "ask_caller")
+                        }) {
+                            feedback_host.notify_native_run(&origin.run_id.to_string(), &format!(
+                                "独立线程 {} 正在等待调用方回答。用 thread_wait 获取交互，再用 thread_answer 回答。interactions={}",
+                                summary.session_id,
+                                serde_json::to_string(&result.interactions).unwrap_or_default(),
+                            ));
+                        }
+                    }
+                }
                 origin
                     .emit(fw::AgentEvent::Collaboration(Box::new(
                         fw::CollaborationEvent::ThreadRunFinished {
@@ -261,120 +282,9 @@ impl AgentCollaborationRuntime for Runtime {
         request: fw::RunRequest,
         parent: &fw::RunContext,
     ) -> Result<fw::ChildRunResult, fw::AgentError> {
-        let session = format!("tool-child-{}", fw::RunId::new_v4());
-        let (agent, mut request, prepared) = self
-            .prepare_new(
-                request,
-                session.clone(),
-                parent,
-                ExecutionLimits::AgentDefinition,
-            )
-            .await?;
-        let host = self.host()?;
-        let owner = parent
-            .extensions
-            .get::<super::super::subagents::SubagentOwner>()
-            .map(|owner| owner.0.clone())
-            .unwrap_or_else(|| parent.session_id.clone());
-        request
-            .extensions
-            .insert(super::super::subagents::SubagentOwner(owner.clone()));
-        let code = prepared
-            .agent_code
-            .clone()
-            .ok_or_else(|| failure("child target missing"))?;
-        let target = self
-            .directory()?
-            .into_iter()
-            .find(|entry| entry.agent_code == code);
-        let name = target
-            .as_ref()
-            .map(|entry| entry.name.clone())
-            .unwrap_or_else(|| code.clone());
-        let avatar_id = target.map(|entry| entry.avatar_id);
-        let task = request.input.text();
-        let admission = host.0.config_lock.lock().await;
-        host.ensure_open().map_err(failure)?;
-        self.authorize(
-            prepared
-                .agent_code
-                .as_deref()
-                .ok_or_else(|| failure("child target missing"))?,
-        )?;
-        let (child, stream) = agent
-            .start_child_with_output_owned::<eliteforge_agent_official_plugin_agui::AgUiStream>(
-                request, parent,
-            )
-            .await?;
-        drop(admission);
-        let run_id = child.run_id();
-        host.record_subagent(
-            &owner,
-            super::super::SubagentRecord {
-                run_id,
-                session_id: session.clone(),
-                parent_run_id: parent.run_id,
-                agent_code: code,
-                agent_name: name,
-                avatar_id,
-                task,
-                user_code: prepared.user_code.clone(),
-            },
-        )
-        .await?;
-        let presentation = host.presentation_service().map_err(failure)?;
-        let (result, ()) = tokio::join!(
-            child.wait(),
-            super::super::super::presentation::consume_native_agui(stream, &prepared, presentation)
-        );
-        let mut result = result?;
-        if result.status == fw::RunStatus::AwaitingInput
-            && prepared
-                .collaboration_owner
-                .as_ref()
-                .is_some_and(|owner| owner.kind == "DUDE")
-        {
-            // A native approval/interaction may pause even a bounded child. Promote
-            // that actual native session to a durable Thread, never fabricate a rerun.
-            let mut record = ThreadRecord {
-                summary: fw::ThreadSummary {
-                    session_id: session.clone(),
-                    title: None,
-                    status: fw::ThreadStatus::AwaitingInput,
-                    latest_run_id: Some(run_id),
-                },
-                workspace_code: prepared.workspace_code.clone(),
-                user_code: prepared.user_code.clone(),
-                agent_code: prepared
-                    .agent_code
-                    .clone()
-                    .ok_or_else(|| failure("child target missing"))?,
-                owner: store::owner(&prepared),
-                initiator_agent_code: self.context.agent_code.clone(),
-                origin_session_code: prepared
-                    .collaboration_owner
-                    .as_ref()
-                    .and_then(|owner| owner.origin_session_code.clone())
-                    .unwrap_or_else(|| parent.session_id.clone()),
-                execution_scope: prepared.execution_scope.clone(),
-                completion: Some((
-                    fw::ThreadStatus::AwaitingInput,
-                    Ok(fw::ThreadResult::from_run(run_id, &result)),
-                )),
-                closed: false,
-                feedback_pending: true,
-                revision: 0,
-                run_admitted_at_ms: fw::lifecycle_time_ms(),
-                execution_sequence: 1,
-                resumed_interaction_id: None,
-            };
-            host.persist_thread(&mut record, true).await?;
-            if let Err(error) = host.flush_thread_feedback().await {
-                tracing::warn!(%error, "Spawn interaction feedback remains pending");
-            }
-            result.output.push_str(&format!("\nThis child is awaiting input in durable Thread {session}. Use thread_read/thread_answer with this session_id and the actual interaction ID; do not start a replacement execution."));
-        }
-        Ok(fw::ChildRunResult { run_id, result })
+        let summary = self.spawn_registered_child(request, parent, false).await?;
+        self.wait_detached_child(&summary.child_run_id.to_string())
+            .await
     }
     async fn spawn_child_detached(
         &self,
@@ -583,7 +493,30 @@ impl AgentCollaborationRuntime for Runtime {
         if thread.state.lock().unwrap().summary.status != fw::ThreadStatus::AwaitingInput {
             return Err(failure("thread is not awaiting input"));
         }
-        let request = thread.agent.answer(id, interaction, value).await?;
+        {
+            let state = thread.state.lock().unwrap();
+            if !state.record.completion.as_ref().is_some_and(|(_, result)| {
+                result.as_ref().is_ok_and(|result| {
+                    result
+                        .interactions
+                        .iter()
+                        .any(|request| request.id == interaction)
+                })
+            }) {
+                return Err(failure(
+                    "interaction is not pending on the current thread execution",
+                ));
+            }
+        }
+        let request = thread
+            .agent
+            .answer_with_provenance(
+                id,
+                interaction,
+                value,
+                Some(self.answer_provenance(parent, interaction)),
+            )
+            .await?;
         let (_, request, _) = self
             .prepare_existing(
                 request,

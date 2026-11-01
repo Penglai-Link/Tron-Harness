@@ -7,6 +7,14 @@ use crate::{
     domain::{agent::AgentCollaborationOwner, dude::*},
 };
 use std::sync::Arc;
+
+fn memory_execution_error(error: crate::domain::dude_memory::DudeMemoryError) -> DudeError {
+    match error {
+        crate::domain::dude_memory::DudeMemoryError::ExecutionBusy => DudeError::ExecutionBusy,
+        error => DudeError::Runtime(error.to_string()),
+    }
+}
+
 pub(super) struct PlatformDudeExecutor {
     pub state: AppState,
 }
@@ -105,13 +113,16 @@ impl DudeExecutor for PlatformDudeExecutor {
         let result = async {
             tracing::info!("Dude execution started");
             let result = self.execute_inner(event, session).await;
-            if result.is_err() {
-                context
-                    .span()
-                    .set_status(Status::error("Dude execution failed"));
-                tracing::error!("Dude execution failed");
-            } else {
-                tracing::info!("Dude execution finished");
+            match &result {
+                Err(DudeError::ExecutionBusy) => tracing::info!("Dude execution deferred"),
+                Err(error) => {
+                    crate::app::telemetry::record_error(&context, "dude", error);
+                    context
+                        .span()
+                        .set_status(Status::error("Dude execution failed"));
+                    tracing::error!("Dude execution failed");
+                }
+                Ok(_) => tracing::info!("Dude execution finished"),
             }
             result
         }
@@ -121,6 +132,7 @@ impl DudeExecutor for PlatformDudeExecutor {
         guard.complete(match &result {
             Ok(outcome) if outcome.awaiting_input => "waiting",
             Ok(_) => "completed",
+            Err(DudeError::ExecutionBusy) => "deferred",
             Err(_) => "error",
         });
         result
@@ -167,7 +179,7 @@ impl PlatformDudeExecutor {
             runner
                 .resume_candidates(&event.dude_code, &user, dude.memory_auto_approve)
                 .await
-                .map_err(|e| DudeError::Runtime(e.to_string()))?;
+                .map_err(memory_execution_error)?;
             let Some(batch) = runner
                 .prepare_wakeup(&event.dude_code, &user)
                 .await
@@ -199,7 +211,7 @@ impl PlatformDudeExecutor {
                     dude.memory_auto_approve,
                 )
                 .await
-                .map_err(|e| DudeError::Runtime(e.to_string()))?;
+                .map_err(memory_execution_error)?;
             return Ok(DudeExecutionOutcome {
                 summary: batch.summary.unwrap_or_default(),
                 awaiting_input: false,
@@ -372,6 +384,45 @@ impl crate::application::agent::ThreadFeedbackSink for ThreadFeedbackBridge {
     }
 }
 pub(super) fn start(state: AppState) {
+    let retention_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let state = retention_state.clone();
+            match tokio::task::spawn_blocking(move || {
+                let candidates = state.dudes.expired_heartbeat_sessions()?;
+                for code in candidates {
+                    // Archiving retires the in-memory run before the transactional
+                    // delete checks for queued events and live Framework leases.
+                    let chat = match state.chats.get_session(&code) {
+                        Ok(chat) => chat,
+                        Err(crate::domain::chat::ChatError::SessionNotFound) => {
+                            state.dudes.delete_empty_heartbeat_session(&code)?;
+                            continue;
+                        }
+                        Err(error) => {
+                            tracing::warn!(session_code=%code, %error, "Heartbeat history lookup failed");
+                            continue;
+                        }
+                    };
+                    let was_archived = chat.status == crate::domain::chat::ChatSessionStatus::Archived;
+                    if state.chats.archive_session(&code).is_ok() {
+                        if let Err(error) = state.chats.delete_expired_heartbeat_session(&code) {
+                            if !was_archived { let _ = state.chats.restore_session(&code); }
+                            tracing::warn!(session_code=%code, %error, "Heartbeat history retirement deferred");
+                        }
+                    }
+                }
+                state.dudes.prune_heartbeat_events()?;
+                Ok::<(), DudeError>(())
+            }).await {
+                Ok(Ok(())) => {},
+                Ok(Err(error)) => tracing::error!(%error, "Heartbeat history retirement failed"),
+                Err(error) => tracing::error!(%error, "Heartbeat history retirement worker failed"),
+            }
+        }
+    });
     let heartbeat_dudes = state.dudes.clone();
     state
         .automations

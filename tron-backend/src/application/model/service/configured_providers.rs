@@ -1,13 +1,15 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use super::*;
 use crate::domain::model::{
     ConfiguredModelProvider, ConfiguredProviderError, ConfiguredProviderModel,
     ConfiguredProviderProtocol, ModelInputCapability,
 };
+use url::Url;
 
 #[derive(Clone)]
 pub struct ConfiguredProviderCommand {
+    pub provider_type: Option<String>,
     pub display_name: String,
     pub protocol: ConfiguredProviderProtocol,
     pub base_url: String,
@@ -49,47 +51,42 @@ impl ModelService {
     pub fn list_configured_providers(
         &self,
     ) -> Result<Vec<ConfiguredModelProvider>, ConfiguredProviderError> {
-        let mut repository = self
-            .repository
+        self.repository
             .lock()
-            .expect("model repository mutex poisoned");
-        let (models, mut providers) = repository
-            .model_configuration_snapshot()
-            .map_err(|_| ConfiguredProviderError::Storage)?;
-        let statuses: HashMap<_, _> = models
-            .iter()
-            .map(|model| (model.model_code.as_str(), model.enabled))
-            .collect();
-        for provider in &mut providers {
-            for model in &mut provider.models {
-                if let Some(enabled) = model
-                    .model_code
-                    .as_deref()
-                    .and_then(|code| statuses.get(code))
-                {
-                    model.enabled = *enabled;
-                }
-            }
-        }
-        Ok(providers)
+            .expect("model repository mutex poisoned")
+            .list_configured_providers()
     }
 
     pub fn get_configured_provider(
         &self,
         provider_id: &str,
     ) -> Result<ConfiguredModelProvider, ConfiguredProviderError> {
-        self.list_configured_providers()?
+        let mut provider = self
+            .list_configured_providers()?
             .into_iter()
             .find(|provider| provider.provider_id == provider_id)
-            .ok_or(ConfiguredProviderError::NotFound)
+            .ok_or(ConfiguredProviderError::NotFound)?;
+        provider.api_key_summary = self.saved_key_summary(&provider);
+        Ok(provider)
+    }
+
+    fn saved_key_summary(&self, provider: &ConfiguredModelProvider) -> Option<String> {
+        if provider.encrypted_api_key.is_empty() {
+            return None;
+        }
+        provider.api_key_summary.clone().or_else(|| {
+            self.reveal_api_key(&provider.encrypted_api_key)
+                .ok()
+                .map(|key| api_key_summary(&key))
+        })
     }
 
     pub fn create_configured_provider(
         &self,
-        provider_id: &str,
         command: ConfiguredProviderCommand,
     ) -> Result<ConfiguredModelProvider, ConfiguredProviderError> {
-        self.save_configured_provider(provider_id, command, true)
+        let provider_id = format!("provider-{:032x}", rand::random::<u128>());
+        self.save_configured_provider(&provider_id, command, true)
     }
 
     pub fn update_configured_provider(
@@ -146,20 +143,21 @@ impl ModelService {
         {
             return Err(ConfiguredProviderError::InvalidModelOwnership);
         }
-        let existing_models = repository
-            .list_models()
-            .map_err(|_| ConfiguredProviderError::Storage)?;
-        let existing: HashMap<_, _> = existing_models
-            .iter()
-            .map(|model| (model.model_code.as_str(), model))
-            .collect();
-        let mut next_id = repository
-            .next_id()
-            .map_err(|_| ConfiguredProviderError::Storage)?;
         let now = chrono::Utc::now().timestamp_millis();
         let updated_at = previous
             .as_ref()
             .map_or(now, |provider| now.max(provider.updated_at + 1));
+        let api_key_summary = command
+            .api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+            .map(api_key_summary)
+            .or_else(|| {
+                previous
+                    .as_ref()
+                    .and_then(|provider| self.saved_key_summary(provider))
+            });
         let encrypted_api_key = match command
             .api_key
             .as_deref()
@@ -182,86 +180,21 @@ impl ModelService {
                 .map(|provider| provider.encrypted_api_key.clone())
                 .unwrap_or_default(),
         };
-        let mut models = Vec::with_capacity(command.models.len());
         for config in &mut command.models {
             config.model_id = config.model_id.trim().to_owned();
             config.name = config.name.trim().to_owned();
-            let old = config
-                .model_code
-                .as_deref()
-                .and_then(|code| existing.get(code))
-                .copied();
-            let id = old.map_or_else(
-                || {
-                    let id = next_id;
-                    next_id += 1;
-                    id
-                },
-                |model| model.id.value(),
-            );
-            let model_code =
-                old.map_or_else(|| build_model_code(id), |model| model.model_code.clone());
-            config.model_code = Some(model_code.clone());
-            let mut capabilities = vec![ModelCapability::TextGeneration];
-            if config.reasoning {
-                capabilities.push(ModelCapability::DeepThinking);
+            if config.model_code.is_none() {
+                config.model_code = Some(format!("MODEL-{:032x}", rand::random::<u128>()));
             }
-            if config.supports_developer_role {
-                capabilities.push(ModelCapability::SupportsDeveloperRole);
-            }
-            if config
-                .input_capabilities
-                .contains(&ModelInputCapability::Image)
-            {
-                capabilities.push(ModelCapability::VisionUnderstanding);
-            }
-            models.push(Model {
-                provider_id: None,
-                request_headers: Default::default(),
-                id: SnowflakeId::new(id),
-                scope_kind: ModelScopeKind::Platform,
-                workspace_code: None,
-                model_code,
-                display_name: format!("{} · {}/{}", config.name, provider_id, config.model_id),
-                vendor: command.display_name.clone(),
-                protocol: command.protocol.model_protocol(),
-                model_type: ModelType::Text,
-                model_capabilities: capabilities,
-                // Only the provider owns the connection and its encrypted credential.
-                base_url: String::new(),
-                api_path: None,
-                api_key_ref: String::new(),
-                model_name: config.model_id.clone(),
-                enabled: config.enabled,
-                description: None,
-                thinking_enabled: config.reasoning,
-                supported_reasoning_efforts: Vec::new(),
-                default_reasoning_effort: None,
-                structured_output_enabled: false,
-                responses_stateful_enabled: false,
-                temperature: None,
-                max_tokens: config.max_output_tokens,
-                context_window_tokens: config.context_window_tokens,
-                top_p: None,
-                max_retries: None,
-                last_verified_at: None,
-                last_verify_status: None,
-                last_verify_message: None,
-                source_kind: ModelSourceKind::Platform,
-                source_model_code: None,
-                allow_inheritance: None,
-                created_at: old
-                    .map(|model| model.created_at.clone())
-                    .unwrap_or_else(current_timestamp),
-                updated_at: current_timestamp(),
-            });
         }
         let provider = ConfiguredModelProvider {
             provider_id: provider_id.to_owned(),
+            provider_type: command.provider_type.or_else(|| previous.as_ref().and_then(|p| p.provider_type.clone())),
             display_name: command.display_name,
             protocol: command.protocol,
             base_url: command.base_url,
             encrypted_api_key,
+            api_key_summary,
             request_headers: command.request_headers,
             enabled: command.enabled,
             models: command.models,
@@ -273,37 +206,25 @@ impl ModelService {
         repository.save_configured_provider(
             &provider,
             previous.as_ref().map(|provider| provider.updated_at),
-            &models,
         )?;
         Ok(provider)
     }
+}
 
-    pub(super) fn configured_headers(
-        &self,
-    ) -> Result<HashMap<String, BTreeMap<String, String>>, ModelError> {
-        Ok(self
-            .repository
-            .lock()
-            .expect("model repository mutex poisoned")
-            .list_configured_providers()
-            .map_err(|_| ModelError::StorageFailure)?
-            .into_iter()
-            .flat_map(|provider| {
-                provider.models.into_iter().filter_map(move |model| {
-                    model
-                        .model_code
-                        .map(|code| (code, provider.request_headers.clone()))
-                })
-            })
-            .collect())
-    }
-
-    pub(super) fn ensure_independent_model(&self, model_code: &str) -> Result<(), ModelError> {
-        if self.configured_headers()?.contains_key(model_code) {
-            return Err(ModelError::PlatformReferenceMutationDenied);
-        }
-        Ok(())
-    }
+fn api_key_summary(key: &str) -> String {
+    let chars: Vec<_> = key.chars().collect();
+    let (prefix, suffix) = match chars.len() {
+        0..=4 => return "***".into(),
+        5..=8 => (1, 1),
+        9..=15 => (2, 2),
+        16..=25 => (3, 3),
+        _ => (6, 7),
+    };
+    format!(
+        "{}***{}",
+        chars[..prefix].iter().collect::<String>(),
+        chars[chars.len() - suffix..].iter().collect::<String>()
+    )
 }
 
 fn validate_provider(
@@ -373,6 +294,16 @@ fn validate_provider(
     let mut ids = HashSet::new();
     let mut codes = HashSet::new();
     for model in &command.models {
+        if model.model_type.protocol(command.protocol).is_none()
+            || (model.model_type != crate::domain::model::ConfiguredProviderModelType::Text
+                && (model.reasoning
+                    || model.supports_developer_role
+                    || (!model.model_type.is_media() && !model.model_type.is_multimodal()
+                        && model.input_capabilities != [ModelInputCapability::Text])))
+        {
+            return Err(ConfiguredProviderError::InvalidModels);
+        }
+        if model.model_type.is_multimodal() && !model.input_capabilities.iter().any(|c| *c != ModelInputCapability::Text) { return Err(ConfiguredProviderError::InvalidModels); }
         if model.model_id.trim().is_empty()
             || model.model_id.len() > 256
             || model.name.trim().is_empty()
@@ -382,18 +313,22 @@ fn validate_provider(
                 .model_code
                 .as_deref()
                 .is_some_and(|code| !codes.insert(code))
+            || model.dimension == Some(0)
             || model.context_window_tokens == Some(0)
             || model.max_output_tokens == Some(0)
             || matches!((model.context_window_tokens, model.max_output_tokens), (Some(context), Some(output)) if output > context)
-            || !model
-                .input_capabilities
-                .contains(&ModelInputCapability::Text)
-            || model.input_capabilities.iter().any(|cap| {
-                matches!(
-                    cap,
-                    ModelInputCapability::Audio | ModelInputCapability::Video
-                )
-            })
+            || model.input_capabilities.is_empty()
+            || (!model.model_type.is_media() && !model.model_type.is_multimodal()
+                && !model
+                    .input_capabilities
+                    .contains(&ModelInputCapability::Text))
+            || (!model.model_type.is_media() && !model.model_type.is_multimodal()
+                && model.input_capabilities.iter().any(|cap| {
+                    matches!(
+                        cap,
+                        ModelInputCapability::Audio | ModelInputCapability::Video
+                    )
+                }))
         {
             return Err(ConfiguredProviderError::InvalidModels);
         }

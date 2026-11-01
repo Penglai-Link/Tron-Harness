@@ -389,10 +389,12 @@ async fn graph_tools_use_run_identity_and_require_agent_grants() {
     let mut registered_context = context.clone();
     registered_context.tools =
         vec![tron_backend::application::agent::tool_record_to_effective_tool(definition)];
+    let mut registered_request = request.clone();
+    registered_request.input["workspaceCode"] = json!(WORKSPACE);
     let registered = f
         .state
         .agent_tool_registry
-        .execute_allowed(request.clone(), &registered_context)
+        .execute_allowed(registered_request, &registered_context)
         .unwrap();
     let registered: Value = serde_json::from_str(&registered.observation.output).unwrap();
     assert!(!registered["nodes"].as_array().unwrap().is_empty());

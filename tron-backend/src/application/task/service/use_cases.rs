@@ -305,7 +305,14 @@ impl TaskService {
     }
 
     pub fn archive_task(&self, task_code: &str) -> Result<TaskLifecycleResult, TaskError> {
-        let mut task = self.get_task_record(task_code)?;
+        let task = self.get_task_record(task_code)?;
+        self.archive_task_record(task)
+    }
+
+    pub(super) fn archive_task_record(
+        &self,
+        mut task: Task,
+    ) -> Result<TaskLifecycleResult, TaskError> {
         if task.archived_at.is_none() {
             let has_active_subtasks = self.all_tasks()?.iter().any(|candidate| {
                 candidate.parent_task_code.as_deref() == Some(&task.task_code)
@@ -324,7 +331,7 @@ impl TaskService {
                 .expect("task repository mutex poisoned")
                 .update_task(&task)?;
         }
-        let result = self.lifecycle_result(task_code)?;
+        let result = self.lifecycle_result(&task.task_code)?;
         self.publish_task_lifecycle_event("task.archived", "Archived task", &result);
         Ok(result)
     }

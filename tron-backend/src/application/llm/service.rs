@@ -16,18 +16,17 @@ use super::{
 impl LlmRuntimeModelResolver for ModelService {
     fn embedding_runtime_model_config(
         &self,
-        workspace_code: &str,
-        model_code: Option<&str>,
+        workspace: &str,
+        code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        ModelService::embedding_runtime_model_config(self, workspace_code, model_code)
+        ModelService::embedding_runtime_model_config(self, workspace, code)
     }
-
     fn rerank_runtime_model_config(
         &self,
-        workspace_code: &str,
-        model_code: Option<&str>,
+        workspace: &str,
+        code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        ModelService::rerank_runtime_model_config(self, workspace_code, model_code)
+        ModelService::rerank_runtime_model_config(self, workspace, code)
     }
 }
 

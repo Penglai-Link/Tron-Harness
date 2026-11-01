@@ -16,7 +16,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AgentAvatarPicker } from "@/domain/agent/components/AgentAvatarPicker";
-import { AgentLoopField } from "@/domain/agent/components/AgentLoopField";
 import { AgentCandidateModelsField } from "@/domain/agent/components/AgentCandidateModelsField";
 import { AgentRolePromptField } from "@/domain/agent/components/AgentRolePromptField";
 import { AgentDescriptionField } from "@/domain/agent/components/AgentDescriptionField";
@@ -52,7 +51,7 @@ export function DudeEditorDialog({
     name: dude?.name ?? "",
     description: dude?.description ?? "",
     rolePrompt: dude?.rolePrompt ?? "",
-    loopCode: dude?.loopCode ?? "",
+
     avatarId: dude?.avatarId ?? "robot",
     candidateModelCodes: dude?.candidateModelCodes ?? [],
     enabled: dude?.enabled ?? true,
@@ -88,7 +87,6 @@ export function DudeEditorDialog({
     /^[a-z][a-z0-9_-]{0,63}$/.test(draft.dudeCode) &&
     Boolean(draft.name.trim()) &&
     [...draft.name].length <= 100 &&
-    Boolean(draft.loopCode) &&
     Boolean(draft.rolePrompt.trim()) &&
     draft.heartbeatMinutes >= 1;
   async function save() {
@@ -215,12 +213,7 @@ export function DudeEditorDialog({
                   />
                 </Field>
                 <AgentDescriptionField value={draft.description ?? ""} disabled={saving} onChange={(value) => field("description", value)} />
-                <AgentLoopField
-                  value={draft.loopCode}
-                  defaultKind={!dude ? "React" : undefined}
-                  disabled={saving}
-                  onChange={(value) => field("loopCode", value)}
-                />
+
                 <AgentCandidateModelsField
                   workspaceCode="$platform"
                   value={draft.candidateModelCodes}
@@ -250,7 +243,7 @@ export function DudeEditorDialog({
                   onSave={() => void save()}
                 />
               </TabsContent>
-              <AgentResourcesEditor ref={resources} agentCode={dude?.dudeCode} agentName={draft.name} loadRecord={getDudeResources} disabled={saving} />
+              <AgentResourcesEditor ref={resources} agentCode={dude?.dudeCode} agentName={draft.name} loadRecord={getDudeResources} disabled={saving} audience="dude" />
               <TabsContent
                 value="background"
                 keepMounted

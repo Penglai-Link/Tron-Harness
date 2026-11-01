@@ -73,6 +73,8 @@ pub use runtime_adapter::{
     RuntimeAdapterSelection, RuntimeAdapterStage, RuntimeCapabilities, runtime_adapter_descriptors,
 };
 pub use tool_catalog::BusinessToolCatalog;
+pub(crate) use tool_catalog::builtin_category;
+pub(crate) use tool_catalog::{dude_tool_replacement, dude_workspace_tool};
 pub use tool_schema::{ToolSchemaCache, request_tool_schema_payload, tool_schema_payload};
 pub(crate) use turn_state::{TurnStateAdapter, TurnStateKind};
 pub(crate) use usage_snapshots::{

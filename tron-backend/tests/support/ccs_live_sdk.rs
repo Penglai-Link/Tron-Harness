@@ -335,10 +335,7 @@ pub async fn run() {
     let vision_calls = Arc::new(AtomicUsize::new(0));
     let measured = Arc::new(Mutex::new(vec![]));
     let llm = LlmRuntimeService::new(
-        Arc::new(ProviderAwareLlmRuntimeResolver::new(
-            f.state.models.clone(),
-            providers.clone(),
-        )),
+        Arc::new(ProviderAwareLlmRuntimeResolver::new(providers.clone())),
         Arc::new(CappedRuntime {
             inner: HttpLlmRuntimeClient::with_model_client(models.clone()),
             calls: embedding_calls.clone(),

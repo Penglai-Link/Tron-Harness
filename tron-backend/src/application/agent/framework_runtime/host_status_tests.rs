@@ -24,6 +24,7 @@ impl AgentRuntime for ResultRuntime {
                 conversation_code: context.conversation_code,
                 workspace_code: context.workspace_code,
                 final_output: "partial".into(),
+                final_message_ids: Vec::new(),
                 step_count: 1,
                 token_usage: None,
                 latest_request_estimate: None,

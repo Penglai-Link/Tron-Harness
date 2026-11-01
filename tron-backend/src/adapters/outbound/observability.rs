@@ -55,6 +55,15 @@ fn trace_status(t: &TelemetryTrace) -> String {
     }
 }
 fn span(mut s: TelemetrySpan) -> TraceSpan {
+    if s.status_code == 2
+        && let Some(message) = s.data.pointer("/span/status/message").and_then(serde_json::Value::as_str)
+        && !message.trim().is_empty()
+    {
+        s.attributes.insert(
+            "otel.status.description".into(),
+            crate::application::short_term_memory::redact_sensitive_text(message),
+        );
+    }
     if s.name == "db.sqlite.business" {
         if let Some(file) = s.attributes.get("code.file.path") {
             let module = file.split("/sqlite/").last().unwrap_or(file).trim_end_matches(".rs").trim_end_matches(".inc");

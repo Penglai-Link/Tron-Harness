@@ -13,6 +13,7 @@ export interface CapabilityPackRecord {
 }
 
 export interface CapabilityContentRecord {
+  displayName?: string;
   kind: string;
   name: string;
   description: string;

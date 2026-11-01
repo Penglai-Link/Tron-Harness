@@ -117,7 +117,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       { catalogModelType: "Embedding", status: "Available", modelId: "embedding-1", modelCode: "bge-m3", modelName: "BGE-M3" },
       { catalogModelType: "Rerank", status: "Available", modelId: "rerank-1", modelCode: "bge-reranker", modelName: "BGE Reranker" },
     ] } }));
-    await page.route("**/api/v1/admin/platform/models**", route => route.fulfill({ json: { code: "0", message: "ok", data: [] } }));
+    await page.route("**/api/v1/model-providers/select-options**", route => route.fulfill({ json: { code: "0", message: "ok", data: [] } }));
     await page.route("**/api/v1/agents/workspaces/TRON_CORE/internal", route => route.fulfill({ json: { code: "0", message: "ok", data: [{ agentCode: "main-agent", name: "Main Agent" }] } }));
     await page.route("**/api/v1/agents/workspaces/TRON_EMPTY/internal", route => route.fulfill({ json: { code: "0", message: "ok", data: [] } }));
     await page.route("**/api/v1/admin/workspaces/options**", route => route.fulfill({json:{code:"0",message:"ok",data:[{workspaceCode:"TRON_CORE",name:"Tron Core",label:"Tron Core",status:"Active"},{workspaceCode:"TRON_EMPTY",name:"Empty Workspace",label:"Empty Workspace",status:"Active"}]}}));

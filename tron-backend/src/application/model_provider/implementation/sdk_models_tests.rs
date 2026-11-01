@@ -5,6 +5,9 @@ use crate::{adapters::outbound::crypto::Sm4GcmVariableCipher, config::VariableCr
 use axum::{Router, body::to_bytes, extract::State, http::StatusCode, response::IntoResponse};
 use sdk::ModelTransport;
 
+#[path = "sdk_encryption_key_tests.rs"]
+mod encryption_key_tests;
+
 // Synthetic public key generated solely for this fixture; no private key is stored.
 const PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlKl+adEvKdKFqV+yOzZX\ncLN501KY3n07350ilbPO9h5y+vQII/TIg7ds++O50O/1Md5tAM2CxxtRzKLZR0tG\naqlZfIx8GtBFFi1UsB/aX2WnxSgwctFgwFAK7dMcc0J8/UUQ2jORuTOCestuXODV\nYHlP3HAtmZQ00a3LQHJFwfLNvWn4zgAbD3s6tagpcjtl6qxzRB3d42d1Zp80enVr\n1sAQL1yGNlF2y9f19HG1U+Bn+KfX/0cWymn8yDSixjPLWN3N/7FBpAD6NnNykYs2\n82pF0ITF5WxLoTfUxAMa1PRzLhvaC5czX6blziL3dziJh1ObQvt4Onp18ASWXypR\nVQIDAQAB\n-----END PUBLIC KEY-----";
 
@@ -281,7 +284,7 @@ async fn respond(
             axum::Json(json!({"message":"Not found"})),
         );
     }
-    if method == "POST" {
+    if method == "POST" && !path.ends_with("/account/devices/heartbeat") {
         let envelope: Value = serde_json::from_slice(&body).unwrap();
         if !product
             || !client
@@ -407,6 +410,7 @@ async fn poll(
         std::time::Duration::from_secs(10),
         service.poll_authorization_session(CompleteProviderAuthorizationCommand {
             session_id: "fixture-session".into(),
+            expected_person_ai_user_id: None,
         }),
     )
     .await
@@ -642,7 +646,7 @@ async fn personai_sync_preserves_vendor_and_tier_identity_through_fixed_selectio
         .unwrap();
     assert_eq!(native.model_code, "PERSON_AI:RERANK:rerank-1");
     assert_eq!(native.api_path.as_deref(), Some("/rerank"));
-    assert_eq!(native.model_type, ModelType::Rerank);
+    assert_eq!(native.model_type, ModelType::TextRerank);
     let fixed_native = service
         .rerank_runtime_model_config("", Some("PERSON_AI:RERANK:rerank-1"))
         .unwrap()

@@ -59,7 +59,8 @@ async fn model_server_rounds(rounds: Vec<Vec<(&str, Value)>>) -> Server {
             "id":id,"type":"function","function":{"name":name,"arguments":arguments.to_string()}
         })}).collect::<Vec<_>>()}}]}));
     }
-    scripted.push(json!({"choices":[{"message":{"role":"assistant","content":"allowlist checked"}}]}));
+    scripted
+        .push(json!({"choices":[{"message":{"role":"assistant","content":"allowlist checked"}}]}));
     let replies = Arc::new(Mutex::new(VecDeque::from(scripted)));
     async fn completion(
         State((requests, replies)): State<(Arc<Mutex<Vec<Value>>>, Arc<Mutex<VecDeque<Value>>>)>,
@@ -287,13 +288,21 @@ fn search_outputs(model: &Server) -> Vec<Value> {
         .iter()
         .flat_map(|output| {
             let value: Value = serde_json::from_str(output).unwrap();
-            value["results"].as_array().unwrap().iter().map(|r|r["result"].clone()).collect::<Vec<_>>()
+            value["results"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| r["result"].clone())
+                .collect::<Vec<_>>()
         })
         .collect()
 }
 
 fn envelope(tool: &str, arguments: Value) -> (&'static str, Value) {
-    ("tool_execute", json!({"tool":tool,"arguments":{"items":[arguments]}}))
+    (
+        "tool_execute",
+        json!({"tool":tool,"arguments":{"items":[arguments]}}),
+    )
 }
 
 /// The stable gateway pair is the only model-visible tool surface.
@@ -304,7 +313,11 @@ fn assert_only_gateway_pair_exposed(model: &Server) {
         .map(str::to_string)
         .collect();
     names.sort();
-    assert_eq!(names, vec!["tool_execute".to_string(), "tool_search".to_string()], "{names:?}");
+    assert_eq!(
+        names,
+        vec!["tool_execute".to_string(), "tool_search".to_string()],
+        "{names:?}"
+    );
     assert!(exposed_assigned_tools(model).is_empty());
 }
 
@@ -318,14 +331,14 @@ async fn saved_empty_allowlist_blocks_forged_local_tools_at_native_execution() {
             "fs_write_text",
             json!({"path":marker,"content":"unauthorized"}),
         ),
-        ("bash_exec", json!({"command":"echo forbidden"})),
+        ("command_exec", json!({"command":"echo forbidden"})),
     ])
     .await;
     run(
         &app,
         &authorization,
         &model,
-        vec![forged_tool("fs_write_text"), forged_tool("bash_exec")],
+        vec![forged_tool("fs_write_text"), forged_tool("command_exec")],
     )
     .await;
     assert_only_gateway_pair_exposed(&model);
@@ -334,7 +347,7 @@ async fn saved_empty_allowlist_blocks_forged_local_tools_at_native_execution() {
         "a forged DTO must not admit a local executor"
     );
     assert!(tool_output(&model, "fs_write_text").contains("is not allowed"));
-    assert!(tool_output(&model, "bash_exec").contains("is not allowed"));
+    assert!(tool_output(&model, "command_exec").contains("is not allowed"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -346,13 +359,13 @@ async fn saved_selected_local_tools_execute_through_the_gateway_pair() {
     std::fs::write(&source, "allowed read").unwrap();
     std::fs::write(temp.path().join("second.txt"), "second batched read").unwrap();
     let model = model_server(vec![
-        envelope("bash_exec", json!({"command":"echo native-alias-authorized"})),
+        envelope("command_exec", json!({"command":"echo native-alias-authorized"})),
         ("tool_execute",json!({"tool":"fs_read_text","arguments":{"items":[{"path":source},{"path":temp.path().join("second.txt")}]}})),
         // Direct inner-name calls bypass the gateway surface and must be
         // rejected even for saved tools.
         ("fs_write_text", json!({"path":marker,"content":"denied"})),
         (
-            "system_exec",
+            "command_exec",
             json!({"command":"echo canonical-name-must-not-expand-authority"}),
         ),
     ])
@@ -362,25 +375,31 @@ async fn saved_selected_local_tools_execute_through_the_gateway_pair() {
         &authorization,
         &model,
         vec![
-            forged_tool("bash_exec"),
+            forged_tool("command_exec"),
             forged_tool("fs_read_text"),
             forged_tool("fs_write_text"),
-            forged_tool("system_exec"),
+            forged_tool("command_exec"),
         ],
     )
     .await;
     // Only the stable pair is model-visible; saved inner tools never appear
     // as request-level schemas, so forged request DTOs cannot leak in.
     assert_only_gateway_pair_exposed(&model);
-    assert!(tool_output(&model, "bash_exec").contains("native-alias-authorized"));
+    assert!(tool_output(&model, "command_exec").contains("native-alias-authorized"));
     let batch: Value = serde_json::from_str(&tool_output(&model, "fs_read_text")).unwrap();
-    assert_eq!(batch["results"].as_array().unwrap().len(),2);
-    assert!(batch["results"].as_array().unwrap().iter().all(|item|item["isError"]==false));
+    assert_eq!(batch["results"].as_array().unwrap().len(), 2);
+    assert!(
+        batch["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["isError"] == false)
+    );
     assert!(tool_output(&model, "fs_read_text").contains("second batched read"));
     assert!(tool_output(&model, "fs_read_text").contains("allowed read"));
     assert!(!marker.exists());
     assert!(tool_output(&model, "fs_write_text").contains("is not allowed"));
-    assert!(tool_output(&model, "system_exec").contains("is not allowed"));
+    assert!(tool_outputs(&model, "command_exec").iter().any(|output| output.contains("is not allowed")));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -393,7 +412,7 @@ async fn nonempty_request_narrows_saved_local_authority_while_empty_uses_saved_p
     // saved selection: fs.read_text executes, bash.exec is denied.
     let narrowed = model_server(vec![
         envelope("fs_read_text", json!({"path":source})),
-        envelope("bash_exec", json!({"command":"echo must-be-denied"})),
+        envelope("command_exec", json!({"command":"echo must-be-denied"})),
     ])
     .await;
     run(
@@ -405,16 +424,16 @@ async fn nonempty_request_narrows_saved_local_authority_while_empty_uses_saved_p
     .await;
     assert_only_gateway_pair_exposed(&narrowed);
     assert!(tool_output(&narrowed, "fs_read_text").contains("read only"));
-    assert!(tool_output(&narrowed, "bash_exec").contains("is not allowed"));
+    assert!(tool_output(&narrowed, "command_exec").contains("is not allowed"));
     // An empty request keeps the saved policy: both saved tools may execute.
     let saved = model_server(vec![(
         "tool_execute",
-        json!({"tool":"bash_exec","arguments":{"items":[{"command":"echo empty-request-keeps-saved-policy"}]}}),
+        json!({"tool":"command_exec","arguments":{"items":[{"command":"echo empty-request-keeps-saved-policy"}]}}),
     )])
     .await;
     run(&app, &authorization, &saved, vec![]).await;
     assert_only_gateway_pair_exposed(&saved);
-    assert!(tool_output(&saved, "bash_exec").contains("empty-request-keeps-saved-policy"));
+    assert!(tool_output(&saved, "command_exec").contains("empty-request-keeps-saved-policy"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -425,11 +444,11 @@ async fn gateway_search_and_envelopes_cannot_authorize_tools_outside_saved_selec
     // Discovery round: search for saved and unsaved tools alike.
     let model = model_server_rounds(vec![
         vec![
-            ("tool_search", json!({"items":[{"tool":"bash_exec"}]})),
+            ("tool_search", json!({"items":[{"tool":"command_exec"}]})),
             ("tool_search", json!({"items":[{"query":"write text"}]})),
         ],
         vec![
-            envelope("bash_exec", json!({"command":"echo gateway-authorized"})),
+            envelope("command_exec", json!({"command":"echo gateway-authorized"})),
             envelope("fs_write_text", json!({"path":marker,"content":"denied"})),
         ],
     ])
@@ -440,7 +459,7 @@ async fn gateway_search_and_envelopes_cannot_authorize_tools_outside_saved_selec
         &app,
         &authorization,
         &model,
-        vec![forged_tool("fs_write_text"), forged_tool("bash_exec")],
+        vec![forged_tool("fs_write_text"), forged_tool("command_exec")],
     )
     .await;
     assert_only_gateway_pair_exposed(&model);
@@ -454,23 +473,29 @@ async fn gateway_search_and_envelopes_cannot_authorize_tools_outside_saved_selec
         .iter()
         .filter_map(|tool| tool["call_name"].as_str())
         .collect();
-    assert!(bash_tools.contains(&"bash_exec"), "{bash_results}");
+    assert!(bash_tools.contains(&"command_exec"), "{bash_results}");
     let bash_descriptor = bash_results["tools"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|tool| tool["call_name"] == "bash_exec")
+        .find(|tool| tool["call_name"] == "command_exec")
         .unwrap();
     assert_ne!(bash_descriptor["description"], "FORGED DESCRIPTION");
-    assert!(bash_descriptor["input_schema"]["properties"]["items"]["items"]["properties"]["command"].is_object());
-    assert!(bash_descriptor["input_schema"]["properties"]["items"]["items"]["properties"]["forged"].is_null());
+    assert!(
+        bash_descriptor["input_schema"]["properties"]["items"]["items"]["properties"]["command"]
+            .is_object()
+    );
+    assert!(
+        bash_descriptor["input_schema"]["properties"]["items"]["items"]["properties"]["forged"]
+            .is_null()
+    );
     let write_results = &searches[1];
     assert!(
         write_results["tools"].as_array().unwrap().is_empty(),
         "unsaved tools must not be discoverable: {write_results}"
     );
     // Envelope execution still enforces the saved selection.
-    let bash_output = tool_output(&model, "bash_exec");
+    let bash_output = tool_output(&model, "command_exec");
     assert!(bash_output.contains("gateway-authorized"), "{bash_output}");
     assert!(!marker.exists());
     assert!(tool_output(&model, "fs_write_text").contains("is not allowed"));
@@ -532,7 +557,10 @@ async fn dynamic_mcp_respects_disabled_empty_selected_and_request_intersection()
     )
     .await;
     let selected = model_server(vec![
-        (eliteforge_agent_core::TOOL_SEARCH_CALL_NAME, json!({"items":[{"domainCode":"mcp.selected_tools","limit":20}]})),
+        (
+            eliteforge_agent_core::TOOL_SEARCH_CALL_NAME,
+            json!({"items":[{"domainCode":"mcp.selected_tools","limit":20}]}),
+        ),
         envelope("mcp_selected_tools_search_docs", json!({"query":"allowed"})),
         envelope("mcp_other_tools_search_docs", json!({"query":"unselected"})),
     ])
@@ -549,12 +577,22 @@ async fn dynamic_mcp_respects_disabled_empty_selected_and_request_intersection()
     .await;
     assert_only_gateway_pair_exposed(&selected);
     let prompt = selected.requests.lock().unwrap()[0]["messages"].to_string();
-    assert!(prompt.contains("mcp.selected_tools"), "MCP group must be advertised in the initial prompt: {prompt}");
+    assert!(
+        prompt.contains("mcp.selected_tools"),
+        "MCP group must be advertised in the initial prompt: {prompt}"
+    );
     assert!(!prompt.contains("FORGED DESCRIPTION"));
     let discovered = search_outputs(&selected);
-    assert!(discovered.iter().any(|output| output["tools"].as_array().is_some_and(|tools| {
-        tools.iter().any(|tool| tool["call_name"] == "mcp_selected_tools_search_docs")
-    })), "the advertised MCP group must be searchable: {discovered:?}");
+    assert!(
+        discovered
+            .iter()
+            .any(|output| output["tools"].as_array().is_some_and(|tools| {
+                tools
+                    .iter()
+                    .any(|tool| tool["call_name"] == "mcp_selected_tools_search_docs")
+            })),
+        "the advertised MCP group must be searchable: {discovered:?}"
+    );
     assert!(tool_output(&selected, "mcp_selected_tools_search_docs").contains("native MCP result"));
     assert!(tool_output(&selected, "mcp_other_tools_search_docs").contains("is not allowed"));
     assert!(
@@ -643,12 +681,18 @@ async fn dynamic_mcp_respects_disabled_empty_selected_and_request_intersection()
     assert_eq!(selected_server.requests.lock().unwrap().len(), calls_before);
 }
 
-
 #[tokio::test]
 async fn disabling_tool_extension_removes_gateway_tools_and_guidance() {
     let (app, authorization) = fixture(&[]).await;
     for enabled in [false, true] {
-        api(&app, &authorization, Method::PUT, "/api/v1/capabilities/extensions/tool/enabled", json!({"enabled":enabled})).await;
+        api(
+            &app,
+            &authorization,
+            Method::PUT,
+            "/api/v1/capabilities/extensions/tool/enabled",
+            json!({"enabled":enabled}),
+        )
+        .await;
         let model = model_server_rounds(vec![]).await;
         run(&app, &authorization, &model, vec![]).await;
         let prompt = model.requests.lock().unwrap()[0]["messages"].to_string();
@@ -657,8 +701,14 @@ async fn disabling_tool_extension_removes_gateway_tools_and_guidance() {
             assert!(prompt.contains(eliteforge_agent_core::TOOL_SEARCH_CALL_NAME));
         } else {
             assert!(exposed(&model).is_empty());
-            assert!(!prompt.contains(eliteforge_agent_core::TOOL_SEARCH_CALL_NAME), "disabled gateway guidance leaked: {prompt}");
-            assert!(!prompt.contains(eliteforge_agent_core::TOOL_EXECUTE_CALL_NAME), "disabled execution guidance leaked: {prompt}");
+            assert!(
+                !prompt.contains(eliteforge_agent_core::TOOL_SEARCH_CALL_NAME),
+                "disabled gateway guidance leaked: {prompt}"
+            );
+            assert!(
+                !prompt.contains(eliteforge_agent_core::TOOL_EXECUTE_CALL_NAME),
+                "disabled execution guidance leaked: {prompt}"
+            );
         }
     }
 }

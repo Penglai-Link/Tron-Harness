@@ -4,11 +4,6 @@
 
 -- tron:business
 
-CREATE TABLE agent_loop_designs (
-    loop_code TEXT PRIMARY KEY,
-    version INTEGER NOT NULL,
-    config_json TEXT NOT NULL
-);
 
 CREATE TABLE agent_workspace_grant_policies(agent_code TEXT PRIMARY KEY);
 
@@ -192,38 +187,10 @@ CREATE TABLE knowledge_chunk_contexts (
  PRIMARY KEY(knowledge_base_id,source_code,context_id)
 );
 
-CREATE TABLE models (
-    id INTEGER PRIMARY KEY,
-    scope_kind TEXT NOT NULL,
-    workspace_code TEXT NULL,
-    model_code TEXT NOT NULL UNIQUE,
-    display_name TEXT NOT NULL,
-    vendor TEXT NOT NULL,
-    protocol TEXT NOT NULL,
-    model_type TEXT NOT NULL,
-    base_url TEXT NOT NULL,
-    api_path TEXT NULL,
-    api_key_ref TEXT NOT NULL,
-    model_name TEXT NOT NULL,
-    enabled INTEGER NOT NULL,
-    description TEXT NULL,
-    thinking_enabled INTEGER NOT NULL,
-    structured_output_enabled INTEGER NOT NULL,
-    temperature REAL NULL,
-    max_tokens INTEGER NULL,
-    context_window_tokens INTEGER NULL,
-    top_p REAL NULL,
-    timeout_ms INTEGER NULL,
-    max_retries INTEGER NULL,
-    last_verified_at INTEGER NULL,
-    last_verify_status TEXT NULL,
-    last_verify_message TEXT NULL,
-    source_kind TEXT NOT NULL,
-    source_model_code TEXT NULL,
-    allow_inheritance INTEGER NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-, model_capabilities TEXT NULL, responses_stateful_enabled INTEGER NOT NULL DEFAULT 0, supported_reasoning_efforts TEXT NOT NULL DEFAULT '[]', default_reasoning_effort TEXT);
+
+CREATE TABLE automatic_router_sources (
+    router_kind TEXT PRIMARY KEY, sources_json TEXT NOT NULL CHECK(json_valid(sources_json))
+);
 
 CREATE TABLE configured_model_providers (
     provider_id TEXT PRIMARY KEY,
@@ -232,7 +199,7 @@ CREATE TABLE configured_model_providers (
 );
 CREATE TABLE configured_provider_models (
     provider_id TEXT NOT NULL REFERENCES configured_model_providers(provider_id) ON DELETE CASCADE,
-    model_code TEXT NOT NULL UNIQUE REFERENCES models(model_code) ON DELETE CASCADE,
+    model_code TEXT NOT NULL UNIQUE,
     PRIMARY KEY (provider_id, model_code)
 );
 
@@ -332,11 +299,6 @@ CREATE TABLE person_ai_profile_credentials (
     updated_at INTEGER NOT NULL
 );
 
-CREATE TABLE platform_default_models (
-    model_type TEXT NOT NULL PRIMARY KEY,
-    model_code TEXT NOT NULL,
-    updated_at INTEGER NOT NULL
-);
 
 CREATE TABLE platform_discovered_tools(tool_code TEXT PRIMARY KEY, config_json TEXT NOT NULL);
 
@@ -477,6 +439,7 @@ CREATE TABLE provider_authorization_sessions (
 );
 
 CREATE TABLE "provider_catalog_models" (
+    tags_json TEXT NOT NULL DEFAULT '[]',
     provider_code TEXT NOT NULL,
     model_code TEXT NOT NULL,
     model_name TEXT NOT NULL,
@@ -528,6 +491,8 @@ CREATE TABLE provider_model_run_snapshots (
 );
 
 CREATE TABLE provider_multimedia_catalog_models (
+    upstream_vendor_code TEXT, upstream_vendor_name TEXT,
+    input_coefficient REAL, cache_hit_coefficient REAL, output_coefficient REAL,
     dimension INTEGER NULL CHECK (dimension IS NULL OR dimension > 0),
     tags_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(tags_json) AND json_type(tags_json)='array'),
     provider_code TEXT NOT NULL,
@@ -984,13 +949,6 @@ CREATE TABLE "tasks" (
                 archived_at INTEGER NULL
             );
 
-CREATE TABLE workspace_default_models (
-    workspace_code TEXT NOT NULL,
-    model_type TEXT NOT NULL,
-    model_code TEXT NOT NULL,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY (workspace_code, model_type)
-);
 
 CREATE TABLE workspace_internal_agent_definitions (
     workspace_code TEXT NOT NULL,
@@ -999,7 +957,7 @@ CREATE TABLE workspace_internal_agent_definitions (
     description TEXT NULL CHECK (description IS NULL OR length(trim(description)) <= 200),
     role_prompt TEXT,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL, loop_code TEXT, avatar_id TEXT, group_name TEXT,
+    updated_at INTEGER NOT NULL, avatar_id TEXT, group_name TEXT,
     candidate_model_codes_json TEXT NOT NULL DEFAULT 'null',
     PRIMARY KEY (workspace_code, agent_code)
 );
@@ -1020,6 +978,7 @@ CREATE TABLE workspace_internal_agent_mcp_server_assignments (
 );
 
 CREATE TABLE workspace_internal_agent_policies (
+    selected_category_codes TEXT NOT NULL DEFAULT '[]',
     workspace_code TEXT NOT NULL,
     agent_code TEXT NOT NULL,
     tool_assignment_mode TEXT NOT NULL,
@@ -1159,19 +1118,9 @@ CREATE INDEX idx_knowledge_bases_owner ON knowledge_bases(owner_user_code);
 CREATE INDEX idx_memory_work_domains_status
     ON memory_work_domains (status, name);
 
-CREATE UNIQUE INDEX idx_models_platform_display_name
-    ON models(display_name)
-    WHERE scope_kind = 'platform';
 
-CREATE INDEX idx_models_scope_workspace
-    ON models(scope_kind, workspace_code);
 
-CREATE INDEX idx_models_source_model_code
-    ON models(source_model_code);
 
-CREATE UNIQUE INDEX idx_models_workspace_display_name
-    ON models(workspace_code, display_name)
-    WHERE scope_kind = 'workspace';
 
 CREATE UNIQUE INDEX idx_navigation_menu_tree_item_position
 ON navigation_menu_tree_items (tree_id, COALESCE(parent_item_id, 0), position);
@@ -1179,8 +1128,6 @@ ON navigation_menu_tree_items (tree_id, COALESCE(parent_item_id, 0), position);
 CREATE INDEX idx_person_ai_profile_credentials_status
     ON person_ai_profile_credentials(status, updated_at DESC);
 
-CREATE INDEX idx_platform_default_models_model_code
-    ON platform_default_models(model_code);
 
 CREATE INDEX idx_platform_mcp_servers_enabled_updated_at
     ON platform_mcp_servers (enabled, updated_at);
@@ -1289,8 +1236,6 @@ CREATE INDEX idx_tasks_owner_list ON tasks(owner_dude_code, task_code, archived_
 
 CREATE INDEX idx_tasks_workspace_status ON tasks(workspace_code, status);
 
-CREATE INDEX idx_workspace_default_models_model_code
-    ON workspace_default_models(model_code);
 
 CREATE INDEX idx_workspace_internal_agent_mcp_server_assignments_workspace
     ON workspace_internal_agent_mcp_server_assignments (workspace_code, agent_code);
@@ -1327,15 +1272,7 @@ CREATE INDEX idx_workspaces_status
 CREATE INDEX workspace_session_links_workspace ON workspace_session_links(workspace_code);
 CREATE INDEX workspace_session_links_owner_source ON workspace_session_links(json_extract(business_json,'$.user_code'),json_extract(business_json,'$.source_code'));
 
-CREATE TRIGGER platform_agent_loop_insert BEFORE INSERT ON platform_internal_agent_configs
-WHEN COALESCE(json_extract(NEW.config_json, '$.loopCode'), '') != ''
-BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM agent_loop_designs WHERE loop_code = json_extract(NEW.config_json, '$.loopCode'))
-    THEN RAISE(ABORT, 'unknown agent loop') END; END;
 
-CREATE TRIGGER platform_agent_loop_update BEFORE UPDATE OF config_json ON platform_internal_agent_configs
-WHEN COALESCE(json_extract(NEW.config_json, '$.loopCode'), '') != ''
-BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM agent_loop_designs WHERE loop_code = json_extract(NEW.config_json, '$.loopCode'))
-    THEN RAISE(ABORT, 'unknown agent loop') END; END;
 
 CREATE TRIGGER resource_server_accounts_require_parent_insert
              BEFORE INSERT ON resource_server_accounts
@@ -1384,15 +1321,7 @@ BEGIN
     SELECT RAISE(ABORT, 'prompt identity fields are immutable');
 END;
 
-CREATE TRIGGER workspace_agent_loop_insert BEFORE INSERT ON workspace_internal_agent_definitions
-WHEN NEW.loop_code IS NOT NULL
-BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM agent_loop_designs WHERE loop_code = NEW.loop_code)
-    THEN RAISE(ABORT, 'unknown agent loop') END; END;
 
-CREATE TRIGGER workspace_agent_loop_update BEFORE UPDATE OF loop_code ON workspace_internal_agent_definitions
-WHEN NEW.loop_code IS NOT NULL
-BEGIN SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM agent_loop_designs WHERE loop_code = NEW.loop_code)
-    THEN RAISE(ABORT, 'unknown agent loop') END; END;
 
 -- 内置目录数据
 
@@ -1418,9 +1347,8 @@ INSERT INTO navigation_menus (id, menu_code, source, menu_type, page_code, url, 
     (734510000000000002, 'APPS', 'BuiltIn', 'Internal', 'apps.index', NULL, 'FolderGit2', '查看和管理工作区中的应用。', 'Browse and manage applications in the workspace.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000003, 'TASKS', 'BuiltIn', 'Internal', 'tasks.index', NULL, 'ListTodo', '创建、查看和跟踪工作任务。', 'Create, review, and track work tasks.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000004, 'AUTOMATIONS', 'BuiltIn', 'Internal', 'automations.index', NULL, 'AlarmClock', '配置自动化规则并查看执行情况。', 'Configure automation rules and review their executions.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000005, 'AGENT_OPERATIONS', 'BuiltIn', 'Group', NULL, NULL, 'Bot', '智能体相关入口，包括 Dude、MCP 服务和模型。', 'Agent-related entry points, including Dude, MCP servers, and models.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
+    (734510000000000005, 'AGENT_OPERATIONS', 'BuiltIn', 'Group', NULL, NULL, 'Bot', '智能体相关入口，包括 Dude 和 MCP 服务。', 'Agent-related entry points, including Dude and MCP servers.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000008, 'MCP_SERVERS', 'BuiltIn', 'Internal', 'mcpServers.index', NULL, 'PlugZap', '配置和管理可供智能体使用的 MCP 服务。', 'Configure MCP servers available to agents.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000010, 'MODELS', 'BuiltIn', 'Internal', 'models.index', NULL, 'Sparkles', '管理模型服务商、模型及其配置。', 'Manage model providers, models, and their configuration.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000012, 'DATA', 'BuiltIn', 'Group', NULL, NULL, 'Database', '数据与资源管理相关入口。', 'Entry points for data and resource management.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000017, 'RESOURCE_MANAGEMENT', 'BuiltIn', 'Group', NULL, NULL, 'Archive', '管理文件、数据源、服务器及服务器账号。', 'Manage files, data sources, servers, and server accounts.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000018, 'FILE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.files', NULL, 'Folder', '浏览和管理工作区文件与已上传资源。', 'Browse and manage workspace files and uploaded resources.', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
@@ -1449,8 +1377,6 @@ INSERT INTO navigation_menu_translations (id, menu_id, locale, label) VALUES
     (734530000000000010, 734510000000000005, 'en-US', 'Agent Operations'),
     (734530000000000015, 734510000000000008, 'zh-CN', 'MCP 服务'),
     (734530000000000016, 734510000000000008, 'en-US', 'MCP Servers'),
-    (734530000000000019, 734510000000000010, 'zh-CN', '模型'),
-    (734530000000000020, 734510000000000010, 'en-US', 'Models'),
     (734530000000000023, 734510000000000012, 'zh-CN', '数据'),
     (734530000000000024, 734510000000000012, 'en-US', 'Data'),
     (734530000000000033, 734510000000000017, 'zh-CN', '资源管理'),
@@ -1495,7 +1421,6 @@ INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, po
     (734520000000000022, 734500000000000001, 734510000000000022, 734520000000000001, 3, 'Inline'),
     (734520000000000005, 734500000000000001, 734510000000000005, 734570200000000001, 2, 'Inline'),
     (734520000000000008, 734500000000000001, 734510000000000008, 734520000000000005, 0, 'Inline'),
-    (734520000000000010, 734500000000000001, 734510000000000010, 734520000000000005, 1, 'Inline'),
     (734520000000000012, 734500000000000001, 734510000000000012, 734570200000000001, 3, 'Inline'),
     (734520000000000017, 734500000000000001, 734510000000000017, 734520000000000012, 0, 'Inline'),
     (734520000000000018, 734500000000000001, 734510000000000018, 734520000000000017, 0, 'Inline'),

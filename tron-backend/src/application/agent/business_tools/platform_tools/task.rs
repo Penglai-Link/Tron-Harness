@@ -18,7 +18,7 @@ use super::common::{
 };
 
 pub(super) fn tools(tasks: TaskService) -> Vec<Arc<dyn Tool>> {
-    vec![
+    let tools: Vec<Arc<dyn Tool>> = vec![
         Arc::new(TaskPageTool {
             tasks: tasks.clone(),
         }),
@@ -32,7 +32,45 @@ pub(super) fn tools(tasks: TaskService) -> Vec<Arc<dyn Tool>> {
             tasks: tasks.clone(),
         }),
         Arc::new(TaskRestoreTool { tasks }),
-    ]
+    ];
+    let mut result: Vec<Arc<dyn Tool>> = Vec::new();
+    for tool in tools {
+        let dude_name = match tool.name() {
+            "task_page" => "dude_task_page",
+            "task_create" => "dude_task_create",
+            "task_update" => "dude_task_update",
+            "task_delete" => "dude_task_delete",
+            "task_restore" => "dude_task_restore",
+            _ => unreachable!(),
+        };
+        result.push(Arc::new(TaskScopeTool { name: tool.name().to_string(), inner: tool.clone(), dude: false }));
+        result.push(Arc::new(TaskScopeTool { name: dude_name.into(), inner: tool, dude: true }));
+    }
+    result
+}
+
+struct TaskScopeTool { name: String, inner: Arc<dyn Tool>, dude: bool }
+impl Tool for TaskScopeTool {
+    fn name(&self) -> &str { &self.name }
+    fn exec(&self, mut request: ToolRequest, context: &AgentRunContext) -> Result<ToolExecutionResult, ToolError> {
+        if self.dude {
+            if !context.is_owning_dude() || !context.workspace_code.trim().is_empty() {
+                return Err(ToolError::ExecutionFailed("Dude task tools require the owning platform Dude".into()));
+            }
+            if request.input.get("workspaceCode").is_some() {
+                return Err(ToolError::ExecutionFailed("Dude task tools do not accept workspaceCode".into()));
+            }
+        } else {
+            if context.is_owning_dude() { return Err(ToolError::ExecutionFailed("Dude must use dude_task tools".into())); }
+            if request.input.get("workspaceCode").and_then(serde_json::Value::as_str).is_none_or(|s| s.trim().is_empty()) {
+                return Err(ToolError::ExecutionFailed("workspaceCode is required".into()));
+            }
+        }
+        request.tool_name = self.inner.name().into();
+        let mut result = self.inner.exec(request, context)?;
+        result.observation.tool_name = self.name.clone();
+        Ok(result)
+    }
 }
 
 #[derive(Clone)]

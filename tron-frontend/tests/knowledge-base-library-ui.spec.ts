@@ -101,7 +101,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     const zh = locale === "zh-CN";
     const created: { name: string; description: string; indexSettings: Record<string, unknown> }[] = [];
     let failCreate = true;
-    await page.route("**/api/v1/admin/platform/models**", route => route.fulfill({ json: { code: "0", message: "ok", data: [{ apiKeyRef: "", parameters: {}, baseUrl: "", modelCode: "vision-model", displayName: "Vision model", enabled: true, modelType: "TEXT", modelCapabilities: ["VISION_UNDERSTANDING"] }] } }));
+    await page.route("**/api/v1/model-providers/select-options**", route => route.fulfill({ json: { code: "0", message: "ok", data: [{ modelCode: "vision-model", optionCode: "vision-model", displayName: "Vision model", enabled: true, modelType: "TEXT", modelSelection: { kind: "Fixed", modelCode: "vision-model" }, sourceKind: "Provider" }] } }));
     await page.route("**/api/v1/model-providers/PersonAi/catalog", route => route.fulfill({ json: { code: "0", message: "ok", data: [{ catalogModelType: "Embedding", status: "Available", modelId: "embedding-1", modelCode: "bge-m3", modelName: "BGE-M3" }] } }));
     await page.route("**/api/v1/knowledge-bases**", async route => {
       const request = route.request(); const path = new URL(request.url()).pathname;

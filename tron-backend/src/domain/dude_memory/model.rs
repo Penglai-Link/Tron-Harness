@@ -179,6 +179,7 @@ pub struct BehaviorCheck {
 pub enum DudeMemoryError {
     NotFound,
     Conflict,
+    ExecutionBusy,
     Invalid(String),
     Dependency(String),
     Storage(String),
@@ -189,6 +190,7 @@ impl std::fmt::Display for DudeMemoryError {
         match self {
             Self::NotFound => f.write_str("Dude memory record not found"),
             Self::Conflict => f.write_str("Dude memory record or installed skill changed"),
+            Self::ExecutionBusy => f.write_str("Dude memory session already has an active run"),
             Self::Invalid(s) | Self::Dependency(s) | Self::Storage(s) | Self::Installation(s) => {
                 f.write_str(s)
             }

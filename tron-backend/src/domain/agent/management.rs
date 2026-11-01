@@ -12,6 +12,8 @@ pub enum ManagedAgentType {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ToolAssignmentMode {
     AllPlatformTools,
+    #[serde(rename = "SelectedCategories", alias = "SELECTED_CATEGORIES")]
+    SelectedCategories,
     SelectedTools,
     #[serde(rename = "AllReadOnlyTools", alias = "ALL_READ_ONLY_TOOLS")]
     AllReadOnlyTools,
@@ -38,6 +40,8 @@ pub struct WorkspaceInternalAgentPolicy {
     pub workspace_code: String,
     pub agent_code: String,
     pub tool_assignment_mode: ToolAssignmentMode,
+    #[serde(default)]
+    pub selected_category_codes: Vec<String>,
     pub mcp_access_mode: McpAccessMode,
     pub max_steps: u32,
     pub max_tool_calls: u32,
@@ -55,8 +59,6 @@ pub struct WorkspaceInternalAgentDefinition {
     pub name: Option<String>,
     pub description: Option<String>,
     pub role_prompt: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub loop_code: Option<String>,
     #[serde(default)]
     pub avatar_id: Option<String>,
     #[serde(default)]
@@ -77,8 +79,6 @@ pub struct PlatformInternalAgentConfig {
     #[serde(default)]
     pub description: String,
     pub role_prompt: String,
-    #[serde(default)]
-    pub loop_code: Option<String>,
     #[serde(default = "default_avatar_id")]
     pub avatar_id: String,
     #[serde(default)]
@@ -86,6 +86,8 @@ pub struct PlatformInternalAgentConfig {
     #[serde(default)]
     pub candidate_model_codes: Vec<String>,
     pub tool_assignment_mode: ToolAssignmentMode,
+    #[serde(default)]
+    pub selected_category_codes: Vec<String>,
     pub mcp_access_mode: McpAccessMode,
     pub max_steps: u32,
     pub max_tool_calls: u32,
@@ -124,8 +126,6 @@ pub struct InternalAgentToolPolicy {
     pub name: String,
     pub description: String,
     pub role_prompt: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub loop_code: Option<String>,
     #[serde(default = "default_avatar_id")]
     pub avatar_id: String,
     #[serde(default)]
@@ -137,6 +137,8 @@ pub struct InternalAgentToolPolicy {
     pub built_in: bool,
     pub source: InternalAgentPolicySource,
     pub tool_assignment_mode: ToolAssignmentMode,
+    #[serde(default)]
+    pub selected_category_codes: Vec<String>,
     pub mcp_access_mode: McpAccessMode,
     pub max_steps: u32,
     pub max_tool_calls: u32,
@@ -280,10 +282,6 @@ pub enum AgentManagementError {
     InternalAgentGroupInvalid,
     PlatformAgentReadOnly,
     BuiltinAgentReadOnly,
-    LoopInvalid,
-    LoopNotFound,
-    LoopConflict,
-    LoopInUse,
     InternalAgentCodeInvalid,
     InternalAgentCodeConflict,
     InternalAgentPolicyInvalid,
@@ -328,9 +326,15 @@ pub enum ToolAvailabilityState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCatalogRecord {
+    #[serde(default)]
+    pub display: Option<eliteforge_agent_core::ToolDisplayMetadata>,
     pub tool_code: String,
     pub tool_name: String,
     pub domain_code: String,
+    #[serde(default)]
+    pub category: Option<eliteforge_agent_core::ToolCategory>,
+    #[serde(default)]
+    pub source: eliteforge_agent_core::ToolSource,
     pub name: String,
     pub description: String,
     pub operation_kind: ToolOperationKind,
@@ -344,4 +348,6 @@ fn default_avatar_id() -> String {
     "robot".into()
 }
 
-fn default_agent_enabled() -> bool { true }
+fn default_agent_enabled() -> bool {
+    true
+}

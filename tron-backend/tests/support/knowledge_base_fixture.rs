@@ -257,11 +257,11 @@ impl LlmRuntimeModelResolver for EmbeddingResolver {
         Ok(Some(RuntimeModelConfig {
             supports_developer_role: false,
             model_code: code
-                .filter(|code| !matches!(*code,"PERSON_AI:ROUTE:EmbeddingAuto"|"PERSON_AI:ROUTE:MultimodalEmbeddingAuto"))
+                .filter(|code| !matches!(*code,"PERSON_AI:ROUTE:EmbeddingAuto"|"PERSON_AI:ROUTE:MultimodalEmbeddingAuto"|"AUTO:TextEmbedding"|"AUTO:MultimodalEmbedding"))
                 .unwrap_or("fixture-embedding")
                 .into(),
             protocol: ModelProtocol::OpenAiCompatible,
-            model_type: ModelType::Embedding,
+            model_type: ModelType::TextEmbedding,
             base_url: "http://fixture.invalid/v1".into(),
             api_path: None,
             api_key: "synthetic-key".into(),

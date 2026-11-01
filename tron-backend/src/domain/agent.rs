@@ -13,6 +13,7 @@ mod model_config;
 mod model_exchange;
 mod run;
 mod tool;
+pub(crate) use tool::validate_workspace_request;
 mod tool_assignment;
 pub use tool_assignment::ToolAssignmentStrategy;
 mod tool_schema;
@@ -50,7 +51,7 @@ pub use management::{
 pub use message::{AgentMessage, AgentMessagePart};
 pub use model_config::AgentModelConfig;
 pub use model_exchange::{
-    ModelFinish, ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind,
+    ModelFinish, ModelOutputItem, ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind,
     ModelTokenUsage, TokenEstimateSnapshot, TokenUsageAuditSnapshot, ToolCall,
 };
 pub(crate) use model_exchange::{responses_function_call_item_json, responses_input_item_json};
@@ -60,9 +61,7 @@ pub use run::{
     AgentRunStatus,
 };
 pub use tool::{
-    InProcessTool, Tool, ToolError, ToolExecutionControl, ToolExecutionFuture,
-    ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
+    InProcessTool, Tool, ToolError, ToolExecutionControl, ToolExecutionFuture, ToolExecutionResult,
+    ToolObservation, ToolRegistry, ToolRequest,
 };
 pub use tool_schema::PreparedToolSchema;
-
-pub mod loop_design;

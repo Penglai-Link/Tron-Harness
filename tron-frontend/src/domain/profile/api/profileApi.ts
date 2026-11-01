@@ -15,6 +15,7 @@ export interface PersonAiProfile {
 }
 
 export interface PersonAiAccountSummary {
+  nickname?: string | null;
   vipLevel: number | null;
   remainingPoints: number | null;
 }
@@ -92,13 +93,13 @@ export function createPendingProfile() {
 }
 
 export function createPersonAiAuthorization() {
-  return createModelProviderAuthorization("PersonAi");
+  return createModelProviderAuthorization("PersonAi", {}, "Profile");
 }
 
 export function pollPersonAiAuthorization(
   sessionId: string,
 ) {
-  return pollModelProviderAuthorization("PersonAi", sessionId);
+  return pollModelProviderAuthorization("PersonAi", sessionId, "Profile");
 }
 
 export function registerProfile(personAiUserId: string, personAiUsername: string) {

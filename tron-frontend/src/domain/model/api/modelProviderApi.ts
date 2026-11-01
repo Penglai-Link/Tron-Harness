@@ -21,8 +21,9 @@ export type ProviderCatalogProtocol =
   | "EMBEDDINGS";
 
 export interface ModelProviderConnection {
+  providerType?: string | null;
   providerCode: string;
-  source?: "PersonAi" | "Custom";
+  source?: "Plugin" | "PersonAi" | "Custom";
   personAiUserId: string | null;
   personAiUsername: string | null;
   displayName: string;
@@ -59,6 +60,7 @@ export interface ProviderCatalogModel {
 }
 
 export interface ProviderAccountBalance {
+  nickname?: string | null;
   username: string | null;
   vipLevel: number | null;
   remainingPoints: number | null;
@@ -99,9 +101,11 @@ export const modelProviderApiEndpoints = {
   catalog: "GET /api/v1/model-providers/{providerCode}/catalog",
   accountBalance: "GET /api/v1/model-providers/{providerCode}/account-balance",
   syncRuns: "GET /api/v1/model-providers/{providerCode}/sync-runs",
-  authorize: "POST /api/v1/model-providers/{providerCode}/authorization-sessions",
-  authorization: "GET /api/v1/model-providers/{providerCode}/authorization-sessions/{sessionId}",
-  pollAuthorization: "POST /api/v1/model-providers/{providerCode}/authorization-sessions/{sessionId}/poll",
+  authorize: "POST /api/v1/model-providers/{providerCode}/reauthorization-sessions",
+  authorization: "GET /api/v1/model-providers/{providerCode}/reauthorization-sessions/{sessionId}",
+  pollAuthorization: "POST /api/v1/model-providers/{providerCode}/reauthorization-sessions/{sessionId}/poll",
+  profileAuthorize: "POST /api/v1/model-providers/{providerCode}/authorization-sessions",
+  profilePollAuthorization: "POST /api/v1/model-providers/{providerCode}/authorization-sessions/{sessionId}/poll",
   sync: "POST /api/v1/model-providers/{providerCode}/sync",
   disconnect: "DELETE /api/v1/model-providers/{providerCode}",
 } as const;
@@ -110,14 +114,14 @@ export function fetchModelProviderConnections(signal?: AbortSignal) {
   return requestApi<ModelProviderConnection[]>(modelProviderApiEndpoints.list, { signal });
 }
 
-export function fetchModelProviderConnection(providerCode: ModelProviderCode, signal?: AbortSignal) {
+export function fetchModelProviderConnection(providerCode: string, signal?: AbortSignal) {
   return requestApi<ModelProviderConnection>(modelProviderApiEndpoints.detail, {
     pathParams: { providerCode },
     signal,
   });
 }
 
-export function fetchProviderCatalog(providerCode: ModelProviderCode, signal?: AbortSignal) {
+export function fetchProviderCatalog(providerCode: string, signal?: AbortSignal) {
   return requestApi<ProviderCatalogModel[]>(modelProviderApiEndpoints.catalog, {
     pathParams: { providerCode },
     signal,
@@ -125,7 +129,7 @@ export function fetchProviderCatalog(providerCode: ModelProviderCode, signal?: A
 }
 
 export function fetchProviderAccountBalance(
-  providerCode: ModelProviderCode,
+  providerCode: string,
   signal?: AbortSignal,
 ) {
   return requestApi<ProviderAccountBalance>(modelProviderApiEndpoints.accountBalance, {
@@ -134,7 +138,7 @@ export function fetchProviderAccountBalance(
   });
 }
 
-export function fetchProviderSyncRuns(providerCode: ModelProviderCode, signal?: AbortSignal) {
+export function fetchProviderSyncRuns(providerCode: string, signal?: AbortSignal) {
   return requestApi<ProviderSyncRun[]>(modelProviderApiEndpoints.syncRuns, {
     pathParams: { providerCode },
     signal,
@@ -142,17 +146,18 @@ export function fetchProviderSyncRuns(providerCode: ModelProviderCode, signal?: 
 }
 
 export function createModelProviderAuthorization(
-  providerCode: ModelProviderCode,
+  providerCode: string,
   payload: { serverBaseUrl?: string | null } = {},
+  purpose: "Provider" | "Profile" = "Provider",
 ) {
-  return requestApi<ProviderAuthorizationSession>(modelProviderApiEndpoints.authorize, {
+  return requestApi<ProviderAuthorizationSession>(purpose === "Profile" ? modelProviderApiEndpoints.profileAuthorize : modelProviderApiEndpoints.authorize, {
     body: payload,
     pathParams: { providerCode },
   });
 }
 
 export function fetchModelProviderAuthorization(
-  providerCode: ModelProviderCode,
+  providerCode: string,
   sessionId: string,
   signal?: AbortSignal,
 ) {
@@ -163,23 +168,24 @@ export function fetchModelProviderAuthorization(
 }
 
 export function pollModelProviderAuthorization(
-  providerCode: ModelProviderCode,
+  providerCode: string,
   sessionId: string,
+  purpose: "Provider" | "Profile" = "Provider",
 ) {
-  return requestApi<ProviderAuthorizationPollResult>(modelProviderApiEndpoints.pollAuthorization, {
+  return requestApi<ProviderAuthorizationPollResult>(purpose === "Profile" ? modelProviderApiEndpoints.profilePollAuthorization : modelProviderApiEndpoints.pollAuthorization, {
     body: {},
     pathParams: { providerCode, sessionId },
   });
 }
 
-export function syncModelProvider(providerCode: ModelProviderCode) {
+export function syncModelProvider(providerCode: string) {
   return requestApi<ProviderSyncRun>(modelProviderApiEndpoints.sync, {
     body: {},
     pathParams: { providerCode },
   });
 }
 
-export function disconnectModelProvider(providerCode: ModelProviderCode) {
+export function disconnectModelProvider(providerCode: string) {
   return requestApi<ModelProviderConnection>(modelProviderApiEndpoints.disconnect, {
     pathParams: { providerCode },
   });

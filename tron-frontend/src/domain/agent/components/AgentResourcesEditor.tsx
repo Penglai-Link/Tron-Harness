@@ -15,17 +15,19 @@ import { InternalAgentSkillField } from "./InternalAgentSkillField";
 import { InternalAgentKnowledgeField } from "./InternalAgentKnowledgeField";
 import { InternalAgentAssignmentDialog, type InternalAgentAssignmentKind } from "./InternalAgentAssignmentDialog";
 import { AgentPolicyFields, newAgentPolicyDraft, type AgentPolicyDraft } from "./AgentPolicyFields";
+import { dudeToolsForRule, hasDudeToolAlias } from "./dudeToolPolicy";
 
 export interface AgentResourcesEditorHandle { validate(): void; save(createdCode?: string): Promise<void> }
 const policyKeys = ["toolAssignmentMode", "maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const;
-const copy = (value: AgentPolicyDraft): AgentPolicyDraft => ({ ...value, selectedToolCodes: [...value.selectedToolCodes], selectedServerCodes: [...value.selectedServerCodes] });
+const copy = (value: AgentPolicyDraft): AgentPolicyDraft => ({ ...value, selectedCategoryCodes: [...(value.selectedCategoryCodes ?? [])], selectedToolCodes: [...value.selectedToolCodes], selectedServerCodes: [...value.selectedServerCodes] });
 const sameCodes = (a: string[], b: string[]) => a.length === b.length && a.every((code) => b.includes(code));
 
 /** The same draft and controls serve creation and editing. Persistence starts only on parent Save. */
 export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
   agentCode?: string; agentName: string; workspaceCode?: string; disabled?: boolean;
+  audience?: "agent" | "dude";
   loadRecord?: (code: string, signal: AbortSignal) => Promise<WorkspaceInternalAgentRecord>;
-}>(function AgentResourcesEditor({ agentCode, agentName, workspaceCode = "$platform", disabled = false, loadRecord }, ref) {
+}>(function AgentResourcesEditor({ agentCode, agentName, workspaceCode = "$platform", disabled = false, loadRecord, audience = "agent" }, ref) {
   const { t } = useTranslation("pages");
   const client = useQueryClient();
   const [baseline, setBaseline] = useState<AgentPolicyDraft | null>(() => agentCode ? null : newAgentPolicyDraft());
@@ -69,7 +71,7 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
       .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false); });
     return () => controller.abort();
   }, [attempt]);
-  const dirty = !!baseline && !!draft && (policyKeys.some((key) => baseline[key] !== draft[key]) || baseline.mcpAccessMode !== draft.mcpAccessMode || !sameCodes(baseline.selectedToolCodes, draft.selectedToolCodes) || !sameCodes(baseline.selectedServerCodes, draft.selectedServerCodes) || skillDraft !== undefined || knowledgeDraft !== undefined);
+  const dirty = !!baseline && !!draft && (policyKeys.some((key) => baseline[key] !== draft[key]) || baseline.mcpAccessMode !== draft.mcpAccessMode || !sameCodes(baseline.selectedCategoryCodes ?? [], draft.selectedCategoryCodes ?? []) || !sameCodes(baseline.selectedToolCodes, draft.selectedToolCodes) || !sameCodes(baseline.selectedServerCodes, draft.selectedServerCodes) || skillDraft !== undefined || knowledgeDraft !== undefined);
   function validate() {
     if (!draft) { if (dirty) throw new Error(error || t("agentSkills.loading")); return; }
     for (const key of ["maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const) {
@@ -89,6 +91,7 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
         saved = copy(await (api ? updateWorkspaceInternalAgentToolAssignments(workspaceCode, code, draft.selectedToolCodes) : agentMocks.updateWorkspaceInternalAgentToolAssignmentsMock(workspaceCode, code, draft.selectedToolCodes))); setBaseline(saved);
       }
       const policy: WorkspaceInternalAgentPolicyPayload = {};
+      if (!sameCodes(saved.selectedCategoryCodes ?? [], draft.selectedCategoryCodes ?? [])) policy.selectedCategoryCodes = draft.selectedCategoryCodes ?? [];
       for (const key of policyKeys) if (saved[key] !== draft[key]) Object.assign(policy, { [key]: draft[key] });
       if (Object.keys(policy).length) { saved = copy(await (api ? patchWorkspaceInternalAgentPolicy(workspaceCode, code, policy) : agentMocks.patchWorkspaceInternalAgentPolicyMock(workspaceCode, code, policy))); setBaseline(saved); }
       if (draft.mcpAccessMode === "selected_servers" && (saved.mcpAccessMode !== "selected_servers" || !sameCodes(saved.selectedServerCodes, draft.selectedServerCodes))) {
@@ -102,10 +105,15 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
   } }), [dirty, draft, baseline, agentCode, workspaceCode, loading, error, skillDraft, knowledgeDraft, client, t]);
   const blocked = disabled || saving || loading;
   const patch = (change: Partial<AgentPolicyDraft>) => setDraft((current) => current ? { ...current, ...change } : current);
+  const assignmentTools = audience === "dude" ? tools.map((tool) => tool.dudeAssignable === false
+    ? { ...tool, assignable: false, disabledReason: t(`workspaceAgents.internal.dudeToolPolicy.${hasDudeToolAlias(tool) ? "replacedByDude" : "workspaceOnly"}`) }
+    : tool) : tools;
+  const initialTools = !draft || draft.toolAssignmentMode === "selected_tools" || audience !== "dude" ? draft?.selectedToolCodes ?? []
+    : dudeToolsForRule(tools, draft.toolAssignmentMode, draft.selectedCategoryCodes ?? []).map((tool) => tool.toolCode);
   return <>
     <TabsContent value="resources" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
       {error ? <div role="alert">{error}<Button type="button" variant="outline" disabled={disabled} onClick={() => setAttempt((value) => value + 1)}>{t("agentSkills.retry")}</Button></div> : null}
-      {!draft ? <p role="status">{t("agentSkills.loading")}</p> : <AgentPolicyFields panel="resources" draft={draft} disabled={blocked || catalogLoading || !!error} onChange={patch} onAssignment={setAssignment}>
+      {!draft ? <p role="status">{t("agentSkills.loading")}</p> : <AgentPolicyFields tools={tools} audience={audience} panel="resources" draft={draft} disabled={blocked || catalogLoading || !!error} onChange={patch} onAssignment={setAssignment}>
         <InternalAgentSkillField agentCode={agentCode ?? ""} disabled={blocked} selectedNames={skillDraft} onSelectionChange={setSkillDraft} />
         <InternalAgentKnowledgeField agentCode={agentCode ?? ""} agentName={agentName} disabled={blocked} selectedIds={knowledgeDraft} onSelectionChange={setKnowledgeDraft} />
       </AgentPolicyFields>}
@@ -113,7 +121,7 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
     <TabsContent value="advanced" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
       {!draft ? <p role="status">{t("agentSkills.loading")}</p> : <AgentPolicyFields panel="advanced" draft={draft} disabled={blocked} onChange={patch} />}
     </TabsContent>
-    {assignment && draft ? <InternalAgentAssignmentDialog kind={assignment} agentName={agentName} busy={blocked} initialSelectedCodes={assignment === "mcp" ? draft.selectedServerCodes : draft.toolAssignmentMode === "selected_tools" ? draft.selectedToolCodes : []} tools={tools} toolDomains={domains} servers={servers} onClose={() => setAssignment(null)} onConfirm={(codes) => {
+    {assignment && draft ? <InternalAgentAssignmentDialog kind={assignment} agentName={agentName} busy={blocked} initialSelectedCodes={assignment === "mcp" ? draft.selectedServerCodes : draft.toolAssignmentMode === "selected_tools" || audience === "dude" ? initialTools : []} tools={assignmentTools} toolDomains={domains} servers={servers} allowRemovingUnavailable={audience === "dude"} switchingFromRule={audience === "dude" && assignment === "tools" && draft.toolAssignmentMode !== "selected_tools"} onClose={() => setAssignment(null)} onConfirm={(codes) => {
       patch(assignment === "mcp" ? { mcpAccessMode: "selected_servers", selectedServerCodes: codes } : { toolAssignmentMode: "selected_tools", selectedToolCodes: codes }); setAssignment(null);
     }} /> : null}
   </>;

@@ -1,5 +1,33 @@
 use super::*;
 
+#[derive(Debug)]
+pub enum CancelDudeTaskError {
+    Completed,
+    Task(TaskError),
+}
+
+impl From<TaskError> for CancelDudeTaskError {
+    fn from(error: TaskError) -> Self {
+        Self::Task(error)
+    }
+}
+
+impl CancelDudeTaskError {
+    pub fn descriptor(&self) -> crate::application::dude::ApplicationErrorDescriptor {
+        let (code, message_key) = match self {
+            Self::Completed => ("101018006", "tron.dude.task_completed"),
+            Self::Task(TaskError::ActiveSubtaskExists) => {
+                ("101018007", "tron.dude.task_has_active_subtasks")
+            }
+            Self::Task(TaskError::NotFound) => ("101018001", "tron.dude.not_found"),
+            Self::Task(TaskError::InvalidRequest) => ("101018003", "tron.dude.state_changed"),
+            Self::Task(TaskError::StorageFailure) => ("101018004", "tron.dude.storage_failed"),
+            Self::Task(_) => ("101018002", "tron.dude.request_invalid"),
+        };
+        crate::application::dude::ApplicationErrorDescriptor { code, message_key }
+    }
+}
+
 /// Begin a day before a deadline; work without a deadline starts immediately.
 /// The policy is internal so creating a task only needs a title and optional deadline.
 pub(super) fn default_planned_start(now_ms: i64, due_at: Option<i64>) -> i64 {
@@ -9,6 +37,22 @@ pub(super) fn default_planned_start(now_ms: i64, due_at: Option<i64>) -> i64 {
 }
 
 impl TaskService {
+    pub fn cancel_dude_task(
+        &self,
+        dude_code: &str,
+        task_code: &str,
+    ) -> Result<(), CancelDudeTaskError> {
+        let task = self.get_task_record(task_code)?;
+        if task.owner_dude_code.as_deref() != Some(dude_code) {
+            return Err(TaskError::NotFound.into());
+        }
+        if task.archived_at.is_none() && task.status == crate::domain::task::CLOSED_STATUS_CODE {
+            return Err(CancelDudeTaskError::Completed);
+        }
+        self.archive_task_record(task)?;
+        Ok(())
+    }
+
     pub fn due_dude_tasks(&self, now_ms: i64) -> Result<Vec<TaskDetail>, TaskError> {
         let all = self.all_tasks()?;
         let hierarchy = TaskHierarchy::new(&all);

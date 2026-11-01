@@ -33,9 +33,19 @@ pub trait DudeRepository: Send {
     fn designate_main(&mut self, code: &str) -> Result<(), DudeError>;
     fn resolve_session(&mut self, session: &DudeSession) -> Result<DudeSession, DudeError>;
     fn sessions(&mut self, code: &str) -> Result<Vec<DudeSession>, DudeError>;
+    /// Old heartbeat sessions eligible for retirement, excluding active or referenced work.
+    fn expired_heartbeat_sessions(&mut self) -> Result<Vec<String>, DudeError> {
+        Ok(Vec::new())
+    }
+    fn delete_empty_heartbeat_session(&mut self, _code: &str) -> Result<(), DudeError> {
+        Ok(())
+    }
     fn session(&mut self, code: &str) -> Result<Option<DudeSession>, DudeError>;
     fn enqueue(&mut self, event: &DudeEvent) -> Result<DudeEvent, DudeError>;
     fn events(&mut self, code: &str) -> Result<Vec<DudeEvent>, DudeError>;
+    fn activity_events(&mut self, code: &str) -> Result<Vec<DudeEvent>, DudeError>;
+    /// Retire old finished heartbeat events without touching pending work.
+    fn prune_heartbeat_events(&mut self) -> Result<usize, DudeError>;
     fn claim(&mut self, now: i64, lease_ms: i64) -> Result<Option<DudeEvent>, DudeError>;
     fn finish(
         &mut self,
@@ -54,6 +64,9 @@ pub trait DudeRepository: Send {
         delay_ms: i64,
         error: &str,
     ) -> Result<(), DudeError>;
+    fn defer_busy(&mut self, event: &DudeEvent, now: i64, delay_ms: i64) -> Result<(), DudeError> {
+        self.retry(event, now, delay_ms, "Waiting for the current Dude run")
+    }
     fn resolve_awaiting_input(
         &mut self,
         session: &str,
@@ -80,6 +93,14 @@ pub trait DudeRepository: Send {
         fingerprint: &str,
     ) -> Result<DudeWorkChange, DudeError>;
     fn scoped_pending_work_changes(
+        &mut self,
+        _dude: &str,
+        _user: &str,
+    ) -> Result<Vec<DudeWorkChange>, DudeError> {
+        Err(DudeError::Storage)
+    }
+    /// Recent assessments and delivery receipts, restricted to the session owner.
+    fn scoped_recent_work_changes(
         &mut self,
         _dude: &str,
         _user: &str,
@@ -303,18 +324,44 @@ impl DudeService {
         self.get(code)?;
         self.repo()?.sessions(code)
     }
+    pub fn expired_heartbeat_sessions(&self) -> Result<Vec<String>, DudeError> {
+        self.repo()?.expired_heartbeat_sessions()
+    }
+    pub fn delete_empty_heartbeat_session(&self, code: &str) -> Result<(), DudeError> {
+        self.repo()?.delete_empty_heartbeat_session(code)
+    }
     pub(crate) fn work_execution_context(
         &self,
         dude: &str,
         user: &str,
     ) -> Result<Vec<serde_json::Value>, DudeError> {
-        let pending = self.repo()?.scoped_pending_work_changes(dude, user)?;
-        let pending: Vec<_> = pending.into_iter().map(|change| serde_json::json!({
-            "changeId":change.change_id,"taskCode":change.task_code,"kind":change.kind,
-            "summary":change.summary,"requestedAction":change.requested_action,"evidence":change.evidence,
-            "originSessionCode":change.session_code,
-        })).collect();
-        Ok(pending)
+        let mut repo = self.repo()?;
+        let pending = repo.scoped_pending_work_changes(dude, user)?;
+        let recent = repo.scoped_recent_work_changes(dude, user)?;
+        let mut seen = std::collections::BTreeSet::new();
+        let changes: Vec<_> = pending
+            .into_iter()
+            .chain(recent)
+            .filter(|change| seen.insert(change.change_id.clone()))
+            .map(|change| {
+                serde_json::json!({
+                    "changeId": change.change_id,
+                    "taskCode": change.task_code,
+                    "kind": change.kind,
+                    "changeKey": change.change_key,
+                    "summary": change.summary,
+                    "requestedAction": change.requested_action,
+                    "evidence": change.evidence,
+                    "originSessionCode": change.session_code,
+                    "resolvedAt": change.resolved_at,
+                    "resolution": change.resolution,
+                    "notification": change.notification.map(|notice| serde_json::json!({
+                        "id": notice.id, "title": notice.title, "createdAt": notice.created_at,
+                    })),
+                })
+            })
+            .collect();
+        Ok(changes)
     }
     pub fn session(&self, code: &str) -> Result<Option<DudeSession>, DudeError> {
         self.repo()?.session(code)
@@ -394,6 +441,13 @@ impl DudeService {
         self.get(code)?;
         self.repo()?.events(code)
     }
+    pub fn activity_events(&self, code: &str) -> Result<Vec<DudeEvent>, DudeError> {
+        self.get(code)?;
+        self.repo()?.activity_events(code)
+    }
+    pub fn prune_heartbeat_events(&self) -> Result<usize, DudeError> {
+        self.repo()?.prune_heartbeat_events()
+    }
     pub fn claim(&self, now: i64, lease_ms: i64) -> Result<Option<DudeEvent>, DudeError> {
         self.repo()?.claim(now, lease_ms)
     }
@@ -430,6 +484,9 @@ impl DudeService {
         error: &str,
     ) -> Result<(), DudeError> {
         self.repo()?.retry(event, now, delay_ms, error)
+    }
+    pub fn defer_busy(&self, event: &DudeEvent, now: i64, delay_ms: i64) -> Result<(), DudeError> {
+        self.repo()?.defer_busy(event, now, delay_ms)
     }
     pub fn resolve_awaiting_input(&self, session: &str, summary: &str) -> Result<(), DudeError> {
         self.repo()?

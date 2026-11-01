@@ -1,10 +1,9 @@
-mod internal_agents;
 mod agent_directory;
+mod internal_agents;
 mod internal_definition_error;
 mod internal_definitions;
 mod internal_groups;
-pub(crate) mod loop_designs;
-mod platform_internal_agents;
+pub(crate) mod platform_internal_agents;
 mod platform_runtime;
 mod system_agent_profiles;
 mod system_agents;
@@ -47,6 +46,7 @@ use crate::{
 #[derive(Debug, Clone, Default)]
 pub struct UpdateWorkspaceInternalAgentPolicyCommand {
     pub tool_assignment_mode: Option<ToolAssignmentMode>,
+    pub selected_category_codes: Option<Vec<String>>,
     pub max_steps: Option<u32>,
     pub max_tool_calls: Option<u32>,
     pub max_parallel_tool_calls: Option<u32>,
@@ -58,7 +58,6 @@ pub struct CreateWorkspaceInternalAgentCommand {
     pub name: String,
     pub description: String,
     pub role_prompt: String,
-    pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
     /// Missing keeps the current group on update; an empty string clears it.
     pub group_name: Option<String>,
@@ -72,7 +71,6 @@ pub struct UpdateWorkspaceInternalAgentDefinitionCommand {
     pub name: Option<String>,
     pub description: Option<String>,
     pub role_prompt: Option<String>,
-    pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
     /// Missing keeps the current group on update; an empty string clears it.
     pub group_name: Option<String>,
@@ -161,22 +159,6 @@ pub trait AgentManagementRepository: Send {
             self.remember_discovered_tool(tool)?;
         }
         Ok(())
-    }
-
-    fn list_loop_designs(
-        &mut self,
-    ) -> Result<Vec<crate::domain::agent::loop_design::LoopDesign>, AgentManagementError> {
-        Ok(vec![])
-    }
-    fn save_loop_design(
-        &mut self,
-        _design: &crate::domain::agent::loop_design::LoopDesign,
-        _expected: u32,
-    ) -> Result<(), AgentManagementError> {
-        Err(AgentManagementError::StorageFailure)
-    }
-    fn delete_loop_design(&mut self, _code: &str) -> Result<(), AgentManagementError> {
-        Err(AgentManagementError::StorageFailure)
     }
 
     fn agent_workspace_grants(
@@ -380,14 +362,110 @@ impl AgentManagementService {
     ) -> Vec<ToolCatalogRecord> {
         let mut records = BusinessToolCatalog::list_tools(domain_code, search, locale);
         if let Ok(dynamic) = self.cached_discovered_tools() {
-            records.extend(dynamic.into_iter().filter(|tool| {
-                domain_code.is_none_or(|domain| tool.domain_code == domain)
+            let fixed_indexes: std::collections::HashMap<_, _> = records
+                .iter()
+                .enumerate()
+                .map(|(i, record)| (record.tool_code.clone(), i))
+                .collect();
+            let a2ui_ids: std::collections::HashSet<_> =
+                eliteforge_agent_official_plugin_a2ui::tool_descriptors()
+                    .into_iter()
+                    .map(|descriptor| descriptor.id)
+                    .collect();
+            for mut tool in dynamic {
+                super::tool_catalog::localize_plugin_display(&mut tool, locale);
+                // Recover domains for records written before providers declared them.
+                if tool.domain_code == "native" {
+                    if [
+                        eliteforge_agent_core::TOOL_SEARCH_ID,
+                        eliteforge_agent_core::TOOL_EXECUTE_ID,
+                    ]
+                    .contains(&tool.tool_code.as_str())
+                    {
+                        tool.domain_code = "tool".into();
+                    } else if tool.source.provider_id.as_deref() == Some("skills.default") {
+                        tool.domain_code = "skill".into();
+                    } else if tool.source.provider_id.as_deref() == Some("tools.agents") {
+                        tool.domain_code = if tool.tool_code.starts_with("thread.") {
+                            "collaboration_thread"
+                        } else {
+                            "subagent"
+                        }
+                        .into();
+                    } else if tool.tool_code == format!("tron.{}", super::CHAT_ASK_USER_TOOL) {
+                        tool.domain_code = "user_interaction".into();
+                    }
+                }
+                if [
+                    eliteforge_agent_core::TOOL_SEARCH_ID,
+                    eliteforge_agent_core::TOOL_EXECUTE_ID,
+                ]
+                .contains(&tool.tool_code.as_str())
+                {
+                    tool.category = Some(super::tool_catalog::builtin_category("execution"));
+                }
+                // Older discoveries can lack metadata. Use the installed provider's
+                // own static catalog to recover it without guessing from names.
+                if a2ui_ids.contains(&tool.tool_code) {
+                    if tool.category.is_none() {
+                        tool.category =
+                            Some(eliteforge_agent_official_plugin_a2ui::tool_category());
+                    }
+                    if tool.source.provider_id.is_none() {
+                        tool.source.provider_id = Some("A2uiService".into());
+                    }
+                    if tool.source.plugin_id.is_none() {
+                        tool.source.plugin_id = Some("agent.a2ui".into());
+                    }
+                    if tool.source.pack_id.is_none() {
+                        tool.source.pack_id =
+                            Some(eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID.into());
+                    }
+                }
+                if tool.tool_code == format!("tron.{}", super::CHAT_ASK_USER_TOOL)
+                    && tool.category.is_none()
+                {
+                    tool.category = Some(super::tool_catalog::builtin_category("interaction"));
+                }
+                if let Some(index) = fixed_indexes.get(&tool.tool_code) {
+                    let fixed = &mut records[*index];
+                    if tool.display.is_some() { fixed.display = tool.display.clone(); }
+                    if tool.category.is_some() {
+                        fixed.category = tool.category;
+                    }
+                    if fixed
+                        .category
+                        .as_ref()
+                        .is_some_and(|category| category.code == "tron.platform")
+                    {
+                        // The host provider is declared by the product catalog;
+                        // registration adds ownership without replacing that origin.
+                        if tool.source.plugin_id.is_some() {
+                            fixed.source.plugin_id = tool.source.plugin_id;
+                        }
+                        if tool.source.pack_id.is_some() {
+                            fixed.source.pack_id = tool.source.pack_id;
+                        }
+                        if tool.source.adapter_id.is_some() {
+                            fixed.source.adapter_id = tool.source.adapter_id;
+                        }
+                    } else if tool.source != Default::default() {
+                        fixed.source = tool.source;
+                    }
+                } else if !super::tool_catalog::is_fixed_code(&tool.tool_code)
+                    && domain_code.is_none_or(|domain| tool.domain_code == domain)
                     && search.is_none_or(|query| {
                         format!("{} {} {}", tool.tool_code, tool.name, tool.description)
                             .to_lowercase()
                             .contains(&query.to_lowercase())
                     })
-            }));
+                {
+                    records.push(tool);
+                }
+            }
+        }
+        for tool in &mut records {
+            super::tool_catalog::localize_plugin_display(tool, locale);
         }
         if let Some(capabilities) = self.capabilities.get() {
             for tool in &mut records {

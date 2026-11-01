@@ -40,7 +40,7 @@ const PARENT_ACTOR: &str = "USR-LARGE-ID";
 #[test]
 fn resource_catalog_exposes_full_resource_lifecycle_tools() {
     let _state = resource_state("catalog");
-    let tool_codes = BusinessToolCatalog::list_tools(Some("resource"), None, "en-US")
+    let tool_codes = BusinessToolCatalog::list_tools(Some("harness_resource"), None, "en-US")
         .into_iter()
         .map(|tool| tool.tool_code)
         .collect::<Vec<_>>();
@@ -65,6 +65,45 @@ fn resource_catalog_exposes_full_resource_lifecycle_tools() {
             "resource.server_account.create",
         ]
     );
+}
+
+#[test]
+fn workspace_resource_tools_round_trip_file_and_enforce_workspace() {
+    let state = resource_state("tool-lifecycle");
+    let local = tempfile::tempdir().unwrap();
+    fs::write(local.path().join("source.txt"), b"tool resource content").unwrap();
+    let tools = BusinessToolCatalog::list_tools(Some("harness_resource"), None, "en-US")
+        .into_iter().map(tool_record_to_effective_tool).collect();
+    let mut context = resource_tool_context(tools);
+    context.execution_scope.local_directory = Some(local.path().display().to_string());
+    let call = |name: &str, input: Value| {
+        let result = state.agent_tool_registry.execute_allowed(ToolRequest {
+            tool_name: name.into(), input, invocation_id: None,
+        }, &context).unwrap_or_else(|error| panic!("{name}: {error}"));
+        serde_json::from_str::<Value>(&result.observation.output).unwrap()
+    };
+    call("resource_create", json!({"workspaceCode":WORKSPACE, "resourceCode":"tool-lifecycle", "kind":"File", "name":"Tool lifecycle", "allowInheritance":false, "sourcePath":"source.txt"}));
+    let page = call("resource_query", json!({"workspaceCode":WORKSPACE, "search":"tool-lifecycle"}));
+    assert!(page.to_string().contains("tool-lifecycle"));
+    let item = call("resource_get", json!({"workspaceCode":WORKSPACE,"resourceCode":"tool-lifecycle"}));
+    assert_eq!(item["name"], "Tool lifecycle");
+    call("resource_update", json!({"workspaceCode":WORKSPACE,"resourceCode":"tool-lifecycle","name":"Updated tool resource"}));
+    let updated = call("resource_get", json!({"workspaceCode":WORKSPACE,"resourceCode":"tool-lifecycle"}));
+    assert_eq!(updated["name"], "Updated tool resource");
+    call("resource_binary", json!({"workspaceCode":WORKSPACE,"resourceCode":"tool-lifecycle","action":"download","targetPath":"downloaded.txt"}));
+    assert_eq!(fs::read(local.path().join("downloaded.txt")).unwrap(), b"tool resource content");
+    call("resource_delete", json!({"workspaceCode":WORKSPACE,"resourceCode":"tool-lifecycle"}));
+    assert!(state.agent_tool_registry.execute_allowed(ToolRequest { tool_name:"resource_get".into(), input:json!({"workspaceCode":WORKSPACE,"resourceCode":"tool-lifecycle"}), invocation_id:None }, &context).is_err());
+
+    call("platform_resource_create", json!({"resourceCode":"platform-tool-lifecycle", "kind":"File", "name":"Platform tool resource", "sourcePath":"source.txt"}));
+    assert!(call("platform_resource_query", json!({"search":"platform-tool-lifecycle"})).to_string().contains("platform-tool-lifecycle"));
+    assert_eq!(call("platform_resource_get", json!({"resourceCode":"platform-tool-lifecycle"}))["name"], "Platform tool resource");
+    call("platform_resource_update", json!({"resourceCode":"platform-tool-lifecycle", "name":"Updated platform resource"}));
+    assert_eq!(call("platform_resource_get", json!({"resourceCode":"platform-tool-lifecycle"}))["name"], "Updated platform resource");
+    call("platform_resource_binary", json!({"resourceCode":"platform-tool-lifecycle", "action":"download", "targetPath":"platform-downloaded.txt"}));
+    assert_eq!(fs::read(local.path().join("platform-downloaded.txt")).unwrap(), b"tool resource content");
+    call("platform_resource_delete", json!({"resourceCode":"platform-tool-lifecycle"}));
+    assert!(state.agent_tool_registry.execute_allowed(ToolRequest { tool_name:"platform_resource_get".into(), input:json!({"resourceCode":"platform-tool-lifecycle"}), invocation_id:None }, &context).is_err());
 }
 
 #[test]
@@ -304,7 +343,7 @@ fn agent_binary_tools_upload_and_download_workspace_files() {
 #[test]
 fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
     let state = resource_state("tool-authorization");
-    let tools = BusinessToolCatalog::list_tools(Some("resource"), None, "en-US")
+    let tools = BusinessToolCatalog::list_tools(Some("harness_resource"), None, "en-US")
         .into_iter()
         .map(tool_record_to_effective_tool)
         .collect::<Vec<_>>();
@@ -329,10 +368,15 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .expect_err("missing userCode must be rejected");
     assert!(error.to_string().contains("authenticated user"));
 
-    // The active local profile can access every active workspace. Removed
-    // legacy bearer-role names must not reintroduce the old ACL model.
+    // The local profile can access another active workspace through a run
+    // bound to that workspace; a run cannot substitute a different scope.
     let mut profile_context = context.clone();
     profile_context.user_code = Some(VIEWER.to_string());
+    assert!(state.agent_tool_registry.execute_allowed(
+        ToolRequest { tool_name: "resource_query".into(), input: json!({"workspaceCode":"ENTERPRISE"}), invocation_id: None },
+        &profile_context,
+    ).is_err());
+    profile_context.workspace_code = "ENTERPRISE".into();
     state
         .agent_tool_registry
         .execute_allowed(
@@ -362,7 +406,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_binary".to_string(),
-                input: json!({
+                input: json!({ "workspaceCode": WORKSPACE,
                     "action": "upload",
                     "resourceCode": "test-document"
                 }),
@@ -378,7 +422,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_binary".to_string(),
-                input: json!({
+                input: json!({ "workspaceCode": WORKSPACE,
                     "action": "download",
                     "resourceCode": "test-document",
                     "targetPath": "download.txt",
@@ -398,7 +442,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
     let base = temp_directory("agent-resource-payload");
     fs::write(base.join("release-notes.md"), "release notes")
         .expect("agent source file should be created");
-    let tools = BusinessToolCatalog::list_tools(Some("resource"), None, "en-US")
+    let tools = BusinessToolCatalog::list_tools(Some("harness_resource"), None, "en-US")
         .into_iter()
         .map(tool_record_to_effective_tool)
         .collect::<Vec<_>>();
@@ -410,7 +454,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_create".to_string(),
-                input: json!({
+                input: json!({ "workspaceCode": WORKSPACE,
                     "resourceCode": "agent-release-notes",
                     "kind": "File",
                     "name": "Agent release notes",
@@ -431,7 +475,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_get".to_string(),
-                input: json!({ "resourceCode": "agent-release-notes" }),
+                input: json!({ "workspaceCode": WORKSPACE, "resourceCode": "agent-release-notes" }),
                 invocation_id: None,
             },
             &context,
@@ -446,7 +490,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_update".to_string(),
-                input: json!({
+                input: json!({ "workspaceCode": WORKSPACE,
                     "resourceCode": "agent-release-notes",
                     "name": "Agent release notes v2"
                 }),
@@ -461,7 +505,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_data_source_create".to_string(),
-                input: json!({
+                input: json!({ "workspaceCode": WORKSPACE,
                     "resourceCode": "agent-mysql",
                     "kind": "MysqlConnection",
                     "name": "Agent MySQL",
@@ -492,7 +536,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_data_source_update".to_string(),
-                input: json!({
+                input: json!({ "workspaceCode": WORKSPACE,
                     "resourceCode": "agent-mysql",
                     "description": "Agent-owned data source"
                 }),
@@ -507,7 +551,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_server_create".to_string(),
-                input: json!({
+                input: json!({ "workspaceCode": WORKSPACE,
                     "serverCode": "agent-bastion",
                     "name": "Agent bastion",
                     "host": "bastion.internal",
@@ -537,7 +581,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_server_account_create".to_string(),
-                input: json!({
+                input: json!({ "workspaceCode": WORKSPACE,
                     "serverCode": "agent-bastion",
                     "account": {
                         "accountCode": "agent-bastion-deploy",
@@ -562,7 +606,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_get".to_string(),
-                input: json!({ "resourceCode": "agent-mysql" }),
+                input: json!({ "workspaceCode": WORKSPACE, "resourceCode": "agent-mysql" }),
                 invocation_id: None,
             },
             &context,
@@ -580,7 +624,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .execute_allowed(
             ToolRequest {
                 tool_name: "resource_delete".to_string(),
-                input: json!({ "resourceCode": "agent-bastion-deploy" }),
+                input: json!({ "workspaceCode": WORKSPACE, "resourceCode": "agent-bastion-deploy" }),
                 invocation_id: None,
             },
             &context,
@@ -621,7 +665,6 @@ fn resource_state(test_name: &str) -> AppState {
         state.apps.clone(),
         state.automations.clone(),
         state.tasks.clone(),
-        state.models.clone(),
         state.skills.clone(),
         state.variables.clone(),
         state.resources.clone(),

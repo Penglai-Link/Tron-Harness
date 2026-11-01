@@ -279,6 +279,14 @@ impl ChatService {
     }
 
     pub fn delete_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
+        self.delete_session_inner(session_code, false)
+    }
+
+    pub(crate) fn delete_expired_heartbeat_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
+        self.delete_session_inner(session_code, true)
+    }
+
+    fn delete_session_inner(&self, session_code: &str, heartbeat_retention: bool) -> Result<ChatSession, ChatError> {
         let session = self.repository().get_session(session_code)?;
         self.ensure_archived_session_inactive(session_code, &session)?;
         let attachments = self
@@ -288,7 +296,11 @@ impl ChatService {
             .transpose()
             .map_err(chat_error_from_resource)?
             .unwrap_or_default();
-        self.repository().delete_session(session_code)?;
+        if heartbeat_retention {
+            self.repository().delete_expired_heartbeat_session(session_code)?;
+        } else {
+            self.repository().delete_session(session_code)?;
+        }
         if let Some(resources) = self.resources.as_ref() {
             resources.cleanup_chat_session_attachment_files(&attachments);
         }

@@ -22,8 +22,7 @@ import { createMockAutomation } from "@/domain/automation/mock/data";
 import type { AutomationOperationalStatus } from "@/domain/automation/model";
 import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api/agentManagementApi";
 import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
-import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
-import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
+import { fetchModelSelectOptions } from "@/domain/model/api/modelApi";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 import {
@@ -54,7 +53,7 @@ export function CreateAutomationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [promptFullscreenOpen, setPromptFullscreenOpen] = useState(false);
   const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>([mainAutomationAgentOption]);
-  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchWorkspaceSelectOptions>>>([]);
+  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchModelSelectOptions>>>([]);
   const [selectedAgentCode, setSelectedAgentCode] = useState(mainAutomationAgentOption.agentCode);
   const [selectedModelOptionCode, setSelectedModelOptionCode] = useState("");
   const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
@@ -118,9 +117,7 @@ export function CreateAutomationPage() {
     const internalAgentsPromise = dataSource === "api"
       ? fetchWorkspaceInternalAgents(activeWorkspaceCode, controller.signal)
       : Promise.resolve(listWorkspaceInternalAgentsMock(activeWorkspaceCode));
-    const modelsPromise = dataSource === "api"
-      ? fetchWorkspaceSelectOptions(activeWorkspaceCode, controller.signal)
-      : Promise.resolve(getWorkspaceSelectOptions(activeWorkspaceCode));
+    const modelsPromise = fetchModelSelectOptions(activeWorkspaceCode, controller.signal);
 
     Promise.all([agentsPromise, modelsPromise, internalAgentsPromise])
       .then(([systemAgents, workspaceModels, internalAgents]) => {

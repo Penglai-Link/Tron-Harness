@@ -37,32 +37,41 @@ where
     vec![
         Arc::new(MemorySearchTool {
             memory: memory.clone(),
+            dude_only: false,
         }),
         Arc::new(MemorySaveTool {
             memory: memory.clone(),
+            dude_only: false,
         }),
-        Arc::new(MemoryDeleteTool { memory }),
+        Arc::new(MemoryDeleteTool { memory: memory.clone(), dude_only: false }),
+        Arc::new(MemorySearchTool { memory: memory.clone(), dude_only: true }),
+        Arc::new(MemorySaveTool { memory: memory.clone(), dude_only: true }),
+        Arc::new(MemoryDeleteTool { memory, dude_only: true }),
     ]
 }
 
 #[derive(Clone)]
 struct MemorySearchTool<R, E> {
     memory: MemoryService<R, E>,
+    dude_only: bool,
 }
 
 #[derive(Clone)]
 struct MemorySaveTool<R, E> {
     memory: MemoryService<R, E>,
+    dude_only: bool,
 }
 
 #[derive(Clone)]
 struct MemoryDeleteTool<R, E> {
     memory: MemoryService<R, E>,
+    dude_only: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MemorySearchInput {
+    workspace_code: Option<String>,
     query: Option<String>,
     mode: Option<String>,
     memory_code: Option<String>,
@@ -80,6 +89,7 @@ struct MemorySearchInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct MemorySaveInput {
+    workspace_code: Option<String>,
     memory_type: Option<String>,
     text: Option<String>,
     memory_code: Option<String>,
@@ -103,6 +113,7 @@ struct MemorySaveInput {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MemoryDeleteInput {
+    workspace_code: Option<String>,
     memory_code: String,
     reason: Option<String>,
     delete_mode: Option<String>,
@@ -127,7 +138,7 @@ where
         + 'static,
 {
     fn name(&self) -> &str {
-        "memory_search"
+        if self.dude_only { "dude_memory_search" } else { "memory_search" }
     }
 
     fn exec(
@@ -136,7 +147,8 @@ where
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
         let input: MemorySearchInput = parse_tool_input(request.input)?;
-        let context = memory_run_context(context)?;
+        if self.dude_only && input.scope_code.is_some() { return Err(ToolError::ExecutionFailed("Dude memory tools do not accept scopeCode".into())); }
+        let context = memory_run_context(context, self.dude_only, input.workspace_code.as_deref())?;
         let memory = self.memory.clone();
         let output = run_memory_future(async move {
             memory
@@ -180,7 +192,7 @@ where
         + 'static,
 {
     fn name(&self) -> &str {
-        "memory_save"
+        if self.dude_only { "dude_memory_save" } else { "memory_save" }
     }
 
     fn exec(
@@ -189,7 +201,8 @@ where
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
         let input: MemorySaveInput = parse_tool_input(request.input)?;
-        let context = memory_run_context(context)?;
+        if self.dude_only && input.scope_code.is_some() { return Err(ToolError::ExecutionFailed("Dude memory tools do not accept scopeCode".into())); }
+        let context = memory_run_context(context, self.dude_only, input.workspace_code.as_deref())?;
         let memory = self.memory.clone();
         let output = run_memory_future(async move {
             memory
@@ -239,7 +252,7 @@ where
         + 'static,
 {
     fn name(&self) -> &str {
-        "memory_delete"
+        if self.dude_only { "dude_memory_delete" } else { "memory_delete" }
     }
 
     fn exec(
@@ -248,7 +261,7 @@ where
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
         let input: MemoryDeleteInput = parse_tool_input(request.input)?;
-        let context = memory_run_context(context)?;
+        let context = memory_run_context(context, self.dude_only, input.workspace_code.as_deref())?;
         let memory = self.memory.clone();
         let output = run_memory_future(async move {
             memory
@@ -270,7 +283,22 @@ where
     }
 }
 
-fn memory_run_context(context: &AgentRunContext) -> Result<MemoryRunContext, ToolError> {
+fn memory_run_context(context: &AgentRunContext, dude_only: bool, requested_workspace: Option<&str>) -> Result<MemoryRunContext, ToolError> {
+    if dude_only && !context.is_owning_dude() {
+        return Err(ToolError::ExecutionFailed("Dude memory tools require the owning Dude".into()));
+    }
+    if !dude_only && context.is_owning_dude() {
+        return Err(ToolError::ExecutionFailed("Dude must use dude_memory tools".into()));
+    }
+    if !dude_only && context.workspace_code.trim().is_empty() {
+        return Err(ToolError::ExecutionFailed("workspaceCode is required for memory tools".into()));
+    }
+    if dude_only && requested_workspace.is_some() {
+        return Err(ToolError::ExecutionFailed("Dude memory tools do not accept workspaceCode".into()));
+    }
+    if !dude_only && requested_workspace.map(str::trim).filter(|s| !s.is_empty()) != Some(context.workspace_code.trim()) {
+        return Err(ToolError::ExecutionFailed("workspaceCode is required and must match the current workspace".into()));
+    }
     let user_code = context
         .user_code
         .as_deref()
@@ -279,12 +307,7 @@ fn memory_run_context(context: &AgentRunContext) -> Result<MemoryRunContext, Too
         .ok_or_else(|| {
             ToolError::ExecutionFailed("userCode is required for memory tools".into())
         })?;
-    let workspace_code = context.workspace_code.trim();
-    if workspace_code.is_empty() {
-        return Err(ToolError::ExecutionFailed(
-            "workspaceCode is required for memory tools".into(),
-        ));
-    }
+    let workspace_code = if dude_only { "" } else { context.workspace_code.trim() };
     Ok(MemoryRunContext::new(user_code, workspace_code))
 }
 

@@ -58,16 +58,6 @@ impl Fixture {
         }
     }
     fn agent(&self, code: &str) {
-        if self
-            .state
-            .agent_management
-            .list_loop_designs()
-            .unwrap()
-            .is_empty()
-        {
-            self.state.agent_management.save_loop_design(serde_json::from_value(json!({"loopCode":"fixture-react","name":"Fixture React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(),0).unwrap();
-        }
-
         self.state
             .agent_management
             .create_platform_internal_agent(CreateWorkspaceInternalAgentCommand {
@@ -77,11 +67,6 @@ impl Fixture {
                 name: code.into(),
                 role_prompt: "Use assigned capabilities".into(),
                 avatar_id: None,
-                loop_code: Some(
-                    self.state.agent_management.list_loop_designs().unwrap()[0]
-                        .loop_code
-                        .clone(),
-                ),
                 group_name: None,
             })
             .unwrap();
@@ -112,13 +97,23 @@ async fn a2ui_plugin_registers_its_skill_and_respects_assignments() {
     let skill = f.state.skills.get_registry_skill("a2ui-interface").unwrap();
     assert_eq!(skill.provider_pack_id.as_deref(), Some("framework.a2ui"));
     assert!(skill.available);
-    assert!(std::path::Path::new(&skill.registry_path).join("SKILL.md").is_file());
+    assert!(
+        std::path::Path::new(&skill.registry_path)
+            .join("SKILL.md")
+            .is_file()
+    );
     assert!(f.assigned("main-agent").contains(&"a2ui-interface".into()));
 
-    f.state.skills.replace_skill_agents("a2ui-interface", &[]).unwrap();
+    f.state
+        .skills
+        .replace_skill_agents("a2ui-interface", &[])
+        .unwrap();
     f.state.agent_framework.sync_capability_resources().unwrap();
     assert!(!f.assigned("main-agent").contains(&"a2ui-interface".into()));
-    f.state.skills.replace_skill_agents("a2ui-interface", &["main-agent".into()]).unwrap();
+    f.state
+        .skills
+        .replace_skill_agents("a2ui-interface", &["main-agent".into()])
+        .unwrap();
     assert!(f.assigned("main-agent").contains(&"a2ui-interface".into()));
 }
 
@@ -859,7 +854,6 @@ async fn conflicting_imports_preserve_the_installed_catalog_and_restart() {
         drop(restarted);
     }
 }
-
 
 fn composer_session(f: &Fixture) -> tron_backend::domain::chat::ChatSession {
     f.state

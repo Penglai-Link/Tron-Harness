@@ -105,7 +105,7 @@ fn resolve_todo_enabled(context: &AgentRunContext) -> bool {
     context
         .tools
         .iter()
-        .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo_update"))
+        .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo_update") || tool.tool_name.eq_ignore_ascii_case("dude_todo_update"))
 }
 
 #[cfg(test)]
@@ -150,11 +150,13 @@ mod tests {
     fn todo_enabled_uses_authorized_tool_catalog() {
         let context = context_with_tools(vec![tool("todo_update")]);
         assert!(resolve_todo_enabled(&context));
+        let dude_context = context_with_tools(vec![tool("dude_todo_update")]);
+        assert!(resolve_todo_enabled(&dude_context));
     }
 
     #[test]
     fn todo_disabled_when_catalog_omits_todo_update() {
-        let context = context_with_tools(vec![tool("bash_exec")]);
+        let context = context_with_tools(vec![tool("command_exec")]);
         assert!(!resolve_todo_enabled(&context));
     }
 

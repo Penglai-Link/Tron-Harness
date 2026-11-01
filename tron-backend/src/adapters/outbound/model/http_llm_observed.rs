@@ -81,7 +81,7 @@ impl HttpLlmRuntimeClient {
         inputs: &[fw::Content],
         dimensions: Option<usize>,
     ) -> ObservedModelResult<fw::EmbeddingResponse> {
-        if config.model_type != ModelType::Embedding {
+        if config.model_type != ModelType::TextEmbedding {
             return failure("embedding requires EMBEDDING model");
         }
         let model = runtime_to_agent_model_config(config);
@@ -173,7 +173,7 @@ impl HttpLlmRuntimeClient {
         documents: &[String],
         top_n: Option<usize>,
     ) -> ObservedModelResult<Vec<LlmRuntimeRerankHit>> {
-        if config.model_type != ModelType::Rerank {
+        if config.model_type != ModelType::TextRerank {
             return failure("rerank requires RERANK model");
         }
         if top_n == Some(0) {

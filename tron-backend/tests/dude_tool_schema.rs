@@ -97,11 +97,19 @@ fn all_dude_tools_have_closed_typed_provider_schemas_and_localized_descriptions(
         }
     }
     for locale in ["en-US", "zh-CN"] {
-        let tools = BusinessToolCatalog::list_tools(Some("dude"), None, locale);
-        assert_eq!(tools.len(), 4);
+        let tools: Vec<_> = BusinessToolCatalog::list_tools(None, None, locale)
+            .into_iter().filter(|tool| tool.category.as_ref().is_some_and(|category| category.code == "tron.dude")).collect();
+        assert_eq!(tools.len(), 13);
         for tool in tools {
+            assert!(tool.tool_name.starts_with("dude_"));
+            assert!(tool.domain_code.starts_with("dude_"));
             assert!(!tool.description.starts_with("agent.toolCatalog"));
-            check(&tool.input_schema);
+            assert_eq!(tool.input_schema["type"], "object");
+            assert_eq!(tool.input_schema["additionalProperties"], false);
+            assert!(tool.input_schema.pointer("/properties/workspaceCode").is_none());
+            if matches!(tool.domain_code.as_str(), "dude_work" | "dude_notification" | "dude_identity") {
+                check(&tool.input_schema);
+            }
             let validator = jsonschema::validator_for(&tool.input_schema).unwrap();
             assert!(!validator.is_valid(&json!({"dudeCode":"another-dude"})));
             for example in tool.input_schema["examples"]
@@ -113,6 +121,26 @@ fn all_dude_tools_have_closed_typed_provider_schemas_and_localized_descriptions(
             }
         }
     }
+}
+
+#[test]
+fn workspace_scoped_catalog_tools_require_explicit_workspace() {
+    let tools = BusinessToolCatalog::list_tools(None, None, "en-US");
+    let mut workspace_tools = 0;
+    for tool in tools {
+        if tool.input_schema.pointer("/properties/workspaceCode").is_none() {
+            continue;
+        }
+        workspace_tools += 1;
+        assert!(tool.input_schema["required"].as_array().is_some_and(|required| required.iter().any(|key| key == "workspaceCode")), "{} must require workspaceCode", tool.tool_name);
+        assert!(!tool.domain_code.starts_with("dude_"), "Dude tool {} must not require a workspace", tool.tool_name);
+        for example in tool.input_schema["examples"].as_array().into_iter().flatten() {
+            if example.is_object() {
+                assert!(example["workspaceCode"].as_str().is_some_and(|code| !code.trim().is_empty()), "{} has an example without workspaceCode", tool.tool_name);
+            }
+        }
+    }
+    assert!(workspace_tools > 10, "workspace tool inventory unexpectedly empty");
 }
 
 #[test]

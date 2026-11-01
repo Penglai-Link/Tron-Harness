@@ -16,10 +16,9 @@ use tron_backend::{
     application::agent::{ActiveRunRegistry, AgentSteerInput, ModelClient, ReactAgentBuilder},
     domain::agent::{
         AgentError, AgentExecutionScope, AgentKind, AgentMessage, AgentMessagePart,
-        AgentModelConfig,
-        AgentModelProtocol, AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool,
-        EffectiveVariable, InProcessTool, ModelRequest, ModelResponse, Tool, ToolCall, ToolError,
-        ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
+        AgentModelConfig, AgentModelProtocol, AgentRunContext, AgentRunLimits, EffectiveSkill,
+        EffectiveTool, EffectiveVariable, InProcessTool, ModelRequest, ModelResponse, Tool,
+        ToolCall, ToolError, ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
     },
     shared::{
         event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
@@ -40,7 +39,6 @@ impl ScriptedModelClient {
     }
 }
 
-
 /// Rewrite every scripted direct tool call into a `tool_execute` envelope,
 /// keeping the original call id so observations stay addressable. Gateway
 /// mode exposes only the stable pair to the model.
@@ -54,7 +52,9 @@ fn to_gateway_response(response: ModelResponse) -> ModelResponse {
             input_error,
         } = part
         {
-            if input_error.is_some() { continue; }
+            if input_error.is_some() {
+                continue;
+            }
             if tool_name == "tool_search" {
                 *input = common::gateway_arguments(tool_name, input.clone());
                 continue;
@@ -931,7 +931,11 @@ async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
 
     assert_eq!(result.final_output, "after-tool");
     assert_eq!(result.observations.len(), 2);
-    let mut outputs = result.observations.iter().map(|o| o.output.as_str()).collect::<Vec<_>>();
+    let mut outputs = result
+        .observations
+        .iter()
+        .map(|o| o.output.as_str())
+        .collect::<Vec<_>>();
     outputs.sort();
     assert_eq!(outputs, ["observed:\"a\"", "observed:\"b\""]);
 }
@@ -1005,7 +1009,11 @@ async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
 
     assert_eq!(result.final_output, "after-tool");
     assert_eq!(result.observations.len(), 2);
-    let mut outputs = result.observations.iter().map(|o| o.output.as_str()).collect::<Vec<_>>();
+    let mut outputs = result
+        .observations
+        .iter()
+        .map(|o| o.output.as_str())
+        .collect::<Vec<_>>();
     outputs.sort();
     assert_eq!(outputs, ["observed:\"a\"", "observed:\"b\""]);
     assert_eq!(max_running.load(Ordering::SeqCst), 2);
@@ -1417,16 +1425,17 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
         .find(|event| event.sse_event == "TOOL_CALL_RESULT")
         .unwrap();
     let batch: eliteforge_agent_core::ToolBatchItem = serde_json::from_str(
-        &payload("tool_batch_json",tool_started).expect("Framework batch identity")
-    ).unwrap();
+        &payload("tool_batch_json", tool_started).expect("Framework batch identity"),
+    )
+    .unwrap();
     let parent_id = batch.parent_invocation_id.to_string();
-    assert_ne!(parent_id,invocation_id);
-    assert_eq!(batch.invocation_id.to_string(),invocation_id);
-    assert_eq!(batch.index,0);
-    for event in [tool_completed,observation] {
-        let recorded: eliteforge_agent_core::ToolBatchItem = serde_json::from_str(
-            &payload("tool_batch_json",event).unwrap()).unwrap();
-        assert_eq!(recorded,batch);
+    assert_ne!(parent_id, invocation_id);
+    assert_eq!(batch.invocation_id.to_string(), invocation_id);
+    assert_eq!(batch.index, 0);
+    for event in [tool_completed, observation] {
+        let recorded: eliteforge_agent_core::ToolBatchItem =
+            serde_json::from_str(&payload("tool_batch_json", event).unwrap()).unwrap();
+        assert_eq!(recorded, batch);
     }
     assert_eq!(start.data["toolCallId"], parent_id);
     assert_eq!(start.data["toolCallName"], "echo");
@@ -1436,14 +1445,21 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
         json!({"items":[serde_json::from_str::<serde_json::Value>(&expected_args).unwrap()]})
     );
     assert_eq!(result.data["toolCallId"], parent_id);
-    let output: serde_json::Value = serde_json::from_str(result.data["content"].as_str().unwrap()).unwrap();
+    let output: serde_json::Value =
+        serde_json::from_str(result.data["content"].as_str().unwrap()).unwrap();
     assert_eq!(output["isError"], false);
     let public_result: eliteforge_agent_core::ToolBatchResult =
         serde_json::from_value(output["structured"].clone()).unwrap();
-    assert_eq!(public_result.results[0].identity,batch);
-    assert_eq!(public_result.results[0].status,eliteforge_agent_core::ToolBatchStatus::Completed);
-    assert_eq!(public_result.results[0].result,Some(json!(expected_result)));
-    assert_eq!(public_result.results[0].content.text(),expected_result);
+    assert_eq!(public_result.results[0].identity, batch);
+    assert_eq!(
+        public_result.results[0].status,
+        eliteforge_agent_core::ToolBatchStatus::Completed
+    );
+    assert_eq!(
+        public_result.results[0].result,
+        Some(json!(expected_result))
+    );
+    assert_eq!(public_result.results[0].content.text(), expected_result);
     let end_index = protocol
         .iter()
         .position(|event| event.sse_event == "TOOL_CALL_END")
@@ -1538,7 +1554,10 @@ async fn react_agent_publishes_tool_progress_activity_events() {
     assert_eq!(starts.len(), 1);
     let first_batch: eliteforge_agent_core::ToolBatchItem =
         serde_json::from_value(activities[0].data["content"]["batch"].clone()).unwrap();
-    assert_eq!(first_batch.parent_invocation_id.to_string(), starts[0].data["toolCallId"]);
+    assert_eq!(
+        first_batch.parent_invocation_id.to_string(),
+        starts[0].data["toolCallId"]
+    );
     assert_ne!(first_batch.parent_invocation_id, first_batch.invocation_id);
     assert_eq!(first_batch.index, 0);
     for activity in &activities {
@@ -2089,7 +2108,9 @@ async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_s
     assert_eq!(
         requests[1]
             .messages
-            .iter().find(|message| message.role == "user" && message.plain_text_content() == "change direction now")
+            .iter()
+            .find(|message| message.role == "user"
+                && message.plain_text_content() == "change direction now")
             .expect("second request should contain steer input")
             .plain_text_content(),
         "change direction now"
@@ -2201,7 +2222,9 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
         requests[1]
             .1
             .messages
-            .iter().find(|message| message.role == "user" && message.plain_text_content() == "use the completed tool result differently")
+            .iter()
+            .find(|message| message.role == "user"
+                && message.plain_text_content() == "use the completed tool result differently")
             .expect("second request should contain steer input")
             .plain_text_content(),
         "use the completed tool result differently"
@@ -2264,10 +2287,7 @@ async fn framework_restores_responses_history_and_replays_changed_layout_after_r
     context.messages = vec![AgentMessage::user("follow up")].into();
     agent.run(context.clone()).await.unwrap();
     let requests = second.requests();
-    assert_eq!(
-        requests[0].1.previous_response_id.as_deref(),
-        None
-    );
+    assert_eq!(requests[0].1.previous_response_id.as_deref(), None);
     assert!(
         requests[0]
             .1
@@ -2443,7 +2463,7 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
         context.execution_scope.local_directory = Some(directory.path().display().to_string());
         context.execution_scope.allowed_local_directories =
             vec![directory.path().display().to_string()];
-        context.tools = ["bash_exec", "bash_task_read", "bash_task_stop"]
+        context.tools = ["command_exec", "command_exec_read", "command_exec_stop"]
             .into_iter()
             .map(|name| EffectiveTool {
                 tool_name: name.into(),
@@ -2456,7 +2476,7 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
             .collect();
         let client = Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call(
-                "bash_exec",
+                "command_exec",
                 json!({"command":"printf 'started\n'; sleep 60"}),
             ),
             ModelResponse::final_output("backgrounded"),
@@ -2492,7 +2512,10 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
                 .iter()
                 .any(|event| event.event_name == "agent.tool.activity")
         );
-        for (index, name) in ["bash_task_read", "bash_task_stop"].into_iter().enumerate() {
+        for (index, name) in ["command_exec_read", "command_exec_stop"]
+            .into_iter()
+            .enumerate()
+        {
             let client = Arc::new(ScriptedModelClient::new(vec![
                 ModelResponse::tool_call(name, json!({"taskId":id})),
                 ModelResponse::final_output("done"),
@@ -2531,7 +2554,8 @@ async fn framework_refreshes_host_instructions_without_losing_persisted_conversa
     context.messages = vec![
         AgentMessage::system("old host instruction"),
         AgentMessage::user("first question"),
-    ].into();
+    ]
+    .into();
     let first = Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
         "first answer",
     )]));
@@ -2548,7 +2572,8 @@ async fn framework_refreshes_host_instructions_without_losing_persisted_conversa
     context.messages = vec![
         AgentMessage::system("new host instruction"),
         AgentMessage::user("second question"),
-    ].into();
+    ]
+    .into();
     let second = Arc::new(ScriptedResultModelClient::new(vec![Ok(
         ModelResponse::final_output("second answer"),
     )]));
@@ -2819,11 +2844,19 @@ data: [DONE]
                     json!({"id":"fixture","object":"chat.completion.chunk","model":"gpt-test","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":response["usage"].clone()}),
                 ),
             };
-            socket.write_all(format!("HTTP/1.1 200 OK
+            socket
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK
 Content-Type: text/event-stream
 Connection: close
 
-{body}").as_bytes()).await.unwrap();
+{body}"
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
         }
         bodies
     });

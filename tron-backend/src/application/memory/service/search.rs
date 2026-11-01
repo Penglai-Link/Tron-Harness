@@ -11,7 +11,7 @@ use crate::application::memory::{
     code::{
         MEMORY_SOURCE_VERSION, MemoryLocator, MemoryScope, SearchMode, access_context,
         decode_memory_code, encode_memory_code, normalize_search_mode, normalized_optional,
-        validate_known_scope_code, validate_limit, validate_locator, validate_scope_code,
+        resolve_scope_code, validate_known_scope_code, validate_limit, validate_locator,
     },
     dto::{
         MemoryContextPack, MemoryContextPackItem, MemoryRunContext, MemorySearchCommand,
@@ -224,10 +224,8 @@ where
             if let Some(scope) = normalized_optional(command.scope.as_deref()) {
                 let scope = MemoryScope::parse(&scope)?;
                 filters.insert("scopeType".into(), json!(scope.as_rag()));
-                if let Some(scope_code) = normalized_optional(command.scope_code.as_deref()) {
-                    validate_scope_code(scope, &scope_code, context)?;
-                    filters.insert("scopeCode".into(), json!(scope_code));
-                }
+                let scope_code = resolve_scope_code(scope, command.scope_code.as_deref(), context)?;
+                filters.insert("scopeCode".into(), json!(scope_code));
             } else if let Some(scope_code) = normalized_optional(command.scope_code.as_deref()) {
                 validate_known_scope_code(&scope_code, context)?;
                 filters.insert("scopeCode".into(), json!(scope_code));

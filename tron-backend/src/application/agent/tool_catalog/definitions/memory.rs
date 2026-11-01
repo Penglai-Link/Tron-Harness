@@ -9,7 +9,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         ToolCatalogDefinition {
             tool_code: "memory.search",
             tool_name: "memory_search".into(),
-            domain_code: "memory",
+            domain_code: "harness_memory",
+            category_code: "tron.platform",
             name_i18n_key: "agent.toolCatalog.tools.memory.search.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.search.description",
             operation_kind: ToolOperationKind::Query,
@@ -19,6 +20,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
                 json!({
                     "type": "object",
                     "properties": {
+                        "workspaceCode": { "type": "string", "minLength": 1 },
                         "query": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.memory.search.params.query" },
                         "mode": { "type": "string", "enum": ["SEARCH", "CONTEXT_PACK"], "default": "SEARCH", "x-i18n-description-key": "agent.toolCatalog.tools.memory.search.params.mode" },
                         "memoryCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.memory.common.params.memoryCode" },
@@ -61,7 +63,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         ToolCatalogDefinition {
             tool_code: "memory.save",
             tool_name: "memory_save".into(),
-            domain_code: "memory",
+            domain_code: "harness_memory",
+            category_code: "tron.platform",
             name_i18n_key: "agent.toolCatalog.tools.memory.save.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.save.description",
             operation_kind: ToolOperationKind::Command,
@@ -71,6 +74,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
                 json!({
                     "type": "object",
                     "properties": {
+                        "workspaceCode": { "type": "string", "minLength": 1 },
                         "memoryType": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.memory.common.params.memoryType" },
                         "text": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.memory.save.params.text" },
                         "memoryCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.memory.common.params.memoryCode" },
@@ -100,7 +104,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         ToolCatalogDefinition {
             tool_code: "memory.delete",
             tool_name: "memory_delete".into(),
-            domain_code: "memory",
+            domain_code: "harness_memory",
+            category_code: "tron.platform",
             name_i18n_key: "agent.toolCatalog.tools.memory.delete.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.delete.description",
             operation_kind: ToolOperationKind::Command,
@@ -111,6 +116,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
                     "type": "object",
                     "required": ["memoryCode", "reason"],
                     "properties": {
+                        "workspaceCode": { "type": "string", "minLength": 1 },
                         "memoryCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.memory.common.params.memoryCode" },
                         "reason": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.memory.delete.params.reason" },
                         "deleteMode": { "type": "string", "enum": ["ARCHIVE", "DISABLE"], "default": "ARCHIVE", "x-i18n-description-key": "agent.toolCatalog.tools.memory.delete.params.deleteMode" },
@@ -127,7 +133,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         ToolCatalogDefinition {
             tool_code: "todo.update",
             tool_name: "todo_update".into(),
-            domain_code: "memory",
+            domain_code: "harness_memory",
+            category_code: "tron.platform",
             name_i18n_key: "agent.toolCatalog.tools.todo.update.name",
             description_i18n_key: "agent.toolCatalog.tools.todo.update.description",
             operation_kind: ToolOperationKind::Command,
@@ -136,8 +143,9 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
                 json!([{ "todos": [{ "position": 1, "content": "Inspect transcript storage", "status": "in_progress", "priority": "high" }] }]),
                 json!({
                     "type": "object",
-                    "required": ["todos"],
+                    "required": ["workspaceCode", "todos"],
                     "properties": {
+                        "workspaceCode": { "type": "string", "minLength": 1 },
                         "todos": {
                             "type": "array",
                             "maxItems": 50,

@@ -123,10 +123,7 @@ async fn native_pdf_uses_the_unified_indices_and_evidence_locations() {
     );
 
     let llm = LlmRuntimeService::new(
-        Arc::new(ProviderAwareLlmRuntimeResolver::new(
-            f.state.models.clone(),
-            providers,
-        )),
+        Arc::new(ProviderAwareLlmRuntimeResolver::new(providers)),
         Arc::new(HttpLlmRuntimeClient::with_model_client(models)),
     );
     let rag = RagService::new(

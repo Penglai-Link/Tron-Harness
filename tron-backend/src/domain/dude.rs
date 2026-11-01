@@ -2,6 +2,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub const HEARTBEAT_HISTORY_LIMIT: usize = 20;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DudeKind {
     Main,

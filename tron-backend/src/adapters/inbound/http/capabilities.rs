@@ -6,7 +6,7 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Multipart, Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
 };
@@ -34,9 +34,15 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
-async fn list_capability_packs(State(state): State<AppState>) -> Response {
+async fn list_capability_packs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let locale = crate::shared::locale::resolve_request_locale(
+        headers.get(axum::http::header::ACCEPT_LANGUAGE).and_then(|value| value.to_str().ok()),
+    );
     let (packs, _) = state.agent_framework.capability_state();
-    match installed_capability_packs(state.agent_framework.pack_root()) {
+    match installed_capability_packs(state.agent_framework.pack_root(), &locale) {
         Ok(records) => Json(ApiResponse::success(
             records
                 .into_iter()
@@ -80,6 +86,7 @@ struct EnabledRequest {
 async fn set_pack_enabled(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(request): Json<EnabledRequest>,
 ) -> Response {
     let is_builtin = crate::application::agent::capability_pack_catalog()
@@ -127,7 +134,7 @@ async fn set_pack_enabled(
         .set_pack_enabled(&id, request.enabled)
         .await
     {
-        Ok(()) => list_capability_packs(State(state)).await,
+        Ok(()) => list_capability_packs(State(state), headers).await,
         Err(error) => failure(StatusCode::CONFLICT, "CAPABILITY_RECONFIGURE_FAILED", error),
     }
 }

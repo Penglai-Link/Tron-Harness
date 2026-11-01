@@ -3,12 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Field, TextInput } from "@/components/forms";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Button } from "@/components/ui/button";
-import { fetchWorkspaceOptions } from "@/domain/admin/api";
-import { fetchWorkspaceSelectOptions } from "@/domain/model/api";
-import { getWorkspaceSelectOptions } from "@/domain/model/mock";
+import { fetchModelSelectOptions } from "@/domain/model/api";
 import type { ModelSelectOption } from "@/domain/model/model";
-import { useWorkspaceSpaces } from "@/shared";
-import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 export function AgentCandidateModelsField({ workspaceCode, value, onChange, disabled }: {
   workspaceCode: string;
@@ -17,10 +13,7 @@ export function AgentCandidateModelsField({ workspaceCode, value, onChange, disa
   disabled?: boolean;
 }) {
   const { t } = useTranslation("pages");
-  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
-  const catalogWorkspace = workspaceCode === "$platform"
-    ? selectedSecondarySpace?.workspaceCode ?? selectedPrimarySpace?.workspaceCode ?? ""
-    : workspaceCode;
+  const catalogWorkspace = workspaceCode === "$platform" ? "" : workspaceCode;
   const [options, setOptions] = useState<ModelSelectOption[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,19 +21,11 @@ export function AgentCandidateModelsField({ workspaceCode, value, onChange, disa
   const [revision, setRevision] = useState(0);
   const text = (key: string) => t(`workspaceAgents.internal.candidateModels.${key}`);
   useEffect(() => {
-    if (!catalogWorkspace && workspaceCode !== "$platform") return;
     const controller = new AbortController();
     setLoading(true);
     setError(null);
     setOptions([]);
-    const load = async () => {
-      if (getServiceDataSource("model") !== "api") return getWorkspaceSelectOptions(catalogWorkspace);
-      if (workspaceCode !== "$platform") return fetchWorkspaceSelectOptions(catalogWorkspace, controller.signal);
-      const workspaces = await fetchWorkspaceOptions({ includeArchived: false }, controller.signal);
-      const catalogs = await Promise.all(workspaces.map((workspace) => fetchWorkspaceSelectOptions(workspace.workspaceCode, controller.signal)));
-      return [...new Map(catalogs.flat().map((option) => [option.optionCode || option.modelCode, option])).values()];
-    };
-    void load().then((records) => {
+    void fetchModelSelectOptions(catalogWorkspace, controller.signal).then((records) => {
       if (!controller.signal.aborted) setOptions(records.filter((option) => option.modelType === "TEXT"
         && (!option.modelSelection || option.modelSelection.kind === "Fixed")
         && option.enabled && (option.contextWindowTokens ?? 0) > 0
@@ -49,7 +34,7 @@ export function AgentCandidateModelsField({ workspaceCode, value, onChange, disa
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [catalogWorkspace, workspaceCode, revision]);
+  }, [catalogWorkspace, revision]);
   const codes = new Set(options.map((option) => option.optionCode || option.modelCode));
   const unavailable = value.filter((code) => !codes.has(code));
   const query = search.trim().toLowerCase();
@@ -69,7 +54,7 @@ export function AgentCandidateModelsField({ workspaceCode, value, onChange, disa
           <span className="min-w-0"><span className="block font-medium">{option.displayName}{option.qualityType ? ` · ${option.qualityType}` : ""}</span><span className="block break-all text-xs text-[var(--color-on-surface-variant)]">{option.sourceLabel} · {option.modelCode}</span></span>
         </label>;
       })}
-      {!loading && !error && options.length === 0 ? <p className="p-3 text-sm text-[var(--color-on-surface-variant)]">{text(catalogWorkspace || workspaceCode === "$platform" ? "empty" : "noWorkspace")}</p> : null}
+      {!loading && !error && options.length === 0 ? <p className="p-3 text-sm text-[var(--color-on-surface-variant)]">{text("empty")}</p> : null}
       {loading ? <p role="status" className="p-3 text-sm">{text("loading")}</p> : null}
     </div>
     {error ? <div className="mt-2 flex items-center gap-2"><p role="alert" className="text-sm text-[var(--color-error)]">{error}</p><Button type="button" size="sm" variant="outline" onClick={() => setRevision((current) => current + 1)}>{text("retry")}</Button></div> : null}

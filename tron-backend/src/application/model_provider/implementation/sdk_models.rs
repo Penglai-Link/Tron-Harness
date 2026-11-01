@@ -1,6 +1,7 @@
 use super::*;
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
+use super::encryption_keys::{is_encryption_key_failure, is_encryption_key_failure_detail};
 
 use eliteforge_agent_official_plugin_model_http as sdk;
 
@@ -95,6 +96,8 @@ impl ModelProviderService {
                     if this.sdk_identity_scope(&row) != expected_scope
                         || !current.is_some_and(|value| {
                             value.token == credentials.token
+                                && value.client_id == credentials.client_id
+                                && value.public_key == credentials.public_key
                                 && value.server_base_url == credentials.server_base_url
                         })
                     {
@@ -156,6 +159,20 @@ impl ModelProviderService {
             fw::ModelError::Fatal("PersonAI rejected attempt identity missing".into())
         })?;
 
+        if is_encryption_key_failure(error) {
+            return match self.recover_encryption_key_for_match(id).await {
+                Ok(Some(_)) => Ok(true),
+                Ok(None) => {
+                    let mut failure = error.clone();
+                    if let fw::ModelError::Provider(detail) = &mut failure {
+                        detail.message = "PersonAI encryption key changed; authorize PersonAI again".into();
+                    }
+                    Err(failure)
+                }
+                Err(failure) => Err(fw::ModelError::Fatal(failure.to_string())),
+            };
+        }
+
         match self
             .refresh_credentials_for_match(ModelProviderCode::PersonAi, id, true, true)
             .await
@@ -185,8 +202,9 @@ impl ModelProviderService {
         if !rejected {
             return;
         }
+        let rejected_key = terminal && is_encryption_key_failure_detail(error);
         let rejected_access =
-            terminal && error.category == fw::ProviderErrorCategory::Authentication;
+            terminal && error.category == fw::ProviderErrorCategory::Authentication && !rejected_key;
         let identity = identity.to_owned();
         let result = (|| -> Result<(), ModelProviderError> {
             let this = self.clone();
@@ -223,6 +241,8 @@ impl ModelProviderService {
             }
             let reason = if unbound {
                 "PersonAI device was unbound; login again"
+            } else if rejected_key {
+                "PersonAI encryption key changed; authorize PersonAI again"
             } else {
                 "PersonAI rejected access credentials; reauthorization required"
             };
@@ -513,10 +533,19 @@ impl ModelProviderService {
         format!("{:x}", digest.finalize())
     }
     pub(super) fn sdk_attempt_for_row(&self, row: &ProviderConnectionRow, token: &str) -> String {
+        // A device reauthorization can rotate the encryption key while the
+        // access token stays valid. Late failures must identify that key too.
+        let credentials = row.credentials_encrypted.as_deref()
+            .and_then(|encrypted| self.decrypt_credentials(encrypted).ok());
+        let material = serde_json::json!([
+            token,
+            credentials.as_ref().map(|value| &value.client_id),
+            credentials.as_ref().map(|value| &value.public_key),
+        ]).to_string();
         format!(
             "{}:{}",
             self.sdk_identity_scope(row),
-            self.sdk_fingerprint(token)
+            self.sdk_fingerprint(&material)
         )
     }
     #[cfg(test)]

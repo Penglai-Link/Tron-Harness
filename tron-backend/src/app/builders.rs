@@ -128,12 +128,12 @@ fn build_skill_registry_service(database_url: &str, registry_root: &str) -> Skil
 
 fn build_model_service(
     database_url: &str,
-    workspaces: WorkspaceService,
     variables: VariableService,
+    providers: ModelProviderService,
 ) -> ModelService {
     let repository = SqliteModelRepository::connect(database_url)
         .expect("model SQLite repository should initialize");
-    ModelService::new(repository, workspaces, variables.cipher())
+    ModelService::new(repository, variables.cipher(), providers)
 }
 
 fn build_model_provider_service(

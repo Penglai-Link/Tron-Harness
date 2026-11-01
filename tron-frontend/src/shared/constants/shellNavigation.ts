@@ -20,7 +20,6 @@ export const tronNavigation: TronNavSection[] = [
 ] },
 { menuCode: "AGENT_OPERATIONS", label: "Agent Operations", translationKey: "shell:nav.sections.agentOperations", href: "", icon: getNavigationIcon("Bot") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
 { menuCode: "MCP_SERVERS", label: "MCP Servers", translationKey: "shell:nav.items.mcpServers", href: "/mcp-servers", icon: getNavigationIcon("PlugZap") ?? Folder, childDisplay: "Inline" },
-{ menuCode: "MODELS", label: "Models", translationKey: "shell:nav.items.models", href: "/models", icon: getNavigationIcon("Sparkles") ?? Folder, childDisplay: "Inline" }
 ] },
 { menuCode: "DATA", label: "Data", translationKey: "shell:nav.sections.data", href: "", icon: getNavigationIcon("Database") ?? Folder, childDisplay: "Inline", isGroup: true, children: [
 { menuCode: "RESOURCE_MANAGEMENT", label: "Resource Management", translationKey: "shell:nav.items.resourceManagement", href: "", icon: getNavigationIcon("Archive") ?? Folder, childDisplay: "Inline", isGroup: true, children: [

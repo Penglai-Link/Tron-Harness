@@ -16,6 +16,9 @@ pub trait ChatRepository: Send {
     ) -> Result<std::collections::BTreeMap<String, u32>, ChatError>;
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError>;
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError>;
+    fn delete_expired_heartbeat_session(&mut self, session_code: &str) -> Result<(), ChatError> {
+        self.delete_session(session_code)
+    }
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError>;
     fn find_source_session(
         &mut self,

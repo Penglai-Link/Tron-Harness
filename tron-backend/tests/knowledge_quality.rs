@@ -546,6 +546,39 @@ async fn knowledge_chat_tools_enforce_server_bound_library_and_identity() {
 }
 
 #[tokio::test]
+async fn knowledge_quality_tools_read_sources_and_manage_a_run() {
+    use serde_json::{Value, json};
+    use tron_backend::domain::agent::{AgentRunContext, ToolRequest};
+
+    let (f, kb, _, quality, _) = ready().await;
+    let session = f.state.chats.ensure_knowledge_quality_session(USER, &kb, "Quality").unwrap();
+    let context: AgentRunContext = serde_json::from_value(json!({
+        "agentCode":f.agent,"conversationCode":session.session_code,"runCode":"quality-lifecycle","workspaceCode":"PLATFORM","userCode":USER,"locale":"en-US","agentKind":"REACT",
+        "model":{"modelCode":"fixture-chat","protocol":"CHAT_COMPLETIONS","baseUrl":"http://127.0.0.1:1/v1","apiKey":"synthetic","modelName":"fixture"},
+        "variables":[],"skills":[],"tools":[],"executionScope":{},"limits":{"maxSteps":2,"maxToolCalls":2,"maxParallelToolCalls":1},"messages":[],"observations":[],"startedAt":"fixture"
+    })).unwrap();
+    let tools = tron_backend::application::agent::knowledge_quality_tools(quality.clone(), f.state.chats.clone());
+    async fn call(tools: &[std::sync::Arc<dyn tron_backend::domain::agent::Tool>], context: &AgentRunContext, name: &str, input: Value) -> Value {
+        let tool = tools.iter().find(|tool| tool.name() == name).unwrap();
+        let result = tool.exec_async(ToolRequest { tool_name: name.into(), invocation_id: None, input }, context, &Control).unwrap().await.unwrap();
+        serde_json::from_str(&result.observation.output).unwrap()
+    }
+    let sources = call(&tools, &context, "rag_quality_sources", json!({})).await;
+    assert!(sources["sourceFingerprint"].as_str().is_some());
+    assert!(!sources["records"].as_array().unwrap().is_empty());
+    let cases = call(&tools, &context, "rag_quality_cases", json!({})).await;
+    assert_eq!(cases["cases"].as_array().unwrap().len(), 8);
+    let run = call(&tools, &context, "rag_quality_start", json!({"requestId":"quality-tool-lifecycle","options":options()})).await;
+    let run_id = run["id"].as_str().unwrap();
+    let status = call(&tools, &context, "rag_quality_status", json!({"runId":run_id})).await;
+    assert_eq!(status["id"], run_id);
+    let cancelled = call(&tools, &context, "rag_quality_cancel", json!({"runId":run_id})).await;
+    assert_eq!(cancelled["id"], run_id);
+    let _ = finished(&quality, &kb, run_id).await;
+    f.state.agent_framework.close().await;
+}
+
+#[tokio::test]
 async fn knowledge_namespace_allows_history_but_rejects_forged_headers_and_path_overrides() {
     use axum::{
         body::Body,

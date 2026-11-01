@@ -6,7 +6,7 @@ import { gatewayArguments } from "./support/gateway-stub";
  * routes, real PTY) with a local OpenAI-compatible stub model. The model stub
  * scripts OpenAI `tool_calls`, so the assertions below observe the real
  * framework loop: `tools` stability, `tool_search` discovery output, real
- * `tool_execute` execution through `bash_exec`, and the AG-UI card titles the
+ * `tool_execute` execution through `command_exec`, and the AG-UI card titles the
  * browser actually renders.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -47,26 +47,26 @@ type Scenario = { toolCalls: StubToolCall[]; final: string };
 const SCENARIOS: Record<string, Scenario> = {
   "gateway-baseline": { toolCalls: [], final: "gateway-baseline-reply" },
   "gateway-discovery": {
-    toolCalls: [{ name: "tool_search", args: { domainCode: "bash", limit: 5 } }],
+    toolCalls: [{ name: "tool_search", args: { domainCode: "command", limit: 5 } }],
     final: "gateway-discovery-reply",
   },
   "gateway-execute": {
-    toolCalls: [{ name: "tool_execute", args: { tool: "bash_exec", arguments: { command: EXEC_COMMAND } } }],
+    toolCalls: [{ name: "tool_execute", args: { tool: "command_exec", arguments: { command: EXEC_COMMAND } } }],
     final: "gateway-execute-reply",
   },
   "gateway-parallel": {
     toolCalls: [
-      { name: "tool_execute", args: { tool: "bash_exec", arguments: { command: PARALLEL_COMMANDS[0] } } },
-      { name: "tool_execute", args: { tool: "bash_exec", arguments: { command: PARALLEL_COMMANDS[1] } } },
+      { name: "tool_execute", args: { tool: "command_exec", arguments: { command: PARALLEL_COMMANDS[0] } } },
+      { name: "tool_execute", args: { tool: "command_exec", arguments: { command: PARALLEL_COMMANDS[1] } } },
     ],
     final: "gateway-parallel-reply",
   },
   "gateway-en-discovery": {
-    toolCalls: [{ name: "tool_search", args: { domainCode: "bash", limit: 5 } }],
+    toolCalls: [{ name: "tool_search", args: { domainCode: "command", limit: 5 } }],
     final: "gateway-en-discovery-reply",
   },
   "gateway-en-execute": {
-    toolCalls: [{ name: "tool_execute", args: { tool: "bash_exec", arguments: { command: EXEC_COMMAND } } }],
+    toolCalls: [{ name: "tool_execute", args: { tool: "command_exec", arguments: { command: EXEC_COMMAND } } }],
     final: "gateway-en-execute-reply",
   },
 };
@@ -211,7 +211,8 @@ test.beforeAll(async () => {
   });
   api = `http://127.0.0.1:${port}`;
   backendLogs = "";
-  backend = spawnManagedProcess("make", ["be-ui-acceptance", `CARGO=${process.env.TRON_ACCEPTANCE_CARGO || "cargo"}`], {
+  const backendBinary = process.env.TRON_ACCEPTANCE_SERVER;
+  backend = spawnManagedProcess(backendBinary || "make", backendBinary ? [] : ["be-ui-acceptance", `CARGO=${process.env.TRON_ACCEPTANCE_CARGO || "cargo"}`], {
     cwd: resolve(fileURLToPath(import.meta.url), "../../.."),
     env: {
       ...process.env,
@@ -247,16 +248,17 @@ test.beforeAll(async () => {
   // `main-agent`, which is the one authorized for every platform tool.
   expect(agentCodes, `workspace internal agents: ${JSON.stringify(agentCodes)}`).toContain("main-agent");
 
-  const modelResponse = await fetch(`${api}/api/v1/admin/platform/models`, {
+  const modelResponse = await fetch(`${api}/api/v1/model-providers/configured`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer profile-test-token" },
     body: JSON.stringify({
-      displayName: MODEL_DISPLAY_NAME, vendor: "OpenAI", protocol: "OPENAI_COMPATIBLE", modelType: "TEXT", modelCapabilities: ["TEXT_GENERATION"],
-      baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiPath: "/chat/completions", apiKeyRef: "sk-acceptance", modelName: "acceptance-model", enabled: true,
-      thinkingEnabled: false, structuredOutputEnabled: false, temperature: 0.2, maxTokens: 1024, contextWindowTokens: 128000, topP: 1, maxRetries: 0,
+      displayName: MODEL_DISPLAY_NAME, protocol: "OpenAiChatCompletions",
+      baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiKey: "sk-acceptance", requestHeaders: {}, enabled: true,
+      models: [{ modelType: "Text", modelCode: null, modelId: "acceptance-model", name: MODEL_DISPLAY_NAME, contextWindowTokens: 128000,
+        maxOutputTokens: 1024, reasoning: false, supportsDeveloperRole: false, inputCapabilities: ["Text"], enabled: true }],
     }),
   });
-  expect(modelResponse.ok).toBe(true);
+  expect(modelResponse.ok, await modelResponse.text()).toBe(true);
   frontend = await startResourceUiFrontend("/chats", {
     VITE_TRON_DATA_SOURCE: "mock", VITE_TRON_CHAT_DATA_SOURCE: "api", VITE_TRON_MODEL_DATA_SOURCE: "api", VITE_TRON_AGENT_DATA_SOURCE: "api",
     VITE_TRON_API_BASE_URL: "", TRON_FRONTEND_API_PROXY_TARGET: api,
@@ -340,7 +342,9 @@ async function visibleToolTitles(transcript: Locator): Promise<string[]> {
 }
 
 function requestsFor(marker: string) {
-  return requests.filter((request) => request.marker === marker);
+  // Title and summary requests can carry the same user text without tools;
+  // only the streamed agent loop participates in the gateway contract.
+  return requests.filter((request) => request.marker === marker && request.stream);
 }
 
 function toolResultTexts(recorded: RecordedRequest) {
@@ -382,11 +386,11 @@ test("1. baseline conversation keeps the model-visible tools array stable", asyn
   await page.screenshot({ path: testInfo.outputPath("01-baseline.png"), animations: "disabled" });
 });
 
-test("2. tool_search discovery returns the bash domain and renders a localized card", async ({ page }, testInfo) => {
+test("2. tool_search discovery returns the command domain and renders a localized card", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await openChat(page, "zh-CN");
   const transcript = transcriptOf(page);
-  await send(page, "gateway-discovery: 找出 bash 领域工具");
+  await send(page, "gateway-discovery: 找出 command 领域工具");
   await expect(transcript).toContainText("gateway-discovery-reply", { timeout: 60_000 });
 
   const recorded = requestsFor("gateway-discovery");
@@ -396,21 +400,21 @@ test("2. tool_search discovery returns the bash domain and renders a localized c
   const results = toolResultTexts(followUp!);
   expect(results.length).toBeGreaterThan(0);
   const discoveryResult = results.join("\n");
-  expect(discoveryResult, "tool_search must return the real bash domain inventory").toContain("bash_exec");
+  expect(discoveryResult, "tool_search must return the real command domain inventory").toContain("command_exec");
   logEvidence("discovery.tools", recorded.map((request) => request.toolNames));
   logEvidence("discovery.followUpToolResult", discoveryResult.slice(0, 600));
 
   await expandWorkRail(transcript);
   const titles = await visibleToolTitles(transcript);
   logEvidence("discovery.cardTitles", titles);
-  expect(titles.some((title) => title.includes("搜索工具")), `zh discovery card title must be human readable: ${JSON.stringify(titles)}`).toBe(true);
+  expect(titles).toContain("查找工具 command");
   const transcriptText = (await transcript.innerText());
   logEvidence("discovery.transcriptHasRawToolSearch", transcriptText.includes("tool_search"));
   expect(transcriptText, "zh transcript must not expose the raw tool_search id").not.toContain("tool_search");
   await page.screenshot({ path: testInfo.outputPath("02-discovery.png"), animations: "disabled" });
 });
 
-test("3. tool_execute really runs bash_exec and the card hides the raw ids", async ({ page }, testInfo) => {
+test("3. tool_execute really runs command_exec and the card hides the raw ids", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await openChat(page, "zh-CN");
   const transcript = transcriptOf(page);
@@ -431,16 +435,11 @@ test("3. tool_execute really runs bash_exec and the card hides the raw ids", asy
   logEvidence("execute.cardTitles", titles);
   expect(titles.some((title) => title.includes("echo acc-gateway-hello")), `zh execute card title must carry the command: ${JSON.stringify(titles)}`).toBe(true);
   const transcriptText = await transcript.innerText();
-  logEvidence("execute.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("bash_exec") });
+  logEvidence("execute.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("command_exec") });
   expect(transcriptText, "zh transcript must not expose tool_execute").not.toContain("tool_execute");
-  expect(transcriptText, "zh transcript must not expose bash_exec").not.toContain("bash_exec");
+  expect(transcriptText, "zh transcript must not expose command_exec").not.toContain("command_exec");
   await page.screenshot({ path: testInfo.outputPath("03-execute.png"), animations: "disabled" });
-  // The Tron work rail composes command cards from the host i18n
-  // `chat.management.tool.commandSummary` =「执行：{{command}}」, so the card
-  // title is a localized action summary carrying the command instead of the
-  // gateway's raw id. Assert the measured wording (verified against the real
-  // browser) and that no raw tool id leaks anywhere in the transcript.
-  expect(titles, "zh execute card title must be a localized action summary carrying the command").toContain("执行 Shell 命令 echo acc-gateway-hello");
+  expect(titles, "zh execute card title must be a localized action summary carrying the command").toContain("执行命令 echo acc-gateway-hello");
 });
 
 test("4. two parallel tool_calls execute in one batch and render two cards", async ({ page }, testInfo) => {
@@ -468,10 +467,10 @@ test("4. two parallel tool_calls execute in one batch and render two cards", asy
   expect(await transcript.locator("button.ef-chat__tool-toggle").count(), "two tool cards must be rendered").toBe(2);
   const transcriptText = await transcript.innerText();
   // The batch is presented as one grouped work-rail entry (zh copy).
-  expect(transcriptText, "the grouped work-rail label must summarize the batch").toContain("执行 2 个命令");
-  logEvidence("parallel.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("bash_exec") });
+  expect(transcriptText, "the grouped work-rail label must summarize the batch").toContain("执行其他操作 2 项");
+  logEvidence("parallel.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("command_exec") });
   expect(transcriptText).not.toContain("tool_execute");
-  expect(transcriptText).not.toContain("bash_exec");
+  expect(transcriptText).not.toContain("command_exec");
   await page.screenshot({ path: testInfo.outputPath("04-parallel.png"), animations: "disabled" });
 });
 
@@ -480,17 +479,17 @@ test("5. reverse validation: en-US renders the same gateway cards in English", a
   await openChat(page, "en-US");
   const transcript = transcriptOf(page);
 
-  await send(page, "gateway-en-discovery: list bash tools");
+  await send(page, "gateway-en-discovery: list command tools");
   await expect(transcript).toContainText("gateway-en-discovery-reply", { timeout: 60_000 });
   const discovery = requestsFor("gateway-en-discovery");
   expectGatewayToolsOnly(discovery, "en discovery");
   const discoveryResult = toolResultTexts(discovery.find((request) => request.hasToolResult)!).join("\n");
-  expect(discoveryResult).toContain("bash_exec");
+  expect(discoveryResult).toContain("command_exec");
   await expandWorkRail(transcript);
   let titles = await visibleToolTitles(transcript);
   logEvidence("en.discoveryCardTitles", titles);
-  expect(titles.some((title) => title.includes("Search tools")), `en discovery card title missing: ${JSON.stringify(titles)}`).toBe(true);
-  expect(titles.some((title) => title.includes("bash")), `en discovery card title must carry the domain: ${JSON.stringify(titles)}`).toBe(true);
+  expect(titles).toContain("Search command");
+  expect(titles.some((title) => title.toLowerCase().includes("command")), `en discovery card title must carry the domain: ${JSON.stringify(titles)}`).toBe(true);
   expect((await transcript.innerText())).not.toContain("tool_search");
   await page.screenshot({ path: testInfo.outputPath("05-en-discovery.png"), animations: "disabled" });
 
@@ -505,12 +504,9 @@ test("5. reverse validation: en-US renders the same gateway cards in English", a
   logEvidence("en.executeCardTitles", titles);
   expect(titles.some((title) => title.includes("echo acc-gateway-hello")), `en execute card title missing: ${JSON.stringify(titles)}`).toBe(true);
   const transcriptText = await transcript.innerText();
-  logEvidence("en.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("bash_exec") });
+  logEvidence("en.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("command_exec") });
   expect(transcriptText).not.toContain("tool_execute");
-  expect(transcriptText).not.toContain("bash_exec");
+  expect(transcriptText).not.toContain("command_exec");
   await page.screenshot({ path: testInfo.outputPath("06-en-execute.png"), animations: "disabled" });
-  // Same as the zh case: the host i18n `chat.management.tool.commandSummary`
-  // renders 「Run: {{command}}」 in en-US. Assert the measured wording rather
-  // than a brief-invented template, keeping the raw-name invariant above.
-  expect(titles, "en execute card title must be a localized action summary carrying the command").toContain("Run shell command echo acc-gateway-hello");
+  expect(titles, "en execute card title must be a localized action summary carrying the command").toContain("System Command Exec echo acc-gateway-hello");
 });

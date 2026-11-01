@@ -21,7 +21,7 @@ it("prevents duplicate clicks, shows the result and refreshes points", async () 
   let finish!: (result: { points: number; continuousDays: number }) => void;
   vi.mocked(checkinApi.checkin).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
   render(<CheckinButton />);
-  await waitFor(() => expect(checkinApi.status).toHaveBeenCalled());
+  await waitFor(() => expect(screen.getByRole("button").textContent).toBe("userMenu.checkin"));
   const button = screen.getByRole("button");
   fireEvent.click(button);
   fireEvent.click(button);
@@ -36,11 +36,23 @@ it("prevents duplicate clicks, shows the result and refreshes points", async () 
 
 it("shows errors and recovers the already checked-in state from the server", async () => {
   render(<CheckinButton />);
-  await waitFor(() => expect(checkinApi.status).toHaveBeenCalled());
+  await waitFor(() => expect(screen.getByRole("button").textContent).toBe("userMenu.checkin"));
   vi.mocked(checkinApi.checkin).mockRejectedValue(new Error("Already checked in"));
   vi.mocked(checkinApi.status).mockResolvedValue({ todayCheckedIn: true, todayRewardPoints: 10 });
   fireEvent.click(screen.getByRole("button"));
   await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("Already checked in"));
   await waitFor(() => expect(screen.getByRole("button").textContent).toBe("userMenu.checkedIn"));
   expect(mocks.update).not.toHaveBeenCalled();
+});
+
+it("does not offer check-in until the server status is known", async () => {
+  let finish!: (result: { todayCheckedIn: boolean; todayRewardPoints: number }) => void;
+  vi.mocked(checkinApi.status).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  render(<CheckinButton />);
+  const button = screen.getByRole("button") as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  expect(button.textContent).toBe("userMenu.checkinStatusLoading");
+  await act(async () => finish({ todayCheckedIn: true, todayRewardPoints: 10 }));
+  expect(button.textContent).toBe("userMenu.checkedIn");
+  expect(button.disabled).toBe(true);
 });

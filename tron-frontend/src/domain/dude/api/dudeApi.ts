@@ -4,25 +4,29 @@ import { normalizeChatSession, type ChatSession } from "@tron/chat-core";
 
 export interface Dude {
   description?: string;
-  dudeCode: string; name: string; rolePrompt: string; loopCode: string | null;
+  dudeCode: string; name: string; rolePrompt: string;
   avatarId: string; candidateModelCodes: string[];
   enabled: boolean; heartbeatMinutes: number; memoryAutoApprove: boolean;
   kind: "Main" | "Memory" | "Custom"; isMain: boolean;
   createdAt: number; updatedAt: number;
 }
-export type DudeInput = Pick<Dude, "dudeCode" | "name" | "description" | "rolePrompt" | "loopCode" | "avatarId" | "candidateModelCodes" | "enabled" | "heartbeatMinutes" | "memoryAutoApprove"> & { kind?: "Custom" | "Memory" };
+export type DudeInput = Pick<Dude, "dudeCode" | "name" | "description" | "rolePrompt" | "avatarId" | "candidateModelCodes" | "enabled" | "heartbeatMinutes" | "memoryAutoApprove"> & { kind?: "Custom" | "Memory" };
 export interface DudeSession extends ChatSession { purpose: string; ownerDudeCode: string; }
 interface DudeSessionResponse extends Omit<DudeSession, "createdAt" | "updatedAt"> { createdAt: number; updatedAt: number; }
 function normalizeDudeSession(value: DudeSessionResponse): DudeSession {
   return normalizeChatSession({ ...value, createdAt: new Date(value.createdAt).toISOString(), updatedAt: new Date(value.updatedAt).toISOString() }) as DudeSession;
 }
 export interface DudeTask {
-  taskCode: string; title: string; description: string | null; status: string;
+  taskCode: string; title: string; status: string;
   ownerDudeCode: string; dueAt: number | null; nextFollowupAt: number | null;
   plannedStartAt: number | null; workSessionCode: string | null; updatedAt: string;
 }
+export interface DudeTaskDetail extends DudeTask {
+  description: string | null; executionResult: string | null; progress: number;
+  createdAt: string;
+}
 export interface DudeEvent { eventId: string; source: string; status: string; sessionCode: string | null; createdAt: number; result: string | null; }
-export const dudeQueryKeys = { all: ["dudes"] as const, sessions: (code: string) => ["dude-sessions", code] as const, tasks: (code: string) => ["dude-tasks", code] as const };
+export const dudeQueryKeys = { all: ["dudes"] as const, sessions: (code: string) => ["dude-sessions", code] as const, tasks: (code: string) => ["dude-tasks", code] as const, task: (code: string) => ["dude-task", code] as const };
 export const listDudes = (signal?: AbortSignal) => requestApi<Dude[]>("GET /api/v1/dudes", { signal });
 export const createDude = (body: DudeInput) => requestApi<Dude>("POST /api/v1/dudes", { body });
 export const updateDude = (dudeCode: string, body: Partial<Omit<DudeInput, "dudeCode" | "name">>) => requestApi<Dude>("PATCH /api/v1/dudes/{dudeCode}", { pathParams: { dudeCode }, body });
@@ -31,9 +35,10 @@ export const resolveMainDudeSession = () => requestApi<DudeSessionResponse>("POS
 export const resolveDudeSession = (dudeCode: string) => requestApi<DudeSessionResponse>("POST /api/v1/dudes/{dudeCode}/sessions", { pathParams: { dudeCode } }).then(normalizeDudeSession);
 export const listDudeSessions = (dudeCode: string, signal?: AbortSignal) => requestApi<DudeSessionResponse[]>("GET /api/v1/dudes/{dudeCode}/sessions", { pathParams: { dudeCode }, signal }).then(items => items.map(normalizeDudeSession));
 export const listDudeTasks = (dudeCode: string, signal?: AbortSignal) => requestApi<{ records: DudeTask[] }>("GET /api/v1/tasks", { queryParams: { ownerDudeCode: dudeCode, size: 200 }, signal }).then(page => page.records);
+export const getDudeTask = (taskCode: string, signal?: AbortSignal) => requestApi<DudeTaskDetail>("GET /api/v1/tasks/{taskCode}", { pathParams: { taskCode }, signal });
 export const createDudeTask = (dudeCode: string, body: { description: string; dueAt: number | null }) => requestApi<DudeTask>("POST /api/v1/tasks", { body: { workspaceCode: null, ownerDudeCode: dudeCode, title: body.description.split("\n")[0].slice(0, 100), description: body.description, dueAt: body.dueAt, priority: "Medium", taskType: "General", sourceType: "Internal", assigneeUserCodes: [], agentCodes: [], appCodes: [] } });
 export const updateDudeTask = (_dudeCode: string, taskCode: string, body: { description?: string; dueAt?: number | null }) => requestApi<DudeTask>("PATCH /api/v1/tasks/{taskCode}", { pathParams: { taskCode }, body: { ...body, ...(body.description ? { title: body.description.split("\n")[0].slice(0, 100) } : {}) } });
-export const archiveDudeTask = (taskCode: string) => requestApi<unknown>("POST /api/v1/tasks/{taskCode}/archive", { pathParams: { taskCode } });
+export const cancelDudeTask = (dudeCode: string, taskCode: string) => requestApi<void>("POST /api/v1/dudes/{dudeCode}/tasks/{taskCode}/cancel", { pathParams: { dudeCode, taskCode } });
 export const listDudeEvents = (dudeCode: string, signal?: AbortSignal) => requestApi<DudeEvent[]>("GET /api/v1/dudes/{dudeCode}/events", { pathParams: { dudeCode }, signal });
 
 export interface DudeThread { sessionCode: string; title: string | null; status: string; latestRunCode: string | null; }

@@ -2,13 +2,57 @@ use super::*;
 
 pub(super) fn translate_en_us(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.subagent.name" => "Subagent collaboration",
+        "agent.toolCatalog.domains.subagent.description" => {
+            "Delegate work to a subagent, inspect its status, exchange messages, answer questions, wait for results, or cancel a run."
+        }
+        "agent.toolCatalog.domains.collaboration_thread.name" => "Independent threads",
+        "agent.toolCatalog.domains.collaboration_thread.description" => {
+            "Create and manage independent agent threads; send messages, answer questions, wait for runs, read history, list or close threads."
+        }
+        "agent.toolCatalog.domains.skillLoading.name" => "Skill loading",
+        "agent.toolCatalog.domains.skillLoading.description" => {
+            "Load an enabled skill’s instructions and read resources listed by that skill."
+        }
+        "agent.toolCatalog.domains.tool.name" => "Tool discovery and execution",
+        "agent.toolCatalog.domains.tool.description" => {
+            "Search available tools and invoke a selected tool with its arguments."
+        }
+        "agent.toolCatalog.domains.user_interaction.name" => "User questions",
+        "agent.toolCatalog.domains.user_interaction.description" => {
+            "Ask the user structured questions and receive their answers."
+        }
+        "agent.toolCatalog.domains.a2ui.name" => "Interactive interface",
+        "agent.toolCatalog.domains.a2ui.description" => {
+            "Publish an interactive interface and request user input through it."
+        }
+        "agent.toolCatalog.domains.mcp.name" => "MCP management",
+        "agent.toolCatalog.domains.mcp.description" => {
+            "List, inspect, create, update, and delete MCP server configurations in platform settings."
+        }
+        "agent.toolCatalog.domains.prompt.name" => "Prompt management",
+        "agent.toolCatalog.domains.prompt.description" => {
+            "List, inspect, create, update, and delete platform prompts."
+        }
+        "agent.toolCatalog.domains.media.name" => "Images and documents",
+        "agent.toolCatalog.domains.media.description" => {
+            "Generate and inspect images, detect image content or text, and read image and PDF files."
+        }
         "agent.toolCatalog.domains.dude.name" => "Dude",
+        "agent.toolCatalog.domains.dude_memory.name" => "Dude memory",
+        "agent.toolCatalog.domains.dude_memory.description" => "Search and maintain user and work-domain memories for the Dude.",
+        "agent.toolCatalog.domains.dude_task.name" => "Dude tasks",
+        "agent.toolCatalog.domains.dude_task.description" => "Manage tasks owned by the Dude.",
+        "agent.toolCatalog.domains.dude_work.name" => "Dude work changes",
+        "agent.toolCatalog.domains.dude_work.description" => "Record and resolve Dude work changes.",
+        "agent.toolCatalog.domains.dude_notification.name" => "Dude notifications",
+        "agent.toolCatalog.domains.dude_notification.description" => "Notify the user about Dude work changes.",
         "agent.toolCatalog.domains.dude.description" => {
             "Dude-owned background work and platform notifications."
         }
         "agent.toolCatalog.tools.dude.work_change.name" => "Assess work changes",
         "agent.toolCatalog.tools.dude.work_change.description" => {
-            "Dude-owned business changes, independent of Thread runs and notifications. list reads durable changes; recordResult saves a result without closing the task; record stores a concrete Progress/Completed/NeedsDecision/Blocked change with stable changeKey and traceable evidence references; resolve explicitly closes a pending question/blocker with resolution evidence and resolves its notification without sending another. Completed requires an explicitly closed task, a recorded result, closed subtasks and no unresolved changes. Create a Dude-owned task first if none exists. No automatic notifications: decide whether to call dude_notify with the returned changeId. Reuse stable keys/references across retries and runs."
+            "Dude-owned business changes, independent of Thread runs and notifications. list reads durable changes; recordResult saves a result without closing the task; record stores a concrete Progress/Completed/NeedsDecision/Blocked change with stable changeKey and traceable evidence references; resolve explicitly closes any work change (including Progress/Completed) with resolution evidence and resolves its notification without sending another. Completed requires an explicitly closed task, a recorded result, closed subtasks and no unresolved questions/blockers. Create a Dude-owned task first if none exists. No automatic notifications: decide whether to call dude_notify with the returned changeId. List existing changes first and reuse their changeKey/changeId across sessions. Status/percentage changes alone are not new Progress milestones; record a new concrete result first. An existing notification receipt means the change was already delivered."
         }
         "agent.toolCatalog.tools.dude.work_change.sampleResultSummary" => {
             "Returns durable work changes and their resolution/delivery receipts."
@@ -55,10 +99,6 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.domains.memory.name" => "Memory Tools",
         "agent.toolCatalog.domains.memory.description" => {
             "Search, save, and soft-delete scoped memories."
-        }
-        "agent.toolCatalog.domains.model.name" => "Model Tools",
-        "agent.toolCatalog.domains.model.description" => {
-            "Inspect effective model catalog configuration."
         }
         "agent.toolCatalog.domains.resource.name" => "Resource Tools",
         "agent.toolCatalog.domains.resource.description" => {
@@ -159,7 +199,7 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.workspace.get.params.workspaceCode" => "Workspace code to load.",
         "agent.toolCatalog.tools.memory.search.name" => "Search memories",
         "agent.toolCatalog.tools.memory.search.description" => {
-            "Search scoped memories or build a context pack for the current agent run."
+            "Search scoped memories or build a context pack for the current agent run. USER/WORK_DOMAIN work without a workspace; SPACE requires a bound workspace."
         }
         "agent.toolCatalog.tools.memory.search.sampleResultSummary" => {
             "Returns matching memory items and an optional context pack."
@@ -181,7 +221,7 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.memory.save.name" => "Save memory",
         "agent.toolCatalog.tools.memory.save.description" => {
-            "Create or update a scoped memory card."
+            "Create or update a scoped memory card. Defaults to USER, which works without a workspace; SPACE requires a bound workspace. scopeCode cannot supply a missing workspace binding."
         }
         "agent.toolCatalog.tools.memory.save.sampleResultSummary" => {
             "Returns the saved memory code and write status."
@@ -333,11 +373,49 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
 
 pub(super) fn translate_zh_cn(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.subagent.name" => "子智能体协作",
+        "agent.toolCatalog.domains.subagent.description" => {
+            "向子智能体分派任务，查看运行状态，发送消息、回答问题、等待结果或取消运行。"
+        }
+        "agent.toolCatalog.domains.collaboration_thread.name" => "独立线程协作",
+        "agent.toolCatalog.domains.collaboration_thread.description" => {
+            "创建和管理独立智能体线程，发送消息、回答问题、等待运行、读取历史、列出或关闭线程。"
+        }
+        "agent.toolCatalog.domains.skillLoading.name" => "技能加载",
+        "agent.toolCatalog.domains.skillLoading.description" => {
+            "加载已启用技能的说明，并读取该技能列出的资源。"
+        }
+        "agent.toolCatalog.domains.tool.name" => "工具发现与执行",
+        "agent.toolCatalog.domains.tool.description" => "搜索可用工具，并使用参数调用选定的工具。",
+        "agent.toolCatalog.domains.user_interaction.name" => "用户提问",
+        "agent.toolCatalog.domains.user_interaction.description" => {
+            "向用户提出结构化问题并接收回答。"
+        }
+        "agent.toolCatalog.domains.a2ui.name" => "交互界面",
+        "agent.toolCatalog.domains.a2ui.description" => "展示交互界面并通过界面收集用户输入。",
+        "agent.toolCatalog.domains.mcp.name" => "MCP 管理",
+        "agent.toolCatalog.domains.mcp.description" => {
+            "查看、新建、更新和删除平台设置中的 MCP 服务器配置。"
+        }
+        "agent.toolCatalog.domains.prompt.name" => "提示词管理",
+        "agent.toolCatalog.domains.prompt.description" => "查看、新建、更新和删除平台提示词。",
+        "agent.toolCatalog.domains.media.name" => "图片与文档",
+        "agent.toolCatalog.domains.media.description" => {
+            "生成和查询图片，检测图片内容或文字，并读取图片和 PDF 文件。"
+        }
         "agent.toolCatalog.domains.dude.name" => "Dude",
+        "agent.toolCatalog.domains.dude_memory.name" => "Dude 记忆",
+        "agent.toolCatalog.domains.dude_memory.description" => "检索和维护用户及工作领域的记忆。",
+        "agent.toolCatalog.domains.dude_task.name" => "Dude 任务",
+        "agent.toolCatalog.domains.dude_task.description" => "管理由 Dude 负责的任务。",
+        "agent.toolCatalog.domains.dude_work.name" => "Dude 事项变化",
+        "agent.toolCatalog.domains.dude_work.description" => "记录和解决 Dude 负责的事项变化。",
+        "agent.toolCatalog.domains.dude_notification.name" => "Dude 通知",
+        "agent.toolCatalog.domains.dude_notification.description" => "向用户通知 Dude 的事项变化。",
         "agent.toolCatalog.domains.dude.description" => "Dude 的后台工作与平台通知。",
         "agent.toolCatalog.tools.dude.work_change.name" => "评估事项变化",
         "agent.toolCatalog.tools.dude.work_change.description" => {
-            "记录由当前 Dude 负责的事项变化，与 Thread 执行及通知独立。list 查询历史及未解决项；recordResult 保存结果但不关闭任务；record 记录 Progress/Completed/NeedsDecision/Blocked，须提供稳定 changeKey、具体摘要和可追溯 evidence 引用；resolve 用解决说明和证据关闭待确认/阻碍，同时解决原通知，不新增通知。Completed 要求 Dude 已显式关闭任务、有结果、子任务均关闭且无未解决项。没有 task 时先创建由自己负责的 task。记录不自动通知，由 Dude 决定是否调用 dude_notify(changeId,title,body)。跨轮次沿用相同 key 和证据。"
+            "记录由当前 Dude 负责的事项变化，与 Thread 执行及通知独立。list 查询历史及未解决项；recordResult 保存结果但不关闭任务；record 记录 Progress/Completed/NeedsDecision/Blocked，须提供稳定 changeKey、具体摘要和可追溯 evidence 引用；resolve 用解决说明和证据关闭任意类型的事项（含 Progress/Completed），同时解决原通知，不新增通知。Completed 要求 Dude 已显式关闭任务、有结果、子任务均关闭且无未解决的待确认/阻碍。没有 task 时先创建由自己负责的 task。记录不自动通知，由 Dude 决定是否调用 dude_notify(changeId,title,body)。先 list 已有事项，跨会话沿用其 changeKey/changeId。仅状态或百分比变化不算新的 Progress 里程碑，须先有新的具体结果。已有 notification 回执即表示投递过。"
         }
         "agent.toolCatalog.tools.dude.work_change.sampleResultSummary" => {
             "返回持久化事项变化及解决、通知投递记录。"
@@ -379,8 +457,6 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.domains.memory.description" => {
             "检索、保存和软删除有作用域的 Agent 记忆。"
         }
-        "agent.toolCatalog.domains.model.name" => "模型工具",
-        "agent.toolCatalog.domains.model.description" => "查看生效中的模型目录配置。",
         "agent.toolCatalog.domains.resource.name" => "资源工具",
         "agent.toolCatalog.domains.resource.description" => {
             "管理文件、数据源、服务器和服务器账号资源。"
@@ -454,7 +530,7 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.workspace.get.params.workspaceCode" => "要读取的工作区编码。",
         "agent.toolCatalog.tools.memory.search.name" => "检索记忆",
         "agent.toolCatalog.tools.memory.search.description" => {
-            "检索当前运行上下文可访问的记忆，或生成可注入上下文包。"
+            "检索当前运行上下文可访问的记忆，或生成可注入上下文包。USER/WORK_DOMAIN 无需工作区；SPACE 须绑定工作区。"
         }
         "agent.toolCatalog.tools.memory.search.sampleResultSummary" => {
             "返回匹配的记忆条目和可选上下文包。"
@@ -471,7 +547,7 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.memory.search.params.trace" => "是否记录 RAG 检索诊断轨迹。",
         "agent.toolCatalog.tools.memory.save.name" => "保存记忆",
-        "agent.toolCatalog.tools.memory.save.description" => "创建或更新有作用域的记忆卡片。",
+        "agent.toolCatalog.tools.memory.save.description" => "创建或更新有作用域的记忆卡片。默认 USER，无需工作区；SPACE 须绑定工作区，scopeCode 不能补充工作区绑定。",
         "agent.toolCatalog.tools.memory.save.sampleResultSummary" => {
             "返回保存后的 memoryCode 和写入状态。"
         }

@@ -167,6 +167,13 @@ fn error(error: DudeMemoryError, locale: &str) -> Response {
             "The artifact or installed skill changed; refresh and review again",
             "制品或已安装技能已变更，请刷新后重新审核",
         ),
+        DudeMemoryError::ExecutionBusy => (
+            StatusCode::CONFLICT,
+            "101041007",
+            "tron.dude_memory.busy",
+            "Memory session is already running",
+            "记忆会话正在运行",
+        ),
         DudeMemoryError::Invalid(_) => (
             StatusCode::BAD_REQUEST,
             "101041003",

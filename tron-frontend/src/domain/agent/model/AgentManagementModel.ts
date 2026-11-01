@@ -1,7 +1,7 @@
 import type { ReasoningEffort } from "@/domain/model/model/ModelRegistryModel";
 export type AgentStatus = "Enabled" | "Disabled" | "Unavailable";
 
-export type ToolAssignmentMode = "all_platform_tools" | "selected_tools" | "all_read_only_tools";
+export type ToolAssignmentMode = "all_platform_tools" | "selected_tools" | "all_read_only_tools" | "selected_categories";
 export type WorkspaceInternalAgentPolicySource =
   | "platform_default"
   | "workspace_override";
@@ -72,8 +72,12 @@ export interface ToolCatalogDomainRecord {
 }
 
 export interface PlatformToolRecord {
+  category?: { code: string; names: Record<string, string> } | null;
+  source?: { providerId: string | null; pluginId: string | null; packId: string | null; adapterId: string | null } | null;
   providerPackId?: string | null;
   assignable?: boolean;
+  dudeAssignable?: boolean;
+  dudeReplacementToolCode?: string | null;
   disabledReason?: string | null;
   toolCode: string;
   toolName: string;
@@ -83,13 +87,19 @@ export interface PlatformToolRecord {
   operationKind: "query" | "command" | "unknown";
 }
 
+export interface ToolCategoryRecord {
+  code: string;
+  name: string;
+  toolCount: number;
+}
+
 export interface WorkspaceInternalAgentRecord {
   enabled?: boolean;
   agentCode: string;
   name: string;
   description: string;
   rolePrompt: string;
-  loopCode?: string | null;
+
   avatarId?: string;
   candidateModelCodes?: string[];
   groupName?: string | null;
@@ -97,6 +107,7 @@ export interface WorkspaceInternalAgentRecord {
   builtIn?: boolean;
   mcpAccessMode: McpAccessMode;
   toolAssignmentMode: ToolAssignmentMode;
+  selectedCategoryCodes?: string[];
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls: number;
@@ -110,7 +121,7 @@ export interface CreateInternalAgentPayload {
   name: string;
   description?: string;
   rolePrompt: string;
-  loopCode?: string | null;
+
   avatarId?: string;
   candidateModelCodes?: string[];
   groupName?: string | null;
@@ -121,7 +132,7 @@ export interface UpdateInternalAgentDefinitionPayload {
   name?: string;
   description?: string;
   rolePrompt?: string;
-  loopCode?: string | null;
+
   avatarId?: string;
   candidateModelCodes?: string[];
   groupName?: string | null;
@@ -129,6 +140,7 @@ export interface UpdateInternalAgentDefinitionPayload {
 
 export interface WorkspaceInternalAgentPolicyPayload {
   toolAssignmentMode?: ToolAssignmentMode;
+  selectedCategoryCodes?: string[];
   maxSteps?: number;
   maxToolCalls?: number;
   maxParallelToolCalls?: number;

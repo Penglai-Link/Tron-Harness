@@ -10,6 +10,7 @@ import type {
 import { cn } from "@/shared/lib/utils";
 import { Field } from "@/components/forms";
 import { SearchField } from "@/components/search-field";
+import { Button } from "@/components/ui/button";
 
 interface InternalAgentToolSelectorProps {
   className?: string;
@@ -18,10 +19,14 @@ interface InternalAgentToolSelectorProps {
   selectedToolCodes: string[];
   toolDomains: ToolCatalogDomainRecord[];
   tools: PlatformToolRecord[];
+  allowRemovingUnavailable?: boolean;
+  onSetToolsChecked?: (codes: string[], checked: boolean) => void;
 }
 
 interface DomainEntry {
   domain: ToolCatalogDomainRecord;
+  categoryCode: string;
+  categoryName: string;
   selectedCount: number;
   visibleTools: PlatformToolRecord[];
 }
@@ -37,8 +42,11 @@ export function InternalAgentToolSelector({
   selectedToolCodes,
   toolDomains,
   tools,
+  allowRemovingUnavailable = false,
+  onSetToolsChecked,
 }: InternalAgentToolSelectorProps) {
-  const { t } = useTranslation(["pages", "common"]);
+  const { t, i18n } = useTranslation(["pages", "common"]);
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [toolSearch, setToolSearch] = useState("");
   const [debouncedToolSearch, setDebouncedToolSearch] = useState("");
   const domainIdPrefix = useId();
@@ -64,85 +72,44 @@ export function InternalAgentToolSelector({
     return () => window.clearTimeout(timer);
   }, [toolSearch]);
 
-  const allToolsByDomain = useMemo(() => {
-    const grouped = new Map<string, PlatformToolRecord[]>();
-    tools.forEach((tool) => {
-      const current = grouped.get(tool.domainCode) ?? [];
-      grouped.set(tool.domainCode, [...current, tool]);
-    });
-
-    grouped.forEach((items, domainCode) => {
-      grouped.set(
-        domainCode,
-        [...items].sort((left, right) =>
-          left.toolCode.localeCompare(right.toolCode)
-        )
-      );
-    });
-
-    return grouped;
-  }, [tools]);
+  const categoryEntries = useMemo(() => {
+    const grouped = new Map<string, { code: string; name: string; count: number }>();
+    for (const tool of tools) {
+      if (!tool.category) continue;
+      const code = tool.category.code;
+      const current = grouped.get(code) ?? { code, name: tool.category.names[i18n.resolvedLanguage ?? i18n.language] ?? tool.category.names["en-US"] ?? code, count: 0 };
+      current.count++;
+      grouped.set(code, current);
+    }
+    return [...grouped.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [tools, i18n.language, i18n.resolvedLanguage]);
 
   const domainEntries = useMemo(() => {
-    const normalizedSearch = debouncedToolSearch;
-
-    return toolDomains.reduce<DomainEntry[]>((accum, domain) => {
-      const domainTools = allToolsByDomain.get(domain.domainCode) ?? [];
-      if (!domainTools.length) {
-        return accum;
-      }
-
-      const matchesDomain =
-        normalizedSearch.length === 0 ||
-        [
-          domain.domainCode,
-          domain.name,
-          domain.description,
-          domain.sampleTools.join(" "),
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedSearch);
-
-      const visibleTools = matchesDomain
-        ? domainTools
-        : domainTools.filter((tool) =>
-            [
-              tool.toolCode,
-              tool.toolName,
-              tool.domainCode,
-              tool.name,
-              tool.description,
-              tool.operationKind,
-              t(`common:toolOperationKind.${tool.operationKind}`, {
-                defaultValue: tool.operationKind,
-              }),
-            ]
-              .join(" ")
-              .toLowerCase()
-              .includes(normalizedSearch)
-          );
-
-      if (!visibleTools.length) {
-        return accum;
-      }
-
-      accum.push({
-        domain,
-        selectedCount: domainTools.filter(
-          (tool) =>
-            tool.assignable !== false && selectedToolSet.has(tool.toolCode)
-        ).length,
-        visibleTools,
-      });
-
-      return accum;
-    }, []);
-  }, [allToolsByDomain, debouncedToolSearch, selectedToolSet, t, toolDomains]);
+    const grouped = new Map<string, { categoryCode: string; categoryName: string; domainCode: string; tools: PlatformToolRecord[] }>();
+    for (const tool of tools) {
+      const categoryCode = tool.category?.code ?? "uncategorized";
+      if (categoryFilter === "readonly" ? tool.operationKind !== "query" : categoryFilter !== "all" && categoryCode !== categoryFilter) continue;
+      const categoryName = categoryEntries.find((item) => item.code === categoryCode)?.name ?? categoryCode;
+      const key = `${categoryCode}:${tool.domainCode}`;
+      const entry = grouped.get(key) ?? { categoryCode, categoryName, domainCode: tool.domainCode, tools: [] };
+      entry.tools.push(tool);
+      grouped.set(key, entry);
+    }
+    return [...grouped.values()].flatMap(({categoryCode, categoryName, domainCode, tools: domainTools}): DomainEntry[] => {
+      const domain = toolDomains.find((item) => item.domainCode === domainCode) ?? { domainCode, name: domainCode, description: "", sampleTools: [], toolCount: domainTools.length, hasMutationTools: false };
+      const matchesDomain = [categoryCode, categoryName, domain.domainCode, domain.name, domain.description, ...domain.sampleTools].join(" ").toLowerCase().includes(debouncedToolSearch);
+      const visibleTools = (matchesDomain ? domainTools : domainTools.filter((tool) => [tool.toolCode, tool.toolName, tool.name, tool.description, tool.operationKind, t(`common:toolOperationKind.${tool.operationKind}`, {defaultValue: tool.operationKind})].join(" ").toLowerCase().includes(debouncedToolSearch))).sort((a, b) => a.toolCode.localeCompare(b.toolCode));
+      if (!visibleTools.length) return [];
+      return [{ domain, categoryCode, categoryName, visibleTools, selectedCount: domainTools.filter((tool) => tool.assignable !== false && selectedToolSet.has(tool.toolCode)).length }];
+    });
+  }, [tools, categoryFilter, categoryEntries, toolDomains, debouncedToolSearch, selectedToolSet, t]);
 
   return (
-    <div className={cn("mt-5 space-y-3", className)}>
-      <Field label={internalPageT("toolSelection.domainsTitle", "Domains")}>
+    <div className={cn("mt-5 flex h-full min-h-0 flex-col gap-3", className)}>
+      <div className="flex shrink-0 flex-wrap gap-2" role="group" aria-label={t("pages:settingsTools.categories.label", { defaultValue: "Tool categories" })}>
+        {[{code: "all", name: t("pages:settingsTools.categories.all", { defaultValue: "All tools" }), count: tools.length}, ...categoryEntries, {code: "readonly", name: t("pages:settingsTools.categories.readonly", {defaultValue: "Read-only tools"}), count: tools.filter((tool) => tool.operationKind === "query").length}].map((category) => <Button key={category.code} type="button" size="sm" variant={categoryFilter === category.code ? "default" : "outline"} aria-pressed={categoryFilter === category.code} onClick={() => setCategoryFilter(category.code)}>{category.name} ({category.count})</Button>)}
+      </div>
+      <Field className="shrink-0" label={internalPageT("toolSelection.domainsTitle", "Domains")} hintAriaLabel={internalPageT("toolSelection.helpAria", "Explain tool selection")} hint={<p>{internalPageT("toolSelection.expandHint", "Expand a domain to choose its tools.")}</p>}>
         <SearchField
           className="w-full"
           ariaLabel={internalPageT("toolSelection.searchAria", "Search tools")}
@@ -154,12 +121,7 @@ export function InternalAgentToolSelector({
           onChange={setToolSearch}
         />
       </Field>
-      <p className="text-xs text-[var(--color-on-surface-variant)]">
-        {internalPageT(
-          "toolSelection.expandHint",
-          "Expand a domain to choose its tools."
-        )}
-      </p>
+      <div className="tron-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain">
       {domainEntries.length === 0 ? (
         <p className="text-sm text-[var(--color-on-surface-variant)]">
           {internalPageT(
@@ -168,15 +130,16 @@ export function InternalAgentToolSelector({
           )}
         </p>
       ) : (
-        <ul className="tron-scrollbar max-h-[min(32rem,55dvh)] divide-y divide-[var(--color-outline-variant)] overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-xl border border-[var(--color-outline-variant)]">
+        <ul className="divide-y divide-[var(--color-outline-variant)] overflow-hidden rounded-xl border border-[var(--color-outline-variant)]">
           {domainEntries.map((entry) => {
-            const { domain, visibleTools, selectedCount } = entry;
-            const expanded = expandedDomainCodes.has(domain.domainCode);
-            const headingId = `${domainIdPrefix}-${domain.domainCode}-heading`;
-            const panelId = `${domainIdPrefix}-${domain.domainCode}-tools`;
+            const { domain, categoryCode, visibleTools, selectedCount } = entry;
+            const groupKey = `${categoryCode}:${domain.domainCode}`;
+            const expanded = expandedDomainCodes.has(groupKey);
+            const headingId = `${domainIdPrefix}-${groupKey}-heading`;
+            const panelId = `${domainIdPrefix}-${groupKey}-tools`;
 
             return (
-              <li key={domain.domainCode}>
+              <li key={groupKey}>
                 <button
                   id={headingId}
                   type="button"
@@ -186,9 +149,9 @@ export function InternalAgentToolSelector({
                   onClick={() =>
                     setExpandedDomainCodes((current) => {
                       const next = new Set(current);
-                      if (next.has(domain.domainCode))
-                        next.delete(domain.domainCode);
-                      else next.add(domain.domainCode);
+                      if (next.has(groupKey))
+                        next.delete(groupKey);
+                      else next.add(groupKey);
                       return next;
                     })
                   }
@@ -232,6 +195,14 @@ export function InternalAgentToolSelector({
                     aria-labelledby={headingId}
                     className="space-y-3 bg-[var(--color-surface-container-low)] p-3 sm:pl-11"
                   >
+                    {onSetToolsChecked && <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" disabled={busy || !visibleTools.some((tool) => tool.assignable !== false)} onClick={() => onSetToolsChecked(visibleTools.filter((tool) => tool.assignable !== false).map((tool) => tool.toolCode), true)}>
+                        {internalPageT("dudeToolPolicy.selectVisible", "Select shown tools")}
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" disabled={busy || !visibleTools.some((tool) => selectedToolSet.has(tool.toolCode))} onClick={() => onSetToolsChecked(visibleTools.map((tool) => tool.toolCode), false)}>
+                        {internalPageT("dudeToolPolicy.clearVisible", "Clear shown tools")}
+                      </Button>
+                    </div>}
                     <ul className="divide-y divide-[var(--color-outline-variant)] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
                       {visibleTools.map((tool) => (
                         <li key={tool.toolCode} className="p-3">
@@ -245,12 +216,9 @@ export function InternalAgentToolSelector({
                             )}
                           >
                             <input
-                              checked={
-                                tool.assignable !== false &&
-                                selectedToolSet.has(tool.toolCode)
-                              }
+                              checked={selectedToolSet.has(tool.toolCode) && (tool.assignable !== false || allowRemovingUnavailable)}
                               className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-primary)]"
-                              disabled={busy || tool.assignable === false}
+                              disabled={busy || (tool.assignable === false && !(allowRemovingUnavailable && selectedToolSet.has(tool.toolCode)))}
                               type="checkbox"
                               onChange={(event) =>
                                 onToggleTool(
@@ -293,6 +261,7 @@ export function InternalAgentToolSelector({
           })}
         </ul>
       )}
+      </div>
     </div>
   );
 }

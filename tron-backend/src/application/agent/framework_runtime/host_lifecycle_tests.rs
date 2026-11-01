@@ -625,7 +625,11 @@ fn assert_gateway_request_tools(observed: &Arc<std::sync::Mutex<Vec<ModelRequest
             "gateway pair missing: {names:?}"
         );
         assert!(
-            names.iter().filter(|n| **n != "tool_search" && **n != "tool_execute").count() == 0,
+            names
+                .iter()
+                .filter(|n| **n != "tool_search" && **n != "tool_execute")
+                .count()
+                == 0,
             "non-gateway tool leaked into request.tools: {names:?}"
         );
     }
@@ -749,9 +753,7 @@ async fn framework_remote_tools_reach_model_only_with_agent_authorization() {
     // Gateway mode: no remote binding is ever directly visible; the stable
     // pair is the whole catalog on every request regardless of authorization.
     assert_gateway_request_tools(&observed);
-    context
-        .tools
-        .retain(|tool| tool.tool_name == "personai_search");
+    context.tools.retain(|tool| tool.tool_name == "web_search");
     context.run_code = fw::RunId::new_v4().to_string();
     host.run(harness.clone(), context.clone(), None, None)
         .await
@@ -769,6 +771,15 @@ async fn framework_remote_tools_reach_model_only_with_agent_authorization() {
 #[tokio::test]
 async fn read_only_assignment_admits_fresh_native_bindings_and_preserves_request_and_platform_limits()
  {
+    check_readonly_assignment(false).await;
+}
+
+#[tokio::test]
+async fn category_assignment_admits_new_queries_and_preserves_request_and_platform_limits() {
+    check_readonly_assignment(true).await;
+}
+
+async fn check_readonly_assignment(category_mode: bool) {
     use crate::adapters::outbound::persistence::{
         SqliteAgentManagementRepository, SqliteWorkspaceRepository,
     };
@@ -811,7 +822,7 @@ async fn read_only_assignment_admits_fresh_native_bindings_and_preserves_request
         WorkspaceService::new(workspaces),
         &crate::config::AppConfig::default().system_agents,
     );
-    management.initialize_default_main_loop().unwrap();
+    management.initialize_default_main_agent().unwrap();
     host.bind_agent_management(management.clone());
     let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
     let model = Arc::new(RemoteCatalogModel(observed.clone()));
@@ -831,7 +842,16 @@ async fn read_only_assignment_admits_fresh_native_bindings_and_preserves_request
     context.tools.clear();
     context.effective_tools.clear();
     context.tool_assignment = Some(AgentToolAssignment {
-        mode: ToolAssignmentMode::AllReadOnlyTools,
+        mode: if category_mode {
+            ToolAssignmentMode::SelectedCategories
+        } else {
+            ToolAssignmentMode::AllReadOnlyTools
+        },
+        selected_category_codes: if category_mode {
+            vec!["readonly".into()]
+        } else {
+            vec![]
+        },
         selected_tool_codes: vec![],
         requested_tool_names: vec![],
     });
@@ -857,6 +877,11 @@ async fn read_only_assignment_admits_fresh_native_bindings_and_preserves_request
                         .with_operation_kind(kind),
                         QueryTool,
                     )
+                    .with_category(fw::ToolCategory::localized(
+                        "execution",
+                        "执行工具",
+                        "Execution tools",
+                    ))
                 })
                 .collect(),
             ),
@@ -894,7 +919,10 @@ async fn read_only_assignment_admits_fresh_native_bindings_and_preserves_request
             for (i, r) in requests.iter().enumerate() {
                 for m in r.messages.iter() {
                     for p in m.parts.iter() {
-                        if let crate::domain::agent::AgentMessagePart::ToolResult { output, .. } = p {
+                        if let crate::domain::agent::AgentMessagePart::ToolResult {
+                            output, ..
+                        } = p
+                        {
                             eprintln!("DEBUG req{i} part output: {}", output);
                         }
                     }

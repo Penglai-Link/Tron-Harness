@@ -32,13 +32,33 @@ pub struct ExtensionImplementationInfo {
 
 pub fn installed_capability_packs(
     root: &std::path::Path,
+    locale: &str,
 ) -> Result<Vec<CapabilityPackInfo>, String> {
     use eliteforge_agent_capability_runtime::CapabilityPackManager;
     let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
     let mut packs = capability_pack_catalog();
+    for pack in &mut packs {
+        let descriptors=contents::builtin_tool_descriptors(&pack.id);
+        for item in pack.contents.iter_mut().filter(|item|item.kind=="Tool") {
+            if let Some(descriptor)=descriptors.iter().find(|d|d.call_name==item.name) {
+                let display=descriptor.resolve_display(locale);
+                item.description=display.description;
+                item.display_name=display.name;
+            }
+        }
+    }
+    // Imported metadata belongs to its provider; never translate by a colliding
+    // built-in call name or activate a plugin merely to display its manifest.
     for installed in manager.installed().map_err(|error| error.to_string())? {
+        let mut contents=manifest_contents(&installed.manifest);
+        for item in contents.iter_mut().filter(|item|item.kind=="Tool") {
+            if let Some(entry)=installed.manifest.tools.iter().find(|entry|entry.descriptor.call_name==item.name) {
+                let display=entry.descriptor.resolve_display(locale);
+                item.display_name=display.name;item.description=display.description;
+            }
+        }
         packs.push(CapabilityPackInfo {
-            contents: manifest_contents(&installed.manifest),
+            contents,
             id: installed.manifest.id,
             name: installed.manifest.name,
             version: installed.manifest.version.to_string(),

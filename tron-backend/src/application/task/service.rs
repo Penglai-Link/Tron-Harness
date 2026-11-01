@@ -31,6 +31,7 @@ mod task_projection;
 mod use_cases;
 mod validation;
 
+pub use self::dude_tasks::CancelDudeTaskError;
 use self::dude_tasks::default_planned_start;
 use self::projection::*;
 

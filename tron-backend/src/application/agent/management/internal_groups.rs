@@ -84,7 +84,6 @@ impl AgentManagementService {
                         name: None,
                         role_prompt: None,
                         description: None,
-                        loop_code: None,
                         avatar_id: None,
                         candidate_model_codes: None,
                         group_name: None,

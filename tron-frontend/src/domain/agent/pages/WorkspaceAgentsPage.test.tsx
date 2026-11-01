@@ -33,7 +33,7 @@ vi.mock("../components/AgentWorkspaceField", () => ({ AgentWorkspaceField: ({ di
 
 
 vi.mock("@/domain/admin/api", () => ({ fetchWorkspaceOptions: vi.fn(async () => [{ workspaceCode: "TRON_CORE" }]) }));
-vi.mock("@/domain/model/api", () => ({ fetchWorkspaceSelectOptions: vi.fn(async () => [
+vi.mock("@/domain/model/api", () => ({ fetchModelSelectOptions: vi.fn(async () => [
   { optionCode: "model-a", modelCode: "model-a", displayName: "Model A", vendor: "fixture", sourceLabel: "Platform", modelType: "TEXT", enabled: true, contextWindowTokens: 128000 },
   { optionCode: "model-b", modelCode: "model-b", displayName: "Model B", vendor: "fixture", sourceLabel: "Platform", modelType: "TEXT", enabled: true, contextWindowTokens: 64000 },
   { modelCode: "embedding", displayName: "Embedding", modelType: "EMBEDDING", enabled: true, contextWindowTokens: 64000 },
@@ -55,7 +55,6 @@ vi.mock("@/domain/agent/api", () => ({
   disableWorkspaceSystemAgent: vi.fn(),
   enableWorkspaceSystemAgent: vi.fn(),
 }));
-vi.mock("@/domain/agent/hooks/useLoopDesignList", () => ({ useLoopDesignList: () => ({ designs: [{loopCode:"review-flow",name:"Review",kind:"Workflow"}], loading:false,error:null }) }));
 vi.mock("@/domain/mcp", () => ({ fetchWorkspaceMcpServers: vi.fn(async () => []), fetchPlatformMcpServers: vi.fn(async () => []), listPlatformMcpServersMock: vi.fn(() => []), listWorkspaceMcpServersMock: vi.fn(() => []) }));
 vi.mock("@/shared/api/serviceConfig", () => ({ getServiceDataSource: () => "api" }));
 vi.mock("react-i18next", async () => {
@@ -196,6 +195,16 @@ describe("internal agent cards and manual editing", () => {
     expect(fixture.patchDefinition).not.toHaveBeenCalled();
   });
 
+  it.each(["workspace", "platform"] as const)("persists category choices in %s", async (scope) => {
+    await openEditor(scope);
+    fireEvent.click(screen.getByRole("tab", {name: "Capabilities"}));
+    fireEvent.change(screen.getByRole("combobox", {name: /tool assignment mode/i}), {target:{value:"selected_categories"}});
+    fireEvent.click(screen.getByRole("checkbox", {name:/Read-only tools/}));
+    save();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(fixture.patch).toHaveBeenCalledWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", expect.objectContaining({toolAssignmentMode:"selected_categories", selectedCategoryCodes:["readonly"]}));
+    expect(fixture.assign).not.toHaveBeenCalled();
+  });
   it.each(["workspace", "platform"] as const)("saves the dynamic read-only rule without rewriting tool assignments in %s", async (scope) => {
     await openEditor(scope);
     fireEvent.click(screen.getByRole("tab", {name: "Capabilities"}));
@@ -309,11 +318,10 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.fox" }));
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Role prompt" }), { target: { value: "Check evidence" } });
     await selectTab(dialog, "Runtime");
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "Agent Loop" }), { target: { value: "review-flow" } });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 550)); });
     expect(fixture.patchDefinition).not.toHaveBeenCalled();
     save();
-    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledExactlyOnceWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", { name: "Reviewer", rolePrompt: "Check evidence", avatarId: "fox", loopCode: "review-flow" }));
+    await waitFor(() => expect(fixture.patchDefinition).toHaveBeenCalledExactlyOnceWith(scope === "platform" ? "$platform" : "TRON_CORE", "main-agent", { name: "Reviewer", rolePrompt: "Check evidence", avatarId: "fox" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(await screen.findByRole("button", { name: "Edit Reviewer" })).toBeTruthy();
     expect(fixture.patch).not.toHaveBeenCalled();
@@ -430,7 +438,6 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "workspaceAgents.internal.avatar.owl" }));
     await selectTab(dialog, "Runtime");
     expect(within(dialog).queryByRole("button", { name: /Choose template|Role library/ })).toBeNull();
-    fireEvent.change(within(dialog).getByRole("combobox", {name:"Agent Loop"}), {target:{value:"review-flow"}});
     fireEvent.click(await within(dialog).findByRole("checkbox", { name: "Model A" }));
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "Model B" }));
     expect(within(dialog).queryByRole("checkbox", { name: "Embedding" })).toBeNull();
@@ -439,7 +446,7 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose workspace" }));
     await selectTab(dialog, "Basic");
     fireEvent.click(within(dialog).getByRole("button", { name: "New" }));
-    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", description: "", rolePrompt: "", loopCode: "review-flow", avatarId: "owl", groupName: "", candidateModelCodes: ["model-a", "model-b"] }));
+    await waitFor(() => expect(fixture.create).toHaveBeenCalledWith("$platform", { agentCode: "reviewer", name: "Reviewer", description: "", rolePrompt: "", avatarId: "owl", groupName: "", candidateModelCodes: ["model-a", "model-b"] }));
     expect(await screen.findByRole("button", { name: "Edit Reviewer" })).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(fixture.workspaceGrants).toHaveBeenCalledWith("reviewer", ["TRON_CORE"]);
@@ -492,7 +499,6 @@ describe("internal agent cards and manual editing", () => {
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const dialog = await screen.findByRole("dialog");
     await selectTab(dialog, "Runtime");
-    fireEvent.change(within(dialog).getByRole("combobox", {name:"Agent Loop"}), {target:{value:"review-flow"}});
     await selectTab(dialog, "Basic");
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Reviewer" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "reviewer" } });
@@ -536,7 +542,6 @@ describe("internal agent groups and built-in platform editing", () => {
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const dialog = await screen.findByRole("dialog");
     await selectTab(dialog, "Runtime");
-    fireEvent.change(within(dialog).getByRole("combobox", {name:"Agent Loop"}), {target:{value:"review-flow"}});
     await selectTab(dialog, "Basic");
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Code" }), { target: { value: "grouped" } });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Grouped" } });

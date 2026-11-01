@@ -21,15 +21,8 @@ fn service(database: &str) -> AgentManagementService {
         WorkspaceService::new(SqliteWorkspaceRepository::connect(database).unwrap()),
         &AppConfig::default().system_agents,
     );
-    if !agents
-        .list_loop_designs()
-        .unwrap()
-        .iter()
-        .any(|design| design.loop_code == "test-react")
-    {
-        agents.save_loop_design(serde_json::from_value(serde_json::json!({"loopCode":"test-react","name":"Test React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(), 0).unwrap();
-    }
-    agents.initialize_default_main_loop().unwrap();
+
+    agents.initialize_default_main_agent().unwrap();
     agents
 }
 fn create(code: &str, group: Option<&str>) -> CreateWorkspaceInternalAgentCommand {
@@ -39,7 +32,7 @@ fn create(code: &str, group: Option<&str>) -> CreateWorkspaceInternalAgentComman
         agent_code: code.into(),
         name: code.into(),
         role_prompt: "Preserve this role".into(),
-        loop_code: Some("test-react".into()),
+
         avatar_id: None,
         group_name: group.map(str::to_owned),
     }

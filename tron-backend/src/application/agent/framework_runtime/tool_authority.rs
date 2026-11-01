@@ -149,22 +149,41 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         if eliteforge_agent_core::is_gateway_descriptor(&binding.descriptor) {
             return Ok(fw::ToolBindingAdmission::Allow);
         }
+        let caller_scope = run.extensions.get::<fw::CallerInteractionScope>().is_some();
+        if (binding.descriptor.id == "agent.ask_caller" && !caller_scope)
+            || (caller_scope
+                && matches!(
+                    binding.descriptor.call_name.as_str(),
+                    "chat_ask_user" | "ask_user" | "a2ui_request_input"
+                ))
+        {
+            return Ok(fw::ToolBindingAdmission::Exclude);
+        }
         let host = HostExecution::from_extensions(&run.extensions)?;
         let mut state = host.state.lock().await;
         let name = &binding.descriptor.call_name;
+        if self.management.is_some() {
+            state.pending_tool_bindings.push(binding.clone());
+        }
         if let (Some(management), Some(selection)) =
             (&self.management, state.context.tool_assignment.as_ref())
         {
             let record = management
-                .describe_tool_descriptor(&binding.descriptor)
+                .describe_tool_binding(binding)
                 .map_err(fw::AgentError::ToolSetup)?;
-            let selected = selection.selects(&record);
-            let read_only =
-                selection.mode == crate::domain::agent::ToolAssignmentMode::AllReadOnlyTools;
-            state
-                .pending_tool_descriptors
-                .push(binding.descriptor.clone());
-            if read_only && !selected {
+            if state.context.is_owning_dude() && crate::application::agent::tool_catalog::dude_workspace_tool(&record) {
+                state.product_tool_authority.remove(name);
+                return Ok(fw::ToolBindingAdmission::Exclude);
+            }
+            let selected = selection.selects(&record)
+                || (state.context.is_owning_dude() && record.category.as_ref().is_some_and(|category| category.code == "tron.dude") && state.product_tool_authority.contains(name))
+                || (caller_scope && binding.descriptor.id == "agent.ask_caller");
+            let restrict_selection = matches!(
+                selection.mode,
+                crate::domain::agent::ToolAssignmentMode::AllReadOnlyTools
+                    | crate::domain::agent::ToolAssignmentMode::SelectedCategories
+            );
+            if restrict_selection && !selected {
                 state.product_tool_authority.remove(name);
                 return Ok(fw::ToolBindingAdmission::Exclude);
             }
@@ -223,9 +242,9 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         let mut state = host.state.lock().await;
         if let Some(management) = &self.management {
             management
-                .register_tool_descriptors(&state.pending_tool_descriptors)
+                .register_tool_bindings(&state.pending_tool_bindings)
                 .map_err(fw::AgentError::ToolSetup)?;
-            state.pending_tool_descriptors.clear();
+            state.pending_tool_bindings.clear();
         }
         // Legacy contexts use `tools` for both ACL and model exposure until an
         // effective catalog is supplied. Materialize that original ACL before
@@ -235,12 +254,13 @@ impl fw::ToolPolicy for ToolCatalogPolicy {
         if state.context.effective_tools.is_empty() {
             state.context.effective_tools = state.context.tools.clone();
         }
-        if state
-            .context
-            .tool_assignment
-            .as_ref()
-            .is_some_and(|s| s.mode == crate::domain::agent::ToolAssignmentMode::AllReadOnlyTools)
-        {
+        if state.context.tool_assignment.as_ref().is_some_and(|s| {
+            matches!(
+                s.mode,
+                crate::domain::agent::ToolAssignmentMode::AllReadOnlyTools
+                    | crate::domain::agent::ToolAssignmentMode::SelectedCategories
+            )
+        }) {
             let admitted = bindings
                 .iter()
                 .map(|b| b.descriptor.call_name.as_str())

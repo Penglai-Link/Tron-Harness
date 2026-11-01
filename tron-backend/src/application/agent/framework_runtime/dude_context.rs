@@ -174,14 +174,23 @@ impl fw::ContextContributor for DudeGuidance {
         input: &fw::ContextInput<'_>,
     ) -> Result<fw::ContextBlock, fw::AgentError> {
         let keys = Self::prompt_keys(self.onboarding);
-        let messages = keys
+        let mut messages = keys
             .iter()
             .map(|key| {
                 managed_guidance(input, key, &self.locale).map(|text| {
+                    let text = if *key == "dude.soul-guidance" { text.replace(" task_update ", " dude_task_update ") } else { text };
                     fw::Message::system(text).with_instruction_origin(fw::InstructionOrigin::Plugin)
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        if !self.onboarding {
+            let guidance = if self.locale.starts_with("zh") {
+                "Dude 负责协调其他 Agent，并使用自己的 dude_memory_*、dude_task_* 和通知工具管理记忆、本人负责的任务及通知。Harness 平台配置和工作区业务数据交给主 Agent 处理。"
+            } else {
+                "Coordinate other agents and use your dude_memory_*, dude_task_*, and notification tools for memories, your own tasks, and notifications. Delegate Harness platform configuration and workspace business data to the main agent."
+            };
+            messages.push(fw::Message::system(guidance).with_instruction_origin(fw::InstructionOrigin::Plugin));
+        }
         Ok(fw::ContextBlock::instructions(self.block_id(), messages))
     }
 }

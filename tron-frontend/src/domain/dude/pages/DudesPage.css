@@ -1,0 +1,36 @@
+.dude-session-chat {
+  container: dude-chat / inline-size;
+}
+
+.dude-session-chat .ef-chat {
+  --dude-chat-content-width: 36rem;
+  --dude-chat-inline-padding: 12px;
+}
+
+@container dude-chat (min-width: 640px) {
+  .dude-session-chat .ef-chat {
+    --dude-chat-content-width: 44rem;
+    --dude-chat-inline-padding: 20px;
+  }
+}
+
+@container dude-chat (min-width: 1000px) {
+  .dude-session-chat .ef-chat {
+    --dude-chat-content-width: 54rem;
+    --dude-chat-inline-padding: 24px;
+  }
+}
+
+.dude-session-chat .ef-chat__transcript,
+.dude-session-chat .ef-chat__footer {
+  padding-inline: var(--dude-chat-inline-padding);
+}
+
+.dude-session-chat .ef-chat__transcript-inner,
+.dude-session-chat .ef-chat__footer > .ef-composer,
+.dude-session-chat .ef-chat__footer > .ef-chat__pending-annotations,
+.dude-session-chat .ef-chat__footer > .ef-chat-goal {
+  max-width: var(--dude-chat-content-width);
+  min-width: 0;
+  margin-inline: auto;
+}

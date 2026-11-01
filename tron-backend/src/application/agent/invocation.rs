@@ -399,6 +399,7 @@ impl AgentInvocationService {
                     native: result.native,
                     sdk_execution: result.sdk_execution,
                     final_output: result.final_output,
+                    final_message_ids: result.final_message_ids,
                     step_count: result.step_count,
                     token_usage,
                     latest_request_estimate: result.latest_request_estimate,

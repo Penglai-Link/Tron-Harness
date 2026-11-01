@@ -1,7 +1,7 @@
 fn platform_variable_page_definition() -> ToolCatalogDefinition {
     definition(
         "platform.variable.page",
-        "variable",
+        "harness_variable",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.platform.variable.page.description",
@@ -22,7 +22,7 @@ fn platform_variable_page_definition() -> ToolCatalogDefinition {
 fn platform_variable_create_definition() -> ToolCatalogDefinition {
     definition(
         "platform.variable.create",
-        "variable",
+        "harness_variable",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.variable.create.description",
@@ -35,7 +35,7 @@ fn platform_variable_create_definition() -> ToolCatalogDefinition {
 fn platform_variable_update_definition() -> ToolCatalogDefinition {
     definition(
         "platform.variable.update",
-        "variable",
+        "harness_variable",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.variable.update.description",
@@ -48,7 +48,7 @@ fn platform_variable_update_definition() -> ToolCatalogDefinition {
 fn platform_variable_delete_definition() -> ToolCatalogDefinition {
     definition(
         "platform.variable.delete",
-        "variable",
+        "harness_variable",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.variable.delete.description",

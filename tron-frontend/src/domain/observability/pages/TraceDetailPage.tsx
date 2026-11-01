@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { triggerDetail } from "../components/traceTrigger";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceSpaces } from "@/shared";
 import { PlatformWorkspaceFilter } from "@/domain/settings/components/PlatformWorkspaceScope";
+import { fetchModelSelectOptions } from "@/domain/model/api";
+import { useAuthStore } from "@/store/authStore";
 import { useTraceDetail } from "../hooks/useObservability";
 import { TraceInspector } from "../components/TraceInspector";
 
@@ -20,6 +23,14 @@ export function TraceDetailPage() {
   const workspaceCode =
     (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
   const detail = useTraceDetail(workspaceCode, traceId);
+  const userCode = useAuthStore((state) => state.session?.user.userCode ?? "");
+  const modelOptions = useQuery({
+    queryKey: ["observability-model-options", userCode, workspaceCode],
+    queryFn: ({ signal }) => fetchModelSelectOptions(workspaceCode, signal),
+    enabled: Boolean(userCode && detail.data?.spans.some((span) => span.attributes["gen_ai.request.model"])),
+    staleTime: 30_000,
+    retry: false,
+  });
   return (
     <>
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3" aria-label={t("detail")}>
@@ -61,6 +72,7 @@ export function TraceDetailPage() {
         <TraceInspector
           key={`${workspaceCode}:${traceId}:${showFull}:${rootSpanId}`}
           detail={showFull ? detail.data : triggerDetail(detail.data, rootSpanId)}
+          models={modelOptions.data ?? []}
         />
       ) : null}
     </>

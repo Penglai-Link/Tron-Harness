@@ -60,7 +60,11 @@ impl ModelClient for ControlledModel {
                 .messages
                 .iter()
                 .rev()
-                .find(|message| message.role == fw::Role::User && (message.content.text().contains("foreground-hold") || message.content.text().contains("background-work")))
+                .find(|message| {
+                    message.role == fw::Role::User
+                        && (message.content.text().contains("foreground-hold")
+                            || message.content.text().contains("background-work"))
+                })
                 .map(|message| message.content.text())
                 .unwrap_or_default();
             if current.contains("foreground-hold") {
@@ -161,19 +165,25 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
     let router = common::app_with_state_setup(config, |state| captured = Some(state.clone()));
     let state = captured.unwrap();
     state.knowledge_bases.stop_ingestion_workers();
-    models::seed_loop(&state);
+
     state
         .dudes
-        .create(tron_backend::application::dude::CreateDudeCommand { kind: DudeKind::Custom, enabled: true, heartbeat_minutes: 30, memory_auto_approve: false, definition: CreateWorkspaceInternalAgentCommand {
-            description: String::new(),
-            agent_code: "acceptance-dude".into(),
-            name: "Acceptance Dude".into(),
-            role_prompt: "Run a focused acceptance task.".into(),
-            loop_code: Some("test-react".into()),
-            avatar_id: Some("robot".into()),
-            group_name: None,
-            candidate_model_codes: vec![],
-        }})
+        .create(tron_backend::application::dude::CreateDudeCommand {
+            kind: DudeKind::Custom,
+            enabled: true,
+            heartbeat_minutes: 30,
+            memory_auto_approve: false,
+            definition: CreateWorkspaceInternalAgentCommand {
+                description: String::new(),
+                agent_code: "acceptance-dude".into(),
+                name: "Acceptance Dude".into(),
+                role_prompt: "Run a focused acceptance task.".into(),
+
+                avatar_id: Some("robot".into()),
+                group_name: None,
+                candidate_model_codes: vec![],
+            },
+        })
         .unwrap();
     // Create the same durable product projection used by real Dude sessions.
     // In particular, DudeSession has no user field: the native chat link is the
@@ -206,6 +216,7 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         ("acceptance-interactive", "USR-AUTH-0001"),
         ("acceptance-task", "USR-AUTH-0001"),
         ("acceptance-foreign-profile", "USR-OTHER-PROFILE"),
+        ("acceptance-private-work", "USR-OTHER-PROFILE"),
     ] {
         let persisted = repository
             .resolve_session(&DudeSession {
@@ -234,6 +245,66 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         state
             .chats
             .ensure_dude_session(&persisted, Some(user.into()))
+            .unwrap();
+    }
+
+    // Recent delivery receipts must cross sessions without crossing profiles,
+    // even when both profiles use the same platform Dude identity.
+    for (session, key) in [
+        ("acceptance-interactive", "shared-delivery-key"),
+        ("acceptance-private-work", "foreign-private-delivery-key"),
+    ] {
+        use tron_backend::{
+            application::task::CreateTaskCommand,
+            domain::{
+                dude::DudeWorkChange,
+                task::{TaskPriority, TaskSourceType, TaskType},
+            },
+        };
+        let task = state
+            .tasks
+            .create_task(CreateTaskCommand {
+                workspace_code: None,
+                owner_dude_code: Some("acceptance-dude".into()),
+                due_at: None,
+                parent_task_code: None,
+                title: key.into(),
+                description: None,
+                priority: TaskPriority::Medium,
+                task_type: TaskType::General,
+                source_type: TaskSourceType::Internal,
+                source_url: None,
+                agent_code: None,
+                model_code: None,
+                assignee_user_codes: vec![],
+                agent_codes: vec![],
+                app_codes: vec![],
+            })
+            .unwrap();
+        let task = state
+            .tasks
+            .record_execution_result(&task.task_code, key.into())
+            .unwrap();
+        let change: DudeWorkChange = serde_json::from_value(json!({
+            "changeId":key, "dudeCode":"acceptance-dude", "taskCode":task.task_code,
+            "changeKey":key, "kind":"Progress", "summary":key, "evidence":[key],
+            "sessionCode":session, "taskSnapshot":{
+                "status":task.status, "progress":task.progress, "executionResult":task.execution_result,
+            },
+            "createdAt":now, "resolutionEvidence":[],
+        })).unwrap();
+        repository.record_work_change(&change, key).unwrap();
+        repository
+            .notify_work_change("acceptance-dude", key, key, key, now)
+            .unwrap();
+        repository
+            .resolve_work_change(
+                "acceptance-dude",
+                key,
+                "acknowledged",
+                &["answer:1".into()],
+                now,
+            )
             .unwrap();
     }
 
@@ -312,6 +383,13 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
         background.workspace_code, "",
         "platform execution must not invent a workspace"
     );
+    let requests = model.requests.lock().unwrap().clone();
+    for request in &requests {
+        let context = request.messages.iter().map(|message| message.content.text()).collect::<Vec<_>>().join("\n");
+        assert!(context.contains("shared-delivery-key"), "recent resolved Progress receipt must remain visible");
+        assert!(context.contains("work-change:shared-delivery-key"));
+        assert!(!context.contains("foreign-private-delivery-key"), "same-Dude work receipts must be profile scoped");
+    }
 
     model.release_foreground.notify_one();
     let foreground = tokio::time::timeout(Duration::from_secs(10), foreground)

@@ -62,7 +62,7 @@ async fn host_can_replace_the_pack_router_using_its_authorized_catalog() {
 #[tokio::test]
 async fn candidate_models_persist_inherit_and_bound_initial_and_refreshed_auto_selection() {
     let f = Fixture::new();
-    models::seed_loop(&f.state);
+
     let a = add_text_model(&f.state, "Model A");
     let b = add_text_model(&f.state, "Model B");
     let management = &f.state.agent_management;
@@ -72,7 +72,7 @@ async fn candidate_models_persist_inherit_and_bound_initial_and_refreshed_auto_s
         agent_code: code.into(),
         name: code.into(),
         role_prompt: String::new(),
-        loop_code: Some("test-react".into()),
+
         avatar_id: None,
         group_name: None,
     };

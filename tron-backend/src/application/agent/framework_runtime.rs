@@ -22,13 +22,16 @@ pub use capability_catalog::{
     extension_implementation_catalog_with_state, install_capability_pack,
     installed_capability_packs,
 };
-pub use host::{FrameworkHost, SubagentRecord, SubagentView, DudeThreadCatalogItem, ThreadFeedback, ThreadFeedbackSink};
+pub use host::{
+    DudeThreadCatalogItem, FrameworkHost, SubagentRecord, SubagentView, ThreadFeedback,
+    ThreadFeedbackSink,
+};
 
 mod external;
-mod native_sessions;
 mod native_session_scope;
-pub(crate) use native_session_scope::NativeCollaborationScope;
+mod native_sessions;
 pub(crate) use external::FrameworkExternalRuntime;
+pub(crate) use native_session_scope::NativeCollaborationScope;
 
 mod question;
 
@@ -39,8 +42,3 @@ mod auxiliary_models;
 pub(crate) use auxiliary_models::attach_auxiliary_model;
 
 pub(crate) mod summary_loop;
-
-mod configured_loop;
-
-#[cfg(test)]
-mod configured_loop_tests;

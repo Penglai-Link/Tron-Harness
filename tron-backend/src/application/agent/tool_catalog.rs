@@ -16,6 +16,67 @@ use self::{
 #[derive(Default)]
 pub struct BusinessToolCatalog;
 
+pub(crate) const HARNESS_TOOL_PROVIDER_ID: &str = "HarnessTools";
+
+/// Legacy workspace tool assignments resolve to Dude-specific implementations.
+pub(crate) fn dude_tool_replacement(code: &str) -> Option<&'static str> {
+    match code {
+        "memory.search" => Some("dude.memory_search"),
+        "memory.save" => Some("dude.memory_save"),
+        "memory.delete" => Some("dude.memory_delete"),
+        "todo.update" => Some("dude.todo_update"),
+        "task.page" => Some("dude.task_page"),
+        "task.create" => Some("dude.task_create"),
+        "task.update" => Some("dude.task_update"),
+        "task.delete" => Some("dude.task_delete"),
+        "task.restore" => Some("dude.task_restore"),
+        _ => None,
+    }
+}
+
+pub(crate) fn dude_workspace_tool(tool: &ToolCatalogRecord) -> bool {
+    matches!(tool.tool_code.as_str(), "memory.search" | "memory.save" | "memory.delete")
+        || tool.input_schema.pointer("/properties/workspaceCode").is_some()
+        || matches!(tool.domain_code.as_str(), "harness_rag" | "harness_app" | "harness_resource" | "harness_variable" | "harness_automation" | "harness_workspace" | "harness_prompt" | "harness_mcp" | "harness_worktree" | "chat_attachment" | "word" | "excel" | "fs" | "search" | "terminal" | "command")
+}
+
+pub(crate) fn is_fixed_code(code: &str) -> bool {
+    static CODES: std::sync::OnceLock<std::collections::HashSet<String>> =
+        std::sync::OnceLock::new();
+    CODES
+        .get_or_init(|| BusinessToolCatalog::tool_codes().into_iter().collect())
+        .contains(code)
+}
+
+pub(crate) fn localize_plugin_display(record: &mut ToolCatalogRecord, locale: &str) {
+    if let Some(display) = &record.display {
+        let resolved = display.resolve(locale, &record.name, &record.description, &record.input_schema);
+        record.name = resolved.name;
+        record.description = resolved.description;
+        record.input_schema = resolved.input_schema;
+    }
+}
+
+pub(crate) fn builtin_category(code: &str) -> eliteforge_agent_core::ToolCategory {
+    let (zh, en) = match code {
+        "tron.platform" => ("平台工具", "Platform tools"),
+        "tron.dude" => ("Dude 工具", "Dude tools"),
+        "system.command" => ("系统命令工具", "System command tools"),
+        "document.media" => ("文档与媒体工具", "Document and media tools"),
+        "network" => ("网络检索工具", "Web retrieval tools"),
+        "agent.collaboration" => ("协作工具", "Collaboration tools"),
+        "interaction" => ("交互工具", "Interaction tools"),
+        "execution" => ("执行工具", "Execution tools"),
+        _ => (code, code),
+    };
+    eliteforge_agent_core::ToolCategory::new(
+        code,
+        [("zh-CN".into(), zh.into()), ("en-US".into(), en.into())]
+            .into_iter()
+            .collect(),
+    )
+}
+
 impl BusinessToolCatalog {
     pub fn domains(locale: &str) -> Vec<ToolDomainRecord> {
         Self::domains_for_records(&Self::list_tools(None, None, locale), locale)
@@ -122,13 +183,40 @@ pub(crate) use localization::{materialize_schema, translate};
 
 #[cfg(test)]
 mod tests {
-    use super::BusinessToolCatalog;
+    use super::{BusinessToolCatalog, dude_workspace_tool};
+
+    #[test]
+    fn dude_tools_are_separate_from_workspace_tools() {
+        for code in ["dude.memory_search", "dude.memory_save", "dude.memory_delete", "dude.todo_update", "dude.task_page", "dude.task_create", "dude.task_update", "dude.task_delete", "dude.task_restore"] {
+            let tool = BusinessToolCatalog::tool(code, "zh-CN").expect("Dude tool exists");
+            assert!(tool.tool_name.starts_with("dude_"));
+            assert!(tool.domain_code.starts_with("dude_"));
+            assert_eq!(tool.category.as_ref().unwrap().code, "tron.dude");
+            assert!(tool.input_schema.pointer("/properties/workspaceCode").is_none());
+            assert!(tool.input_schema.pointer("/properties/scopeCode").is_none());
+        }
+        let memory = BusinessToolCatalog::tool("dude.memory_search", "en-US").unwrap();
+        assert_eq!(memory.input_schema["properties"]["scope"]["enum"], serde_json::json!(["USER", "WORK_DOMAIN"]));
+        assert!(!dude_workspace_tool(&memory));
+        for code in ["memory.search", "memory.save", "memory.delete", "todo.update", "task.page", "task.create", "task.update", "task.delete", "task.restore"] {
+            let tool = BusinessToolCatalog::tool(code, "en-US").unwrap();
+            assert!(dude_workspace_tool(&tool));
+            assert!(tool.input_schema["required"].as_array().unwrap().iter().any(|field| field == "workspaceCode"));
+        }
+        for code in ["rag.search", "app.page", "variable.page", "resource.query"] {
+            let tool = BusinessToolCatalog::tool(code, "en-US").unwrap();
+            assert!(dude_workspace_tool(&tool));
+        }
+    }
 
     #[test]
     fn domain_samples_preserve_actual_call_names_including_aliases() {
         for locale in ["zh-CN", "en-US"] {
-            let mut model = BusinessToolCatalog::tool("model.page", locale).unwrap();
-            for (domain, call_name) in [("model", "model_page"), ("custom.remote", "remote.lookup-v2")] {
+            let mut model = BusinessToolCatalog::tool("app.page", locale).unwrap();
+            for (domain, call_name) in [
+                ("harness_app", "app_page"),
+                ("custom.remote", "remote.lookup-v2"),
+            ] {
                 model.domain_code = domain.into();
                 model.tool_name = call_name.into();
                 let domains = BusinessToolCatalog::domains_for_records(&[model.clone()], locale);
@@ -145,7 +233,7 @@ mod tests {
             let record = BusinessToolCatalog::tool(&descriptor.id, "en-US")
                 .expect("Framework tool is selectable");
             assert_eq!(record.tool_name, descriptor.call_name);
-            assert_eq!(record.input_schema, descriptor.input_schema);
+            assert_eq!(record.input_schema, descriptor.resolve_display("en-US").input_schema);
             assert!(BusinessToolCatalog::tool_codes().contains(&descriptor.id));
             assert!(
                 BusinessToolCatalog::list_tools(Some(&record.domain_code), None, "en-US")
@@ -158,7 +246,7 @@ mod tests {
 
     #[test]
     fn platform_variable_crud_tools_are_catalogued_without_workspace_scope() {
-        let tools = BusinessToolCatalog::list_tools(Some("variable"), None, "en-US");
+        let tools = BusinessToolCatalog::list_tools(Some("harness_variable"), None, "en-US");
         let codes = tools
             .iter()
             .map(|tool| tool.tool_code.as_str())
@@ -170,7 +258,6 @@ mod tests {
         assert!(codes.contains(&"platform.variable.delete"));
         let all_codes = BusinessToolCatalog::tool_codes();
         for code in [
-            "platform.model.page",
             "platform.prompt.page",
             "platform.mcp.page",
             "platform.resource.query",
@@ -244,43 +331,75 @@ mod tests {
 pub(crate) fn official_remote_descriptors() -> Vec<eliteforge_agent_core::ToolDescriptor> {
     let mut tools = eliteforge_agent_capability_personai::personai_tool_catalog();
     tools.extend(eliteforge_agent_official_plugin_tools_media::media_tool_catalog());
-    tools.push(eliteforge_agent_official_plugin_tools_web::web_fetch_descriptor());
+    tools.push(eliteforge_agent_official_plugin_tools_web::web_read_descriptor());
     tools
 }
 fn official_remote_records(locale: SupportedLocale) -> Vec<ToolCatalogRecord> {
     use crate::domain::agent::{ToolAvailabilityState, ToolOperationKind};
-    official_remote_descriptors()
+    let source = |provider: &str, plugin: &str, pack: &str| eliteforge_agent_core::ToolSource {
+        provider_id: Some(provider.into()),
+        plugin_id: Some(plugin.into()),
+        pack_id: Some(pack.into()),
+        adapter_id: Some("tron.remote.tools".into()),
+    };
+    let mut entries = eliteforge_agent_capability_personai::personai_tool_catalog_with_categories()
         .into_iter()
-        .map(|tool| {
-            let label = match (locale, tool.call_name.as_str()) {
-                (SupportedLocale::ZhCn, "personai_search") => "搜索网页",
-                (SupportedLocale::ZhCn, "personai_generate_image") => "生成图片",
-                (SupportedLocale::ZhCn, "personai_query_image") => "查询图片任务",
-                (SupportedLocale::ZhCn, "personai_detect_text") => "检测 AI 文本",
-                (SupportedLocale::ZhCn, "personai_detect_image") => "检测 AI 图片",
-                (SupportedLocale::ZhCn, "media_read_image") => "读取图片",
-                (SupportedLocale::ZhCn, "media_read_pdf") => "读取 PDF",
-                (SupportedLocale::ZhCn, "web_fetch") => "读取网页",
-                _ => &tool.call_name,
-            }
-            .to_owned();
-            let domain = if ["personai_search", "web_fetch"].contains(&tool.call_name.as_str()) {
-                "search"
+        .map(|(tool, category)| {
+            (
+                tool,
+                category,
+                source(
+                    "PersonAiToolProvider",
+                    "capability.personai",
+                    "framework.personai",
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
+    entries.extend(
+        eliteforge_agent_official_plugin_tools_media::media_tool_catalog()
+            .into_iter()
+            .map(|tool| {
+                (
+                    tool,
+                    eliteforge_agent_official_plugin_tools_media::media_tool_category(),
+                    source(
+                        "MediaToolsPlugin",
+                        "framework.media.tools",
+                        "framework.media",
+                    ),
+                )
+            }),
+    );
+    entries.push((
+        eliteforge_agent_official_plugin_tools_web::web_read_descriptor(),
+        eliteforge_agent_official_plugin_tools_web::web_tool_category(),
+        source("WebToolsPlugin", "framework.web.tools", "framework.web"),
+    ));
+    entries
+        .into_iter()
+        .map(|(tool, category, source)| {
+            let resolved = tool.resolve_display(match locale { SupportedLocale::ZhCn => "zh-CN", SupportedLocale::EnUs => "en-US" });
+            let domain = if ["web_search", "web_read"].contains(&tool.call_name.as_str()) {
+                "web_search"
             } else {
                 "media"
             };
             ToolCatalogRecord {
-                tool_code: tool.id,
+                display: tool.display.clone(),
+                tool_code: tool.id.clone(),
                 tool_name: tool.call_name.clone(),
                 domain_code: domain.into(),
-                name: label,
-                description: tool.description,
+                category: Some(category),
+                source,
+                name: resolved.name,
+                description: resolved.description,
                 operation_kind: match tool.operation_kind {
                     eliteforge_agent_core::ToolOperationKind::Query => ToolOperationKind::Query,
                     eliteforge_agent_core::ToolOperationKind::Command => ToolOperationKind::Command,
                     eliteforge_agent_core::ToolOperationKind::Unknown => ToolOperationKind::Unknown,
                 },
-                input_schema: tool.input_schema,
+                input_schema: resolved.input_schema,
                 module_owner: "Framework".into(),
                 availability_state: ToolAvailabilityState::Available,
                 sample_result_summary: String::new(),

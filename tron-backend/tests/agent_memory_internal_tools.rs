@@ -172,7 +172,7 @@ async fn memory_tool_catalog_is_visible_and_zh_cn_localized() {
         "unexpected domains response body: {domains_body}"
     );
     assert_eq!(domains_body["code"], json!("SUCCESS"));
-    let memory_domain = find_record(&domains_body["data"], "domainCode", "memory")
+    let memory_domain = find_record(&domains_body["data"], "domainCode", "harness_memory")
         .expect("memory tool domain should be visible");
     assert!(contains_cjk(&memory_domain["name"]));
     assert!(contains_cjk(&memory_domain["description"]));
@@ -185,7 +185,7 @@ async fn memory_tool_catalog_is_visible_and_zh_cn_localized() {
     let tools_response = request_with_locale(
         &app,
         Method::GET,
-        "/api/v1/tools?domainCode=memory",
+        "/api/v1/tools?domainCode=harness_memory",
         None,
         &authorization,
         "zh-CN",
@@ -202,7 +202,7 @@ async fn memory_tool_catalog_is_visible_and_zh_cn_localized() {
     for tool_code in ["memory.search", "memory.save", "memory.delete"] {
         let tool = find_record(&tools_body["data"], "toolCode", tool_code)
             .unwrap_or_else(|| panic!("{tool_code} should be visible"));
-        assert_eq!(tool["domainCode"], json!("memory"));
+        assert_eq!(tool["domainCode"], json!("harness_memory"));
         assert_eq!(tool["availabilityState"], json!("AVAILABLE"));
         assert!(contains_cjk(&tool["name"]));
         assert!(contains_cjk(&tool["description"]));
@@ -701,7 +701,7 @@ async fn memory_search_allows_empty_query_without_memory_code() {
     let embedding_model_code =
         create_embedding_default(&app, &authorization, &model_server.base_url).await;
     // The seeded memory corpus pins Person-AI auto routes that need a live
-    // provider connection; point embeddings at the mock-backed platform model
+    // provider connection; point embeddings at the mock-backed provider model
     // so save/search run end to end against this server. This case does not
     // exercise rerank, so the rerank route stays unset.
     point_memory_corpus_at_mock_models(&app, &authorization, &embedding_model_code, None).await;
@@ -814,7 +814,7 @@ async fn memory_search_observation_stays_under_event_bus_limit_with_governance_m
     let rerank_model_code =
         create_rerank_default(&app, &authorization, &model_server.base_url).await;
     // The seeded memory corpus pins Person-AI auto routes that need a live
-    // provider connection; point them at the mock-backed platform models so
+    // provider connection; point them at the mock-backed provider models so
     // the seven saves and the query search run end to end against this server.
     point_memory_corpus_at_mock_models(
         &app,
@@ -929,7 +929,7 @@ async fn memory_context_pack_merges_baseline_injectable_and_query_related_memori
     let rerank_model_code =
         create_rerank_default(&app, &authorization, &model_server.base_url).await;
     // The seeded memory corpus pins Person-AI auto routes that need a live
-    // provider connection; point them at the mock-backed platform models so
+    // provider connection; point them at the mock-backed provider models so
     // the baseline/related saves and the query search run end to end.
     point_memory_corpus_at_mock_models(
         &app,
@@ -1056,7 +1056,7 @@ async fn memory_code_upsert_loads_current_without_default_governance_filters() {
     let embedding_model_code =
         create_embedding_default(&app, &authorization, &model_server.base_url).await;
     // The seeded memory corpus pins Person-AI auto routes that need a live
-    // provider connection; point embeddings at the mock-backed platform model
+    // provider connection; point embeddings at the mock-backed provider model
     // so the candidate saves and current lookup run end to end. This case
     // searches by memoryCode without a query, so rerank stays unset.
     point_memory_corpus_at_mock_models(&app, &authorization, &embedding_model_code, None).await;
@@ -1157,7 +1157,7 @@ async fn user_work_domain_and_space_memory_code_short_formats_are_accepted() {
     let embedding_model_code =
         create_embedding_default(&app, &authorization, &model_server.base_url).await;
     // The seeded memory corpus pins Person-AI auto routes that need a live
-    // provider connection; point embeddings at the mock-backed platform model
+    // provider connection; point embeddings at the mock-backed provider model
     // so the three short-format saves run end to end.
     point_memory_corpus_at_mock_models(&app, &authorization, &embedding_model_code, None).await;
 
@@ -1274,7 +1274,7 @@ async fn memory_code_save_update_delete_search_observations_are_sanitized() {
     let embedding_model_code =
         create_embedding_default(&app, &authorization, &model_server.base_url).await;
     // The seeded memory corpus pins Person-AI auto routes that need a live
-    // provider connection; point them at the mock-backed platform models so
+    // provider connection; point them at the mock-backed provider models so
     // the full save/update/search/delete lifecycle runs end to end.
     point_memory_corpus_at_mock_models(&app, &authorization, &embedding_model_code, None).await;
 
@@ -1441,20 +1441,11 @@ async fn create_embedding_default(
     let create_response = request_with_headers(
         app,
         Method::POST,
-        "/api/v1/admin/platform/models",
+        "/api/v1/model-providers/configured",
         Some(json!({
-            "displayName": "Memory Test Embedding",
-            "vendor": "Test",
-            "protocol": "OPENAI_COMPATIBLE_EMBEDDING",
-            "modelType": "EMBEDDING",
-            "modelCapabilities": ["TEXT_VECTOR"],
-            "baseUrl": base_url,
-            "apiKeyRef": "sk-test-embedding",
-            "modelName": "memory-test-embedding",
-            "enabled": true,
-            "thinkingEnabled": false,
-            "structuredOutputEnabled": false,
-            "maxRetries": 0
+            "displayName": "Memory Test Embedding", "protocol": "OpenAiChatCompletions", "baseUrl": base_url,
+            "apiKey": "fixture-provider-key", "requestHeaders": {}, "enabled": true,
+            "models": [{"modelType":"TextEmbedding","modelCode":null,"modelId":"memory-test-embedding","name":"Memory Test Embedding","contextWindowTokens":32000,"maxOutputTokens":null,"dimension":1024,"reasoning":false,"supportsDeveloperRole":false,"inputCapabilities":["Text"],"enabled":true}]
         })),
         None,
         Some(authorization_header),
@@ -1464,30 +1455,14 @@ async fn create_embedding_default(
     let create_body = response_json(create_response).await;
     assert_eq!(
         create_status,
-        StatusCode::CREATED,
+        StatusCode::OK,
         "unexpected embedding model create response body: {create_body}"
     );
-    let model_code = create_body["data"]["modelCode"]
+    let model_code = create_body["data"]["models"][0]["modelCode"]
         .as_str()
         .expect("created embedding model should expose modelCode")
         .to_string();
 
-    let default_response = request_with_headers(
-        app,
-        Method::POST,
-        &format!("/api/v1/admin/platform/models/{model_code}/set-default"),
-        None,
-        None,
-        Some(authorization_header),
-    )
-    .await;
-    let default_status = default_response.status();
-    let default_body = response_json(default_response).await;
-    assert_eq!(
-        default_status,
-        StatusCode::OK,
-        "unexpected embedding default response body: {default_body}"
-    );
     model_code
 }
 
@@ -1495,20 +1470,11 @@ async fn create_rerank_default(app: &Router, authorization_header: &str, base_ur
     let create_response = request_with_headers(
         app,
         Method::POST,
-        "/api/v1/admin/platform/models",
+        "/api/v1/model-providers/configured",
         Some(json!({
-            "displayName": "Memory Test Rerank",
-            "vendor": "Test",
-            "protocol": "RERANK",
-            "modelType": "RERANK",
-            "modelCapabilities": ["RERANK"],
-            "baseUrl": base_url,
-            "apiKeyRef": "sk-test-rerank",
-            "modelName": "memory-test-rerank",
-            "enabled": true,
-            "thinkingEnabled": false,
-            "structuredOutputEnabled": false,
-            "maxRetries": 0
+            "displayName": "Memory Test Rerank", "protocol": "OpenAiChatCompletions", "baseUrl": base_url,
+            "apiKey": "fixture-provider-key", "requestHeaders": {}, "enabled": true,
+            "models": [{"modelType":"TextRerank","modelCode":null,"modelId":"memory-test-rerank","name":"Memory Test Rerank","contextWindowTokens":32000,"maxOutputTokens":null,"reasoning":false,"supportsDeveloperRole":false,"inputCapabilities":["Text"],"enabled":true}]
         })),
         None,
         Some(authorization_header),
@@ -1518,30 +1484,14 @@ async fn create_rerank_default(app: &Router, authorization_header: &str, base_ur
     let create_body = response_json(create_response).await;
     assert_eq!(
         create_status,
-        StatusCode::CREATED,
+        StatusCode::OK,
         "unexpected rerank model create response body: {create_body}"
     );
-    let model_code = create_body["data"]["modelCode"]
+    let model_code = create_body["data"]["models"][0]["modelCode"]
         .as_str()
         .expect("created rerank model should expose modelCode")
         .to_string();
 
-    let default_response = request_with_headers(
-        app,
-        Method::POST,
-        &format!("/api/v1/admin/platform/models/{model_code}/set-default"),
-        None,
-        None,
-        Some(authorization_header),
-    )
-    .await;
-    let default_status = default_response.status();
-    let default_body = response_json(default_response).await;
-    assert_eq!(
-        default_status,
-        StatusCode::OK,
-        "unexpected rerank default response body: {default_body}"
-    );
     model_code
 }
 
@@ -1549,7 +1499,7 @@ async fn create_rerank_default(app: &Router, authorization_header: &str, base_ur
 /// routes, which cannot resolve without a connected Person-AI provider.
 /// Memory tool tests run against the scripted mock server, so the corpus is
 /// reconfigured through the public settings endpoint to route embeddings (and
-/// optionally rerank) at the mock-backed platform models created above.
+/// optionally rerank) at the mock-backed provider models created above.
 async fn point_memory_corpus_at_mock_models(
     app: &Router,
     authorization_header: &str,
@@ -1639,8 +1589,15 @@ fn final_response(content: impl Into<String>) -> Value {
 
 /// The model-visible catalog is the stable `tool_search`/`tool_execute` pair;
 /// scripted tool calls address the inner memory tool through the envelope.
-fn tool_call_response(tool_name: &str, input: Value) -> Value {
+fn tool_call_response(tool_name: &str, mut input: Value) -> Value {
     let tool_name = tool_name.replace('.', "_");
+    // Ordinary chat memory tools now require the current workspace explicitly.
+    // Preserve deliberately malformed non-object arguments in schema tests.
+    if matches!(tool_name.as_str(), "memory_search" | "memory_save" | "memory_delete") {
+        if let Some(input) = input.as_object_mut() {
+            input.entry("workspaceCode").or_insert_with(|| json!("TRON_CORE"));
+        }
+    }
     json!({
         "choices": [{
             "message": {
@@ -1763,9 +1720,10 @@ fn parse_memory_observation_message(
             return None;
         }
         let output = message["content"].as_str()?;
-        let output = serde_json::from_str(&common::single_gateway_result(output)).unwrap_or_else(|error| {
-            panic!("{tool_name} observation should be valid JSON: {error}; output={output}")
-        });
+        let output =
+            serde_json::from_str(&common::single_gateway_result(output)).unwrap_or_else(|error| {
+                panic!("{tool_name} observation should be valid JSON: {error}; output={output}")
+            });
         return Some(ParsedObservation {
             tool_name: tool_name.to_string(),
             output,
@@ -1782,9 +1740,10 @@ fn parse_memory_observation(content: &str) -> Option<ParsedObservation> {
     if !tool_name.starts_with("memory_") {
         return None;
     }
-    let output = serde_json::from_str(&common::single_gateway_result(output)).unwrap_or_else(|error| {
-        panic!("{tool_name} observation should be valid JSON: {error}; output={output}")
-    });
+    let output =
+        serde_json::from_str(&common::single_gateway_result(output)).unwrap_or_else(|error| {
+            panic!("{tool_name} observation should be valid JSON: {error}; output={output}")
+        });
     Some(ParsedObservation {
         tool_name: tool_name.to_string(),
         output,

@@ -119,7 +119,7 @@ interface InternalAgentDraft {
   groupName: string;
   avatarId: string;
   candidateModelCodes: string[];
-  loopCode: string;
+
   name: string;
   rolePrompt: string;
   maxSteps: number;
@@ -129,6 +129,7 @@ interface InternalAgentDraft {
   selectedServerCodes: string[];
   selectedToolCodes: string[];
   toolAssignmentMode: WorkspaceInternalAgentRecord["toolAssignmentMode"];
+  selectedCategoryCodes?: string[];
 }
 
 type InternalSaveState = "idle" | "pending" | "saving" | "saved" | "error";
@@ -184,7 +185,7 @@ function draftFromRecord(
     name: record.name,
     description: record.description,
     rolePrompt: record.rolePrompt,
-    loopCode: record.loopCode || "",
+
     maxSteps: record.maxSteps,
     maxToolCalls: record.maxToolCalls,
     maxParallelToolCalls: record.maxParallelToolCalls,
@@ -192,6 +193,7 @@ function draftFromRecord(
     selectedServerCodes: normalizeServerCodes(record.selectedServerCodes),
     selectedToolCodes: normalizeToolCodes(record.selectedToolCodes),
     toolAssignmentMode: record.toolAssignmentMode,
+    selectedCategoryCodes: record.selectedCategoryCodes ?? [],
   };
 }
 
@@ -224,9 +226,10 @@ function hasDraftChanges(
     !hasSameToolCodes(normalizeToolCodes(record.candidateModelCodes ?? []), normalizeToolCodes(draft.candidateModelCodes)) ||
     record.name !== draft.name ||
     record.description !== draft.description ||
-    (record.loopCode || "") !== draft.loopCode ||
+
     record.rolePrompt !== draft.rolePrompt ||
     record.toolAssignmentMode !== draft.toolAssignmentMode ||
+    JSON.stringify(record.selectedCategoryCodes ?? []) !== JSON.stringify(draft.selectedCategoryCodes ?? []) ||
     record.maxSteps !== draft.maxSteps ||
     record.maxToolCalls !== draft.maxToolCalls ||
     record.maxParallelToolCalls !== draft.maxParallelToolCalls ||
@@ -815,6 +818,7 @@ export function WorkspaceAgentsPage({
     }
 
     const payload: WorkspaceInternalAgentPolicyPayload = {};
+    if (JSON.stringify(row.selectedCategoryCodes ?? []) !== JSON.stringify(draft.selectedCategoryCodes ?? [])) payload.selectedCategoryCodes = draft.selectedCategoryCodes ?? [];
     if (row.toolAssignmentMode !== draft.toolAssignmentMode) {
       payload.toolAssignmentMode = draft.toolAssignmentMode;
     }
@@ -869,7 +873,7 @@ export function WorkspaceAgentsPage({
           row.name !== draft.name ||
           row.description !== draft.description ||
           row.rolePrompt !== draft.rolePrompt ||
-          (row.loopCode || "") !== draft.loopCode ||
+
           (row.avatarId || "robot") !== draft.avatarId ||
           !hasSameToolCodes(normalizeToolCodes(row.candidateModelCodes ?? []), normalizeToolCodes(draft.candidateModelCodes))
         ) {
@@ -882,9 +886,7 @@ export function WorkspaceAgentsPage({
             ...((row.avatarId || "robot") !== draft.avatarId
               ? { avatarId: draft.avatarId }
               : {}),
-            ...((row.loopCode || "") !== draft.loopCode
-              ? { loopCode: draft.loopCode }
-              : {}),
+
             ...(row.name !== draft.name ? { name: draft.name } : {}),
             ...(row.description !== draft.description ? { description: draft.description } : {}),
             ...(row.rolePrompt !== draft.rolePrompt
@@ -1453,10 +1455,10 @@ export function WorkspaceAgentsPage({
                                     avatar={agent.builtIn && scope !== "platform" ? <AgentAvatar avatarId={draft.avatarId} className="size-24 rounded-full" /> : undefined} />
                                 </TabsContent>
                                 <TabsContent value="runtime" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
-                                  <InternalAgentRuntimeFields workspaceCode={activeWorkspaceCode} loopCode={draft.loopCode} candidateModelCodes={draft.candidateModelCodes} disabled={editingDisabled} onChange={(change) => setInternalDraft(agent.agentCode, change)} />
+                                  <InternalAgentRuntimeFields workspaceCode={activeWorkspaceCode} candidateModelCodes={draft.candidateModelCodes} disabled={editingDisabled} onChange={(change) => setInternalDraft(agent.agentCode, change)} />
                                 </TabsContent>
                                 <TabsContent value="resources" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
-                                  <AgentPolicyFields panel="resources" draft={draft} disabled={resourceEditingDisabled} onChange={(change) => setInternalDraft(agent.agentCode, change)} onAssignment={(kind) => openAssignmentDialog(agent.agentCode, kind)}>
+                                  <AgentPolicyFields tools={tools} panel="resources" draft={draft} disabled={resourceEditingDisabled} onChange={(change) => setInternalDraft(agent.agentCode, change)} onAssignment={(kind) => openAssignmentDialog(agent.agentCode, kind)}>
                                     <InternalAgentSkillField agentCode={agent.agentCode} disabled={resourceEditingDisabled} selectedNames={skillDrafts[agent.agentCode]} onSelectionChange={(names) => setSkillDrafts((current) => ({ ...current, [agent.agentCode]: names }))} />
                                     <InternalAgentKnowledgeField key={`${activeWorkspaceCode}:${agent.agentCode}:knowledge`} agentCode={agent.agentCode} agentName={translateInternalAgentName(t, { ...agent, name: draft.name })} disabled={editingDisabled} selectedIds={knowledgeDrafts[agent.agentCode]}
                                       onSelectionChange={!agent.builtIn || scope === "platform" ? (ids) => setKnowledgeDrafts((current) => ({ ...current, [agent.agentCode]: ids })) : undefined} />

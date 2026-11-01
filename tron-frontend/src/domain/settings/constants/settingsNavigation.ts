@@ -57,12 +57,7 @@ export const settingsNavigation = [
         icon: Sparkles,
         translationKey: "shell:settings.items.modelProviders",
       },
-      {
-        label: "Models",
-        href: "/settings/models",
-        icon: Sparkles,
-        translationKey: "shell:settings.items.models",
-      },
+      { label: "Automatic Routers", href: "/settings/automatic-routers", icon: Network, translationKey: "pages:automaticRouters.title" },
       {
         label: "Prompts",
         href: "/settings/prompts",
@@ -76,7 +71,7 @@ export const settingsNavigation = [
         translationKey: "shell:settings.items.taskFlows",
       },
       {
-        label: "Resources",
+        label: "Shared Resources",
         href: "/settings/resources",
         icon: Archive,
         translationKey: "shell:settings.items.resources",

@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { TablePagination } from "@/components/table-pagination";
 import { TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
@@ -19,13 +20,16 @@ import {
 import { InfoTooltip } from "@/components/info-tooltip/InfoTooltip";
 import { useToast } from "@/components/ui/toast";
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
+import { contextModelDisplayName } from "@/domain/chat/model/contextAssemblyReport";
+import type { ModelSelectOption } from "@/domain/model/model";
 import type { TraceDetail, TraceSpan } from "../model/Trace";
 import { TraceStatus } from "./TraceStatus";
 import { formatTraceDuration, formatTraceTokens } from "./traceFormat";
 import { SpanVisualization } from "./SpanVisualization";
 import { traceTree } from "./traceTree";
+import { spanErrorMessage } from "./traceError";
 
-export function TraceInspector({ detail }: { detail: TraceDetail }) {
+export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; models?: readonly ModelSelectOption[] }) {
   const { t, i18n } = useTranslation("observability");
   const { currentLocale, formatNumber, formatDateTime } = useLocaleFormatters();
   const toast = useToast();
@@ -33,10 +37,15 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
   const [pageSize, setPageSize] = useState(25);
   const [keyword, setKeyword] = useState("");
   const rows = useMemo(() => traceTree(detail.spans), [detail.spans]);
+  const modelLabel = (code: string) => contextModelDisplayName(code, models) || code;
+  const operationLabel = (item: TraceSpan) => {
+    const model = item.attributes["gen_ai.request.model"];
+    return item.attributes["gen_ai.tool.name"] ?? (model ? modelLabel(model) : item.name);
+  };
   const filteredRows = useMemo(() => {
     const query = keyword.trim().toLowerCase();
-    return query ? rows.filter(({ span }) => `${span.name} ${span.spanId} ${span.attributes["gen_ai.tool.name"] ?? ""} ${span.attributes["gen_ai.request.model"] ?? ""}`.toLowerCase().includes(query)) : rows;
-  }, [rows, keyword]);
+    return query ? rows.filter(({ span }) => `${span.name} ${span.spanId} ${span.attributes["gen_ai.tool.name"] ?? ""} ${span.attributes["gen_ai.request.model"] ?? ""} ${operationLabel(span)}`.toLowerCase().includes(query)) : rows;
+  }, [rows, keyword, models]);
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const visibleRows = useMemo(() => filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize), [filteredRows, currentPage, pageSize]);
@@ -52,6 +61,10 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
   const isPageTrigger = triggerRoot?.attributes["tron.trace.page"] === "true" || Boolean(triggerRoot?.attributes["url.path"]);
   const triggerCategory = !isPageTrigger && (triggerRoot?.attributes["tron.agent.code"] || triggerRoot?.attributes["tron.dude.code"]) ? "Agent" : "Page";
   const title = triggerLabel(trace.trigger, i18n, triggerCategory);
+  const traceError = triggerRoot && spanErrorMessage(triggerRoot)
+    || detail.spans.filter((item) => item.name === "agent.run" && item.status === "Error").map(spanErrorMessage).find(Boolean)
+    || detail.spans.filter((item) => item.status === "Error").map(spanErrorMessage).find(Boolean)
+    || null;
   const isDudeExecution = detail.spans.some((item) => item.name === "tron.dude.execute");
   const sessionHref = isDudeExecution
     ? `/dudes?${new URLSearchParams({ dude: trace.agentCode, tab: "history", session: trace.sessionCode })}`
@@ -109,6 +122,12 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
           <InfoTooltip ariaLabel={t("help")}>{t("metricsHelp")}</InfoTooltip>
         </div>
       </header>
+      {trace.status === "Error" && (
+        <div className="mx-5 mt-4 rounded-md bg-[var(--color-error-container)] px-3 py-2 text-sm text-[var(--color-on-error-container)]">
+          <div className="font-semibold">{t("failureReason")}</div>
+          <div className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{traceError ?? t("failureReasonUnavailable")}</div>
+        </div>
+      )}
       <dl className="grid grid-cols-2 gap-5 border-b border-[var(--color-outline-variant)] p-5 sm:grid-cols-4 xl:grid-cols-8">
         {metrics.map(([key, value]) => (
           <div key={key}>
@@ -144,7 +163,9 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleRows.map(({ span: item, depth }) => (
+                  {visibleRows.map(({ span: item, depth }) => {
+                    const operation = operationLabel(item);
+                    return (
                     <TableRow
                       key={item.spanId}
                       data-state={
@@ -152,18 +173,17 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
                       }
                     >
                       <TableCell>
-                        <Button
-                          variant="link"
-                          className="h-auto max-w-64 justify-start p-0"
-                          style={{ paddingLeft: Math.min(depth, 8) * 12 }}
-                          onClick={() => setSelected(item.spanId)}
-                        >
-                          <span className="truncate">
-                            {item.attributes["gen_ai.tool.name"] ??
-                              item.attributes["gen_ai.request.model"] ??
-                              item.name}
-                          </span>
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger render={<Button
+                            variant="link"
+                            className="h-auto max-w-64 justify-start p-0"
+                            style={{ paddingLeft: Math.min(depth, 8) * 12 }}
+                            onClick={() => setSelected(item.spanId)}
+                          />}>
+                            <span className="truncate">{operation}</span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-80 break-all">{operation}</TooltipContent>
+                        </Tooltip>
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {item.spanId}
@@ -176,7 +196,8 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
                       </TableCell>
                       <TableCell>{duration(item.durationMs)}</TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TabsContent>
@@ -184,7 +205,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
               {visibleRows.length > 0 && (
                 <SpanVisualization
                   detail={detail}
-                  rows={visibleRows}
+                  rows={visibleRows.map(({ span, depth }) => ({ span: { ...span, name: operationLabel(span) }, depth }))}
                   mode="waterfall"
                   selected={span?.spanId ?? ""}
                   onSelect={setSelected}
@@ -195,7 +216,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
               {visibleRows.length > 0 && (
                 <SpanVisualization
                   detail={detail}
-                  rows={visibleRows}
+                  rows={visibleRows.map(({ span, depth }) => ({ span: { ...span, name: operationLabel(span) }, depth }))}
                   mode="topology"
                   selected={span?.spanId ?? ""}
                   onSelect={setSelected}
@@ -218,7 +239,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
             aria-label={t("spanDetail")}
           >
             <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-2">
-              <h3 className="min-w-0 flex-1 text-sm font-semibold [overflow-wrap:anywhere]">{span.name}</h3>
+              <h3 className="min-w-0 flex-1 text-sm font-semibold [overflow-wrap:anywhere]">{operationLabel(span)}</h3>
               <TraceStatus status={span.status} />
             </div>
             <dl className="mb-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
@@ -238,6 +259,13 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
               <dt>{t("duration")}</dt>
               <dd className="tabular-nums">{duration(span.durationMs)}</dd>
             </dl>
+            {span.status === "Error" && (
+              <div className="mb-5 rounded-md bg-[var(--color-error-container)] px-3 py-2 text-xs text-[var(--color-on-error-container)]">
+                <div className="font-semibold">{t("failureReason")}</div>
+                <div className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{spanErrorMessage(span) ?? t("failureReasonUnavailable")}</div>
+                {span.attributes["error.type"] && <div className="mt-1 opacity-80">{t("failureType", { type: span.attributes["error.type"] })}</div>}
+              </div>
+            )}
             <Tabs defaultValue="attributes">
               <TabsList className="max-w-full overflow-x-auto">
                 <TabsTrigger value="attributes">{t("attributes")}</TabsTrigger>
@@ -249,7 +277,7 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="attributes">
-                <AttributeList attributes={span.attributes} />
+                <AttributeList attributes={span.attributes} modelLabel={modelLabel} />
               </TabsContent>
               <TabsContent value="events">
                 {span.events.length ? (
@@ -306,8 +334,10 @@ export function TraceInspector({ detail }: { detail: TraceDetail }) {
 }
 function AttributeList({
   attributes,
+  modelLabel,
 }: {
   attributes: TraceSpan["attributes"];
+  modelLabel?: (code: string) => string;
 }) {
   const { t } = useTranslation("observability");
   return Object.keys(attributes).length ? (
@@ -317,7 +347,7 @@ function AttributeList({
           <dt className="break-all text-[var(--color-on-surface-variant)]">
             {key}
           </dt>
-          <dd className="break-all font-mono">{value}</dd>
+          <dd className="break-all font-mono">{key === "gen_ai.request.model" && modelLabel ? modelLabel(value) : value}</dd>
         </div>
       ))}
     </dl>

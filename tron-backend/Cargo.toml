@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 eliteforge-agent-capability-chunking = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-chunking" }
+eliteforge-agent-capability-auto-routing = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-auto-routing" }
 eliteforge-agent-capability-personai = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-personai" }
 eliteforge-agent-official-plugin-tools-web = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-web" }
 eliteforge-agent-official-plugin-tools-media = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-media" }
@@ -46,7 +47,7 @@ bcrypt = "0.17"
 flate2 = "1"
 tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "b1e63a5e0199d09f000ad1d23b7e5559ee95710c" }
+crab-serverapi = { git = "https://gitee.com/person-ai/person-ai-index-rust-sdk.git", rev = "3baeeaaa69f04d883ada509c391dbd474d205429" }
 cron = "0.12"
 gmcrypto-core = { version = "1.0.0", features = ["sm4-aead"] }
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
@@ -95,6 +96,8 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+rand08 = { package = "rand", version = "0.8" }
+rsa = "0.9"
 rusqlite = { version = "0.37", features = ["trace"] }
 opentelemetry-proto = { version = "=0.32.0", default-features = false, features = ["gen-tonic-messages", "trace", "metrics", "with-serde"] }
 prost = "0.14"

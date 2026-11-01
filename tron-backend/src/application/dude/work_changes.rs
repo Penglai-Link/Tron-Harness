@@ -194,6 +194,10 @@ impl Tool for DudeWorkChangeTool {
                 // Exclude wording and invocation IDs: paraphrases and later runs share a receipt.
                 let fingerprint = if kind.actionable() {
                     json!({"kind":kind,"evidence":change.evidence})
+                } else if kind == WorkChangeKind::Progress {
+                    // Task bookkeeping is not a new deliverable. Foreground,
+                    // reminder and heartbeat runs share the concrete result.
+                    json!({"kind":kind,"executionResult":task.execution_result.as_deref().map(str::trim)})
                 } else {
                     json!({"kind":kind,"snapshot":change.task_snapshot})
                 }
@@ -259,10 +263,16 @@ pub(super) fn publish(
         .work_change(dude, id)
         .map_err(failure)?;
     let task = owned_task(tasks, dude, &change.task_code)?;
-    if change.notification.is_none()
-        && !change.kind.actionable()
-        && snapshot(&task) != change.task_snapshot
-    {
+    let stale = match change.kind {
+        WorkChangeKind::Progress => {
+            task.status == crate::domain::task::CLOSED_STATUS_CODE
+                || task.execution_result.as_deref().map(str::trim)
+                    != change.task_snapshot["executionResult"].as_str().map(str::trim)
+        }
+        WorkChangeKind::Completed => snapshot(&task) != change.task_snapshot,
+        _ => false,
+    };
+    if change.notification.is_none() && stale {
         return Err(invalid(
             "Task changed since this assessment. Reassess and record its current change before notifying",
         ));

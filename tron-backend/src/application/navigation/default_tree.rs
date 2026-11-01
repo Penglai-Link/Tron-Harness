@@ -92,13 +92,6 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
     },
     DefaultNavigationMenuTreeItem {
         domain_code: "ADVANCED",
-        menu_code: "MODELS",
-        parent_menu_code: Some("AGENT_OPERATIONS"),
-        position: 1,
-        child_display: NavigationMenuChildDisplay::Inline,
-    },
-    DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
         menu_code: "DATA",
         parent_menu_code: Some("EXPLORE_MORE"),
         position: 3,

@@ -88,7 +88,7 @@ impl Default for ContextProvidersConfig {
                 ("runtime_identity", Some(8192)),
                 ("dude_onboarding", Some(1024)),
                 ("dude_environment", Some(1536)),
-                ("dude_wakeup", Some(2048)),
+                ("dude_wakeup", Some(8192)),
                 ("skills.catalog", Some(8192)),
                 ("tool_domains", None),
             ]

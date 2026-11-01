@@ -39,6 +39,7 @@ pub struct CachedProfileAvatar {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersonAiAccountSummary {
+    pub nickname: Option<String>,
     pub vip_level: Option<i32>,
     pub remaining_points: Option<f64>,
 }

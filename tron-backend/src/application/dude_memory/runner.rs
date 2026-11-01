@@ -3,7 +3,7 @@ use super::{DudeMemoryService, DudeMemorySourceCollector};
 use crate::{
     app::AppMemoryService,
     application::{
-        agent::{AgentInvocationCommand, AgentInvocationService, FrameworkHost},
+        agent::{AgentInvocationCommand, AgentInvocationError, AgentInvocationService, FrameworkHost},
         memory::{
             MemoryRunContext, MemorySaveCommand, MemorySearchCommand, encode_memory_code_parts,
         },
@@ -98,7 +98,10 @@ impl DudeMemoryAgentRuntime for NativeDudeMemoryAgentRuntime {
                 Some("zh-CN".into()),
             )
             .await
-            .map_err(|e| DudeMemoryError::Storage(format!("{e:?}")))?;
+            .map_err(|error| match error {
+                AgentInvocationError::SessionBusy(_) => DudeMemoryError::ExecutionBusy,
+                error => DudeMemoryError::Storage(format!("{error:?}")),
+            })?;
         if result.status != "COMPLETED" {
             return Err(DudeMemoryError::Invalid(format!(
                 "memory agent has not completed: {}",

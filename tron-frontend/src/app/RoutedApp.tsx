@@ -74,14 +74,6 @@ export default function RoutedApp() {
               }
             />
             <Route
-              path="/admin/platform/models"
-              element={
-                <ProtectedRoute>
-                  <Navigate replace to="/settings/models" />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/resource-management/files/new"
               element={
                 <ProtectedRoute>

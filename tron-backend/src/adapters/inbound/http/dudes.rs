@@ -35,6 +35,10 @@ pub fn routes() -> Router<AppState> {
             get(sessions).post(resolve_session),
         )
         .route("/api/v1/dudes/{code}/events", get(events))
+        .route(
+            "/api/v1/dudes/{code}/tasks/{task_code}/cancel",
+            post(cancel_task),
+        )
         .route("/api/v1/dudes/{code}/threads", get(threads))
         .route(
             "/api/v1/dudes/{code}/threads/{session}/messages",
@@ -66,45 +70,58 @@ impl From<DudeError> for DudeApiError {
 }
 impl IntoResponse for DudeApiError {
     fn into_response(self) -> Response {
-        let descriptor = error_descriptor(&self.0);
-        let (status, zh, en) = match descriptor.message_key {
-            "tron.dude.not_found" => (
-                StatusCode::NOT_FOUND,
-                "Dude 或关联记录不存在",
-                "Dude or related record was not found",
-            ),
-            "tron.dude.request_invalid" => (
-                StatusCode::BAD_REQUEST,
-                "Dude 配置或请求无效",
-                "Dude configuration or request is invalid",
-            ),
-            "tron.dude.state_changed" => (
-                StatusCode::CONFLICT,
-                "Dude 状态已变化，请刷新后重试",
-                "Dude state changed; refresh and retry",
-            ),
-            "tron.dude.storage_failed" => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Dude 存储操作失败",
-                "Dude storage operation failed",
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Dude 运行失败，请查看工作记录",
-                "Dude execution failed; inspect its work history",
-            ),
-        };
-        let english = crate::shared::auth_holder::AuthHolder::get()
-            .is_some_and(|c| c.locale.to_ascii_lowercase().starts_with("en"));
-        (
-            status,
-            Json(ApiResponse::<EmptyData>::protocol_error(
-                descriptor.code,
-                if english { en } else { zh },
-            )),
-        )
-            .into_response()
+        dude_error_response(error_descriptor(&self.0))
     }
+}
+
+fn dude_error_response(descriptor: ApplicationErrorDescriptor) -> Response {
+    let (status, zh, en) = match descriptor.message_key {
+        "tron.dude.not_found" => (
+            StatusCode::NOT_FOUND,
+            "Dude 或关联记录不存在",
+            "Dude or related record was not found",
+        ),
+        "tron.dude.request_invalid" => (
+            StatusCode::BAD_REQUEST,
+            "Dude 配置或请求无效",
+            "Dude configuration or request is invalid",
+        ),
+        "tron.dude.state_changed" => (
+            StatusCode::CONFLICT,
+            "Dude 状态已变化，请刷新后重试",
+            "Dude state changed; refresh and retry",
+        ),
+        "tron.dude.task_completed" => (
+            StatusCode::CONFLICT,
+            "已完成的任务不能取消",
+            "A completed task cannot be cancelled",
+        ),
+        "tron.dude.task_has_active_subtasks" => (
+            StatusCode::CONFLICT,
+            "取消任务前请先处理未归档的子任务",
+            "Resolve unarchived subtasks before cancelling this task",
+        ),
+        "tron.dude.storage_failed" => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Dude 存储操作失败",
+            "Dude storage operation failed",
+        ),
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Dude 运行失败，请查看工作记录",
+            "Dude execution failed; inspect its work history",
+        ),
+    };
+    let english = crate::shared::auth_holder::AuthHolder::get()
+        .is_some_and(|c| c.locale.to_ascii_lowercase().starts_with("en"));
+    (
+        status,
+        Json(ApiResponse::<EmptyData>::protocol_error(
+            descriptor.code,
+            if english { en } else { zh },
+        )),
+    )
+        .into_response()
 }
 macro_rules! dude_response {
     ($name:ident) => {
@@ -116,7 +133,6 @@ macro_rules! dude_response {
             name: String,
             description: String,
             role_prompt: String,
-            loop_code: Option<String>,
             avatar_id: String,
             candidate_model_codes: Vec<String>,
             kind: DudeKind,
@@ -127,6 +143,8 @@ macro_rules! dude_response {
             created_at: i64,
             updated_at: i64,
             tool_assignment_mode: crate::domain::agent::ToolAssignmentMode,
+            #[serde(default)]
+            selected_category_codes: Vec<String>,
             mcp_access_mode: crate::domain::agent::McpAccessMode,
             max_steps: u32,
             max_tool_calls: u32,
@@ -143,7 +161,6 @@ macro_rules! dude_response {
                     name: p.name,
                     description: p.description,
                     role_prompt: p.role_prompt,
-                    loop_code: p.loop_code,
                     avatar_id: p.avatar_id,
                     candidate_model_codes: p.candidate_model_codes,
                     kind: d.kind,
@@ -154,6 +171,7 @@ macro_rules! dude_response {
                     created_at: d.created_at,
                     updated_at: d.updated_at,
                     tool_assignment_mode: p.tool_assignment_mode,
+                    selected_category_codes: p.selected_category_codes.clone(),
                     mcp_access_mode: p.mcp_access_mode,
                     max_steps: p.max_steps,
                     max_tool_calls: p.max_tool_calls,
@@ -178,7 +196,6 @@ pub struct CreateDudeRequest {
     #[serde(default)]
     pub description: String,
     pub role_prompt: String,
-    pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
     #[serde(default)]
     pub candidate_model_codes: Vec<String>,
@@ -205,7 +222,6 @@ fn cadence() -> u32 {
 pub struct UpdateDudeRequest {
     pub description: Option<String>,
     pub role_prompt: Option<String>,
-    pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
     pub candidate_model_codes: Option<Vec<String>>,
     pub enabled: Option<bool>,
@@ -241,7 +257,6 @@ async fn create(
             name: r.name,
             description: r.description,
             role_prompt: r.role_prompt,
-            loop_code: r.loop_code,
             avatar_id: r.avatar_id,
             group_name: None,
             candidate_model_codes: r.candidate_model_codes,
@@ -268,7 +283,6 @@ async fn update(
                 name: None,
                 description: r.description,
                 role_prompt: r.role_prompt,
-                loop_code: r.loop_code,
                 avatar_id: r.avatar_id,
                 group_name: None,
                 candidate_model_codes: r.candidate_model_codes,
@@ -359,13 +373,22 @@ async fn main_session(
 ) -> Result<Json<ApiResponse<MainDudeSessionResponse>>, DudeApiError> {
     let code = s.dudes.main()?.dude_code;
     let mut soul = s.dudes.soul(&code)?;
-    if soul.state!=SoulState::Ready && soul.session_code.is_none() {
-        soul=s.dudes.begin_awakening(&code,&auth.user().user_code)?.0;
+    if soul.state != SoulState::Ready && soul.session_code.is_none() {
+        soul = s.dudes.begin_awakening(&code, &auth.user().user_code)?.0;
     }
-    let d = if soul.user_code.as_deref()==Some(&auth.user().user_code) && soul.session_code.is_some() {
-        s.dudes.session(soul.session_code.as_deref().unwrap())?.ok_or(DudeError::NotFound)?
+    let d = if soul.user_code.as_deref() == Some(&auth.user().user_code)
+        && soul.session_code.is_some()
+    {
+        s.dudes
+            .session(soul.session_code.as_deref().unwrap())?
+            .ok_or(DudeError::NotFound)?
     } else {
-        s.dudes.resolve_session(&code, DudeSessionPurpose::Interactive, &format!("interactive:{}",auth.user().user_code), None)?
+        s.dudes.resolve_session(
+            &code,
+            DudeSessionPurpose::Interactive,
+            &format!("interactive:{}", auth.user().user_code),
+            None,
+        )?
     };
     let chat = s
         .chats
@@ -381,13 +404,22 @@ async fn resolve_session(
     Path(code): Path<String>,
 ) -> Result<Json<ApiResponse<ResolveDudeSessionResponse>>, DudeApiError> {
     let mut soul = s.dudes.soul(&code)?;
-    if soul.state!=SoulState::Ready && soul.session_code.is_none() {
-        soul=s.dudes.begin_awakening(&code,&auth.user().user_code)?.0;
+    if soul.state != SoulState::Ready && soul.session_code.is_none() {
+        soul = s.dudes.begin_awakening(&code, &auth.user().user_code)?.0;
     }
-    let d = if soul.user_code.as_deref()==Some(&auth.user().user_code) && soul.session_code.is_some() {
-        s.dudes.session(soul.session_code.as_deref().unwrap())?.ok_or(DudeError::NotFound)?
+    let d = if soul.user_code.as_deref() == Some(&auth.user().user_code)
+        && soul.session_code.is_some()
+    {
+        s.dudes
+            .session(soul.session_code.as_deref().unwrap())?
+            .ok_or(DudeError::NotFound)?
     } else {
-        s.dudes.resolve_session(&code, DudeSessionPurpose::Interactive, &format!("interactive:{}",auth.user().user_code), None)?
+        s.dudes.resolve_session(
+            &code,
+            DudeSessionPurpose::Interactive,
+            &format!("interactive:{}", auth.user().user_code),
+            None,
+        )?
     };
     let chat = s
         .chats
@@ -415,12 +447,19 @@ async fn sessions(
         .filter(|chat| chat.user_code.as_deref() == Some(&auth.user().user_code))
         .map(|chat| (chat.session_code.clone(), chat))
         .collect::<std::collections::BTreeMap<_, _>>();
+    let mut heartbeat_count = 0;
     let result = sessions
         .into_iter()
         .filter_map(|session| {
             chats
                 .remove(&session.session_code)
-                .map(|chat| ListDudeSessionResponse::from_record(chat, session))
+                .and_then(|chat| {
+                    if session.purpose == DudeSessionPurpose::Heartbeat {
+                        heartbeat_count += 1;
+                        if heartbeat_count > HEARTBEAT_HISTORY_LIMIT { return None; }
+                    }
+                    Some(ListDudeSessionResponse::from_record(chat, session))
+                })
         })
         .collect::<Vec<_>>();
     Ok(Json(ApiResponse::protocol_success(result)))
@@ -443,7 +482,7 @@ async fn events(
 ) -> Result<Json<ApiResponse<Vec<ListDudeEventResponse>>>, DudeApiError> {
     Ok(Json(ApiResponse::protocol_success(
         s.dudes
-            .events(&code)?
+            .activity_events(&code)?
             .into_iter()
             .map(|e| ListDudeEventResponse {
                 event_id: e.event_id,
@@ -457,6 +496,16 @@ async fn events(
             })
             .collect(),
     )))
+}
+
+async fn cancel_task(
+    State(s): State<AppState>,
+    Path((code, task_code)): Path<(String, String)>,
+) -> Response {
+    match s.tasks.cancel_dude_task(&code, &task_code) {
+        Ok(()) => Json(ApiResponse::protocol_success(EmptyData {})).into_response(),
+        Err(error) => dude_error_response(error.descriptor()),
+    }
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

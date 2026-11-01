@@ -27,7 +27,7 @@ async function fulfillJson(route: Route, data: unknown) {
   await route.fulfill({ json: { code: "SUCCESS", message: "ok", data } });
 }
 
-async function mockChat(page: Page) {
+async function mockChat(page: Page, phaseFixture = false) {
   let now = Date.now();
   const session: ChatSession = {
     id: 1, sessionCode: "SESSION-CONTEXT", workspaceCode: "TRON_CORE", title: "Context checks",
@@ -51,6 +51,14 @@ async function mockChat(page: Page) {
     const status = failed ? "Failed" as const : completed ? "Completed" as const : "Running" as const;
     const run = { id: "RUN-CONTEXT", sessionId: session.sessionCode, parentRunId: null, rootRunId: "RUN-CONTEXT", status,
       startedAtMs: now, finishedAtMs: status === "Running" ? null : now + 3, error: failed?.message ?? null };
+    if (phaseFixture && completed) {
+      return { sessionId: session.sessionCode, version: String(events.length), nextCursor: null, runs: [run], activeRuns: [], pendingInteractions: [],
+        records: { messages: [
+          { id: "MSG-CONTEXT", runId: run.id, stepId: null, role: "User", content: [{ type: "Text", text: messages[0]?.content ?? "" }], structured: null, status: "Completed", createdAtMs: now },
+          { id: "phase-progress", runId: run.id, stepId: "phase-step", role: "Assistant", phase: "commentary", outputIndex: 0, content: [{ type: "Text", text: "Checking files" }], structured: null, status: "Completed", createdAtMs: now + 1 },
+          { id: "phase-final", runId: run.id, stepId: "phase-step", role: "Assistant", phase: "final_answer", outputIndex: 1, content: [{ type: "Text", text: "Finished the check" }], structured: null, status: "Completed", createdAtMs: now + 2 },
+        ], steps: [{ id: "phase-step", runId: run.id, nodeInvocationId: null, sequence: 1, attempt: 1, name: "chat", model: null, status: "Completed", usage: { inputTokens: 3, outputTokens: 4 }, startedAtMs: now + 1, finishedAtMs: now + 3 }], interactions: [], toolInvocations: [] } };
+    }
     return { sessionId: session.sessionCode, version: String(events.length), nextCursor: null,
       runs: events.length ? [run] : [], activeRuns: events.length && status === "Running" ? [run] : [], pendingInteractions: [],
       records: { messages: [...messages.map(message => ({ id: message.messageCode, runId: run.id, stepId: null, role: "User", content: [{ type: "Text", text: message.content }], structured: null, status: "Completed" as const, createdAtMs: now })), ...(events.length ? [{ id: "assistant-work", runId: run.id, stepId: compacting ? "compact" : null, role: "Assistant" as const, content: failed ? [{ type: "Text" as const, text: failed.message! }] : [], structured: null, status, createdAtMs: now + 1 }] : [])],
@@ -76,6 +84,22 @@ async function mockChat(page: Page) {
     if (path.endsWith("/messages/stream")) {
       now = Date.now();
       messages = [userMessage(route.request().postDataJSON().content)];
+      if (phaseFixture) {
+        const meta = (phase?: string, outputIndex = 0) => ({ framework: { runId: "RUN-CONTEXT", ...(phase ? { message: { phase, outputIndex, stepId: "phase-step" } } : {}) } });
+        const product = { id: 2, messageCode: "product-final", sessionCode: session.sessionCode, role: "ASSISTANT" as const, actor: "Assistant", channel: "MAIN_AGENT", content: "Finished the check", runCode: "RUN-CONTEXT", createdAt: new Date(now + 3).toISOString() };
+        messages.push(product);
+        const result = { session, run: { runCode: "RUN-CONTEXT", workspaceCode: "TRON_CORE", status: "COMPLETED", finalOutput: product.content, finalMessageIds: ["phase-final"], stepCount: 1 }, messages, userInputRequest: null };
+        events = [event("RUN_STARTED"),
+          event("TEXT_MESSAGE_START", { messageId: "phase-progress", role: "assistant", metadata: meta() }),
+          event("TEXT_MESSAGE_CONTENT", { messageId: "phase-progress", delta: "Checking files", metadata: meta() }),
+          event("TEXT_MESSAGE_END", { messageId: "phase-progress", metadata: meta("commentary") }),
+          event("TEXT_MESSAGE_START", { messageId: "phase-final", role: "assistant", metadata: meta("final_answer", 1) }),
+          event("TEXT_MESSAGE_CONTENT", { messageId: "phase-final", delta: "Finished the check", metadata: meta("final_answer", 1) }),
+          event("TEXT_MESSAGE_END", { messageId: "phase-final", metadata: meta("final_answer", 1) }),
+          event("RUN_FINISHED", { metadata: { framework: { runId: "RUN-CONTEXT", finalMessageIds: ["phase-final"] } }, result, productCompletion: true }),
+        ];
+        return route.fulfill({ contentType: "text/event-stream", body: events.map(entry => `event: ${entry.type.toLowerCase()}\ndata: ${JSON.stringify(entry)}\n\n`).join("") });
+      }
       events = [
         event("RUN_STARTED"),
         event("RUN_ERROR", {
@@ -110,6 +134,26 @@ async function mockChat(page: Page) {
     },
   };
 }
+
+test("Responses commentary and final answer remain separate after history refresh", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await seedResourceUiShell(page, "en-US");
+  const fixture = await mockChat(page, true);
+  await page.goto(fixture.url);
+  const transcript = page.getByRole("region", { name: "Chat transcript", exact: true });
+  const input = page.locator('[data-theme-part="chat-input"]');
+  await expect(input).toBeEnabled();
+  await input.fill("Inspect the workspace");
+  await input.press("Enter");
+  await expect(transcript.locator('[data-message-id="phase-progress"]')).toContainText("Checking files");
+  await expect(transcript.locator('[data-message-id="phase-final"]')).toContainText("Finished the check");
+  await expect(transcript.getByText("Finished the check", { exact: true })).toHaveCount(1);
+  await page.reload();
+  await expect(transcript.locator('[data-message-id="phase-progress"]')).toContainText("Checking files");
+  await expect(transcript.locator('[data-message-id="phase-final"]')).toContainText("Finished the check");
+  await expect(transcript.getByText("Finished the check", { exact: true })).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("responses-phase-history.png") });
+});
 
 for (const locale of ["en-US", "zh-CN"] as const) {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 1920, height: 1080 }]) {

@@ -21,6 +21,8 @@ pub(super) fn encode(message: &AgentMessage) -> Result<Message, String> {
         other => return Err(format!("unsupported conversation role: {other}")),
     };
     let mut result = Message::new(role, Content::default()).with_annotations(message.annotations.clone());
+    result.phase = message.phase.clone();
+    result.output_group_id = message.output_group_id.clone();
     for part in &message.parts {
         let block = match part {
             AgentMessagePart::Text { text } => ContentBlock::Text { text: text.clone() },
@@ -238,6 +240,8 @@ pub(crate) fn decode(message: &Message) -> Result<AgentMessage, String> {
         }
     }
     let mut result = AgentMessage::new(role, parts);
+    result.phase = message.phase.clone();
+    result.output_group_id = message.output_group_id.clone();
     result.annotations = message.annotations.clone();
     Ok(result)
 }

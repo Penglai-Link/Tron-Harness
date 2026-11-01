@@ -582,7 +582,7 @@ async fn shared_model_picker_exposes_four_typed_automatic_routes() {
     let response = common::authenticated_request(
         &app,
         Method::GET,
-        &format!("/api/v1/models/workspaces/{WORKSPACE}/select-options"),
+        &format!("/api/v1/model-providers/select-options?workspaceCode={WORKSPACE}"),
         None,
     )
     .await;

@@ -1,11 +1,11 @@
 mod access;
 mod bundles;
-mod evidence;
-pub mod graph;
 mod catalog;
 mod catalog_service;
 mod diagnostics;
+mod evidence;
 mod facade;
+pub mod graph;
 mod indexing;
 mod ingest;
 mod lifecycle;
@@ -22,10 +22,10 @@ pub(crate) use source_parts::selected_spans as selected_source_spans;
 mod service;
 mod task_content;
 pub use access::*;
-pub use evidence::*;
 pub use catalog::*;
 pub use catalog_service::{RagTaskHistoryError, TaskHistoryErrorDescriptor};
 pub use diagnostics::*;
+pub use evidence::*;
 pub use facade::*;
 pub use indexing::*;
 pub use ingest::*;
@@ -41,6 +41,6 @@ pub use task_content::RagTaskChunksError;
 
 pub use crate::application::document::split_document;
 
-// The shared memory corpus uses platform models for writes and retrieval alike.
+// The shared memory corpus uses provider models for writes and retrieval alike.
 // Business workspace codes remain exclusively in access scopes and persisted tasks.
 const MEMORY_MODEL_WORKSPACE: &str = "PLATFORM";

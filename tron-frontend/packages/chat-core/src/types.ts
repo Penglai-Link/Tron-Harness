@@ -66,6 +66,7 @@ export interface UpdateChatSessionInput {
 }
 
 export interface ChatMessage {
+  phase?: string | null;
   annotations?: ChatAnnotation[];
   id: number | string;
   messageCode: string;
@@ -124,6 +125,7 @@ export interface ChatRunSummary {
   reasoningEffort?: ReasoningEffort | null;
   status: "COMPLETED" | "AWAITING_USER_INPUT";
   finalOutput: string;
+  finalMessageIds?: string[];
   stepCount: number;
   tokenUsage?: ChatTokenUsage | null;
   systemAgentSessionId?: string | null;

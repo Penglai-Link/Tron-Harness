@@ -41,7 +41,7 @@ async fn default_and_custom_dudes_can_assign_revoke_and_use_resources_without_jo
         "/api/v1/dudes",
         Some(json!({
             "dudeCode":"grant-dude", "name":"Grant Dude", "rolePrompt":"Use grants",
-            "loopCode":main.loop_code, "enabled":false
+            "enabled":false
         })),
     )
     .await;

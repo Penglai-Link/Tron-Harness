@@ -24,11 +24,13 @@ pub(super) enum ShellKind {
     /// A shell without `precmd`/`preexec` hooks. It still runs, but it cannot
     /// report prompt boundaries, so the client degrades to a plain terminal.
     Posix,
+    PowerShell,
+    Cmd,
 }
 
 impl ShellKind {
     pub(super) fn reports_blocks(self) -> bool {
-        !matches!(self, Self::Posix)
+        matches!(self, Self::Bash | Self::Zsh)
     }
 
     pub(super) fn as_str(self) -> &'static str {
@@ -36,13 +38,22 @@ impl ShellKind {
             Self::Bash => "bash",
             Self::Zsh => "zsh",
             Self::Posix => "sh",
+            Self::PowerShell => "powershell",
+            Self::Cmd => "cmd",
         }
     }
 
     fn from_program(program: &Path) -> Self {
-        match program.file_name().and_then(|name| name.to_str()) {
-            Some("bash") => Self::Bash,
-            Some("zsh") => Self::Zsh,
+        let name = program
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        match name.trim_end_matches(".exe") {
+            "bash" => Self::Bash,
+            "zsh" => Self::Zsh,
+            "pwsh" | "powershell" => Self::PowerShell,
+            "cmd" => Self::Cmd,
             _ => Self::Posix,
         }
     }
@@ -99,7 +110,9 @@ impl ShellIntegration {
     pub(super) fn command(&self) -> PtyCommand {
         let mut command = PtyCommand::new(&self.program);
         let directory = self.directory.as_ref().map(TempDir::path);
-        command.env("__TRON_SUBSHELL_BOOTSTRAP", subshell_bootstrap());
+        if !matches!(self.kind, ShellKind::PowerShell | ShellKind::Cmd) {
+            command.env("__TRON_SUBSHELL_BOOTSTRAP", subshell_bootstrap());
+        }
         if let Some(directory) = directory {
             command.env("__TRON_SSH_INTEGRATION", directory.join("integration.sh"));
             command.env("__TRON_SSH_HELPER", directory.join("ssh-helper.sh"));
@@ -134,6 +147,12 @@ impl ShellIntegration {
                 }
                 command.env("ZDOTDIR", directory);
                 command.arg("-i");
+            }
+            (ShellKind::PowerShell, _) => {
+                command.arg("-NoLogo");
+            }
+            (ShellKind::Cmd, _) => {
+                command.arg("/D");
             }
             _ => {
                 command.arg("-i");
@@ -259,7 +278,7 @@ fn write_shell_files(kind: ShellKind) -> std::io::Result<TempDir> {
                 ),
             )?;
         }
-        ShellKind::Posix => {}
+        ShellKind::Posix | ShellKind::PowerShell | ShellKind::Cmd => {}
     }
 
     Ok(directory)

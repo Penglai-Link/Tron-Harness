@@ -278,12 +278,12 @@ impl ModelProviderService {
                     return Ok(vec![]);
                 }
                 [
-                    (ModelType::Embedding, ProviderRouteCode::EmbeddingAuto),
+                    (ModelType::TextEmbedding, ProviderRouteCode::EmbeddingAuto),
                     (
-                        ModelType::Embedding,
+                        ModelType::TextEmbedding,
                         ProviderRouteCode::MultimodalEmbeddingAuto,
                     ),
-                    (ModelType::Rerank, ProviderRouteCode::RerankAuto),
+                    (ModelType::TextRerank, ProviderRouteCode::RerankAuto),
                 ]
                 .into_iter()
                 .map(|(model_type, route)| {
@@ -322,7 +322,7 @@ pub(super) fn person_ai_embedding_config(code: &str) -> RuntimeModelConfig {
     RuntimeModelConfig {
         model_code: format!("{PERSON_AI_EMBEDDING_PREFIX}{code}"),
         protocol: ModelProtocol::OpenAiCompatibleEmbedding,
-        model_type: ModelType::Embedding,
+        model_type: ModelType::TextEmbedding,
         base_url: "https://person-ai.invalid".into(),
         api_path: Some("embeddings".into()),
         api_key: String::new(),
@@ -344,7 +344,7 @@ pub(super) fn person_ai_rerank_config(id: &str) -> RuntimeModelConfig {
     RuntimeModelConfig {
         model_code: format!("{PERSON_AI_RERANK_PREFIX}{id}"),
         protocol: ModelProtocol::Rerank,
-        model_type: ModelType::Rerank,
+        model_type: ModelType::TextRerank,
         base_url: "https://person-ai.invalid".into(),
         api_path: Some("/rerank".into()),
         api_key: String::new(),

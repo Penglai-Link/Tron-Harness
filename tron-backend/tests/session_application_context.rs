@@ -44,7 +44,9 @@ fn to_gateway_response(
             input_error,
         } = part
         {
-            if input_error.is_some() { continue; }
+            if input_error.is_some() {
+                continue;
+            }
             if tool_name == "tool_search" {
                 *input = common::gateway_arguments(tool_name, input.clone());
                 continue;
@@ -406,7 +408,7 @@ async fn missing_working_directory_never_runs_in_the_backend_directory() {
         .into_owned();
     context.execution_scope.local_directory = Some(missing.clone());
     context.tools = vec![EffectiveTool {
-        tool_name: "bash_exec".into(),
+        tool_name: "command_exec".into(),
         domain_code: None,
         description: "shell".into(),
         input_schema: json!({"type": "object"}),
@@ -416,7 +418,7 @@ async fn missing_working_directory_never_runs_in_the_backend_directory() {
     let result = execute_tool(
         &state,
         ToolRequest {
-            tool_name: "bash_exec".into(),
+            tool_name: "command_exec".into(),
             input: json!({"command": "pwd"}),
             invocation_id: None,
         },
@@ -496,6 +498,11 @@ fn productivity_context(root: &Path) -> tron_backend::domain::agent::AgentRunCon
             .into_iter()
             .map(tron_backend::application::agent::tool_record_to_effective_tool)
             .collect();
+    context.tools.push(tron_backend::domain::agent::EffectiveTool {
+        tool_name: "command_exec".into(), domain_code: Some("command".into()),
+        description: "Execute a command".into(), input_schema: json!({"type":"object"}),
+        skill_name: None, required_variable_keys: vec![],
+    });
     context.limits.max_steps = 10;
     context.limits.max_tool_calls = 10;
     context
@@ -602,6 +609,7 @@ fn execute_tool(
     let is_gateway_call = matches!(request.tool_name.as_str(), "tool_search" | "tool_execute");
     if !(request.tool_name.starts_with("fs_")
         || request.tool_name.starts_with("bash_")
+        || request.tool_name.starts_with("command_")
         || is_gateway_call)
     {
         return state.agent_tool_registry.execute_allowed(request, context);
@@ -821,6 +829,14 @@ fn office_tools_read_session_attachments_through_file_refs() {
             &mut Cursor::new("第一行\nsecond line\n".as_bytes()),
         )
         .unwrap();
+    let attachment_text = call_tool(
+        &state,
+        &context,
+        "chat_attachment_read_text",
+        json!({"attachmentCode":text_code}),
+    );
+    assert_eq!(attachment_text["content"], "第一行\nsecond line\n");
+    assert_eq!(attachment_text["attachment"]["attachmentCode"], text_code);
     let text = call_tool(
         &state,
         &context,
@@ -1018,7 +1034,7 @@ fn productivity_domains_are_localized_and_discoverable() {
         let mut context = productivity_context(temporary.path());
         context.locale = locale.into();
 
-        for domain in ["worktree", "git", "word", "excel"] {
+        for domain in ["harness_worktree", "word", "excel"] {
             assert!(domains.iter().any(|item| item.domain_code == domain));
             let tools = BusinessToolCatalog::list_tools(Some(domain), None, locale);
             assert!(!tools.is_empty());
@@ -1036,7 +1052,7 @@ fn productivity_domains_are_localized_and_discoverable() {
                 &state,
                 tron_backend::domain::agent::ToolRequest {
                     tool_name: "tool_search".into(),
-                    input: json!({"query": domain, "limit": 20}),
+                    input: json!({"domainCode": domain, "limit": 20}),
                     invocation_id: None,
                 },
                 &context,
@@ -1091,11 +1107,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
                         "worktree_create",
                         json!({"name":"selected","branch":"feature/selected"}),
                     ),
-                    1 => ModelResponse::tool_call(
-                        "git_switch_branch",
-                        json!({"branch":"feature/new","create":true}),
-                    ),
-                    2 => ModelResponse::tool_call("worktree_select", json!({"path":self.root})),
+                    1 => ModelResponse::tool_call("worktree_select", json!({"path":self.root})),
                     _ => ModelResponse::final_output("verified"),
                 }))
             })
@@ -1165,10 +1177,9 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
     ensure_native_fixture_session(&state);
     let mut context = productivity_context(&root);
     // Keep request budget small enough to verify the execution prefix, without unrelated catalog schemas.
-    context.tools.retain(|tool| {
-        ["worktree_create", "worktree_select", "git_switch_branch"]
-            .contains(&tool.tool_name.as_str())
-    });
+    context
+        .tools
+        .retain(|tool| ["worktree_create", "worktree_select"].contains(&tool.tool_name.as_str()));
     let requests = Arc::new(Mutex::new(Vec::new()));
     let agent = ReactAgentBuilder::new(
         Arc::new(Script {
@@ -1186,7 +1197,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
     let result = agent.run(context).await.unwrap();
     assert_eq!(result.final_output, "verified");
     let requests = requests.lock().unwrap();
-    assert_eq!(requests.len(), 4);
+    assert_eq!(requests.len(), 3);
     for (index, request) in requests.iter().enumerate() {
         let has_main = request
             .messages
@@ -1194,7 +1205,7 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
             .any(|m| m.text_content().contains("main-only project instruction"));
         assert_eq!(
             has_main,
-            index == 0 || index == 3,
+            index == 0 || index == 2,
             "instruction scope at request {index}"
         );
     }
@@ -1209,7 +1220,12 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
                         .text_content()
                         .contains("application-execution-context")
                 })
-                .unwrap_or_else(|| panic!("missing application scope in request: {:?}", request.messages));
+                .unwrap_or_else(|| {
+                    panic!(
+                        "missing application scope in request: {:?}",
+                        request.messages
+                    )
+                });
             let content = message.text_content();
             let begin = content.find('{').unwrap();
             let end = content.rfind('}').unwrap();
@@ -1222,15 +1238,14 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
         .collect::<Vec<_>>();
     assert_eq!(scopes[0]["branchName"], "main");
     assert_eq!(scopes[1]["branchName"], "feature/selected");
-    assert_eq!(scopes[2]["branchName"], "feature/new");
-    assert_eq!(scopes[3]["branchName"], "main");
+    assert_eq!(scopes[2]["branchName"], "main");
     assert!(
         scopes[1]["localDirectory"]
             .as_str()
             .unwrap()
             .ends_with(".tron-worktrees/selected")
     );
-    assert_eq!(scopes[3]["localDirectory"], root.to_str().unwrap());
+    assert_eq!(scopes[2]["localDirectory"], root.to_str().unwrap());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1258,7 +1273,7 @@ async fn deleting_selected_worktree_never_reverts_to_old_tool_observations() {
     ensure_native_fixture_session(&state);
     let mut context = productivity_context(&root);
     context.observations.push(ToolObservation {
-        tool_name: "bash_exec".into(),
+        tool_name: "command_exec".into(),
         output: json!({"cwd":root}).to_string(),
     });
     let created = call_tool(
@@ -1292,7 +1307,7 @@ async fn deleting_selected_worktree_never_reverts_to_old_tool_observations() {
         execute_tool(
             &state,
             ToolRequest {
-                tool_name: "bash_exec".into(),
+                tool_name: "command_exec".into(),
                 input: json!({"command":"pwd"}),
                 invocation_id: None,
             },
@@ -2160,7 +2175,7 @@ async fn project_instructions_refresh_without_duplicating_and_primary_tools_use_
         memory.prompt_prefix.len(),
         memory.prompt_prefix_sources.len()
     );
-    let output = call_tool(&state, &context, "bash_exec", json!({"command":"pwd"}));
+    let output = call_tool(&state, &context, "command_exec", json!({"command":"pwd"}));
     assert_eq!(
         std::fs::canonicalize(output["cwd"].as_str().unwrap()).unwrap(),
         root

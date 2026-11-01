@@ -42,6 +42,12 @@ export function useAppOptions(query: AppOptionQuery): AppOptionsResult {
 
   useEffect(() => {
     if (dataSource !== "api") return;
+    if (!query.workspaceCode.trim()) {
+      setOptions([]);
+      setError(false);
+      setLoading(false);
+      return;
+    }
     const controller = new AbortController();
     setLoading(true);
     setError(false);

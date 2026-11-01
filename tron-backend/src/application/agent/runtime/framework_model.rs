@@ -292,7 +292,7 @@ impl ReactAgent {
         if response.finish == crate::domain::agent::ModelFinish::ToolCalls
             && !response.assistant.parts.is_empty()
         {
-            std::sync::Arc::make_mut(&mut context.messages).push(response.assistant.clone());
+            std::sync::Arc::make_mut(&mut context.messages).extend(response.transcript_messages());
         }
         turn_state.apply_model_response(&response, context.messages.len());
 

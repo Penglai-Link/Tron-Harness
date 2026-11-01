@@ -72,13 +72,16 @@ pub async fn get_context_detail(
     }
     let snapshot_sequence = match query.snapshot_sequence.as_deref().map(str::parse::<u64>) {
         Some(Ok(sequence)) if sequence > 0 => Some(sequence),
-        Some(_) => return invalid_request_response("snapshotSequence must be a positive event sequence"),
+        Some(_) => {
+            return invalid_request_response("snapshotSequence must be a positive event sequence");
+        }
         None => None,
     };
-    match state
-        .short_term_memory
-        .context_detail_at(&query.session_code, &query.block_code, snapshot_sequence)
-    {
+    match state.short_term_memory.context_detail_at(
+        &query.session_code,
+        &query.block_code,
+        snapshot_sequence,
+    ) {
         Ok(Some(detail)) => Json(ApiResponse::success(detail)).into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
@@ -135,7 +138,7 @@ pub async fn create_compaction(
         Ok(None) => {
             return compaction_model_error_response(
                 "COMPACTION_MODEL_NOT_CONFIGURED",
-                "no default text model is configured for this workspace",
+                "no matching text model is available from model providers",
             );
         }
         Err(_) => return short_term_memory_error_response(ShortTermMemoryError::StorageFailure),

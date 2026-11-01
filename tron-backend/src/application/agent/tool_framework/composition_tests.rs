@@ -224,10 +224,10 @@ async fn blank_command_activity_does_not_mark_presentation_incomplete() {
         "limits":{"maxSteps":2,"maxToolCalls":1,"maxParallelToolCalls":1},
         "messages":[],"observations":[],"startedAt":"test"
     })).unwrap();
-    agent.framework_tool_activity(&context, "CALL-1", "bash_exec", "");
+    agent.framework_tool_activity(&context, "CALL-1", "command_exec", "");
     assert_eq!(bus.stats_snapshot().rejected_invalid, 0);
     assert_eq!(bus.stats_snapshot().accepted, 0);
-    agent.framework_tool_activity(&context, "CALL-1", "bash_exec", "line");
+    agent.framework_tool_activity(&context, "CALL-1", "command_exec", "line");
     assert_eq!(bus.stats_snapshot().accepted, 1);
     assert_eq!(bus.stats_snapshot().rejected_invalid, 0);
     assert!(host.close().await.is_success());

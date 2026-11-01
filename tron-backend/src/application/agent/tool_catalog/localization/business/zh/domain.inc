@@ -1,8 +1,4 @@
 &[
-    (
-        "agent.toolCatalog.tools.model.delete.sampleResultSummary",
-        "返回模型删除结果。",
-    ),
     ("agent.toolCatalog.tools.skill.page.name", "分页查询技能"),
     (
         "agent.toolCatalog.tools.skill.page.description",
@@ -127,90 +123,6 @@
     (
         "agent.toolCatalog.tools.platform.variable.delete.sampleResultSummary",
         "返回平台变量删除结果。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.page.name",
-        "分页查询平台模型",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.page.description",
-        "分页查询平台设置中的模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.page.sampleResultSummary",
-        "返回分页后的平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.get.name",
-        "获取平台模型",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.get.description",
-        "读取单个平台模型配置。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.get.sampleResultSummary",
-        "返回单个平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.create.name",
-        "创建平台模型",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.create.description",
-        "在平台设置中创建模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.create.sampleResultSummary",
-        "返回新建的平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.update.name",
-        "修改平台模型",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.update.description",
-        "修改平台模型配置。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.update.sampleResultSummary",
-        "返回修改后的平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.enable.name",
-        "启用平台模型",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.enable.description",
-        "启用平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.enable.sampleResultSummary",
-        "返回已启用的平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.disable.name",
-        "停用平台模型",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.disable.description",
-        "停用平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.disable.sampleResultSummary",
-        "返回已停用的平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.delete.name",
-        "删除平台模型",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.delete.description",
-        "删除平台模型。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.model.delete.sampleResultSummary",
-        "返回平台模型删除结果。",
     ),
     (
         "agent.toolCatalog.tools.platform.prompt.page.name",

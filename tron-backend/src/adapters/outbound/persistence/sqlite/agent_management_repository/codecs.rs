@@ -1,6 +1,5 @@
 use crate::domain::agent::{
-    AgentManagementError, AgentRuntimeType, McpAccessMode,
-    ToolAssignmentMode,
+    AgentManagementError, AgentRuntimeType, McpAccessMode, ToolAssignmentMode,
 };
 
 pub(super) fn storage_error(_error: rusqlite::Error) -> AgentManagementError {
@@ -32,6 +31,7 @@ pub(super) fn runtime_type_from_storage(value: &str) -> AgentRuntimeType {
 
 pub(super) fn tool_assignment_mode_to_storage(value: ToolAssignmentMode) -> &'static str {
     match value {
+        ToolAssignmentMode::SelectedCategories => "SELECTED_CATEGORIES",
         ToolAssignmentMode::AllPlatformTools => "ALL_PLATFORM_TOOLS",
         ToolAssignmentMode::SelectedTools => "SELECTED_TOOLS",
         ToolAssignmentMode::AllReadOnlyTools => "ALL_READ_ONLY_TOOLS",
@@ -40,6 +40,7 @@ pub(super) fn tool_assignment_mode_to_storage(value: ToolAssignmentMode) -> &'st
 
 pub(super) fn tool_assignment_mode_from_storage(value: String) -> ToolAssignmentMode {
     match value.trim().to_ascii_uppercase().as_str() {
+        "SELECTED_CATEGORIES" => ToolAssignmentMode::SelectedCategories,
         "SELECTED_TOOLS" => ToolAssignmentMode::SelectedTools,
         "ALL_READ_ONLY_TOOLS" => ToolAssignmentMode::AllReadOnlyTools,
         _ => ToolAssignmentMode::AllPlatformTools,

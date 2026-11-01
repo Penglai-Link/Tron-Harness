@@ -9,6 +9,8 @@ pub struct AgentRunResult {
     pub conversation_code: Option<String>,
     pub workspace_code: String,
     pub final_output: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub final_message_ids: Vec<String>,
     pub step_count: u32,
     pub token_usage: Option<ModelTokenUsage>,
     pub latest_request_estimate: Option<TokenEstimateSnapshot>,

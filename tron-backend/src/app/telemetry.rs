@@ -1,7 +1,7 @@
 //! Host composition: Profile isolation, retention settings and Tron trace attributes.
 use crate::adapters::outbound::observability::{TelemetryProjection, now};
 use crate::application::observability::*;
-use eliteforge_agent_core::{TelemetryStore, TelemetryStoreService, TelemetryTrace};
+use eliteforge_agent_core::{ErrorRedactor, TelemetryStore, TelemetryStoreService, TelemetryTrace};
 use eliteforge_agent_official_plugin_otel::{
     OtelRuntimeConfig, OtelRuntimePlugin, OtelRuntimeService, TelemetryConfig, TelemetryPlugin,
     TraceParent,
@@ -17,6 +17,25 @@ use opentelemetry::{
     trace::{TraceContextExt, Tracer, TracerProvider},
 };
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
+
+struct TronErrorRedactor;
+
+impl ErrorRedactor for TronErrorRedactor {
+    fn redact(&self, _kind: &str, message: &str) -> Option<String> {
+        Some(crate::application::short_term_memory::redact_sensitive_text(message))
+    }
+}
+
+pub(crate) fn record_error(context: &Context, kind: &str, error: &(dyn std::error::Error + 'static)) {
+    let report = eliteforge_agent_core::ErrorReport::from_error(kind, error, &TronErrorRedactor);
+    if let Ok(report) = serde_json::to_string(&report) {
+        context.span().add_event("agent.error", vec![
+            KeyValue::new("error.type", kind.to_owned()),
+            KeyValue::new("agent.error.report", report),
+        ]);
+    }
+}
+
 pub struct LocalTelemetry {
     pub(crate) store: Arc<dyn TelemetryStore>,
     query_database: eliteforge_agent_official_plugin_storage_local::SqliteDatabase,
@@ -108,10 +127,11 @@ impl LocalTelemetry {
             &self.runtime.metrics,
             TelemetryConfig {
                 record_identifiers: true,
-                record_error_reports: false,
+                record_error_reports: true,
                 ..Default::default()
             },
         )
+        .map(|plugin| plugin.with_error_redactor(Arc::new(TronErrorRedactor)))
         .map_err(|e| e.to_string())
     }
     pub(crate) fn register(
@@ -297,6 +317,9 @@ impl TraceGuard {
         let span = self.0.span();
         let ids = span.span_context();
         if outcome == "error" {
+            if let Err(error) = result {
+                record_error(&self.0, error.kind(), error);
+            }
             tracing::error!(trace_id=%ids.trace_id(), span_id=%ids.span_id(), outcome, "Agent run failed");
         } else {
             tracing::info!(trace_id=%ids.trace_id(), span_id=%ids.span_id(), outcome, "Agent run finished");

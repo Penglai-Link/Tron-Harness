@@ -79,6 +79,7 @@ pub(crate) async fn execute(
     progress: Arc<dyn Fn(String) + Send + Sync>,
 ) -> Result<ToolExecutionResult, ToolError> {
     let tool = registry.resolve_allowed(&request, &context)?;
+    let request = crate::domain::agent::validate_workspace_request(request, &context)?;
     let control = RunControl(run.clone());
     control.check_active()?;
     if let Some(operation) = tool.exec_async(request.clone(), &context, &control) {
