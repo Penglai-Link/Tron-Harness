@@ -114,7 +114,7 @@ export const settingsNavigation = [
     label: "Data",
     translationKey: "shell:settings.groups.data",
     items: [
-      { label: "Memory", href: "/settings/memory", icon: Database, translationKey: "shell:nav.items.memory" },
+      { label: "Long-term Memory", href: "/settings/memory", icon: Database, translationKey: "shell:nav.items.memory" },
       { label: "KnowledgeGraph", href: "/settings/knowledge-graph", icon: Network, translationKey: "shell:nav.items.knowledgeGraph" },
       { label: "KnowledgeBase", href: "/settings/knowledge-base", icon: BookOpenText, translationKey: "shell:nav.items.knowledgeBase" },
       { label: "RAG", href: "/settings/rag", icon: Database, translationKey: "shell:nav.items.rag" },

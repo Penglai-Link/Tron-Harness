@@ -103,7 +103,7 @@ export const shell = {
       knowledgeBase: "知识库",
       knowledgeGraph: "知识图谱",
       mcpServers: "MCP 服务",
-      memory: "记忆",
+      memory: "长期记忆",
       rag: "RAG",
       resources: "资源",
       resourceManagement: "资源管理",

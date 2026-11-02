@@ -564,7 +564,7 @@ function MemoryRepository() {
           onArchive={setArchiveTarget}
           onEdit={editMemory}
           onOpen={openMemory}
-          title={t("pages:memory.title", "Memory")}
+          title={t("pages:memory.title", "Long-term Memory")}
           toolbar={
             <div className="flex gap-[12px]">
               <SelectInput

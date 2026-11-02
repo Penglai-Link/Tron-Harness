@@ -130,8 +130,8 @@ export function MemoryDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: t("pages:memory.title", "Memory"), href: dataHref("/memory") }, { label: t("pages:variables.notFound", "Not Found") }]}
-          title={t("pages:memory.title", "Memory")}
+          breadcrumbs={[{ label: t("pages:memory.title", "Long-term Memory"), href: dataHref("/memory") }, { label: t("pages:variables.notFound", "Not Found") }]}
+          title={t("pages:memory.title", "Long-term Memory")}
         />
         <SurfaceCard>{t("pages:memory.errors.notFound", "Memory not found.")}</SurfaceCard>
       </>
@@ -209,7 +209,7 @@ export function MemoryDetailsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Memory", href: dataHref("/memory") }, { label: memory.title }]}
+        breadcrumbs={[{ label: t("pages:memory.title", "Long-term Memory"), href: dataHref("/memory") }, { label: memory.title }]}
         title={memory.title}
         actions={editing ? (
           <>

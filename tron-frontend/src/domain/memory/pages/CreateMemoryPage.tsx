@@ -122,7 +122,7 @@ export function CreateMemoryPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: t("pages:memory.title", "Memory"), href: dataHref("/memory") }, { label: t("pages:memory.actions.new", "New") }]}
+        breadcrumbs={[{ label: t("pages:memory.title", "Long-term Memory"), href: dataHref("/memory") }, { label: t("pages:memory.actions.new", "New") }]}
         title={t("pages:memory.createTitle", "New Memory")}
         actions={(
           <>

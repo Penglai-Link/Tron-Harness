@@ -7,6 +7,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { PageHeader } from "@/shared";
 import { contextBlockName } from "@/shared/context/contextBlockPresentation";
 import { fetchContextLayout, updateContextLayout, type ContextLayoutState } from "../api/contextLayoutApi";
+import { contextBlockColor } from "../components/context-layout/contextBlockColors";
 import { BudgetShareControl } from "../components/context-layout/BudgetShareControl";
 import { allocateContextShares } from "../components/context-layout/contextShares";
 import { ContextBudgetPreview } from "../components/context-layout/ContextBudgetPreview";
@@ -23,6 +24,7 @@ export function ContextLayoutPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -92,7 +94,7 @@ export function ContextLayoutPage() {
       {notice ? <p role="status" className="mb-4 text-sm text-[var(--color-success)]">{notice}</p> : null}
       {loading ? <p role="status" className="py-10 text-sm text-[var(--color-on-surface-variant)]">{t("contextLayout.loading")}</p> : null}
       {!loading && order.length > 0 ? <>
-        <ContextBudgetPreview budgets={budgets} windowTokens={previewWindow} onWindowChange={setPreviewWindow} />
+        <ContextBudgetPreview budgets={budgets} windowTokens={previewWindow} onWindowChange={setPreviewWindow} highlightedId={highlightedId} onHighlightChange={setHighlightedId} />
         <div className="overflow-x-auto">
           <section aria-label={t("contextLayout.title")} className="min-w-[30rem] overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
             <div className={`${columns} border-b border-[var(--color-outline-variant)] px-4 py-3 text-xs text-[var(--color-on-surface-variant)]`}>
@@ -105,7 +107,11 @@ export function ContextLayoutPage() {
                 const block = blocksById.get(id);
                 const movable = id !== "seed_prompt_prefix";
                 const name = contextBlockName(id, t, block?.displayName || id);
-                return <li key={id} draggable={movable && !saving} tabIndex={movable ? 0 : undefined}
+                return <li key={id}
+                  onMouseEnter={() => setHighlightedId(id)} onMouseLeave={() => setHighlightedId(null)}
+                  onFocusCapture={() => setHighlightedId(id)}
+                  onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHighlightedId(null); }}
+                  draggable={movable && !saving} tabIndex={movable ? 0 : undefined}
                   onKeyDown={event => {
                     if (!movable || saving || event.target !== event.currentTarget || !event.altKey) return;
                     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
@@ -122,6 +128,7 @@ export function ContextLayoutPage() {
                   className={`group ${columns} min-h-14 px-4 py-2 hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)] ${draggedId === id ? "opacity-50" : ""}`}>
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="flex w-4 shrink-0 justify-center">{movable ? <GripVertical size={14} className="cursor-grab text-[var(--color-on-surface-variant)] opacity-40 group-hover:opacity-90" aria-hidden="true" /> : null}</span>
+                    <span aria-hidden="true" className="size-2.5 shrink-0 rounded-[2px]" style={{ background: contextBlockColor(id) }} />
                     <span className="truncate text-sm font-medium" title={name}>{name}</span>
                     {block?.plugin ? <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-[var(--color-on-surface-variant)] ring-1 ring-inset ring-[var(--color-outline-variant)]" title={block.providerId ?? undefined}>{t("contextLayout.plugin")}</span> : null}
                     {block?.unavailable ? <Button variant="ghost" size="icon-xs" disabled={saving} aria-label={t("contextLayout.removeUnavailable", { name })} onClick={() => removeBlock(id)}><Trash2 /></Button> : null}

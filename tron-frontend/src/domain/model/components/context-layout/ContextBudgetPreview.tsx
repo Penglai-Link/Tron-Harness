@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TextInput } from "@/components/forms";
+import { contextBlockColor } from "./contextBlockColors";
 import { InfoTooltip } from "@/components/info-tooltip";
 
 export interface PreviewBudget {
@@ -10,23 +11,24 @@ export interface PreviewBudget {
   tokens: number;
 }
 
-export function ContextBudgetPreview({ budgets, windowTokens, onWindowChange }: {
+export function ContextBudgetPreview({ budgets, windowTokens, onWindowChange, highlightedId, onHighlightChange }: {
   budgets: PreviewBudget[];
   windowTokens: number;
   onWindowChange: (tokens: number) => void;
+  highlightedId: string | null;
+  onHighlightChange: (id: string | null) => void;
 }) {
   const { t, i18n } = useTranslation("pages");
   const [windowEditing, setWindowEditing] = useState(false);
   const [windowDraft, setWindowDraft] = useState("");
-  const [highlight, setHighlight] = useState<string | null>(null);
   const number = new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 });
   const percentage = (tokens: number) => `${Number((tokens / windowTokens * 100).toFixed(2))}%`;
-  const segments = budgets.map((budget, index) => ({
+  const segments = budgets.map(budget => ({
     ...budget,
-    color: `color-mix(in srgb, var(--color-accent) ${15 + (index * 13) % 30}%, var(--color-elevated-surface))`,
+    color: contextBlockColor(budget.id),
   })).filter(budget => budget.tokens > 0);
   const totalShare = budgets.reduce((sum, budget) => sum + budget.share, 0);
-  const active = segments.find(segment => segment.id === highlight);
+  const active = segments.find(segment => segment.id === highlightedId);
   const label = (segment: typeof segments[number]) => `${segment.name} · ${number.format(segment.tokens)} tokens · ${percentage(segment.tokens)}`;
 
   return (
@@ -56,12 +58,12 @@ export function ContextBudgetPreview({ budgets, windowTokens, onWindowChange }: 
       </div>
       <div className="flex h-12 overflow-hidden rounded-md bg-[var(--color-outline-variant)]" aria-label={t("contextLayout.previewDetails")}>
         {segments.map(segment => (
-          <button key={segment.id} type="button" className="min-w-0 shrink-0 overflow-hidden border-r border-[var(--color-elevated-surface)] px-1 text-xs text-[var(--color-on-surface)] outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-focus-ring)]"
-            style={{ width: `${segment.share / 100}%`, background: segment.color, opacity: highlight && highlight !== segment.id ? 0.4 : 1 }}
+          <button key={segment.id} type="button" className="min-w-0 shrink-0 overflow-hidden text-xs text-[var(--color-on-surface)] outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-focus-ring)]"
+            style={{ width: `${segment.share / 100}%`, background: segment.color, opacity: highlightedId && highlightedId !== segment.id ? 0.35 : 1, boxShadow: "inset -1px 0 0 var(--color-elevated-surface)" }}
             title={label(segment)} aria-label={label(segment)}
-            onMouseEnter={() => setHighlight(segment.id)} onMouseLeave={() => setHighlight(null)}
-            onFocus={() => setHighlight(segment.id)} onBlur={() => setHighlight(null)}>
-            {segment.share >= 700 ? <span className="block truncate">{segment.name}</span> : null}
+            onMouseEnter={() => onHighlightChange(segment.id)} onMouseLeave={() => onHighlightChange(null)}
+            onFocus={() => onHighlightChange(segment.id)} onBlur={() => onHighlightChange(null)}>
+            {segment.share >= 700 ? <span className="mx-auto inline-block max-w-full truncate rounded bg-[var(--color-elevated-surface)]/90 px-2 py-0.5 text-[var(--color-on-surface)]">{segment.name}</span> : null}
           </button>
         ))}
       </div>

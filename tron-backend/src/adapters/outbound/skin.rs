@@ -14,8 +14,7 @@ const MAX_PACKAGE: usize = 20 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
 const ORIGINAL_MATRIX: &str =
     include_str!("../../../resources/skins/migrations/matrix-dark-original.json");
-const PREVIOUS_MATRIX: &str =
-    include_str!("../../../resources/matrix-dark-shipped-v1.json");
+const PREVIOUS_MATRIX: &str = include_str!("../../../resources/matrix-dark-shipped-v1.json");
 const LEGACY_MATRIX_PARTICLES: &str =
     include_str!("../../../resources/skins/migrations/matrix-particles.json");
 const BUILTINS: [&str; 2] = [
@@ -44,6 +43,38 @@ impl FileSkinStore {
             if !dir.exists() {
                 fs::create_dir_all(&dir).map_err(|_| SkinError::Storage)?;
                 atomic_write(&dir.join("skin.json"), content.as_bytes())?;
+            } else if skin.id == "light" {
+                // Refresh only the former shipped chart palette; retain all authored colors.
+                let previous = self
+                    .checked_resource(&skin.id, "skin.json")
+                    .ok()
+                    .and_then(|path| fs::read(path).ok())
+                    .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+                if let Some(mut previous) = previous
+                    && let Some(colors) = previous
+                        .get_mut("colors")
+                        .and_then(|value| value.as_object_mut())
+                {
+                    let legacy = [
+                        ("--chart-1", "oklch(0.87 0 0)"),
+                        ("--chart-2", "oklch(0.556 0 0)"),
+                        ("--chart-3", "oklch(0.439 0 0)"),
+                        ("--chart-4", "oklch(0.371 0 0)"),
+                        ("--chart-5", "oklch(0.269 0 0)"),
+                    ];
+                    if legacy.iter().all(|(key, value)| {
+                        colors.get(*key).and_then(|color| color.as_str()) == Some(*value)
+                    }) {
+                        for (key, _) in legacy {
+                            if let Some(value) = skin.colors.get(key) {
+                                colors.insert(key.into(), serde_json::Value::String(value.clone()));
+                            }
+                        }
+                        let bytes =
+                            serde_json::to_vec_pretty(&previous).map_err(|_| SkinError::Storage)?;
+                        atomic_write(&dir.join("skin.json"), &bytes)?;
+                    }
+                }
             } else if skin.id == "matrix-dark" {
                 // Upgrade only the unmodified shipped palette, preserving authored skins.
                 let previous = self

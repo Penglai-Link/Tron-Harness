@@ -103,7 +103,7 @@ export const shell = {
       knowledgeBase: "KnowledgeBase",
       knowledgeGraph: "KnowledgeGraph",
       mcpServers: "MCP Servers",
-      memory: "Memory",
+      memory: "Long-term Memory",
       rag: "RAG",
       resources: "Resources",
       resourceManagement: "Resource Management",
