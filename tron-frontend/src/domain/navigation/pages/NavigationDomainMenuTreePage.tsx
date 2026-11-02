@@ -417,9 +417,9 @@ export function NavigationDomainMenuTreePage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader title={text("tree.title", "菜单编排", "Menu arrangement")} actions={<>
-        <Button disabled={loading || saving} onClick={() => setRefreshKey((value) => value + 1)}>{text("actions.refresh", "刷新", "Refresh")}</Button>
-        <Button disabled={!isApiMode || saving} onClick={() => setRestoreDefaultTreesOpen(true)}>{text("arrangement.restore", "补齐默认菜单", "Add missing defaults")}</Button>
-        <Button disabled={!selectedTreeCode || saving || loading || menuTrees.length < 2} onClick={openCopyMenu}>{text("arrangement.copy", "从其他领域复制", "Copy from another domain")}</Button>
+        <Button variant="secondary" disabled={loading || saving} onClick={() => setRefreshKey((value) => value + 1)}>{text("actions.refresh", "刷新", "Refresh")}</Button>
+        <Button variant="secondary" disabled={!isApiMode || saving} onClick={() => setRestoreDefaultTreesOpen(true)}>{text("arrangement.restore", "补齐默认菜单", "Add missing defaults")}</Button>
+        <Button variant="secondary" disabled={!selectedTreeCode || saving || loading || menuTrees.length < 2} onClick={openCopyMenu}>{text("arrangement.copy", "从其他领域复制", "Copy from another domain")}</Button>
         <Button disabled={!selectedTreeCode || saving || loading} onClick={openAddMenu}>{text("arrangement.add", "添加", "Add")}</Button>
       </>} />
       <SurfaceCard className="min-h-0 flex-1 !p-0 overflow-hidden">
@@ -476,7 +476,7 @@ export function NavigationDomainMenuTreePage() {
               {(selectedItem.menuType === "Group" || selectedItem.menuType === "Widget") ? <Field label={text("arrangement.interaction", "展开方式", "Expansion")} hint={expansionValueHelp} hintAriaLabel={text("arrangement.expansionHelpAria", "查看展开方式说明", "Show expansion help")}><SelectInput value={editDisplay} disabled={saving} onValueChange={(value) => { if (value) setEditDisplay(value as "Inline" | "Flyout"); }}><SelectItem value="Inline">{text("arrangement.inline", "在侧栏内展开", "Expand in sidebar")}</SelectItem><SelectItem value="Flyout">{text("arrangement.flyout", "向右弹出", "Open to the right")}</SelectItem></SelectInput></Field> : <div className="space-y-1 text-sm"><p className="text-[var(--color-on-surface-variant)]">{text("columns.target", "目标", "Target")}</p><p className="break-all font-mono text-xs">{selectedItem.pageCode ?? selectedItem.url}</p></div>}
               <Button type="button" variant="secondary" className="w-full" onClick={() => navigate(`/admin/navigation/menus?menuCode=${encodeURIComponent(selectedItem.menuCode)}`)}>{text("arrangement.editContent", "编辑菜单内容", "Edit menu content")}</Button>
               <div className="flex items-center justify-between gap-2 border-t border-[var(--color-outline-variant)] pt-4">
-                <Button type="button" variant="ghost" disabled={saving || selectedItem.children.length > 0} onClick={() => setItemToRemove(selectedItem)}><Trash2 size={14} />{text("actions.remove", "移除", "Remove")}</Button>
+                <Button type="button" variant="destructive" disabled={saving || selectedItem.children.length > 0} onClick={() => setItemToRemove(selectedItem)}><Trash2 size={14} />{text("actions.remove", "移除", "Remove")}</Button>
                 <Button type="submit" disabled={saving} aria-busy={saving}>{text("actions.save", "保存", "Save")}</Button>
               </div>
             </form> : <p className="p-5 text-sm text-[var(--color-on-surface-variant)]">{text("arrangement.select", "选择一个菜单，调整内容、位置和交互。", "Select a menu to edit its content, position and interaction.")}</p>}
@@ -502,7 +502,7 @@ export function NavigationDomainMenuTreePage() {
             <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={saving} onClick={() => setCopyMenuOpen(false)}>{text("actions.cancel", "取消", "Cancel")}</Button><Button type="submit" disabled={!sourceTreeCode || saving} aria-busy={saving}>{text("actions.copy", "复制", "Copy")}</Button></div>
           </form>
       </ModalDialog>
-      <ConfirmDialog open={restoreDefaultTreesOpen} title={text("tree.restoreDefaultTrees", "生成所有默认菜单树", "Generate all default menu trees")} description={text("tree.restoreDefaultTreesDescription", "会补齐所有缺失的内置默认菜单节点；已有菜单及自定义编排不会被删除或覆盖。", "This adds every missing built-in default menu node. Existing menus and custom arrangements are not deleted or overwritten.")} cancelText={text("actions.cancel", "取消", "Cancel")} confirmText={text("actions.generate", "生成", "Generate")} pending={saving} onCancel={() => setRestoreDefaultTreesOpen(false)} onConfirm={() => void confirmRestoreDefaultMenuTrees()} />
+      <ConfirmDialog open={restoreDefaultTreesOpen} tone="default" title={text("tree.restoreDefaultTrees", "生成所有默认菜单树", "Generate all default menu trees")} description={text("tree.restoreDefaultTreesDescription", "会补齐所有缺失的内置默认菜单节点；已有菜单及自定义编排不会被删除或覆盖。", "This adds every missing built-in default menu node. Existing menus and custom arrangements are not deleted or overwritten.")} cancelText={text("actions.cancel", "取消", "Cancel")} confirmText={text("actions.generate", "生成", "Generate")} pending={saving} onCancel={() => setRestoreDefaultTreesOpen(false)} onConfirm={() => void confirmRestoreDefaultMenuTrees()} />
       <ConfirmDialog open={Boolean(itemToRemove)} title={text("tree.removeTitle", "从编排移除菜单", "Remove menu from arrangement")} description={text("tree.removeDescription", `确定移除 ${itemToRemove?.menuCode ?? ""}？这只会删除当前菜单树的编排关系，不会删除菜单定义。`, `Remove ${itemToRemove?.menuCode ?? ""}? This deletes only the current menu-tree arrangement; the menu definition remains.`)} cancelText={text("actions.cancel", "取消", "Cancel")} confirmText={text("actions.remove", "移除", "Remove")} pending={saving} onCancel={() => setItemToRemove(null)} onConfirm={() => void confirmRemoveMenu()} />
     </div>
   );
