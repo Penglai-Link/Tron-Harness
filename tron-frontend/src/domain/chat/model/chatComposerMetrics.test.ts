@@ -17,14 +17,14 @@ function audit(inputTokens: number | null, outputTokens: number | null, cachedIn
 }
 
 describe("latestChatComposerMetrics", () => {
-  it("uses the matching model attempt and provider usage for all three indicators", () => {
+  it("uses provider decode timing and actual usage, excluding TTFT and event publication delay", () => {
     const events = [
       event("agent.model.requested", "2026-10-19T12:00:00.000Z", { model_attempt_id: "A" }),
       event("agent.model.requested", "2026-10-19T12:00:01.000Z", { model_attempt_id: "B" }),
-      event("agent.model.responded", "2026-10-19T12:00:02.000Z", { model_attempt_id: "A", usage_audit_json: audit(30_000, 200, 9_000) }),
+      event("agent.model.responded", "2026-10-19T12:00:02.000Z", { model_attempt_id: "A", model_timing_json: JSON.stringify({ decodeMs: 500, ttftMs: 1500 }), usage_audit_json: audit(30_000, 200, 9_000) }),
     ];
     expect(latestChatComposerMetrics(events)).toEqual({
-      tokensPerSecond: 100, cacheHitPercent: 30, contextPercent: 40,
+      tokensPerSecond: 400, cacheHitPercent: 30, contextPercent: 40,
       contextUsedTokens: 40_000, contextWindowTokens: 100_000, contextEstimated: true,
     });
   });

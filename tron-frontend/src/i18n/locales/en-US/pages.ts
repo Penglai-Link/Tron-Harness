@@ -1652,8 +1652,9 @@ export const pages = {
     composerMetrics: {
       ariaLabel: "Latest model call metrics",
       unavailable: "0",
+      speedUnavailable: "—",
       throughput: "{{value}} tok/s",
-      throughputTitle: "Average output speed of the latest model call",
+      throughputTitle: "Generation speed of the latest model call: actual output tokens divided by time from the first generated delta to model completion, excluding first-token wait and tool execution",
       cacheHit: "Cache hit {{value}}%",
       cacheHitTitle: "Cumulative cache hit rate for this conversation",
       context: "Context {{value}}%",

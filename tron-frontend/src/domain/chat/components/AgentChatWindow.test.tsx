@@ -77,7 +77,7 @@ it("shows the latest measured model call beside the composer", async () => {
     <AgentChatWindow adapter={adapter} showHeader={false} config={{ floating: false }}
       initialSession={{ id: 1, sessionCode: "SESSION", workspaceCode: "WORKSPACE", title: "Metrics", status: "ACTIVE", createdAt: "2026-10-19T00:00:00Z", updatedAt: "2026-10-19T00:00:00Z" }} />
   </QueryClientProvider>);
-  expect(await screen.findByText("100 tok/s")).toBeTruthy();
+  expect(await screen.findByText("— tok/s")).toBeTruthy();
   expect(screen.getByText("Cache hit 50%")).toBeTruthy();
   expect(screen.getByText("Context 48%")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Cache hit 50%" }));
@@ -100,7 +100,7 @@ it("shows all metric controls as zero before the first model call", async () => 
     <AgentChatWindow adapter={adapter} showHeader={false} config={{ floating: false }}
       initialSession={{ id: 1, sessionCode: "NEW", workspaceCode: "WORKSPACE", title: "New", status: "ACTIVE", createdAt: "2026-10-19T00:00:00Z", updatedAt: "2026-10-19T00:00:00Z" }} />
   </QueryClientProvider>);
-  expect(screen.getByRole("button", { name: "0 tok/s" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "— tok/s" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "缓存 0%" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "上下文 0%" })).toBeTruthy();
 });
@@ -126,7 +126,7 @@ it("restores a legacy Dude context report after closing and reopening the window
   </QueryClientProvider>);
   const first = renderWindow();
   expect(await screen.findByRole("button", { name: "上下文 4.4%" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "0 tok/s" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "— tok/s" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "缓存 0%" })).toBeTruthy();
   first.unmount();
   renderWindow();

@@ -79,17 +79,11 @@ function auditPayload(event: ChatAguiEvent): Record<string, unknown> | null {
   }
 }
 
-/** A model call is matched by its attempt ID, so tool steps and other runs cannot skew tok/s. */
+/** Provider output usage divided by the same model call’s measured decode time. */
 export function latestChatComposerMetrics(
   events: ChatAguiEvent[],
   contextSnapshot: ContextAssemblySnapshot | null = null,
 ): ChatComposerMetrics | null {
-  const requests = new Map<string, ChatAguiEvent>();
-  for (const event of events) {
-    if (event.eventName === "agent.model.requested" && event.metadata.model_attempt_id) {
-      requests.set(event.metadata.model_attempt_id, event);
-    }
-  }
 
   const responses = events
     .filter((event) => event.eventName === "agent.model.responded")
@@ -118,11 +112,13 @@ export function latestChatComposerMetrics(
       ? Math.min(100, Math.round(cachedInputTokens / inputTokens * 100)) : null;
     const cacheHitPercent = sessionCacheHitPercent(events) ?? latestCacheHitPercent;
 
-    const request = requests.get(response.metadata.model_attempt_id ?? "");
-    const elapsedMs = request && request.runCode === response.runCode
-      ? Date.parse(response.occurredAt) - Date.parse(request.occurredAt) : NaN;
-    const tokensPerSecond = outputTokens !== null && Number.isFinite(elapsedMs) && elapsedMs > 0
-      ? Math.round(outputTokens * 1000 / elapsedMs) : null;
+    let decodeMs: number | null = null;
+    try { decodeMs = tokenCount(record(JSON.parse(response.metadata.model_timing_json ?? "null"))?.decodeMs); }
+    catch { /* Older records have no reliable decode timing. */ }
+    const speed = outputTokens !== null && decodeMs !== null && decodeMs > 0
+      ? outputTokens * 1000 / decodeMs : null;
+    const tokensPerSecond = speed !== null && Number.isFinite(speed)
+      ? speed >= 10 ? Math.round(speed) : Math.round(speed * 10) / 10 : null;
 
     if (tokensPerSecond !== null || cacheHitPercent !== null || contextPercent !== null) {
       return {

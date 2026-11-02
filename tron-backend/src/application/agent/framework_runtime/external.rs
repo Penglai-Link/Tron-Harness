@@ -220,7 +220,7 @@ async fn forward_event(
             sink.emit(fw::ExternalAgentEvent::ReasoningDelta(event.delta))
                 .await
         }
-        ModelStreamEventKind::MessageStart | ModelStreamEventKind::MessageEnd | ModelStreamEventKind::ToolBoundary => {}
+        ModelStreamEventKind::MessageStart | ModelStreamEventKind::MessageEnd | ModelStreamEventKind::ToolBoundary | ModelStreamEventKind::ToolCallDelta => {}
     }
 }
 

@@ -1584,8 +1584,9 @@ export const pages = {
     composerMetrics: {
       ariaLabel: "最近一次模型调用指标",
       unavailable: "0",
+      speedUnavailable: "—",
       throughput: "{{value}} tok/s",
-      throughputTitle: "最近一次模型调用的平均输出速度",
+      throughputTitle: "最近一次模型调用的生成速度：实际输出 tokens ÷ 首个生成增量至模型返回的耗时，不含首 token 等待与工具执行",
       cacheHit: "缓存 {{value}}%",
       cacheHitTitle: "本会话累计缓存命中率",
       context: "上下文 {{value}}%",

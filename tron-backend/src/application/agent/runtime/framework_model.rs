@@ -188,14 +188,19 @@ impl ReactAgent {
         // appending tool calls so copy-on-write does not duplicate the history.
         drop(prepared_context);
 
+        let model_started = std::time::Instant::now();
+        let first_delta_at = Arc::new(Mutex::new(None::<std::time::Instant>));
         let output_started = Arc::new(Mutex::new(false));
         let stream_sink = sink.map(|sink| {
-            self.model_stream_event_sink(
-                context,
-                turn_state_kind,
-                sink,
-                Arc::clone(&output_started),
-            )
+            let forward = self.model_stream_event_sink(context, turn_state_kind, sink, Arc::clone(&output_started));
+            let first_delta_at = Arc::clone(&first_delta_at);
+            Arc::new(move |event: ModelStreamEvent| {
+                use crate::domain::agent::ModelStreamEventKind as Kind;
+                if !event.delta.is_empty() && matches!(event.kind, Kind::Text | Kind::Reasoning | Kind::ReasoningSummary | Kind::ToolCallDelta | Kind::ToolBoundary) {
+                    first_delta_at.lock().unwrap().get_or_insert_with(std::time::Instant::now);
+                }
+                forward(event);
+            }) as ModelStreamSink
         });
         let response_result = match native_request {
             Some(native) => {
@@ -216,6 +221,15 @@ impl ReactAgent {
                 }
             },
         };
+        // Stop before argument normalization, router persistence, event publication,
+        // tool dispatch or the Agent's final response. Durations use one monotonic clock.
+        let model_completed = std::time::Instant::now();
+        let first_delta = *first_delta_at.lock().unwrap();
+        let model_timing = serde_json::json!({
+            "requestMs": model_completed.duration_since(model_started).as_secs_f64() * 1000.0,
+            "ttftMs": first_delta.map(|first| first.duration_since(model_started).as_secs_f64() * 1000.0),
+            "decodeMs": first_delta.map(|first| model_completed.duration_since(first).as_secs_f64() * 1000.0),
+        });
         let mut response = match response_result {
             Ok(response) => response,
             Err(message) => {
@@ -279,6 +293,7 @@ impl ReactAgent {
             {
                 let mut payload = usage_event_payload("usage_audit_json", &usage_audit);
                 payload.push(("model_attempt_id".into(), model_attempt_id));
+                payload.push(("model_timing_json".into(), model_timing.to_string()));
                 payload
             },
         )?;

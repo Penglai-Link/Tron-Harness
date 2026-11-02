@@ -13,7 +13,7 @@ export function ChatComposerMetrics({ metrics, onOpen }: { metrics: Metrics | nu
   return <div className="tron-chat-composer-metrics" role="group" aria-label={t("chat.composerMetrics.ariaLabel")}>
     <button className="tron-chat-composer-metrics__item" title={t("chat.composerMetrics.throughputTitle")} type="button" onClick={onOpen}>
       <Gauge size={14} aria-hidden="true" />
-      {t("chat.composerMetrics.throughput", { value: metrics?.tokensPerSecond == null ? unavailable : number.format(metrics.tokensPerSecond) })}
+      {t("chat.composerMetrics.throughput", { value: metrics?.tokensPerSecond == null ? t("chat.composerMetrics.speedUnavailable") : number.format(metrics.tokensPerSecond) })}
     </button>
     <button className="tron-chat-composer-metrics__item" title={t("chat.composerMetrics.cacheHitTitle")} type="button" onClick={onOpen}>
       <Database size={14} aria-hidden="true" />

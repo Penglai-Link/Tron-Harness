@@ -34,13 +34,13 @@ it("refreshes composer metrics during an active run and stops polling afterward"
   const session: ChatSession = { id: 1, sessionCode: "SESSION", workspaceCode: "WORKSPACE", title: "Chat", status: "ACTIVE", createdAt: "", updatedAt: "" };
   const adapter = { loadAguiEvents } as unknown as ChatAdapter;
   await act(async () => { render(<AgentChatWindow adapter={adapter} config={{ floating: false }} initialSession={session} />); });
-  expect(screen.getByText("50 tok/s")).toBeTruthy();
+  expect(screen.getByText("— tok/s")).toBeTruthy();
   expect(screen.getByText("缓存 20%")).toBeTruthy();
   expect(screen.getByText("上下文 20%")).toBeTruthy();
   await act(async () => captured.run?.({ active: true, loading: false, sessionId: "SESSION", runId: "RUN", supportsSteer: false }));
   input = 20000; cached = 10000; context = 40000; output = 200;
   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
-  expect(screen.getByText("100 tok/s")).toBeTruthy();
+  expect(screen.getByText("— tok/s")).toBeTruthy();
   expect(screen.getByText("缓存 50%")).toBeTruthy();
   expect(screen.getByText("上下文 40%")).toBeTruthy();
   await act(async () => captured.run?.({ active: false, loading: false, sessionId: "SESSION", runId: "RUN", supportsSteer: false }));

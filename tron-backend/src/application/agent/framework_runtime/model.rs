@@ -212,7 +212,7 @@ impl fw::ChatModel for TronChatModel {
             }
             // Raw chain-of-thought is internal evidence: present the reasoning
             // summary to streams, never the raw reasoning itself.
-            if event.kind == crate::domain::agent::ModelStreamEventKind::Reasoning {
+            if matches!(event.kind, crate::domain::agent::ModelStreamEventKind::Reasoning | crate::domain::agent::ModelStreamEventKind::ToolCallDelta) {
                 return;
             }
             if event.delta.len() > 256 * 1024 || sender.try_send(event.clone()).is_err() {
@@ -415,6 +415,7 @@ async fn emit_model_event(stream: &dyn fw::ChatStream, event: crate::domain::age
         ModelStreamEventKind::Reasoning => {},
         ModelStreamEventKind::MessageStart => if let Some(index) = event.output_index { stream.message_start(index, event.phase.as_deref()).await },
         ModelStreamEventKind::MessageEnd => if let Some(index) = event.output_index { stream.message_end(index, event.phase.as_deref(), &event.delta).await },
+        ModelStreamEventKind::ToolCallDelta => {},
         ModelStreamEventKind::ToolBoundary => if let Some(index) = event.output_index { stream.tool_boundary(index).await },
     }
 }

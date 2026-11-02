@@ -90,6 +90,7 @@ fn domain_stream_kind(kind: sdk::ModelStreamEventKind) -> ModelStreamEventKind {
         sdk::ModelStreamEventKind::ReasoningSummary => ModelStreamEventKind::ReasoningSummary,
         sdk::ModelStreamEventKind::MessageStart => ModelStreamEventKind::MessageStart,
         sdk::ModelStreamEventKind::MessageEnd => ModelStreamEventKind::MessageEnd,
+        sdk::ModelStreamEventKind::ToolCallDelta => ModelStreamEventKind::ToolCallDelta,
         sdk::ModelStreamEventKind::ToolBoundary => ModelStreamEventKind::ToolBoundary,
     }
 }
