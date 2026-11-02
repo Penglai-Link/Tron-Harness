@@ -36,7 +36,34 @@ describe("browser HTTP tracing", () => {
     vi.stubGlobal("fetch", fetcher);
     await expect(tracedFetch("/api/v1/chats/sessions")).rejects.toBe(failure);
     await vi.runAllTimersAsync();
-    expect(JSON.parse(fetcher.mock.calls[1][1].body).spans[0].status).toBe(0);
+    const report = JSON.parse(fetcher.mock.calls[1][1].body).spans[0];
+    expect(report.status).toBe(0);
+    expect(report.failure).toBe("Network");
+  });
+  it.each([["AbortError", "Cancelled"], ["TimeoutError", "Timeout"]])("distinguishes %s and preserves the caller's rejection", async (name, classification) => {
+    const controller = new AbortController();
+    const reason = new DOMException("private caller context", name);
+    controller.abort(reason);
+    const fetcher = vi.fn().mockRejectedValue(reason);
+    vi.stubGlobal("fetch", fetcher);
+    await expect(tracedFetch("/api/v1/chats/sessions?token=private", { signal: controller.signal })).rejects.toBe(reason);
+    await vi.runAllTimersAsync();
+    const body = fetcher.mock.calls[1][1].body;
+    const report = JSON.parse(body).spans[0];
+    expect(report.failure).toBe(classification);
+    expect(body).not.toContain("private");
+    expect(report.path).toBe("/api/v1/chats/sessions");
+  });
+  it("records failed HTTP responses while leaving the response body available to the caller", async () => {
+    const response = new Response("private server body", { status: 503 });
+    const fetcher = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetcher);
+    expect(await tracedFetch("/api/v1/tools")).toBe(response);
+    expect(await response.text()).toBe("private server body");
+    await vi.runAllTimersAsync();
+    const body = fetcher.mock.calls[1][1].body;
+    expect(JSON.parse(body).spans[0]).toMatchObject({ status: 503, failure: "Http" });
+    expect(body).not.toContain("private");
   });
   it("does not recursively instrument exports or non API traffic", async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(""));

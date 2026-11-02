@@ -457,6 +457,9 @@ pub async fn query_logs(
 #[derive(Clone, Copy, Deserialize, utoipa::ToSchema)]
 enum BrowserSpanKind { Page, Resource, Request }
 
+#[derive(Clone, Copy, Deserialize, utoipa::ToSchema)]
+enum BrowserRequestFailure { Cancelled, Timeout, Network, Http }
+
 fn ignored_trace_path(path: &str) -> bool {
     path.starts_with("/api/v1/observability/")
         || (path.starts_with("/api/v1/agents/agui/streams/")
@@ -480,6 +483,7 @@ pub struct BrowserSpanRequest {
     method: String,
     path: String,
     status: u16,
+    failure: Option<BrowserRequestFailure>,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -511,7 +515,9 @@ pub async fn record_browser_span(
         || q.phase.as_ref().is_some_and(|phase| phase.len() > 64)
         || (matches!(q.kind, BrowserSpanKind::Request) && !q.path.starts_with("/api/v1/"))
         || q.path.contains(['?', '#']) || q.method.len() > 16
-        || q.method.parse::<axum::http::Method>().is_err() || q.status > 599 {
+        || q.method.parse::<axum::http::Method>().is_err() || q.status > 599
+        || q.failure.is_some_and(|failure| matches!(q.kind, BrowserSpanKind::Resource)
+            || if matches!(failure, BrowserRequestFailure::Http) { q.status < 400 } else { q.status != 0 }) {
         return Err(invalid());
     }
     if ignored_trace_path(&q.path) { continue; }
@@ -528,10 +534,28 @@ pub async fn record_browser_span(
         ("http.response.status_code".into(), q.status.to_string()),
     ]);
     if let Some(phase) = q.phase { attributes.insert("browser.phase".into(), phase); }
+    let cancelled = matches!(q.failure, Some(BrowserRequestFailure::Cancelled));
+    let failed = !cancelled && ((q.status == 0 && !matches!(q.kind, BrowserSpanKind::Resource)) || q.status >= 400);
+    if cancelled { attributes.insert("agent.operation.outcome".into(), "cancelled".into()); }
+    else if matches!(q.kind, BrowserSpanKind::Page) {
+        // A page root owns its outcome, even if a child was ingested first.
+        attributes.insert("agent.operation.outcome".into(), if failed { "error" } else { "completed" }.into());
+    }
+    if cancelled || failed {
+        let (kind, message) = match q.failure {
+            Some(BrowserRequestFailure::Cancelled) => ("AbortError", "The caller cancelled the request before an HTTP response was received.".into()),
+            Some(BrowserRequestFailure::Timeout) => ("TimeoutError", "The request timed out before an HTTP response was received.".into()),
+            Some(BrowserRequestFailure::Network) => ("NetworkError", "The browser fetch operation failed without an HTTP response.".into()),
+            _ if q.status >= 400 => ("HttpError", format!("HTTP {}: request failed.", q.status)),
+            _ => ("ResponseUnavailable", "No HTTP response was received; the client exception was not recorded.".into()),
+        };
+        attributes.insert("error.type".into(), kind.into());
+        attributes.insert("error.message".into(), message);
+    }
     spans.push(eliteforge_agent_core::TelemetrySpan {
         trace_id: q.trace_id, span_id: q.span_id, parent_span_id: q.parent_span_id,
         name, started_at: q.started_at, ended_at: q.ended_at,
-        status_code: if (q.status == 0 && !matches!(q.kind, BrowserSpanKind::Resource)) || q.status >= 400 { 2 } else { 0 }, attributes,
+        status_code: if failed { 2 } else { 0 }, attributes,
         data: serde_json::json!({"durationMs":q.ended_at-q.started_at,"span":{"kind":span_kind},"scope":{"name":scope}}),
         ..Default::default()
     });

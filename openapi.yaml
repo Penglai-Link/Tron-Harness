@@ -27,7 +27,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BrowserSpanRequest'
+              $ref: '#/components/schemas/BrowserSpansRequest'
         required: true
       responses:
         '200':
@@ -618,11 +618,16 @@ components:
         data:
           type: object
           required:
+          - agentOptions
           - current
           - size
           - total
           - records
           properties:
+            agentOptions:
+              type: array
+              items:
+                $ref: '#/components/schemas/TraceAgentOption'
             current:
               type: integer
               minimum: 0
@@ -700,10 +705,24 @@ components:
         total:
           type: integer
           minimum: 0
+    BrowserRequestFailure:
+      type: string
+      enum:
+      - Cancelled
+      - Timeout
+      - Network
+      - Http
+    BrowserSpanKind:
+      type: string
+      enum:
+      - Page
+      - Resource
+      - Request
     BrowserSpanRequest:
       type: object
       description: Record completed application API requests without credentials, query strings or polling noise.
       required:
+      - kind
       - traceId
       - spanId
       - startedAt
@@ -715,6 +734,12 @@ components:
         endedAt:
           type: integer
           format: int64
+        failure:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/BrowserRequestFailure'
+        kind:
+          $ref: '#/components/schemas/BrowserSpanKind'
         method:
           type: string
         parentSpanId:
@@ -723,6 +748,10 @@ components:
           - 'null'
         path:
           type: string
+        phase:
+          type:
+          - string
+          - 'null'
         spanId:
           type: string
         startedAt:
@@ -734,6 +763,16 @@ components:
           minimum: 0
         traceId:
           type: string
+      additionalProperties: false
+    BrowserSpansRequest:
+      type: object
+      required:
+      - spans
+      properties:
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/BrowserSpanRequest'
       additionalProperties: false
     CollectorConnection:
       type: object
@@ -979,9 +1018,25 @@ components:
       - current
       - size
       properties:
+        agentCode:
+          type:
+          - string
+          - 'null'
+        category:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TraceCategory'
         current:
           type: integer
           minimum: 0
+        keyword:
+          type:
+          - string
+          - 'null'
+        keywordAliases:
+          type: array
+          items:
+            type: string
         sessionCode:
           type:
           - string
@@ -997,6 +1052,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TraceSort'
+        spanId:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
         traceId:
           type:
           - string
@@ -1130,6 +1193,21 @@ components:
           type: string
         traceId:
           type: string
+    TraceAgentOption:
+      type: object
+      required:
+      - code
+      - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+    TraceCategory:
+      type: string
+      enum:
+      - Page
+      - Agent
     TraceDetail:
       type: object
       required:
@@ -1175,11 +1253,16 @@ components:
     TracePage:
       type: object
       required:
+      - agentOptions
       - current
       - size
       - total
       - records
       properties:
+        agentOptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraceAgentOption'
         current:
           type: integer
           minimum: 0
@@ -1261,6 +1344,7 @@ components:
     TraceSummary:
       type: object
       required:
+      - trigger
       - workspaceCode
       - traceId
       - sessionCode
@@ -1278,6 +1362,10 @@ components:
       properties:
         agentCode:
           type: string
+        cachedInputTokens:
+          type: integer
+          format: int64
+          minimum: 0
         durationMs:
           type: number
           format: double
@@ -1300,6 +1388,10 @@ components:
           type: integer
           format: int64
           minimum: 0
+        rootSpanId:
+          type:
+          - string
+          - 'null'
         runCode:
           type: string
         sessionCode:
@@ -1320,6 +1412,8 @@ components:
           type: integer
           minimum: 0
         traceId:
+          type: string
+        trigger:
           type: string
         workspaceCode:
           type: string

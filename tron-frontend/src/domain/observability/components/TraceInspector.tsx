@@ -61,9 +61,13 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
   const isPageTrigger = triggerRoot?.attributes["tron.trace.page"] === "true" || Boolean(triggerRoot?.attributes["url.path"]);
   const triggerCategory = !isPageTrigger && (triggerRoot?.attributes["tron.agent.code"] || triggerRoot?.attributes["tron.dude.code"]) ? "Agent" : "Page";
   const title = triggerLabel(trace.trigger, i18n, triggerCategory);
-  const traceError = triggerRoot && spanErrorMessage(triggerRoot)
-    || detail.spans.filter((item) => item.name === "agent.run" && item.status === "Error").map(spanErrorMessage).find(Boolean)
-    || detail.spans.filter((item) => item.status === "Error").map(spanErrorMessage).find(Boolean)
+  const errorMessage = (item: TraceSpan) => spanErrorMessage(item, t);
+  const failedRequest = isPageTrigger ? detail.spans.find((item) => item.status === "Error"
+    && item.attributes["browser.phase"] === "response-headers" && errorMessage(item)) : undefined;
+  const traceError = failedRequest && `${failedRequest.name}: ${errorMessage(failedRequest)}`
+    || triggerRoot && errorMessage(triggerRoot)
+    || detail.spans.filter((item) => item.name === "agent.run" && item.status === "Error").map(errorMessage).find(Boolean)
+    || detail.spans.filter((item) => item.status === "Error").map(errorMessage).find(Boolean)
     || null;
   const isDudeExecution = detail.spans.some((item) => item.name === "tron.dude.execute");
   const sessionHref = isDudeExecution
@@ -262,7 +266,7 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
             {span.status === "Error" && (
               <div className="mb-5 rounded-md bg-[var(--color-error-container)] px-3 py-2 text-xs text-[var(--color-on-error-container)]">
                 <div className="font-semibold">{t("failureReason")}</div>
-                <div className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{spanErrorMessage(span) ?? t("failureReasonUnavailable")}</div>
+                <div className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{errorMessage(span) ?? t("failureReasonUnavailable")}</div>
                 {span.attributes["error.type"] && <div className="mt-1 opacity-80">{t("failureType", { type: span.attributes["error.type"] })}</div>}
               </div>
             )}

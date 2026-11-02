@@ -11,12 +11,14 @@ function ignored(path: string) {
     (path.startsWith("/api/v1/chats/sessions/") && (path.endsWith("/subagents") || path.includes("/subagents/") || path.endsWith("/history/query"))) ||
     ["/api/v1/health", "/api/v1/ready", "/api/v1/readiness", "/health", "/ready", "/api/v1/profiles/events", "/api/v1/system/skins/events"].includes(path);
 }
+type BrowserRequestFailure = "Cancelled" | "Timeout" | "Network" | "Http";
 type BrowserSpan = {
   kind: "Page" | "Resource" | "Request"; phase: string | null;
   traceId: string; spanId: string; parentSpanId: string | null;
   startedAt: number; endedAt: number; method: string; path: string; status: number;
+  failure?: BrowserRequestFailure;
 };
-type PageScope = { traceId: string; spanId: string; path: string; startedAt: number; endedAt: number; status: number };
+type PageScope = { traceId: string; spanId: string; path: string; startedAt: number; endedAt: number; status: number; failure?: BrowserRequestFailure };
 let page: PageScope | undefined;
 const pages: PageScope[] = [];
 let destination: { endpoint: URL; headers: Headers; credentials: RequestCredentials } | undefined;
@@ -128,15 +130,29 @@ export async function tracedFetch(input: string | URL, init: RequestInit = {}): 
   const startedAt = Date.now();
   const started = performance.now();
   let status = 0;
+  let failure: BrowserRequestFailure | undefined;
   try {
     const response = await fetch(input, { ...init, headers });
     status = response.status;
+    if (status >= 400) failure = "Http";
     return response;
+  } catch (error) {
+    const name = error instanceof Error || error instanceof DOMException ? error.name : "";
+    const reason = init.signal?.reason;
+    const reasonName = reason instanceof Error || reason instanceof DOMException ? reason.name : "";
+    failure = name === "TimeoutError" || (init.signal?.aborted && reasonName === "TimeoutError")
+      ? "Timeout"
+      : init.signal?.aborted || name === "AbortError" ? "Cancelled" : "Network";
+    // Classify the failure without exporting arbitrary abort reasons, URLs or payloads.
+    throw error;
   } finally {
     const endedAt = startedAt + Math.round(performance.now() - started);
     send({ kind: "Request", phase: "response-headers", traceId, spanId, parentSpanId, startedAt, endedAt,
-      method: init.method ?? "GET", path: url.pathname, status });
-    if (scope && scope.traceId === traceId) { if (status === 0 || status >= 400) scope.status = status; root(scope, endedAt); }
+      method: init.method ?? "GET", path: url.pathname, status, failure });
+    if (scope && scope.traceId === traceId) {
+      if (failure !== "Cancelled" && (status === 0 || status >= 400)) { scope.status = status; scope.failure = failure; }
+      root(scope, endedAt);
+    }
 
   }
 }
