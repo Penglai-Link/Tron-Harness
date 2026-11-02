@@ -38,6 +38,12 @@ Generated with the built-in `image_gen` tool on 2026-10-10. These PNGs are bundl
 
 ## Prompt set
 
+DeepSeek Harness uses a bundled custom blue whale avatar at
+`public/agent-brands/deepseek-pixel.png`, selected by the system Agent code `dsh`.
+It is generated with the built-in `image_gen` tool on 2026-11-02 and follows the
+pixel-art style below. It is a custom avatar, not an official logo. The complete
+generation prompt is recorded in `../systemAvatarGeneration.json`.
+
 For cat, owl, astronaut, wizard, panda, frog, penguin, raccoon, rabbit and dragon, replace `{subject}` with the corresponding subject above:
 
 ```text

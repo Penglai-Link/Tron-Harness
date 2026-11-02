@@ -38,6 +38,7 @@ import { SystemAgentProfileDialog } from "./SystemAgentProfileDialog";
 const brandImages: Record<string, string> = {
   codex: "/agent-brands/codex-pixel.png",
   opencode: "/agent-brands/opencode-pixel.png",
+  dsh: "/agent-brands/deepseek-pixel.png",
 };
 
 function SystemAgentAvatar({ code, name, avatarId }: { code: string; name: string; avatarId?: string | null }) {
