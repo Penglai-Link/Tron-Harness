@@ -167,6 +167,8 @@ export const observability = {
   waterfall: "瀑布图",
   operation: "操作",
   spanDetail: "Span 详情",
+  spanLogs: "Span 日志",
+  spanLogSource: "Span 日志",
   failureReason: "失败原因",
   cancellationReason: "取消原因",
   failureReasonUnavailable: "未记录具体失败原因",

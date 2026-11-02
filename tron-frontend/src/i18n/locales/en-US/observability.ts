@@ -167,6 +167,8 @@ export const observability = {
   waterfall: "Waterfall",
   operation: "Operation",
   spanDetail: "Span detail",
+  spanLogs: "Span logs",
+  spanLogSource: "Span log",
   failureReason: "Failure reason",
   cancellationReason: "Cancellation reason",
   failureReasonUnavailable: "No detailed failure reason was recorded",

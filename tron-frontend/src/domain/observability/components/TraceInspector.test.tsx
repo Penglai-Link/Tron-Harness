@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { TraceInspector } from "./TraceInspector";
 import type { TraceDetail } from "../model/Trace";
+vi.mock("../api/observabilityApi", () => ({ queryLogs: vi.fn() }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/shared/hooks/useLocaleFormatters", () => ({ useLocaleFormatters: () => ({ currentLocale: "en-US", formatNumber: String, formatDateTime: String }) }));
 vi.mock("@/components/ui/toast", () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));

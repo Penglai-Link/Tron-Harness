@@ -27,7 +27,7 @@ import { TraceStatus } from "./TraceStatus";
 import { formatTraceDuration, formatTraceTokens } from "./traceFormat";
 import { SpanVisualization } from "./SpanVisualization";
 import { traceTree } from "./traceTree";
-import { spanErrorMessage } from "./traceError";
+import { TraceSpanLogs } from "./TraceSpanLogs";
 
 export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; models?: readonly ModelSelectOption[] }) {
   const { t, i18n } = useTranslation("observability");
@@ -55,20 +55,13 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
     detail.spans.find((s) => s.spanId === selected) ??
     detail.spans.find((s) => s.name === "agent.run") ??
     detail.spans[0];
+  const [detailTab, setDetailTab] = useState(() => span?.status === "Error" || span?.status === "Cancelled" ? "logs" : "attributes");
   const trace = detail.trace;
   const triggerRoot = detail.spans.find((item) => item.spanId === trace.rootSpanId)
     ?? detail.spans.find((item) => !item.parentSpanId);
   const isPageTrigger = triggerRoot?.attributes["tron.trace.page"] === "true" || Boolean(triggerRoot?.attributes["url.path"]);
   const triggerCategory = !isPageTrigger && (triggerRoot?.attributes["tron.agent.code"] || triggerRoot?.attributes["tron.dude.code"]) ? "Agent" : "Page";
   const title = triggerLabel(trace.trigger, i18n, triggerCategory);
-  const errorMessage = (item: TraceSpan) => spanErrorMessage(item, t);
-  const failedRequest = isPageTrigger ? detail.spans.find((item) => item.status === "Error"
-    && item.attributes["browser.phase"] === "response-headers" && errorMessage(item)) : undefined;
-  const traceError = failedRequest && `${failedRequest.name}: ${errorMessage(failedRequest)}`
-    || triggerRoot && errorMessage(triggerRoot)
-    || detail.spans.filter((item) => item.name === "agent.run" && item.status === "Error").map(errorMessage).find(Boolean)
-    || detail.spans.filter((item) => item.status === "Error").map(errorMessage).find(Boolean)
-    || null;
   const isDudeExecution = detail.spans.some((item) => item.name === "tron.dude.execute");
   const sessionHref = isDudeExecution
     ? `/dudes?${new URLSearchParams({ dude: trace.agentCode, tab: "history", session: trace.sessionCode })}`
@@ -126,12 +119,6 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
           <InfoTooltip ariaLabel={t("help")}>{t("metricsHelp")}</InfoTooltip>
         </div>
       </header>
-      {trace.status === "Error" && (
-        <div className="mx-5 mt-4 rounded-md bg-[var(--color-error-container)] px-3 py-2 text-sm text-[var(--color-on-error-container)]">
-          <div className="font-semibold">{t("failureReason")}</div>
-          <div className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{traceError ?? t("failureReasonUnavailable")}</div>
-        </div>
-      )}
       <dl className="grid grid-cols-2 gap-5 border-b border-[var(--color-outline-variant)] p-5 sm:grid-cols-4 xl:grid-cols-8">
         {metrics.map(([key, value]) => (
           <div key={key}>
@@ -263,17 +250,9 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
               <dt>{t("duration")}</dt>
               <dd className="tabular-nums">{duration(span.durationMs)}</dd>
             </dl>
-            {(span.status === "Error" || span.status === "Cancelled" && errorMessage(span)) && (
-              <div className={`mb-5 rounded-md px-3 py-2 text-xs ${span.status === "Cancelled"
-                ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]"
-                : "bg-[var(--color-error-container)] text-[var(--color-on-error-container)]"}`}>
-                <div className="font-semibold">{t(span.status === "Cancelled" ? "cancellationReason" : "failureReason")}</div>
-                <div className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{errorMessage(span) ?? t("failureReasonUnavailable")}</div>
-                {span.status === "Error" && span.attributes["error.type"] && <div className="mt-1 opacity-80">{t("failureType", { type: span.attributes["error.type"] })}</div>}
-              </div>
-            )}
-            <Tabs defaultValue="attributes">
-              <TabsList className="max-w-full overflow-x-auto">
+            <Tabs value={detailTab} onValueChange={value => setDetailTab(String(value))}>
+              <TabsList className="max-w-full overflow-x-auto" aria-label={t("spanDetail")}>
+                <TabsTrigger value="logs">{t("logs")}</TabsTrigger>
                 <TabsTrigger value="attributes">{t("attributes")}</TabsTrigger>
                 <TabsTrigger value="events">
                   {t("events")} ({formatNumber(span.events.length)})
@@ -282,6 +261,9 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
                   {t("links")} ({formatNumber(span.links.length)})
                 </TabsTrigger>
               </TabsList>
+              <TabsContent value="logs">
+                {detailTab === "logs" && <TraceSpanLogs key={`${trace.traceId}:${span.spanId}`} traceId={trace.traceId} workspaceCode={span.attributes["tron.workspace.code"] ?? trace.workspaceCode} span={span} />}
+              </TabsContent>
               <TabsContent value="attributes">
                 <AttributeList attributes={span.attributes} modelLabel={modelLabel} />
               </TabsContent>

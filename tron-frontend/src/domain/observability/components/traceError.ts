@@ -13,19 +13,24 @@ function reportMessages(value: unknown): string[] {
   return messages;
 }
 
+export function eventErrorMessage(event: TraceSpan["events"][number]): string | null {
+  const report = event.attributes["agent.error.report"];
+  if (report) {
+    try {
+      const messages = [...new Set(reportMessages(JSON.parse(report)))];
+      if (messages.length) return messages.join("\n");
+    } catch {
+      // Other fields may still be usable when external reports are malformed.
+    }
+  }
+  const message = event.attributes["exception.message"] || event.attributes["error.message"];
+  return message?.trim() || null;
+}
+
 export function spanErrorMessage(span: TraceSpan, t: TFunction<"observability">): string | null {
   for (const event of span.events) {
-    const report = event.attributes["agent.error.report"];
-    if (report) {
-      try {
-        const messages = [...new Set(reportMessages(JSON.parse(report)))];
-        if (messages.length) return messages.join("\n");
-      } catch {
-        // External telemetry can contain malformed reports; other fields may still be usable.
-      }
-    }
-    const message = event.attributes["exception.message"] || event.attributes["error.message"];
-    if (message?.trim()) return message.trim();
+    const message = eventErrorMessage(event);
+    if (message) return message;
   }
   const browser = span.attributes["service.name"] === "tron-frontend";
   const type = span.attributes["error.type"];
