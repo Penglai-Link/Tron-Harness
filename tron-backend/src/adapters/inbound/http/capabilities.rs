@@ -1,6 +1,6 @@
 use crate::{
     app::AppState,
-    application::agent::{extension_implementation_catalog_with_state, installed_capability_packs},
+    application::agent::{installed_capability_packs, installed_extension_implementations},
     response::ApiResponse,
 };
 use axum::{
@@ -63,20 +63,12 @@ async fn list_capability_packs(
 
 async fn list_extension_implementations(
     State(state): State<AppState>,
-) -> Json<ApiResponse<Vec<crate::application::agent::ExtensionImplementationInfo>>> {
-    let (packs, mut extensions) = state.agent_framework.capability_state();
-    if let Some(enabled) = packs.get("framework.local.scoped") {
-        extensions.entry("tool".into()).or_insert(*enabled);
+) -> Response {
+    let (packs, extensions) = state.agent_framework.capability_state();
+    match installed_extension_implementations(state.agent_framework.pack_root(), &packs, &extensions) {
+        Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Err(error) => failure(StatusCode::INTERNAL_SERVER_ERROR, "CAPABILITY_LIST_FAILED", error),
     }
-    if let Some(enabled) = packs.get("tron.harness") {
-        extensions.entry("context".into()).or_insert(*enabled);
-    }
-    if let Some(enabled) = packs.get("framework.external-agent") {
-        extensions.entry("runtime".into()).or_insert(*enabled);
-    }
-    Json(ApiResponse::success(
-        extension_implementation_catalog_with_state(&extensions),
-    ))
 }
 
 #[derive(Deserialize)]
@@ -158,9 +150,7 @@ async fn set_extension_enabled(
         .set_extension_enabled(&point, request.enabled)
         .await
     {
-        Ok(()) => list_extension_implementations(State(state))
-            .await
-            .into_response(),
+        Ok(()) => list_extension_implementations(State(state)).await,
         Err(error) => failure(StatusCode::CONFLICT, "CAPABILITY_RECONFIGURE_FAILED", error),
     }
 }

@@ -28,6 +28,15 @@ pub struct ExtensionImplementationInfo {
     pub provider_pack_id: String,
     pub provider: String,
     pub effective: bool,
+    pub enabled: bool,
+    pub configuration: ExtensionConfiguration,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub enum ExtensionConfiguration {
+    Required,
+    Extension,
+    CapabilityPack,
 }
 
 pub fn installed_capability_packs(
@@ -339,45 +348,102 @@ pub(super) fn pack_extension_implementations() -> Vec<ExtensionImplementationInf
                 provider_pack_id: provider_pack_id.into(),
                 provider: provider.into(),
                 effective: true,
+                enabled: true,
+                configuration: match (extension_point, provider_pack_id) {
+                    ("model" | "storage" | "tool-policy", _) => ExtensionConfiguration::Required,
+                    ("tool", "framework.local.scoped")
+                    | ("observe", "tron.tool.audit")
+                    | ("context", "tron.harness")
+                    | ("runtime", "framework.external-agent") => ExtensionConfiguration::Extension,
+                    _ => ExtensionConfiguration::CapabilityPack,
+                },
             }
         },
     )
     .collect()
 }
 
-// The extension settings page currently manages these six runtime switches.
-// Pack details also include contributions that have no independent switch.
 pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
     pack_extension_implementations()
+}
+
+pub fn extension_implementation_catalog_with_state(
+    packs: &std::collections::BTreeMap<String, bool>,
+    enabled: &std::collections::BTreeMap<String, bool>,
+) -> Vec<ExtensionImplementationInfo> {
+    let extension_enabled = |point: &str| enabled.get(point).copied().unwrap_or(true);
+    extension_implementation_catalog()
         .into_iter()
-        .filter(|item| {
-            matches!(
-                (
-                    item.extension_point.as_str(),
-                    item.provider_pack_id.as_str()
-                ),
-                ("model", "framework.model.connection.tron")
-                    | ("tool", "framework.local.scoped")
-                    | ("observe", "tron.tool.audit")
-                    | ("context", "tron.harness")
-                    | ("runtime", "framework.external-agent")
-                    | ("storage", "framework.storage.local")
-            )
+        .map(|mut implementation| {
+            let pack_enabled = packs.get(&implementation.provider_pack_id).copied().unwrap_or(true);
+            implementation.enabled = match implementation.configuration {
+                ExtensionConfiguration::Required => true,
+                ExtensionConfiguration::Extension => extension_enabled(&implementation.extension_point),
+                ExtensionConfiguration::CapabilityPack => pack_enabled,
+            };
+            implementation.effective = match implementation.extension_point.as_str() {
+                // These services remain installed even when optional pack contributions are omitted.
+                "model" | "storage" | "tool-policy" => true,
+                "tool" => pack_enabled && extension_enabled("tool"),
+                "context" if implementation.provider_pack_id == "tron.harness" => {
+                    pack_enabled && extension_enabled("context") && extension_enabled("tool")
+                }
+                "context" => pack_enabled && extension_enabled("tool"),
+                "runtime" | "external-agent" => pack_enabled && extension_enabled("runtime"),
+                "observe" => extension_enabled("observe"),
+                _ => pack_enabled,
+            };
+            implementation
         })
         .collect()
 }
 
-pub fn extension_implementation_catalog_with_state(
+pub fn installed_extension_implementations(
+    root: &std::path::Path,
+    packs: &std::collections::BTreeMap<String, bool>,
     enabled: &std::collections::BTreeMap<String, bool>,
-) -> Vec<ExtensionImplementationInfo> {
-    extension_implementation_catalog()
-        .into_iter()
-        .map(|mut implementation| {
-            implementation.effective = enabled
-                .get(&implementation.extension_point)
-                .copied()
-                .unwrap_or(true);
-            implementation
-        })
-        .collect()
+) -> Result<Vec<ExtensionImplementationInfo>, String> {
+    use eliteforge_agent_capability_runtime::CapabilityPackManager;
+    let mut items = extension_implementation_catalog_with_state(packs, enabled);
+    let manager = CapabilityPackManager::new(root).map_err(|error| error.to_string())?;
+    for installed in manager.installed().map_err(|error| error.to_string())? {
+        let manifest = installed.manifest;
+        for implementation in manifest.implementations {
+            let enabled = packs.get(&manifest.id).copied().unwrap_or(false);
+            items.push(ExtensionImplementationInfo {
+                extension_name: implementation.extension.clone(),
+                extension_point: implementation.extension,
+                implementation: implementation.id,
+                description: String::new(),
+                provider_pack_id: manifest.id.clone(),
+                provider: "External".into(),
+                effective: enabled,
+                enabled,
+                configuration: ExtensionConfiguration::CapabilityPack,
+            });
+        }
+    }
+    Ok(items)
+}
+
+#[cfg(test)]
+mod extension_catalog_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn pack_and_extension_switches_compose_without_disabling_other_providers() {
+        let packs = BTreeMap::from([("framework.local.scoped".into(), false)]);
+        let items = extension_implementation_catalog_with_state(&packs, &BTreeMap::new());
+        let tools: Vec<_> = items.iter().filter(|item| item.extension_point == "tool").collect();
+        assert_eq!(tools.iter().filter(|item| item.effective).count(), 6);
+        let local = tools.iter().find(|item| item.provider_pack_id == "framework.local.scoped").unwrap();
+        assert!(local.enabled);
+        assert!(!local.effective);
+
+        let items = extension_implementation_catalog_with_state(&packs, &BTreeMap::from([("tool".into(), false)]));
+        assert!(items.iter().filter(|item| item.extension_point == "tool").all(|item| !item.effective));
+        assert!(items.iter().filter(|item| item.configuration == ExtensionConfiguration::Required).all(|item| item.effective));
+        assert!(!items.iter().find(|item| item.implementation == "TronContext + bounded context preparation").unwrap().effective);
+    }
 }

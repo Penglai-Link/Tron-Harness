@@ -28,6 +28,8 @@ export interface ExtensionImplementationRecord {
   providerPackId: string;
   provider: string;
   effective: boolean;
+  enabled: boolean;
+  configuration: "Required" | "Extension" | "CapabilityPack";
 }
 
 export function listCapabilityPacks(signal?: AbortSignal) {

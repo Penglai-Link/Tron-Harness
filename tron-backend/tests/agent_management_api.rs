@@ -2079,6 +2079,15 @@ async fn capability_catalog_exposes_installed_packs_and_extension_implementation
             && item["description"] == tron_harness_capability::TOOL_IMPLEMENTATION_DESCRIPTION
     }));
     assert!(extensions.iter().all(|row| row["effective"] == json!(true)));
+    let points = extensions.iter().map(|row| row["extensionPoint"].as_str().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(points, std::collections::BTreeSet::from([
+        "model", "tool", "tool-policy", "skill", "observe", "context", "runtime", "external-agent", "storage",
+    ]));
+    assert_eq!(extensions.iter().filter(|row| row["extensionPoint"] == "tool").count(), 7);
+    assert!(extensions.iter().filter(|row| matches!(row["extensionPoint"].as_str(), Some("model" | "storage" | "tool-policy")))
+        .all(|row| row["configuration"] == "Required"));
+    assert!(extensions.iter().all(|row| row["enabled"] == true));
 
     let disabled = request_with_headers(
         &app,
@@ -2094,6 +2103,18 @@ async fn capability_catalog_exposes_installed_packs_and_extension_implementation
     assert!(packs["data"].as_array().unwrap().iter().any(|pack| {
         pack["id"] == json!("framework.external-agent") && pack["effective"] == json!(false)
     }));
+
+    // An explicitly enabled extension cannot override its disabled capability pack.
+    let enabled = request_with_headers(
+        &app, Method::PUT, "/api/v1/capabilities/extensions/runtime/enabled",
+        Some(json!({ "enabled": true })), None, Some(&authorization),
+    ).await;
+    assert_eq!(enabled.status(), StatusCode::OK);
+    let enabled = response_json(enabled).await;
+    let rows = enabled["data"].as_array().unwrap();
+    assert!(rows.iter().filter(|row| matches!(row["extensionPoint"].as_str(), Some("runtime" | "external-agent")))
+        .all(|row| row["effective"] == false));
+    assert!(rows.iter().any(|row| row["extensionPoint"] == "runtime" && row["enabled"] == true));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
