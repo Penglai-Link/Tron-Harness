@@ -24,7 +24,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     tracing::info!("tron-backend listening on http://{socket_addr}");
     tokio::select! {
-        result = axum::serve(listener, router).into_future() => {
+        // Finalize routes once; serving Router directly runs with_state(())
+        // and clones every route's middleware state for each new connection.
+        result = axum::serve(listener, router.into_make_service()).into_future() => {
             result?;
             Ok(())
         }

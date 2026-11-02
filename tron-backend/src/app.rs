@@ -95,7 +95,12 @@ pub type AppRagService = RagService<Arc<Mutex<SqliteRagRepository>>, DefaultRagR
 pub type AppMemoryService = MemoryService<Arc<Mutex<SqliteRagRepository>>, DefaultRagRuntime>;
 
 #[derive(Clone)]
-pub struct AppState {
+pub struct AppState(Arc<AppStateInner>);
+
+/// Services shared by routes, middleware and background workers. Cloning the
+/// HTTP state must not clone every service's configuration and lookup tables.
+#[derive(Clone)]
+pub struct AppStateInner {
     pub dude_memory: crate::application::dude_memory::DudeMemoryService,
     pub dudes: crate::application::dude::DudeService,
     pub config: AppConfig,
@@ -142,6 +147,22 @@ pub struct AppState {
     pub navigation: NavigationService,
     pub rag: AppRagService,
     pub knowledge_bases: crate::application::knowledge_base::KnowledgeBaseService,
+}
+
+impl std::ops::Deref for AppState {
+    type Target = AppStateInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for AppState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // Host setup may replace a service before building its router. Preserve
+        // value isolation for that explicit mutation; requests only share reads.
+        Arc::make_mut(&mut self.0)
+    }
 }
 
 impl AppState {
@@ -609,7 +630,7 @@ impl AppState {
         let skins = crate::application::skin::SkinService::new(Arc::new(
             crate::adapters::outbound::skin::FileSkinStore::new(skin_root),
         ));
-        Ok(Self {
+        Ok(Self(Arc::new(AppStateInner {
             dude_memory,
             dudes,
             config,
@@ -656,7 +677,7 @@ impl AppState {
             variables,
             resources,
             workspaces,
-        })
+        })))
     }
 }
 
