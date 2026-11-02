@@ -83,6 +83,8 @@ it("shows scoped request error rate, readable latency, resources and actual chil
     </MemoryRouter>
   );
   expect(screen.getByText("33.3%")).toBeTruthy();
+  expect(screen.getByText("累计错误率")).toBeTruthy();
+  expect(screen.getByText("最近 15 分钟：33.3%")).toBeTruthy();
   expect(screen.getByText("1.25 s")).toBeTruthy();
   expect(screen.getAllByText((_, element) => element?.textContent === "100 MiB" && !Array.from(element.children).some((child) => child.textContent === "100 MiB"))).toHaveLength(2);
   expect(screen.getByText("plugin-backend")).toBeTruthy();
@@ -103,5 +105,13 @@ it("does not invent a zero-percent error rate when no requests were collected", 
   );
   expect(screen.queryByText("0%")).toBeNull();
   expect(screen.getByText("—")).toBeTruthy();
+  state.data = previous;
+});
+it.each([[4, "0%"], [0, "—"]])("keeps the recent error rate independent from retained failures with %i recent traces", (requests, rate) => {
+  const previous = state.data;
+  state.data = { ...previous, recentRequests: [{ startedAt: 0, requests, errors: 0 }] };
+  render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+  expect(screen.getByText("33.3%")).toBeTruthy();
+  expect(screen.getByText(`最近 15 分钟：${rate}`)).toBeTruthy();
   state.data = previous;
 });

@@ -30,21 +30,20 @@ export function DashboardPage() {
     value == null ? "—" : formatNumber(value);
   const duration = (value: number | undefined) =>
     value == null ? "—" : formatTraceDuration(value, currentLocale);
+  const errorRate = (failed: number, total: number) => total > 0
+    ? `${formatNumber((failed / total) * 100, { maximumFractionDigits: 1 })}%`
+    : "—";
   const cards = [
     ["requestCount", n(data?.traceCount), "requestCountHint"],
     [
       "errorRate",
-      data && data.traceCount > 0
-        ? `${formatNumber((data.failedTraceCount / data.traceCount) * 100, {
-            maximumFractionDigits: 1,
-          })}%`
-        : "—",
+      data ? errorRate(data.failedTraceCount, data.traceCount) : "—",
       "errorRateHint",
     ],
     ["averageDuration", duration(data?.averageDurationMs), "latencyHint"],
     ["p95Duration", duration(data?.p95DurationMs), "p95Hint"],
     ["runningRequests", n(data?.runningTraceCount), "runningHint"],
-    ["failedTraces", n(data?.failedTraceCount), "failedHint"],
+    ["cumulativeFailedTraces", n(data?.failedTraceCount), "failedHint"],
     [
       "totalTokens",
       data
@@ -55,6 +54,10 @@ export function DashboardPage() {
     ["metricPoints", n(data?.metricPointCount), "metricPointHint"],
   ];
   const buckets = data?.recentRequests ?? [];
+  const recent = buckets.reduce((sum, bucket) => ({
+    requests: sum.requests + bucket.requests,
+    errors: sum.errors + bucket.errors,
+  }), { requests: 0, errors: 0 });
   const maximum = Math.max(1, ...buckets.map((b) => b.requests));
   return (
     <>
@@ -82,12 +85,16 @@ export function DashboardPage() {
           {cards.map(([label, value]) => (
             <div key={label}>
               <SurfaceCard className="!px-5 !py-4 !shadow-none">
-              <dt className="text-xs text-[var(--color-on-surface-variant)]">
+              <dt className="flex items-center gap-1 text-xs text-[var(--color-on-surface-variant)]">
                 {t(label)}
+                {label === "errorRate" && <InfoTooltip variant="icon" ariaLabel={t("errorRate")}>{t("errorRateHint")}</InfoTooltip>}
               </dt>
               <dd className="mt-2 truncate text-2xl font-semibold leading-none tracking-tight tabular-nums" title={value}>
                 {value}
               </dd>
+              {label === "errorRate" && data && <p className="mt-2 text-xs tabular-nums text-[var(--color-on-surface-variant)]">
+                {t("recentErrorRate", { rate: errorRate(recent.errors, recent.requests) })}
+              </p>}
               </SurfaceCard>
             </div>
           ))}
