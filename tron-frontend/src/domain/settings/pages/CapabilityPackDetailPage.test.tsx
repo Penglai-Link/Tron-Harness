@@ -7,7 +7,7 @@ import { CapabilityPacksPage } from "./CapabilityPacksPage";
 import { listCapabilityPacks, setCapabilityPackEnabled, type CapabilityPackRecord } from "../api/capabilityApi";
 
 vi.mock("../api/capabilityApi", () => ({ listCapabilityPacks: vi.fn(), setCapabilityPackEnabled: vi.fn(), importCapabilityPack: vi.fn() }));
-vi.mock("react-i18next", async (importOriginal) => ({ ...await importOriginal<typeof import("react-i18next")>(), useTranslation: () => ({ t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key }) }));
+vi.mock("react-i18next", async (importOriginal) => ({ ...await importOriginal<typeof import("react-i18next")>(), useTranslation: () => ({ t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key, i18n: { resolvedLanguage: "en-US" } }) }));
 const pack: CapabilityPackRecord = {
   id: "framework.a2ui", name: "A2UI Interfaces", version: "0.1.0", description: "Interactive interfaces",
   provider: "EliteForge", updatedAt: null, effective: true, kind: "capability",
@@ -52,12 +52,21 @@ it("shows empty declared contents for a pack with no contributions", async () =>
   vi.mocked(listCapabilityPacks).mockResolvedValue([{ ...pack, contents: [] }]);
   mount();
   expect(await screen.findByText("pages:capabilityManagement.emptyContents")).toBeTruthy();
+  const tabs = screen.getAllByRole("tab");
+  expect(tabs).toHaveLength(13);
+  expect(tabs.every((tab) => tab.textContent?.endsWith("0") && !tab.hasAttribute("disabled"))).toBe(true);
+  expect(tabs.map((tab) => tab.textContent?.replace("pages:capabilityManagement.contentKinds.", ""))).toEqual([
+    "Tool0", "Skill0", "Resource0", "Page0", "Mcp0", "Runtime0", "Context0", "Policy0",
+    "Extension0", "Implementation0", "Plugin0", "Dependency0", "Permission0",
+  ]);
+  fireEvent.click(screen.getByRole("tab", { name: /Plugin/ }));
+  expect(screen.getByRole("tabpanel").textContent).toContain("pages:capabilityManagement.emptyContents");
 });
 
 it("groups contributions into tabs and shows plugin descriptions and provided capabilities", async () => {
   vi.mocked(listCapabilityPacks).mockResolvedValue([{ ...pack, contents: [
     ...pack.contents,
-    { kind: "Plugin", name: "agent.a2ui", description: "Interactive interface plugin", provides: ["A2uiService", "a2ui-interface"] },
+    { kind: "Plugin", name: "agent.a2ui", description: "Interactive interface plugin", provides: ["A2uiService", "a2ui-interface", "a2ui_publish"] },
     { kind: "Implementation", name: "A2uiService", description: "tool: Interactive surfaces" },
     { kind: "Resource", name: "references/examples.json", description: "Skill examples" },
   ] }]);

@@ -2308,7 +2308,7 @@ export const pages = {
     backToPacks: "返回能力包",
     notFound: "能力包不存在或已被移除。",
     contents: "提供的内容",
-    emptyContents: "此能力包暂无已声明的内容。",
+    emptyContents: "此分类暂无内容。",
     contentKinds: {
       Tool: "工具",
       Skill: "技能",

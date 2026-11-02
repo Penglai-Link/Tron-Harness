@@ -2389,7 +2389,7 @@ export const pages = {
     backToPacks: "Back to capability packs",
     notFound: "This capability pack does not exist or has been removed.",
     contents: "Provided contents",
-    emptyContents: "This capability pack has no declared contents.",
+    emptyContents: "No content in this category.",
     contentKinds: {
       Tool: "Tools",
       Skill: "Skills",
