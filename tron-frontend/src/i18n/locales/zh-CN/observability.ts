@@ -168,6 +168,7 @@ export const observability = {
   operation: "操作",
   spanDetail: "Span 详情",
   failureReason: "失败原因",
+  cancellationReason: "取消原因",
   failureReasonUnavailable: "未记录具体失败原因",
   browserFailureCancelled: "调用方在收到 HTTP 响应前取消了请求。",
   browserFailureTimeout: "请求超时，未取得 HTTP 响应。",

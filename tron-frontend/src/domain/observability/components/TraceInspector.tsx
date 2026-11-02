@@ -263,11 +263,13 @@ export function TraceInspector({ detail, models = [] }: { detail: TraceDetail; m
               <dt>{t("duration")}</dt>
               <dd className="tabular-nums">{duration(span.durationMs)}</dd>
             </dl>
-            {span.status === "Error" && (
-              <div className="mb-5 rounded-md bg-[var(--color-error-container)] px-3 py-2 text-xs text-[var(--color-on-error-container)]">
-                <div className="font-semibold">{t("failureReason")}</div>
+            {(span.status === "Error" || span.status === "Cancelled" && errorMessage(span)) && (
+              <div className={`mb-5 rounded-md px-3 py-2 text-xs ${span.status === "Cancelled"
+                ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]"
+                : "bg-[var(--color-error-container)] text-[var(--color-on-error-container)]"}`}>
+                <div className="font-semibold">{t(span.status === "Cancelled" ? "cancellationReason" : "failureReason")}</div>
                 <div className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{errorMessage(span) ?? t("failureReasonUnavailable")}</div>
-                {span.attributes["error.type"] && <div className="mt-1 opacity-80">{t("failureType", { type: span.attributes["error.type"] })}</div>}
+                {span.status === "Error" && span.attributes["error.type"] && <div className="mt-1 opacity-80">{t("failureType", { type: span.attributes["error.type"] })}</div>}
               </div>
             )}
             <Tabs defaultValue="attributes">

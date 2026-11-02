@@ -168,6 +168,7 @@ export const observability = {
   operation: "Operation",
   spanDetail: "Span detail",
   failureReason: "Failure reason",
+  cancellationReason: "Cancellation reason",
   failureReasonUnavailable: "No detailed failure reason was recorded",
   browserFailureCancelled: "The caller cancelled the request before receiving an HTTP response.",
   browserFailureTimeout: "The request timed out before an HTTP response was available.",
