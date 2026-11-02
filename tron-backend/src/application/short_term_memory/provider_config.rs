@@ -33,6 +33,8 @@ impl ContextProviderPolicy {
 pub struct ContextProvidersConfig {
     /// Actual message block order. Tools retain their provider-native protocol location.
     pub order: Vec<String>,
+    /// One complete percentage allocation; no independently configured token caps.
+    pub shares: std::collections::BTreeMap<String, u32>,
     pub data_blocks: std::collections::BTreeMap<String, ContextDataBlockConfig>,
     /// Optional per-plugin token caps. Missing entries preserve plugin defaults.
     pub plugin_overrides: std::collections::BTreeMap<String, u32>,
@@ -82,6 +84,22 @@ impl Default for ContextProvidersConfig {
             ]
             .map(str::to_owned)
             .to_vec(),
+            shares: [
+                ("seed_prompt_prefix", 500),
+                ("current_session_history", 7500),
+                ("conversation_history_summary", 400),
+                ("runtime_identity", 100),
+                ("dude_onboarding", 10),
+                ("tool_domains", 50),
+                ("agent_directory", 20),
+                ("skills.catalog", 50),
+                ("page_context", 300),
+                ("application_context", 400),
+                ("current_session_working_state", 200),
+                ("knowledge_base", 400),
+                ("dude_environment", 20),
+                ("dude_wakeup", 50),
+            ].into_iter().map(|(id, share)| (id.into(), share)).collect(),
             data_blocks: [
                 ("page_context", Some(2048)),
                 ("application_context", Some(16_000)),
@@ -158,6 +176,16 @@ impl ContextPriceInputs {
 }
 
 impl ContextProvidersConfig {
+    pub fn effective_shares(&self, order: &[String]) -> std::collections::BTreeMap<String, u32> {
+        let mut shares = self.shares.clone();
+        for id in order {
+            if !shares.contains_key(id) {
+                shares.insert(id.clone(), 1);
+                if let Some(history) = shares.get_mut("current_session_history") { *history = history.saturating_sub(1); }
+            }
+        }
+        shares
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.history_recent_turns == 0 || self.history_recent_turns > 512 {
             return Err("history recent-turn retention must be between 1 and 512".into());
@@ -183,35 +211,7 @@ impl ContextProvidersConfig {
         if self.order.first().map(String::as_str) != Some("seed_prompt_prefix") {
             return Err("fixed instructions must be first".into());
         }
-        let history = self
-            .order
-            .iter()
-            .position(|id| id == "current_session_history")
-            .unwrap();
-        if self
-            .order
-            .iter()
-            .position(|id| id == "conversation_history_summary")
-            .unwrap()
-            > history
-        {
-            return Err("stable checkpoint must precede history".into());
-        }
-        if self.order.iter().take(history).any(|id| {
-            !matches!(
-                id.as_str(),
-                "seed_prompt_prefix" | "conversation_history_summary" | "runtime_identity" | "dude_onboarding" | "tool_domains"
-            )
-        }) {
-            return Err("dynamic context blocks must follow history".into());
-        }
-        if self
-            .plugin_overrides
-            .iter()
-            .any(|(id, tokens)| id.trim().is_empty() || *tokens == 0)
-        {
-            return Err("plugin context token overrides must have an ID and positive cap".into());
-        }
+        eliteforge_agent_memory::ContextShareAllocation::new(self.shares.clone()).map_err(|error| error.to_string())?;
         let expected_data = Self::default().data_blocks;
         if expected_data
             .keys()
@@ -224,15 +224,13 @@ impl ContextProvidersConfig {
         }
         for (id, block) in &self.data_blocks {
             if id.trim().is_empty()
-                || block.max_tokens == Some(0)
-                || (block.max_tokens.is_none() && block.policy.strategy != ContextReductionStrategy::Keep)
                 || !matches!(
                     block.policy.strategy,
                     ContextReductionStrategy::Keep | ContextReductionStrategy::Bound
                 )
             {
                 return Err(
-                    "context data requires a positive budget or uncapped keep strategy".into(),
+                    "context data requires an explicit keep or bound strategy".into(),
                 );
             }
         }
@@ -265,7 +263,7 @@ impl ContextProvidersConfig {
 mod layout_tests {
     use super::*;
     #[test]
-    fn stable_domains_precede_history_and_dynamic_sources_follow_it() {
+    fn context_sources_can_reorder_after_fixed_instructions() {
         let baseline = ContextProvidersConfig::default();
         baseline.validate().unwrap();
         assert_eq!(baseline.data_blocks["agent_directory"].policy.strategy, ContextReductionStrategy::Keep);
@@ -278,8 +276,8 @@ mod layout_tests {
             let index = changed.order.iter().position(|value| value == id).unwrap();
             changed.order.swap(index, 1);
             assert!(
-                changed.validate().is_err(),
-                "dynamic block admitted before history: {id}"
+                changed.validate().is_ok(),
+                "context block must be reorderable: {id}"
             );
         }
         let mut reordered = baseline.clone();

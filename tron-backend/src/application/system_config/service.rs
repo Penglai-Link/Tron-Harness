@@ -58,10 +58,9 @@ impl SystemConfigService {
             .into_iter()
             .filter(|path| !super::helpers::is_removed_config_path(path))
             .collect::<Vec<_>>();
-        const PLUGIN_OVERRIDES_PATH: &str = "shortTermMemory.context.providers.pluginOverrides";
-        if super::helpers::value_at_path(&effective, PLUGIN_OVERRIDES_PATH).is_some() {
-            available_paths.push(PLUGIN_OVERRIDES_PATH.to_owned());
-        }
+        const SHARES_PATH: &str = "shortTermMemory.context.providers.shares";
+        available_paths.push(SHARES_PATH.to_owned());
+        let saving_shares = changes.iter().any(|change| change.path == SHARES_PATH);
         let mut selected_paths = std::collections::BTreeSet::new();
         for change in changes {
             if !selected_paths.insert(change.path.clone())
@@ -78,6 +77,19 @@ impl SystemConfigService {
             }
         }
 
+        if saving_shares {
+            if let Some(context) = next_value.get_mut("shortTermMemory").and_then(|memory| memory.get_mut("context")).and_then(serde_yaml::Value::as_mapping_mut) {
+                context.remove(serde_yaml::Value::String("blocks".into()));
+                if let Some(providers) = context.get_mut(serde_yaml::Value::String("providers".into())).and_then(serde_yaml::Value::as_mapping_mut) {
+                    providers.remove(serde_yaml::Value::String("pluginOverrides".into()));
+                    if let Some(blocks) = providers.get_mut(serde_yaml::Value::String("dataBlocks".into())).and_then(serde_yaml::Value::as_mapping_mut) {
+                        for block in blocks.values_mut().filter_map(serde_yaml::Value::as_mapping_mut) {
+                            block.remove(serde_yaml::Value::String("maxTokens".into()));
+                        }
+                    }
+                }
+            }
+        }
         let next_yaml = serde_yaml::to_string(&next_value)
             .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
         parse_yaml(&next_yaml, path)?;

@@ -136,13 +136,17 @@ pub(super) async fn assemble(
         })?,
         ..budget
     };
-    let caps = &config.context.blocks;
-    let seed = fw::ContextBlockConfig::new(
-        fw::INSTRUCTIONS_BLOCK,
-        block_budget(&caps.seed_prompt_prefix)?,
-    );
-    fw::configured_block_budget(&seed, available)?;
-    let knowledge_cap = config.context.providers.data_blocks["knowledge_base"].max_tokens.map_or(available.max_tokens, |n| n as usize);
+    let mut source_order = config.context.providers.order.clone();
+    if let Some(services) = input.run.extensions.get::<fw::ScopedAgentServices>() {
+        for source in services.0.context_sources.iter().filter(|source| source.kind() == fw::ContextSourceKind::Data) {
+            let id = source.block_id().to_owned();
+            if !source_order.contains(&id) { source_order.push(id); }
+        }
+    }
+    let quotas = memory::ContextShareAllocation::new(config.context.providers.effective_shares(&source_order))?.allocate(available.max_tokens);
+    let quota = |id: &str| quotas.get(id).copied().unwrap_or(0);
+    let seed = fw::ContextBlockConfig::new(fw::INSTRUCTIONS_BLOCK, fw::BlockBudget::tokens(quota("seed_prompt_prefix")));
+    let knowledge_cap = quota("knowledge_base");
     let mut contributors: Vec<Arc<dyn fw::ContextContributor>> = Vec::new();
     contributors.push(Arc::new(knowledge_base_context::KnowledgeBaseContributor {
         service: (!onboarding)
@@ -203,7 +207,7 @@ pub(super) async fn assemble(
             "tool_domains",
             &tool_domains,
             fw::BlockBudget::tokens(
-                config.context.providers.data_blocks["tool_domains"].max_tokens.map_or(available.max_tokens, |n| n as usize),
+                quota("tool_domains"),
             ),
             None,
         ),
@@ -211,20 +215,20 @@ pub(super) async fn assemble(
             "application_context",
             &application,
             fw::BlockBudget::tokens(
-                config.context.providers.data_blocks["application_context"].max_tokens.map_or(available.max_tokens, |n| n as usize),
+                quota("application_context"),
             ),
             None,
         ),
         (
             "conversation_history_summary",
             &source.checkpoint,
-            block_budget(&caps.conversation_history_summary)?,
+            fw::BlockBudget::tokens(quota("conversation_history_summary")),
             Some(&config.context.providers.checkpoint),
         ),
         (
             "current_session_working_state",
             &source.working,
-            block_budget(&caps.current_session_working_state)?,
+            fw::BlockBudget::tokens(quota("current_session_working_state")),
             Some(&config.context.providers.working),
         ),
     ] {
@@ -312,7 +316,7 @@ pub(super) async fn assemble(
         let block = fw::ContextBlockConfig::new(
             "agent_directory",
             fw::BlockBudget::tokens(
-                config.context.providers.data_blocks["agent_directory"].max_tokens.map_or(available.max_tokens, |n| n as usize),
+                quota("agent_directory"),
             ),
         );
         configs.insert("agent_directory".into(), block);
@@ -324,7 +328,7 @@ pub(super) async fn assemble(
             "dude_environment",
             "dude_wakeup",
         ] {
-            let cap = config.context.providers.data_blocks[id].max_tokens.map_or(available.max_tokens, |n| n as usize);
+            let cap = quota(id);
             contributors.push(Arc::new(super::dude_context::DudeContributor {
                 service: host.harness.framework_dudes(),
                 context: context.clone(),
@@ -355,24 +359,10 @@ pub(super) async fn assemble(
                     "context contributor default config changed identity: {id}"
                 )));
             }
-            let configured_tokens = config
-                .context
-                .providers
-                .plugin_overrides
-                .get(id)
-                .copied()
-                .or_else(|| {
-                    config
-                        .context
-                        .providers
-                        .data_blocks
-                        .get(id)
-                        .and_then(|legacy| legacy.max_tokens)
-                });
-            if let Some(tokens) = configured_tokens {
-                // Preserve the plugin's declared ratio and message-count limits.
-                block.budget.max_tokens = Some(tokens as usize);
-            }
+            // The host's complete share plan owns token allocation. Preserve only
+            // the plugin's protocol/message constraints, not an independent token cap.
+            block.budget.max_tokens = Some(quota(id));
+            block.budget.max_ratio_bps = None;
             if configs
                 .insert(id.into(), block)
                 .is_some()
@@ -391,15 +381,19 @@ pub(super) async fn assemble(
             continue;
         }
         if let Some(block) = configs.get_mut(id.as_str()) {
-            block.budget = policy.max_tokens.map_or_else(|| fw::BlockBudget::ratio(10_000), |n| fw::BlockBudget::tokens(n as usize));
+            block.budget = fw::BlockBudget::tokens(quota(id));
             if policy.policy.strategy == Strategy::Bound {
                 *block = compression(block.clone(), &policy.policy)?;
-                block.reducer = bound_data_reducer(policy.max_tokens.map_or(available.max_tokens, |n| n as usize));
+                block.reducer = bound_data_reducer(quota(id));
             } else {
                 block.reducer = Arc::new(fw::KeepContext);
                 block.compression = None;
             }
         }
+    }
+    for (id, block) in &mut configs {
+        block.budget.max_tokens = Some(quota(id));
+        block.budget.max_ratio_bps = None;
     }
     plugin_order.sort();
     let mut order = config.context.providers.order.clone();
@@ -417,7 +411,7 @@ pub(super) async fn assemble(
             "every active contributor must occur in the configured layout".into(),
         ));
     }
-    let policy: Arc<dyn fw::ContextBudgetPolicy> = Arc::new(memory::BorrowUnusedMemoryBudget);
+    let policy: Arc<dyn fw::ContextBudgetPolicy> = Arc::new(memory::SharedContextBudget);
     let assembler = fw::DefaultContextAssembler::new(fw::ContextLayout(layout), contributors)?;
     let assembler = if config.context.providers.history.strategy == Strategy::Checkpoint {
         assembler.with_history_summary_block("conversation_history_summary", config.context.providers.history_recent_turns)?
@@ -446,21 +440,7 @@ pub(super) async fn assemble(
     };
     assembler.assemble(&mapped).await
 }
-pub(super) fn block_budget(
-    config: &crate::application::short_term_memory::ContextBlockBudgetConfig,
-) -> Result<fw::BlockBudget, fw::AgentError> {
-    if config.max_ratio_bps.is_some_and(|ratio| ratio > 10_000) {
-        return Err(fw::AgentError::InvalidConfiguration(
-            "invalid context block percentage".into(),
-        ));
-    }
-    Ok(fw::BlockBudget {
-        max_tokens: config.max_tokens.map(|tokens| tokens as usize),
-        max_ratio_bps: config.max_ratio_bps.map(|ratio| ratio as u16),
-        max_messages: None,
-    })
-}
-fn fingerprint(value: &impl serde::Serialize) -> Result<String, fw::AgentError> {
+pub(super) fn fingerprint(value: &impl serde::Serialize) -> Result<String, fw::AgentError> {
     serde_json::to_vec(value)
         .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
         .map_err(|error| fw::AgentError::InvalidConfiguration(error.to_string()))

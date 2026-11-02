@@ -14,8 +14,8 @@ vi.mock("@/shared", () => ({
 }));
 vi.mock("../api/contextLayoutApi", () => ({
   fetchContextLayout: vi.fn().mockResolvedValue({
-    revision: "revision", pluginOverrides: {},
-    nativeBudgets: { conversation_history_summary: { maxTokens: 6000, maxRatioBps: 2000 }, knowledge_base: { maxTokens: 1200, maxRatioBps: null } },
+    revision: "revision",
+    shares: { seed_prompt_prefix: 2500, conversation_history_summary: 500, tool_domains: 1000, current_session_history: 5000, knowledge_base: 500, "custom.plugin": 500 },
     order: ["seed_prompt_prefix", "conversation_history_summary", "tool_domains", "current_session_history", "knowledge_base", "custom.plugin"],
     blocks: [{ id: "custom.plugin", displayName: "Custom plugin", plugin: true, unavailable: false }],
   }),
@@ -27,37 +27,38 @@ it("shows the renamed configuration page with the same product block names as sh
   const i18n = createInstance();
   await i18n.init({ lng: "zh-CN", resources: { "zh-CN": { pages } }, defaultNS: "pages" });
   render(<I18nextProvider i18n={i18n}><ContextLayoutPage /></I18nextProvider>);
-  expect(await screen.findByText("对话历史摘要")).toBeTruthy();
+  expect(await screen.findByRole("spinbutton", { name: "对话历史摘要 的占比（%）" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "上下文配置" })).toBeTruthy();
   for (const name of ["系统提示词", "工具领域", "对话历史", "知识库信息", "Custom plugin"]) {
-    expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getAllByText(name)[0]).toBeTruthy();
   }
   for (const oldName of ["会话检查点", "固定指令", "工具目录", "conversation_history_summary"]) {
     expect(screen.queryByText(oldName)).toBeNull();
   }
 });
 
-it("edits host budgets, labels only plugins, and prevents moving fixed rows", async () => {
+it("saves only percentage shares, validates exactly 100%, and keeps instructions first", async () => {
   const i18n = createInstance();
   await i18n.init({ lng: "zh-CN", resources: { "zh-CN": { pages } }, defaultNS: "pages" });
   render(<I18nextProvider i18n={i18n}><ContextLayoutPage /></I18nextProvider>);
-  await screen.findByText("对话历史摘要");
+  await screen.findByRole("spinbutton", { name: "对话历史摘要 的占比（%）" });
   expect(screen.queryByText("平台块")).toBeNull();
   expect(screen.queryByText("固定锚点")).toBeNull();
   expect(screen.getAllByText("插件提供")).toHaveLength(1);
-  const fixed = screen.getByText("对话历史摘要").closest("li")!;
+  const fixed = screen.getAllByText("系统提示词").find(element => element.closest("li"))!.closest("li")!;
   expect(fixed.draggable).toBe(false);
   expect(fixed.querySelector("svg.lucide-grip-vertical")).toBeNull();
   expect(screen.queryByRole("button", { name: /^上移|^下移/ })).toBeNull();
-  const movable = screen.getByText("Custom plugin").closest("li")!;
+  const movable = screen.getAllByText("Custom plugin").find(element => element.closest("li"))!.closest("li")!;
   expect(movable.draggable).toBe(true);
   fireEvent.keyDown(movable, { key: "ArrowUp", altKey: true });
-  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史摘要 的最大 tokens" }), { target: { value: "4000" } });
-  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史摘要 的最大占比（%）" }), { target: { value: "15" } });
-  fireEvent.change(screen.getByRole("spinbutton", { name: "知识库信息 的最大 tokens" }), { target: { value: "2500" } });
+  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史摘要 的占比（%）" }), { target: { value: "4" } });
+  expect(screen.getByRole("button", { name: "保存" }).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByText("还需分配 1%")).toBeTruthy();
+  fireEvent.change(screen.getByRole("spinbutton", { name: "对话历史 的占比（%）" }), { target: { value: "51" } });
   fireEvent.click(screen.getByRole("button", { name: "保存" }));
   await waitFor(() => expect(updateContextLayout).toHaveBeenCalledWith(expect.objectContaining({
     order: ["seed_prompt_prefix", "conversation_history_summary", "tool_domains", "current_session_history", "custom.plugin", "knowledge_base"],
-    nativeBudgets: { conversation_history_summary: { maxTokens: 4000, maxRatioBps: 1500 }, knowledge_base: { maxTokens: 2500, maxRatioBps: null } },
+    shares: { seed_prompt_prefix: 2500, conversation_history_summary: 400, tool_domains: 1000, current_session_history: 5100, knowledge_base: 500, "custom.plugin": 500 },
   })));
 });

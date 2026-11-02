@@ -668,22 +668,12 @@ impl FrameworkHost {
                 let source = &service.0;
                 (source.kind() == fw::ContextSourceKind::Data).then(|| {
                     let metadata = source.layout_metadata();
-                    let default = source.default_block_config();
                     super::super::ContextLayoutContributorInfo {
                         provider_id: provider_id.to_owned(),
                         block_id: source.block_id().to_owned(),
                         display_name: metadata.display_name,
                         description: metadata.description,
                         default_order: metadata.default_order,
-                        default_max_tokens: default
-                            .as_ref()
-                            .and_then(|config| config.budget.max_tokens),
-                        default_max_ratio_bps: default
-                            .as_ref()
-                            .and_then(|config| config.budget.max_ratio_bps),
-                        default_max_messages: default
-                            .as_ref()
-                            .and_then(|config| config.budget.max_messages),
                     }
                 })
             })

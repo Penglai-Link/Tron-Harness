@@ -293,7 +293,7 @@ pub(super) fn effective_context_value(
     path: &Path,
     mut value: Value,
 ) -> Result<Value, SystemConfigError> {
-    use crate::application::short_term_memory::{ContextBlockBudgetConfig, ContextProviderPolicy};
+    use crate::application::short_term_memory::ContextProviderPolicy;
     use serde_json::json;
     let invocation = AppConfig::effective_config(content, path)
         .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?
@@ -302,38 +302,25 @@ pub(super) fn effective_context_value(
     let config = AppConfig::effective_short_term_memory(content, path)
         .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
     let ratio = |bps: u32| format!("{}%", f64::from(bps) / 100.0);
-    let budget = |block: &ContextBlockBudgetConfig| {
-        json!({
-            "maxRatio": block.max_ratio_bps.map(ratio), "maxTokens": block.max_tokens
-        })
-    };
     let policy = |p: &ContextProviderPolicy| {
         json!({
             "strategy": p.strategy, "triggerRatio": ratio(p.trigger_ratio_bps),
             "targetRatio": ratio(p.target_ratio_bps), "minGainTokens": p.min_gain_tokens
         })
     };
-    let blocks = &config.context.blocks;
     let providers = &config.context.providers;
     let data_blocks = providers.data_blocks.iter().map(|(id, block)| {
-        let mut value = policy(&block.policy);
-        value["maxTokens"] = json!(block.max_tokens);
+        let value = policy(&block.policy);
         (id.clone(), value)
     }).collect::<serde_json::Map<_, _>>();
+    if let Some(context) = value.get_mut("shortTermMemory").and_then(|memory| memory.get_mut("context")).and_then(Value::as_mapping_mut) {
+        context.remove(Value::String("blocks".into()));
+    }
     for (field, projected) in [
-        (
-            "shortTermMemory.context.blocks",
-            json!({
-                "seedPromptPrefix": budget(&blocks.seed_prompt_prefix),
-                "conversationHistorySummary": budget(&blocks.conversation_history_summary),
-                "currentSessionWorkingState": budget(&blocks.current_session_working_state),
-                "toolSchema": budget(&blocks.tool_schema)
-            }),
-        ),
         (
             "shortTermMemory.context.providers",
             json!({
-                "order": providers.order, "dataBlocks": data_blocks, "pluginOverrides": providers.plugin_overrides,
+                "order": providers.order, "shares": providers.shares, "dataBlocks": data_blocks,
                 "checkpoint": policy(&providers.checkpoint),
                 "working": policy(&providers.working),
                 "history": policy(&providers.history), "prices": providers.prices,

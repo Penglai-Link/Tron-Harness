@@ -32,6 +32,7 @@ pub(super) fn update(
     let bytes = serde_json::to_vec(&(
         fixed,
         &config.context.providers.order,
+        &config.context.providers.shares,
         input.tools,
         input.options,
         &input.history.generation,
@@ -74,48 +75,14 @@ pub(super) fn update(
             .map(|block| block.allocated_tokens.min(u32::MAX as usize) as u32)
     };
     let history_cap = cap(fw::HISTORY_BLOCK).unwrap_or(0);
-    // Allocation lends unused space to history. It is not the configured ceiling
-    // of the protected instruction block shown by the inspector.
-    let seed_config = &config.context.blocks.seed_prompt_prefix;
-    let available = fw::ContextBudget {
-        max_tokens: window
-            .report
-            .input_capacity
-            .saturating_sub(window.report.protocol_tokens),
-        ..input.budget
-    };
-    let configured_cap =
-        |id: &str,
-         config: &crate::application::short_term_memory::ContextBlockBudgetConfig|
-         -> Result<u32, fw::AgentError> {
-            Ok(fw::configured_block_budget(
-                &fw::ContextBlockConfig::new(id, super::context_providers::block_budget(config)?),
-                available,
-            )?
-            .max_tokens
-            .min(u32::MAX as usize) as u32)
-        };
-    let seed_cap = configured_cap(fw::INSTRUCTIONS_BLOCK, seed_config)?;
-    let checkpoint_cap = configured_cap(
-        "conversation_history_summary",
-        &config.context.blocks.conversation_history_summary,
-    )?;
-    let working_cap = configured_cap(
-        "current_session_working_state",
-        &config.context.blocks.current_session_working_state,
-    )?;
-    let tool_cap = projection
-        .context_window_limit
-        .zip(projection.output_token_reserve)
-        .map(|(window, reserve)| {
-            config
-                .context
-                .blocks
-                .plan(window, reserve)
-                .block_budgets
-                .tool_schema
-                .effective_limit_tokens
-        });
+    // The SDK report contains the exact percentage-derived quotas, including
+    // token rounding and the current request's protocol overhead.
+    let configured_cap = |id: &str| window.report.blocks.iter().find(|block| block.id == id)
+        .and_then(|block| block.configured_tokens).unwrap_or(0).min(u32::MAX as usize) as u32;
+    let seed_cap = configured_cap(fw::INSTRUCTIONS_BLOCK);
+    let checkpoint_cap = configured_cap("conversation_history_summary");
+    let working_cap = configured_cap("current_session_working_state");
+    let tool_cap = Some(window.report.input_capacity.min(u32::MAX as usize) as u32);
     let history_target = eliteforge_agent_memory::ratio_tokens(
         history_cap,
         config.context.providers.history.target_ratio_bps,
@@ -151,8 +118,8 @@ pub(super) fn update(
         report.tool_schema_tokens = projection.tool_schema_token_estimate;
         report.tool_schema_budget_tokens = tool_cap;
         report.prompt_prefix_budget_tokens = Some(seed_cap);
-        report.prompt_prefix_max_ratio_bps = seed_config.max_ratio_bps;
-        report.prompt_prefix_max_tokens = seed_config.max_tokens;
+        report.prompt_prefix_max_ratio_bps = config.context.providers.shares.get("seed_prompt_prefix").copied();
+        report.prompt_prefix_max_tokens = None;
         let history_report = window
             .report
             .blocks

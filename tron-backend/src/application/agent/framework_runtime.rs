@@ -17,9 +17,6 @@ pub(crate) struct ContextLayoutContributorInfo {
     pub display_name: String,
     pub description: String,
     pub default_order: i32,
-    pub default_max_tokens: Option<usize>,
-    pub default_max_ratio_bps: Option<u16>,
-    pub default_max_messages: Option<usize>,
 }
 
 mod dude_context;
