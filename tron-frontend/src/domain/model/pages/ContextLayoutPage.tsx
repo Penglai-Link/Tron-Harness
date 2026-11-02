@@ -1,11 +1,12 @@
 import { contextBlockName } from "@/shared/context/contextBlockPresentation";
 import { useEffect, useMemo, useState } from "react";
-import { GripVertical, RotateCcw, Trash2 } from "lucide-react";
+import { GripVertical, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { TextInput } from "@/components/forms";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { PageHeader } from "@/shared";
 import { fetchContextLayout, updateContextLayout, type ContextLayoutBudget, type ContextLayoutState } from "../api/contextLayoutApi";
 
 const HISTORY_ANCHOR = "current_session_history";
@@ -122,21 +123,20 @@ export function ContextLayoutPage() {
   const inputClass = "h-8 rounded-md border-transparent bg-transparent px-2 text-right font-mono text-sm tabular-nums shadow-none transition-colors hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-elevated-surface)] focus:border-[var(--color-focus-ring)] focus:bg-[var(--color-elevated-surface)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
   return (
-    <div className="mx-auto min-w-0 max-w-5xl pb-8">
-      <header className="mb-7 flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1.5">
-          <h1 className="text-xl font-semibold tracking-tight">{t("contextLayout.title")}</h1>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">{t("contextLayout.subtitle")}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button variant="ghost" disabled={loading || saving} onClick={() => setRefreshKey(value => value + 1)}>
-            <RotateCcw aria-hidden="true" className="size-3.5" />{t("contextLayout.refresh")}
-          </Button>
-          <Button disabled={loading || saving || !changed} onClick={() => void save()}>
-            {saving ? t("contextLayout.saving") : t("contextLayout.save")}
-          </Button>
-        </div>
-      </header>
+    <div className="min-w-0 pb-8">
+      <PageHeader
+        title={t("contextLayout.title")}
+        actions={(
+          <>
+            <Button disabled={loading || saving || !changed} onClick={() => void save()}>
+              {saving ? t("contextLayout.saving") : t("contextLayout.save")}
+            </Button>
+            <Button variant="secondary" disabled={loading || saving} onClick={() => setRefreshKey(value => value + 1)}>
+              {t("contextLayout.refresh")}
+            </Button>
+          </>
+        )}
+      />
 
       {error ? <p role="alert" className="mb-4 text-sm text-[var(--color-error)]">{error}</p> : null}
       {notice ? <p role="status" className="mb-4 text-sm text-[var(--color-success)]">{notice}</p> : null}
@@ -144,8 +144,8 @@ export function ContextLayoutPage() {
       {!loading && layout && order.length === 0 ? <p className="py-10 text-sm text-[var(--color-on-surface-variant)]">{t("contextLayout.empty")}</p> : null}
 
       {!loading && order.length > 0 ? (
-        <section aria-label={t("contextLayout.title")}>
-          <div className={`${columns} border-b border-[var(--color-outline-variant)] px-3 pb-2 text-xs text-[var(--color-on-surface-variant)] sm:px-4`}>
+        <section aria-label={t("contextLayout.title")} className="min-w-0 overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]">
+          <div className={`${columns} border-b border-[var(--color-outline-variant)] px-3 py-2 text-xs text-[var(--color-on-surface-variant)] sm:px-4`}>
             <span className="pl-6">{t("contextLayout.blockColumn")}</span>
             <span className="flex items-center justify-end gap-1">
               {t("contextLayout.tokensColumn")}
@@ -226,7 +226,7 @@ export function ContextLayoutPage() {
               );
             })}
           </ol>
-          <footer className="mt-3 flex items-center gap-1 border-t border-[var(--color-outline-variant)] pt-3 text-xs text-[var(--color-on-surface-variant)]">
+          <footer className="flex items-center gap-1 border-t border-[var(--color-outline-variant)] px-3 py-2 text-xs sm:px-4 text-[var(--color-on-surface-variant)]">
             <InfoTooltip ariaLabel={t("contextLayout.orderHelpLabel")}>{t("contextLayout.orderHelp")} {t("contextLayout.dragHelp")}</InfoTooltip>
             <span>{t("contextLayout.compactHelp")}</span>
           </footer>
