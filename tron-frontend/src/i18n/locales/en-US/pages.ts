@@ -2753,6 +2753,9 @@ export const pages = {
         neo: "Neo",
         "red-blue-pills": "Red and Blue Pills",
         tibo: "Tibo",
+        codex: "Codex",
+        deepseek: "DeepSeek",
+        opencode: "OpenCode",
       },
       editAgent: "Edit {{name}}",
 

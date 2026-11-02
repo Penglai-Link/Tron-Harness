@@ -385,6 +385,9 @@ pub(super) fn validate_avatar_id(id: Option<&str>) -> Result<String, AgentManage
             | "black-hole"
             | "red-blue-pills"
             | "tibo"
+            | "codex"
+            | "deepseek"
+            | "opencode"
     ) {
         Ok(id.to_owned())
     } else {

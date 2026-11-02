@@ -31,7 +31,7 @@ it("validates a distinct identity and saves an explicit model with its base Agen
   expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save" }).disabled).toBe(true);
   fireEvent.change(screen.getByRole("textbox", { name: "Code" }), { target: { value: "codex-fast" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({ agentCode: "codex-fast", name: "Codex Fast", description: "", baseAgentCode: "codex", modelId: "fast-model", reasoningEffort: null, fastMode: false, avatarId: "robot", enabled: true }));
+  await waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({ agentCode: "codex-fast", name: "Codex Fast", description: "", baseAgentCode: "codex", modelId: "fast-model", reasoningEffort: null, fastMode: false, avatarId: "codex", enabled: true }));
   await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
 });
 it("keeps the configured model draft after a failed save and permits retry", async () => {
@@ -79,7 +79,7 @@ it("saves the disabled state from the edit header", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(onSave).toHaveBeenCalledExactlyOnceWith({
     agentCode: "codex-fast", name: "Codex", description: "CLI", baseAgentCode: "codex",
-    modelId: "fast-model", reasoningEffort: null, fastMode: false, avatarId: "robot", enabled: false,
+    modelId: "fast-model", reasoningEffort: null, fastMode: false, avatarId: "codex", enabled: false,
   }));
 });
 
@@ -92,3 +92,20 @@ it("requires a qualified dsh model and saves the selected native route", async (
   fireEvent.click(screen.getByRole("button",{name:"Save"}));
   await waitFor(()=>expect(onSave).toHaveBeenCalledWith(expect.objectContaining({baseAgentCode:"dsh",modelId:"deepseek-account/model/submodel",reasoningEffort:null,fastMode:false})));
 });
+
+for (const avatarId of ["codex", "deepseek", "opencode"]) {
+  it(`previews, saves and restores the ${avatarId} system avatar`, async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const view = render(<SystemAgentProfileDialog agents={agents} onSave={onSave} onClose={vi.fn()} />);
+    fill("custom-avatar", "fast-model");
+    const label = `workspaceAgents.internal.avatar.${avatarId}`;
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    expect(screen.getByRole("img", { name: label }).getAttribute("src")).toBe(`/agent-brands/${avatarId}-pixel.png`);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ avatarId })));
+    view.unmount();
+    render(<SystemAgentProfileDialog agents={agents} record={{ ...agents[0], agentCode: "custom-avatar", baseAgentCode: "codex", modelId: "fast-model", avatarId }} onSave={onSave} onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: label }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("img", { name: label }).getAttribute("src")).toBe(`/agent-brands/${avatarId}-pixel.png`);
+  });
+}

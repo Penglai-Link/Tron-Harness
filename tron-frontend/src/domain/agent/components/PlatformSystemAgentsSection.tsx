@@ -1,5 +1,5 @@
 import { AgentActivationSwitch } from "./AgentActivationSwitch";
-import { AgentAvatar } from "./AgentAvatarPicker";
+import { AgentAvatar, SYSTEM_AGENT_AVATAR_IDS } from "./AgentAvatarPicker";
 import { notifyInternalAgentRegistryChanged } from "../model";
 import { AgentAvailabilityAvatar } from "./AgentAvailabilityAvatar";
 import { useEffect, useState } from "react";
@@ -35,16 +35,10 @@ import { Field } from "@/components/forms";
 import { translateSystemAgentDescription, translateSystemAgentSource } from "../constants/agentPresentation";
 import { SystemAgentProfileDialog } from "./SystemAgentProfileDialog";
 
-const brandImages: Record<string, string> = {
-  codex: "/agent-brands/codex-pixel.png",
-  opencode: "/agent-brands/opencode-pixel.png",
-  dsh: "/agent-brands/deepseek-pixel.png",
-};
-
 function SystemAgentAvatar({ code, name, avatarId }: { code: string; name: string; avatarId?: string | null }) {
-  const image = brandImages[code];
+  const id = avatarId || SYSTEM_AGENT_AVATAR_IDS[code];
   return <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-[var(--color-outline-variant)]">
-    {avatarId ? <AgentAvatar avatarId={avatarId} alt={name} className="size-full" /> : image ? <img src={image} alt={name} className="size-full object-contain [image-rendering:pixelated]" /> : <span className="text-xl font-semibold text-black" aria-hidden="true">{name.slice(0, 2)}</span>}
+    {id ? <AgentAvatar avatarId={id} alt={name} className="size-full" /> : <span className="text-xl font-semibold text-black" aria-hidden="true">{name.slice(0, 2)}</span>}
   </span>;
 }
 

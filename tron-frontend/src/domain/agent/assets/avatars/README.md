@@ -36,6 +36,13 @@ Generated with the built-in `image_gen` tool on 2026-10-10. These PNGs are bundl
 | red-blue-pills | Red and blue capsules against green digital code rain |
 | tibo | Smiling man with short dark hair and a dark shirt |
 
+## System Agent avatars
+
+The shared picker also includes `codex`, `deepseek`, and `opencode`, backed by
+`public/agent-brands/{id}-pixel.png`. These IDs are accepted by the backend and
+can be saved as custom avatars. System Agent cards and the picker share the same
+asset mapping; `dsh` defaults to the `deepseek` avatar.
+
 ## Prompt set
 
 DeepSeek Harness uses a bundled custom blue whale avatar at

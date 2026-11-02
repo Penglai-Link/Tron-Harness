@@ -268,3 +268,34 @@ fn dsh_system_profiles_scan_persist_and_enforce_workspace_policy() {
     agents.enable_workspace_system_agent("SPACE","dsh-custom").unwrap();
     agents.rescan_system_agents().unwrap();assert!(agents.resolve_workspace_agent_runtime("SPACE",Some("dsh-custom")).is_ok());
 }
+
+#[test]
+fn system_avatar_choices_persist_across_profile_updates_restart_and_rescan() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("avatars.sqlite");
+    let path = path.to_str().unwrap();
+    let available = Arc::new(AtomicBool::new(true));
+    let agents = service(path, available.clone());
+    agents.rescan_system_agents().unwrap();
+    for avatar in ["codex", "deepseek", "opencode"] {
+        let code = format!("avatar-{avatar}");
+        let created = agents.create_system_agent_profile_with_settings(
+            &code, &code, "codex", "model-fast", None, Some(avatar.into()), false, None,
+        ).unwrap();
+        assert_eq!(created.avatar_id.as_deref(), Some(avatar));
+        let updated = agents.update_system_agent_profile_with_settings(
+            &code, &code, "model-fast", None, Some(avatar.into()), false, None,
+        ).unwrap();
+        assert_eq!(updated.avatar_id.as_deref(), Some(avatar));
+    }
+    assert!(matches!(agents.update_system_agent_profile_with_settings(
+        "avatar-codex", "Avatar", "model-fast", None, Some("../../outside.png".into()), false, None,
+    ), Err(AgentManagementError::InternalAgentDefinitionInvalid)));
+    drop(agents);
+    let agents = service(path, available);
+    let records = agents.rescan_system_agents().unwrap().records;
+    for avatar in ["codex", "deepseek", "opencode"] {
+        let code = format!("avatar-{avatar}");
+        assert_eq!(records.iter().find(|record| record.agent_code == code).unwrap().avatar_id.as_deref(), Some(avatar));
+    }
+}

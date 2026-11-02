@@ -4,12 +4,19 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
-export const BUILTIN_AGENT_AVATAR_IDS = ["robot", "fox", "cat", "owl", "astronaut", "wizard", "panda", "frog", "penguin", "raccoon", "rabbit", "dragon", "sun", "moon", "earth", "mars", "mercury", "jupiter", "pig", "dog", "cow", "sheep", "horse", "snake", "rat", "chinese-dragon", "kucha", "black-hole", "neo", "red-blue-pills", "tibo"] as const;
+export const SYSTEM_AGENT_AVATAR_IDS: Readonly<Record<string, string>> = { codex: "codex", dsh: "deepseek", opencode: "opencode" };
+const systemAvatarImages: Record<string, string> = {
+  codex: "/agent-brands/codex-pixel.png",
+  deepseek: "/agent-brands/deepseek-pixel.png",
+  opencode: "/agent-brands/opencode-pixel.png",
+};
+
+export const BUILTIN_AGENT_AVATAR_IDS = ["codex", "deepseek", "opencode", "robot", "fox", "cat", "owl", "astronaut", "wizard", "panda", "frog", "penguin", "raccoon", "rabbit", "dragon", "sun", "moon", "earth", "mars", "mercury", "jupiter", "pig", "dog", "cow", "sheep", "horse", "snake", "rat", "chinese-dragon", "kucha", "black-hole", "neo", "red-blue-pills", "tibo"] as const;
 const assets = import.meta.glob<string>("../assets/avatars/*.png", { eager: true, query: "?url", import: "default" });
 
 export function AgentAvatar({ avatarId, alt = "", className }: { avatarId?: string; alt?: string; className?: string }) {
   const id = BUILTIN_AGENT_AVATAR_IDS.find((id) => id === avatarId) ?? "robot";
-  return <img src={assets[`../assets/avatars/${id}.png`]} alt={alt} width={64} height={64} draggable={false} className={cn("object-cover [image-rendering:pixelated]", className)} />;
+  return <img src={systemAvatarImages[id] ?? assets[`../assets/avatars/${id}.png`]} alt={alt} width={64} height={64} draggable={false} className={cn("object-cover [image-rendering:pixelated]", className)} />;
 }
 
 export function AgentAvatarPicker({ value, disabled, onChange }: { value: string; disabled?: boolean; onChange: (id: string) => void }) {

@@ -1,4 +1,4 @@
-import { AgentAvatarPicker } from "./AgentAvatarPicker";
+import { AgentAvatarPicker, SYSTEM_AGENT_AVATAR_IDS } from "./AgentAvatarPicker";
 import { AgentDescriptionField } from "./AgentDescriptionField";
 import type { ReasoningEffort } from "@/domain/model/model/ModelRegistryModel";
 import { AgentActivationSwitch } from "./AgentActivationSwitch";
@@ -29,7 +29,7 @@ export function SystemAgentProfileDialog({ agents, record, onSave, onClose }: {
   const [description, setDescription] = useState(record?.description ?? "");
   const [modelId, setModel] = useState(record?.modelId ?? "");
   const isBase = Boolean(record && !record.baseAgentCode);
-  const [avatarId, setAvatar] = useState(record?.avatarId ?? "robot");
+  const [avatarId, setAvatar] = useState(record?.avatarId ?? SYSTEM_AGENT_AVATAR_IDS[baseAgentCode] ?? "robot");
   const [effort, setEffort] = useState<ReasoningEffort | "Default">(record?.reasoningEffort ?? "Default");
   const [fastMode, setFastMode] = useState(record?.fastMode ?? false);
   const [enabled, setEnabled] = useState(record?.enabled ?? true);

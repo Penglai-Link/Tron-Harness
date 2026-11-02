@@ -2668,6 +2668,9 @@ export const pages = {
         neo: "尼奥",
         "red-blue-pills": "红蓝药丸",
         tibo: "Tibo",
+        codex: "Codex",
+        deepseek: "DeepSeek",
+        opencode: "OpenCode",
       },
       editAgent: "编辑 {{name}}",
 
