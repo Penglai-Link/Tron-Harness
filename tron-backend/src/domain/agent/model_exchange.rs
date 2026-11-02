@@ -58,6 +58,8 @@ pub struct ModelTokenUsage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenEstimateSnapshot {
+    #[serde(default)]
+    pub estimator: String,
     pub estimated_input_tokens: u32,
     pub message_token_estimate: u32,
     pub tool_schema_token_estimate: u32,
@@ -83,7 +85,6 @@ pub struct TokenUsageAuditSnapshot {
     pub cumulative_run_usage: Option<ModelTokenUsage>,
     pub input_token_delta: Option<i64>,
     pub input_token_ratio: Option<f64>,
-    pub calibration_factor: Option<f64>,
     pub response_id: Option<String>,
     pub usage_source: String,
     pub usage_confidence: String,

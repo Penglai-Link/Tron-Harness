@@ -201,7 +201,7 @@ fn add_binding(
         vec![descriptor],
     )
     .with_protocol(protocol(&config))
-    .with_token_estimator(Arc::new(super::super::context::TronTokenEstimator));
+    .with_token_estimator(Arc::new(super::super::token_estimation::TronTokenEstimator::new(&config)));
     runtime
         .replace_connection(
             &model.connection,
@@ -320,7 +320,7 @@ impl sdk::ModelCatalogRefresh for AuthorizedRefresh {
                     vec![eliteforge_agent_official_plugin_model_http::model_descriptor(&wire)],
                 )
                 .with_protocol(protocol(&config))
-                .with_token_estimator(Arc::new(super::super::context::TronTokenEstimator)),
+                .with_token_estimator(Arc::new(super::super::token_estimation::TronTokenEstimator::new(&config))),
             );
         }
         if self.account_identity() != Some(expected.clone()) {

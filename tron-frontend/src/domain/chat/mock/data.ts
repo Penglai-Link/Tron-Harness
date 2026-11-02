@@ -69,7 +69,6 @@ const mockRequestEstimate: ChatTokenEstimateSnapshot = {
 };
 
 const mockUsageAudit: ChatUsageAuditSnapshot = {
-  calibrationFactor: 1.06,
   cumulativeRunUsage: {
     inputTokens: 24_100,
     outputTokens: 2_400,

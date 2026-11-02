@@ -398,6 +398,7 @@ function normalizeUsageEstimate(parsed: Partial<ChatTokenEstimateSnapshot> | nul
     checkpointCode: parsed.checkpointCode ?? null,
     contextWindowLimit: tokenField(parsed.contextWindowLimit),
     effectiveInputBudget: tokenField(parsed.effectiveInputBudget),
+    estimator: parsed.estimator ?? "unicode_estimate",
     estimatedInputTokens: parsed.estimatedInputTokens,
     messageTokenEstimate: parsed.messageTokenEstimate,
     modelCode: parsed.modelCode ?? "",
@@ -488,7 +489,6 @@ function parsedUsageAudit(value: string | null | undefined): ChatUsageAuditSnaps
     const requestEstimate = normalizeUsageEstimate(parsed.requestEstimate);
     if (!requestEstimate) return null;
     return {
-      calibrationFactor: typeof parsed.calibrationFactor === "number" ? parsed.calibrationFactor : null,
       cumulativeRunUsage: normalizeTokenUsage(parsed.cumulativeRunUsage),
       inputTokenDelta: typeof parsed.inputTokenDelta === "number" ? parsed.inputTokenDelta : null,
       inputTokenRatio: typeof parsed.inputTokenRatio === "number" ? parsed.inputTokenRatio : null,
@@ -1789,7 +1789,7 @@ function ProviderUsagePanel({
         </h4>
         <div className="grid grid-cols-3 gap-1.5">
           <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(providerUsage?.inputTokens)} />
-          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(providerUsage?.cachedInputTokens ?? 0)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(providerUsage?.cachedInputTokens)} />
           <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(providerUsage?.reasoningTokens)} />
         </div>
         <p className="mt-2 rounded-md bg-[var(--color-surface-container-low)] px-2 py-1.5 text-[10px] leading-4 text-[var(--color-on-surface-variant)]">
@@ -1800,11 +1800,9 @@ function ProviderUsagePanel({
                 delta: formatCompactTokenCount(usageAudit?.inputTokenDelta),
                 estimate: formatCompactTokenCount(requestEstimate.estimatedInputTokens),
               })}
-              {usageAudit?.calibrationFactor ? (
-                <span> {t("chat.shortTermMemory.contextPanel.calibration", {
-                  factor: new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(usageAudit.calibrationFactor),
-                })}</span>
-              ) : null}
+              <span> {requestEstimate.estimator && requestEstimate.estimator !== "unicode_estimate"
+                ? t("chat.shortTermMemory.contextPanel.vendorTokenizer", { model: requestEstimate.estimator })
+                : t("chat.shortTermMemory.contextPanel.localHeuristic")}</span>
             </>
           ) : (
             t("chat.shortTermMemory.contextPanel.providerUnavailable")

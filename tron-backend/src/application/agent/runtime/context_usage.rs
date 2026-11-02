@@ -14,6 +14,7 @@ impl ReactAgent {
         let token_usage = crate::application::short_term_memory::memory_provider_usage(result);
         let response = ModelResponse::final_output_with_usage(&result.summary, token_usage);
         let estimate = crate::domain::agent::TokenEstimateSnapshot {
+            estimator: "unicode_estimate".into(),
             estimated_input_tokens: result.usage.input_tokens.min(u64::from(u32::MAX)) as u32,
             message_token_estimate: result.usage.input_tokens.min(u64::from(u32::MAX)) as u32,
             tool_schema_token_estimate: 0,

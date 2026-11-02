@@ -1,8 +1,3 @@
-use std::{
-    collections::HashMap,
-    sync::{Mutex, OnceLock},
-};
-
 use crate::{
     application::short_term_memory::PreparedModelContext,
     domain::agent::{
@@ -11,13 +6,15 @@ use crate::{
     },
 };
 
-const CALIBRATION_ALPHA: f64 = 0.2;
-
 pub(crate) fn request_estimate_snapshot(
     context: &AgentRunContext,
     prepared_context: &PreparedModelContext,
 ) -> TokenEstimateSnapshot {
     TokenEstimateSnapshot {
+        estimator: super::framework_runtime::token_estimation::TronTokenEstimator::source(
+            &context.model,
+        )
+        .into(),
         estimated_input_tokens: prepared_context.estimated_tokens,
         message_token_estimate: prepared_context.message_token_estimate,
         tool_schema_token_estimate: prepared_context.tool_schema_token_estimate,
@@ -49,8 +46,6 @@ pub(crate) fn usage_audit_snapshot(
     });
     let input_token_ratio = provider_usage
         .and_then(|usage| token_ratio(usage.input_tokens, request_estimate.estimated_input_tokens));
-    let calibration_factor =
-        input_token_ratio.map(|ratio| update_calibration_factor(&request_estimate, ratio));
     let usage_source = if provider_usage.is_some() {
         "provider"
     } else {
@@ -68,7 +63,6 @@ pub(crate) fn usage_audit_snapshot(
         cumulative_run_usage,
         input_token_delta,
         input_token_ratio,
-        calibration_factor,
         response_id: response.response_id().map(str::to_string),
         usage_source: usage_source.into(),
         usage_confidence: usage_confidence.into(),
@@ -90,24 +84,6 @@ fn token_ratio(actual: u32, estimated: u32) -> Option<f64> {
         return None;
     }
     Some(f64::from(actual) / f64::from(estimated))
-}
-
-fn update_calibration_factor(estimate: &TokenEstimateSnapshot, ratio: f64) -> f64 {
-    let key = format!(
-        "{}:{}:{}",
-        estimate.model_protocol, estimate.model_code, estimate.model_name
-    );
-    let mut guard = calibration_factors()
-        .lock()
-        .expect("usage calibration mutex poisoned");
-    let entry = guard.entry(key).or_insert(ratio);
-    *entry = (*entry * (1.0 - CALIBRATION_ALPHA)) + (ratio * CALIBRATION_ALPHA);
-    *entry
-}
-
-fn calibration_factors() -> &'static Mutex<HashMap<String, f64>> {
-    static FACTORS: OnceLock<Mutex<HashMap<String, f64>>> = OnceLock::new();
-    FACTORS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn protocol_code(protocol: AgentModelProtocol) -> &'static str {

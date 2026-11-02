@@ -86,6 +86,7 @@ export interface ChatTokenUsage {
 }
 
 export interface ChatTokenEstimateSnapshot {
+  estimator?: string;
   estimatedInputTokens: number;
   messageTokenEstimate: number;
   toolSchemaTokenEstimate: number;
@@ -143,7 +144,6 @@ export interface ChatUsageAuditSnapshot {
   cumulativeRunUsage?: ChatTokenUsage | null;
   inputTokenDelta?: number | null;
   inputTokenRatio?: number | null;
-  calibrationFactor?: number | null;
   responseId?: string | null;
   usageSource: string;
   usageConfidence: string;

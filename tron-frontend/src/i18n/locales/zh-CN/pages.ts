@@ -2218,7 +2218,8 @@ export const pages = {
         reasoning: "推理",
         providerDelta:
           "本地估算 {{estimate}}，Provider 实际 {{actual}}，偏差 {{delta}}。",
-        calibration: "校准 {{factor}}。",
+        vendorTokenizer: "使用 {{model}} tokenizer；协议开销为估算。",
+        localHeuristic: "通用近似估算，以 Provider 用量为准。",
         providerUnavailable: "Provider usage 会在下一轮运行后显示。",
       },
       rows: {
