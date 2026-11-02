@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     app::AppState,
-    application::{short_term_memory::ContextBudgetConfig, system_config::SystemConfigChange},
+    application::{short_term_memory::{ContextBudgetConfig, ContextProvidersConfig}, system_config::SystemConfigChange},
     response::ApiResponse,
 };
 
@@ -41,6 +41,13 @@ pub(super) struct ContextLayoutBlockVo {
 #[serde(rename_all = "camelCase")]
 pub(super) struct ContextLayoutVo {
     revision: String, order: Vec<String>, shares: BTreeMap<String, u32>, blocks: Vec<ContextLayoutBlockVo>,
+    defaults: ContextLayoutDefaultsVo,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ContextLayoutDefaultsVo {
+    order: Vec<String>,
+    shares: BTreeMap<String, u32>,
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -177,11 +184,16 @@ fn build_layout(
 ) -> ContextLayoutVo {
     let providers = &config.providers;
     let contributors = contributors.into_iter().map(|item| (item.block_id.clone(), item)).collect::<HashMap<_, _>>();
-    let mut order = providers.order.clone();
-    let mut additions = contributors.values().filter(|item| !order.contains(&item.block_id))
-        .map(|item| (item.default_order, item.block_id.clone())).collect::<Vec<_>>();
-    additions.sort(); order.extend(additions.into_iter().map(|(_, id)| id));
+    let order = ordered_sources(providers, &contributors);
     let shares = providers.effective_shares(&order);
+    // Use the same built-in configuration as new runtimes, never saved overrides.
+    // Active plugin sources are included; stale unloaded sources are not restored.
+    let built_in = ContextProvidersConfig::default();
+    let default_order = ordered_sources(&built_in, &contributors);
+    let defaults = ContextLayoutDefaultsVo {
+        shares: built_in.effective_shares(&default_order),
+        order: default_order,
+    };
     let blocks = order.iter().map(|id| {
         if let Some(item) = contributors.get(id) {
             ContextLayoutBlockVo { id: id.clone(), display_name: item.display_name.clone(), description: item.description.clone(),
@@ -192,5 +204,17 @@ fn build_layout(
                 plugin: !native, unavailable: !native, provider_id: None }
         }
     }).collect();
-    ContextLayoutVo { revision, order, shares, blocks }
+    ContextLayoutVo { revision, order, shares, blocks, defaults }
+}
+
+fn ordered_sources(
+    providers: &ContextProvidersConfig,
+    contributors: &HashMap<String, crate::application::agent::framework_runtime::ContextLayoutContributorInfo>,
+) -> Vec<String> {
+    let mut order = providers.order.clone();
+    let mut additions = contributors.values().filter(|item| !order.contains(&item.block_id))
+        .map(|item| (item.default_order, item.block_id.clone())).collect::<Vec<_>>();
+    additions.sort();
+    order.extend(additions.into_iter().map(|(_, id)| id));
+    order
 }

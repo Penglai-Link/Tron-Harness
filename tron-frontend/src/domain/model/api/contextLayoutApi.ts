@@ -9,12 +9,18 @@ export interface ContextLayoutBlock {
   providerId: string | null;
 }
 
+export interface ContextLayoutDefaults {
+  order: string[];
+  shares: Record<string, number>;
+}
+
 export interface ContextLayoutState {
   revision: string;
   order: string[];
   /** Basis points; the complete distribution must total exactly 10,000. */
   shares: Record<string, number>;
   blocks: ContextLayoutBlock[];
+  defaults: ContextLayoutDefaults;
 }
 
 export function fetchContextLayout(signal?: AbortSignal) {

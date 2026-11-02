@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { GripVertical, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { PageHeader } from "@/shared";
@@ -16,6 +17,7 @@ export function ContextLayoutPage() {
   const [order, setOrder] = useState<string[]>([]);
   const [shares, setShares] = useState<Record<string, number>>({});
   const [previewWindow, setPreviewWindow] = useState(1_000_000);
+  const [resetOpen, setResetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -37,6 +39,10 @@ export function ContextLayoutPage() {
 
   const blocksById = useMemo(() => new Map((layout?.blocks ?? []).map(block => [block.id, block])), [layout]);
   const changed = layout !== null && (JSON.stringify(order) !== JSON.stringify(layout.order) || JSON.stringify(shares) !== JSON.stringify(layout.shares));
+  const canReset = layout?.defaults != null && (
+    JSON.stringify(order) !== JSON.stringify(layout.defaults.order)
+    || JSON.stringify(shares) !== JSON.stringify(layout.defaults.shares)
+  );
   const total = Object.values(shares).reduce((sum, value) => sum + value, 0);
   const valid = total === 10_000 && order.every(id => Number.isSafeInteger(shares[id]) && shares[id] >= 1 && shares[id] <= 10_000) && Object.keys(shares).length === order.length;
   const validationMessage = t(total > 10_000 ? "contextLayout.shareExcess" : "contextLayout.shareMissing", { value: Math.abs(total - 10_000) / 100 });
@@ -52,6 +58,14 @@ export function ContextLayoutPage() {
   function removeBlock(id: string) {
     setOrder(current => current.filter(value => value !== id));
     setShares(current => { const next = { ...current }; delete next[id]; return next; });
+  }
+  function reset() {
+    if (!layout?.defaults || saving) return;
+    setOrder([...layout.defaults.order]);
+    setShares({ ...layout.defaults.shares });
+    setDraggedId(null);
+    setError("");
+    setNotice(t("contextLayout.resetDraft"));
   }
   async function save() {
     if (!layout || saving || !changed) return;
@@ -71,6 +85,7 @@ export function ContextLayoutPage() {
     <div className="min-w-0 pb-8">
       <PageHeader title={t("contextLayout.title")} actions={<>
         <Button disabled={loading || saving || !changed || !valid} onClick={() => void save()}>{saving ? t("contextLayout.saving") : t("contextLayout.save")}</Button>
+        <Button variant="secondary" disabled={loading || saving || !canReset} onClick={() => setResetOpen(true)}>{t("contextLayout.reset")}</Button>
         <Button variant="secondary" disabled={loading || saving} onClick={() => setRefreshKey(value => value + 1)}>{t("contextLayout.refresh")}</Button>
       </>} />
       {error ? <p role="alert" className="mb-4 text-sm text-[var(--color-error)]">{error}</p> : null}
@@ -123,6 +138,17 @@ export function ContextLayoutPage() {
           <span>{t("contextLayout.totalShare", { value: total / 100 })}</span><span>{valid ? t("contextLayout.totalValid") : total === 10_000 ? t("contextLayout.positiveShareRequired") : validationMessage}</span>
         </div>
       </> : null}
+      <ConfirmDialog
+        open={resetOpen}
+        tone="default"
+        pending={loading || saving}
+        title={t("contextLayout.resetTitle")}
+        description={t("contextLayout.resetDescription")}
+        cancelText={t("contextLayout.resetCancel")}
+        confirmText={t("contextLayout.resetConfirm")}
+        onCancel={() => setResetOpen(false)}
+        onConfirm={() => { reset(); setResetOpen(false); }}
+      />
     </div>
   );
 }
