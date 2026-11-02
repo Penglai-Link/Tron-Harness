@@ -744,6 +744,7 @@ fn resolve_invocation_model(
         AgentRuntimeType::React => requested_model.ok_or(AgentInvocationError::ModelRequired),
         AgentRuntimeType::CodexExec
         | AgentRuntimeType::CodexAppServer
+        | AgentRuntimeType::DshHeadless
         | AgentRuntimeType::OpenCodeRun
         | AgentRuntimeType::OpenCodeServe
         | AgentRuntimeType::OpenCodeAcp => {
@@ -769,6 +770,7 @@ fn runtime_selection_for_agent(
             command_name: required_runtime_command_name(resolved_agent)?,
             working_directory: local_directory,
         }),
+        AgentRuntimeType::DshHeadless => Ok(RuntimeAdapterSelection::DshHeadless { command_name: required_runtime_command_name(resolved_agent)?, working_directory: local_directory }),
         AgentRuntimeType::OpenCodeRun => Ok(RuntimeAdapterSelection::OpenCodeRun {
             command_name: required_runtime_command_name(resolved_agent)?,
             working_directory: local_directory,
@@ -920,6 +922,7 @@ mod gateway_tests {
             &crate::config::SystemAgentConfig {
                 codex_command: String::new(),
                 opencode_command: String::new(),
+                dsh_command: String::new(),
             },
         );
         let tool = EffectiveTool {
@@ -1034,6 +1037,7 @@ mod gateway_tests {
                 &crate::config::SystemAgentConfig {
                     codex_command: String::new(),
                     opencode_command: String::new(),
+                    dsh_command: String::new(),
                 },
             )
         };

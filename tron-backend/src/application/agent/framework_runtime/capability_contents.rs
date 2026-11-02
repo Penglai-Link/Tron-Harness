@@ -158,7 +158,7 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             }),
     );
     let plugins: &[&str] = match id {
-        "framework.external-agent" => &["framework.external-agent", "framework.loop"],
+        "framework.external-agent" => &["framework.external-agent", "tron.external-loop"],
         "framework.local.scoped" => &["framework.pty.service", "framework.local.scoped.tools"],
         "framework.tool-pack.agent-collaboration" => &["tools.agents"],
         "framework.a2ui" => &["agent.a2ui"],
@@ -224,7 +224,7 @@ fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityCon
             "Connect external agents to host execution and session bridging",
             &["HostExternalAgent"],
         ),
-        "framework.loop" => (
+        "tron.external-loop" => (
             "Run external agents with native session ownership and observation events",
             &["Independent ExternalAgentLoop"],
         ),
@@ -421,7 +421,7 @@ mod content_tests {
         let external = builtin_contents("framework.external-agent");
         let plugin = external
             .iter()
-            .find(|item| item.name == "framework.loop")
+            .find(|item| item.name == "tron.external-loop")
             .unwrap();
         assert_eq!(plugin.provides, ["Independent ExternalAgentLoop"]);
         let json = serde_json::to_value(&external).unwrap();

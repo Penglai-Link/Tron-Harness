@@ -82,3 +82,13 @@ it("saves the disabled state from the edit header", async () => {
     modelId: "fast-model", reasoningEffort: null, fastMode: false, avatarId: "robot", enabled: false,
   }));
 });
+
+it("requires a qualified dsh model and saves the selected native route", async () => {
+  const onSave=vi.fn().mockResolvedValue(undefined);
+  render(<SystemAgentProfileDialog agents={[{...agents[0],agentCode:"dsh",name:"DeepSeek Harness",models:[]}]} onSave={onSave} onClose={vi.fn()} />);
+  fill("dsh-custom", "model");
+  expect(screen.getByRole<HTMLButtonElement>("button",{name:"Save"}).disabled).toBe(true);
+  fireEvent.change(screen.getByRole("combobox",{name:"Model"}),{target:{value:"deepseek-account/model/submodel"}});
+  fireEvent.click(screen.getByRole("button",{name:"Save"}));
+  await waitFor(()=>expect(onSave).toHaveBeenCalledWith(expect.objectContaining({baseAgentCode:"dsh",modelId:"deepseek-account/model/submodel",reasoningEffort:null,fastMode:false})));
+});

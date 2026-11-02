@@ -288,6 +288,7 @@ export const routePages: Record<string, RoutePageComponent> = {
     }))
   ),
   "settings.automaticRouters": lazy(() => import("@/domain/model/pages/AutomaticRoutersPage").then(module => ({ default: module.AutomaticRoutersPage }))),
+  "settings.contextLayout": lazy(() => import("@/domain/model/pages/ContextLayoutPage").then(module => ({ default: module.ContextLayoutPage }))),
   "settings.modelProviders": lazy(() =>
     import("@/domain/model/pages/ModelProvidersPage").then((module) => ({
       default: module.ModelProvidersPage,

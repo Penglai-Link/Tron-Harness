@@ -1,5 +1,6 @@
 use crate::application::agent::{
-    ActiveRunError, ActiveRunGuard, ActiveRunRegistry, AgentInvocationError, generate_agent_run_code,
+    ActiveRunError, ActiveRunGuard, ActiveRunRegistry, AgentInvocationError,
+    generate_agent_run_code,
 };
 
 use super::{ChatSendError, ChatService};
@@ -19,7 +20,7 @@ impl ChatService {
         &self,
         session_code: &str,
         requested_run_code: Option<String>,
-        agent_code: &str,
+        runtime_type: crate::domain::agent::AgentRuntimeType,
         compacting: bool,
     ) -> Result<ChatRunReservation, ChatSendError> {
         let run_code = requested_run_code
@@ -31,15 +32,20 @@ impl ChatService {
                 "runCode must be a UUID".into(),
             ))
         })?;
-        let runtime_adapter_key = runtime_adapter_key_for_agent(agent_code);
+        let runtime_adapter_key = runtime_adapter_key_for_agent(runtime_type);
         if compacting && runtime_adapter_key != MAIN_RUNTIME_ADAPTER_KEY {
             return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
                 "Context compaction requires a native agent".into(),
             )));
         }
         let supports_steer = runtime_adapter_key == MAIN_RUNTIME_ADAPTER_KEY;
-        let reserve = if compacting { ActiveRunRegistry::reserve_context_compaction } else { ActiveRunRegistry::reserve };
-        let guard = match reserve(&self.active_runs,
+        let reserve = if compacting {
+            ActiveRunRegistry::reserve_context_compaction
+        } else {
+            ActiveRunRegistry::reserve
+        };
+        let guard = match reserve(
+            &self.active_runs,
             session_code,
             &run_code,
             runtime_adapter_key,
@@ -74,10 +80,15 @@ impl ChatService {
     }
 }
 
-fn runtime_adapter_key_for_agent(agent_code: &str) -> &'static str {
-    match agent_code.trim().to_ascii_lowercase().as_str() {
-        "codex" => CODEX_RUNTIME_ADAPTER_KEY,
-        "opencode" => OPENCODE_RUNTIME_ADAPTER_KEY,
-        _ => MAIN_RUNTIME_ADAPTER_KEY,
+fn runtime_adapter_key_for_agent(runtime: crate::domain::agent::AgentRuntimeType) -> &'static str {
+    use crate::domain::agent::AgentRuntimeType;
+    match runtime {
+        AgentRuntimeType::React => MAIN_RUNTIME_ADAPTER_KEY,
+        AgentRuntimeType::CodexExec => CODEX_RUNTIME_ADAPTER_KEY,
+        AgentRuntimeType::OpenCodeRun => OPENCODE_RUNTIME_ADAPTER_KEY,
+        AgentRuntimeType::DshHeadless => "DSH_HEADLESS",
+        AgentRuntimeType::CodexAppServer => "CODEX_APP_SERVER",
+        AgentRuntimeType::OpenCodeServe => "OPENCODE_SERVE",
+        AgentRuntimeType::OpenCodeAcp => "OPENCODE_ACP",
     }
 }

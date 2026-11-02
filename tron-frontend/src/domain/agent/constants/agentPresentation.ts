@@ -27,6 +27,7 @@ const internalAgentGroupCatalogKeyByName: Record<string, string> = {
 const systemAgentCatalogKeyByCode: Record<string, string> = {
   codex: "codex",
   opencode: "opencode",
+  dsh: "dsh",
 };
 
 export function translateInternalAgentName(t: TFunction, agent: WorkspaceInternalAgentRecord) {
@@ -59,6 +60,7 @@ export function translateInternalAgentDescription(t: TFunction, agent: Workspace
 
 export function translateSystemAgentDescription(t: TFunction, agent: Pick<WorkspaceSystemAgentRecord, "agentCode" | "baseAgentCode" | "description">) {
   const defaults: Record<string, string[]> = {
+    dsh: ["DeepSeek Harness CLI agent runtime."],
     codex: ["OpenAI Codex CLI agent runtime.", "OpenAI coding agent runtime used for structured feature delivery."],
     opencode: ["OpenCode CLI agent runtime.", "Local CLI coding agent kept as a platform-level fallback executor."],
   };

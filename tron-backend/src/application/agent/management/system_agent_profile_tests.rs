@@ -38,6 +38,7 @@ fn service(path: &str, available: Arc<AtomicBool>) -> AgentManagementService {
         system_agents::supported_system_agents_from_config(&SystemAgentConfig {
             codex_command: "fixture-codex".into(),
             opencode_command: String::new(),
+            dsh_command: String::new(),
         }),
         Arc::new(Probe(available)),
     )
@@ -232,4 +233,38 @@ fn system_profiles_validate_identity_and_configuration_and_keep_scanned_agents_r
         agents.delete_system_agent_profile("codex"),
         Err(AgentManagementError::BuiltinAgentReadOnly)
     ));
+}
+
+#[test]
+fn dsh_profiles_require_provider_and_preserve_model_slashes() {
+    assert!(validate_profile("DSH", "provider/model/submodel", AgentRuntimeType::DshHeadless).is_ok());
+    for invalid in ["model", "/model", "provider/"] { assert!(validate_profile("DSH", invalid, AgentRuntimeType::DshHeadless).is_err()); }
+    assert!(validate_fast_mode(AgentRuntimeType::DshHeadless, true).is_err());
+}
+#[test]
+fn dsh_runtime_code_roundtrips() {
+    use crate::application::agent::RuntimeAdapterKey;
+    assert_eq!(RuntimeAdapterKey::from_code("DSH_HEADLESS"), Some(RuntimeAdapterKey::DshHeadless));
+    assert_eq!(serde_json::to_string(&AgentRuntimeType::DshHeadless).unwrap(), "\"DSH_HEADLESS\"");
+}
+
+#[test]
+fn dsh_system_profiles_scan_persist_and_enforce_workspace_policy() {
+    struct DshProbe;
+    impl SystemCommandProbe for DshProbe {
+        fn is_available(&self, command: &str) -> Result<bool,String> {Ok(command=="fixture-dsh")}
+        fn list_models(&self,_: &str,_: &str)->Result<Vec<SystemAgentModelRecord>,String> {
+            Ok(vec![SystemAgentModelRecord{model_id:"account/model".into(),display_name:"Model".into(),context_window_tokens:Some(128_000),supported_reasoning_efforts:vec![crate::domain::reasoning::ReasoningEffort::High]}])
+        }
+    }
+    let temp=tempfile::tempdir().unwrap(); let path=temp.path().join("dsh.sqlite"); let path=path.to_str().unwrap();
+    let agents=AgentManagementService::with_probe(SqliteAgentManagementRepository::connect(path).unwrap(),WorkspaceService::new(SqliteWorkspaceRepository::connect(path).unwrap()),system_agents::supported_system_agents_from_config(&SystemAgentConfig{codex_command:String::new(),opencode_command:String::new(),dsh_command:"fixture-dsh".into()}),Arc::new(DshProbe));
+    workspace(path);let scan=agents.rescan_system_agents().unwrap();assert_eq!(scan.available_count,1);
+    let profile=agents.create_system_agent_profile("dsh-custom","DSH custom","dsh","account/model").unwrap();assert_eq!(profile.runtime_type,AgentRuntimeType::DshHeadless);
+    agents.assign_agent_workspaces("dsh-custom",vec!["SPACE".into()]).unwrap();
+    let runtime=agents.resolve_workspace_agent_runtime("SPACE",Some("dsh-custom")).unwrap();assert_eq!(runtime.system_model_id.as_deref(),Some("account/model"));
+    agents.disable_workspace_system_agent("SPACE","dsh-custom").unwrap();
+    assert!(matches!(agents.resolve_workspace_agent_runtime("SPACE",Some("dsh-custom")),Err(AgentManagementError::SystemAgentUnavailable)));
+    agents.enable_workspace_system_agent("SPACE","dsh-custom").unwrap();
+    agents.rescan_system_agents().unwrap();assert!(agents.resolve_workspace_agent_runtime("SPACE",Some("dsh-custom")).is_ok());
 }

@@ -291,6 +291,7 @@ impl AppConfigFile {
 struct SystemAgentFileConfig {
     codex_command: Option<String>,
     opencode_command: Option<String>,
+    dsh_command: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -316,6 +317,7 @@ impl SystemAgentConfig {
         if let Some(value) = overrides.codex_command {
             self.codex_command = value;
         }
+        if let Some(value) = overrides.dsh_command { self.dsh_command = value; }
         if let Some(value) = overrides.opencode_command {
             self.opencode_command = value;
         }

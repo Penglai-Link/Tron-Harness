@@ -443,7 +443,9 @@ pub async fn rescan_platform_system_agents(
     State(agent_management): State<AgentManagementService>,
     _auth: RequestAuthContext,
 ) -> Response {
-    match agent_management.rescan_system_agents() {
+    let result = tokio::task::spawn_blocking(move || agent_management.rescan_system_agents()).await
+        .unwrap_or(Err(crate::domain::agent::AgentManagementError::StorageFailure));
+    match result {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_management_error_response(error),
     }

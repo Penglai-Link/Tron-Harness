@@ -97,6 +97,7 @@ impl SystemCliRuntime {
                 .reasoning_effort
                 .map(|effort| effort.provider_value().to_owned()),
         )
+        .with_dsh_options(eliteforge_agent_capability_external::DshCliOptions { reuse_stored_credentials: true, provider_profile: Some("desktop".into()) })
         .with_fast_mode(context.system_agent_fast_mode)
         .invoke(request, sink)
         .await

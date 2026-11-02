@@ -24,6 +24,7 @@ pub enum RuntimeAdapterKey {
     CodexExec,
     CodexAppServer,
     OpenCodeRun,
+    DshHeadless,
     OpenCodeServe,
     OpenCodeAcp,
 }
@@ -35,6 +36,7 @@ impl RuntimeAdapterKey {
             Self::CodexExec => "CODEX_EXEC",
             Self::CodexAppServer => "CODEX_APP_SERVER",
             Self::OpenCodeRun => "OPENCODE_RUN",
+            Self::DshHeadless => "DSH_HEADLESS",
             Self::OpenCodeServe => "OPENCODE_SERVE",
             Self::OpenCodeAcp => "OPENCODE_ACP",
         }
@@ -46,6 +48,7 @@ impl RuntimeAdapterKey {
             "CODEX_EXEC" => Some(Self::CodexExec),
             "CODEX_APP_SERVER" => Some(Self::CodexAppServer),
             "OPENCODE_RUN" => Some(Self::OpenCodeRun),
+            "DSH_HEADLESS" => Some(Self::DshHeadless),
             "OPENCODE_SERVE" => Some(Self::OpenCodeServe),
             "OPENCODE_ACP" => Some(Self::OpenCodeAcp),
             _ => None,
@@ -71,6 +74,12 @@ impl RuntimeAdapterKey {
                 name: "Codex App Server Runtime",
                 stage: RuntimeAdapterStage::Ga,
                 capabilities: RuntimeCapabilities::service_mode(),
+            },
+            Self::DshHeadless => RuntimeAdapterDescriptor {
+                key: self,
+                name: "DeepSeek Harness Headless Runtime",
+                stage: RuntimeAdapterStage::Ga,
+                capabilities: RuntimeCapabilities::system_cli(),
             },
             Self::OpenCodeRun => RuntimeAdapterDescriptor {
                 key: self,
@@ -122,6 +131,7 @@ pub fn runtime_adapter_descriptors() -> Vec<RuntimeAdapterDescriptor> {
         RuntimeAdapterKey::React,
         RuntimeAdapterKey::CodexExec,
         RuntimeAdapterKey::CodexAppServer,
+        RuntimeAdapterKey::DshHeadless,
         RuntimeAdapterKey::OpenCodeRun,
         RuntimeAdapterKey::OpenCodeServe,
         RuntimeAdapterKey::OpenCodeAcp,
@@ -198,7 +208,8 @@ pub trait AgentRuntime: Send + Sync {
         context: AgentRunContext,
         sink: Option<ModelStreamSink>,
         _observations: Arc<dyn Fn(crate::domain::agent::ToolObservation) + Send + Sync>,
-    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
+    {
         match session {
             Some(session) => self.resume(session, context, sink),
             None => self.start(context, sink),
@@ -234,6 +245,10 @@ pub enum RuntimeAdapterSelection {
     },
     CodexAppServer {
         endpoint: String,
+        working_directory: Option<String>,
+    },
+    DshHeadless {
+        command_name: String,
         working_directory: Option<String>,
     },
     OpenCodeRun {
@@ -345,6 +360,16 @@ impl AgentRuntimeRegistry {
                 RuntimeAdapterKey::CodexExec,
                 RuntimeCapabilities::system_cli(),
                 SystemAgentCliKind::Codex,
+                command_name,
+                working_directory,
+            )),
+            RuntimeAdapterSelection::DshHeadless {
+                command_name,
+                working_directory,
+            } => Arc::new(SystemCliRuntime::new(
+                RuntimeAdapterKey::DshHeadless,
+                RuntimeCapabilities::system_cli(),
+                SystemAgentCliKind::Dsh,
                 command_name,
                 working_directory,
             )),

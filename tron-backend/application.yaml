@@ -38,6 +38,7 @@ resource:
 systemAgents:
   codexCommand: codex
   opencodeCommand: opencode
+  dshCommand: dsh
 
 # Model budgets are read at the next invocation; batch limits at the next embedding batch.
 modelInvocation:
@@ -193,7 +194,7 @@ shortTermMemory:
           targetRatio: "80%"
           minGainTokens: 1
         dude_wakeup:
-          maxTokens: 2048
+          maxTokens: 8192
           strategy: bound
           triggerRatio: "100%"
           targetRatio: "80%"

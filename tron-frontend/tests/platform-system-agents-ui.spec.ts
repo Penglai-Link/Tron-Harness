@@ -14,6 +14,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     const base = { description: "System runtime", source: "SYSTEM", lastScannedAt: "2026-10-10T02:00:00Z", models: [] };
     let records = [
       { ...base, agentCode: "codex", name: "Codex", enabled: true, available: true, status: "ENABLED" },
+      { ...base, agentCode: "dsh", name: "DeepSeek Harness", enabled: true, available: true, status: "ENABLED", models: [{modelId:"deepseek-account/model",displayName:"Model",supportedReasoningEfforts:["High"]}] },
       { ...base, agentCode: "opencode", name: "OpenCode", enabled: false, available: false, status: "UNAVAILABLE" },
     ];
     let assigned: string[] = [];
@@ -31,7 +32,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
       if (url.pathname.endsWith("/rescan")) {
         calls.push("scan");
         records = records.map(record => ({ ...record, lastScannedAt: "2026-10-10T03:00:00Z" }));
-        return route.fulfill({ json: ok({ scannedCount: 2, availableCount: 1, unavailableCount: 1, records }) });
+        return route.fulfill({ json: ok({ scannedCount: 3, availableCount: 2, unavailableCount: 1, records }) });
       }
       if (url.pathname.endsWith("/disable") || url.pathname.endsWith("/enable")) {
         const enabled = url.pathname.endsWith("/enable");
@@ -48,6 +49,8 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     const openCode = section.getByRole("button", { name: zh ? "管理 OpenCode" : "Manage OpenCode", exact: true });
     await expect(codex).toBeVisible();
     await expect(openCode).toBeVisible();
+    const dsh = section.getByRole("button", {name: zh ? "管理 DeepSeek Harness" : "Manage DeepSeek Harness", exact:true});
+    await expect(dsh).toBeVisible();
     for (const [button, file] of [[codex, "codex-pixel.png"], [openCode, "opencode-pixel.png"]] as const) {
       const avatar = button.locator("img");
       await expect(avatar).toHaveAttribute("src", `/agent-brands/${file}`);
@@ -76,6 +79,10 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     expect(calls).toEqual(["scan", "disable", "enable", "authorize"]);
     await detail.screenshot({ animations: "disabled", path: testInfo.outputPath(`system-detail-${locale}.png`) });
     await detail.getByRole("button", { name: zh ? "关闭" : "Close", exact: true }).click();
+    await dsh.click();
+    const dshDetail = page.getByRole("dialog", {name:"DeepSeek Harness", exact:true});
+    await expect(dshDetail.getByRole("switch")).toBeEnabled();
+    await dshDetail.getByRole("button", {name:zh ? "关闭" : "Close",exact:true}).click();
     await openCode.click();
     const unavailable = page.getByRole("dialog", { name: "OpenCode", exact: true });
     await expect(unavailable.getByRole("switch")).toBeDisabled();

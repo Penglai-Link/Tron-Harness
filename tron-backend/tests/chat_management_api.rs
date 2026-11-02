@@ -3359,6 +3359,7 @@ async fn chat_send_resumes_from_framework_external_session_mapping() {
         system_agents: SystemAgentConfig {
             codex_command: codex_command.display().to_string(),
             opencode_command: opencode_command.display().to_string(),
+            dsh_command: String::new(),
         },
         ..AppConfig::default()
     });
@@ -3533,6 +3534,7 @@ fn app_with_system_agent_commands(
         system_agents: SystemAgentConfig {
             codex_command: codex_command.display().to_string(),
             opencode_command: opencode_command.display().to_string(),
+            dsh_command: String::new(),
         },
         ..AppConfig::default()
     })

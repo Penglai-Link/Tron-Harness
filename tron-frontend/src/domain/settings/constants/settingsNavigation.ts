@@ -58,6 +58,7 @@ export const settingsNavigation = [
         translationKey: "shell:settings.items.modelProviders",
       },
       { label: "Automatic Routers", href: "/settings/automatic-routers", icon: Network, translationKey: "pages:automaticRouters.title" },
+      { label: "Context Layout", href: "/settings/context-layout", icon: ListTree, translationKey: "pages:contextLayout.title" },
       {
         label: "Prompts",
         href: "/settings/prompts",

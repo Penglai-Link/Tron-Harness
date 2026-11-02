@@ -54,10 +54,14 @@ impl SystemConfigService {
         }
         let path = Path::new(&stored.path);
         let effective = effective_context_value(&stored.content, path, next_value.clone())?;
-        let available_paths = leaf_paths(&effective)
+        let mut available_paths = leaf_paths(&effective)
             .into_iter()
             .filter(|path| !super::helpers::is_removed_config_path(path))
             .collect::<Vec<_>>();
+        const PLUGIN_OVERRIDES_PATH: &str = "shortTermMemory.context.providers.pluginOverrides";
+        if super::helpers::value_at_path(&effective, PLUGIN_OVERRIDES_PATH).is_some() {
+            available_paths.push(PLUGIN_OVERRIDES_PATH.to_owned());
+        }
         let mut selected_paths = std::collections::BTreeSet::new();
         for change in changes {
             if !selected_paths.insert(change.path.clone())

@@ -156,6 +156,7 @@ pub enum AgentRuntimeType {
     CodexExec,
     CodexAppServer,
     OpenCodeRun,
+    DshHeadless,
     OpenCodeServe,
     OpenCodeAcp,
 }

@@ -117,10 +117,11 @@ impl ChatService {
             .map_err(ChatSendError::Chat)?;
         let goal = super::composer_input::goal_objective(&content).map_err(ChatSendError::Chat)?;
         if goal.is_some() { self.ensure_goal_agent(&effective_agent_code).map_err(ChatSendError::Chat)?; }
+        let runtime_type = agent.runtime_type_for_admission(&workspace_code, &effective_agent_code).map_err(ChatSendError::Agent)?;
         let reservation = self.reserve_run(
             session_code,
             command.run_code.clone(),
-            &effective_agent_code,
+            runtime_type,
             context_compaction,
         )?;
         let run_code = reservation.run_code;

@@ -160,6 +160,7 @@ struct GoalLoopFileConfig {
 struct ContextProvidersFileConfig {
     order: Option<Vec<String>>,
     data_blocks: Option<std::collections::BTreeMap<String, ContextDataBlockFileConfig>>,
+    plugin_overrides: Option<std::collections::BTreeMap<String, u32>>,
     checkpoint: Option<ContextProviderFilePolicy>,
     working: Option<ContextProviderFilePolicy>,
     history: Option<ContextProviderFilePolicy>,
@@ -195,6 +196,9 @@ impl ContextProvidersFileConfig {
         }
         if let Some(order) = self.order {
             config.order = order;
+        }
+        if let Some(overrides) = self.plugin_overrides {
+            config.plugin_overrides = overrides;
         }
         if let Some(policy) = self.checkpoint {
             policy.apply_to(&mut config.checkpoint);

@@ -70,6 +70,10 @@ pub fn profile_routes() -> Router<AppState> {
         .route("/api/v1/automatic-routers", get(super::automatic_routers::list))
         .route("/api/v1/automatic-routers/{kind}", axum::routing::put(super::automatic_routers::update))
         .route(
+            "/api/v1/context-layout",
+            get(super::context_layout::list).put(super::context_layout::update),
+        )
+        .route(
             "/api/v1/model-providers/{provider_code}/reauthorization-sessions",
             post(create_authorization_session),
         )

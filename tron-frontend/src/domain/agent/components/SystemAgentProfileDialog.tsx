@@ -38,10 +38,10 @@ export function SystemAgentProfileDialog({ agents, record, onSave, onClose }: {
   const base = bases.find((agent) => agent.agentCode === baseAgentCode);
   const isCodex = baseAgentCode === "codex";
   const codeValid = /^[a-z][a-z0-9_-]{0,63}$/.test(agentCode);
-  const modelValid = isBase || (Boolean(modelId.trim()) && (baseAgentCode !== "opencode" || /^[^/\s]+\/\S+$/.test(modelId.trim())));
+  const modelValid = isBase || (Boolean(modelId.trim()) && (!["opencode", "dsh"].includes(baseAgentCode) || /^[^/\s]+\/\S+$/.test(modelId.trim())));
   const selectedModel = base?.models.find((model) => model.modelId === modelId.trim());
   const effortOptions: ReasoningEffort[] = selectedModel?.supportedReasoningEfforts?.length
-    ? selectedModel.supportedReasoningEfforts : ["None", "Minimal", "Low", "Medium", "High", "XHigh", "Max", "Ultra"];
+    ? selectedModel.supportedReasoningEfforts : baseAgentCode === "dsh" ? [] : ["None", "Minimal", "Low", "Medium", "High", "XHigh", "Max", "Ultra"];
   async function save() {
     if (busy || !codeValid || !name.trim() || !modelValid || !baseAgentCode) return;
     setBusy(true);
@@ -98,7 +98,7 @@ export function SystemAgentProfileDialog({ agents, record, onSave, onClose }: {
               </ComboboxList>
             </ComboboxPopup>
           </Combobox>
-          {baseAgentCode === "opencode" ? <p className="text-xs text-[var(--color-on-surface-variant)]">{text("openCodeModelHelp")}</p> : null}
+          {["opencode", "dsh"].includes(baseAgentCode) ? <p className="text-xs text-[var(--color-on-surface-variant)]">{text(baseAgentCode === "dsh" ? "dshModelHelp" : "openCodeModelHelp")}</p> : null}
         </Field>}
         {!isBase && <Field label={t("common:reasoningEffort.chatLabel")}>
           <SelectInput value={effort} disabled={busy} onValueChange={(value) => setEffort(value as ReasoningEffort | "Default")}>

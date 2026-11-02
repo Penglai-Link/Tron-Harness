@@ -12,6 +12,7 @@ pub(super) fn runtime_type_to_storage(runtime_type: AgentRuntimeType) -> &'stati
         AgentRuntimeType::CodexExec => "CODEX_EXEC",
         AgentRuntimeType::CodexAppServer => "CODEX_APP_SERVER",
         AgentRuntimeType::OpenCodeRun => "OPENCODE_RUN",
+        AgentRuntimeType::DshHeadless => "DSH_HEADLESS",
         AgentRuntimeType::OpenCodeServe => "OPENCODE_SERVE",
         AgentRuntimeType::OpenCodeAcp => "OPENCODE_ACP",
     }
@@ -23,6 +24,7 @@ pub(super) fn runtime_type_from_storage(value: &str) -> AgentRuntimeType {
         "CODEX_EXEC" => AgentRuntimeType::CodexExec,
         "CODEX_APP_SERVER" => AgentRuntimeType::CodexAppServer,
         "OPENCODE_RUN" => AgentRuntimeType::OpenCodeRun,
+        "DSH_HEADLESS" => AgentRuntimeType::DshHeadless,
         "OPENCODE_SERVE" => AgentRuntimeType::OpenCodeServe,
         "OPENCODE_ACP" => AgentRuntimeType::OpenCodeAcp,
         _ => AgentRuntimeType::React,

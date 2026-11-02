@@ -333,7 +333,8 @@ pub(super) fn effective_context_value(
         (
             "shortTermMemory.context.providers",
             json!({
-                "order": providers.order, "dataBlocks": data_blocks, "checkpoint": policy(&providers.checkpoint),
+                "order": providers.order, "dataBlocks": data_blocks, "pluginOverrides": providers.plugin_overrides,
+                "checkpoint": policy(&providers.checkpoint),
                 "working": policy(&providers.working),
                 "history": policy(&providers.history), "prices": providers.prices,
                 "maxAuxiliaryCallsPerStep": providers.max_auxiliary_calls_per_step

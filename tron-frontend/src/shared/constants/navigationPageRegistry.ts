@@ -1,5 +1,6 @@
 export const navigationPageRegistry: Record<string, string> = {
   "settings.automaticRouters": "/settings/automatic-routers",
+  "settings.contextLayout": "/settings/context-layout",
   "dudes.index": "/dudes",
   "notifications.index": "/notifications",
   "agents.index": "/agents",

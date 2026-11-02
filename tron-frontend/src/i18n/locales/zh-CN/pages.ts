@@ -4,6 +4,10 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   automaticRouters: {"routeHelp": {"Chat": "智能体对话模型", "TextGeneration": "为文本生成任务选择模型，应选择支持关闭思考的模型。", "TextEmbedding": "候选维度为 1024。索引创建后会固定模型和维度。修改后，可能导致需要重建索引。", "MultimodalEmbedding": "候选维度为 1024。索引创建后会固定模型和维度。修改后，可能导致需要重建索引。", "TextRerank": "为文本检索结果选择重排模型，支持文本输入的多模态重排模型也可作为候选。", "MultimodalRerank": "为包含图片等内容的检索结果选择多模态重排模型，实际执行取决于供应商适配。"}, "title": "自动路由器", "refresh": "刷新", "loading": "加载中…", "save": "保存", "saved": "路由来源已保存，新一轮运行将使用当前配置", "failed": "无法读取或保存路由配置", "source": "数据来源", "providers": "供应商", "models": "模型", "choose": "搜索并选择（可多选）", "unavailable": "已不可用：{{id}}", "empty": "没有可用候选模型", "candidates": "候选模型（{{count}}）", "help": "默认按模型类型纳入所有已启用供应商的可用模型。可限定供应商或模型；空选择会停用该路由的候选。对话还受 Agent 授权和上下文长度约束。运行中的选择保持不变。索引创建后会固定向量模型和维度。", "modes": {"AllProviders": "所有供应商（自动）", "SelectedProviders": "指定供应商", "SelectedModels": "指定模型"}, "kinds": {"Chat": "对话", "TextGeneration": "文本生成", "TextEmbedding": "文本向量", "MultimodalEmbedding": "多模态向量", "TextRerank": "文本重排", "MultimodalRerank": "多模态重排"}},
+  contextLayout: {
+    title: "上下文布局", refresh: "刷新", loading: "加载中…", save: "保存", saving: "保存中…", saved: "上下文布局已保存，新运行将使用当前配置", loadFailed: "无法读取上下文布局", saveFailed: "无法保存上下文布局", empty: "暂无上下文块", description: "调整会话上下文块的顺序和插件预算。插件提供默认预算，Tron 保存排序和自定义上限。", orderHelpLabel: "上下文排序说明", orderHelp: "会话历史是固定锚点，锚点之前的块不可移动；其余块可以调整顺序。", dragHelp: "拖动卡片排序，也可以使用上下箭头；预算留空时沿用插件默认值。", anchor: "固定锚点", plugin: "插件块", platform: "平台块", unavailable: "插件未加载", tokenBudget: "{{count}} tokens", ratioBudget: "上下文的 {{value}}%", messageBudget: "最多 {{count}} 条消息", noDefaultBudget: "未声明默认预算", defaultBudget: "插件默认预算：{{budget}}", tokenOverride: "自定义最大 tokens", tokenOverrideHelp: "为空时沿用插件默认值。填写后增加自定义 token 上限，插件声明的比例和消息数限制仍生效。", inheritBudget: "沿用插件默认值", tokenOverrideFor: "{{name}} 的自定义最大 tokens", moveUp: "上移 {{name}}", moveDown: "下移 {{name}}", removeUnavailable: "移除未加载插件块 {{name}}",
+    blockNames: { seed_prompt_prefix: "固定指令", current_session_checkpoint: "会话检查点", current_session_history: "当前会话历史", current_session_working_state: "当前工作状态", runtime_identity: "运行时身份", dude_onboarding: "Dude 初始信息", tool_domains: "工具目录", agent_directory: "智能体目录", page_context: "页面上下文", application_context: "应用上下文", knowledge_base: "知识库", dude_environment: "Dude 环境", dude_wakeup: "唤醒信息", skills: { catalog: "技能目录" } },
+  },
   configuredProviders,
   knowledgeQuality,
   agentActivation: { active: "激活", disabled: "禁用" },
@@ -2475,6 +2479,7 @@ export const pages = {
       customModelHelp: "未找到匹配模型，可直接使用输入的模型 ID。",
       fastMode: "Fast 模式",
       fastModeHelp: "使用 Codex 的快速服务档位，保持所选模型和思考强度。仅适用于支持 Fast 的模型和账号，用量消耗更高。",
+      dshModelHelp: "dsh 的模型 ID 须使用 provider/model 格式。",
       openCodeModelHelp: "OpenCode 的模型 ID 须使用 provider/model 格式。",
       codeHelp: "使用 1–64 位小写字母、数字、连字符或下划线，并以字母开头。",
       scanFirst: "请先扫描已安装的 Agent。",
@@ -2509,7 +2514,8 @@ export const pages = {
         codex: {
           description: "OpenAI Codex CLI 智能体运行时。",
         },
-        opencode: {
+        dsh: { name: "DeepSeek Harness", description: "DeepSeek Harness 本地命令行智能体运行时。" },
+      opencode: {
           description: "OpenCode CLI 智能体运行时。",
         },
       },

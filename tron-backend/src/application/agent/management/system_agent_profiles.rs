@@ -83,6 +83,9 @@ impl AgentManagementService {
         let Some(effort) = effort else { return Ok(()); };
         let base = entry.base_agent_code.as_deref().unwrap_or(&entry.agent_code);
         let models = self.system_agent_models(base);
+        if entry.runtime_type == AgentRuntimeType::DshHeadless && !models.iter().any(|record| record.model_id == model.trim() && record.supported_reasoning_efforts.contains(&effort)) {
+            return Err(AgentManagementError::InternalAgentDefinitionInvalid);
+        }
         if let Some(record) = models.iter().find(|record| record.model_id == model.trim()) {
             if !record.supported_reasoning_efforts.is_empty() && !record.supported_reasoning_efforts.contains(&effort) {
                 return Err(AgentManagementError::InternalAgentDefinitionInvalid);
@@ -147,7 +150,7 @@ fn validate_profile(
         || model.trim().is_empty()
         || model.len() > 256
         || model.chars().any(char::is_control)
-        || (runtime == AgentRuntimeType::OpenCodeRun
+        || (matches!(runtime, AgentRuntimeType::OpenCodeRun | AgentRuntimeType::DshHeadless)
             && !model
                 .trim()
                 .split_once('/')

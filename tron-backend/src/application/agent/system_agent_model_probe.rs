@@ -23,7 +23,13 @@ impl SystemCommandProbe for ProcessSystemCommandProbe {
             return Ok(false);
         }
         if command_name.contains(std::path::MAIN_SEPARATOR) {
-            return Ok(Path::new(command_name).exists());
+            let path = Path::new(command_name);
+            if !path.is_file() { return Ok(false); }
+            #[cfg(unix)] {
+                use std::os::unix::fs::PermissionsExt;
+                return path.metadata().map(|metadata| metadata.permissions().mode() & 0o111 != 0).map_err(|e| e.to_string());
+            }
+            #[cfg(not(unix))] return Ok(true);
         }
         let output = Command::new(command_discovery_command())
             .arg(command_name)
@@ -41,6 +47,39 @@ impl SystemCommandProbe for ProcessSystemCommandProbe {
         let command_name = command_name.trim();
         if command_name.is_empty() {
             return Ok(Vec::new());
+        }
+        if agent_code == "dsh" {
+            let catalog = eliteforge_agent_capability_external::DshModelProbe::discover_blocking(
+                command_name,
+                eliteforge_agent_capability_external::DshCliOptions {
+                    reuse_stored_credentials: true, provider_profile: Some("desktop".into())
+                },
+            )
+            .map_err(|e| e.to_string())?;
+            if catalog.models.is_empty() && !catalog.errors.is_empty() {
+                return Err(catalog.errors.join("; "));
+            }
+            return Ok(catalog
+                .models
+                .into_iter()
+                .map(|m| SystemAgentModelRecord {
+                    model_id: format!("{}/{}", m.provider, m.model),
+                    display_name: m.display_name,
+                    context_window_tokens: m.context_window_tokens,
+                    supported_reasoning_efforts: crate::domain::reasoning::ReasoningEffort::ALL
+                        .into_iter()
+                        .filter(|effort| {
+                            m.reasoning_efforts.iter().any(|id| {
+                                id.eq_ignore_ascii_case(if effort.provider_value() == "none" {
+                                    "off"
+                                } else {
+                                    effort.provider_value()
+                                })
+                            })
+                        })
+                        .collect(),
+                })
+                .collect());
         }
         let command_plans = command_plans_for_agent(&agent_code);
         if command_plans.is_empty() {
@@ -311,17 +350,31 @@ mod tests {
     }
 }
 
-fn parse_reasoning_efforts(object: &serde_json::Map<String, Value>) -> Vec<crate::domain::reasoning::ReasoningEffort> {
-    let values = object.get("supportedReasoningEfforts")
+fn parse_reasoning_efforts(
+    object: &serde_json::Map<String, Value>,
+) -> Vec<crate::domain::reasoning::ReasoningEffort> {
+    let values = object
+        .get("supportedReasoningEfforts")
         .or_else(|| object.get("supportedReasoningEffort"))
         .or_else(|| object.get("supported_reasoning_levels"))
         .or_else(|| object.get("variants"));
     let names: Vec<&str> = match values {
-        Some(Value::Array(items)) => items.iter().filter_map(|item| item.as_str().or_else(|| item.get("effort").and_then(Value::as_str))).collect(),
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(|item| {
+                item.as_str()
+                    .or_else(|| item.get("effort").and_then(Value::as_str))
+            })
+            .collect(),
         Some(Value::Object(items)) => items.keys().map(String::as_str).collect(),
         _ => Vec::new(),
     };
-    crate::domain::reasoning::ReasoningEffort::ALL.into_iter()
-        .filter(|effort| names.iter().any(|name| name.eq_ignore_ascii_case(effort.provider_value())))
+    crate::domain::reasoning::ReasoningEffort::ALL
+        .into_iter()
+        .filter(|effort| {
+            names
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case(effort.provider_value()))
+        })
         .collect()
 }

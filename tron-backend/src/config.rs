@@ -111,6 +111,7 @@ impl HttpClientProfilesConfig {
 pub struct SystemAgentConfig {
     pub codex_command: String,
     pub opencode_command: String,
+    pub dsh_command: String,
 }
 
 impl AppConfig {
@@ -128,6 +129,7 @@ impl AppConfig {
             system_agents: SystemAgentConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
                 opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),
+                dsh_command: "dsh".into(),
             },
             variable_crypto: VariableCryptoConfig::default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),

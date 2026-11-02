@@ -50,6 +50,9 @@ fn availability_for_descriptor(
         RuntimeAdapterKey::CodexExec => {
             system_runtime_availability(entries, AgentRuntimeType::CodexExec)
         }
+        RuntimeAdapterKey::DshHeadless => {
+            system_runtime_availability(entries, AgentRuntimeType::DshHeadless)
+        }
         RuntimeAdapterKey::OpenCodeRun => {
             system_runtime_availability(entries, AgentRuntimeType::OpenCodeRun)
         }

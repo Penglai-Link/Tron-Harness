@@ -334,6 +334,8 @@ pub(super) async fn assemble(
             configs.insert(id.into(), block);
         }
     }
+    let mut plugin_order = Vec::new();
+    let mut plugin_ids = std::collections::HashSet::new();
     if let Some(services) = input.run.extensions.get::<fw::ScopedAgentServices>() {
         for source in services
             .0
@@ -345,34 +347,49 @@ pub(super) async fn assemble(
                 continue;
             }
             let id = source.block_id();
-            let policy = config
+            let mut block = source.default_block_config().unwrap_or_else(|| {
+                fw::ContextBlockConfig::new(id, fw::BlockBudget::ratio(10_000))
+            });
+            if block.id != id {
+                return Err(fw::AgentError::InvalidConfiguration(format!(
+                    "context contributor default config changed identity: {id}"
+                )));
+            }
+            let configured_tokens = config
                 .context
                 .providers
-                .data_blocks
+                .plugin_overrides
                 .get(id)
-                .ok_or_else(|| {
-                    fw::AgentError::InvalidConfiguration(format!(
-                        "unconfigured context contributor: {id}"
-                    ))
-                })?;
+                .copied()
+                .or_else(|| {
+                    config
+                        .context
+                        .providers
+                        .data_blocks
+                        .get(id)
+                        .and_then(|legacy| legacy.max_tokens)
+                });
+            if let Some(tokens) = configured_tokens {
+                // Preserve the plugin's declared ratio and message-count limits.
+                block.budget.max_tokens = Some(tokens as usize);
+            }
             if configs
-                .insert(
-                    id.into(),
-                    fw::ContextBlockConfig::new(
-                        id,
-                        fw::BlockBudget::tokens(policy.max_tokens.map_or(available.max_tokens, |n| n as usize)),
-                    ),
-                )
+                .insert(id.into(), block)
                 .is_some()
             {
                 return Err(fw::AgentError::InvalidConfiguration(format!(
                     "duplicate context contributor: {id}"
                 )));
             }
+            plugin_ids.insert(id.to_owned());
+            plugin_order.push((source.layout_metadata().default_order, id.to_owned()));
             contributors.push(source.clone());
         }
     }
     for (id, policy) in &config.context.providers.data_blocks {
+        if plugin_ids.contains(id.as_str()) {
+            continue;
+        }
         if let Some(block) = configs.get_mut(id.as_str()) {
             block.budget = policy.max_tokens.map_or_else(|| fw::BlockBudget::ratio(10_000), |n| fw::BlockBudget::tokens(n as usize));
             if policy.policy.strategy == Strategy::Bound {
@@ -384,10 +401,14 @@ pub(super) async fn assemble(
             }
         }
     }
-    let layout = config
-        .context
-        .providers
-        .order
+    plugin_order.sort();
+    let mut order = config.context.providers.order.clone();
+    for (_, id) in plugin_order {
+        if !order.contains(&id) {
+            order.push(id);
+        }
+    }
+    let layout = order
         .iter()
         .filter_map(|id| configs.remove(id.as_str()))
         .collect::<Vec<_>>();

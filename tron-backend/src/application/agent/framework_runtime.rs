@@ -9,6 +9,19 @@ mod context;
 mod context_auxiliary;
 mod context_projection;
 mod context_providers;
+
+#[derive(Debug, Clone)]
+pub(crate) struct ContextLayoutContributorInfo {
+    pub provider_id: String,
+    pub block_id: String,
+    pub display_name: String,
+    pub description: String,
+    pub default_order: i32,
+    pub default_max_tokens: Option<usize>,
+    pub default_max_ratio_bps: Option<u16>,
+    pub default_max_messages: Option<usize>,
+}
+
 mod dude_context;
 mod onboarding;
 

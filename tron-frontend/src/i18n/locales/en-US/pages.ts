@@ -4,6 +4,10 @@ import { systemConfigDescriptions } from "./systemConfigDescriptions";
 
 export const pages = {
   automaticRouters: {"routeHelp": {"Chat": "Agent conversation models", "TextGeneration": "Select models for text generation that support disabling reasoning.", "TextEmbedding": "Candidate dimension is 1024. An index pins its model and dimension; changes may require rebuilding the index.", "MultimodalEmbedding": "Candidate dimension is 1024. An index pins its model and dimension; changes may require rebuilding the index.", "TextRerank": "Select rerankers for text search results; multimodal rerankers accepting text can also be candidates.", "MultimodalRerank": "Select rerankers for results containing media; execution depends on provider support."}, "title": "Automatic Routers", "refresh": "Refresh", "loading": "Loading…", "save": "Save", "saved": "Router sources saved for the next run", "failed": "Could not load or save router settings", "source": "Data sources", "providers": "Providers", "models": "Models", "choose": "Search and select multiple", "unavailable": "Unavailable: {{id}}", "empty": "No available candidate models", "candidates": "Candidate models ({{count}})", "help": "Automatically include enabled provider models by model type, or restrict sources to selected providers or models. An empty selection leaves no candidates. Chat also respects Agent authorization and context limits. Existing runs keep their snapshot. Indexes retain their embedding model and dimensions.", "modes": {"AllProviders": "All providers (automatic)", "SelectedProviders": "Selected providers", "SelectedModels": "Selected models"}, "kinds": {"Chat": "Conversation", "TextGeneration": "Text generation", "TextEmbedding": "Text embedding", "MultimodalEmbedding": "Multimodal embedding", "TextRerank": "Text rerank", "MultimodalRerank": "Multimodal rerank"}},
+  contextLayout: {
+    title: "Context Layout", refresh: "Refresh", loading: "Loading…", save: "Save", saving: "Saving…", saved: "Context layout saved; new runs will use this configuration", loadFailed: "Could not load context layout", saveFailed: "Could not save context layout", empty: "No context blocks are available", description: "Set the order of context blocks and plugin budgets. Plugins provide default budgets; Tron stores the order and custom caps.", orderHelpLabel: "Context ordering help", orderHelp: "Session history is a fixed anchor. Blocks before it cannot move; the remaining blocks can be reordered.", dragHelp: "Drag cards to reorder, or use the arrow buttons. Leave a budget blank to inherit the plugin default.", anchor: "Fixed anchor", plugin: "Plugin block", platform: "Platform block", unavailable: "Plugin not loaded", tokenBudget: "{{count}} tokens", ratioBudget: "{{value}}% of context", messageBudget: "up to {{count}} messages", noDefaultBudget: "No default budget declared", defaultBudget: "Plugin default budget: {{budget}}", tokenOverride: "Custom max tokens", tokenOverrideHelp: "Leave blank to inherit the plugin default. A value adds a token ceiling while the plugin's ratio and message limits remain in effect.", inheritBudget: "Inherit plugin default", tokenOverrideFor: "Custom max tokens for {{name}}", moveUp: "Move {{name}} up", moveDown: "Move {{name}} down", removeUnavailable: "Remove unloaded plugin block {{name}}",
+    blockNames: { seed_prompt_prefix: "Fixed instructions", current_session_checkpoint: "Session checkpoint", current_session_history: "Current session history", current_session_working_state: "Current work state", runtime_identity: "Runtime identity", dude_onboarding: "Dude onboarding", tool_domains: "Tool catalog", agent_directory: "Agent directory", page_context: "Page context", application_context: "Application context", knowledge_base: "Knowledge base", dude_environment: "Dude environment", dude_wakeup: "Wake-up context", skills: { catalog: "Skills catalog" } },
+  },
   configuredProviders,
   knowledgeQuality,
   agentActivation: { active: "Active", disabled: "Disabled" },
@@ -2560,6 +2564,7 @@ export const pages = {
       customModelHelp: "No matching model. You can use the entered model ID.",
       fastMode: "Fast mode",
       fastModeHelp: "Use Codex’s faster service tier with the selected model and reasoning effort. Requires a supported model and account, and consumes more usage.",
+      dshModelHelp: "dsh requires a provider/model ID.",
       openCodeModelHelp: "OpenCode requires a provider/model ID.",
       codeHelp: "Use 1–64 lowercase letters, numbers, hyphens or underscores, starting with a letter.",
       scanFirst: "Scan to find an installed Agent first.",
@@ -2594,7 +2599,8 @@ export const pages = {
         codex: {
           description: "OpenAI Codex CLI agent runtime.",
         },
-        opencode: {
+        dsh: { name: "DeepSeek Harness", description: "DeepSeek Harness CLI agent runtime." },
+      opencode: {
           description: "OpenCode CLI agent runtime.",
         },
       },

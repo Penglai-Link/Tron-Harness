@@ -34,6 +34,8 @@ pub struct ContextProvidersConfig {
     /// Actual message block order. Tools retain their provider-native protocol location.
     pub order: Vec<String>,
     pub data_blocks: std::collections::BTreeMap<String, ContextDataBlockConfig>,
+    /// Optional per-plugin token caps. Missing entries preserve plugin defaults.
+    pub plugin_overrides: std::collections::BTreeMap<String, u32>,
     pub checkpoint: ContextProviderPolicy,
     pub working: ContextProviderPolicy,
     pub history: ContextProviderPolicy,
@@ -110,6 +112,7 @@ impl Default for ContextProvidersConfig {
                 )
             })
             .collect(),
+            plugin_overrides: std::collections::BTreeMap::new(),
             checkpoint: ContextProviderPolicy::new(ContextReductionStrategy::Bound, 8_000),
             working: ContextProviderPolicy::new(ContextReductionStrategy::Bound, 8_000),
             history: ContextProviderPolicy::new(ContextReductionStrategy::Checkpoint, 2_000),
@@ -159,7 +162,7 @@ impl ContextProvidersConfig {
         if self.history_recent_turns == 0 || self.history_recent_turns > 512 {
             return Err("history recent-turn retention must be between 1 and 512".into());
         }
-        let expected = [
+        let required = [
             "seed_prompt_prefix",
             "current_session_checkpoint",
             "current_session_history",
@@ -169,12 +172,13 @@ impl ContextProvidersConfig {
         .map(str::to_owned)
         .chain(self.data_blocks.keys().cloned())
         .collect::<Vec<_>>();
+        let required = required.into_iter().collect::<std::collections::BTreeSet<_>>();
         let actual = self.order.iter().collect::<std::collections::BTreeSet<_>>();
-        if self.order.len() != expected.len()
-            || actual.len() != expected.len()
-            || expected.iter().any(|id| !actual.contains(id))
+        if self.order.iter().any(|id| id.trim().is_empty())
+            || actual.len() != self.order.len()
+            || required.iter().any(|id| !actual.contains(id))
         {
-            return Err("context order must contain every context block exactly once".into());
+            return Err("context order must contain every configured context block exactly once".into());
         }
         if self.order.first().map(String::as_str) != Some("seed_prompt_prefix") {
             return Err("fixed instructions must be first".into());
@@ -200,6 +204,13 @@ impl ContextProvidersConfig {
             )
         }) {
             return Err("dynamic context blocks must follow history".into());
+        }
+        if self
+            .plugin_overrides
+            .iter()
+            .any(|(id, tokens)| id.trim().is_empty() || *tokens == 0)
+        {
+            return Err("plugin context token overrides must have an ID and positive cap".into());
         }
         let expected_data = Self::default().data_blocks;
         if expected_data

@@ -387,16 +387,15 @@ impl FrameworkHost {
                 eliteforge_agent_framework::ReactAgentLoop,
             ))
             .plugin(fw::AgentLoopPlugin::named(
-                "tron.external-loop",
-                eliteforge_agent_framework::ExternalAgentLoop,
-            ))
-            .plugin(fw::AgentLoopPlugin::named(
                 "tron.continuation-loop",
                 eliteforge_agent_framework::ContinuationLoop,
             ))
-            .plugin(fw::ExternalAgentPlugin::new(
-                super::super::external::HostExternalAgent,
-            ))
+            .capability_pack(
+                eliteforge_agent_capability_external::external_agent_pack_with_loop(
+                    super::super::external::HostExternalAgent,
+                    "tron.external-loop",
+                ),
+            )
             .plugin(eliteforge_agent_framework::GoalPlugin)
             .plugin(fw::AgentLoopPlugin::named(
                 "tron.summary-loop",
@@ -654,6 +653,41 @@ impl FrameworkHost {
             .framework
             .get_or_try_init(|| self.initialize_framework())
             .await
+    }
+
+    pub(crate) async fn context_layout_catalog(
+        &self,
+    ) -> Result<Vec<super::super::ContextLayoutContributorInfo>, fw::AgentError> {
+        let framework = self.framework().await?;
+        let services = framework.services()?;
+        Ok(services
+            .providers::<fw::ContextContributorService>()
+            .into_iter()
+            .zip(services.all::<fw::ContextContributorService>())
+            .filter_map(|(provider_id, service)| {
+                let source = &service.0;
+                (source.kind() == fw::ContextSourceKind::Data).then(|| {
+                    let metadata = source.layout_metadata();
+                    let default = source.default_block_config();
+                    super::super::ContextLayoutContributorInfo {
+                        provider_id: provider_id.to_owned(),
+                        block_id: source.block_id().to_owned(),
+                        display_name: metadata.display_name,
+                        description: metadata.description,
+                        default_order: metadata.default_order,
+                        default_max_tokens: default
+                            .as_ref()
+                            .and_then(|config| config.budget.max_tokens),
+                        default_max_ratio_bps: default
+                            .as_ref()
+                            .and_then(|config| config.budget.max_ratio_bps),
+                        default_max_messages: default
+                            .as_ref()
+                            .and_then(|config| config.budget.max_messages),
+                    }
+                })
+            })
+            .collect())
     }
 
     async fn initialize_framework(&self) -> Result<Framework, fw::AgentError> {

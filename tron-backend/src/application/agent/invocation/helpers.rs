@@ -17,6 +17,7 @@ pub(super) fn agent_kind_for_runtime(runtime_type: AgentRuntimeType) -> AgentKin
         AgentRuntimeType::React => AgentKind::React,
         AgentRuntimeType::CodexExec
         | AgentRuntimeType::CodexAppServer
+        | AgentRuntimeType::DshHeadless
         | AgentRuntimeType::OpenCodeRun
         | AgentRuntimeType::OpenCodeServe
         | AgentRuntimeType::OpenCodeAcp => AgentKind::SystemCli,
@@ -45,6 +46,7 @@ pub(super) fn runtime_type_label(runtime_type: AgentRuntimeType) -> &'static str
         AgentRuntimeType::CodexExec => "CODEX_EXEC",
         AgentRuntimeType::CodexAppServer => "CODEX_APP_SERVER",
         AgentRuntimeType::OpenCodeRun => "OPENCODE_RUN",
+        AgentRuntimeType::DshHeadless => "DSH_HEADLESS",
         AgentRuntimeType::OpenCodeServe => "OPENCODE_SERVE",
         AgentRuntimeType::OpenCodeAcp => "OPENCODE_ACP",
     }

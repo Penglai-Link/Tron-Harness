@@ -32,6 +32,7 @@ impl Default for AppConfig {
             system_agents: SystemAgentConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
                 opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),
+                dsh_command: String::new(),
             },
             variable_crypto: VariableCryptoConfig::test_default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),

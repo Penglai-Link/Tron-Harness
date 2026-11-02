@@ -1077,7 +1077,7 @@ function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOpt
     remoteStatus: null,
     qualityType: null,
     source: "system-agent" as const,
-    supportedReasoningEfforts: [],
+    supportedReasoningEfforts: model.supportedReasoningEfforts ?? [],
     upstreamVendorName: null,
     outputCoefficient: null,
     vendor: null,

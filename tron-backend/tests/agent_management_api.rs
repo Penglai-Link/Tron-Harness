@@ -521,6 +521,7 @@ fn test_config(codex_command: &PathBuf, opencode_command: &PathBuf) -> AppConfig
         system_agents: SystemAgentConfig {
             codex_command: codex_command.display().to_string(),
             opencode_command: opencode_command.display().to_string(),
+            dsh_command: String::new(),
         },
         ..AppConfig::default()
     }
@@ -1015,7 +1016,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
                         "type": "function",
                         "function": {
                             "name": "workspace_page",
-                            "arguments": "{}"
+                            "arguments": "{\"workspaceCode\":\"TRON_CORE\"}"
                         }
                     }]
                 }
@@ -1166,7 +1167,7 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
                         "type": "function",
                         "function": {
                             "name": "tool_search",
-                            "arguments": "{\"domainCode\":\"WORKSPACE\",\"limit\":20}"
+                            "arguments": "{\"domainCode\":\"HARNESS_WORKSPACE\",\"limit\":20}"
                         }
                     }]
                 }
@@ -1198,7 +1199,7 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
                         "type": "function",
                         "function": {
                             "name": "workspace_page",
-                            "arguments": "{}"
+                            "arguments": "{\"workspaceCode\":\"TRON_CORE\"}"
                         }
                     }]
                 }
@@ -1308,7 +1309,7 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
     let instructions = system_messages.join("\n");
     let inventory = system_messages
         .iter()
-        .find(|message| message.contains("\"domainCode\":\"workspace\""))
+        .find(|message| message.contains("\"domainCode\":\"harness_workspace\""))
         .unwrap_or_else(|| {
             panic!("authorized domain missing from the run instructions: {instructions}")
         });
@@ -1321,7 +1322,7 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
         "domain tool codes missing from the run instructions: {inventory}"
     );
     assert!(
-        !inventory.contains("\"domainCode\":\"app\""),
+        !inventory.contains("\"domainCode\":\"harness_app\""),
         "unauthorized domain leaked into the run instructions: {inventory}"
     );
     assert!(
@@ -1442,14 +1443,14 @@ async fn host_taxonomy_makes_framework_pack_tools_domain_listable() {
     write_fake_command(&codex_command);
     write_fake_command(&opencode_command);
 
-    // One `domainCode` search per advertised group: bash/fs/search are
-    // framework-pack tools (no host per-binding label), workspace is a
+    // One `domainCode` search per advertised group: command/fs/search are
+    // framework-pack tools (no host per-binding label), harness_workspace is a
     // product-catalog tool.
     let model_server = scripted_model_server(vec![
-        domain_search_response("bash"),
+        domain_search_response("command"),
         domain_search_response("fs"),
         domain_search_response("search"),
-        domain_search_response("workspace"),
+        domain_search_response("harness_workspace"),
         json!({
             "choices": [{
                 "message": {
@@ -1565,7 +1566,7 @@ async fn host_taxonomy_makes_framework_pack_tools_domain_listable() {
     advertised.dedup();
     assert_eq!(
         advertised,
-        vec!["bash", "fs", "search", "workspace"],
+        vec!["command", "fs", "harness_workspace", "search"],
         "only the authorized capability groups may be advertised: {instructions}"
     );
 
@@ -1583,10 +1584,10 @@ async fn host_taxonomy_makes_framework_pack_tools_domain_listable() {
             .to_string()
     };
     for (index, (domain_code, tool_name)) in [
-        ("bash", "command_exec"),
+        ("command", "command_exec"),
         ("fs", "fs_read_text"),
         ("search", "search_grep"),
-        ("workspace", "workspace_page"),
+        ("harness_workspace", "workspace_page"),
     ]
     .into_iter()
     .enumerate()
@@ -2223,7 +2224,7 @@ async fn tool_catalog_read_apis_are_available() {
     );
 
     for (locale, expected) in [
-        ("zh-CN", "向子运行分派"),
+        ("zh-CN", "将任务交给指定智能体"),
         ("en-US", "Delegate one focused task"),
     ] {
         let response = request_with_locale(
@@ -2263,15 +2264,15 @@ async fn tool_catalog_read_apis_are_available() {
     assert!(
         domains
             .iter()
-            .any(|row| row["domainCode"] == json!("workspace"))
+            .any(|row| row["domainCode"] == json!("harness_workspace"))
     );
     assert!(
         domains
             .iter()
-            .any(|row| row["domainCode"] == json!("automation"))
+            .any(|row| row["domainCode"] == json!("harness_automation"))
     );
-    assert!(domains.iter().any(|row| row["domainCode"] == json!("task")));
-    assert!(domains.iter().any(|row| row["domainCode"] == json!("bash")));
+    assert!(domains.iter().any(|row| row["domainCode"] == json!("harness_task")));
+    assert!(domains.iter().any(|row| row["domainCode"] == json!("command")));
     assert!(domains.iter().any(|row| row["domainCode"] == json!("fs")));
     assert!(
         domains
@@ -2309,7 +2310,7 @@ async fn tool_catalog_read_apis_are_available() {
     let workspace_tools_response = request_with_headers(
         &app,
         Method::GET,
-        "/api/v1/tools?domainCode=workspace",
+        "/api/v1/tools?domainCode=harness_workspace",
         None,
         None,
         Some(&authorization),
@@ -2344,7 +2345,7 @@ async fn tool_catalog_read_apis_are_available() {
         .into_iter()
         .find(|tool| tool.call_name == "command_exec")
         .unwrap();
-    assert_eq!(tool_body["data"]["inputSchema"], official.input_schema);
+    assert_eq!(tool_body["data"]["inputSchema"], official.resolve_display("en-US").input_schema);
     assert!(
         tool_body["data"]["description"]
             .as_str()
@@ -2374,7 +2375,7 @@ async fn tool_catalog_read_apis_follow_accept_language() {
         .as_array()
         .and_then(|rows| {
             rows.iter()
-                .find(|row| row["domainCode"] == json!("workspace"))
+                .find(|row| row["domainCode"] == json!("harness_workspace"))
         })
         .expect("workspace domain should be present");
     assert_eq!(workspace_domain["name"], json!("工作区工具"));
@@ -2394,18 +2395,14 @@ async fn tool_catalog_read_apis_follow_accept_language() {
     .await;
     assert_eq!(tool_response.status(), StatusCode::OK);
     let tool_body = response_json(tool_response).await;
-    assert_eq!(tool_body["data"]["name"], json!("执行 Shell 命令"));
-    assert!(
-        tool_body["data"]["description"]
-            .as_str()
-            .unwrap()
-            .contains("10 秒")
-    );
+    assert_eq!(tool_body["data"]["name"], json!("执行命令"));
     let official = eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
         .into_iter()
         .find(|tool| tool.call_name == "command_exec")
         .unwrap();
-    assert_eq!(tool_body["data"]["inputSchema"], official.input_schema);
+    let localized = official.resolve_display("zh-CN");
+    assert_eq!(tool_body["data"]["description"], localized.description);
+    assert_eq!(tool_body["data"]["inputSchema"], localized.input_schema);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -3383,12 +3380,12 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
     let update_result = provider_tool_result(second_messages, "app_update");
     assert!(
         update_result
-            .contains("workspaceCode `ENTERPRISE` does not match app workspace `TRON_CORE`"),
+            .contains("workspaceCode is required and must match the current authorized workspace"),
         "{update_result}"
     );
     let delete_result = provider_tool_result(second_messages, "task_delete");
     assert!(
-        delete_result.contains("workspaceCode is outside the current authorized execution scope"),
+        delete_result.contains("workspaceCode is required and must match the current authorized workspace"),
         "{delete_result}"
     );
 

@@ -59,6 +59,26 @@ pub struct AgentInvocationService {
 }
 
 impl AgentInvocationService {
+    pub(crate) fn runtime_type_for_admission(
+        &self,
+        workspace: &str,
+        code: &str,
+    ) -> Result<crate::domain::agent::AgentRuntimeType, AgentInvocationError> {
+        let runtime = if self.platform_scope {
+            self.management.resolve_platform_agent_runtime(Some(code))
+        } else {
+            self.management
+                .resolve_workspace_agent_runtime(workspace, Some(code))
+        };
+        runtime
+            .map(|runtime| runtime.runtime_type)
+            .map_err(|error| {
+                AgentInvocationError::RuntimeFailed(format!(
+                    "agent runtime resolution failed: {error:?}"
+                ))
+            })
+    }
+
     pub fn new(
         workspaces: WorkspaceService,
         apps: AppService,
