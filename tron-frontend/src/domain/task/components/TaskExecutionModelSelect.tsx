@@ -104,7 +104,7 @@ export function TaskExecutionModelSelect({
               quality: t(`chat.management.modelSelector.quality.${qualityType}`),
               vendor,
             })
-          : model.accessPlatform ?? t("chat.management.modelSelector.platformModels");
+          : model.accessPlatform ?? t("chat.management.modelSelector.providerModels");
         const group = groups.get(key) ?? { label, models: [] };
         group.models.push(model);
         groups.set(key, group);

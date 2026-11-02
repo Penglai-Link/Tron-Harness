@@ -1,9 +1,7 @@
 mod app;
 mod automation;
 mod common;
-mod model;
 mod platform_mcp;
-mod platform_model;
 mod platform_prompt;
 mod platform_resource;
 mod platform_variable;
@@ -17,9 +15,9 @@ use std::sync::Arc;
 
 use crate::{
     application::{
-        app::AppService, automation::AutomationService, mcp::McpService, model::ModelService,
-        prompt::PromptService, resource::ResourceService, skill::SkillRegistryService,
-        task::TaskService, variable::VariableService, workspace::WorkspaceService,
+        app::AppService, automation::AutomationService, mcp::McpService, prompt::PromptService,
+        resource::ResourceService, skill::SkillRegistryService, task::TaskService,
+        variable::VariableService, workspace::WorkspaceService,
     },
     domain::agent::Tool,
 };
@@ -29,7 +27,6 @@ pub(super) fn platform_business_tools(
     apps: AppService,
     automations: AutomationService,
     tasks: TaskService,
-    models: ModelService,
     skills: SkillRegistryService,
     variables: VariableService,
     resources: ResourceService,
@@ -41,8 +38,6 @@ pub(super) fn platform_business_tools(
     tools.extend(app::tools(apps));
     tools.extend(automation::tools(automations));
     tools.extend(task::tools(tasks));
-    tools.extend(model::tools(models.clone()));
-    tools.extend(platform_model::tools(models));
     tools.extend(platform_mcp::tools(mcp));
     tools.extend(platform_prompt::tools(prompts));
     tools.extend(platform_resource::tools(resources.clone()));

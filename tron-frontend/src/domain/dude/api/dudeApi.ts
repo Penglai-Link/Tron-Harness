@@ -4,13 +4,13 @@ import { normalizeChatSession, type ChatSession } from "@tron/chat-core";
 
 export interface Dude {
   description?: string;
-  dudeCode: string; name: string; rolePrompt: string; loopCode: string | null;
+  dudeCode: string; name: string; rolePrompt: string;
   avatarId: string; candidateModelCodes: string[];
   enabled: boolean; heartbeatMinutes: number; memoryAutoApprove: boolean;
   kind: "Main" | "Memory" | "Custom"; isMain: boolean;
   createdAt: number; updatedAt: number;
 }
-export type DudeInput = Pick<Dude, "dudeCode" | "name" | "description" | "rolePrompt" | "loopCode" | "avatarId" | "candidateModelCodes" | "enabled" | "heartbeatMinutes" | "memoryAutoApprove"> & { kind?: "Custom" | "Memory" };
+export type DudeInput = Pick<Dude, "dudeCode" | "name" | "description" | "rolePrompt" | "avatarId" | "candidateModelCodes" | "enabled" | "heartbeatMinutes" | "memoryAutoApprove"> & { kind?: "Custom" | "Memory" };
 export interface DudeSession extends ChatSession { purpose: string; ownerDudeCode: string; }
 interface DudeSessionResponse extends Omit<DudeSession, "createdAt" | "updatedAt"> { createdAt: number; updatedAt: number; }
 function normalizeDudeSession(value: DudeSessionResponse): DudeSession {

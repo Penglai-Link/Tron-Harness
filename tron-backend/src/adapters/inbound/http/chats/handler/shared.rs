@@ -116,7 +116,18 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
     match error {
         ChatSendError::Chat(ChatError::AttachmentInvalid(_)) => "CHAT_ATTACHMENT_INVALID",
         ChatSendError::Chat(ChatError::AttachmentNotFound) => "CHAT_ATTACHMENT_NOT_FOUND",
-        ChatSendError::Chat(error @ (ChatError::AnnotationsInvalid | ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict)) => crate::application::chat::composer_input::descriptor(error).unwrap().code,
+        ChatSendError::Chat(
+            error @ (ChatError::AnnotationsInvalid
+            | ChatError::RequestedSkillsInvalid
+            | ChatError::RequestedSkillForbidden
+            | ChatError::GoalCommandInvalid
+            | ChatError::GoalCommandUnavailable
+            | ChatError::GoalCommandConflict),
+        ) => {
+            crate::application::chat::composer_input::descriptor(error)
+                .unwrap()
+                .code
+        }
         ChatSendError::Chat(ChatError::MessageRequired) => "CHAT_MESSAGE_REQUIRED",
         ChatSendError::Chat(ChatError::SessionNotFound) => "CHAT_SESSION_NOT_FOUND",
         ChatSendError::Chat(ChatError::SessionMustBeArchived) => "CHAT_SESSION_MUST_BE_ARCHIVED",
@@ -149,7 +160,14 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
         ChatSendError::Chat(ChatError::AttachmentNotFound) => {
             "chat attachment was not found".into()
         }
-        ChatSendError::Chat(error @ (ChatError::AnnotationsInvalid | ChatError::RequestedSkillsInvalid | ChatError::RequestedSkillForbidden | ChatError::GoalCommandInvalid | ChatError::GoalCommandUnavailable | ChatError::GoalCommandConflict)) => super::super::error_mapper::composer_error_message(&error),
+        ChatSendError::Chat(
+            error @ (ChatError::AnnotationsInvalid
+            | ChatError::RequestedSkillsInvalid
+            | ChatError::RequestedSkillForbidden
+            | ChatError::GoalCommandInvalid
+            | ChatError::GoalCommandUnavailable
+            | ChatError::GoalCommandConflict),
+        ) => super::super::error_mapper::composer_error_message(&error),
         ChatSendError::Chat(ChatError::MessageRequired) => "message content is required".into(),
         ChatSendError::Chat(ChatError::SessionNotFound) => "chat session was not found".into(),
         ChatSendError::Chat(ChatError::SessionMustBeArchived) => {
@@ -200,13 +218,14 @@ fn normalized_optional(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-pub(super) fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand) -> String {
+pub(super) fn effective_agent_code(
+    session: &ChatSession,
+    request: &SendChatMessageCommand,
+) -> String {
     let selected = if session.last_run_code.is_some()
-        || session
-            .source_code
-            .as_deref()
-            .is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:"))
-    {
+        || session.source_code.as_deref().is_some_and(|source| {
+            source.starts_with("__dude:") || source.starts_with("__knowledge:")
+        }) {
         session.agent_code.clone()
     } else {
         normalized_optional(request.agent_code.clone()).or(session.agent_code.clone())
@@ -220,20 +239,19 @@ pub(crate) fn resolve_chat_agent_runtime(
     request: &SendChatMessageCommand,
 ) -> Result<ResolvedAgentRuntime, ChatSendError> {
     let effective_agent_code = effective_agent_code(session, request);
-    let runtime = if session
-        .source_code
-        .as_deref()
-        .is_some_and(|source| source.starts_with("__dude:") || source.starts_with("__knowledge:"))
-    {
-        state
-            .agent_management
-            .resolve_platform_agent_runtime(Some(effective_agent_code.as_str()))
-    } else {
-        state.agent_management.resolve_workspace_agent_runtime(
-            &session.workspace_code,
-            Some(effective_agent_code.as_str()),
-        )
-    };
+    let runtime =
+        if session.source_code.as_deref().is_some_and(|source| {
+            source.starts_with("__dude:") || source.starts_with("__knowledge:")
+        }) {
+            state
+                .agent_management
+                .resolve_platform_agent_runtime(Some(effective_agent_code.as_str()))
+        } else {
+            state.agent_management.resolve_workspace_agent_runtime(
+                &session.workspace_code,
+                Some(effective_agent_code.as_str()),
+            )
+        };
     runtime.map_err(|error| match error {
         crate::domain::agent::AgentManagementError::InvalidWorkspace => {
             ChatSendError::Chat(ChatError::WorkspaceForbidden)
@@ -251,10 +269,6 @@ pub(crate) fn resolve_chat_agent_runtime(
         crate::domain::agent::AgentManagementError::InternalAgentNotFound
         | crate::domain::agent::AgentManagementError::InternalAgentCodeInvalid
         | crate::domain::agent::AgentManagementError::InternalAgentCodeConflict
-        | crate::domain::agent::AgentManagementError::LoopInvalid
-        | crate::domain::agent::AgentManagementError::LoopNotFound
-        | crate::domain::agent::AgentManagementError::LoopConflict
-        | crate::domain::agent::AgentManagementError::LoopInUse
         | crate::domain::agent::AgentManagementError::BuiltinAgentReadOnly
         | crate::domain::agent::AgentManagementError::PlatformAgentReadOnly
         | crate::domain::agent::AgentManagementError::InternalAgentGroupInvalid

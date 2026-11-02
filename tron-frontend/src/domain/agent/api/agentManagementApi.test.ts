@@ -37,3 +37,10 @@ it("hides disabled agents from usage lists but retains them for management", asy
   expect((await fetchWorkspaceSystemAgents("SPACE")).map(a => a.agentCode)).toEqual(["active"]);
   expect((await fetchWorkspaceSystemAgents("SPACE", undefined, true)).map(a => a.agentCode)).toEqual(["active", "disabled"]);
 });
+
+it("preserves category mode and stable category identities", async () => {
+  vi.mocked(requestApi).mockResolvedValue([{ agentCode: "main-agent", toolAssignmentMode: "SelectedCategories", selectedCategoryCodes: ["tron.platform", "readonly"], selectedToolCodes: [], selectedServerCodes: [] }]);
+  const [record] = await fetchWorkspaceInternalAgents("SPACE");
+  expect(record.toolAssignmentMode).toBe("selected_categories");
+  expect(record.selectedCategoryCodes).toEqual(["tron.platform", "readonly"]);
+});

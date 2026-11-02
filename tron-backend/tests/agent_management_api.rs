@@ -35,25 +35,6 @@ fn app_with_config(config: AppConfig) -> Router {
         // API fixtures use the production-style multi-thread Tokio runtime: real
         // AppState background services can block on SQLite while an HTTP run
         // needs another task to finish its transaction.
-        // Runtime tests explicitly configure a React loop, just as Agent forms require.
-        if !state
-            .agent_management
-            .list_loop_designs()
-            .unwrap()
-            .iter()
-            .any(|d| d.loop_code == "test-react")
-        {
-            state.agent_management.save_loop_design(serde_json::from_value(json!({"loopCode":"test-react","name":"Test React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(),0).unwrap();
-        }
-        for agent in state
-            .agent_management
-            .list_platform_internal_agents()
-            .unwrap()
-        {
-            if agent.loop_code.is_none() {
-                state.agent_management.update_platform_internal_agent_definition(&agent.agent_code, tron_backend::application::agent::UpdateWorkspaceInternalAgentDefinitionCommand { loop_code: Some("test-react".into()), ..Default::default() }).unwrap();
-            }
-        }
     })
 }
 
@@ -102,9 +83,11 @@ fn provider_tool_result(messages: &[Value], name: &str) -> String {
         1,
         "expected one native result for {name}/{id}: {messages:?}"
     );
-    common::single_gateway_result(results[0]["content"]
-        .as_str()
-        .expect("tool output must be text"))
+    common::single_gateway_result(
+        results[0]["content"]
+            .as_str()
+            .expect("tool output must be text"),
+    )
 }
 
 struct RecordingModelServer {
@@ -395,14 +378,16 @@ fn to_gateway_response(mut response: Value) -> Value {
             .and_then(|name| name.as_str())
             .is_some_and(|name| name == "tool_execute" || name == "tool_search");
         if is_gateway {
-            let name=call["function"]["name"].as_str().unwrap();
-            let raw=call["function"]["arguments"].as_str().unwrap_or("{}");
-            let input:Value=serde_json::from_str(raw).unwrap();
-            let input=if name=="tool_search" { common::gateway_arguments(name,input) } else {
-                let envelope=eliteforge_agent_core::GatewayEnvelope::parse(&input).unwrap();
+            let name = call["function"]["name"].as_str().unwrap();
+            let raw = call["function"]["arguments"].as_str().unwrap_or("{}");
+            let input: Value = serde_json::from_str(raw).unwrap();
+            let input = if name == "tool_search" {
+                common::gateway_arguments(name, input)
+            } else {
+                let envelope = eliteforge_agent_core::GatewayEnvelope::parse(&input).unwrap();
                 json!({"tool":envelope.tool,"arguments":common::gateway_arguments(&envelope.tool,envelope.arguments)})
             };
-            call["function"]["arguments"]=json!(input.to_string());
+            call["function"]["arguments"] = json!(input.to_string());
             continue;
         }
         let inner_name = call
@@ -502,18 +487,6 @@ async fn request_with_locale(
     authorization_header: &str,
     locale: &str,
 ) -> axum::response::Response {
-    let mut body = body;
-    if method == Method::POST {
-        if let Some(object) = body.as_mut().and_then(Value::as_object_mut) {
-            if uri.ends_with("/internal") {
-                object.entry("loopCode").or_insert(json!("test-react"));
-            }
-            if uri == "/api/v1/agents/loops" {
-                object.remove("version");
-                object.remove("updatedAt");
-            }
-        }
-    }
     let mut builder = Request::builder()
         .method(method)
         .uri(uri)
@@ -975,7 +948,11 @@ async fn platform_main_agent_guidance_is_editable_and_legacy_storage_still_drive
             "retired prompt leaked: {removed}"
         );
     }
-    assert!(main_messages.iter().any(|message| message["role"] == "user" && message["content"] == "Investigate latency."));
+    assert!(
+        main_messages.iter().any(
+            |message| message["role"] == "user" && message["content"] == "Investigate latency."
+        )
+    );
 
     let task_messages = recorded_requests[1]["messages"]
         .as_array()
@@ -985,7 +962,8 @@ async fn platform_main_agent_guidance_is_editable_and_legacy_storage_still_drive
             .unwrap()
             .contains("Calm, terse, and surgical.")
     );
-    assert!(task_messages.iter().any(|message| message["role"] == "user" && message["content"] == "Investigate latency for task."));
+    assert!(task_messages.iter().any(|message| message["role"] == "user"
+        && message["content"] == "Investigate latency for task."));
 
     legacy["rolePrompt"] = json!("");
     connection.execute("UPDATE platform_internal_agent_configs SET config_json=?1 WHERE agent_code='main-agent'", [legacy.to_string()]).unwrap();
@@ -1061,8 +1039,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         &app,
         Method::PATCH,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
-        Some(json!({
-        })),
+        Some(json!({})),
         None,
         Some(&authorization),
     )
@@ -1365,8 +1342,10 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
     };
 
     // Grouping: `domainCode` lists that group's wrapped tools only.
-    let domain_search: Value =
-        serde_json::from_str(&common::single_gateway_result(&latest_tool_output(&recorded[1]))).expect("domain search result JSON");
+    let domain_search: Value = serde_json::from_str(&common::single_gateway_result(
+        &latest_tool_output(&recorded[1]),
+    ))
+    .expect("domain search result JSON");
     let grouped: Vec<String> = domain_search["tools"]
         .as_array()
         .expect("grouped tools should be an array")
@@ -1394,8 +1373,10 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
     );
 
     // Keyword discovery still reaches the same wrapped tool.
-    let keyword_search: Value = serde_json::from_str(&common::single_gateway_result(&latest_tool_output(&recorded[2])))
-        .expect("keyword search result JSON");
+    let keyword_search: Value = serde_json::from_str(&common::single_gateway_result(
+        &latest_tool_output(&recorded[2]),
+    ))
+    .expect("keyword search result JSON");
     assert!(
         keyword_search["tools"]
             .as_array()
@@ -1406,8 +1387,10 @@ async fn run_instructions_list_only_authorized_tool_domains_and_search_stays_in_
     );
 
     // The discovered wrapped tool executes through the gateway envelope.
-    let executed: Value = serde_json::from_str(&common::single_gateway_result(&latest_tool_output(&recorded[3])))
-        .expect("workspace page result JSON");
+    let executed: Value = serde_json::from_str(&common::single_gateway_result(
+        &latest_tool_output(&recorded[3]),
+    ))
+    .expect("workspace page result JSON");
     assert!(
         executed["records"]
             .as_array()
@@ -1437,8 +1420,12 @@ fn domain_search_response(domain_code: &str) -> Value {
 
 /// Domain codes advertised by the rendered `agent.domain-discovery` inventory.
 fn advertised_domain_codes(instructions: &str) -> Vec<String> {
-    instructions.lines().filter_map(|line|serde_json::from_str::<Vec<Value>>(line).ok())
-        .flatten().filter_map(|domain|domain["domainCode"].as_str().map(str::to_owned)).collect()
+    instructions
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Vec<Value>>(line).ok())
+        .flatten()
+        .filter_map(|domain| domain["domainCode"].as_str().map(str::to_owned))
+        .collect()
 }
 
 /// The host owns the tool taxonomy. Framework packs (bash/fs/search/terminal,
@@ -1596,7 +1583,7 @@ async fn host_taxonomy_makes_framework_pack_tools_domain_listable() {
             .to_string()
     };
     for (index, (domain_code, tool_name)) in [
-        ("bash", "bash_exec"),
+        ("bash", "command_exec"),
         ("fs", "fs_read_text"),
         ("search", "search_grep"),
         ("workspace", "workspace_page"),
@@ -1604,8 +1591,10 @@ async fn host_taxonomy_makes_framework_pack_tools_domain_listable() {
     .into_iter()
     .enumerate()
     {
-        let listing: Value = serde_json::from_str(&common::single_gateway_result(&latest_tool_output(&recorded[index + 1])))
-            .unwrap_or_else(|error| panic!("`{domain_code}` search result JSON: {error}"));
+        let listing: Value = serde_json::from_str(&common::single_gateway_result(
+            &latest_tool_output(&recorded[index + 1]),
+        ))
+        .unwrap_or_else(|error| panic!("`{domain_code}` search result JSON: {error}"));
         assert_eq!(
             listing["matched"],
             json!(1),
@@ -1809,15 +1798,6 @@ Progressive disclosure instructions loaded.\n",
     let app = app_with_config(config);
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
-    internal_agent_api(&app, &authorization, Method::POST, "/api/v1/agents/loops", Some(json!({"loopCode":"skill-fixture","name":"Skill fixture","kind":"React","nodes":[],"edges":[],"maxParallelNodes":1}))).await;
-    internal_agent_api(
-        &app,
-        &authorization,
-        Method::PATCH,
-        "/api/v1/agents/registry/internal/main-agent/definition",
-        Some(json!({"loopCode":"skill-fixture"})),
-    )
-    .await;
     common::enable_direct_list(&app).await;
 
     let tool_response = request_with_headers(
@@ -2212,6 +2192,59 @@ async fn tool_catalog_read_apis_are_available() {
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
 
+    let categories_response = request_with_locale(
+        &app,
+        Method::GET,
+        "/api/v1/tools/categories",
+        None,
+        &authorization,
+        "zh-CN",
+    )
+    .await;
+    assert_eq!(categories_response.status(), StatusCode::OK);
+    let categories_body = response_json(categories_response).await;
+    assert_eq!(categories_body["code"], "0");
+    let categories = categories_body["data"].as_array().unwrap();
+    assert!(categories.iter().any(|row| row["code"] == "tron.platform"
+        && row["name"] == "平台工具"
+        && row["toolCount"].as_u64().unwrap() > 0));
+    assert!(
+        categories
+            .iter()
+            .any(|row| row["code"] == "system.command" && row["name"] == "系统命令工具")
+    );
+    assert!(categories.iter().any(
+        |row| row["code"] == "agent.collaboration" && row["toolCount"].as_u64().unwrap() >= 15
+    ));
+    assert!(
+        categories
+            .iter()
+            .any(|row| row["code"] == "interaction" && row["toolCount"].as_u64().unwrap() >= 2)
+    );
+
+    for (locale, expected) in [
+        ("zh-CN", "向子运行分派"),
+        ("en-US", "Delegate one focused task"),
+    ] {
+        let response = request_with_locale(
+            &app,
+            Method::GET,
+            "/api/v1/tools/agent.spawn",
+            None,
+            &authorization,
+            locale,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert!(
+            body["data"]["description"]
+                .as_str()
+                .unwrap()
+                .contains(expected)
+        );
+    }
+
     let domains_response = request_with_headers(
         &app,
         Method::GET,
@@ -2265,6 +2298,13 @@ async fn tool_catalog_read_apis_are_available() {
             .iter()
             .any(|row| row["toolCode"] == json!("fs.read_text"))
     );
+    let read = tools
+        .iter()
+        .find(|row| row["toolCode"] == "fs.read_text")
+        .unwrap();
+    assert_eq!(read["category"]["code"], "system.command");
+    assert_eq!(read["operationKind"], "QUERY");
+    assert!(read["source"].is_object());
 
     let workspace_tools_response = request_with_headers(
         &app,
@@ -2302,7 +2342,7 @@ async fn tool_catalog_read_apis_are_available() {
     assert_eq!(tool_body["data"]["toolCode"], json!("bash.exec"));
     let official = eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
         .into_iter()
-        .find(|tool| tool.call_name == "system_exec")
+        .find(|tool| tool.call_name == "command_exec")
         .unwrap();
     assert_eq!(tool_body["data"]["inputSchema"], official.input_schema);
     assert!(
@@ -2363,7 +2403,7 @@ async fn tool_catalog_read_apis_follow_accept_language() {
     );
     let official = eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
         .into_iter()
-        .find(|tool| tool.call_name == "system_exec")
+        .find(|tool| tool.call_name == "command_exec")
         .unwrap();
     assert_eq!(tool_body["data"]["inputSchema"], official.input_schema);
 }
@@ -3027,14 +3067,14 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                     "role": "assistant",
                     "tool_calls": [
                         {
-                            "id": "call_bash_exec",
+                            "id": "call_command_exec",
                             "type": "function",
                             "function": {
-                                "name": "bash_exec",
+                                "name": "command_exec",
                                 "arguments": serde_json::to_string(&json!({
                                     "command": "sed",
                                     "args": ["-n", "1,1p", cargo_toml.display().to_string()]
-                                })).expect("bash_exec arguments should serialize")
+                                })).expect("command_exec arguments should serialize")
                             }
                         },
                         {
@@ -3148,7 +3188,7 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
         .as_array()
         .expect("second request messages should be an array");
     let command_result: Value =
-        serde_json::from_str(&provider_tool_result(second_messages, "bash_exec"))
+        serde_json::from_str(&provider_tool_result(second_messages, "command_exec"))
             .expect("command result JSON");
     assert_eq!(command_result["exitCode"], json!(0));
     assert!(
@@ -3514,86 +3554,6 @@ async fn internal_agent_api(
     let body = response_json(response).await;
     assert_eq!(status, StatusCode::OK, "{uri}: {body}");
     body["data"].clone()
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn builtin_default_react_loop_is_named_and_read_only() {
-    let router = app();
-    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    let loops = internal_agent_api(
-        &router,
-        &authorization,
-        Method::GET,
-        "/api/v1/agents/loops",
-        None,
-    )
-    .await;
-    let builtin = loops
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["loopCode"] == "default-react")
-        .expect("the built-in ReAct Loop is initialized");
-    assert_eq!(builtin["name"], "EliteForge ReAct");
-
-    let update = request_with_locale(
-        &router,
-        Method::PUT,
-        "/api/v1/agents/loops/default-react",
-        Some(json!({"name":"Renamed","kind":"React","nodes":[],"edges":[],"maxParallelNodes":1,"expectedVersion":builtin["version"]})),
-        &authorization,
-        "zh-CN",
-    )
-    .await;
-    assert_eq!(update.status(), StatusCode::FORBIDDEN);
-    let _ = response_json(update).await;
-
-    let delete = request_with_locale(
-        &router,
-        Method::DELETE,
-        "/api/v1/agents/loops/default-react",
-        None,
-        &authorization,
-        "zh-CN",
-    )
-    .await;
-    assert_eq!(delete.status(), StatusCode::FORBIDDEN);
-    let _ = response_json(delete).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn builtin_internal_agents_have_default_react_loop_assigned() {
-    let router =
-        common::app_with_state_setup(common::prepared_config(AppConfig::default()), |state| {
-            state.knowledge_bases.stop_ingestion_workers()
-        });
-    let authorization = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    let agents = internal_agent_api(
-        &router,
-        &authorization,
-        Method::GET,
-        "/api/v1/agents/registry/internal",
-        None,
-    )
-    .await;
-    let builtins: Vec<_> = agents
-        .as_array()
-        .expect("internal agents are returned as a list")
-        .iter()
-        .filter(|agent| agent["builtIn"] == json!(true))
-        .collect();
-
-    let mut codes = builtins.iter().map(|agent| agent["agentCode"].as_str().unwrap()).collect::<Vec<_>>();
-    codes.sort_unstable();
-    assert_eq!(codes, ["explore-agent", "main-agent", "prd-agent"]);
-    for agent in builtins {
-        assert_eq!(
-            agent["loopCode"],
-            json!("default-react"),
-            "{} should have the built-in ReAct Loop assigned",
-            agent["agentCode"]
-        );
-    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -4046,8 +4006,8 @@ async fn concurrent_internal_agent_creation_preserves_the_first_definition() {
         } else {
             "global-race"
         };
-        let first_body = json!({"agentCode":code,"name":"First","rolePrompt":"First role","loopCode":"test-react"});
-        let second_body = json!({"agentCode":code,"name":"Second","rolePrompt":"Second role","loopCode":"test-react"});
+        let first_body = json!({"agentCode":code,"name":"First","rolePrompt":"First role",});
+        let second_body = json!({"agentCode":code,"name":"Second","rolePrompt":"Second role",});
         let (first, second) = tokio::join!(
             request_with_headers(
                 &router,
@@ -4097,370 +4057,6 @@ async fn concurrent_internal_agent_creation_preserves_the_first_definition() {
         .await;
         assert_eq!(saved["name"], winner["data"]["name"]);
         assert_eq!(saved["rolePrompt"], winner["data"]["rolePrompt"]);
-    }
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn agent_loop_runs_follow_stage_order_and_new_versions() {
-    let server = recording_model_server().await;
-    let router = app();
-    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    let loop_body = json!({"loopCode":"staged-review","name":"Staged review","kind":"Workflow","nodes":[
-        {"id":"prepare","kind":"Model","instructions":"LOOP_PREPARE_UNIQUE","join":"Selected","condition":null},
-        {"id":"finish","kind":"Model","instructions":"LOOP_FINISH_UNIQUE","join":"Selected","condition":null}
-    ],"edges":[],"maxParallelNodes":1});
-    internal_agent_api(
-        &router,
-        &auth,
-        Method::POST,
-        "/api/v1/agents/loops",
-        Some(loop_body.clone()),
-    )
-    .await;
-    internal_agent_api(&router,&auth,Method::POST,"/api/v1/agents/workspaces/TRON_CORE/internal",Some(json!({"agentCode":"staged-agent","name":"Staged","rolePrompt":"SHARED_AGENT_ROLE","loopCode":"staged-review"}))).await;
-    let run = || {
-        json!({"prompt":"Check the proposal.","workspaceCode":"TRON_CORE","agentCode":"staged-agent",
-        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}})
-    };
-    let result = internal_agent_api(
-        &router,
-        &auth,
-        Method::POST,
-        "/api/v1/agents/runs",
-        Some(run()),
-    )
-    .await;
-    assert_eq!(result["stepCount"], 2);
-    let mut update = loop_body;
-    update.as_object_mut().unwrap().remove("loopCode");
-    update["expectedVersion"] = json!(1);
-    update["nodes"][1]["instructions"] = json!("LOOP_FINISH_V2");
-    internal_agent_api(
-        &router,
-        &auth,
-        Method::PUT,
-        "/api/v1/agents/loops/staged-review",
-        Some(update),
-    )
-    .await;
-    internal_agent_api(
-        &router,
-        &auth,
-        Method::POST,
-        "/api/v1/agents/runs",
-        Some(run()),
-    )
-    .await;
-    let requests = server.requests.lock().unwrap().clone();
-    assert_eq!(requests.len(), 4);
-    for (index, marker) in [
-        "LOOP_PREPARE_UNIQUE",
-        "LOOP_FINISH_UNIQUE",
-        "LOOP_PREPARE_UNIQUE",
-        "LOOP_FINISH_V2",
-    ]
-    .iter()
-    .enumerate()
-    {
-        let messages = requests[index]["messages"].to_string();
-        assert!(messages.contains(marker), "{messages}");
-        assert!(messages.contains("SHARED_AGENT_ROLE"), "{messages}");
-    }
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn agent_loop_dag_branches_skip_unselected_nodes() {
-    let server = recording_model_server().await;
-    let router = app();
-    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    let model_node = |id: &str, prompt: &str| json!({"id":id,"kind":"Model","instructions":prompt,"join":"Selected","condition":null});
-    internal_agent_api(&router,&auth,Method::POST,"/api/v1/agents/loops",Some(json!({"loopCode":"branch-review","name":"Branch review","kind":"Dag","nodes":[
-        model_node("source","DAG_SOURCE_UNIQUE"),
-        {"id":"route","kind":"Branch","instructions":"","join":"Selected","condition":{"sourceNode":"source","pointer":"/absent","equals":true,"matchTarget":"approved","elseTarget":"rejected"}},
-        model_node("approved","DAG_APPROVED_UNIQUE"), model_node("rejected","DAG_REJECTED_UNIQUE"),model_node("finish","DAG_FINISH_UNIQUE")
-    ],"edges":[{"from":"source","to":"route"},{"from":"route","to":"approved"},{"from":"route","to":"rejected"},{"from":"approved","to":"finish"},{"from":"rejected","to":"finish"}],"maxParallelNodes":2}))).await;
-    internal_agent_api(&router,&auth,Method::POST,"/api/v1/agents/workspaces/TRON_CORE/internal",Some(json!({"agentCode":"branch-agent","name":"Branch","rolePrompt":"BRANCH_ROLE","loopCode":"branch-review"}))).await;
-    let result=internal_agent_api(&router,&auth,Method::POST,"/api/v1/agents/runs",Some(json!({"prompt":"Check the proposal.","workspaceCode":"TRON_CORE","agentCode":"branch-agent",
-        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}}))).await;
-    assert_eq!(result["stepCount"], 3);
-    let requests = server.requests.lock().unwrap().clone();
-    assert_eq!(requests.len(), 3);
-    assert!(
-        requests[0]["messages"]
-            .to_string()
-            .contains("DAG_SOURCE_UNIQUE")
-    );
-    assert!(
-        requests[1]["messages"]
-            .to_string()
-            .contains("DAG_REJECTED_UNIQUE")
-    );
-    assert!(
-        requests[2]["messages"]
-            .to_string()
-            .contains("DAG_FINISH_UNIQUE")
-    );
-    assert!(
-        !requests
-            .iter()
-            .any(|r| r["messages"].to_string().contains("DAG_APPROVED_UNIQUE"))
-    );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn agent_loop_dag_runs_parallel_roots_with_isolated_contexts() {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let requests = Arc::new(Mutex::new(Vec::<Value>::new()));
-    let barrier = Arc::new(tokio::sync::Barrier::new(2));
-    async fn completion(
-        axum::extract::State((requests, barrier)): axum::extract::State<(
-            Arc<Mutex<Vec<Value>>>,
-            Arc<tokio::sync::Barrier>,
-        )>,
-        Json(payload): Json<Value>,
-    ) -> Response {
-        let index = {
-            let mut requests = requests.lock().unwrap();
-            requests.push(payload.clone());
-            requests.len()
-        };
-        if index <= 2 {
-            // A serial implementation cannot reach this barrier's second participant.
-            tokio::time::timeout(std::time::Duration::from_secs(10), barrier.wait())
-                .await
-                .expect("DAG roots must execute concurrently");
-        }
-        model_completion(
-            &payload,
-            json!({"choices":[{"message":{"role":"assistant","content":format!("parallel-result-{index}")}}]}),
-        )
-    }
-    let server = Router::new()
-        .route("/v1/chat/completions", post(completion))
-        .with_state((requests.clone(), barrier));
-    let task = tokio::spawn(async move {
-        axum::serve(listener, server).await.unwrap();
-    });
-    let router = app();
-    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    let node = |id: &str| json!({"id":id,"kind":"Model","instructions":format!("ISOLATED_{id}"),"join":"All","condition":null});
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(json!({
-        "loopCode":"parallel-review","name":"Parallel review","kind":"Dag",
-        "nodes":[node("left"),node("right"),node("finish")],
-        "edges":[{"from":"left","to":"finish"},{"from":"right","to":"finish"}],"maxParallelNodes":2
-    }))).await;
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"parallel-agent","name":"Parallel","rolePrompt":"Parallel review","loopCode":"parallel-review"}))).await;
-    let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
-        "prompt":"Review this proposal.","workspaceCode":"TRON_CORE","agentCode":"parallel-agent",
-        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":format!("http://{address}/v1"),"apiKey":"sk-test","modelName":"gpt-test"}
-    }))).await;
-    assert_eq!(result["stepCount"], 3);
-    let requests = requests.lock().unwrap();
-    assert_eq!(requests.len(), 3);
-    let roots = requests[..2]
-        .iter()
-        .map(|r| r["messages"].to_string())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        roots.iter().filter(|s| s.contains("ISOLATED_left")).count(),
-        1
-    );
-    assert_eq!(
-        roots
-            .iter()
-            .filter(|s| s.contains("ISOLATED_right"))
-            .count(),
-        1
-    );
-    assert!(roots.iter().all(|s| !s.contains("ISOLATED_finish")));
-    let finish = requests[2]["messages"].to_string();
-    assert!(
-        finish.contains("parallel-result-1") && finish.contains("parallel-result-2"),
-        "{finish}"
-    );
-    assert!(finish.contains("ISOLATED_finish"));
-    task.abort();
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn agent_loop_dag_matches_json_fields_from_model_output() {
-    let response =
-        |content: &str| json!({"choices":[{"message":{"role":"assistant","content":content}}]});
-    let server = scripted_model_server(vec![
-        response(r#"{"approved":true}"#),
-        response("Approved result"),
-    ])
-    .await;
-    let router = app();
-    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    let node = |id: &str| json!({"id":id,"kind":"Model","instructions":format!("JSON_BRANCH_{id}"),"join":"Selected","condition":null});
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(json!({
-        "loopCode":"json-branch","name":"JSON branch","kind":"Dag","nodes":[node("source"),
-        {"id":"route","kind":"Branch","instructions":"","join":"Selected","condition":{"sourceNode":"source","pointer":"/approved","equals":true,"matchTarget":"approved","elseTarget":"rejected"}},
-        node("approved"),node("rejected")],"edges":[{"from":"source","to":"route"},{"from":"route","to":"approved"},{"from":"route","to":"rejected"}],"maxParallelNodes":1
-    }))).await;
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"json-agent","name":"JSON","rolePrompt":"JSON","loopCode":"json-branch"}))).await;
-    let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
-        "prompt":"Review this proposal.","workspaceCode":"TRON_CORE","agentCode":"json-agent",
-        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
-    }))).await;
-    assert_eq!(result["stepCount"], 2);
-    let requests = server.requests.lock().unwrap();
-    assert_eq!(requests.len(), 2);
-    assert!(
-        requests[1]["messages"]
-            .to_string()
-            .contains("JSON_BRANCH_approved")
-    );
-    assert!(
-        !requests[1]["messages"]
-            .to_string()
-            .contains("JSON_BRANCH_rejected")
-    );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn agent_loop_dag_preserves_all_terminal_outputs() {
-    let server = recording_model_server().await;
-    let router = app();
-    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    let node = |id: &str| json!({"id":id,"kind":"Model","instructions":id,"join":"Selected","condition":null});
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/loops", Some(json!({
-        "loopCode":"two-results","name":"Two results","kind":"Dag","nodes":[node("first"),node("second")],"edges":[],"maxParallelNodes":2
-    }))).await;
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"two-results-agent","name":"Two results","rolePrompt":"Review","loopCode":"two-results"}))).await;
-    let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
-        "prompt":"Review this proposal.","workspaceCode":"TRON_CORE","agentCode":"two-results-agent",
-        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
-    }))).await;
-    assert_eq!(result["stepCount"], 2);
-    let outputs: Value = serde_json::from_str(
-        result["finalOutput"]
-            .as_str()
-            .expect("nonempty terminal outputs"),
-    )
-    .unwrap();
-    assert!(outputs["first"].as_str().is_some());
-    assert!(outputs["second"].as_str().is_some());
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn agent_loop_custom_workflow_runs_all_stages() {
-    let server = recording_model_server().await;
-    let router = app();
-    let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-    let design = serde_json::json!({"loopCode":"review-three","name":"Review","kind":"Workflow","version":0,"updatedAt":0,"maxParallelNodes":1,"edges":[],"nodes":[{"id":"draft","kind":"Model","instructions":"Draft stage","join":"Selected","condition":null},{"id":"review","kind":"Model","instructions":"Review stage","join":"Selected","condition":null},{"id":"finalize","kind":"Model","instructions":"Finalize stage","join":"Selected","condition":null}]});
-    internal_agent_api(
-        &router,
-        &auth,
-        Method::POST,
-        "/api/v1/agents/loops",
-        Some(design),
-    )
-    .await;
-    internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"custom-review","name":"Review","rolePrompt":"CUSTOM_ROLE","loopCode":"review-three"}))).await;
-    let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
-        "prompt":"Draft a proposal.","workspaceCode":"TRON_CORE","agentCode":"custom-review",
-        "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
-    }))).await;
-    assert_eq!(result["stepCount"], 3);
-    let catalog =
-        internal_agent_api(&router, &auth, Method::GET, "/api/v1/agents/loops", None).await;
-    let design = catalog
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|d| d["loopCode"] == "review-three")
-        .unwrap();
-    let requests = server.requests.lock().unwrap();
-    assert_eq!(requests.len(), 3);
-    for (index, node) in design["nodes"].as_array().unwrap().iter().enumerate() {
-        assert!(
-            requests[index]["messages"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|message| message["content"] == node["instructions"])
-        );
-        assert!(
-            requests[index]["messages"]
-                .to_string()
-                .contains("CUSTOM_ROLE")
-        );
-    }
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn agent_loop_custom_analysis_joins_roots_and_selects_each_exit() {
-    for approved in [true, false] {
-        let app_config = AppConfig {
-            database_url: temp_database_url("custom-analysis-loop"),
-            ..AppConfig::default()
-        };
-        let response = |content: String| json!({"choices":[{"message":{"role":"assistant","content":content}}]});
-        let design = serde_json::json!({"loopCode":"analysis-dag","name":"Analysis","kind":"Dag","version":0,"updatedAt":0,"maxParallelNodes":2,"nodes":[{"id":"solution","kind":"Model","instructions":"Solution analysis","join":"Selected","condition":null},{"id":"risks","kind":"Model","instructions":"Risk analysis","join":"Selected","condition":null},{"id":"decision","kind":"Model","instructions":"Decision stage","join":"All","condition":null},{"id":"route","kind":"Branch","instructions":"","join":"Selected","condition":{"sourceNode":"decision","pointer":"/approved","equals":true,"matchTarget":"action","elseTarget":"clarify"}},{"id":"action","kind":"Model","instructions":"Action stage","join":"All","condition":null},{"id":"clarify","kind":"Model","instructions":"Clarification stage","join":"All","condition":null}],"edges":[{"from":"solution","to":"decision"},{"from":"risks","to":"decision"},{"from":"decision","to":"route"},{"from":"route","to":"action"},{"from":"route","to":"clarify"},{"from":"decision","to":"action"},{"from":"decision","to":"clarify"}]});
-        let server = scripted_model_server(vec![
-            response("BUILTIN_ANALYSIS_FIRST".into()),
-            response("BUILTIN_ANALYSIS_SECOND".into()),
-            response(json!({"approved":approved,"summary":"Decision"}).to_string()),
-            response(format!("FINAL_{approved}")),
-        ])
-        .await;
-        let router = app_with_config(app_config.clone());
-        let auth = format!("Bearer {}", authenticated_bearer_token(&router).await);
-        internal_agent_api(
-            &router,
-            &auth,
-            Method::POST,
-            "/api/v1/agents/loops",
-            Some(design.clone()),
-        )
-        .await;
-        internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/workspaces/TRON_CORE/internal", Some(json!({"agentCode":"custom-analysis","name":"Analysis","rolePrompt":"CUSTOM_ROLE","loopCode":"analysis-dag"}))).await;
-        let result = internal_agent_api(&router, &auth, Method::POST, "/api/v1/agents/runs", Some(json!({
-            "prompt":"Review a proposal.","workspaceCode":"TRON_CORE","agentCode":"custom-analysis",
-            "model":{"modelCode":"TEST_MODEL","protocol":"CHAT_COMPLETIONS","baseUrl":server.base_url,"apiKey":"sk-test","modelName":"gpt-test"}
-        }))).await;
-        assert_eq!(result["stepCount"], 4);
-        assert_eq!(result["finalOutput"], format!("FINAL_{approved}"));
-        let catalog =
-            internal_agent_api(&router, &auth, Method::GET, "/api/v1/agents/loops", None).await;
-        let design = catalog
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|d| d["loopCode"] == "analysis-dag")
-            .unwrap();
-        let requests = server.requests.lock().unwrap();
-        assert_eq!(requests.len(), 4);
-        let merged = requests[2]["messages"].to_string();
-        assert!(
-            merged.contains("BUILTIN_ANALYSIS_FIRST") && merged.contains("BUILTIN_ANALYSIS_SECOND"),
-            "{merged}"
-        );
-        let target = if approved { "action" } else { "clarify" };
-        let other = if approved { "clarify" } else { "action" };
-        let instruction = |id| {
-            design["nodes"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|n| n["id"] == id)
-                .unwrap()["instructions"]
-                .clone()
-        };
-        let messages = requests[3]["messages"].as_array().unwrap();
-        assert!(
-            messages
-                .iter()
-                .any(|message| message["content"] == instruction(target))
-        );
-        assert!(
-            !messages
-                .iter()
-                .any(|message| message["content"] == instruction(other))
-        );
     }
 }
 
@@ -4624,9 +4220,8 @@ async fn internal_agent_group_api_persists_catalog_and_guards_builtin_definition
             json!({"groupName":"Engineering"}),
             json!({"name":"changed"}),
             json!({"avatarId":"fox"}),
-            json!({"loopCode":"missing-loop"}),
         ] {
-            let missing_loop = body.get("loopCode").is_some();
+            let missing_loop = false;
             let denied = request_with_locale(
                 &router,
                 Method::PATCH,
@@ -4676,4 +4271,60 @@ async fn internal_agent_group_api_persists_catalog_and_guards_builtin_definition
     .await;
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     assert_eq!(response_json(invalid).await["code"], "101028016");
+}
+
+#[tokio::test]
+async fn category_assignments_persist_and_expand_as_a_union() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/tools/categories",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    for body in [
+        json!({"toolAssignmentMode":"SelectedCategories", "selectedCategoryCodes":["system.command","readonly"]}),
+        json!({}),
+    ] {
+        let response = request_with_headers(
+            &app,
+            Method::PATCH,
+            "/api/v1/agents/registry/internal/main-agent/policy",
+            Some(body),
+            None,
+            Some(&authorization),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["data"]["selectedCategoryCodes"],
+            json!(["readonly", "system.command"])
+        );
+        let codes = body["data"]["selectedToolCodes"].as_array().unwrap();
+        assert!(codes.contains(&json!("bash.exec")));
+        assert!(codes.contains(&json!("fs.read_text")));
+        assert!(!codes.contains(&json!("app.create")));
+        let unique = codes
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(codes.len(), unique.len());
+    }
+    let response = request_with_headers(&app, Method::PATCH, "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy", Some(json!({"toolAssignmentMode":"SelectedCategories", "selectedCategoryCodes":["tron.platform"]})), None, Some(&authorization)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(
+        body["data"]["selectedCategoryCodes"],
+        json!(["tron.platform"])
+    );
+    let codes = body["data"]["selectedToolCodes"].as_array().unwrap();
+    assert!(codes.contains(&json!("app.create")));
+    assert!(!codes.contains(&json!("bash.exec")));
 }

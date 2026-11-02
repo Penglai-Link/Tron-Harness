@@ -261,7 +261,7 @@ impl LlmRuntimeModelResolver for EmbeddingResolver {
                 .unwrap_or("fixture-embedding")
                 .into(),
             protocol: ModelProtocol::OpenAiCompatible,
-            model_type: ModelType::Embedding,
+            model_type: ModelType::TextEmbedding,
             base_url: "http://fixture.invalid/v1".into(),
             api_path: None,
             api_key: "synthetic-key".into(),

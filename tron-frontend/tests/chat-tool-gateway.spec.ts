@@ -6,7 +6,7 @@ import { gatewayArguments } from "./support/gateway-stub";
  * routes, real PTY) with a local OpenAI-compatible stub model. The model stub
  * scripts OpenAI `tool_calls`, so the assertions below observe the real
  * framework loop: `tools` stability, `tool_search` discovery output, real
- * `tool_execute` execution through `bash_exec`, and the AG-UI card titles the
+ * `tool_execute` execution through `command_exec`, and the AG-UI card titles the
  * browser actually renders.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -51,13 +51,13 @@ const SCENARIOS: Record<string, Scenario> = {
     final: "gateway-discovery-reply",
   },
   "gateway-execute": {
-    toolCalls: [{ name: "tool_execute", args: { tool: "bash_exec", arguments: { command: EXEC_COMMAND } } }],
+    toolCalls: [{ name: "tool_execute", args: { tool: "command_exec", arguments: { command: EXEC_COMMAND } } }],
     final: "gateway-execute-reply",
   },
   "gateway-parallel": {
     toolCalls: [
-      { name: "tool_execute", args: { tool: "bash_exec", arguments: { command: PARALLEL_COMMANDS[0] } } },
-      { name: "tool_execute", args: { tool: "bash_exec", arguments: { command: PARALLEL_COMMANDS[1] } } },
+      { name: "tool_execute", args: { tool: "command_exec", arguments: { command: PARALLEL_COMMANDS[0] } } },
+      { name: "tool_execute", args: { tool: "command_exec", arguments: { command: PARALLEL_COMMANDS[1] } } },
     ],
     final: "gateway-parallel-reply",
   },
@@ -66,7 +66,7 @@ const SCENARIOS: Record<string, Scenario> = {
     final: "gateway-en-discovery-reply",
   },
   "gateway-en-execute": {
-    toolCalls: [{ name: "tool_execute", args: { tool: "bash_exec", arguments: { command: EXEC_COMMAND } } }],
+    toolCalls: [{ name: "tool_execute", args: { tool: "command_exec", arguments: { command: EXEC_COMMAND } } }],
     final: "gateway-en-execute-reply",
   },
 };
@@ -247,13 +247,14 @@ test.beforeAll(async () => {
   // `main-agent`, which is the one authorized for every platform tool.
   expect(agentCodes, `workspace internal agents: ${JSON.stringify(agentCodes)}`).toContain("main-agent");
 
-  const modelResponse = await fetch(`${api}/api/v1/admin/platform/models`, {
+  const modelResponse = await fetch(`${api}/api/v1/model-providers/configured`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer profile-test-token" },
     body: JSON.stringify({
-      displayName: MODEL_DISPLAY_NAME, vendor: "OpenAI", protocol: "OPENAI_COMPATIBLE", modelType: "TEXT", modelCapabilities: ["TEXT_GENERATION"],
-      baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiPath: "/chat/completions", apiKeyRef: "sk-acceptance", modelName: "acceptance-model", enabled: true,
-      thinkingEnabled: false, structuredOutputEnabled: false, temperature: 0.2, maxTokens: 1024, contextWindowTokens: 128000, topP: 1, maxRetries: 0,
+      providerId: "acceptance", displayName: MODEL_DISPLAY_NAME, protocol: "OpenAiChatCompletions",
+      baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiKey: "sk-acceptance", requestHeaders: {}, enabled: true,
+      models: [{ modelType: "Text", modelCode: null, modelId: "acceptance-model", name: MODEL_DISPLAY_NAME, contextWindowTokens: 128000,
+        maxOutputTokens: 1024, reasoning: false, supportsDeveloperRole: false, inputCapabilities: ["Text"], enabled: true }],
     }),
   });
   expect(modelResponse.ok).toBe(true);
@@ -396,7 +397,7 @@ test("2. tool_search discovery returns the bash domain and renders a localized c
   const results = toolResultTexts(followUp!);
   expect(results.length).toBeGreaterThan(0);
   const discoveryResult = results.join("\n");
-  expect(discoveryResult, "tool_search must return the real bash domain inventory").toContain("bash_exec");
+  expect(discoveryResult, "tool_search must return the real bash domain inventory").toContain("command_exec");
   logEvidence("discovery.tools", recorded.map((request) => request.toolNames));
   logEvidence("discovery.followUpToolResult", discoveryResult.slice(0, 600));
 
@@ -410,7 +411,7 @@ test("2. tool_search discovery returns the bash domain and renders a localized c
   await page.screenshot({ path: testInfo.outputPath("02-discovery.png"), animations: "disabled" });
 });
 
-test("3. tool_execute really runs bash_exec and the card hides the raw ids", async ({ page }, testInfo) => {
+test("3. tool_execute really runs command_exec and the card hides the raw ids", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await openChat(page, "zh-CN");
   const transcript = transcriptOf(page);
@@ -431,9 +432,9 @@ test("3. tool_execute really runs bash_exec and the card hides the raw ids", asy
   logEvidence("execute.cardTitles", titles);
   expect(titles.some((title) => title.includes("echo acc-gateway-hello")), `zh execute card title must carry the command: ${JSON.stringify(titles)}`).toBe(true);
   const transcriptText = await transcript.innerText();
-  logEvidence("execute.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("bash_exec") });
+  logEvidence("execute.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("command_exec") });
   expect(transcriptText, "zh transcript must not expose tool_execute").not.toContain("tool_execute");
-  expect(transcriptText, "zh transcript must not expose bash_exec").not.toContain("bash_exec");
+  expect(transcriptText, "zh transcript must not expose command_exec").not.toContain("command_exec");
   await page.screenshot({ path: testInfo.outputPath("03-execute.png"), animations: "disabled" });
   // The Tron work rail composes command cards from the host i18n
   // `chat.management.tool.commandSummary` =「执行：{{command}}」, so the card
@@ -469,9 +470,9 @@ test("4. two parallel tool_calls execute in one batch and render two cards", asy
   const transcriptText = await transcript.innerText();
   // The batch is presented as one grouped work-rail entry (zh copy).
   expect(transcriptText, "the grouped work-rail label must summarize the batch").toContain("执行 2 个命令");
-  logEvidence("parallel.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("bash_exec") });
+  logEvidence("parallel.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("command_exec") });
   expect(transcriptText).not.toContain("tool_execute");
-  expect(transcriptText).not.toContain("bash_exec");
+  expect(transcriptText).not.toContain("command_exec");
   await page.screenshot({ path: testInfo.outputPath("04-parallel.png"), animations: "disabled" });
 });
 
@@ -485,7 +486,7 @@ test("5. reverse validation: en-US renders the same gateway cards in English", a
   const discovery = requestsFor("gateway-en-discovery");
   expectGatewayToolsOnly(discovery, "en discovery");
   const discoveryResult = toolResultTexts(discovery.find((request) => request.hasToolResult)!).join("\n");
-  expect(discoveryResult).toContain("bash_exec");
+  expect(discoveryResult).toContain("command_exec");
   await expandWorkRail(transcript);
   let titles = await visibleToolTitles(transcript);
   logEvidence("en.discoveryCardTitles", titles);
@@ -505,9 +506,9 @@ test("5. reverse validation: en-US renders the same gateway cards in English", a
   logEvidence("en.executeCardTitles", titles);
   expect(titles.some((title) => title.includes("echo acc-gateway-hello")), `en execute card title missing: ${JSON.stringify(titles)}`).toBe(true);
   const transcriptText = await transcript.innerText();
-  logEvidence("en.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("bash_exec") });
+  logEvidence("en.transcriptHasRawIds", { toolExecute: transcriptText.includes("tool_execute"), bashExec: transcriptText.includes("command_exec") });
   expect(transcriptText).not.toContain("tool_execute");
-  expect(transcriptText).not.toContain("bash_exec");
+  expect(transcriptText).not.toContain("command_exec");
   await page.screenshot({ path: testInfo.outputPath("06-en-execute.png"), animations: "disabled" });
   // Same as the zh case: the host i18n `chat.management.tool.commandSummary`
   // renders 「Run: {{command}}」 in en-US. Assert the measured wording rather

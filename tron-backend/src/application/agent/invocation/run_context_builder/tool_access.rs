@@ -103,7 +103,10 @@ impl AgentRunContextBuilder {
             let mut records = HashMap::new();
             let discovered = self
                 .management
-                .register_labeled_tool_descriptors(&materialization.descriptors, &materialization.tools)
+                .register_labeled_tool_descriptors(
+                    &materialization.descriptors,
+                    &materialization.tools,
+                )
                 .map_err(AgentInvocationError::RuntimeFailed)?;
             for (descriptor, record) in materialization.descriptors.iter().zip(discovered) {
                 if self
@@ -123,14 +126,18 @@ impl AgentRunContextBuilder {
                 .collect::<Vec<_>>();
             materialization.tools.retain(|tool| {
                 records.get(&tool.tool_name).is_some_and(|record| {
-                    policy
-                        .tool_assignment_mode
-                        .selects(record, &server_tool_codes)
+                    policy.tool_assignment_mode.selects_policy(
+                        record,
+                        &server_tool_codes,
+                        &policy.selected_category_codes,
+                    )
                 }) && permitted.contains(&tool.tool_name)
                     && (access.requested_tool_names.is_empty()
                         || access.requested_tool_names.contains(&tool.tool_name))
             });
-            access.effective_tools.extend(materialization.tools.iter().cloned());
+            access
+                .effective_tools
+                .extend(materialization.tools.iter().cloned());
             access.tools.extend(materialization.tools);
         }
 

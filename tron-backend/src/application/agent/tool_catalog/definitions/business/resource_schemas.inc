@@ -199,7 +199,7 @@ fn credentials_schema(username_required: bool) -> Value {
 fn secret_reference_schema() -> Value {
     json!({
         "oneOf": [
-            { "type": "string", "minLength": 1, "maxLength": 128, "description": "Legacy variable key" },
+            { "type": "string", "minLength": 1, "maxLength": 128, "description": "Variable key referencing a stored secret" },
             {
                 "type": "object",
                 "oneOf": [

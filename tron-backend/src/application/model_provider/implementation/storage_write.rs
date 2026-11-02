@@ -80,10 +80,11 @@ pub(super) fn apply_catalog_snapshot(
                 "INSERT INTO provider_catalog_models (
                     provider_code, model_code, model_name, upstream_vendor_code, upstream_vendor_name,
                     context_window_tokens, protocols, quality_type, input_coefficient, cache_hit_coefficient,
-                    output_coefficient, status, first_seen_at, last_seen_at, updated_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?13)
+                    output_coefficient, status, first_seen_at, last_seen_at, updated_at, tags_json
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?13, ?14)
                  ON CONFLICT(provider_code, model_code, upstream_vendor_code, quality_type) DO UPDATE SET
                     model_name = excluded.model_name,
+                    tags_json = excluded.tags_json,
                     upstream_vendor_code = excluded.upstream_vendor_code,
                     upstream_vendor_name = excluded.upstream_vendor_name,
                     context_window_tokens = excluded.context_window_tokens,
@@ -109,6 +110,7 @@ pub(super) fn apply_catalog_snapshot(
                     model.output_coefficient,
                     ProviderCatalogModelStatus::Available.storage_value(),
                     now,
+                    serde_json::to_string(&model.tags).map_err(|_| ModelProviderError::Storage)?,
                 ],
             )
             .map_err(|_| ModelProviderError::Storage)?;
@@ -143,14 +145,16 @@ pub(super) fn apply_multimedia_catalog_snapshot(
             .execute(
                 "INSERT INTO provider_multimedia_catalog_models (
                     provider_code, model_id, model_code, model_name, media_type, status,
-                    first_seen_at, last_seen_at, updated_at, dimension, tags_json
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?7, ?8, ?9)
+                    first_seen_at, last_seen_at, updated_at, dimension, tags_json, upstream_vendor_code, upstream_vendor_name, input_coefficient, cache_hit_coefficient, output_coefficient
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                  ON CONFLICT(provider_code, model_id) DO UPDATE SET
                     model_code = excluded.model_code,
                     model_name = excluded.model_name,
                     media_type = excluded.media_type,
                     dimension = excluded.dimension,
                     tags_json = excluded.tags_json,
+                    upstream_vendor_code = excluded.upstream_vendor_code, upstream_vendor_name = excluded.upstream_vendor_name,
+                    input_coefficient = excluded.input_coefficient, cache_hit_coefficient = excluded.cache_hit_coefficient, output_coefficient = excluded.output_coefficient,
                     status = excluded.status,
                     last_seen_at = excluded.last_seen_at,
                     updated_at = excluded.updated_at",
@@ -164,6 +168,7 @@ pub(super) fn apply_multimedia_catalog_snapshot(
                     now,
                     model.dimension.map(|dimension| dimension as i64),
                     serde_json::to_string(&model.tags).map_err(|_| ModelProviderError::Storage)?,
+                    model.upstream_vendor_code, model.upstream_vendor_name, model.input_coefficient, model.cache_hit_coefficient, model.output_coefficient,
                 ],
             )
             .map_err(|_| ModelProviderError::Storage)?;
@@ -267,7 +272,7 @@ pub(super) fn replace_authorized_connection(
         .map_err(|_| ModelProviderError::Storage)?;
     for (model_type, route_code) in [
         (ModelType::Text, ProviderRouteCode::ChatAuto),
-        (ModelType::Embedding, ProviderRouteCode::EmbeddingAuto),
+        (ModelType::TextEmbedding, ProviderRouteCode::EmbeddingAuto),
     ] {
         transaction
             .execute(
@@ -275,13 +280,7 @@ pub(super) fn replace_authorized_connection(
                     scope_key, workspace_code, model_type, selection_kind, provider_code, model_code,
                     quality_type, route_code, created_at, updated_at
                  ) VALUES ('platform', NULL, ?1, ?2, ?3, NULL, NULL, ?4, ?5, ?5)
-                 ON CONFLICT(scope_key, model_type) DO UPDATE SET
-                    selection_kind = excluded.selection_kind,
-                    provider_code = excluded.provider_code,
-                    model_code = NULL,
-                    quality_type = NULL,
-                    route_code = excluded.route_code,
-                    updated_at = excluded.updated_at",
+                 ON CONFLICT(scope_key, model_type) DO NOTHING",
                 params![
                     model_type_storage(model_type),
                     ModelSelectionKind::ProviderRoute.storage_value(),

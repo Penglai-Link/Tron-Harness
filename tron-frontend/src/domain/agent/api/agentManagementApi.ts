@@ -45,7 +45,7 @@ type ToolOperationKindApi =
 type ToolAssignmentModeApi =
   | WorkspaceInternalAgentRecord["toolAssignmentMode"]
   | Uppercase<WorkspaceInternalAgentRecord["toolAssignmentMode"]>
-  | "AllReadOnlyTools";
+  | "AllReadOnlyTools" | "SelectedCategories";
 type WorkspaceInternalAgentSourceApi =
   | WorkspaceInternalAgentRecord["source"]
   | "PLATFORM_DEFAULT"
@@ -84,6 +84,8 @@ interface ToolCatalogDomainRecordApi {
 }
 
 interface ToolRecordApi {
+  category?: { code: string; names: Record<string, string> } | null;
+  source?: { providerId: string | null; pluginId: string | null; packId: string | null; adapterId: string | null } | null;
   providerPackId?: string | null;
   assignable?: boolean;
   disabledReason?: string | null;
@@ -101,7 +103,7 @@ export interface WorkspaceInternalAgentRecordApi {
   name: string;
   description: string;
   rolePrompt: string;
-  loopCode?: string | null;
+
   avatarId?: string;
   candidateModelCodes?: string[];
   groupName?: string | null;
@@ -110,6 +112,7 @@ export interface WorkspaceInternalAgentRecordApi {
   source?: WorkspaceInternalAgentSourceApi;
   mcpAccessMode?: McpAccessModeApi;
   toolAssignmentMode: ToolAssignmentModeApi;
+  selectedCategoryCodes?: string[];
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls?: number;
@@ -161,6 +164,10 @@ function normalizeToolAssignmentMode(
   mode: ToolAssignmentModeApi
 ): WorkspaceInternalAgentRecord["toolAssignmentMode"] {
   switch (mode) {
+    case "SelectedCategories":
+    case "SELECTED_CATEGORIES":
+    case "selected_categories":
+      return "selected_categories";
     case "ALL_PLATFORM_TOOLS":
     case "all_platform_tools":
       return "all_platform_tools";
@@ -223,6 +230,8 @@ function normalizeToolCatalogDomainRecord(
 
 function normalizeToolRecord(record: ToolRecordApi): PlatformToolRecord {
   return {
+    category: record.category,
+    source: record.source,
     providerPackId: record.providerPackId,
     assignable: record.assignable,
     disabledReason: record.disabledReason,
@@ -243,7 +252,7 @@ export function normalizeWorkspaceInternalAgentRecord(
     agentCode: record.agentCode,
     description: record.description,
     rolePrompt: record.rolePrompt ?? "",
-    loopCode: record.loopCode || null,
+
     avatarId: record.avatarId || "robot",
     candidateModelCodes: record.candidateModelCodes ?? [],
     groupName: record.groupName || null,
@@ -274,6 +283,7 @@ export function normalizeWorkspaceInternalAgentRecord(
       ? [...new Set(record.selectedToolCodes)]
       : [],
     toolAssignmentMode: normalizeToolAssignmentMode(record.toolAssignmentMode),
+    selectedCategoryCodes: record.selectedCategoryCodes ?? [],
   };
 }
 
@@ -440,6 +450,13 @@ export function fetchToolDomains(signal?: AbortSignal) {
   ).then((records) => records.map(normalizeToolCatalogDomainRecord));
 }
 
+export function fetchToolCategories(signal?: AbortSignal) {
+  return requestApi<{ code: string; name: string; toolCount: number }[]>(
+    agentApiEndpoints.getToolCategories,
+    { signal },
+  );
+}
+
 export function listTools(payload: ListToolsQuery = {}, signal?: AbortSignal) {
   return requestApi<ToolRecordApi[]>(agentApiEndpoints.getTools, {
     queryParams: {
@@ -476,7 +493,7 @@ export function createWorkspaceInternalAgent(
     name: string;
     description: string;
     rolePrompt: string;
-    loopCode?: string | null;
+
     avatarId: string;
     groupName: string | null;
   }>(
@@ -511,7 +528,7 @@ export function patchWorkspaceInternalAgentDefinition(
     name: string;
     description: string;
     rolePrompt: string;
-    loopCode?: string | null;
+
     avatarId: string;
     groupName: string | null;
   }>(

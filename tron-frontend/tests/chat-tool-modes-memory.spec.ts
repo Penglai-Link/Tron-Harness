@@ -34,7 +34,7 @@ type CapturedToolResult = { callId: string; tool: string; content: string };
 /** Embedding requests the backend sent to the stub (the memory corpus vector channel). */
 type EmbeddingRequest = { path: string; model: string; inputCount: number };
 
-const RAW_TOOL_NAMES = ["tool_search", "tool_execute", "bash_exec", "bash_task_read", "bash_task_stop", "memory_save", "memory_search"];
+const RAW_TOOL_NAMES = ["tool_search", "tool_execute", "command_exec", "command_exec_read", "command_exec_stop", "memory_save", "memory_search"];
 const EXPECTED_TOOL_NAMES = ["tool_execute", "tool_search"];
 const LONG_COMMAND = "sleep 12 && echo acc-long-done";
 const PARALLEL_COMMANDS = ["echo acc-parallel-a", "echo acc-parallel-b"];
@@ -109,7 +109,7 @@ function parseTaskId(text: string) {
 
 function longTaskDecision(turn: StubMessage[]): Decision {
   if (!longTaskState.execCallId) {
-    return { calls: [{ tool: "bash_exec", args: { command: LONG_COMMAND }, bind: (id) => { longTaskState.execCallId = id; } }] };
+    return { calls: [{ tool: "command_exec", args: { command: LONG_COMMAND }, bind: (id) => { longTaskState.execCallId = id; } }] };
   }
   const execResult = toolResultFor(turn, longTaskState.execCallId);
   const taskId = parseTaskId(execResult);
@@ -118,7 +118,7 @@ function longTaskDecision(turn: StubMessage[]): Decision {
   const lastReadResult = lastReadId ? toolResultFor(turn, lastReadId) : "";
   if (!lastReadResult || (!lastReadResult.includes("acc-long-done") && longTaskState.reads < 3)) {
     longTaskState.reads += 1;
-    return { calls: [{ tool: "bash_task_read", args: { taskId, waitMs: 10_000 }, bind: (id) => { longTaskState.readCallIds.push(id); } }] };
+    return { calls: [{ tool: "command_exec_read", args: { taskId, waitMs: 10_000 }, bind: (id) => { longTaskState.readCallIds.push(id); } }] };
   }
   return { text: "e2e-long-task-done" };
 }
@@ -147,8 +147,8 @@ function parallelDecision(turn: StubMessage[]): Decision {
   if (!parallelState.aCallId) {
     return {
       calls: [
-        { tool: "bash_exec", args: { command: PARALLEL_COMMANDS[0] }, bind: (id) => { parallelState.aCallId = id; } },
-        { tool: "bash_exec", args: { command: PARALLEL_COMMANDS[1] }, bind: (id) => { parallelState.bCallId = id; } },
+        { tool: "command_exec", args: { command: PARALLEL_COMMANDS[0] }, bind: (id) => { parallelState.aCallId = id; } },
+        { tool: "command_exec", args: { command: PARALLEL_COMMANDS[1] }, bind: (id) => { parallelState.bCallId = id; } },
       ],
     };
   }
@@ -296,25 +296,26 @@ test.beforeAll(async () => {
   // The acceptance workspace seeds main-agent plus its platform internal agents.
   expect(agents.map((agent: { agentCode: string }) => agent.agentCode)).toContain("main-agent");
 
-  await post("/api/v1/admin/platform/models", {
-    displayName: "Framework Acceptance", vendor: "OpenAI", protocol: "OPENAI_COMPATIBLE", modelType: "TEXT", modelCapabilities: ["TEXT_GENERATION"],
-    baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiPath: "/chat/completions", apiKeyRef: "sk-acceptance", modelName: "acceptance-model", enabled: true,
-    thinkingEnabled: false, structuredOutputEnabled: false, temperature: 0.2, maxTokens: 1024, contextWindowTokens: 128000, topP: 1, maxRetries: 0,
+  await post("/api/v1/model-providers/configured", {
+    providerId: "acceptance", displayName: "Framework Acceptance", protocol: "OpenAiChatCompletions",
+    baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiKey: "sk-acceptance", requestHeaders: {}, enabled: true,
+    models: [{ modelType: "Text", modelCode: null, modelId: "acceptance-model", name: "Framework Acceptance", contextWindowTokens: 128000,
+      maxOutputTokens: 1024, reasoning: false, supportsDeveloperRole: false, inputCapabilities: ["Text"], enabled: true }],
   });
   // Offline acceptance has no reachable Person-AI embedding provider, while the
   // seeded `memory-card` corpus pins `embeddingModelCode:
   // "PERSON_AI:ROUTE:EmbeddingAuto"` (tron-backend/migrations/0001_init.sql).
-  // Register the local stub as an OpenAI-compatible EMBEDDING platform model and
+  // Register the local stub as a provider with an Embedding model and
   // repoint the corpus at it through the public management APIs, so the memory
   // save/search round trip really runs (and really persists) offline.
-  const embeddingModel = await post("/api/v1/admin/platform/models", {
-    displayName: "Framework Acceptance Embedding", vendor: "OpenAI", protocol: "OPENAI_COMPATIBLE_EMBEDDING", modelType: "EMBEDDING", modelCapabilities: ["TEXT_VECTOR"],
-    baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiPath: "/embeddings", apiKeyRef: "sk-acceptance-embedding", modelName: "acceptance-embedding", enabled: true,
-    thinkingEnabled: false, structuredOutputEnabled: false, maxRetries: 0,
+  const embeddingModel = await post("/api/v1/model-providers/configured", {
+    providerId: "acceptance-embedding", displayName: "Framework Acceptance Embedding", protocol: "OpenAiChatCompletions",
+    baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiKey: "sk-acceptance-embedding", requestHeaders: {}, enabled: true,
+    models: [{ modelType: "Embedding", modelCode: null, modelId: "acceptance-embedding", name: "Framework Acceptance Embedding", contextWindowTokens: null,
+      maxOutputTokens: null, reasoning: false, supportsDeveloperRole: false, inputCapabilities: ["Text"], enabled: true }],
   });
-  const embeddingModelCode = String(embeddingModel.modelCode ?? "");
+  const embeddingModelCode = String(embeddingModel.models?.[0]?.modelCode ?? "");
   if (!embeddingModelCode) throw new Error(`embedding model create returned no modelCode: ${JSON.stringify(embeddingModel)}`);
-  await post(`/api/v1/admin/platform/models/${encodeURIComponent(embeddingModelCode)}/set-default`, {});
   const memorySettings = await put(`/api/v1/rag/corpora/${MEMORY_CORPUS_ID}/settings`, {
     fulltext: true, vector: true, graph: false,
     embeddingModelCode, embeddingDimension: EMBEDDING_DIMENSION,
@@ -408,12 +409,12 @@ test("long command moves to a task id and is read back through the task tool", a
   await expect(transcript).toContainText("e2e-long-task-done", { timeout: 120_000 });
 
   const results = toolResultSnapshots.get("e2e-long-task") ?? [];
-  const execResult = results.find((entry) => entry.tool === "bash_exec")?.content ?? "";
-  const reads = results.filter((entry) => entry.tool === "bash_task_read");
+  const execResult = results.find((entry) => entry.tool === "command_exec")?.content ?? "";
+  const reads = results.filter((entry) => entry.tool === "command_exec_read");
   const taskId = parseTaskId(execResult);
-  report("long-task bash_exec result", execResult);
+  report("long-task command_exec result", execResult);
   report("long-task task id", taskId);
-  report("long-task bash_task_read result", reads.map((entry) => entry.content));
+  report("long-task command_exec_read result", reads.map((entry) => entry.content));
 
   await expandWorkTranscript(transcript);
   await expandToolPayloads(transcript);
@@ -480,7 +481,7 @@ test("short-term memory save and search render as human tool cards", async ({ pa
   assertGatewayToolsInvariant();
 
   // Persistence proof, running fully offline: the suite registers the local stub
-  // as an OpenAI-compatible EMBEDDING platform model and repoints the built-in
+  // as an OpenAI-compatible provider-owned Embedding model and repoints the built-in
   // `memory-card` corpus at it, so `memory_save` embeds through the stub, writes
   // a real memory row and `memory_search` reads that exact row back.
   //

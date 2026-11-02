@@ -46,7 +46,7 @@ pub(super) fn app_code_definition(
 ) -> ToolCatalogDefinition {
     definition(
         tool_code,
-        "app",
+        "harness_app",
         operation_kind,
         schema(
             tool_key(tool_code, "description"),
@@ -70,7 +70,7 @@ pub(super) fn task_code_definition(
 ) -> ToolCatalogDefinition {
     definition(
         tool_code,
-        "task",
+        "harness_task",
         operation_kind,
         schema(
             tool_key(tool_code, "description"),
@@ -81,30 +81,6 @@ pub(super) fn task_code_definition(
                 "properties": {
                     "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.workspaceCode" },
                     "taskCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.taskCode" }
-                },
-                "additionalProperties": false
-            }),
-        ),
-    )
-}
-
-pub(super) fn model_code_definition(
-    tool_code: &'static str,
-    operation_kind: ToolOperationKind,
-) -> ToolCatalogDefinition {
-    definition(
-        tool_code,
-        "model",
-        operation_kind,
-        schema(
-            tool_key(tool_code, "description"),
-            json!([{ "workspaceCode": "TRON_CORE", "modelCode": "MDL-1" }]),
-            json!({
-                "type": "object",
-                "required": ["modelCode"],
-                "properties": {
-                    "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.workspaceCode" },
-                    "modelCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.modelCode" }
                 },
                 "additionalProperties": false
             }),
@@ -175,53 +151,6 @@ pub(super) fn task_mutation_schema(create: bool) -> Value {
             "appCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.appCode" },
             "status": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.page.params.status" },
             "progress": { "type": "integer", "minimum": 0, "maximum": 100, "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.progress" }
-        },
-        "additionalProperties": false
-    })
-}
-
-pub(super) fn model_mutation_schema(create: bool) -> Value {
-    let required = if create {
-        json!([
-            "displayName",
-            "vendor",
-            "protocol",
-            "modelType",
-            "baseUrl",
-            "apiKeyRef",
-            "modelName"
-        ])
-    } else {
-        json!(["modelCode"])
-    };
-    json!({
-        "type": "object",
-        "required": required,
-        "properties": {
-            "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.workspaceCode" },
-            "modelCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.modelCode" },
-            "displayName": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.displayName" },
-            "vendor": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.vendor" },
-            "protocol": { "type": "string", "enum": ["openai_compatible", "responses", "rerank"], "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.protocol" },
-            "modelType": { "type": "string", "enum": ["text", "embedding", "rerank", "image"], "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.modelType" },
-            "modelCapabilities": { "type": "array", "items": { "type": "string" }, "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.modelCapabilities" },
-            "baseUrl": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.baseUrl" },
-            "apiPath": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.apiPath" },
-            "apiKeyRef": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.apiKeyRef" },
-            "modelName": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.modelName" },
-            "enabled": { "type": "boolean", "default": true, "x-i18n-description-key": "agent.toolCatalog.common.params.enabled" },
-            "description": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.description" },
-            "thinkingEnabled": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.thinkingEnabled" },
-            "supportedReasoningEfforts": { "type": "array", "items": { "type": "string", "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] }, "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.supportedReasoningEfforts" },
-            "defaultReasoningEffort": { "type": "string", "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"], "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.defaultReasoningEffort" },
-            "structuredOutputEnabled": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.structuredOutputEnabled" },
-            "responsesStatefulEnabled": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.responsesStatefulEnabled" },
-            "temperature": { "type": "number", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.temperature" },
-            "maxTokens": { "type": "integer", "minimum": 1, "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.maxTokens" },
-            "contextWindowTokens": { "type": "integer", "minimum": 1, "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.contextWindowTokens" },
-            "topP": { "type": "number", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.topP" },
-            "maxRetries": { "type": "integer", "minimum": 0, "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.maxRetries" },
-            "allowInheritance": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.allowInheritance" }
         },
         "additionalProperties": false
     })

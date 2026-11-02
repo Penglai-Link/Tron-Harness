@@ -82,6 +82,14 @@ describe("ModelProviderCatalogPage", () => {
     }
   });
 
+  it("shows unavailable historical entries with their status", async () => {
+    fixture.fetch.mockResolvedValue([model("active", "vendor"), { ...model("retired", "vendor"), status: "Unavailable" }]);
+    render(<MemoryRouter><ModelProviderCatalogPage /></MemoryRouter>);
+    await screen.findByText("modelProviders.pagination.catalog:2");
+    expect(screen.getAllByText("retired").length).toBeGreaterThan(0);
+    expect(screen.getByText("modelProviders.catalogDisabled")).toBeTruthy();
+  });
+
   it("preserves the last catalogue and reports a remote sync failure", async () => {
     fixture.fetch.mockResolvedValue([model("deepseek", "alibaba")]);
     fixture.sync.mockRejectedValue(new Error("Person-AI unavailable"));
@@ -91,6 +99,6 @@ describe("ModelProviderCatalogPage", () => {
     await waitFor(() => expect(fixture.toast.error).toHaveBeenCalledWith("Person-AI unavailable"));
     expect(fixture.fetch).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole("row")).toHaveLength(2);
-    expect(screen.getByText("alibaba")).toBeTruthy();
+    expect(screen.getAllByText("alibaba").length).toBeGreaterThan(0);
   });
 });

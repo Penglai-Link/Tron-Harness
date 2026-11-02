@@ -9,8 +9,8 @@ use crate::{
         CreateWorkspaceInternalAgentCommand, UpdateWorkspaceInternalAgentDefinitionCommand,
     },
     domain::agent::{
-        AgentManagementError, InternalAgentPolicySource,
-        InternalAgentToolPolicy, McpAccessMode, ToolAssignmentMode,
+        AgentManagementError, InternalAgentPolicySource, InternalAgentToolPolicy, McpAccessMode,
+        ToolAssignmentMode,
     },
     response::ApiResponse,
 };
@@ -30,7 +30,6 @@ pub struct CreatePlatformInternalAgentRequest {
     #[serde(default)]
     description: String,
     role_prompt: String,
-    loop_code: Option<String>,
     avatar_id: Option<String>,
     group_name: Option<String>,
     #[serde(default)]
@@ -43,7 +42,6 @@ pub struct UpdatePlatformInternalAgentDefinitionRequest {
     name: Option<String>,
     description: Option<String>,
     role_prompt: Option<String>,
-    loop_code: Option<String>,
     avatar_id: Option<String>,
     group_name: Option<String>,
     #[serde(default)]
@@ -69,7 +67,6 @@ pub struct PlatformInternalAgentView {
     name: String,
     description: String,
     role_prompt: String,
-    loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
     #[serde(default)]
@@ -78,6 +75,8 @@ pub struct PlatformInternalAgentView {
     built_in: bool,
     source: InternalAgentPolicySource,
     tool_assignment_mode: ToolAssignmentMode,
+    #[serde(default)]
+    selected_category_codes: Vec<String>,
     mcp_access_mode: McpAccessMode,
     max_steps: u32,
     max_tool_calls: u32,
@@ -96,7 +95,6 @@ impl From<InternalAgentToolPolicy> for PlatformInternalAgentView {
             name: record.name,
             description: record.description,
             role_prompt: record.role_prompt,
-            loop_code: record.loop_code,
             avatar_id: record.avatar_id,
             group_name: record.group_name,
             candidate_model_codes: record.candidate_model_codes,
@@ -104,6 +102,7 @@ impl From<InternalAgentToolPolicy> for PlatformInternalAgentView {
             built_in: record.built_in,
             source: record.source,
             tool_assignment_mode: record.tool_assignment_mode,
+            selected_category_codes: record.selected_category_codes.clone(),
             mcp_access_mode: record.mcp_access_mode,
             max_steps: record.max_steps,
             max_tool_calls: record.max_tool_calls,
@@ -140,6 +139,7 @@ endpoint_response!(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdatePlatformInternalAgentPolicyRequest {
     tool_assignment_mode: Option<String>,
+    selected_category_codes: Option<Vec<String>>,
     max_steps: Option<u32>,
     max_tool_calls: Option<u32>,
     max_parallel_tool_calls: Option<u32>,
@@ -177,7 +177,6 @@ pub async fn create_platform_internal_agent(
             name: request.name,
             description: request.description,
             role_prompt: request.role_prompt,
-            loop_code: request.loop_code,
             avatar_id: request.avatar_id,
             group_name: request.group_name,
             candidate_model_codes: request.candidate_model_codes,
@@ -214,7 +213,6 @@ pub async fn update_platform_internal_agent_definition(
                 name: request.name,
                 description: request.description,
                 role_prompt: request.role_prompt,
-                loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
                 group_name: request.group_name,
                 candidate_model_codes: request.candidate_model_codes,
@@ -233,6 +231,7 @@ pub async fn update_platform_internal_agent_policy(
     let command =
         match super::handler::to_internal_agent_policy_command(UpdateInternalAgentPolicyRequest {
             tool_assignment_mode: request.tool_assignment_mode,
+            selected_category_codes: request.selected_category_codes,
             max_steps: request.max_steps,
             max_tool_calls: request.max_tool_calls,
             max_parallel_tool_calls: request.max_parallel_tool_calls,

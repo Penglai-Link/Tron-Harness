@@ -2,13 +2,20 @@ use super::*;
 
 #[derive(Clone)]
 pub struct ProviderAwareLlmRuntimeResolver {
-    models: ModelService,
     providers: ModelProviderService,
+    configured_models: Option<ModelService>,
 }
 
 impl ProviderAwareLlmRuntimeResolver {
-    pub fn new(models: ModelService, providers: ModelProviderService) -> Self {
-        Self { models, providers }
+    pub fn with_configured_providers(mut self, models: ModelService) -> Self {
+        self.configured_models = Some(models);
+        self
+    }
+    pub fn new(providers: ModelProviderService) -> Self {
+        Self {
+            providers,
+            configured_models: None,
+        }
     }
 }
 
@@ -33,6 +40,9 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
         )))
     }
     fn embedding_accepts_images(&self, _: &str, model: &str) -> Result<bool, ModelError> {
+        if let Some(models)=&self.configured_models {
+            if let Some(record)=models.automatic_route_catalog()?.into_iter().find(|m|m.model_code==model) { return Ok(record.model_type==ModelType::MultimodalEmbedding); }
+        }
         self.providers.embedding_accepts_images(model)
     }
 
@@ -152,15 +162,28 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        let requested=model_code.map(str::trim).filter(|s|!s.is_empty());
+        if let Some(models)=&self.configured_models {
+            let auto_kind=match requested {
+                None=>Some(crate::domain::model::AutoRouterKind::TextEmbedding),
+                Some("AUTO:TextEmbedding")=>Some(crate::domain::model::AutoRouterKind::TextEmbedding),
+                Some("AUTO:MultimodalEmbedding")=>Some(crate::domain::model::AutoRouterKind::MultimodalEmbedding),
+                Some("PERSON_AI:ROUTE:EmbeddingAuto")=>Some(crate::domain::model::AutoRouterKind::TextEmbedding),
+                Some("PERSON_AI:ROUTE:MultimodalEmbeddingAuto")=>Some(crate::domain::model::AutoRouterKind::MultimodalEmbedding),
+                _=>None,
+            };
+            if let Some(kind)=auto_kind { return models.route_automatic_model(workspace_code,kind).map(Some); }
+        }
         match self
             .providers
             .embedding_runtime_model_config(workspace_code, model_code)
+            .map_err(runtime_resolution_error)?
         {
-            Ok(Some(config)) => Ok(Some(config)),
-            Ok(None) => self
-                .models
-                .embedding_runtime_model_config(workspace_code, model_code),
-            Err(error) => Err(runtime_resolution_error(error)),
+            Some(config) => Ok(Some(config)),
+            None => match &self.configured_models {
+                Some(models) => models.embedding_runtime_model_config(workspace_code, model_code),
+                None => Ok(None),
+            },
         }
     }
 
@@ -169,15 +192,28 @@ impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        let requested=model_code.map(str::trim).filter(|s|!s.is_empty());
+        if let Some(models)=&self.configured_models {
+            let auto_kind=match requested {
+                None=>Some(crate::domain::model::AutoRouterKind::TextRerank),
+                Some("AUTO:TextRerank")=>Some(crate::domain::model::AutoRouterKind::TextRerank),
+                Some("AUTO:MultimodalRerank")=>Some(crate::domain::model::AutoRouterKind::MultimodalRerank),
+                Some("PERSON_AI:ROUTE:RerankAuto")=>Some(crate::domain::model::AutoRouterKind::TextRerank),
+
+                _=>None,
+            };
+            if let Some(kind)=auto_kind { return models.route_automatic_model(workspace_code,kind).map(Some); }
+        }
         match self
             .providers
             .rerank_runtime_model_config(workspace_code, model_code)
+            .map_err(runtime_resolution_error)?
         {
-            Ok(Some(config)) => Ok(Some(config)),
-            Ok(None) => self
-                .models
-                .rerank_runtime_model_config(workspace_code, model_code),
-            Err(error) => Err(runtime_resolution_error(error)),
+            Some(config) => Ok(Some(config)),
+            None => match &self.configured_models {
+                Some(models) => models.rerank_runtime_model_config(workspace_code, model_code),
+                None => Ok(None),
+            },
         }
     }
 }

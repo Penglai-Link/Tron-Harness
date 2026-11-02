@@ -9,14 +9,13 @@ import { createWorkspaceInternalAgentMock, patchWorkspaceInternalAgentDefinition
 import { notifyInternalAgentRegistryChanged } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useInternalAgentGroups } from "../hooks/useInternalAgentGroups";
-import { DEFAULT_REACT_LOOP_CODE } from "../model/builtinLoops";
 import { AgentWorkspaceField } from "./AgentWorkspaceField";
 import { AgentActivationSwitch } from "./AgentActivationSwitch";
 import { persistAgentWorkspaceGrants } from "../hooks/agentWorkspaceGrants";
 import { INTERNAL_AGENT_DIALOG_CLASS, INTERNAL_AGENT_SECTIONS, InternalAgentProfileFields, InternalAgentRuntimeFields } from "./InternalAgentFormFields";
 import { AgentResourcesEditor, type AgentResourcesEditorHandle } from "./AgentResourcesEditor";
 
-const initialDraft = () => ({ name: "", description: "", rolePrompt: "", avatarId: "robot", groupName: "", loopCode: DEFAULT_REACT_LOOP_CODE, candidateModelCodes: [] as string[], enabled: true });
+const initialDraft = () => ({ name: "", description: "", rolePrompt: "", avatarId: "robot", groupName: "", candidateModelCodes: [] as string[], enabled: true });
 export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorkspaceAssignment = false }: { workspaceCode: string; onCreated: () => Promise<void>; allowWorkspaceAssignment?: boolean }) {
   const { t } = useTranslation("pages");
   const toast = useToast();
@@ -37,7 +36,7 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
   const text = (key: string, fallback: string) => t(`workspaceAgents.internal.definition.${key}`, { defaultValue: fallback });
   const codeValid = /^[a-z][a-z0-9_-]{0,63}$/.test(agentCode.trim());
   async function create() {
-    if (!codeValid || !draft.name.trim() || !draft.loopCode || savingRef.current) return;
+    if (!codeValid || !draft.name.trim() || savingRef.current) return;
     savingRef.current = true; setSaving(true);
     try {
       resources.current?.validate();
@@ -80,12 +79,12 @@ export function CreateInternalAgentDialog({ workspaceCode, onCreated, allowWorks
               {allowWorkspaceAssignment ? <TabsTrigger value="workspace" className="flex-none px-3">{text("tabs.workspace", "Workspace")}</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="profile" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"><InternalAgentProfileFields code={agentCode} onCodeChange={setAgentCode} draft={draft} onChange={patch} workspaceCode={workspaceCode} disabled={saving || !!createdCode} /></TabsContent>
-            <TabsContent value="runtime" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"><InternalAgentRuntimeFields workspaceCode={workspaceCode} loopCode={draft.loopCode} candidateModelCodes={draft.candidateModelCodes} disabled={saving || !!createdCode} onChange={patch} /></TabsContent>
+            <TabsContent value="runtime" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"><InternalAgentRuntimeFields workspaceCode={workspaceCode} candidateModelCodes={draft.candidateModelCodes} disabled={saving || !!createdCode} onChange={patch} /></TabsContent>
             <AgentResourcesEditor ref={resources} agentName={draft.name} workspaceCode={workspaceCode} disabled={saving} />
             {allowWorkspaceAssignment ? <TabsContent value="workspace" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3"><AgentWorkspaceField name={draft.name} disabled={saving} selectedCodes={workspaceCodes} onSelectionChange={setWorkspaceCodes} /></TabsContent> : null}
           </Tabs>
           {createdCode ? <p role="status" className="text-sm text-[var(--color-on-surface-variant)]">{t("platformData.createdAssignmentPending")}</p> : null}
-          <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>{text("cancel", "Cancel")}</Button><Button type="submit" disabled={saving || !codeValid || !draft.name.trim() || !draft.loopCode}>{saving ? text("saving", "Saving...") : createdCode ? t("pages:platformData.save") : text("create", "New")}</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>{text("cancel", "Cancel")}</Button><Button type="submit" disabled={saving || !codeValid || !draft.name.trim()}>{saving ? text("saving", "Saving...") : createdCode ? t("pages:platformData.save") : text("create", "New")}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

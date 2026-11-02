@@ -35,8 +35,11 @@ impl FrameworkHost {
             .map_err(AgentError::InvalidConfiguration)?;
         crate::application::agent::execution_context::sync_execution_context(&mut context);
         collaboration::authorize_tools(self, &mut context);
-        let onboarding = super::super::onboarding::active(&context, harness.framework_dudes().as_ref());
-        if onboarding { super::super::onboarding::narrow(&mut context); }
+        let onboarding =
+            super::super::onboarding::active(&context, harness.framework_dudes().as_ref());
+        if onboarding {
+            super::super::onboarding::narrow(&mut context);
+        }
         let admission = self.0.config_lock.lock().await;
         self.ensure_open()
             .map_err(AgentError::InvalidConfiguration)?;
@@ -152,22 +155,35 @@ impl FrameworkHost {
                 .await
                 .map_err(map_error)?;
         }
-        let compact = current.plain_text_content().trim().eq_ignore_ascii_case("/compact")
-            || context.short_term_memory.as_ref().and_then(|memory| memory.input_metadata.as_ref())
+        let compact = current
+            .plain_text_content()
+            .trim()
+            .eq_ignore_ascii_case("/compact")
+            || context
+                .short_term_memory
+                .as_ref()
+                .and_then(|memory| memory.input_metadata.as_ref())
                 .and_then(|metadata| metadata.get("contextCompaction"))
-                .and_then(serde_json::Value::as_bool).unwrap_or(false);
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
         let mut request = fw::RunRequest::new(&session, input);
-        if compact { request.extensions.insert(fw::ContextCompactionRequest); }
+        if compact {
+            request.extensions.insert(fw::ContextCompactionRequest);
+        }
         let memory = context.short_term_memory.as_ref();
-        request.annotations = memory.and_then(|input| input.input_metadata.as_ref())
+        request.annotations = memory
+            .and_then(|input| input.input_metadata.as_ref())
             .and_then(|metadata| metadata.get("annotations"))
             .map(|value| serde_json::from_value(value.clone()))
-            .transpose().map_err(|_| AgentError::InvalidConfiguration("invalid annotations".into()))?
+            .transpose()
+            .map_err(|_| AgentError::InvalidConfiguration("invalid annotations".into()))?
             .unwrap_or_default();
-        request.requested_skills = memory.and_then(|input| input.input_metadata.as_ref())
+        request.requested_skills = memory
+            .and_then(|input| input.input_metadata.as_ref())
             .and_then(|metadata| metadata.get("requestedSkills"))
             .map(|value| serde_json::from_value(value.clone()))
-            .transpose().map_err(|_| AgentError::InvalidConfiguration("invalid requested skills".into()))?
+            .transpose()
+            .map_err(|_| AgentError::InvalidConfiguration("invalid requested skills".into()))?
             .unwrap_or_default();
         let runtime_input = memory.filter(|input| input.input_kind != "USER_PROMPT");
         let source = runtime_input
@@ -190,10 +206,19 @@ impl FrameworkHost {
                     context.user_code.clone()
                 },
                 display_name: Some(
-                    match (source, crate::shared::locale::SupportedLocale::from_raw(&context.locale)) {
-                        ("Heartbeat", crate::shared::locale::SupportedLocale::EnUs) => "System heartbeat",
-                        ("TaskReminder", crate::shared::locale::SupportedLocale::EnUs) => "Task reminder",
-                        ("ThreadFeedback", crate::shared::locale::SupportedLocale::EnUs) => "Thread feedback",
+                    match (
+                        source,
+                        crate::shared::locale::SupportedLocale::from_raw(&context.locale),
+                    ) {
+                        ("Heartbeat", crate::shared::locale::SupportedLocale::EnUs) => {
+                            "System heartbeat"
+                        }
+                        ("TaskReminder", crate::shared::locale::SupportedLocale::EnUs) => {
+                            "Task reminder"
+                        }
+                        ("ThreadFeedback", crate::shared::locale::SupportedLocale::EnUs) => {
+                            "Thread feedback"
+                        }
                         ("UserMessage", crate::shared::locale::SupportedLocale::EnUs) => "You",
                         (_, crate::shared::locale::SupportedLocale::EnUs) => "Memory maintenance",
                         ("Heartbeat", _) => "系统心跳",
@@ -246,22 +271,28 @@ impl FrameworkHost {
         );
         if let Some(prompts) = self.0.prompt_service.get() {
             let mut keys = vec![
-                "agent.goal-judge", "memory.context-summary", "skills.guidance",
-                "a2ui.guidance", "agent.directory-guidance",
+                "agent.goal-judge",
+                "memory.context-summary",
+                "skills.guidance",
+                "a2ui.guidance",
+                "agent.directory-guidance",
             ];
             if context.is_owning_dude() {
-                keys.extend_from_slice(super::super::dude_context::DudeGuidance::prompt_keys(false));
+                keys.extend_from_slice(super::super::dude_context::DudeGuidance::prompt_keys(
+                    false,
+                ));
                 keys.extend_from_slice(super::super::dude_context::DudeGuidance::prompt_keys(true));
             }
-            let resolved = prompts.runtime_prompt_texts(
-                &keys,
-                &context.locale,
-                &std::collections::HashMap::new(),
-            )
-            .map_err(|error| AgentError::InvalidConfiguration(format!(
-                "managed developer prompts could not be resolved: {error}"
-            )))?;
-            request.extensions.insert(fw::ManagedDeveloperPrompts(resolved));
+            let resolved = prompts
+                .runtime_prompt_texts(&keys, &context.locale, &std::collections::HashMap::new())
+                .map_err(|error| {
+                    AgentError::InvalidConfiguration(format!(
+                        "managed developer prompts could not be resolved: {error}"
+                    ))
+                })?;
+            request
+                .extensions
+                .insert(fw::ManagedDeveloperPrompts(resolved));
         }
         if let Some(capabilities) = a2ui_options {
             request
@@ -295,27 +326,6 @@ impl FrameworkHost {
             })
             .await
             .map_err(|e| map_error(e.into()))?;
-        if request.resume.is_none() {
-            if let Some(management) = self.0.agent_management.get() {
-                let policy = if context.uses_platform_agent_definition() {
-                    management.platform_internal_agent_policy(
-                        context.agent_code.as_deref().unwrap_or("main-agent"),
-                    )
-                } else {
-                    management.workspace_internal_agent_policy(
-                        &context.workspace_code,
-                        context.agent_code.as_deref().unwrap_or("main-agent"),
-                    )
-                }
-                .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
-                let design = management
-                    .loop_design(policy.loop_code.as_deref().ok_or_else(|| {
-                        AgentError::InvalidConfiguration("agent loop is not configured".into())
-                    })?)
-                    .map_err(|e| AgentError::InvalidConfiguration(format!("{e:?}")))?;
-                request.extensions.insert(design);
-            }
-        }
         request.limits.max_steps = context.limits.max_steps as usize;
         request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
         request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
@@ -364,13 +374,22 @@ impl FrameworkHost {
             )),
         );
         if onboarding {
-            request.extensions.insert(fw::SkillAccess { names: [eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into()].into_iter().collect() });
-            let service = framework.services().map_err(map_error)?
+            request.extensions.insert(fw::SkillAccess {
+                names: [eliteforge_agent_official_plugin_a2ui::A2UI_SKILL_NAME.into()]
+                    .into_iter()
+                    .collect(),
+            });
+            let service = framework
+                .services()
+                .map_err(map_error)?
                 .get::<eliteforge_agent_official_plugin_a2ui::A2uiService>()
-                .ok_or_else(|| AgentError::InvalidConfiguration("A2UI unavailable for onboarding".into()))?;
+                .ok_or_else(|| {
+                    AgentError::InvalidConfiguration("A2UI unavailable for onboarding".into())
+                })?;
             request.extensions.insert((*service).clone());
         } else {
-            self.attach_skill_access(&context, &mut request).map_err(map_error)?;
+            self.attach_skill_access(&context, &mut request)
+                .map_err(map_error)?;
         }
         // Framework-pack bindings (bash/fs/search/terminal, collaboration,
         // skills, a2ui, remote plugins) are minted inside the packs, so the
@@ -410,14 +429,20 @@ impl FrameworkHost {
                 ))));
         }
         if let Some(control) = steering {
-            request.extensions.insert(fw::ContextCompactionObserverBinding(Arc::new(control.clone())));
+            request
+                .extensions
+                .insert(fw::ContextCompactionObserverBinding(Arc::new(
+                    control.clone(),
+                )));
             request
                 .extensions
                 .insert(fw::LiveInputSourceService(Arc::new(HostSteering {
                     control,
                 })));
         }
-        if !onboarding { collaboration::attach(self, &context, &mut request); }
+        if !onboarding {
+            collaboration::attach(self, &context, &mut request);
+        }
         harness
             .framework_model_scope(&context)?
             .attach(&mut request);
@@ -430,7 +455,7 @@ impl FrameworkHost {
             .begin(&context, &mut request)
             .map_err(|_| AgentError::InvalidConfiguration("trace registration failed".into()))?;
         let parent = eliteforge_agent_framework::current_continuation_parent();
-        let mut result = if let Some(parent) = parent {
+        let result = if let Some(parent) = parent {
             let started = agent
                 .start_child_with_output_owned::<eliteforge_agent_official_plugin_agui::AgUiStream>(
                     request, &parent,
@@ -470,22 +495,31 @@ impl FrameworkHost {
         };
         trace_guard.finish(&result);
         drop(trace_guard);
-        if onboarding && result.as_ref().is_ok_and(|r| r.status == fw::RunStatus::AwaitingInput) {
+        if onboarding
+            && result
+                .as_ref()
+                .is_ok_and(|r| r.status == fw::RunStatus::AwaitingInput)
+        {
             if let Some(dudes) = harness.framework_dudes() {
-                for interaction in agent.pending_interactions(context.conversation_code.as_deref().unwrap_or(&context.run_code)).await.map_err(map_error)? {
-                    if !matches!(interaction.request.kind, fw::InteractionKind::Input) { continue; }
-                    dudes.record_soul_question(&interaction.session_id, &interaction.request.id.to_string())
+                for interaction in agent
+                    .pending_interactions(
+                        context
+                            .conversation_code
+                            .as_deref()
+                            .unwrap_or(&context.run_code),
+                    )
+                    .await
+                    .map_err(map_error)?
+                {
+                    if !matches!(interaction.request.kind, fw::InteractionKind::Input) {
+                        continue;
+                    }
+                    dudes
+                        .record_soul_question(
+                            &interaction.session_id,
+                            &interaction.request.id.to_string(),
+                        )
                         .map_err(|e| AgentError::InvalidConfiguration(e.to_string()))?;
-                }
-            }
-        }
-        // Multiple terminal DAG nodes produce structured JSON rather than text.
-        // Keep every result visible in Tron's text-oriented run/history contract.
-        if let Ok(result) = &mut result {
-            if result.status == fw::RunStatus::Completed && result.output.is_empty() {
-                if let Some(value) = &result.structured {
-                    result.output = serde_json::to_string_pretty(value)
-                        .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
                 }
             }
         }

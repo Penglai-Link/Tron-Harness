@@ -183,6 +183,8 @@ pub struct AgentRunContext {
 #[serde(rename_all = "camelCase")]
 pub struct AgentToolAssignment {
     pub mode: super::ToolAssignmentMode,
+    #[serde(default)]
+    pub selected_category_codes: Vec<String>,
     pub selected_tool_codes: Vec<String>,
     /// Empty means no additional request restriction, never an empty grant.
     pub requested_tool_names: Vec<String>,
@@ -190,9 +192,12 @@ pub struct AgentToolAssignment {
 
 impl AgentToolAssignment {
     pub fn selects(&self, tool: &super::ToolCatalogRecord) -> bool {
-        self.mode.selects(tool, &self.selected_tool_codes)
-            && (self.requested_tool_names.is_empty()
-                || self.requested_tool_names.contains(&tool.tool_name))
+        self.mode.selects_policy(
+            tool,
+            &self.selected_tool_codes,
+            &self.selected_category_codes,
+        ) && (self.requested_tool_names.is_empty()
+            || self.requested_tool_names.contains(&tool.tool_name))
     }
 }
 
@@ -301,7 +306,7 @@ mod tests {
             auto_model_route: None,
             variables: Vec::new(),
             skills: Vec::new(),
-            tools: vec![tool("bash_exec", "bash")],
+            tools: vec![tool("command_exec", "command")],
             effective_tools: Vec::new(),
             tool_assignment: None,
             execution_scope: AgentExecutionScope::default(),
@@ -313,13 +318,13 @@ mod tests {
         };
 
         // Without an effective snapshot the catalog is authoritative.
-        assert!(context.is_tool_authorized("bash_exec"));
+        assert!(context.is_tool_authorized("command_exec"));
         assert!(!context.is_tool_authorized("todo_update"));
         // An effective snapshot narrows authority: only its tools stay
         // authorized even when the catalog is broader.
         context.effective_tools = vec![tool("todo_update", "planning")];
         assert!(context.is_tool_authorized("todo_update"));
-        assert!(!context.is_tool_authorized("bash_exec"));
+        assert!(!context.is_tool_authorized("command_exec"));
     }
 }
 

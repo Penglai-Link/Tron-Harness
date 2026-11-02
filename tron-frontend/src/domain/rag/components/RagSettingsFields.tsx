@@ -6,7 +6,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { SelectInput } from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { fetchPlatformModels } from "@/domain/model/api/modelApi";
+import { fetchModelSelectOptions } from "@/domain/model/api/modelApi";
 import { fetchProviderCatalog } from "@/domain/model/api/modelProviderApi";
 import { autoModelRoutes, autoModelRouteCode } from "@/domain/model/constants/autoModelRoutes";
 import type { RagSettings } from "../model/RagModel";
@@ -19,7 +19,7 @@ export function RagSettingsFields({ settings, setSettings, disabled = false, idP
 }) {
   const { t } = useTranslation("pages");
   const user = useAuthStore((state) => state.session?.user.userCode ?? "");
-  const models = useQuery({ queryKey: ["rag-platform-models", user], queryFn: ({ signal }) => fetchPlatformModels(signal) });
+  const models = useQuery({ queryKey: ["rag-provider-models", user], queryFn: ({ signal }) => fetchModelSelectOptions("", signal) });
   const providerCatalog = useQuery({ queryKey: ["rag-person-ai-catalog", user], queryFn: ({ signal }) => fetchProviderCatalog("PersonAi", signal) });
   useRagErrorToast(models.error?.message);
   useRagErrorToast(providerCatalog.error?.message);
@@ -45,13 +45,14 @@ export function RagSettingsFields({ settings, setSettings, disabled = false, idP
           <Field>{fieldLabel("embeddingDimension", "dimensionHelp", `${idPrefix}-dimension`)}<Input id={`${idPrefix}-dimension`} type="number" value={1024} disabled /></Field>
           {(["embeddingModelCode", "graphModelCode", "rerankModelCode"] as const).map((key) => <Field key={key}>{fieldLabel(key, `${key}Help`, `${idPrefix}-${key}`)}<SelectInput disabled={disabled} id={`${idPrefix}-${key}`} aria-label={t(`ragUnified.${key}`)} value={settings[key] ?? "__none__"} onValueChange={(value) => setSettings({ ...settings, [key]: value === "__none__" ? null : String(value) })}>
             <SelectItem value="__none__">{t(key === "rerankModelCode" ? "ragUnified.rerankOff" : "ragUnified.chooseModel")}</SelectItem>
-            <SelectItem value={autoModelRouteCode(key === "embeddingModelCode" ? "EMBEDDING" : key === "graphModelCode" ? "TEXT" : "RERANK")}>
-              {t(autoModelRoutes[key === "embeddingModelCode" ? "EMBEDDING" : key === "graphModelCode" ? "TEXT" : "RERANK"].labelKey)}
+            <SelectItem value={autoModelRouteCode(key === "embeddingModelCode" ? "TEXT_EMBEDDING" : key === "graphModelCode" ? "TEXT" : "TEXT_RERANK")}>
+              {t(autoModelRoutes[key === "embeddingModelCode" ? "TEXT_EMBEDDING" : key === "graphModelCode" ? "TEXT" : "TEXT_RERANK"].labelKey)}
             </SelectItem>
             {key === "embeddingModelCode" ? <SelectItem value={autoModelRouteCode("MULTIMODAL_EMBEDDING")}>{t(autoModelRoutes.MULTIMODAL_EMBEDDING.labelKey)}</SelectItem> : null}
+            {key === "rerankModelCode" ? <SelectItem value={autoModelRouteCode("MULTIMODAL_RERANK")}>{t(autoModelRoutes.MULTIMODAL_RERANK.labelKey)}</SelectItem> : null}
             {key === "embeddingModelCode" ? [...embeddingCatalog].map(([code, model]) => <SelectItem key={`person-ai-${code}`} value={`PERSON_AI:EMBEDDING:${code}`}>{model.name} · Person-AI{model.instances > 1 ? ` (${t("ragUnified.instanceCount", { count: model.instances })})` : ""}</SelectItem>) : null}
             {key === "rerankModelCode" ? (providerCatalog.data ?? []).filter((model) => model.catalogModelType === "Rerank" && model.status === "Available" && model.modelId).map((model) => <SelectItem key={`person-ai-rerank-${model.modelId}`} value={`PERSON_AI:RERANK:${model.modelId}`}>{model.modelName} · Person-AI</SelectItem>) : null}
-            {(models.data ?? []).filter((model) => model.enabled && model.modelType === (key === "embeddingModelCode" ? "EMBEDDING" : key === "graphModelCode" ? "TEXT" : "RERANK")).map((model) => <SelectItem key={model.modelCode} value={model.modelCode}>{model.displayName}</SelectItem>)}
+            {(models.data ?? []).filter((model) => model.enabled && !model.modelCode.startsWith("AUTO:") && model.modelSelection?.kind === "Fixed" && (key === "embeddingModelCode" ? ["TEXT_EMBEDDING","MULTIMODAL_EMBEDDING"] : key === "graphModelCode" ? ["TEXT"] : ["TEXT_RERANK","MULTIMODAL_RERANK"]).includes(model.modelType)).map((model) => <SelectItem key={model.modelCode} value={model.modelCode}>{model.displayName}</SelectItem>)}
           </SelectInput>{key === "embeddingModelCode" && (settings.vector || settings.graph) && !settings.embeddingModelCode ? <p className="text-sm text-destructive">{t("ragUnified.embeddingModelRequired")}</p> : null}</Field>)}
   </div>;
 

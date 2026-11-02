@@ -8,13 +8,15 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { Button } from "@/components/ui/button";
 
 import { useToast } from "@/components/ui/toast";
-import { PageHeader, SurfaceCard, useLocaleFormatters } from "@/shared";
+import { SurfaceCard, useLocaleFormatters } from "@/shared";
+import { ProviderPageHeader } from "@/domain/model/components/ProviderPageHeader";
 import {
   createModelProviderAuthorization,
   disconnectModelProvider,
   fetchProviderAccountBalance,
   fetchModelProviderAuthorization,
   fetchModelProviderConnection,
+  fetchModelProviderConnections,
   pollModelProviderAuthorization,
   syncModelProvider,
   type ModelProviderConnection,
@@ -25,12 +27,9 @@ import { ModelProviderStatusBadge } from "@/domain/model/components/ModelProvide
 
 import { ConfiguredProviderPage } from "./ConfiguredProviderPage";
 
-const personAiProviderCode = "PersonAi" as const;
-
-function detailPath(authorizationSessionId?: string) {
-  const query = new URLSearchParams({ providerCode: personAiProviderCode });
-  if (authorizationSessionId)
-    query.set("authorizationSessionId", authorizationSessionId);
+function detailPath(providerCode: string, authorizationSessionId?: string) {
+  const query = new URLSearchParams({ providerCode });
+  if (authorizationSessionId) query.set("authorizationSessionId", authorizationSessionId);
   return `/settings/model-providers/detail?${query.toString()}`;
 }
 
@@ -53,14 +52,30 @@ function DetailLabel({
 
 export function ModelProviderDetailsPage() {
   const [params] = useSearchParams();
-  const providerCode = params.get("providerCode") ?? personAiProviderCode;
-  if (providerCode !== personAiProviderCode) {
-    return <ConfiguredProviderPage key={providerCode} providerId={providerCode} />;
-  }
-  return <PersonAiProviderDetailsPage />;
+  const providerCode = params.get("providerCode") ?? "";
+  const { t } = useTranslation("pages");
+  const [provider, setProvider] = useState<ModelProviderConnection | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const controller = new AbortController();
+    setProvider(null); setError(""); setLoading(true);
+    fetchModelProviderConnections(controller.signal).then((records) => {
+      const record = records.find((item) => item.providerCode === providerCode);
+      if (!controller.signal.aborted) record ? setProvider(record) : setError(t("configuredProviders.errors.load"));
+    }).catch((reason: unknown) => {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("configuredProviders.errors.load"));
+    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [providerCode, t]);
+  if (loading) return <p role="status">{t("configuredProviders.loading")}</p>;
+  if (error || !provider) return <p role="alert">{error || t("configuredProviders.errors.load")}</p>;
+  return provider.source === "Custom"
+    ? <ConfiguredProviderPage key={providerCode} providerId={providerCode} />
+    : <ManagedProviderDetailsPage key={providerCode} providerCode={providerCode} displayName={provider.displayName} />;
 }
 
-function PersonAiProviderDetailsPage() {
+function ManagedProviderDetailsPage({ providerCode, displayName }: { providerCode: string; displayName: string }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const toast = useToast();
@@ -83,7 +98,7 @@ function PersonAiProviderDetailsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const nextConnection = await fetchModelProviderConnection(personAiProviderCode);
+      const nextConnection = await fetchModelProviderConnection(providerCode);
       setConnection(nextConnection);
       if (
         nextConnection.status === "Connected" ||
@@ -91,7 +106,7 @@ function PersonAiProviderDetailsPage() {
       ) {
         try {
           setAccountBalance(
-            await fetchProviderAccountBalance(personAiProviderCode),
+            await fetchProviderAccountBalance(providerCode),
           );
         } catch {
           setAccountBalance(null);
@@ -108,7 +123,7 @@ function PersonAiProviderDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [t, toast]);
+  }, [t, toast, providerCode]);
 
   useEffect(() => {
     void load();
@@ -121,7 +136,7 @@ function PersonAiProviderDetailsPage() {
     }
     let active = true;
     void fetchModelProviderAuthorization(
-      personAiProviderCode,
+      providerCode,
       authorizationSessionId,
     )
       .then((session) => {
@@ -139,20 +154,20 @@ function PersonAiProviderDetailsPage() {
     return () => {
       active = false;
     };
-  }, [authorizationSessionId, t, toast]);
+  }, [authorizationSessionId, t, toast, providerCode]);
 
   function clearAuthorization() {
     setAuthorization(null);
-    navigate(detailPath(), { replace: true });
+    navigate(detailPath(providerCode), { replace: true });
   }
 
   async function beginAuthorization() {
     setBusy("authorize");
     try {
       const session =
-        await createModelProviderAuthorization(personAiProviderCode);
+        await createModelProviderAuthorization(providerCode);
       setAuthorization(session);
-      navigate(detailPath(session.sessionId), { replace: true });
+      navigate(detailPath(providerCode, session.sessionId), { replace: true });
       window.open(session.loginUrl, "_blank", "noopener,noreferrer");
       toast.info(t("modelProviders.messages.authorizationPageOpened"));
       await load();
@@ -173,7 +188,7 @@ function PersonAiProviderDetailsPage() {
     setBusy("poll");
     try {
       const result = await pollModelProviderAuthorization(
-        personAiProviderCode,
+        providerCode,
         session.sessionId,
       );
       if (result.completed) {
@@ -209,7 +224,7 @@ function PersonAiProviderDetailsPage() {
   async function syncNow() {
     setBusy("sync");
     try {
-      const run = await syncModelProvider(personAiProviderCode);
+      const run = await syncModelProvider(providerCode);
       toast.success(
         t("modelProviders.messages.syncCompleted", {
           count: run.modelCount ?? 0,
@@ -231,7 +246,7 @@ function PersonAiProviderDetailsPage() {
   async function disconnect() {
     setBusy("disconnect");
     try {
-      await disconnectModelProvider(personAiProviderCode);
+      await disconnectModelProvider(providerCode);
       clearAuthorization();
       setDisconnectOpen(false);
       toast.success(t("modelProviders.messages.disconnected"));
@@ -252,15 +267,15 @@ function PersonAiProviderDetailsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Person-AI"
+      <ProviderPageHeader
+        title={t("configuredProviders.editTitle")}
         actions={
           <>
             <Button
               variant="secondary"
               onClick={() =>
                 navigate(
-                  `/settings/model-providers/catalog?providerCode=${personAiProviderCode}`,
+                  `/settings/model-providers/catalog?providerCode=${providerCode}`,
                 )
               }
             >
@@ -271,7 +286,7 @@ function PersonAiProviderDetailsPage() {
               variant="secondary"
               onClick={() =>
                 navigate(
-                  `/settings/model-providers/sync-runs?providerCode=${personAiProviderCode}`,
+                  `/settings/model-providers/sync-runs?providerCode=${providerCode}`,
                 )
               }
             >
@@ -291,6 +306,7 @@ function PersonAiProviderDetailsPage() {
       />
 
       <SurfaceCard className="mb-4 space-y-5">
+        <h1 className="text-base font-semibold">{connection?.displayName ?? displayName}</h1>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold">
@@ -450,7 +466,11 @@ function PersonAiProviderDetailsPage() {
             {t("modelProviders.help.account")}
           </InfoTooltip>
         </div>
-        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-3">
+        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-4">
+          <div>
+            <DetailLabel help={t("modelProviders.help.nickname")} helpAriaLabel={t("modelProviders.aria.fieldHelp", { label: t("modelProviders.detail.nickname") })} label={t("modelProviders.detail.nickname")} />
+            <dd className="mt-1">{accountBalance?.nickname?.trim() || t("modelProviders.values.notProvided")}</dd>
+          </div>
           <div>
             <DetailLabel
               help={t("modelProviders.help.username")}
@@ -487,10 +507,10 @@ function PersonAiProviderDetailsPage() {
               })}
               label={t("modelProviders.detail.remainingPoints")}
             />
-            <dd className="mt-1">
+            <dd className="mt-1" title={accountBalance?.remainingPoints == null ? undefined : formatNumber(accountBalance.remainingPoints, { maximumFractionDigits: 20 })}>
               {accountBalance?.remainingPoints === null || accountBalance?.remainingPoints === undefined
                 ? t("modelProviders.values.notProvided")
-                : formatNumber(accountBalance.remainingPoints)}
+                : formatNumber(accountBalance.remainingPoints, { notation: "compact", compactDisplay: "short", maximumFractionDigits: 2 })}
             </dd>
           </div>
         </dl>

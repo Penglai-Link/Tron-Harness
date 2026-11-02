@@ -272,6 +272,8 @@ impl ChatAutoModelRouter {
                 provider: false,
             });
         }
+        let sources = self.models.automatic_chat_model_codes().map_err(|e|e.to_string())?;
+        candidates.retain(|candidate| sources.contains(&candidate.config.model_code));
         candidates.retain(|candidate| allowed.is_empty() || allowed.contains(&candidate.code));
         let filtered = self
             .router

@@ -15,7 +15,7 @@ pub(super) struct HostRunState {
     pub trusted_prefix: Vec<crate::domain::agent::AgentMessage>,
     /// Actual admitted native IDs for product exposure audits; never an executor.
     pub tool_catalog: std::collections::BTreeMap<String, String>,
-    pub pending_tool_descriptors: Vec<fw::ToolDescriptor>,
+    pub pending_tool_bindings: Vec<fw::ToolBinding>,
     pub tool_sequence: u32,
     pub tool_sequences: std::collections::BTreeMap<String, u32>,
     pub error: Option<crate::domain::agent::AgentError>,
@@ -55,7 +55,7 @@ impl HostRunState {
             product_tool_authority,
             trusted_prefix,
             tool_catalog: Default::default(),
-            pending_tool_descriptors: Vec::new(),
+            pending_tool_bindings: Vec::new(),
             tool_sequence: 0,
             tool_sequences: Default::default(),
             error: None,

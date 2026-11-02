@@ -5,6 +5,7 @@ use serde::Serialize;
 pub struct CapabilityContentInfo {
     pub kind: String,
     pub name: String,
+    pub display_name: String,
     pub description: String,
     pub provides: Vec<String>,
 }
@@ -14,9 +15,11 @@ fn content(
     name: impl Into<String>,
     description: impl Into<String>,
 ) -> CapabilityContentInfo {
+    let name=name.into();
     CapabilityContentInfo {
         kind: kind.into(),
-        name: name.into(),
+        display_name: name.clone(),
+        name,
         description: description.into(),
         provides: Vec::new(),
     }
@@ -26,6 +29,7 @@ pub(super) fn manifest_contents(
     manifest: &eliteforge_agent_capability_runtime::CapabilityPackManifest,
 ) -> Vec<CapabilityContentInfo> {
     let mut items = Vec::new();
+    items.extend(manifest.tools.iter().map(|entry| content("Tool",&entry.descriptor.call_name,&entry.descriptor.description)));
     for (kind, names) in [
         ("Plugin", &manifest.plugins),
         ("Skill", &manifest.skills),
@@ -62,13 +66,14 @@ pub(super) fn manifest_contents(
     items
 }
 
-pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
+pub(super) fn builtin_tool_descriptors(id: &str) -> Vec<eliteforge_agent_core::ToolDescriptor> {
     use eliteforge_agent_official_plugin_tools_agents::*;
-    let tools = match id {
+    match id {
         "framework.local.scoped" => {
             eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
         }
         "framework.tool-pack.agent-collaboration" => vec![
+            AskCallerTool::descriptor(),
             AgentGetTool::descriptor(),
             AgentSpawnTool::descriptor(),
             ChildWaitTool::descriptor(),
@@ -87,11 +92,21 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
         ],
         "framework.a2ui" => eliteforge_agent_official_plugin_a2ui::tool_descriptors(),
         "framework.personai" => eliteforge_agent_capability_personai::personai_tool_catalog(),
-        "framework.web" => vec![eliteforge_agent_official_plugin_tools_web::web_fetch_descriptor()],
+        "framework.web" => vec![eliteforge_agent_official_plugin_tools_web::web_read_descriptor()],
         "framework.media" => eliteforge_agent_official_plugin_tools_media::media_tool_catalog(),
+        tron_harness_capability::PACK_ID => {
+            eliteforge_agent_core::ToolProvider::catalog_metadata(&super::super::tools::HarnessTools)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|tool| tool.descriptor)
+                .collect()
+        }
         _ => vec![],
-    };
-    let mut items: Vec<_> = tools
+    }
+}
+
+pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
+    let mut items: Vec<_> = builtin_tool_descriptors(id)
         .into_iter()
         .map(|tool| content("Tool", tool.call_name, tool.description))
         .collect();
@@ -125,12 +140,6 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
             "Tron tool permissions",
             tron_harness_capability::TOOL_IMPLEMENTATION_DESCRIPTION,
         ));
-        items.extend(
-            crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US")
-                .into_iter()
-                .filter(|tool| super::super::tools::official_id(&tool.tool_name).is_none())
-                .map(|tool| content("Tool", tool.tool_name, tool.description)),
-        );
     }
     // Keep detail contributions and the extension catalog on the same source.
     items.extend(
@@ -153,7 +162,7 @@ pub(super) fn builtin_contents(id: &str) -> Vec<CapabilityContentInfo> {
         "framework.local.scoped" => &["framework.pty.service", "framework.local.scoped.tools"],
         "framework.tool-pack.agent-collaboration" => &["tools.agents"],
         "framework.a2ui" => &["agent.a2ui"],
-        "framework.personai" => &["capability.personai", "framework.tools.discovery"],
+        "framework.personai" => &["capability.personai"],
         "framework.web" => &["framework.web.tools"],
         "framework.media" => &["framework.media.tools"],
         "tron.harness" => &[
@@ -249,11 +258,14 @@ fn plugin_content(id: &str, contents: &[CapabilityContentInfo]) -> CapabilityCon
         ),
         "framework.tools.discovery" => (
             "Discover and execute available tools on demand",
-            &[eliteforge_agent_core::TOOL_SEARCH_CALL_NAME, eliteforge_agent_core::TOOL_EXECUTE_CALL_NAME],
+            &[
+                eliteforge_agent_core::TOOL_SEARCH_CALL_NAME,
+                eliteforge_agent_core::TOOL_EXECUTE_CALL_NAME,
+            ],
         ),
         "framework.web.tools" => (
             "Fetch text from public webpages",
-            &["WebToolsPlugin", "web_fetch"],
+            &["WebToolsPlugin", "web_read"],
         ),
         "framework.media.tools" => (
             "Read images and PDF files within the authorized scope",
@@ -313,7 +325,7 @@ mod content_tests {
             !harness
                 .contents
                 .iter()
-                .any(|item| item.name == "web_fetch" || item.name.starts_with("personai_"))
+                .any(|item| item.name == "web_read" || item.name.starts_with("personai_"))
         );
         for name in [
             "tron-theme-spec",

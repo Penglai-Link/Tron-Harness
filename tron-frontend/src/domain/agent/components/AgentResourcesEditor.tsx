@@ -18,7 +18,7 @@ import { AgentPolicyFields, newAgentPolicyDraft, type AgentPolicyDraft } from ".
 
 export interface AgentResourcesEditorHandle { validate(): void; save(createdCode?: string): Promise<void> }
 const policyKeys = ["toolAssignmentMode", "maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const;
-const copy = (value: AgentPolicyDraft): AgentPolicyDraft => ({ ...value, selectedToolCodes: [...value.selectedToolCodes], selectedServerCodes: [...value.selectedServerCodes] });
+const copy = (value: AgentPolicyDraft): AgentPolicyDraft => ({ ...value, selectedCategoryCodes: [...(value.selectedCategoryCodes ?? [])], selectedToolCodes: [...value.selectedToolCodes], selectedServerCodes: [...value.selectedServerCodes] });
 const sameCodes = (a: string[], b: string[]) => a.length === b.length && a.every((code) => b.includes(code));
 
 /** The same draft and controls serve creation and editing. Persistence starts only on parent Save. */
@@ -69,7 +69,7 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
       .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false); });
     return () => controller.abort();
   }, [attempt]);
-  const dirty = !!baseline && !!draft && (policyKeys.some((key) => baseline[key] !== draft[key]) || baseline.mcpAccessMode !== draft.mcpAccessMode || !sameCodes(baseline.selectedToolCodes, draft.selectedToolCodes) || !sameCodes(baseline.selectedServerCodes, draft.selectedServerCodes) || skillDraft !== undefined || knowledgeDraft !== undefined);
+  const dirty = !!baseline && !!draft && (policyKeys.some((key) => baseline[key] !== draft[key]) || baseline.mcpAccessMode !== draft.mcpAccessMode || !sameCodes(baseline.selectedCategoryCodes ?? [], draft.selectedCategoryCodes ?? []) || !sameCodes(baseline.selectedToolCodes, draft.selectedToolCodes) || !sameCodes(baseline.selectedServerCodes, draft.selectedServerCodes) || skillDraft !== undefined || knowledgeDraft !== undefined);
   function validate() {
     if (!draft) { if (dirty) throw new Error(error || t("agentSkills.loading")); return; }
     for (const key of ["maxSteps", "maxToolCalls", "maxParallelToolCalls"] as const) {
@@ -89,6 +89,7 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
         saved = copy(await (api ? updateWorkspaceInternalAgentToolAssignments(workspaceCode, code, draft.selectedToolCodes) : agentMocks.updateWorkspaceInternalAgentToolAssignmentsMock(workspaceCode, code, draft.selectedToolCodes))); setBaseline(saved);
       }
       const policy: WorkspaceInternalAgentPolicyPayload = {};
+      if (!sameCodes(saved.selectedCategoryCodes ?? [], draft.selectedCategoryCodes ?? [])) policy.selectedCategoryCodes = draft.selectedCategoryCodes ?? [];
       for (const key of policyKeys) if (saved[key] !== draft[key]) Object.assign(policy, { [key]: draft[key] });
       if (Object.keys(policy).length) { saved = copy(await (api ? patchWorkspaceInternalAgentPolicy(workspaceCode, code, policy) : agentMocks.patchWorkspaceInternalAgentPolicyMock(workspaceCode, code, policy))); setBaseline(saved); }
       if (draft.mcpAccessMode === "selected_servers" && (saved.mcpAccessMode !== "selected_servers" || !sameCodes(saved.selectedServerCodes, draft.selectedServerCodes))) {
@@ -105,7 +106,7 @@ export const AgentResourcesEditor = forwardRef<AgentResourcesEditorHandle, {
   return <>
     <TabsContent value="resources" keepMounted className="tron-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-3">
       {error ? <div role="alert">{error}<Button type="button" variant="outline" disabled={disabled} onClick={() => setAttempt((value) => value + 1)}>{t("agentSkills.retry")}</Button></div> : null}
-      {!draft ? <p role="status">{t("agentSkills.loading")}</p> : <AgentPolicyFields panel="resources" draft={draft} disabled={blocked || catalogLoading || !!error} onChange={patch} onAssignment={setAssignment}>
+      {!draft ? <p role="status">{t("agentSkills.loading")}</p> : <AgentPolicyFields tools={tools} panel="resources" draft={draft} disabled={blocked || catalogLoading || !!error} onChange={patch} onAssignment={setAssignment}>
         <InternalAgentSkillField agentCode={agentCode ?? ""} disabled={blocked} selectedNames={skillDraft} onSelectionChange={setSkillDraft} />
         <InternalAgentKnowledgeField agentCode={agentCode ?? ""} agentName={agentName} disabled={blocked} selectedIds={knowledgeDraft} onSelectionChange={setKnowledgeDraft} />
       </AgentPolicyFields>}

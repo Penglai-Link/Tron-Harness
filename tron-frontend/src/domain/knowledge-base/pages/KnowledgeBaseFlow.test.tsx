@@ -22,7 +22,7 @@ vi.mock("@/components/ui/dialog", () => ({ Dialog: ({ children, open }: { childr
 vi.mock("@/components/forms", () => ({ Field: ({ label, children }: { label: string; children: ReactNode }) => <label>{label}{children}</label>, TextInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />, TextArea: (props: React.ComponentProps<"textarea">) => <textarea {...props} />, SelectInput: ({ onValueChange, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { onValueChange: (value: string) => void }) => <select {...props} onChange={(event) => onValueChange(event.target.value)} /> }));
 vi.mock("@/components/ui/select", () => ({ SelectItem: ({ value, children }: { value: string; children: ReactNode }) => <option value={value}>{children}</option> }));
 vi.mock("@/components/ui/switch", () => ({ Switch: ({ checked, disabled, onCheckedChange, ...props }: { checked: boolean; disabled?: boolean; onCheckedChange: (checked: boolean) => void }) => <input {...props} type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(event) => onCheckedChange(event.target.checked)} /> }));
-vi.mock("@/domain/model/api/modelApi", () => ({ fetchPlatformModels: vi.fn(async () => []) }));
+vi.mock("@/domain/model/api/modelApi", () => ({ fetchModelSelectOptions: vi.fn(async () => []) }));
 vi.mock("@/domain/model/api/modelProviderApi", () => ({ fetchProviderCatalog: vi.fn(async () => []) }));
 vi.mock("@/domain/resource/api/resourceApi", () => ({ downloadResourceBinary: vi.fn() }));
 vi.mock("@/domain/dude/api/dudeApi", () => ({ listDudes: vi.fn(async () => []) }));

@@ -1,33 +1,78 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Field, SelectInput, TextInput } from "@/components/forms";
+import { Field } from "@/components/forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SelectItem } from "@/components/ui/select";
+import { Combobox, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList, ComboboxPopup } from "@/components/ui/combobox";
 import { Spinner } from "@/components/ui/spinner";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { fetchModelProviderConnections, type ModelProviderConnection } from "@/domain/model/api";
 import {
-  fetchProviderPresetModels, fetchProviderPresets,
-  type ProviderPreset, type ProviderPresetModel,
+  fetchConfiguredProvider, fetchProviderPresets,
+  type ProviderPreset,
 } from "@/domain/model/api/configuredProviderApi";
+import { duplicateProviderDraft, type ConfiguredProviderDraft } from "./configuredProviderForm";
 
-export function ProviderPresetPicker({ selectedModelIds, disabled, onSelect, onAddModel }: {
-  selectedModelIds: string[];
+interface ProviderOption {
+  value: string;
+  label: string;
+  searchText: string;
   disabled: boolean;
-  onSelect: (preset: ProviderPreset) => void;
-  onAddModel: (model: ProviderPresetModel) => void;
+}
+
+export function ProviderPresetPicker({ disabled, onSelect, onCreateFromExisting, onSelectionPending }: {
+  disabled: boolean;
+  onSelect: (preset: ProviderPreset | null) => void;
+  onCreateFromExisting: (draft: ConfiguredProviderDraft) => void;
+  onSelectionPending: () => void;
 }) {
   const { t } = useTranslation("pages");
   const text = (key: string) => t(`configuredProviders.${key}`);
   const [presets, setPresets] = useState<ProviderPreset[]>([]);
+  const [existing, setExisting] = useState<ModelProviderConnection[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [models, setModels] = useState<ProviderPresetModel[]>([]);
-  const [providerSearch, setProviderSearch] = useState("");
-  const [modelSearch, setModelSearch] = useState("");
-  const [visibleLimit, setVisibleLimit] = useState(20);
   const [loading, setLoading] = useState(true);
-  const [loadingModels, setLoadingModels] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [loadingConnection, setLoadingConnection] = useState(false);
+  const connectionRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => connectionRequest.current?.abort(), []);
+  function uniqueName(baseName: string) {
+    const names = new Set(existing.map(item => item.displayName));
+    let name = baseName;
+    let suffix = 2;
+    while (names.has(name)) name = `${baseName} (${suffix++})`;
+    return name;
+  }
+
+  async function createFromExisting(provider: ModelProviderConnection) {
+    if (provider.source !== "Custom") return;
+    const controller = new AbortController();
+    connectionRequest.current = controller;
+    onSelectionPending();
+    setLoadingConnection(true);
+    try {
+      const next = duplicateProviderDraft(await fetchConfiguredProvider(provider.providerCode, controller.signal));
+      if (!controller.signal.aborted) {
+        next.displayName = uniqueName(next.displayName);
+        onCreateFromExisting(next);
+      }
+    } catch (reason) {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : text("errors.load"));
+    } finally {
+      if (!controller.signal.aborted) setLoadingConnection(false);
+    }
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchModelProviderConnections(controller.signal).then((records) => {
+      if (!controller.signal.aborted) setExisting(records.filter(provider => provider.source === "Custom"));
+    }).catch((reason: unknown) => {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("configuredProviders.errors.load"));
+    });
+    return () => controller.abort();
+  }, [revision, t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -43,92 +88,97 @@ export function ProviderPresetPicker({ selectedModelIds, disabled, onSelect, onA
     return () => controller.abort();
   }, [revision, t]);
 
-  useEffect(() => {
-    if (!selectedId) return;
-    const controller = new AbortController();
-    setLoadingModels(true);
-    setModels([]);
-    setError("");
-    fetchProviderPresetModels(selectedId, controller.signal).then((records) => {
-      if (!controller.signal.aborted) setModels(records);
-    }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("configuredProviders.errors.catalog"));
-    }).finally(() => {
-      if (!controller.signal.aborted) setLoadingModels(false);
-    });
-    return () => controller.abort();
-  }, [selectedId, revision, t]);
-
   const selected = presets.find((preset) => preset.id === selectedId);
-  const filteredPresets = useMemo(() => {
-    const query = providerSearch.trim().toLowerCase();
-    return presets.filter((preset) => preset.id === selectedId || `${preset.id} ${preset.name}`.toLowerCase().includes(query));
-  }, [presets, providerSearch, selectedId]);
-  const filteredModels = useMemo(() => {
-    const query = modelSearch.trim().toLowerCase();
-    return models.filter((model) => `${model.modelId} ${model.name}`.toLowerCase().includes(query));
-  }, [models, modelSearch]);
+  const providerOptions = useMemo<ProviderOption[]>(() => [
+    ...existing.map((provider) => ({
+      value: `__existing__:${provider.providerCode}`,
+      label: t("configuredProviders.catalog.newFromExisting", { name: provider.displayName }),
+      searchText: `${provider.providerCode} ${provider.displayName}`,
+      disabled: false,
+    })),
+    {
+      value: "__tron_custom__",
+      label: t("configuredProviders.catalog.customProvider"),
+      searchText: `custom ${t("configuredProviders.catalog.customProvider")}`,
+      disabled: false,
+    },
+    ...presets.map((preset) => ({
+      value: preset.id,
+      label: preset.supported && preset.protocol ? preset.name : `${preset.name} · ${t("configuredProviders.catalog.unsupported")}`,
+      searchText: `${preset.id} ${preset.name}`,
+      disabled: !preset.supported || !preset.protocol,
+    })),
+  ], [existing, presets, t]);
 
   return (
     <section className="space-y-4 border-b border-[var(--color-outline-variant)] pb-6" aria-labelledby="provider-presets-heading">
       <div>
-        <h2 id="provider-presets-heading" className="text-base font-semibold">{text("catalog.title")}</h2>
-        <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{text("catalog.hint")}</p>
+        <div className="flex items-center gap-1"><h2 id="provider-presets-heading" className="text-base font-semibold">{text("catalog.title")}</h2>
+          <InfoTooltip ariaLabel={text("catalog.title")}>{text("catalog.hint")}</InfoTooltip></div>
       </div>
-      {loading ? <p className="inline-flex items-center gap-2 text-sm" role="status"><Spinner size={16} />{text("loading")}</p> : (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label={text("catalog.searchProviders")}>
-            <TextInput aria-label={text("catalog.searchProviders")} value={providerSearch} disabled={disabled}
-              onChange={(event) => setProviderSearch(event.currentTarget.value)} />
-          </Field>
-          <Field label={text("catalog.provider")}>
-            <SelectInput aria-label={text("catalog.provider")} value={selectedId || null} disabled={disabled}
-              placeholder={text("catalog.chooseProvider")}
-              onValueChange={(value: string | null) => {
-                const preset = presets.find((entry) => entry.id === value);
-                if (!preset?.supported || !preset.protocol) return;
-                setSelectedId(preset.id);
-                setModelSearch("");
-                setVisibleLimit(20);
-                onSelect(preset);
-              }}>
-              {filteredPresets.map((preset) => <SelectItem key={preset.id} value={preset.id} disabled={!preset.supported || !preset.protocol}>
-                {preset.name}{!preset.supported ? ` · ${text("catalog.unsupported")}` : ""}
-              </SelectItem>)}
-            </SelectInput>
-          </Field>
-        </div>
-      )}
+      {loading && <p className="inline-flex items-center gap-2 text-sm" role="status"><Spinner size={16} />{text("loading")}</p>}
+      <Field label={text("catalog.provider")}>
+        <Combobox
+          items={providerOptions}
+          value={providerOptions.find((option) => option.value === selectedId) ?? null}
+          disabled={disabled}
+          itemToStringLabel={(option) => option.label}
+          itemToStringValue={(option) => option.value}
+          isItemEqualToValue={(option, value) => option.value === value.value}
+          filter={(option, query) => `${option.searchText} ${option.label}`.toLowerCase().includes(query.trim().toLowerCase())}
+          onValueChange={(option) => {
+            const value = option?.value;
+            if (!value) return;
+            connectionRequest.current?.abort();
+            setLoadingConnection(false);
+            setError("");
+            if (value === "__tron_custom__") {
+              setSelectedId(value);
+              onSelect(null);
+              return;
+            }
+            if (value?.startsWith("__existing__:")) {
+              const provider = existing.find((item) => item.providerCode === value.slice("__existing__:".length));
+              if (provider) { setSelectedId(value); void createFromExisting(provider); }
+              return;
+            }
+            const preset = presets.find((entry) => entry.id === value);
+            if (!preset?.supported || !preset.protocol) return;
+            setSelectedId(preset.id);
+            onSelect({ ...preset, name: uniqueName(preset.name) });
+          }}>
+          <ComboboxInput
+            aria-label={text("catalog.provider")}
+            placeholder={text("catalog.searchOrChooseProvider")}
+            autoComplete="off"
+            spellCheck={false}
+            className="h-[var(--tron-input-height,2.25rem)] sm:h-[var(--tron-input-height,2.125rem)]"
+          />
+          <ComboboxPopup className="w-(--anchor-width)">
+            <ComboboxEmpty>{text("catalog.noProviders")}</ComboboxEmpty>
+            <ComboboxList>
+              {(option: ProviderOption) => <ComboboxItem key={option.value} value={option} disabled={option.disabled}>
+                {option.label}
+              </ComboboxItem>}
+            </ComboboxList>
+          </ComboboxPopup>
+        </Combobox>
+      </Field>
+      {loadingConnection && <p role="status" className="inline-flex items-center gap-2 text-sm"><Spinner size={16} />{text("loading")}</p>}
       {error && <div role="alert" className="flex items-center justify-between gap-3 text-sm text-[var(--color-error)]">
-        <span>{error}</span><Button type="button" variant="secondary" onClick={() => setRevision((value) => value + 1)}>{text("actions.retry")}</Button>
+        <span>{error}</span><Button type="button" variant="secondary" disabled={disabled} onClick={() => {
+          const provider = selectedId.startsWith("__existing__:") ? existing.find(item => item.providerCode === selectedId.slice("__existing__:".length)) : undefined;
+          if (provider) { connectionRequest.current?.abort(); setError(""); void createFromExisting(provider); }
+          else setRevision((value) => value + 1);
+        }}>{text("actions.retry")}</Button>
       </div>}
       {selected && <>
         <div className="flex flex-wrap gap-2">
           {selected.guessed && <Badge variant="warning">{text("catalog.guessed")}</Badge>}
           {(selected.needsBaseUrl || !selected.baseUrl) && <Badge variant="warning">{text("catalog.needsBaseUrl")}</Badge>}
-          <span className="text-sm text-[var(--color-on-surface-variant)]">{t("configuredProviders.catalog.modelCount", { count: selected.modelCount })}</span>
         </div>
-        {selected.guessed && <p className="text-sm text-[var(--color-on-surface-variant)]">{text("catalog.guessedHint")}</p>}
-        <Field label={text("catalog.searchModels")}>
-          <TextInput aria-label={text("catalog.searchModels")} value={modelSearch} disabled={disabled}
-            onChange={(event) => { setModelSearch(event.currentTarget.value); setVisibleLimit(20); }} />
-        </Field>
-        {loadingModels ? <p role="status" className="text-sm">{text("loading")}</p> : (
-          <div className="max-h-80 overflow-y-auto rounded border border-[var(--color-outline-variant)]">
-            {filteredModels.slice(0, visibleLimit).map((model) => {
-              const added = selectedModelIds.includes(model.modelId);
-              return <div key={model.modelId} className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-3 py-2 last:border-0">
-                <div className="min-w-0"><p className="truncate text-sm font-medium" title={model.name}>{model.name}</p>
-                  <p className="truncate font-mono text-xs text-[var(--color-on-surface-variant)]" title={model.modelId}>{model.modelId}</p></div>
-                <Button type="button" size="sm" variant="secondary" disabled={disabled || added}
-                  aria-label={t(added ? "configuredProviders.catalog.addedModel" : "configuredProviders.catalog.addModel", { name: model.name })}
-                  onClick={() => onAddModel(model)}>{text(added ? "catalog.added" : "catalog.add")}</Button>
-              </div>;
-            })}
-            {!filteredModels.length && <p className="p-3 text-sm text-[var(--color-on-surface-variant)]">{text("catalog.noModels")}</p>}
-            {filteredModels.length > visibleLimit && <div className="p-3"><Button type="button" variant="ghost" onClick={() => setVisibleLimit((value) => value + 20)}>{text("catalog.more")}</Button></div>}
-          </div>
-        )}
+        {selected.guessed && <InfoTooltip ariaLabel={text("catalog.guessed")}>{text("catalog.guessedHint")}</InfoTooltip>}
+
       </>}
     </section>
   );

@@ -1,8 +1,6 @@
 //! Host installation, selection and credential lifecycle for shared Framework tools.
 use super::*;
-use crate::application::{
-    agent::tool_catalog::official_remote_descriptors, model_provider::ModelProviderService,
-};
+use crate::application::model_provider::ModelProviderService;
 use eliteforge_agent_capability_personai::{
     PersonAiConfig, PersonAiConnection, PersonAiToolProvider,
 };
@@ -95,27 +93,44 @@ impl fw::ToolProvider for RemoteTools {
                 .providers
                 .get()
                 .and_then(|p| p.sdk_model_authorization_scope().ok());
-            for descriptor in official_remote_descriptors()
-                .into_iter()
-                .filter(|d| d.id.starts_with("personai.") && allowed(&d.call_name))
+            for (descriptor, category) in
+                eliteforge_agent_capability_personai::personai_tool_catalog_with_categories()
+                    .into_iter()
+                    .filter(|(d, _)| allowed(&d.call_name))
             {
-                tools.push(fw::ToolBinding::new(
+                let mut binding = fw::ToolBinding::new(
                     descriptor.clone(),
                     PersonAiTool {
                         host: self.0.clone(),
                         scope: scope.clone(),
-                        name: descriptor.call_name,
+                        name: descriptor.call_name.clone(),
                     },
-                ));
+                );
+                binding.category = Some(category);
+                binding.source = fw::ToolSource {
+                    provider_id: Some("PersonAiToolProvider".into()),
+                    plugin_id: Some("capability.personai".into()),
+                    pack_id: Some("framework.personai".into()),
+                    adapter_id: None,
+                };
+                tools.push(binding);
             }
         }
-        if enabled("framework.web") && allowed("web_fetch") {
+        if enabled("framework.web") && allowed("web_read") {
             let lease = WebToolsPlugin::new()
                 .fetch(WebFetchConfig::unrestricted())
                 .lease(run)
                 .await?;
             run.own_resources(lease.resources);
-            tools.extend(lease.tools);
+            tools.extend(lease.tools.into_iter().map(|mut binding| {
+                binding.source = fw::ToolSource {
+                    provider_id: Some("WebToolsPlugin".into()),
+                    plugin_id: Some("framework.web.tools".into()),
+                    pack_id: Some("framework.web".into()),
+                    adapter_id: None,
+                };
+                binding
+            }));
         }
         if enabled("framework.media")
             && ["media_read_image", "media_read_pdf"]
@@ -129,7 +144,15 @@ impl fw::ToolProvider for RemoteTools {
                 .with_image_token_estimate(4096);
             let lease = MediaToolsPlugin::new(config).lease(run).await?;
             run.own_resources(lease.resources);
-            tools.extend(lease.tools);
+            tools.extend(lease.tools.into_iter().map(|mut binding| {
+                binding.source = fw::ToolSource {
+                    provider_id: Some("MediaToolsPlugin".into()),
+                    plugin_id: Some("framework.media.tools".into()),
+                    pack_id: Some("framework.media".into()),
+                    adapter_id: None,
+                };
+                binding
+            }));
         }
         tools.retain(|binding| allowed(&binding.descriptor.call_name));
         for binding in &mut tools {
@@ -144,13 +167,18 @@ impl fw::ToolProvider for RemoteTools {
         let tools = tools
             .into_iter()
             .map(|binding| {
-                let domain = context.authorized_tools().iter()
+                let domain = context
+                    .authorized_tools()
+                    .iter()
                     .find(|tool| tool.tool_name == binding.descriptor.call_name)
                     .and_then(|tool| tool.domain_code.clone())
-                    .or_else(|| crate::application::agent::BusinessToolCatalog::tool(
-                        &binding.descriptor.id,
-                        &context.locale,
-                    ).map(|record| record.domain_code));
+                    .or_else(|| {
+                        crate::application::agent::BusinessToolCatalog::tool(
+                            &binding.descriptor.id,
+                            &context.locale,
+                        )
+                        .map(|record| record.domain_code)
+                    });
                 super::super::tools::label_domain(binding, domain.as_deref())
             })
             .collect::<Vec<_>>();

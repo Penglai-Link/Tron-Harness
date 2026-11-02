@@ -11,55 +11,17 @@ impl AgentManagementService {
             .any(|code| code.eq_ignore_ascii_case(agent_code)))
     }
 
-    /// Fresh installations start with a runnable main Agent. Saved choices remain authoritative.
-    pub fn initialize_default_main_loop(&self) -> Result<(), AgentManagementError> {
-        let code = crate::domain::agent::loop_design::DEFAULT_REACT_LOOP_CODE;
-        match self.loop_design(code) {
-            Ok(mut design) if design.name != "EliteForge ReAct" => {
-                let expected_version = design.version;
-                design.name = "EliteForge ReAct".into();
-                design.version = expected_version
-                    .checked_add(1)
-                    .ok_or(AgentManagementError::LoopInvalid)?;
-                self.repository()
-                    .save_loop_design(&design, expected_version)?;
-            }
-            Ok(_) => {}
-            Err(AgentManagementError::LoopNotFound) => {
-                self.repository().save_loop_design(
-                    &crate::domain::agent::loop_design::LoopDesign {
-                        loop_code: code.into(),
-                        name: "EliteForge ReAct".into(),
-                        kind: crate::domain::agent::loop_design::LoopKind::React,
-                        version: 1,
-                        nodes: vec![],
-                        edges: vec![],
-                        max_parallel_nodes: 1,
-                        updated_at: 0,
-                    },
-                    0,
-                )?;
-            }
-            Err(error) => return Err(error),
-        }
+    /// Fresh installations start with a main Agent using the runtime's ReAct loop.
+    pub fn initialize_default_main_agent(&self) -> Result<(), AgentManagementError> {
         let mut repository = self.repository();
-        let mut configs = repository.list_platform_internal_agent_configs()?;
-        for config in &mut configs {
-            if internal_definitions::is_builtin_agent(&config.agent_code)
-                && config.loop_code.is_none()
-            {
-                config.loop_code = Some(code.into());
-                repository.upsert_platform_internal_agent_config(config)?;
-            }
-        }
-        if configs
+        if repository
+            .list_platform_internal_agent_configs()?
             .iter()
             .any(|config| config.agent_code == "main-agent")
         {
             return Ok(());
         }
-        let mut config = default_config(internal_definitions::internal_agents().remove(0));
-        config.loop_code = Some(code.into());
+        let config = default_config(internal_definitions::internal_agents().remove(0));
         repository.insert_platform_internal_agent_config(&config)
     }
 
@@ -91,7 +53,8 @@ impl AgentManagementService {
             "main-dude" => "统筹用户事务，协调智能体执行任务并跟进结果。",
             "memory-dude" => "整理稳定事实与已验证经验，维护长期记忆和可复用技能。",
             _ => "",
-        }.into();
+        }
+        .into();
         config.group_name = None;
         if let Some(prompt) = role_prompt {
             config.role_prompt = prompt
@@ -139,7 +102,11 @@ impl AgentManagementService {
     }
     /// Identity-only listing must not build tool policies or resolve capabilities.
     pub fn platform_internal_agent_codes(&self) -> Result<Vec<String>, AgentManagementError> {
-        Ok(self.platform_internal_agent_configs()?.into_iter().map(|c| c.agent_code).collect())
+        Ok(self
+            .platform_internal_agent_configs()?
+            .into_iter()
+            .map(|c| c.agent_code)
+            .collect())
     }
     pub fn all_platform_internal_agents(
         &self,
@@ -168,7 +135,6 @@ impl AgentManagementService {
         config.avatar_id = internal_definitions::validate_avatar_id(command.avatar_id.as_deref())?;
         config.candidate_model_codes =
             internal_definitions::normalize_candidate_model_codes(command.candidate_model_codes)?;
-        config.loop_code = Some(self.validate_loop_selection(command.loop_code.as_deref())?);
         Ok(config)
     }
     pub fn create_platform_internal_agent(
@@ -242,16 +208,15 @@ impl AgentManagementService {
         if let Some(id) = &command.avatar_id {
             internal_definitions::validate_avatar_id(Some(id))?;
         }
-        if let Some(loop_code) = &command.loop_code {
-            self.validate_loop_selection(Some(loop_code))?;
-        }
         let group_name = if self.is_dude_definition(code)? {
             Some(String::new())
         } else {
             self.validate_internal_agent_group("", command.group_name)?
         };
         self.change_platform_internal_agent(code, |config| {
-            if let Some(enabled) = command.enabled { config.enabled = enabled; }
+            if let Some(enabled) = command.enabled {
+                config.enabled = enabled;
+            }
             if let Some(name) = group_name {
                 config.group_name = (!name.is_empty()).then_some(name);
             }
@@ -261,9 +226,6 @@ impl AgentManagementService {
             }
             if let Some(id) = command.avatar_id {
                 config.avatar_id = id;
-            }
-            if let Some(loop_code) = command.loop_code {
-                config.loop_code = Some(loop_code);
             }
             if let Some(name) = command.name {
                 config.name = name.trim().to_owned();
@@ -283,6 +245,7 @@ impl AgentManagementService {
         code: &str,
         command: UpdateWorkspaceInternalAgentPolicyCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        self.validate_selected_categories(&command.selected_category_codes)?;
         if [
             command.max_steps,
             command.max_tool_calls,
@@ -295,6 +258,9 @@ impl AgentManagementService {
             return Err(AgentManagementError::InternalAgentPolicyInvalid);
         }
         self.change_platform_internal_agent(code, |config| {
+            if let Some(value) = command.selected_category_codes {
+                config.selected_category_codes = normalize_string_codes(value);
+            }
             if let Some(value) = command.tool_assignment_mode {
                 config.tool_assignment_mode = value;
             }
@@ -376,9 +342,11 @@ fn platform_view(
     let tools = catalog
         .iter()
         .filter(|tool| {
-            config
-                .tool_assignment_mode
-                .selects(tool, &config.selected_tool_codes)
+            config.tool_assignment_mode.selects_policy(
+                tool,
+                &config.selected_tool_codes,
+                &config.selected_category_codes,
+            )
         })
         .map(|tool| tool.tool_code.clone())
         .collect::<Vec<_>>();
@@ -390,7 +358,6 @@ fn platform_view(
         name: config.name,
         description: config.description,
         role_prompt: config.role_prompt,
-        loop_code: config.loop_code,
         avatar_id: config.avatar_id,
         candidate_model_codes: config.candidate_model_codes,
         group_name: config.group_name,
@@ -398,6 +365,7 @@ fn platform_view(
         built_in: internal_definitions::is_builtin_agent(&config.agent_code),
         source: InternalAgentPolicySource::PlatformDefault,
         tool_assignment_mode: config.tool_assignment_mode,
+        selected_category_codes: config.selected_category_codes.clone(),
         mcp_access_mode: config.mcp_access_mode,
         max_steps: config.max_steps,
         max_tool_calls: config.max_tool_calls,
@@ -418,11 +386,11 @@ fn default_config(
         name: definition.name,
         description: definition.description,
         role_prompt: definition.role_prompt,
-        loop_code: definition.loop_code,
         avatar_id: definition.avatar_id,
         candidate_model_codes: definition.candidate_model_codes,
         group_name: definition.group_name,
         tool_assignment_mode: definition.tool_assignment_mode,
+        selected_category_codes: definition.selected_category_codes.clone(),
         mcp_access_mode: definition.mcp_access_mode,
         max_steps: definition.max_steps,
         max_tool_calls: definition.max_tool_calls,

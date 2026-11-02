@@ -3,7 +3,7 @@ use crate::{
     application::model::ConfiguredProviderCommand,
     domain::model::{
         ConfiguredModelProvider, ConfiguredProviderError, ConfiguredProviderModel,
-        ConfiguredProviderProtocol, ModelInputCapability,
+        ConfiguredProviderModelType, ConfiguredProviderProtocol, ModelInputCapability,
     },
     response::{ApiResponse, EmptyData},
     shared::locale::SupportedLocale,
@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct CreateConfiguredProviderRequest {
-    provider_id: String,
+    provider_type: Option<String>,
     display_name: String,
     protocol: ConfiguredProviderProtocol,
     base_url: String,
@@ -32,6 +32,7 @@ pub(super) struct CreateConfiguredProviderRequest {
 impl CreateConfiguredProviderRequest {
     fn command(self) -> ConfiguredProviderCommand {
         ConfiguredProviderCommand {
+            provider_type: self.provider_type,
             display_name: self.display_name,
             protocol: self.protocol,
             base_url: self.base_url,
@@ -45,6 +46,7 @@ impl CreateConfiguredProviderRequest {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct UpdateConfiguredProviderRequest {
+    provider_type: Option<String>,
     display_name: String,
     protocol: ConfiguredProviderProtocol,
     base_url: String,
@@ -56,6 +58,7 @@ pub(super) struct UpdateConfiguredProviderRequest {
 impl UpdateConfiguredProviderRequest {
     fn command(self) -> ConfiguredProviderCommand {
         ConfiguredProviderCommand {
+            provider_type: self.provider_type,
             display_name: self.display_name,
             protocol: self.protocol,
             base_url: self.base_url,
@@ -69,9 +72,11 @@ impl UpdateConfiguredProviderRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ConfiguredModelResponse {
+    model_type: ConfiguredProviderModelType,
     model_code: String,
     model_id: String,
     name: String,
+    dimension: Option<u32>,
     context_window_tokens: Option<u32>,
     max_output_tokens: Option<u32>,
     reasoning: bool,
@@ -82,9 +87,11 @@ struct ConfiguredModelResponse {
 impl From<ConfiguredProviderModel> for ConfiguredModelResponse {
     fn from(model: ConfiguredProviderModel) -> Self {
         Self {
+            model_type: model.model_type,
             model_code: model.model_code.unwrap_or_default(),
             model_id: model.model_id,
             name: model.name,
+            dimension: model.dimension,
             context_window_tokens: model.context_window_tokens,
             max_output_tokens: model.max_output_tokens,
             reasoning: model.reasoning,
@@ -98,10 +105,12 @@ impl From<ConfiguredProviderModel> for ConfiguredModelResponse {
 #[serde(rename_all = "camelCase")]
 struct ListConfiguredProviderResponse {
     provider_id: String,
+    provider_type: Option<String>,
     display_name: String,
     protocol: ConfiguredProviderProtocol,
     base_url: String,
     has_api_key: bool,
+    api_key_summary: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
     models: Vec<ConfiguredModelResponse>,
@@ -112,10 +121,12 @@ impl From<ConfiguredModelProvider> for ListConfiguredProviderResponse {
     fn from(provider: ConfiguredModelProvider) -> Self {
         Self {
             provider_id: provider.provider_id,
+            provider_type: provider.provider_type,
             display_name: provider.display_name,
             protocol: provider.protocol,
             base_url: provider.base_url,
             has_api_key: !provider.encrypted_api_key.is_empty(),
+            api_key_summary: provider.api_key_summary,
             request_headers: provider.request_headers,
             enabled: provider.enabled,
             models: provider.models.into_iter().map(Into::into).collect(),
@@ -128,10 +139,12 @@ impl From<ConfiguredModelProvider> for ListConfiguredProviderResponse {
 #[serde(rename_all = "camelCase")]
 struct GetConfiguredProviderResponse {
     provider_id: String,
+    provider_type: Option<String>,
     display_name: String,
     protocol: ConfiguredProviderProtocol,
     base_url: String,
     has_api_key: bool,
+    api_key_summary: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
     models: Vec<ConfiguredModelResponse>,
@@ -142,10 +155,12 @@ impl From<ConfiguredModelProvider> for GetConfiguredProviderResponse {
     fn from(provider: ConfiguredModelProvider) -> Self {
         Self {
             provider_id: provider.provider_id,
+            provider_type: provider.provider_type,
             display_name: provider.display_name,
             protocol: provider.protocol,
             base_url: provider.base_url,
             has_api_key: !provider.encrypted_api_key.is_empty(),
+            api_key_summary: provider.api_key_summary,
             request_headers: provider.request_headers,
             enabled: provider.enabled,
             models: provider.models.into_iter().map(Into::into).collect(),
@@ -158,10 +173,12 @@ impl From<ConfiguredModelProvider> for GetConfiguredProviderResponse {
 #[serde(rename_all = "camelCase")]
 struct CreateConfiguredProviderResponse {
     provider_id: String,
+    provider_type: Option<String>,
     display_name: String,
     protocol: ConfiguredProviderProtocol,
     base_url: String,
     has_api_key: bool,
+    api_key_summary: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
     models: Vec<ConfiguredModelResponse>,
@@ -172,10 +189,12 @@ impl From<ConfiguredModelProvider> for CreateConfiguredProviderResponse {
     fn from(provider: ConfiguredModelProvider) -> Self {
         Self {
             provider_id: provider.provider_id,
+            provider_type: provider.provider_type,
             display_name: provider.display_name,
             protocol: provider.protocol,
             base_url: provider.base_url,
             has_api_key: !provider.encrypted_api_key.is_empty(),
+            api_key_summary: provider.api_key_summary,
             request_headers: provider.request_headers,
             enabled: provider.enabled,
             models: provider.models.into_iter().map(Into::into).collect(),
@@ -188,10 +207,12 @@ impl From<ConfiguredModelProvider> for CreateConfiguredProviderResponse {
 #[serde(rename_all = "camelCase")]
 struct UpdateConfiguredProviderResponse {
     provider_id: String,
+    provider_type: Option<String>,
     display_name: String,
     protocol: ConfiguredProviderProtocol,
     base_url: String,
     has_api_key: bool,
+    api_key_summary: Option<String>,
     request_headers: BTreeMap<String, String>,
     enabled: bool,
     models: Vec<ConfiguredModelResponse>,
@@ -202,10 +223,12 @@ impl From<ConfiguredModelProvider> for UpdateConfiguredProviderResponse {
     fn from(provider: ConfiguredModelProvider) -> Self {
         Self {
             provider_id: provider.provider_id,
+            provider_type: provider.provider_type,
             display_name: provider.display_name,
             protocol: provider.protocol,
             base_url: provider.base_url,
             has_api_key: !provider.encrypted_api_key.is_empty(),
+            api_key_summary: provider.api_key_summary,
             request_headers: provider.request_headers,
             enabled: provider.enabled,
             models: provider.models.into_iter().map(Into::into).collect(),
@@ -247,11 +270,7 @@ pub(super) async fn create(
     let Ok(Json(request)) = request else {
         return error_response(ConfiguredProviderError::InvalidModels, &headers);
     };
-    let id = request.provider_id.clone();
-    match state
-        .models
-        .create_configured_provider(&id, request.command())
-    {
+    match state.models.create_configured_provider(request.command()) {
         Ok(provider) => Json(ApiResponse::protocol_success(
             CreateConfiguredProviderResponse::from(provider),
         ))
@@ -368,6 +387,7 @@ pub(super) fn error_response(error: ConfiguredProviderError, headers: &HeaderMap
 pub(super) struct ProviderListResponse {
     provider_code: String,
     source: &'static str,
+    provider_type: Option<String>,
     person_ai_user_id: Option<String>,
     person_ai_username: Option<String>,
     display_name: String,
@@ -385,6 +405,7 @@ impl From<crate::domain::model_provider::ProviderConnectionView> for ProviderLis
         Self {
             provider_code: provider.provider_code.storage_value().into(),
             source: "PersonAi",
+            provider_type: Some("PersonAi".into()),
             person_ai_user_id: provider.person_ai_user_id,
             person_ai_username: provider.person_ai_username,
             display_name: provider.display_name,
@@ -404,6 +425,7 @@ impl From<ConfiguredModelProvider> for ProviderListResponse {
         Self {
             provider_code: provider.provider_id,
             source: "Custom",
+            provider_type: provider.provider_type,
             person_ai_user_id: None,
             person_ai_username: None,
             display_name: provider.display_name,

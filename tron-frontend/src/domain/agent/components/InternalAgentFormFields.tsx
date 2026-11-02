@@ -5,7 +5,6 @@ import { AgentAvatarPicker } from "./AgentAvatarPicker";
 import { AgentDescriptionField } from "./AgentDescriptionField";
 import { AgentRolePromptField } from "./AgentRolePromptField";
 import { InternalAgentGroupField } from "./InternalAgentGroupField";
-import { AgentLoopField } from "./AgentLoopField";
 import { AgentCandidateModelsField } from "./AgentCandidateModelsField";
 
 export const INTERNAL_AGENT_DIALOG_CLASS = "flex h-[min(78dvh,48rem)] max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl";
@@ -34,12 +33,12 @@ export function InternalAgentProfileFields({ code, onCodeChange, draft, onChange
   </div>;
 }
 
-export function InternalAgentRuntimeFields({ workspaceCode, loopCode, candidateModelCodes, disabled, onChange }: {
-  workspaceCode: string; loopCode: string; candidateModelCodes: string[]; disabled: boolean;
-  onChange: (patch: { loopCode?: string; candidateModelCodes?: string[] }) => void;
+export function InternalAgentRuntimeFields({ workspaceCode, candidateModelCodes, disabled, onChange }: {
+  workspaceCode: string; candidateModelCodes: string[]; disabled: boolean;
+  onChange: (patch: { candidateModelCodes?: string[] }) => void;
 }) {
   return <>
-    <AgentLoopField value={loopCode} disabled={disabled} onChange={(value) => onChange({ loopCode: value })} />
+
     <AgentCandidateModelsField workspaceCode={workspaceCode} value={candidateModelCodes} disabled={disabled} onChange={(value) => onChange({ candidateModelCodes: value })} />
   </>;
 }

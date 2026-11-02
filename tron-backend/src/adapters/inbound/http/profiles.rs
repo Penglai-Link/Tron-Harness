@@ -184,6 +184,7 @@ async fn bootstrap_status(
                     active_profile.avatar_url = avatar_url;
                 }
                 status.account = Some(PersonAiAccountSummary {
+                    nickname: account.nickname.clone(),
                     vip_level: account.vip_level,
                     remaining_points: account.remaining_tokens,
                 });

@@ -1,14 +1,10 @@
 mod common;
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::path::PathBuf;
 
 use axum::{
-    Json, Router,
-    extract::State,
-    http::{HeaderMap, Method, StatusCode, Uri},
+    Router,
+    http::{Method, StatusCode},
 };
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
@@ -19,6 +15,197 @@ use tron_backend::{
 use common::{app_with_state_setup, authenticated_request, prepared_config, response_json};
 
 const PROVIDERS: &str = "/api/v1/model-providers/configured";
+
+#[tokio::test]
+async fn api_key_summary_is_persisted_retained_and_updated_without_revealing_the_key() {
+    let fixture = Fixture::new();
+    let key = "sk-1234567890abcdef-sdf-hsd";
+    let created = create(
+        &fixture,
+        provider("summary", "https://models.example.test/v1", Some(key)),
+    )
+    .await;
+    assert_eq!(created["apiKeySummary"], "sk-123***sdf-hsd");
+    assert_no_credentials(&created, &[key]);
+    let stored: String = fixture
+        .database()
+        .query_row(
+            "SELECT configuration_json FROM configured_model_providers WHERE provider_id=?1",
+            [id(&created)],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let stored: Value = serde_json::from_str(&stored).unwrap();
+    assert_eq!(stored["apiKeySummary"], created["apiKeySummary"]);
+    assert!(!stored.to_string().contains(key));
+    let retained = call(
+        &fixture.router,
+        Method::PUT,
+        &endpoint(id(&created)),
+        Some(update(&created, None)),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(retained["data"]["apiKeySummary"], created["apiKeySummary"]);
+    let replacement = "sk-9876543210abcdef-qwe-zxc";
+    let changed = call(
+        &fixture.router,
+        Method::PUT,
+        &endpoint(id(&created)),
+        Some(update(&created, Some(replacement))),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(changed["data"]["apiKeySummary"], "sk-987***qwe-zxc");
+    assert_no_credentials(&changed, &[key, replacement]);
+    let (router, models) = open(&fixture.config);
+    assert_eq!(
+        get(&router, id(&created)).await["apiKeySummary"],
+        "sk-987***qwe-zxc"
+    );
+    assert_eq!(
+        models
+            .text_agent_model_config("workspace", Some(code(&created, 0)))
+            .unwrap()
+            .unwrap()
+            .api_key,
+        replacement
+    );
+}
+
+#[tokio::test]
+async fn api_key_summary_masks_short_keys_and_handles_unicode_and_absent_keys() {
+    let fixture = Fixture::new();
+    for (key, summary) in [
+        ("abc", "***"),
+        ("abcd", "***"),
+        ("abcdef", "a***f"),
+        ("abcdefghi", "ab***hi"),
+        ("密钥安全测试中文", "密***文"),
+    ] {
+        let created = create(
+            &fixture,
+            provider("short-summary", "https://models.example.test/v1", Some(key)),
+        )
+        .await;
+        assert_eq!(created["apiKeySummary"], summary);
+        assert_no_credentials(&created, &[key]);
+    }
+    let without_key = create(
+        &fixture,
+        provider("no-summary", "https://models.example.test/v1", None),
+    )
+    .await;
+    assert_eq!(without_key["apiKeySummary"], Value::Null);
+    assert_eq!(without_key["hasApiKey"], false);
+}
+
+#[tokio::test]
+async fn identical_create_requests_receive_distinct_server_generated_identities() {
+    let fixture = Fixture::new();
+    let request = provider("same-supplier", "https://models.example.test/v1", None);
+    assert!(request.get("providerId").is_none());
+    let first = create(&fixture, request.clone()).await;
+    let second = create(&fixture, request).await;
+    assert!(id(&first).starts_with("provider-"));
+    assert_ne!(id(&first), id(&second));
+    assert_eq!(get(&fixture.router, id(&first)).await, first);
+    assert_eq!(get(&fixture.router, id(&second)).await, second);
+}
+
+#[tokio::test]
+async fn same_vendor_connections_keep_names_credentials_and_models_independent() {
+    let fixture = Fixture::new();
+    let url = "https://same-vendor.example.test/v1";
+    let mut personal = provider("vendor-personal", url, Some("personal-key"));
+    personal["displayName"] = json!("My personal account");
+    let mut work = provider("vendor-work", url, Some("work-key"));
+    work["displayName"] = json!("My work account");
+    let personal = create(&fixture, personal).await;
+    let work = create(&fixture, work).await;
+    assert_ne!(code(&personal, 0), code(&work, 0));
+    for (record, key) in [(&personal, "personal-key"), (&work, "work-key")] {
+        let model = fixture
+            .models
+            .text_agent_model_config("workspace", Some(code(record, 0)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(model.base_url, url);
+        assert_eq!(model.api_key, key);
+    }
+    let mut changed = update(&personal, Some("rotated-personal-key"));
+    changed["displayName"] = json!("Renamed personal account");
+    call(
+        &fixture.router,
+        Method::PUT,
+        &endpoint(id(&personal)),
+        Some(changed),
+        StatusCode::OK,
+    )
+    .await;
+    let (router, models) = open(&fixture.config);
+    assert_eq!(get(&router, id(&work)).await, work);
+    assert_eq!(
+        models
+            .text_agent_model_config("workspace", Some(code(&work, 0)))
+            .unwrap()
+            .unwrap()
+            .api_key,
+        "work-key"
+    );
+    call(
+        &router,
+        Method::DELETE,
+        &endpoint(id(&personal)),
+        None,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(get(&router, id(&work)).await, work);
+}
+
+#[tokio::test]
+async fn configured_media_model_types_survive_reopening_and_stay_out_of_chat_candidates() {
+    let fixture = Fixture::new();
+    let types = [
+        "Image",
+        "Video",
+        "SpeechSynthesis",
+        "SpeechRecognition",
+        "RealtimeSpeech",
+    ];
+    let mut body = provider("media-types", "https://models.example.test/v1", None);
+    body["models"] = Value::Array(
+        types
+            .iter()
+            .map(|kind| {
+                let mut entry = model(kind, kind);
+                entry["modelType"] = json!(kind);
+                entry["contextWindowTokens"] = Value::Null;
+                entry["maxOutputTokens"] = Value::Null;
+                entry["inputCapabilities"] = if *kind == "SpeechRecognition" {
+                    json!(["Audio"])
+                } else {
+                    json!(["Text", "Image"])
+                };
+                entry
+            })
+            .collect(),
+    );
+    let created = create(&fixture, body).await;
+    for (index, kind) in types.iter().enumerate() {
+        assert_eq!(created["models"][index]["modelType"], *kind);
+    }
+    let (router, models) = open(&fixture.config);
+    assert_eq!(get(&router, id(&created)).await, created);
+    assert!(
+        models
+            .auto_chat_candidates("workspace", &[], None)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(models.list_select_options().unwrap().len(), types.len());
+}
 
 struct Fixture {
     router: Router,
@@ -59,6 +246,7 @@ fn open(config: &AppConfig) -> (Router, ModelService) {
 
 fn model(id: &str, name: &str) -> Value {
     json!({
+        "modelType": "Text",
         "modelCode": null,
         "modelId": id,
         "name": name,
@@ -73,7 +261,6 @@ fn model(id: &str, name: &str) -> Value {
 
 fn provider(id: &str, url: &str, key: Option<&str>) -> Value {
     json!({
-        "providerId": id,
         "displayName": format!("Provider {id}"),
         "protocol": "OpenAiChatCompletions",
         "baseUrl": url,
@@ -100,6 +287,12 @@ fn code(provider: &Value, index: usize) -> &str {
     provider["models"][index]["modelCode"]
         .as_str()
         .expect("stable model code")
+}
+
+fn id(provider: &Value) -> &str {
+    provider["providerId"]
+        .as_str()
+        .expect("server-generated provider ID")
 }
 
 fn endpoint(provider_id: &str) -> String {
@@ -173,7 +366,7 @@ async fn configured_provider_round_trip_encrypts_credentials_and_survives_reopen
     assert!(created["createdAt"].as_i64().is_some_and(|value| value > 0));
     assert!(created["updatedAt"].as_i64().is_some_and(|value| value > 0));
     assert_no_credentials(&created, &[key]);
-    assert_eq!(get(&fixture.router, "persisted").await, created);
+    assert_eq!(get(&fixture.router, id(&created)).await, created);
 
     let list = call(
         &fixture.router,
@@ -202,7 +395,7 @@ async fn configured_provider_round_trip_encrypts_credentials_and_survives_reopen
     assert!(
         records
             .iter()
-            .any(|item| item["providerCode"] == "persisted" && item["source"] == "Custom")
+            .any(|item| item["providerCode"] == created["providerId"] && item["source"] == "Custom")
     );
     assert_no_credentials(&providers, &[key]);
 
@@ -210,7 +403,7 @@ async fn configured_provider_round_trip_encrypts_credentials_and_survives_reopen
         .database()
         .query_row(
             "SELECT configuration_json FROM configured_model_providers WHERE provider_id=?1",
-            ["persisted"],
+            [id(&created)],
             |row| row.get(0),
         )
         .unwrap();
@@ -222,16 +415,6 @@ async fn configured_provider_round_trip_encrypts_credentials_and_survives_reopen
         stored.contains("enc:v1:"),
         "provider credential must use the existing encrypted credential format"
     );
-    let model_key: String = fixture
-        .database()
-        .query_row(
-            "SELECT api_key_ref FROM models WHERE model_code=?1",
-            [&model_code],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert!(!model_key.contains(key));
-
     let resolved = fixture
         .models
         .text_agent_model_config("", Some(&model_code))
@@ -246,19 +429,8 @@ async fn configured_provider_round_trip_encrypts_credentials_and_survives_reopen
             .map(String::as_str),
         Some("persisted")
     );
-    let platform = call(
-        &fixture.router,
-        Method::GET,
-        &format!("/api/v1/admin/platform/models/{model_code}"),
-        None,
-        StatusCode::OK,
-    )
-    .await;
-    assert_eq!(platform["data"]["providerId"], "persisted");
-    assert_no_credentials(&platform, &[key]);
-
     let (reopened_router, reopened_models) = open(&fixture.config);
-    assert_eq!(get(&reopened_router, "persisted").await, created);
+    assert_eq!(get(&reopened_router, id(&created)).await, created);
     let reopened = reopened_models
         .text_agent_model_config("", Some(&model_code))
         .unwrap()
@@ -311,7 +483,7 @@ async fn changing_one_connection_updates_runtime_without_affecting_another_provi
     let response = call(
         &fixture.router,
         Method::PUT,
-        &endpoint("first"),
+        &endpoint(id(&first)),
         Some(changed),
         StatusCode::OK,
     )
@@ -343,7 +515,7 @@ async fn changing_one_connection_updates_runtime_without_affecting_another_provi
     let rotated = call(
         &fixture.router,
         Method::PUT,
-        &endpoint("first"),
+        &endpoint(id(&first)),
         Some(update(updated, Some("fixture-rotated-key"))),
         StatusCode::OK,
     )
@@ -363,7 +535,7 @@ async fn changing_one_connection_updates_runtime_without_affecting_another_provi
     assert_eq!(other.base_url, "https://second.example.test/api");
     assert_eq!(other.api_key, "fixture-second-key");
     assert_eq!(other.protocol, AgentModelProtocol::ChatCompletions);
-    assert_eq!(get(&fixture.router, "second").await, second);
+    assert_eq!(get(&fixture.router, id(&second)).await, second);
 }
 
 #[tokio::test]
@@ -425,7 +597,7 @@ async fn rejected_updates_leave_provider_models_and_credentials_unchanged() {
         let response = call(
             &fixture.router,
             Method::PUT,
-            &endpoint("validated"),
+            &endpoint(id(&initial)),
             Some(request),
             StatusCode::BAD_REQUEST,
         )
@@ -441,7 +613,7 @@ async fn rejected_updates_leave_provider_models_and_credentials_unchanged() {
             ],
         );
         assert_eq!(
-            get(&fixture.router, "validated").await,
+            get(&fixture.router, id(&initial)).await,
             initial,
             "validation must finish before persistence"
         );
@@ -456,36 +628,39 @@ async fn rejected_updates_leave_provider_models_and_credentials_unchanged() {
     let count: i64 = fixture
         .database()
         .query_row(
-            "SELECT count(*) FROM configured_provider_models WHERE provider_id='validated'",
-            [],
+            "SELECT count(*) FROM configured_provider_models WHERE provider_id=?1",
+            [id(&initial)],
             |row| row.get(0),
         )
         .unwrap();
     assert_eq!(count, 1);
-    assert_eq!(get(&fixture.router, "foreign").await, foreign);
+    assert_eq!(get(&fixture.router, id(&foreign)).await, foreign);
 
-    let duplicate = call(
+    let mut client_identity = provider(
+        "validated",
+        "https://duplicate.example.test",
+        Some("fixture-duplicate-secret"),
+    );
+    client_identity["providerId"] = json!(id(&initial));
+    call(
         &fixture.router,
         Method::POST,
         PROVIDERS,
-        Some(provider(
-            "validated",
-            "https://duplicate.example.test",
-            Some("fixture-duplicate-secret"),
-        )),
-        StatusCode::CONFLICT,
+        Some(client_identity),
+        StatusCode::BAD_REQUEST,
     )
     .await;
-    assert_eq!(duplicate["code"], "101032002");
-    assert_eq!(get(&fixture.router, "validated").await, initial);
+    assert_eq!(get(&fixture.router, id(&initial)).await, initial);
+}
+
+fn set_defaults(database: &Connection, code: &str) {
+    for (scope, workspace) in [("platform", None), ("TRON_CORE", Some("TRON_CORE"))] {
+        database.execute("INSERT INTO default_model_selections(scope_key,workspace_code,model_type,selection_kind,model_code,created_at,updated_at) VALUES(?1,?2,'TEXT','Fixed',?3,1,1) ON CONFLICT(scope_key,model_type) DO UPDATE SET model_code=excluded.model_code", params![scope,workspace,code]).unwrap();
+    }
 }
 
 fn assert_defaults_removed(database: &Connection, model_code: &str) {
-    for table in [
-        "platform_default_models",
-        "workspace_default_models",
-        "default_model_selections",
-    ] {
+    for table in ["default_model_selections"] {
         let count: i64 = database
             .query_row(
                 &format!("SELECT count(*) FROM {table} WHERE model_code=?1"),
@@ -515,11 +690,7 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
     let created = create(&fixture, request).await;
     let primary = code(&created, 0).to_owned();
     let fallback = code(&created, 1).to_owned();
-    fixture.models.set_platform_default(&primary).unwrap();
-    fixture
-        .models
-        .set_workspace_default("TRON_CORE", &primary)
-        .unwrap();
+    set_defaults(&fixture.database(), &primary);
     assert!(
         fixture
             .models
@@ -533,7 +704,7 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
     let disabled = call(
         &fixture.router,
         Method::PUT,
-        &endpoint("lifecycle"),
+        &endpoint(id(&created)),
         Some(disabled),
         StatusCode::OK,
     )
@@ -549,7 +720,7 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
         assert!(
             fixture
                 .models
-                .list_workspace_select_options(workspace)
+                .list_select_options()
                 .unwrap()
                 .iter()
                 .filter(|item| item.model_code == primary)
@@ -563,22 +734,18 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
     let enabled = call(
         &fixture.router,
         Method::PUT,
-        &endpoint("lifecycle"),
+        &endpoint(id(&created)),
         Some(enabled),
         StatusCode::OK,
     )
     .await;
-    fixture.models.set_platform_default(&primary).unwrap();
-    fixture
-        .models
-        .set_workspace_default("TRON_CORE", &primary)
-        .unwrap();
+    set_defaults(&fixture.database(), &primary);
     let mut removed = update(&enabled["data"], None);
     removed["models"].as_array_mut().unwrap().remove(0);
     let remaining = call(
         &fixture.router,
         Method::PUT,
-        &endpoint("lifecycle"),
+        &endpoint(id(&created)),
         Some(removed),
         StatusCode::OK,
     )
@@ -594,7 +761,7 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
     assert!(
         fixture
             .models
-            .list_workspace_select_options("TRON_CORE")
+            .list_select_options()
             .unwrap()
             .iter()
             .all(|item| item.model_code != primary)
@@ -603,18 +770,18 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
     let removed_count: i64 = fixture
         .database()
         .query_row(
-            "SELECT count(*) FROM models WHERE model_code=?1",
+            "SELECT count(*) FROM configured_provider_models WHERE model_code=?1",
             [&primary],
             |row| row.get(0),
         )
         .unwrap();
     assert_eq!(removed_count, 0);
 
-    fixture.models.set_platform_default(&fallback).unwrap();
+    set_defaults(&fixture.database(), &fallback);
     let deleted = call(
         &fixture.router,
         Method::DELETE,
-        &endpoint("lifecycle"),
+        &endpoint(id(&created)),
         None,
         StatusCode::OK,
     )
@@ -626,8 +793,8 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
         let count: i64 = fixture
             .database()
             .query_row(
-                &format!("SELECT count(*) FROM {table} WHERE provider_id='lifecycle'"),
-                [],
+                &format!("SELECT count(*) FROM {table} WHERE provider_id=?1"),
+                [id(&created)],
                 |row| row.get(0),
             )
             .unwrap();
@@ -636,7 +803,7 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
     let model_count: i64 = fixture
         .database()
         .query_row(
-            "SELECT count(*) FROM models WHERE model_code IN (?1,?2)",
+            "SELECT count(*) FROM configured_provider_models WHERE model_code IN (?1,?2)",
             params![primary, fallback],
             |row| row.get(0),
         )
@@ -645,7 +812,7 @@ async fn disabling_removing_models_and_deleting_the_provider_clear_selection_and
     let missing = call(
         &fixture.router,
         Method::GET,
-        &endpoint("lifecycle"),
+        &endpoint(id(&created)),
         None,
         StatusCode::NOT_FOUND,
     )
@@ -704,146 +871,6 @@ async fn explicit_protocols_and_models_work_without_model_discovery_or_a_require
     }
 }
 
-#[derive(Clone)]
-struct ProtocolServerState {
-    anthropic: bool,
-    requests: Arc<Mutex<Vec<(Uri, HeaderMap, Value)>>>,
-}
-
-struct ProtocolServer {
-    url: String,
-    requests: Arc<Mutex<Vec<(Uri, HeaderMap, Value)>>>,
-    task: tokio::task::JoinHandle<()>,
-}
-
-impl Drop for ProtocolServer {
-    fn drop(&mut self) {
-        self.task.abort();
-    }
-}
-
-async fn protocol_request(
-    State(state): State<ProtocolServerState>, uri: Uri, headers: HeaderMap, Json(body): Json<Value>,
-) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    state.requests.lock().unwrap().push((uri, headers, body));
-    let data = if state.anthropic {
-        [("message_start", json!({"type":"message_start","message":{"id":"m1","usage":{"input_tokens":5,"output_tokens":0}}})),
-         ("content_block_start", json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}})),
-         ("content_block_delta", json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}})),
-         ("content_block_stop", json!({"type":"content_block_stop","index":0})),
-         ("message_delta", json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}})),
-         ("message_stop", json!({"type":"message_stop"}))]
-        .into_iter().map(|(event,data)|format!("event: {event}\ndata: {data}\n\n")).collect::<String>()
-    } else {
-        format!("data: {}\n\n",json!({"candidates":[{"content":{"parts":[{"text":"OK"}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":1,"totalTokenCount":6}}))
-    };
-    ([(axum::http::header::CONTENT_TYPE,"text/event-stream")], data).into_response()
-}
-
-async fn protocol_server(anthropic: bool) -> ProtocolServer {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let router = Router::new()
-        .fallback(protocol_request)
-        .with_state(ProtocolServerState {
-            anthropic,
-            requests: requests.clone(),
-        });
-    let task = tokio::spawn(async move {
-        axum::serve(listener, router).await.unwrap();
-    });
-    ProtocolServer {
-        url: format!("http://{address}/fixture"),
-        requests,
-        task,
-    }
-}
-
-#[tokio::test]
-async fn platform_verification_uses_production_clients_for_anthropic_and_gemini() {
-    let fixture = Fixture::new();
-    for (id, protocol, anthropic) in [
-        ("verify-anthropic", "AnthropicMessages", true),
-        ("verify-gemini", "GoogleGemini", false),
-    ] {
-        let server = protocol_server(anthropic).await;
-        let key = "fixture-production-client-key";
-        let mut request = provider(id, &server.url, Some(key));
-        request["protocol"] = json!(protocol);
-        let created = create(&fixture, request).await;
-        let verified = call(
-            &fixture.router,
-            Method::POST,
-            &format!("/api/v1/admin/platform/models/{}/verify", code(&created, 0)),
-            None,
-            StatusCode::OK,
-        )
-        .await;
-        assert_eq!(verified["data"]["lastVerifyStatus"], "SUCCEEDED");
-        assert_no_credentials(&verified, &[key]);
-        let requests = server.requests.lock().unwrap();
-        assert_eq!(
-            requests.len(),
-            1,
-            "verification should issue one model request, without discovery"
-        );
-        let (uri, headers, body) = &requests[0];
-        assert_eq!(
-            headers
-                .get("x-test-provider")
-                .and_then(|value| value.to_str().ok()),
-            Some(id)
-        );
-        assert!(
-            uri.path().starts_with("/fixture/"),
-            "custom API base path must be preserved"
-        );
-        if anthropic {
-            assert_eq!(uri.path(), "/fixture/messages");
-            assert_eq!(
-                headers
-                    .get("x-api-key")
-                    .and_then(|value| value.to_str().ok()),
-                Some(key)
-            );
-            assert!(headers.contains_key("anthropic-version"));
-            assert_eq!(body["model"], "same-remote-model");
-            assert!(
-                body["messages"]
-                    .as_array()
-                    .is_some_and(|messages| !messages.is_empty())
-            );
-            assert!(body["max_tokens"].as_u64().is_some_and(|limit| limit > 0));
-        } else {
-            assert!(
-                uri.path()
-                    .ends_with("/models/same-remote-model:streamGenerateContent")
-            );
-            assert!(
-                headers
-                    .get("x-goog-api-key")
-                    .and_then(|value| value.to_str().ok())
-                    == Some(key)
-                    || uri.query().is_some_and(|query| query
-                        .split('&')
-                        .any(|part| part == format!("key={key}")))
-            );
-            assert!(
-                body["contents"]
-                    .as_array()
-                    .is_some_and(|contents| !contents.is_empty())
-            );
-            assert!(
-                body["generationConfig"]["maxOutputTokens"]
-                    .as_u64()
-                    .is_some_and(|limit| limit > 0)
-            );
-        }
-    }
-}
-
 #[tokio::test]
 async fn configured_provider_management_requires_the_active_profile() {
     let router = common::app_without_profile();
@@ -861,4 +888,225 @@ async fn configured_provider_management_requires_the_active_profile() {
         let response = call(&router, method, PROVIDERS, body, StatusCode::CONFLICT).await;
         assert_eq!(response["code"], "PERSONAI_PROFILE_REQUIRED");
     }
+}
+
+#[tokio::test]
+async fn automatic_sources_default_to_all_providers_and_control_real_runtime_resolution() {
+    use tron_backend::domain::model::AutoRouterKind;
+    let fixture = Fixture::new();
+    let first = create(
+        &fixture,
+        provider(
+            "first",
+            "https://first.example.test/v1",
+            Some("first-secret"),
+        ),
+    )
+    .await;
+    let second = create(
+        &fixture,
+        provider(
+            "second",
+            "https://second.example.test/v1",
+            Some("second-secret"),
+        ),
+    )
+    .await;
+    let all = fixture
+        .models
+        .automatic_route_models(AutoRouterKind::TextGeneration)
+        .unwrap();
+    assert_eq!(all.len(), 2);
+    assert_ne!(code(&first, 0), code(&second, 0));
+    // Same remote model, independent connection and credential identity.
+    call(
+        &fixture.router,
+        Method::PUT,
+        "/api/v1/automatic-routers/TextGeneration",
+        Some(json!({"mode":"SelectedProviders","providerIds":[id(&second)],"modelCodes":[]})),
+        StatusCode::OK,
+    )
+    .await;
+    let selected = fixture
+        .models
+        .route_automatic_model("workspace", AutoRouterKind::TextGeneration)
+        .unwrap();
+    assert_eq!(selected.model_code, code(&second, 0));
+    assert_eq!(selected.api_key, "second-secret");
+    assert_eq!(selected.base_url, "https://second.example.test/v1");
+    assert_eq!(
+        fixture
+            .models
+            .automatic_route_models(AutoRouterKind::Chat)
+            .unwrap()
+            .len(),
+        2
+    );
+    let (router, reopened) = open(&fixture.config);
+    assert_eq!(
+        reopened
+            .route_automatic_model("workspace", AutoRouterKind::TextGeneration)
+            .unwrap()
+            .model_code,
+        code(&second, 0)
+    );
+    let list = call(
+        &router,
+        Method::GET,
+        "/api/v1/automatic-routers",
+        None,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(list["data"].as_array().unwrap().len(), 6);
+    assert_no_credentials(&list, &["first-secret", "second-secret"]);
+    call(
+        &fixture.router,
+        Method::PUT,
+        "/api/v1/automatic-routers/TextGeneration",
+        Some(json!({"mode":"AllProviders","providerIds":[],"modelCodes":[]})),
+        StatusCode::OK,
+    )
+    .await;
+    let third = create(
+        &fixture,
+        provider("third", "https://third.example.test/v1", None),
+    )
+    .await;
+    assert_eq!(
+        fixture
+            .models
+            .automatic_route_models(AutoRouterKind::TextGeneration)
+            .unwrap()
+            .len(),
+        3
+    );
+    call(
+        &fixture.router,
+        Method::PUT,
+        "/api/v1/automatic-routers/Chat",
+        Some(json!({"mode":"SelectedModels","providerIds":[],"modelCodes":[code(&third,0)]})),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(
+        fixture.models.automatic_chat_model_codes().unwrap(),
+        [code(&third, 0).to_owned()].into_iter().collect()
+    );
+    assert_eq!(
+        fixture
+            .models
+            .automatic_route_models(AutoRouterKind::TextGeneration)
+            .unwrap()
+            .len(),
+        3
+    );
+}
+
+#[tokio::test]
+async fn empty_and_invalid_sources_never_widen_runtime_candidates() {
+    use tron_backend::domain::model::AutoRouterKind;
+    let fixture = Fixture::new();
+    let created = create(
+        &fixture,
+        provider("empty", "https://models.example.test/v1", None),
+    )
+    .await;
+    for body in [
+        json!({"mode":"SelectedModels","providerIds":[],"modelCodes":["invented-model"]}),
+        json!({"mode":"SelectedProviders","providerIds":["invented-provider"],"modelCodes":[]}),
+        json!({"mode":"AllProviders","providerIds":[id(&created)],"modelCodes":[]}),
+    ] {
+        call(
+            &fixture.router,
+            Method::PUT,
+            "/api/v1/automatic-routers/Chat",
+            Some(body),
+            StatusCode::BAD_REQUEST,
+        )
+        .await;
+    }
+    call(
+        &fixture.router,
+        Method::PUT,
+        "/api/v1/automatic-routers/TextGeneration",
+        Some(json!({"mode":"SelectedModels","providerIds":[],"modelCodes":[]})),
+        StatusCode::OK,
+    )
+    .await;
+    assert!(
+        fixture
+            .models
+            .route_automatic_model("workspace", AutoRouterKind::TextGeneration)
+            .is_err()
+    );
+    assert_eq!(
+        fixture
+            .models
+            .automatic_route_models(AutoRouterKind::Chat)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn text_and_multimodal_vector_and_rerank_types_remain_distinct_through_storage_and_runtime() {
+    use tron_backend::domain::model::{AutoRouterKind, ModelType};
+    let fixture = Fixture::new();
+    let mut request = provider("modalities", "https://models.example.test/v1", None);
+    request["models"] = json!([]);
+    for kind in [
+        "TextEmbedding",
+        "MultimodalEmbedding",
+        "TextRerank",
+        "MultimodalRerank",
+    ] {
+        let mut m = model(kind, kind);
+        m["modelType"] = json!(kind);
+        if kind.starts_with("Multimodal") {
+            m["inputCapabilities"] = json!(["Text", "Image"]);
+        }
+        request["models"].as_array_mut().unwrap().push(m);
+    }
+    let created = create(&fixture, request).await;
+    for (index, (route, expected)) in [
+        (AutoRouterKind::TextEmbedding, ModelType::TextEmbedding),
+        (
+            AutoRouterKind::MultimodalEmbedding,
+            ModelType::MultimodalEmbedding,
+        ),
+        (AutoRouterKind::TextRerank, ModelType::TextRerank),
+        (
+            AutoRouterKind::MultimodalRerank,
+            ModelType::MultimodalRerank,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let candidates = fixture.models.automatic_route_models(route).unwrap();
+        assert_eq!(candidates.len(), 1);
+        let config = fixture
+            .models
+            .route_automatic_model("workspace", route)
+            .unwrap();
+        assert_eq!(config.model_code, code(&created, index));
+        assert_eq!(config.model_type, expected);
+        let (_, reopened) = open(&fixture.config);
+        assert_eq!(
+            reopened.automatic_route_models(route).unwrap()[0].model_type,
+            expected
+        );
+    }
+    let mut invalid = update(&created, None);
+    invalid["models"][0]["inputCapabilities"] = json!(["Text", "Image"]);
+    call(
+        &fixture.router,
+        Method::PUT,
+        &endpoint(id(&created)),
+        Some(invalid),
+        StatusCode::BAD_REQUEST,
+    )
+    .await;
 }

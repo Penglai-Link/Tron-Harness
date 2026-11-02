@@ -21,6 +21,25 @@ fn fixed_tool(name: &str) -> Option<ToolCatalogRecord> {
 }
 
 impl AgentManagementService {
+    pub(super) fn validate_selected_categories(
+        &self,
+        categories: &Option<Vec<String>>,
+    ) -> Result<(), AgentManagementError> {
+        if let Some(categories) = categories {
+            let known = self
+                .list_tools(None, None, "en-US")
+                .into_iter()
+                .filter_map(|tool| tool.category.map(|category| category.code))
+                .collect::<HashSet<_>>();
+            if categories
+                .iter()
+                .any(|code| code != "readonly" && !known.contains(code))
+            {
+                return Err(AgentManagementError::InternalAgentPolicyInvalid);
+            }
+        }
+        Ok(())
+    }
     pub fn tool_permissions(&self) -> Result<Vec<ToolPermissionSetting>, AgentManagementError> {
         let mut saved: BTreeMap<_, _> = self
             .cached_tool_permissions()?
@@ -83,21 +102,36 @@ impl AgentManagementService {
         descriptor: &ToolDescriptor,
     ) -> Result<ToolCatalogRecord, String> {
         let fixed = fixed_tool(&descriptor.call_name);
-        if let Some(record) = fixed {
+        if let Some(mut record) = fixed {
+            record.display = descriptor.display.clone();
             return Ok(record);
         }
         if BusinessToolCatalog::tool(&descriptor.id, "en-US").is_some() {
             return Err("Native descriptor conflicts with a platform tool code".into());
         }
+        let cached = self
+            .cached_tool_by_name(&descriptor.call_name)
+            .map_err(|_| "Could not read tool catalog".to_string())?;
         // Only a real provider lease can register this native descriptor.
         let record = ToolCatalogRecord {
+            display: descriptor.display.clone(),
             tool_code: descriptor.id.clone(),
             tool_name: descriptor.call_name.clone(),
-            domain_code: self
-                .cached_tool_by_name(&descriptor.call_name)
-                .map_err(|_| "Could not read tool catalog".to_string())?
-                .map(|record| record.domain_code)
+            domain_code: cached
+                .as_ref()
+                .map(|record| record.domain_code.clone())
                 .unwrap_or_else(|| "native".into()),
+            category: if eliteforge_agent_core::is_gateway_descriptor(descriptor) {
+                Some(crate::application::agent::tool_catalog::builtin_category(
+                    "execution",
+                ))
+            } else {
+                cached.as_ref().and_then(|record| record.category.clone())
+            },
+            source: cached
+                .as_ref()
+                .map(|record| record.source.clone())
+                .unwrap_or_default(),
             name: descriptor.call_name.clone(),
             description: descriptor.description.clone(),
             operation_kind: match descriptor.operation_kind {
@@ -106,11 +140,140 @@ impl AgentManagementService {
                 eliteforge_agent_core::ToolOperationKind::Unknown => ToolOperationKind::Unknown,
             },
             input_schema: descriptor.input_schema.clone(),
-            module_owner: "Framework".into(),
+            module_owner: String::new(),
             availability_state: ToolAvailabilityState::Available,
             sample_result_summary: String::new(),
         };
         Ok(record)
+    }
+    pub(crate) fn describe_tool_binding(
+        &self,
+        binding: &eliteforge_agent_core::ToolBinding,
+    ) -> Result<ToolCatalogRecord, String> {
+        let mut record = self.describe_tool_descriptor(&binding.descriptor)?;
+        if let Some(domain) = &binding.domain_code {
+            record.domain_code = domain.clone();
+        }
+        if binding.category.is_some() {
+            record.category = binding.category.clone();
+        }
+        if binding.source.provider_id.is_some() {
+            record.source.provider_id = binding.source.provider_id.clone();
+        }
+        if binding.source.plugin_id.is_some() {
+            record.source.plugin_id = binding.source.plugin_id.clone();
+        }
+        if binding.source.pack_id.is_some() {
+            record.source.pack_id = binding.source.pack_id.clone();
+        }
+        if binding.source.adapter_id.is_some() {
+            record.source.adapter_id = binding.source.adapter_id.clone();
+        }
+        Ok(record)
+    }
+
+    pub(crate) fn register_tool_bindings(
+        &self,
+        bindings: &[eliteforge_agent_core::ToolBinding],
+    ) -> Result<(), String> {
+        let records = bindings
+            .iter()
+            .map(|binding| self.describe_tool_binding(binding))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.register_catalog_records(&records)
+    }
+
+    pub(crate) fn register_tool_catalog_entries(
+        &self,
+        entries: &[(
+            eliteforge_agent_core::ToolCatalogEntry,
+            eliteforge_agent_core::ToolSource,
+        )],
+    ) -> Result<Vec<ToolCatalogRecord>, String> {
+        let mut records = Vec::new();
+        for (entry, source) in entries {
+            // Resolve existing call names to their stable platform toolCode so
+            // refreshed plugin metadata preserves permissions and assignments.
+            let mut record = self.describe_tool_descriptor(&entry.descriptor)?;
+            if let Some(domain) = &entry.domain_code {
+                record.domain_code = domain.clone();
+            }
+            if entry.category.is_some() {
+                record.category = entry.category.clone();
+            }
+            let declared_provider = fixed_tool(&entry.descriptor.call_name)
+                .and_then(|tool| tool.source.provider_id);
+            record.source = source.clone();
+            if let Some(provider) = declared_provider {
+                record.source.provider_id = Some(provider);
+            }
+            records.push(record);
+        }
+        self.register_catalog_records(&records)?;
+        Ok(records)
+    }
+
+    fn register_catalog_records(&self, records: &[ToolCatalogRecord]) -> Result<(), String> {
+        // A provider may reuse an existing category. A new plugin category must
+        // be under that plugin or capability pack's stable namespace.
+        let mut known: HashSet<String> = [
+            "tron.platform",
+            "system.command",
+            "document.media",
+            "network",
+            "agent.collaboration",
+            "interaction",
+            "execution",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        known.extend(
+            self.cached_discovered_tools()
+                .map_err(|_| "Could not read tool catalog".to_string())?
+                .into_iter()
+                .filter_map(|tool| tool.category.map(|category| category.code)),
+        );
+        for record in records {
+            let Some(category) = &record.category else {
+                return Err(format!("Tool {} must declare a category", record.tool_code));
+            };
+            if category.code.is_empty()
+                || category.code.len() > 128
+                || ["all", "readonly", "uncategorized"].contains(&category.code.as_str())
+                || !category
+                    .code
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+            {
+                return Err("Invalid tool category code".into());
+            }
+            if [
+                &record.source.plugin_id,
+                &record.source.pack_id,
+                &record.source.provider_id,
+            ]
+            .into_iter()
+            .flatten()
+            .any(|owner| category.code.starts_with(&format!("{owner}.")))
+            {
+                known.insert(category.code.clone());
+            }
+        }
+        for record in records {
+            if let Some(category) = &record.category {
+                if !known.contains(&category.code)
+                    && (record.source.plugin_id.is_some() || record.source.pack_id.is_some())
+                {
+                    return Err(format!(
+                        "Tool category {} must use its provider namespace",
+                        category.code
+                    ));
+                }
+            }
+        }
+        self.remember_tools(records)
+            .map_err(|_| "Could not save tool bindings".to_string())
     }
     pub(crate) fn register_tool_descriptor(
         &self,
@@ -123,6 +286,7 @@ impl AgentManagementService {
         }
         Ok(record)
     }
+    #[cfg(test)]
     pub(crate) fn register_tool_descriptors(
         &self,
         descriptors: &[ToolDescriptor],

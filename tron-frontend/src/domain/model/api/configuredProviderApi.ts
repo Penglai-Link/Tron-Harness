@@ -8,7 +8,11 @@ export type ConfiguredProviderProtocol =
 
 export type ProviderInputCapability = "Text" | "Image" | "Audio" | "Video";
 
+export type ConfiguredProviderModelType = "Text" | "TextEmbedding" | "MultimodalEmbedding" | "TextRerank" | "MultimodalRerank" | "Image" | "Video" | "SpeechSynthesis" | "SpeechRecognition" | "RealtimeSpeech";
+
 export interface ConfiguredProviderModel {
+  modelType: ConfiguredProviderModelType;
+  dimension?: number | null;
   modelCode: string | null;
   modelId: string;
   name: string;
@@ -21,6 +25,7 @@ export interface ConfiguredProviderModel {
 }
 
 export interface ConfiguredProviderUpdate {
+  providerType?: string | null;
   displayName: string;
   protocol: ConfiguredProviderProtocol;
   baseUrl: string;
@@ -30,13 +35,12 @@ export interface ConfiguredProviderUpdate {
   models: ConfiguredProviderModel[];
 }
 
-export interface ConfiguredProviderCreate extends ConfiguredProviderUpdate {
-  providerId: string;
-}
+export type ConfiguredProviderCreate = ConfiguredProviderUpdate;
 
 export interface ConfiguredProvider extends Omit<ConfiguredProviderUpdate, "apiKey"> {
   providerId: string;
   hasApiKey: boolean;
+  apiKeySummary: string | null;
   createdAt: number;
   updatedAt: number;
 }

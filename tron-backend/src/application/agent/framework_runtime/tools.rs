@@ -12,18 +12,10 @@ use eliteforge_agent_official_plugin_tools_local as local;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(super) fn official_name(name: &str) -> &str {
-    match name {
-        "bash_exec" => "system_exec",
-        "bash_task_read" => "system_exec_task_read",
-        "bash_task_stop" => "system_exec_task_stop",
-        _ => name,
-    }
-}
 fn local_id(name: &str) -> Option<String> {
     local::local_tool_catalog()
         .into_iter()
-        .find(|tool| tool.call_name == official_name(name))
+        .find(|tool| tool.call_name == name)
         .map(|tool| tool.id)
 }
 pub(super) fn official_id(name: &str) -> Option<String> {
@@ -31,7 +23,7 @@ pub(super) fn official_id(name: &str) -> Option<String> {
         .into_iter()
         .chain(crate::application::agent::tool_catalog::official_remote_descriptors())
         .chain(eliteforge_agent_official_plugin_a2ui::tool_descriptors())
-        .find(|tool| tool.call_name == official_name(name))
+        .find(|tool| tool.call_name == name)
         .map(|tool| tool.id)
 }
 fn id(name: &str) -> String {
@@ -177,6 +169,31 @@ impl local::LocalToolScopeProvider for LocalScope {
 pub(super) struct HarnessTools;
 #[async_trait]
 impl fw::ToolProvider for HarnessTools {
+    fn catalog_metadata(&self) -> Option<Vec<fw::ToolCatalogEntry>> {
+        let mut entries = crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US")
+            .into_iter()
+            .filter(|tool| official_id(&tool.tool_name).is_none())
+            .map(|tool| fw::ToolCatalogEntry {
+                descriptor: fw::ToolDescriptor::new(
+                    id(&tool.tool_name), tool.tool_name, tool.description, tool.input_schema,
+                ).with_operation_kind(match tool.operation_kind {
+                    crate::domain::agent::ToolOperationKind::Query => fw::ToolOperationKind::Query,
+                    crate::domain::agent::ToolOperationKind::Command => fw::ToolOperationKind::Command,
+                    crate::domain::agent::ToolOperationKind::Unknown => fw::ToolOperationKind::Unknown,
+                }),
+                domain_code: Some(tool.domain_code),
+                category: tool.category,
+            }).collect::<Vec<_>>();
+        let ask = crate::application::agent::ask_user_definition("en-US");
+        entries.push(fw::ToolCatalogEntry {
+            descriptor: fw::ToolDescriptor::new(
+                id(&ask.tool_name), ask.tool_name, ask.description, ask.input_schema,
+            ).with_operation_kind(fw::ToolOperationKind::Command).with_single_input(),
+            domain_code: Some("user_interaction".into()),
+            category: Some(crate::application::agent::tool_catalog::builtin_category("interaction")),
+        });
+        Some(entries)
+    }
     async fn lease(&self, run: &fw::RunContext) -> Result<fw::ToolLease, fw::AgentError> {
         if run
             .extensions
@@ -269,12 +286,27 @@ impl fw::ToolProvider for HarnessTools {
                     name: tool.tool_name.clone(),
                 },
             );
+            binding.source.provider_id =
+                Some(crate::application::agent::tool_catalog::HARNESS_TOOL_PROVIDER_ID.to_owned());
+            if tool.tool_name == crate::application::agent::CHAT_ASK_USER_TOOL {
+                binding.descriptor = binding.descriptor.with_operation_kind(fw::ToolOperationKind::Command);
+                binding.category = Some(crate::application::agent::tool_catalog::builtin_category(
+                    "interaction",
+                ));
+            }
             // These operations edit one document or change the current interaction/
             // execution scope. All other product and remote tools use batch input.
-            if matches!(tool.tool_name.as_str(),
-                "chat_ask_user" | "worktree_create" | "worktree_select" | "git_switch_branch"
-                | "word_create" | "word_replace_text" | "excel_write"
-                | "fs_write_text" | "fs_apply_patch" | "terminal_write"
+            if matches!(
+                tool.tool_name.as_str(),
+                "chat_ask_user"
+                    | "worktree_create"
+                    | "worktree_select"
+                    | "word_create"
+                    | "word_replace_text"
+                    | "excel_write"
+                    | "fs_write_text"
+                    | "fs_apply_patch"
+                    | "terminal_write"
             ) {
                 binding.descriptor = binding.descriptor.with_single_input();
             }
@@ -310,6 +342,11 @@ impl fw::Tool for HarnessTool {
             .get::<fw::ToolCallIdentity>()
             .ok_or_else(|| failed("missing Framework tool identity"))?;
         if self.name == crate::application::agent::CHAT_ASK_USER_TOOL {
+            if run.extensions.get::<fw::CallerInteractionScope>().is_some() {
+                return Err(failed(
+                    "delegated runs must use ask_caller instead of asking the user directly",
+                ));
+            }
             let input = serde_json::from_value(arguments).map_err(failed)?;
             let interaction =
                 eliteforge_agent_official_plugin_tools_human::AskUserTool::request(input)
@@ -383,11 +420,19 @@ impl fw::ToolMiddleware for ToolAudit {
                 &invocation.call.id,
                 &invocation.call.arguments,
                 sequence,
-                invocation.run.extensions.get::<fw::ToolBatchItem>().as_deref(),
+                invocation
+                    .run
+                    .extensions
+                    .get::<fw::ToolBatchItem>()
+                    .as_deref(),
             )
             .map_err(failed)?;
         let batch_item = invocation.run.extensions.get::<fw::ToolBatchItem>();
-        let source_call_id = batch_item.as_ref().map_or(invocation.call.id.as_str(), |item| item.parent_call_id.as_str());
+        let source_call_id = batch_item
+            .as_ref()
+            .map_or(invocation.call.id.as_str(), |item| {
+                item.parent_call_id.as_str()
+            });
         let input_error = state
             .context
             .messages
@@ -442,13 +487,21 @@ impl fw::ToolResultProcessor for ToolAudit {
                     &invocation.call.id,
                     &invocation.call.arguments,
                     sequence,
-                    invocation.run.extensions.get::<fw::ToolBatchItem>().as_deref(),
+                    invocation
+                        .run
+                        .extensions
+                        .get::<fw::ToolBatchItem>()
+                        .as_deref(),
                 )
                 .map_err(|error| fw::AgentError::Run(error.to_string()))?;
             sequence
         };
         let batch_item = invocation.run.extensions.get::<fw::ToolBatchItem>();
-        let source_call_id = batch_item.as_ref().map_or(invocation.call.id.as_str(), |item| item.parent_call_id.as_str());
+        let source_call_id = batch_item
+            .as_ref()
+            .map_or(invocation.call.id.as_str(), |item| {
+                item.parent_call_id.as_str()
+            });
         let input_error = state
             .context
             .messages
@@ -524,7 +577,11 @@ impl fw::ToolResultProcessor for ToolAudit {
                     output,
                 },
                 result.is_error,
-                invocation.run.extensions.get::<fw::ToolBatchItem>().as_deref(),
+                invocation
+                    .run
+                    .extensions
+                    .get::<fw::ToolBatchItem>()
+                    .as_deref(),
             )
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
         // Product audit is a separate projection. Preserve native Content,
@@ -574,7 +631,10 @@ impl local::FileReferenceReader for AttachmentReader {
 
 fn emit_tool_progress(run: &fw::RunContext, invocation_id: &str, name: &str, line: &str) {
     let parent = run.extensions.get::<fw::ToolBatchItem>();
-    let visible_invocation_id = parent.as_ref().map(|item| item.parent_invocation_id.to_string()).unwrap_or_else(||invocation_id.into());
+    let visible_invocation_id = parent
+        .as_ref()
+        .map(|item| item.parent_invocation_id.to_string())
+        .unwrap_or_else(|| invocation_id.into());
     run.emit_output(fw::OutputEvent::ActivitySnapshot {
         id: invocation_id.into(),
         activity_type: "tron.tool.progress".into(),
@@ -582,7 +642,10 @@ fn emit_tool_progress(run: &fw::RunContext, invocation_id: &str, name: &str, lin
             ("toolCallId".into(), visible_invocation_id.into()),
             ("toolName".into(), name.into()),
             ("line".into(), line.into()),
-            ("batch".into(), serde_json::to_value(parent.as_deref()).expect("batch identity serializes")),
+            (
+                "batch".into(),
+                serde_json::to_value(parent.as_deref()).expect("batch identity serializes"),
+            ),
         ]),
     });
 }
@@ -602,7 +665,7 @@ impl local::CommandProgressSink for CommandProgress {
                     official_id(&tool.tool_name).as_deref() == Some(identity.tool_id.as_str())
                 })
                 .map(|tool| tool.tool_name.as_str())
-                .unwrap_or("bash_exec");
+                .unwrap_or("command_exec");
             for line in text.lines() {
                 let line = if stream == "stderr" {
                     format!("[stderr] {line}")

@@ -1,4 +1,5 @@
 mod configured;
+mod automatic_routers;
 mod handler;
 mod presets;
 mod routes;

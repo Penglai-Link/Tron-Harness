@@ -286,20 +286,19 @@ impl AppState {
             &config.system_agents,
         );
         agent_management
-            .initialize_default_main_loop()
-            .expect("default main Agent loop");
+            .initialize_default_main_agent()
+            .expect("default main Agent");
         if let Err(error) = agent_management.bootstrap_registry() {
             tracing::error!("agent management bootstrap scan failed: {error:?}");
         }
         let automations =
             build_automation_service(&config.database_url, workspaces.clone(), event_bus.clone());
-        let models =
-            build_model_service(&config.database_url, workspaces.clone(), variables.clone());
         let model_providers = build_model_provider_service(&config.database_url, variables.clone());
-        let models = models
-            .with_runtime_config(runtime_config.clone())
-            .with_model_executor(model_providers.model_executor())
-            .with_model_transport(model_inference_client.clone());
+        let models = build_model_service(
+            &config.database_url,
+            variables.clone(),
+            model_providers.clone(),
+        );
         let agent_model_client = Arc::new(
             HttpModelClient::new(Arc::new(PersonAiModelProviderClient::new(
                 HttpModelProviderClient::new(model_inference_client.clone()),
@@ -311,16 +310,17 @@ impl AppState {
         let prompts =
             build_prompt_service(&config.database_url, variables.clone(), id_provider.clone());
         let llm_runtime = LlmRuntimeService::new(
-            Arc::new(ProviderAwareLlmRuntimeResolver::new(
-                models.clone(),
-                model_providers.clone(),
-            )),
-            Arc::new(HttpLlmRuntimeClient::with_model_client(
-                agent_model_client.clone(),
-            ).with_prompt_service(prompts.clone())),
+            Arc::new(
+                ProviderAwareLlmRuntimeResolver::new(model_providers.clone())
+                    .with_configured_providers(models.clone()),
+            ),
+            Arc::new(
+                HttpLlmRuntimeClient::with_model_client(agent_model_client.clone())
+                    .with_prompt_service(prompts.clone()),
+            ),
         );
         let prompts = prompts.with_llm_runtime(llm_runtime.clone());
-        let llm_router = LlmModelRouter::new(model_providers.clone());
+        let llm_router = LlmModelRouter::new(model_providers.clone()).with_configured_providers(models.clone());
         let prompts = prompts.with_llm_router(llm_router.clone());
         let graph_core = if config.graph_storage_path == ":memory:" {
             if let Some(core) = GLOBAL_GRAPH_CORE.get() {
@@ -470,7 +470,6 @@ impl AppState {
             apps.clone(),
             automations.clone(),
             tasks.clone(),
-            models.clone(),
             skills.clone(),
             variables.clone(),
             resources.clone(),

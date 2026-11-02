@@ -147,9 +147,12 @@ fn authorized_domain_records(
                 .filter(|code| !code.is_empty());
             let mut record = records.remove(&tool.tool_name).or_else(|| {
                 code.map(|code| crate::domain::agent::ToolCatalogRecord {
+                    display: None,
                     tool_code: tool.tool_name.clone(),
                     tool_name: tool.tool_name.clone(),
                     domain_code: code.into(),
+                    category: None,
+                    source: Default::default(),
                     name: tool.tool_name.clone(),
                     description: tool.description.clone(),
                     operation_kind: crate::domain::agent::ToolOperationKind::Unknown,
@@ -170,11 +173,14 @@ fn authorized_domain_records(
 
 /// Authorized inventory is data, kept separate from stable gateway instructions.
 fn visible_domain_context(domains: &[crate::domain::agent::ToolDomainRecord]) -> AgentMessage {
-    AgentMessage::new("user", vec![crate::domain::agent::AgentMessagePart::Context {
-        kind: "tool_domains".into(),
-        text: serde_json::to_string(domains).expect("domain records serialize"),
-        metadata: None,
-    }])
+    AgentMessage::new(
+        "user",
+        vec![crate::domain::agent::AgentMessagePart::Context {
+            kind: "tool_domains".into(),
+            text: serde_json::to_string(domains).expect("domain records serialize"),
+            metadata: None,
+        }],
+    )
 }
 
 pub(crate) struct PreparedAgentRun {
@@ -216,7 +222,10 @@ pub(crate) struct AgentRunContextBuilder {
 }
 
 impl AgentRunContextBuilder {
-    pub(crate) fn with_framework_host(mut self, host: Option<crate::application::agent::FrameworkHost>) -> Self {
+    pub(crate) fn with_framework_host(
+        mut self,
+        host: Option<crate::application::agent::FrameworkHost>,
+    ) -> Self {
         self.framework_host = host;
         self
     }
@@ -329,7 +338,14 @@ impl AgentRunContextBuilder {
         let prompt = requested_prompt
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
-            .or_else(|| transcript_input_metadata.as_ref().and_then(|metadata| metadata.get("annotations")).and_then(|value| value.as_array()).filter(|items| !items.is_empty()).map(|_| String::new()))
+            .or_else(|| {
+                transcript_input_metadata
+                    .as_ref()
+                    .and_then(|metadata| metadata.get("annotations"))
+                    .and_then(|value| value.as_array())
+                    .filter(|items| !items.is_empty())
+                    .map(|_| String::new())
+            })
             .ok_or(AgentInvocationError::PromptRequired)?;
         let workspace_code = requested_workspace_code
             .map(|value| value.trim().to_string())
@@ -456,6 +472,7 @@ impl AgentRunContextBuilder {
                 .as_ref()
                 .map(|policy| crate::domain::agent::AgentToolAssignment {
                     mode: policy.tool_assignment_mode,
+                    selected_category_codes: policy.selected_category_codes.clone(),
                     selected_tool_codes: policy.selected_tool_codes.clone(),
                     requested_tool_names: tool_access
                         .requested_tool_names
@@ -471,7 +488,10 @@ impl AgentRunContextBuilder {
 
         // Standalone registries create a default host with tools enabled.
         let gateway_enabled = matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
-            && self.framework_host.as_ref().is_none_or(|host| host.gateway_enabled());
+            && self
+                .framework_host
+                .as_ref()
+                .is_none_or(|host| host.gateway_enabled());
         if gateway_enabled
             && requested_conversation_code.is_some()
             && supports_user_input_requests
@@ -503,21 +523,24 @@ impl AgentRunContextBuilder {
                 AgentInvocationError::RuntimeFailed("internal agent config load failed".into())
             })?;
             if let Some(guidance) = guidance {
-                messages.push(AgentMessage::system(guidance)
-                    .with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Agent));
+                messages.push(
+                    AgentMessage::system(guidance)
+                        .with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Agent),
+                );
                 prompt_prefix_sources.push(None);
             }
         }
-        if gateway_enabled
-            && requested_conversation_code.is_some()
-            && supports_user_input_requests
+        if gateway_enabled && requested_conversation_code.is_some() && supports_user_input_requests
         {
-            messages.push(AgentMessage::system(managed_system_prompt(
-                self.prompt_service.as_ref(),
-                "chat.ask-user",
-                &locale,
-                &empty_runtime_prompt_values,
-            )?).with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Plugin));
+            messages.push(
+                AgentMessage::system(managed_system_prompt(
+                    self.prompt_service.as_ref(),
+                    "chat.ask-user",
+                    &locale,
+                    &empty_runtime_prompt_values,
+                )?)
+                .with_instruction_origin(eliteforge_agent_core::InstructionOrigin::Plugin),
+            );
             prompt_prefix_sources
                 .push(Some(managed_system_prompt_source("chat.ask-user", &locale)));
         }
@@ -536,7 +559,11 @@ impl AgentRunContextBuilder {
                 .map(|record| (record.tool_name.as_str(), record.domain_code.as_str()))
                 .collect();
             for tool in tools.iter_mut().chain(effective_tools.iter_mut()) {
-                if tool.domain_code.as_deref().is_none_or(|code| code.trim().is_empty()) {
+                if tool
+                    .domain_code
+                    .as_deref()
+                    .is_none_or(|code| code.trim().is_empty())
+                {
                     tool.domain_code = domain_labels
                         .get(tool.tool_name.as_str())
                         .map(|code| (*code).to_owned());
@@ -571,7 +598,9 @@ impl AgentRunContextBuilder {
         let mut prompt_prefix_messages = messages.clone();
         let mut user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);
         crate::application::agent::page_context::record_snapshot(
-            &mut user_prompt_message, page_context.as_ref(), &locale,
+            &mut user_prompt_message,
+            page_context.as_ref(),
+            &locale,
         );
         messages.push(user_prompt_message.clone());
 
@@ -800,7 +829,11 @@ mod tests {
             ..Default::default()
         };
         let mut message = AgentMessage::user("question");
-        crate::application::agent::page_context::record_snapshot(&mut message, Some(&context), "en-US");
+        crate::application::agent::page_context::record_snapshot(
+            &mut message,
+            Some(&context),
+            "en-US",
+        );
         let AgentMessagePart::Context { text, metadata, .. } = &message.parts[0] else {
             panic!("page context should be structured user data");
         };
@@ -818,7 +851,6 @@ mod tests {
         assert!(crate::application::agent::page_context::normalized(None).is_none());
     }
 }
-
 
 #[cfg(test)]
 mod gateway_tests {
@@ -854,7 +886,10 @@ mod gateway_tests {
                     .unwrap();
                 let data: serde_json::Value = serde_json::from_str(&result.content.text()).unwrap();
                 assert_eq!(data["results"][0]["result"]["matched"], 1);
-                assert_eq!(data["results"][0]["result"]["tools"][0]["call_name"], "mcp_example_lookup");
+                assert_eq!(
+                    data["results"][0]["result"]["tools"][0]["call_name"],
+                    "mcp_example_lookup"
+                );
                 Ok(fw::ChatResponse::text("done"))
             }
         }
@@ -918,7 +953,30 @@ mod gateway_tests {
             let prompt =
                 managed_system_prompt(None, "agent.domain-discovery", locale, &values).unwrap();
             assert!(!prompt.contains("mcp.example"));
-            assert!(serde_json::to_string(&inventory).unwrap().contains("mcp.example"));
+            let serialized = serde_json::to_string(&inventory).unwrap();
+            assert!(serialized.contains("mcp.example"));
+            assert!(!serialized.contains("category"));
+            assert!(!serialized.contains("providerId"));
+            assert!(!serialized.contains("pluginId"));
+            // Domain descriptions are also part of the model-visible inventory.
+            let mut subagent = records[0].clone();
+            subagent.domain_code = "subagent".into();
+            let subagent_domains =
+                crate::application::agent::BusinessToolCatalog::domains_for_records(
+                    &[subagent],
+                    locale,
+                );
+            let expected = if locale == "zh-CN" {
+                "向子智能体分派任务"
+            } else {
+                "Delegate work to a subagent"
+            };
+            assert!(subagent_domains[0].description.contains(expected));
+            assert!(
+                serde_json::to_string(&visible_domain_context(&subagent_domains))
+                    .unwrap()
+                    .contains(expected)
+            );
             let agent = eliteforge_agent_test_support::TestBuilder::default()
                 .plugin(fw::ChatModelPlugin::new(SearchFromPrompt {
                     group: domains[0].domain_code.clone(),
@@ -957,6 +1015,152 @@ mod gateway_tests {
         assert_eq!(
             management.register_tool_descriptors(&[descriptor]).unwrap()[0].domain_code,
             "mcp.example"
+        );
+    }
+
+    #[test]
+    fn provider_categories_and_sources_survive_descriptor_reads_and_reopen() {
+        use crate::adapters::outbound::persistence::{
+            SqliteAgentManagementRepository, SqliteWorkspaceRepository,
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("categories.sqlite");
+        let open = || {
+            AgentManagementService::new(
+                SqliteAgentManagementRepository::connect(path.to_str().unwrap()).unwrap(),
+                WorkspaceService::new(
+                    SqliteWorkspaceRepository::connect(path.to_str().unwrap()).unwrap(),
+                ),
+                &crate::config::SystemAgentConfig {
+                    codex_command: String::new(),
+                    opencode_command: String::new(),
+                },
+            )
+        };
+        let management = open();
+        let bindings = ["fixture.read", "fixture.write", "fixture.other_read"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| {
+                let descriptor =
+                    fw::ToolDescriptor::new(id, id.replace('.', "_"), "fixture", json!({}))
+                        .with_operation_kind(if index == 1 {
+                            fw::ToolOperationKind::Unknown
+                        } else {
+                            fw::ToolOperationKind::Query
+                        });
+                let mut binding = fw::ToolBinding::new(descriptor, UnusedTool)
+                    .with_domain_code("shared")
+                    .with_category(fw::ToolCategory::localized(
+                        if index == 1 {
+                            "fixture.plugin.other"
+                        } else {
+                            "fixture.plugin.reads"
+                        },
+                        "测试",
+                        "Fixture",
+                    ));
+                binding.source = fw::ToolSource {
+                    provider_id: Some("fixture.provider".into()),
+                    plugin_id: Some(
+                        if index == 2 {
+                            "fixture.second"
+                        } else {
+                            "fixture.plugin"
+                        }
+                        .into(),
+                    ),
+                    pack_id: Some("fixture.pack".into()),
+                    adapter_id: None,
+                };
+                binding
+            })
+            .collect::<Vec<_>>();
+        let mut reverse_order = bindings.clone();
+        reverse_order.reverse();
+        management.register_tool_bindings(&reverse_order).unwrap();
+        let mut invalid = bindings[0].clone();
+        invalid.descriptor.id = "fixture.invalid".into();
+        invalid.descriptor.call_name = "fixture_invalid".into();
+        invalid.category = Some(fw::ToolCategory::localized(
+            "unowned.category",
+            "错误",
+            "Invalid",
+        ));
+        assert!(management.register_tool_bindings(&[invalid]).is_err());
+        let mut refreshed = bindings[0].clone();
+        refreshed.source.pack_id = None;
+        management.register_tool_bindings(&[refreshed]).unwrap();
+        management
+            .register_tool_descriptor(&bindings[0].descriptor)
+            .unwrap();
+        drop(management);
+        let reopened = open();
+        let resources = crate::application::capability::CapabilityResources::new(
+            crate::adapters::outbound::persistence::sqlite::capability_repository::SqliteCapabilityRepository::connect(path.to_str().unwrap()).unwrap(),
+        );
+        reopened.bind_capabilities(resources.clone());
+        resources
+            .register(
+                &bindings
+                    .iter()
+                    .map(
+                        |binding| crate::application::capability::CapabilityResource {
+                            pack_id: "fixture.pack".into(),
+                            kind: "tool".into(),
+                            code: binding.descriptor.id.clone(),
+                            available: true,
+                        },
+                    )
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+        let records = reopened.list_tools(Some("shared"), None, "en-US");
+        assert_eq!(records.len(), 3);
+        let read = records
+            .iter()
+            .find(|r| r.tool_code == "fixture.read")
+            .unwrap();
+        assert_eq!(read.category.as_ref().unwrap().code, "fixture.plugin.reads");
+        assert_eq!(read.source.plugin_id.as_deref(), Some("fixture.plugin"));
+        assert_eq!(read.source.pack_id.as_deref(), Some("fixture.pack"));
+        assert_eq!(
+            read.operation_kind,
+            crate::domain::agent::ToolOperationKind::Query
+        );
+        assert_eq!(
+            records
+                .iter()
+                .filter(|r| r
+                    .category
+                    .as_ref()
+                    .is_some_and(|c| c.code == "fixture.plugin.reads"))
+                .count(),
+            2
+        );
+        assert_eq!(
+            records
+                .iter()
+                .find(|r| r.tool_code == "fixture.write")
+                .unwrap()
+                .operation_kind,
+            crate::domain::agent::ToolOperationKind::Unknown
+        );
+        resources.transition("fixture.pack", false, &[]).unwrap();
+        let disabled = reopened.list_tools(Some("shared"), None, "en-US");
+        assert_eq!(disabled.len(), 3);
+        assert!(
+            disabled
+                .iter()
+                .all(|r| r.availability_state
+                    == crate::domain::agent::ToolAvailabilityState::Disabled)
+        );
+        assert!(disabled.iter().all(|r| r.category.is_some()));
+        resources.remove("fixture.pack").unwrap();
+        assert!(
+            reopened
+                .list_tools(Some("shared"), None, "en-US")
+                .is_empty()
         );
     }
 }

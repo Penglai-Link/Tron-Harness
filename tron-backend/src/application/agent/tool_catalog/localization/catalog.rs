@@ -2,6 +2,42 @@ use super::*;
 
 pub(super) fn translate_en_us(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.subagent.name" => "Subagent collaboration",
+        "agent.toolCatalog.domains.subagent.description" => {
+            "Delegate work to a subagent, inspect its status, exchange messages, answer questions, wait for results, or cancel a run."
+        }
+        "agent.toolCatalog.domains.collaboration_thread.name" => "Independent threads",
+        "agent.toolCatalog.domains.collaboration_thread.description" => {
+            "Create and manage independent agent threads; send messages, answer questions, wait for runs, read history, list or close threads."
+        }
+        "agent.toolCatalog.domains.skillLoading.name" => "Skill loading",
+        "agent.toolCatalog.domains.skillLoading.description" => {
+            "Load an enabled skill’s instructions and read resources listed by that skill."
+        }
+        "agent.toolCatalog.domains.tool.name" => "Tool discovery and execution",
+        "agent.toolCatalog.domains.tool.description" => {
+            "Search available tools and invoke a selected tool with its arguments."
+        }
+        "agent.toolCatalog.domains.user_interaction.name" => "User questions",
+        "agent.toolCatalog.domains.user_interaction.description" => {
+            "Ask the user structured questions and receive their answers."
+        }
+        "agent.toolCatalog.domains.a2ui.name" => "Interactive interface",
+        "agent.toolCatalog.domains.a2ui.description" => {
+            "Publish an interactive interface and request user input through it."
+        }
+        "agent.toolCatalog.domains.mcp.name" => "MCP management",
+        "agent.toolCatalog.domains.mcp.description" => {
+            "List, inspect, create, update, and delete MCP server configurations in platform settings."
+        }
+        "agent.toolCatalog.domains.prompt.name" => "Prompt management",
+        "agent.toolCatalog.domains.prompt.description" => {
+            "List, inspect, create, update, and delete platform prompts."
+        }
+        "agent.toolCatalog.domains.media.name" => "Images and documents",
+        "agent.toolCatalog.domains.media.description" => {
+            "Generate and inspect images, detect image content or text, and read image and PDF files."
+        }
         "agent.toolCatalog.domains.dude.name" => "Dude",
         "agent.toolCatalog.domains.dude.description" => {
             "Dude-owned background work and platform notifications."
@@ -55,10 +91,6 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.domains.memory.name" => "Memory Tools",
         "agent.toolCatalog.domains.memory.description" => {
             "Search, save, and soft-delete scoped memories."
-        }
-        "agent.toolCatalog.domains.model.name" => "Model Tools",
-        "agent.toolCatalog.domains.model.description" => {
-            "Inspect effective model catalog configuration."
         }
         "agent.toolCatalog.domains.resource.name" => "Resource Tools",
         "agent.toolCatalog.domains.resource.description" => {
@@ -333,6 +365,36 @@ pub(super) fn translate_en_us(key: &str) -> &'static str {
 
 pub(super) fn translate_zh_cn(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.subagent.name" => "子智能体协作",
+        "agent.toolCatalog.domains.subagent.description" => {
+            "向子智能体分派任务，查看运行状态，发送消息、回答问题、等待结果或取消运行。"
+        }
+        "agent.toolCatalog.domains.collaboration_thread.name" => "独立线程协作",
+        "agent.toolCatalog.domains.collaboration_thread.description" => {
+            "创建和管理独立智能体线程，发送消息、回答问题、等待运行、读取历史、列出或关闭线程。"
+        }
+        "agent.toolCatalog.domains.skillLoading.name" => "技能加载",
+        "agent.toolCatalog.domains.skillLoading.description" => {
+            "加载已启用技能的说明，并读取该技能列出的资源。"
+        }
+        "agent.toolCatalog.domains.tool.name" => "工具发现与执行",
+        "agent.toolCatalog.domains.tool.description" => "搜索可用工具，并使用参数调用选定的工具。",
+        "agent.toolCatalog.domains.user_interaction.name" => "用户提问",
+        "agent.toolCatalog.domains.user_interaction.description" => {
+            "向用户提出结构化问题并接收回答。"
+        }
+        "agent.toolCatalog.domains.a2ui.name" => "交互界面",
+        "agent.toolCatalog.domains.a2ui.description" => "展示交互界面并通过界面收集用户输入。",
+        "agent.toolCatalog.domains.mcp.name" => "MCP 管理",
+        "agent.toolCatalog.domains.mcp.description" => {
+            "查看、新建、更新和删除平台设置中的 MCP 服务器配置。"
+        }
+        "agent.toolCatalog.domains.prompt.name" => "提示词管理",
+        "agent.toolCatalog.domains.prompt.description" => "查看、新建、更新和删除平台提示词。",
+        "agent.toolCatalog.domains.media.name" => "图片与文档",
+        "agent.toolCatalog.domains.media.description" => {
+            "生成和查询图片，检测图片内容或文字，并读取图片和 PDF 文件。"
+        }
         "agent.toolCatalog.domains.dude.name" => "Dude",
         "agent.toolCatalog.domains.dude.description" => "Dude 的后台工作与平台通知。",
         "agent.toolCatalog.tools.dude.work_change.name" => "评估事项变化",
@@ -379,8 +441,6 @@ pub(super) fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.domains.memory.description" => {
             "检索、保存和软删除有作用域的 Agent 记忆。"
         }
-        "agent.toolCatalog.domains.model.name" => "模型工具",
-        "agent.toolCatalog.domains.model.description" => "查看生效中的模型目录配置。",
         "agent.toolCatalog.domains.resource.name" => "资源工具",
         "agent.toolCatalog.domains.resource.description" => {
             "管理文件、数据源、服务器和服务器账号资源。"

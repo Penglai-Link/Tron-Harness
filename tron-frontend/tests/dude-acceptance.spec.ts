@@ -181,17 +181,14 @@ test.beforeAll(async () => {
   if (!ready) throw new Error(backendLogs);
   // Configure an executable loop through the same public management API as an
   // existing user. This fixture tests parallel execution, not bootstrap policy.
-  await request("POST", "/api/v1/agents/loops", {
-    loopCode: "dude-acceptance-react", name: "Dude acceptance React", kind: "React",
-    nodes: [], edges: [], maxParallelNodes: 1,
-  });
+
   const main = (await request("GET", "/api/v1/dudes")).find((dude: { isMain: boolean }) => dude.isMain);
   if (!main) throw new Error("default main Dude missing");
-  await request("PATCH", `/api/v1/dudes/${main.dudeCode}`, { loopCode: "dude-acceptance-react" });
-  await request("POST", "/api/v1/admin/platform/models", {
-    displayName: "Dude Acceptance", vendor: "OpenAI", protocol: "OPENAI_COMPATIBLE", modelType: "TEXT", modelCapabilities: ["TEXT_GENERATION"],
-    baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiPath: "/chat/completions", apiKeyRef: "synthetic-acceptance", modelName: "acceptance-model", enabled: true,
-    thinkingEnabled: false, structuredOutputEnabled: false, temperature: 0.2, maxTokens: 1024, contextWindowTokens: 128000, topP: 1, maxRetries: 0,
+  await request("POST", "/api/v1/model-providers/configured", {
+    providerId: "acceptance", displayName: "Dude Acceptance", protocol: "OpenAiChatCompletions",
+    baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiKey: "synthetic-acceptance", requestHeaders: {}, enabled: true,
+    models: [{ modelType: "Text", modelCode: null, modelId: "acceptance-model", name: "Dude Acceptance", contextWindowTokens: 128000,
+      maxOutputTokens: 1024, reasoning: false, supportsDeveloperRole: false, inputCapabilities: ["Text"], enabled: true }],
   });
   frontend = await startResourceUiFrontend("/dudes", {
     VITE_TRON_DATA_SOURCE: "mock", VITE_TRON_CHAT_DATA_SOURCE: "api", VITE_TRON_MODEL_DATA_SOURCE: "api", VITE_TRON_AGENT_DATA_SOURCE: "api",

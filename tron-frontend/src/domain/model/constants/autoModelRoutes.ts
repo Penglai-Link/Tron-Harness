@@ -1,12 +1,8 @@
-import type { ProviderRouteCode } from "../model/ModelRegistryModel";
-
 export const autoModelRoutes = {
-  TEXT: { code: "ChatAuto", labelKey: "modelAutoRoutes.chat" },
-  EMBEDDING: { code: "EmbeddingAuto", labelKey: "modelAutoRoutes.embedding" },
-  MULTIMODAL_EMBEDDING: { code: "MultimodalEmbeddingAuto", labelKey: "modelAutoRoutes.multimodalEmbedding" },
-  RERANK: { code: "RerankAuto", labelKey: "modelAutoRoutes.rerank" },
-} satisfies Record<string, { code: ProviderRouteCode; labelKey: string }>;
-
-export function autoModelRouteCode(type: keyof typeof autoModelRoutes) {
-  return `PERSON_AI:ROUTE:${autoModelRoutes[type].code}`;
-}
+  TEXT: { code: "Chat", labelKey: "automaticRouters.kinds.Chat" },
+  TEXT_EMBEDDING: { code: "TextEmbedding", labelKey: "automaticRouters.kinds.TextEmbedding" },
+  MULTIMODAL_EMBEDDING: { code: "MultimodalEmbedding", labelKey: "automaticRouters.kinds.MultimodalEmbedding" },
+  TEXT_RERANK: { code: "TextRerank", labelKey: "automaticRouters.kinds.TextRerank" },
+  MULTIMODAL_RERANK: { code: "MultimodalRerank", labelKey: "automaticRouters.kinds.MultimodalRerank" },
+};
+export function autoModelRouteCode(type: keyof typeof autoModelRoutes) { return `AUTO:${autoModelRoutes[type].code}`; }

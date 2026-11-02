@@ -32,13 +32,13 @@ fn default_dimension() -> usize {
     1024
 }
 fn default_embedding_model() -> Option<String> {
-    Some("PERSON_AI:ROUTE:EmbeddingAuto".into())
+    Some("AUTO:TextEmbedding".into())
 }
 fn default_graph_model() -> Option<String> {
-    Some("PERSON_AI:ROUTE:ChatAuto".into())
+    Some("AUTO:Chat".into())
 }
 fn default_rerank_model() -> Option<String> {
-    Some("PERSON_AI:ROUTE:RerankAuto".into())
+    Some("AUTO:TextRerank".into())
 }
 impl Default for RagSettings {
     fn default() -> Self {
@@ -56,7 +56,7 @@ impl Default for RagSettings {
 }
 impl RagSettings {
     pub fn knowledge_base_default() -> Self {
-        Self {graph:true,embedding_model_code:Some("PERSON_AI:ROUTE:MultimodalEmbeddingAuto".into()),..Self::default()}
+        Self {graph:true,embedding_model_code:Some("AUTO:MultimodalEmbedding".into()),..Self::default()}
     }
     pub fn from_capabilities(value: &Value) -> Result<Self, RagError> {
         value
@@ -123,7 +123,7 @@ mod tests {
     fn vector_index_accepts_a_fixed_model_or_an_automatic_route() {
         let mut settings = RagSettings::default();
         assert!(settings.validate().is_ok());
-        settings.embedding_model_code = Some("PERSON_AI:ROUTE:EmbeddingAuto".into());
+        settings.embedding_model_code = Some("AUTO:TextEmbedding".into());
         assert!(settings.validate().is_ok());
         settings.embedding_model_code = Some("PERSON_AI:EMBEDDING:bge-m3".into());
         assert!(settings.validate().is_ok());
@@ -139,15 +139,15 @@ mod tests {
         assert_eq!(defaults, omitted);
         assert_eq!(
             defaults.embedding_model_code.as_deref(),
-            Some("PERSON_AI:ROUTE:EmbeddingAuto")
+            Some("AUTO:TextEmbedding")
         );
         assert_eq!(
             defaults.graph_model_code.as_deref(),
-            Some("PERSON_AI:ROUTE:ChatAuto")
+            Some("AUTO:Chat")
         );
         assert_eq!(
             defaults.rerank_model_code.as_deref(),
-            Some("PERSON_AI:ROUTE:RerankAuto")
+            Some("AUTO:TextRerank")
         );
         let explicit: RagSettings = serde_json::from_value(serde_json::json!({"embeddingModelCode":"fixed-embedding", "graphModelCode":"fixed-chat", "rerankModelCode":null})).unwrap();
         assert_eq!(

@@ -78,16 +78,6 @@ pub(super) fn resolve_workspace_code(
     Ok(workspace_code.to_string())
 }
 
-pub(super) fn required_string(
-    value: Option<String>,
-    field_name: &str,
-) -> Result<String, ToolError> {
-    value
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| ToolError::ExecutionFailed(format!("{field_name} is required")))
-}
-
 pub(super) fn optional_trimmed(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())

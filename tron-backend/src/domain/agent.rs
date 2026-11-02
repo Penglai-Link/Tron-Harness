@@ -60,9 +60,7 @@ pub use run::{
     AgentRunStatus,
 };
 pub use tool::{
-    InProcessTool, Tool, ToolError, ToolExecutionControl, ToolExecutionFuture,
-    ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
+    InProcessTool, Tool, ToolError, ToolExecutionControl, ToolExecutionFuture, ToolExecutionResult,
+    ToolObservation, ToolRegistry, ToolRequest,
 };
 pub use tool_schema::PreparedToolSchema;
-
-pub mod loop_design;

@@ -179,10 +179,7 @@ async fn agent_grants_api_roundtrips_with_library_grants_and_localized_errors() 
 async fn platform_agent_knowledge_configuration_precedes_space_authorization() {
     use tron_backend::application::agent::CreateWorkspaceInternalAgentCommand;
     let f = Fixture::new();
-    f.state.agent_management.save_loop_design(
-        serde_json::from_value(json!({"loopCode":"knowledge-grant-react","name":"Knowledge grant React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(),
-        0,
-    ).unwrap();
+
     let agent = f
         .state
         .agent_management
@@ -190,7 +187,7 @@ async fn platform_agent_knowledge_configuration_precedes_space_authorization() {
             description: String::new(),
             candidate_model_codes: Vec::new(),
             avatar_id: None,
-            loop_code: Some("knowledge-grant-react".into()),
+
             agent_code: "platform-reader".into(),
             name: "Reader".into(),
             role_prompt: "Read documents".into(),

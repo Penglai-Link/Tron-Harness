@@ -116,7 +116,6 @@ macro_rules! dude_response {
             name: String,
             description: String,
             role_prompt: String,
-            loop_code: Option<String>,
             avatar_id: String,
             candidate_model_codes: Vec<String>,
             kind: DudeKind,
@@ -127,6 +126,8 @@ macro_rules! dude_response {
             created_at: i64,
             updated_at: i64,
             tool_assignment_mode: crate::domain::agent::ToolAssignmentMode,
+            #[serde(default)]
+            selected_category_codes: Vec<String>,
             mcp_access_mode: crate::domain::agent::McpAccessMode,
             max_steps: u32,
             max_tool_calls: u32,
@@ -143,7 +144,6 @@ macro_rules! dude_response {
                     name: p.name,
                     description: p.description,
                     role_prompt: p.role_prompt,
-                    loop_code: p.loop_code,
                     avatar_id: p.avatar_id,
                     candidate_model_codes: p.candidate_model_codes,
                     kind: d.kind,
@@ -154,6 +154,7 @@ macro_rules! dude_response {
                     created_at: d.created_at,
                     updated_at: d.updated_at,
                     tool_assignment_mode: p.tool_assignment_mode,
+                    selected_category_codes: p.selected_category_codes.clone(),
                     mcp_access_mode: p.mcp_access_mode,
                     max_steps: p.max_steps,
                     max_tool_calls: p.max_tool_calls,
@@ -178,7 +179,6 @@ pub struct CreateDudeRequest {
     #[serde(default)]
     pub description: String,
     pub role_prompt: String,
-    pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
     #[serde(default)]
     pub candidate_model_codes: Vec<String>,
@@ -205,7 +205,6 @@ fn cadence() -> u32 {
 pub struct UpdateDudeRequest {
     pub description: Option<String>,
     pub role_prompt: Option<String>,
-    pub loop_code: Option<String>,
     pub avatar_id: Option<String>,
     pub candidate_model_codes: Option<Vec<String>>,
     pub enabled: Option<bool>,
@@ -241,7 +240,6 @@ async fn create(
             name: r.name,
             description: r.description,
             role_prompt: r.role_prompt,
-            loop_code: r.loop_code,
             avatar_id: r.avatar_id,
             group_name: None,
             candidate_model_codes: r.candidate_model_codes,
@@ -268,7 +266,6 @@ async fn update(
                 name: None,
                 description: r.description,
                 role_prompt: r.role_prompt,
-                loop_code: r.loop_code,
                 avatar_id: r.avatar_id,
                 group_name: None,
                 candidate_model_codes: r.candidate_model_codes,
@@ -359,13 +356,22 @@ async fn main_session(
 ) -> Result<Json<ApiResponse<MainDudeSessionResponse>>, DudeApiError> {
     let code = s.dudes.main()?.dude_code;
     let mut soul = s.dudes.soul(&code)?;
-    if soul.state!=SoulState::Ready && soul.session_code.is_none() {
-        soul=s.dudes.begin_awakening(&code,&auth.user().user_code)?.0;
+    if soul.state != SoulState::Ready && soul.session_code.is_none() {
+        soul = s.dudes.begin_awakening(&code, &auth.user().user_code)?.0;
     }
-    let d = if soul.user_code.as_deref()==Some(&auth.user().user_code) && soul.session_code.is_some() {
-        s.dudes.session(soul.session_code.as_deref().unwrap())?.ok_or(DudeError::NotFound)?
+    let d = if soul.user_code.as_deref() == Some(&auth.user().user_code)
+        && soul.session_code.is_some()
+    {
+        s.dudes
+            .session(soul.session_code.as_deref().unwrap())?
+            .ok_or(DudeError::NotFound)?
     } else {
-        s.dudes.resolve_session(&code, DudeSessionPurpose::Interactive, &format!("interactive:{}",auth.user().user_code), None)?
+        s.dudes.resolve_session(
+            &code,
+            DudeSessionPurpose::Interactive,
+            &format!("interactive:{}", auth.user().user_code),
+            None,
+        )?
     };
     let chat = s
         .chats
@@ -381,13 +387,22 @@ async fn resolve_session(
     Path(code): Path<String>,
 ) -> Result<Json<ApiResponse<ResolveDudeSessionResponse>>, DudeApiError> {
     let mut soul = s.dudes.soul(&code)?;
-    if soul.state!=SoulState::Ready && soul.session_code.is_none() {
-        soul=s.dudes.begin_awakening(&code,&auth.user().user_code)?.0;
+    if soul.state != SoulState::Ready && soul.session_code.is_none() {
+        soul = s.dudes.begin_awakening(&code, &auth.user().user_code)?.0;
     }
-    let d = if soul.user_code.as_deref()==Some(&auth.user().user_code) && soul.session_code.is_some() {
-        s.dudes.session(soul.session_code.as_deref().unwrap())?.ok_or(DudeError::NotFound)?
+    let d = if soul.user_code.as_deref() == Some(&auth.user().user_code)
+        && soul.session_code.is_some()
+    {
+        s.dudes
+            .session(soul.session_code.as_deref().unwrap())?
+            .ok_or(DudeError::NotFound)?
     } else {
-        s.dudes.resolve_session(&code, DudeSessionPurpose::Interactive, &format!("interactive:{}",auth.user().user_code), None)?
+        s.dudes.resolve_session(
+            &code,
+            DudeSessionPurpose::Interactive,
+            &format!("interactive:{}", auth.user().user_code),
+            None,
+        )?
     };
     let chat = s
         .chats

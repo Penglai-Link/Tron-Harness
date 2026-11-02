@@ -5,7 +5,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     vec![ToolCatalogDefinition {
         tool_code: "rag.search",
         tool_name: "rag_search".into(),
-        domain_code: "rag",
+        domain_code: "harness_rag",
+        category_code: "tron.platform",
         name_i18n_key: "agent.toolCatalog.tools.rag.search.name",
         description_i18n_key: "agent.toolCatalog.tools.rag.search.description",
         operation_kind: ToolOperationKind::Query,

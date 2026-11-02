@@ -463,33 +463,87 @@ pub async fn native_goal(database: &str, id: &str) -> eliteforge_agent_core::Goa
 
 /// Scripted models use the same batch-only gateway contract as production.
 pub fn gateway_arguments(name: &str, arguments: Value) -> Value {
-    if matches!(name, "chat_ask_user" | "ask_user" | "a2ui_publish" | "a2ui_request_input"
-        | "worktree_create" | "worktree_select" | "git_switch_branch" | "word_create" | "word_replace_text"
-        | "excel_write" | "fs_write_text" | "fs_apply_patch" | "fs_apply_unified_patch" | "terminal_write" | "system_task_write") {
+    if matches!(
+        name,
+        "chat_ask_user"
+            | "ask_user"
+            | "a2ui_publish"
+            | "a2ui_request_input"
+            | "worktree_create"
+            | "worktree_select"
+            | "word_create"
+            | "word_replace_text"
+            | "excel_write"
+            | "fs_write_text"
+            | "fs_apply_patch"
+            | "fs_apply_unified_patch"
+            | "terminal_write"
+            | "system_task_write"
+    ) {
         arguments
-    } else { json!({"items":[arguments]}) }
+    } else {
+        json!({"items":[arguments]})
+    }
 }
 
 /// Existing one-operation fixtures inspect their one item; batch tests inspect
 /// the complete envelope directly and do not use this helper.
 pub fn single_gateway_result(text: &str) -> String {
-    let Ok(value) = serde_json::from_str::<Value>(text) else { return text.to_string(); };
-    let Some(rows) = value.get("results").and_then(Value::as_array) else { return text.to_string(); };
-    assert_eq!(rows.len(),1,"one-item fixture received a multi-item result");
-    assert_eq!(rows[0]["index"],0);
-    rows[0]["result"].as_str().map(str::to_owned).unwrap_or_else(||rows[0]["result"].to_string())
+    let Ok(value) = serde_json::from_str::<Value>(text) else {
+        return text.to_string();
+    };
+    let Some(rows) = value.get("results").and_then(Value::as_array) else {
+        return text.to_string();
+    };
+    assert_eq!(
+        rows.len(),
+        1,
+        "one-item fixture received a multi-item result"
+    );
+    assert_eq!(rows[0]["index"], 0);
+    rows[0]["result"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| rows[0]["result"].to_string())
 }
 
 /// Scripted providers echo the last conversational payload, not runtime data
 /// contributors which are deliberately placed after history in the request.
 pub fn last_conversation_content(payload: &Value) -> &str {
-    payload["messages"].as_array().and_then(|messages| messages.iter().rev().find_map(|message| {
-        if message["role"] != "user" && message["role"] != "tool" { return None; }
-        let text = message["content"].as_str()?;
-        if ["<available_skills>", "<available_agents>", "<application-execution-context>",
-            "<current-session-working-state>", "<page-context>", "<knowledge", "<dude-"].iter().any(|tag| text.trim_start().starts_with(tag)) { return None; }
-        if serde_json::from_str::<Value>(text).is_ok_and(|value| value.get("agents").is_some()) { return None; }
-        if serde_json::from_str::<Vec<Value>>(text).is_ok_and(|items| items.iter().any(|item| item.get("domainCode").is_some())) { return None; }
-        Some(text)
-    })).unwrap_or_default()
+    payload["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages.iter().rev().find_map(|message| {
+                if message["role"] != "user" && message["role"] != "tool" {
+                    return None;
+                }
+                let text = message["content"].as_str()?;
+                if [
+                    "<available_skills>",
+                    "<available_agents>",
+                    "<application-execution-context>",
+                    "<current-session-working-state>",
+                    "<page-context>",
+                    "<knowledge",
+                    "<dude-",
+                ]
+                .iter()
+                .any(|tag| text.trim_start().starts_with(tag))
+                {
+                    return None;
+                }
+                if serde_json::from_str::<Value>(text)
+                    .is_ok_and(|value| value.get("agents").is_some())
+                {
+                    return None;
+                }
+                if serde_json::from_str::<Vec<Value>>(text)
+                    .is_ok_and(|items| items.iter().any(|item| item.get("domainCode").is_some()))
+                {
+                    return None;
+                }
+                Some(text)
+            })
+        })
+        .unwrap_or_default()
 }

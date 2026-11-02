@@ -15,10 +15,7 @@ use crate::{
     },
     domain::mcp::WorkspaceMcpServerListQuery,
     domain::{
-        agent::{
-            AgentRunHistoryQuery, AgentRunHistoryRecord,
-            McpAccessMode, ToolAssignmentMode,
-        },
+        agent::{AgentRunHistoryQuery, AgentRunHistoryRecord, McpAccessMode, ToolAssignmentMode},
         model_provider::ProviderModelRunSnapshotView,
     },
     response::ApiResponse,
@@ -154,6 +151,52 @@ pub async fn list_tool_domains(
     .into_response()
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolCategoryView {
+    code: String,
+    name: String,
+    tool_count: usize,
+}
+
+pub async fn list_tool_categories(
+    State(state): State<AppState>,
+    State(agent_management): State<AgentManagementService>,
+    auth: RequestAuthContext,
+) -> Response {
+    if let Err(error) = state.agent_framework.ensure_capability_catalog().await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::protocol_error("-1", error)),
+        )
+            .into_response();
+    }
+    let mut categories = std::collections::BTreeMap::<String, ToolCategoryView>::new();
+    for tool in agent_management.list_tools(None, None, &auth.locale) {
+        let Some(category) = tool.category else {
+            continue;
+        };
+        let name = category
+            .names
+            .get(&auth.locale)
+            .or_else(|| category.names.get("en-US"))
+            .cloned()
+            .unwrap_or_else(|| category.code.clone());
+        let entry = categories
+            .entry(category.code.clone())
+            .or_insert(ToolCategoryView {
+                code: category.code,
+                name,
+                tool_count: 0,
+            });
+        entry.tool_count += 1;
+    }
+    Json(ApiResponse::protocol_success(
+        categories.into_values().collect::<Vec<_>>(),
+    ))
+    .into_response()
+}
+
 pub async fn list_tools(
     State(state): State<AppState>,
     State(agent_management): State<AgentManagementService>,
@@ -175,20 +218,44 @@ pub async fn list_tools(
     Json(ApiResponse::success(
         tools
             .into_iter()
-            .map(|tool| {
+            .map(|mut tool| {
                 let owner = agent_management.capability_resource("tool", &tool.tool_code);
+                if tool.source.pack_id.is_none() {
+                    tool.source.pack_id = owner.as_ref().map(|item| item.pack_id.clone());
+                }
+                let assignable = tool.availability_state
+                    == crate::domain::agent::ToolAvailabilityState::Available;
+                let disabled_reason = owner.as_ref().filter(|o| !o.available).map(|o| {
+                    if auth.locale.starts_with("zh") {
+                        format!("能力包 {} 已禁用", o.pack_id)
+                    } else {
+                        format!("Capability pack {} is disabled", o.pack_id)
+                    }
+                });
                 ToolAssignmentVo {
                     provider_pack_id: owner.as_ref().map(|o| o.pack_id.clone()),
-                    assignable: tool.availability_state
-                        == crate::domain::agent::ToolAvailabilityState::Available,
-                    disabled_reason: owner.filter(|o| !o.available).map(|o| {
-                        if auth.locale.starts_with("zh") {
-                            format!("能力包 {} 已禁用", o.pack_id)
-                        } else {
-                            format!("Capability pack {} is disabled", o.pack_id)
-                        }
+                    assignable,
+                    disabled_reason,
+                    tool_code: tool.tool_code,
+                    tool_name: tool.tool_name,
+                    domain_code: tool.domain_code,
+                    category: tool.category.map(|category| ToolCategoryMetadataVo {
+                        code: category.code,
+                        names: category.names,
                     }),
-                    tool,
+                    source: ToolSourceVo {
+                        provider_id: tool.source.provider_id,
+                        plugin_id: tool.source.plugin_id,
+                        pack_id: tool.source.pack_id,
+                        adapter_id: tool.source.adapter_id,
+                    },
+                    name: tool.name,
+                    description: tool.description,
+                    operation_kind: tool.operation_kind,
+                    input_schema: tool.input_schema,
+                    module_owner: tool.module_owner,
+                    availability_state: tool.availability_state,
+                    sample_result_summary: tool.sample_result_summary,
                 }
             })
             .collect::<Vec<_>>(),
@@ -454,6 +521,7 @@ pub(super) fn to_internal_agent_policy_command(
     };
     Ok(UpdateWorkspaceInternalAgentPolicyCommand {
         tool_assignment_mode,
+        selected_category_codes: request.selected_category_codes,
         max_steps: request.max_steps,
         max_tool_calls: request.max_tool_calls,
         max_parallel_tool_calls: request.max_parallel_tool_calls,
@@ -476,6 +544,7 @@ fn parse_tool_assignment_mode(
 ) -> Result<ToolAssignmentMode, (&'static str, &'static str)> {
     match normalize_mode_token(raw).as_str() {
         "all_platform_tools" => Ok(ToolAssignmentMode::AllPlatformTools),
+        "selected_categories" | "selectedcategories" => Ok(ToolAssignmentMode::SelectedCategories),
         "selected_tools" => Ok(ToolAssignmentMode::SelectedTools),
         "all_read_only_tools" | "allreadonlytools" => Ok(ToolAssignmentMode::AllReadOnlyTools),
         _ => Err((
@@ -583,9 +652,34 @@ pub async fn list_agui_stream_protocol_events(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ToolAssignmentVo {
-    #[serde(flatten)]
-    tool: crate::domain::agent::ToolCatalogRecord,
+    tool_code: String,
+    tool_name: String,
+    domain_code: String,
+    category: Option<ToolCategoryMetadataVo>,
+    source: ToolSourceVo,
+    name: String,
+    description: String,
+    operation_kind: crate::domain::agent::ToolOperationKind,
+    input_schema: serde_json::Value,
+    module_owner: String,
+    availability_state: crate::domain::agent::ToolAvailabilityState,
+    sample_result_summary: String,
     provider_pack_id: Option<String>,
     assignable: bool,
     disabled_reason: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ToolCategoryMetadataVo {
+    code: String,
+    names: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolSourceVo {
+    provider_id: Option<String>,
+    plugin_id: Option<String>,
+    pack_id: Option<String>,
+    adapter_id: Option<String>,
 }

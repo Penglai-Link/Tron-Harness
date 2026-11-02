@@ -1,7 +1,7 @@
 fn workspace_page_definition() -> ToolCatalogDefinition {
     definition(
         "workspace.page",
-        "workspace",
+        "harness_workspace",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.workspace.page.description",
@@ -22,7 +22,7 @@ fn workspace_page_definition() -> ToolCatalogDefinition {
 fn workspace_get_definition() -> ToolCatalogDefinition {
     definition(
         "workspace.get",
-        "workspace",
+        "harness_workspace",
         ToolOperationKind::Query,
         workspace_code_schema(
             "agent.toolCatalog.tools.workspace.get.description",
@@ -34,7 +34,7 @@ fn workspace_get_definition() -> ToolCatalogDefinition {
 fn app_page_definition() -> ToolCatalogDefinition {
     definition(
         "app.page",
-        "app",
+        "harness_app",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.app.page.description",
@@ -50,7 +50,7 @@ fn app_page_definition() -> ToolCatalogDefinition {
 fn app_create_definition() -> ToolCatalogDefinition {
     definition(
         "app.create",
-        "app",
+        "harness_app",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.app.create.description",
@@ -63,7 +63,7 @@ fn app_create_definition() -> ToolCatalogDefinition {
 fn app_update_definition() -> ToolCatalogDefinition {
     definition(
         "app.update",
-        "app",
+        "harness_app",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.app.update.description",
@@ -84,7 +84,7 @@ fn app_restore_definition() -> ToolCatalogDefinition {
 fn automation_page_definition() -> ToolCatalogDefinition {
     definition(
         "automation.page",
-        "automation",
+        "harness_automation",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.automation.page.description",
@@ -105,7 +105,7 @@ fn automation_get_definition() -> ToolCatalogDefinition {
 fn automation_create_definition() -> ToolCatalogDefinition {
     definition(
         "automation.create",
-        "automation",
+        "harness_automation",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.automation.create.description",
@@ -118,7 +118,7 @@ fn automation_create_definition() -> ToolCatalogDefinition {
 fn automation_update_definition() -> ToolCatalogDefinition {
     definition(
         "automation.update",
-        "automation",
+        "harness_automation",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.automation.update.description",
@@ -146,7 +146,7 @@ fn automation_code_definition(
 ) -> ToolCatalogDefinition {
     definition(
         tool_code,
-        "automation",
+        "harness_automation",
         operation_kind,
         schema(
             match tool_code {
@@ -207,7 +207,7 @@ fn automation_mutation_schema(create: bool) -> serde_json::Value {
 fn task_page_definition() -> ToolCatalogDefinition {
     definition(
         "task.page",
-        "task",
+        "harness_task",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.task.page.description",
@@ -229,7 +229,7 @@ fn task_page_definition() -> ToolCatalogDefinition {
 fn task_create_definition() -> ToolCatalogDefinition {
     definition(
         "task.create",
-        "task",
+        "harness_task",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.task.create.description",
@@ -242,7 +242,7 @@ fn task_create_definition() -> ToolCatalogDefinition {
 fn task_update_definition() -> ToolCatalogDefinition {
     definition(
         "task.update",
-        "task",
+        "harness_task",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.task.update.description",
@@ -261,7 +261,7 @@ fn task_restore_definition() -> ToolCatalogDefinition {
 }
 
 fn dude_notify_definition() -> ToolCatalogDefinition {
-    definition("dude.notify", "dude", ToolOperationKind::Command,
+    definition("dude.notify", "harness_dude", ToolOperationKind::Command,
         schema("agent.toolCatalog.tools.dude.notify.description", json!([{"changeId":"change-id","title":"Decision needed","body":"Choose the deployment window."}]),
             json!({"type":"object","required":["changeId","title","body"],"properties":{
                 "changeId":{"type":"string","minLength":1},"title":{"type":"string","minLength":1,"maxLength":200},"body":{"type":"string","minLength":1,"maxLength":8000}},"additionalProperties":false})))
@@ -269,7 +269,7 @@ fn dude_notify_definition() -> ToolCatalogDefinition {
 fn dude_work_change_definition() -> ToolCatalogDefinition {
     // Model providers require a concrete object at the parameter root. Operation-
     // specific required fields are enforced by WorkInput before any mutation.
-    definition("dude.work_change", "dude", ToolOperationKind::Command,
+    definition("dude.work_change", "harness_dude", ToolOperationKind::Command,
         schema("agent.toolCatalog.tools.dude.work_change.description", json!([{"operation":"list","taskCode":"task-id"}]),
             json!({"type":"object","required":["operation"],"properties":{
                 "operation":{"type":"string","enum":["list","recordResult","record","resolve"],"description":"list: requires taskCode. recordResult: requires taskCode and result. record: requires taskCode, changeKey, kind, summary and evidence; NeedsDecision/Blocked also require requestedAction. resolve: requires changeId, resolution and evidence. Omit fields belonging to other operations."},
@@ -286,11 +286,11 @@ fn dude_work_change_definition() -> ToolCatalogDefinition {
 }
 
 fn dude_soul_read_definition() -> ToolCatalogDefinition {
-    definition("dude.soul_read", "dude", ToolOperationKind::Query,
+    definition("dude.soul_read", "harness_dude", ToolOperationKind::Query,
         schema("agent.toolCatalog.tools.dude.soul_read.description", json!([{}]),json!({"type":"object","properties":{},"additionalProperties":false})))
 }
 fn dude_soul_update_definition() -> ToolCatalogDefinition {
-    definition("dude.soul_update", "dude", ToolOperationKind::Command,
+    definition("dude.soul_update", "harness_dude", ToolOperationKind::Command,
         schema("agent.toolCatalog.tools.dude.soul_update.description", json!([
             {"name":"小川"},
             {"edits":[{"old":"","new":"回答简洁。"}]}

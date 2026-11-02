@@ -627,7 +627,7 @@ async fn embedding_timeout_changes_apply_to_the_next_http_call_without_rebuildin
         supports_developer_role: false,
         model_code: "fixture".into(),
         protocol: ModelProtocol::OpenAiCompatibleEmbedding,
-        model_type: ModelType::Embedding,
+        model_type: ModelType::TextEmbedding,
         base_url: url,
         api_path: None,
         api_key: "fixture".into(),

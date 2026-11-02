@@ -11,7 +11,6 @@ vi.mock("@/components/ui/toast", () => ({ useToast: () => ({ error: toastError }
 vi.mock("./SoulFields", () => ({ SoulFields: ({ name, onName }: { name: string; onName: (name: string) => void }) => <input aria-label="dude.name" value={name} onChange={e => onName(e.target.value)} /> }));
 vi.mock("../api/dudeApi", () => ({ createDude: create, updateDude: update, getDudeSoul: soul, saveDudeSoul: saveSoul, getDudeResources: vi.fn() }));
 vi.mock("@/domain/agent/components/AgentAvatarPicker", () => ({ AgentAvatarPicker: ({ onChange }: { onChange: (value: string) => void }) => <button type="button" onClick={() => onChange("neo")}>Neo</button> }));
-vi.mock("@/domain/agent/components/AgentLoopField", () => ({ AgentLoopField: ({ onChange, defaultKind }: { onChange: (value: string) => void; defaultKind?: string }) => <><button type="button" data-default-kind={defaultKind} onClick={() => onChange("main")}>Choose loop</button></> }));
 vi.mock("@/domain/agent/components/AgentCandidateModelsField", () => ({ AgentCandidateModelsField: () => null }));
 vi.mock("@/domain/agent/components/AgentRolePromptField", () => ({ AgentRolePromptField: ({ value, onChange, required }: { value: string; onChange: (value: string) => void; required?: boolean }) => <textarea aria-label="Role prompt" required={required} value={value} onChange={event => onChange(event.target.value)} /> }));
 vi.mock("@/domain/agent/components/InternalAgentGroupField", () => ({ InternalAgentGroupField: () => <span>Agent group</span> }));
@@ -25,12 +24,10 @@ it("shows the points warning and retries refresh without creating another Dude",
   expect(screen.getByText("dude.costWarning")).toBeTruthy();
   expect(screen.queryByText("Agent group")).toBeNull();
   expect(screen.queryByLabelText("dude.kind")).toBeNull();
-  expect(screen.getByRole("button", { name: "Choose loop" }).getAttribute("data-default-kind")).toBe("React");
   expect((screen.getByLabelText("Role prompt") as HTMLTextAreaElement).required).toBe(true);
   fireEvent.change(screen.getByLabelText("dude.code"), { target: { value: "buddy" } });
   fireEvent.change(screen.getByLabelText("dude.name"), { target: { value: "Buddy" } });
   fireEvent.change(screen.getByLabelText("Role prompt"), { target: { value: "A helpful buddy" } });
-  fireEvent.click(screen.getByText("Choose loop"));
   fireEvent.click(screen.getByRole("button", { name: "dude.save" }));
   await waitFor(() => expect(toastError).toHaveBeenCalledWith("Refresh failed"));
   fireEvent.click(screen.getByRole("button", { name: "dude.save" }));
@@ -42,7 +39,7 @@ it("shows the points warning and retries refresh without creating another Dude",
 });
 
 it("names each background switch once and keeps help outside its accessible name", () => {
-  render(<DudeEditorDialog dude={{dudeCode:"memory",name:"Memory",rolePrompt:"",loopCode:"main",avatarId:"robot",candidateModelCodes:[],enabled:true,heartbeatMinutes:30,memoryAutoApprove:false,kind:"Memory",isMain:false,createdAt:0,updatedAt:0}} onClose={vi.fn()} onSaved={vi.fn()} />);
+  render(<DudeEditorDialog dude={{dudeCode:"memory",name:"Memory",rolePrompt:"",avatarId:"robot",candidateModelCodes:[],enabled:true,heartbeatMinutes:30,memoryAutoApprove:false,kind:"Memory",isMain:false,createdAt:0,updatedAt:0}} onClose={vi.fn()} onSaved={vi.fn()} />);
   fireEvent.click(screen.getByRole("tab", { name: "dude.backgroundSection" }));
   const background = screen.getByRole("switch", {name:"dude.backgroundEnabled"});
   const approval = screen.getByRole("switch", {name:"dude.autoApprove"});
@@ -61,7 +58,7 @@ it("names each background switch once and keeps help outside its accessible name
   expect((screen.getByLabelText("dude.heartbeatMinutes") as HTMLInputElement).value).toBe("5");
 });
 
-const existing = { dudeCode: "main-dude", name: "Memory", rolePrompt: "Help", loopCode: "main", avatarId: "robot", candidateModelCodes: [], enabled: true, heartbeatMinutes: 30, memoryAutoApprove: false, kind: "Main" as const, isMain: true, createdAt: 0, updatedAt: 0 };
+const existing = { dudeCode: "main-dude", name: "Memory", rolePrompt: "Help", avatarId: "robot", candidateModelCodes: [], enabled: true, heartbeatMinutes: 30, memoryAutoApprove: false, kind: "Main" as const, isMain: true, createdAt: 0, updatedAt: 0 };
 it("saves an avatar without rewriting or confirming an unchanged soul", async () => {
   update.mockResolvedValue(existing);
   const close = vi.fn();

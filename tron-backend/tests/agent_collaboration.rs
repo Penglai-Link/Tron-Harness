@@ -36,7 +36,9 @@ fn to_gateway_response(response: ModelResponse) -> ModelResponse {
             input_error,
         } = part
         {
-            if input_error.is_some() { continue; }
+            if input_error.is_some() {
+                continue;
+            }
             if tool_name == "tool_search" {
                 *input = common::gateway_arguments(tool_name, input.clone());
                 continue;
@@ -96,7 +98,11 @@ impl ModelClient for Script {
             let results: Vec<_> = request
                 .messages
                 .iter()
-                .filter_map(|m| m.tool_result.as_ref().map(|_| common::single_gateway_result(&m.content.text())))
+                .filter_map(|m| {
+                    m.tool_result
+                        .as_ref()
+                        .map(|_| common::single_gateway_result(&m.content.text()))
+                })
                 .collect();
             let response = match root.as_deref() {
                 Some("root:discovery") => match results.len() {
@@ -157,7 +163,8 @@ impl ModelClient for Script {
                     json!({"agentCode":"reviewer", "task":"child:slow"}),
                 ),
                 Some("root:system-directory") if results.is_empty() => ModelResponse::tool_call(
-                    "agent_spawn", json!({"agentCode":"codex-fast", "task":"child:external", "workingDirectory":"child-task"}),
+                    "agent_spawn",
+                    json!({"agentCode":"codex-fast", "task":"child:external", "workingDirectory":"child-task"}),
                 ),
                 Some("root:system-fast" | "root:system-deep") if results.is_empty() => {
                     ModelResponse::tool_call(
@@ -378,8 +385,11 @@ impl ModelClient for Script {
                             "target role was not loaded"
                         );
                         assert!(
-                            request.tools.iter().all(|t| t.call_name == "tool_execute"
-                                || t.call_name == "tool_search"),
+                            request
+                                .tools
+                                .iter()
+                                .all(|t| t.call_name == "tool_execute"
+                                    || t.call_name == "tool_search"),
                             "target inherited unauthorized tools: {:?}",
                             request
                                 .tools
@@ -462,7 +472,11 @@ async fn tool_search_discovers_wrapped_inventory_and_gateway_executes_it() {
         requests[index]
             .messages
             .iter()
-            .filter_map(|m| m.tool_result.as_ref().map(|_| common::single_gateway_result(&m.content.text())))
+            .filter_map(|m| {
+                m.tool_result
+                    .as_ref()
+                    .map(|_| common::single_gateway_result(&m.content.text()))
+            })
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -488,7 +502,10 @@ async fn tool_search_discovers_wrapped_inventory_and_gateway_executes_it() {
         requests[1..]
             .iter()
             .flat_map(|request| request.messages.iter())
-            .filter_map(|m| m.tool_result.as_ref().map(|_| common::single_gateway_result(&m.content.text())))
+            .filter_map(|m| m
+                .tool_result
+                .as_ref()
+                .map(|_| common::single_gateway_result(&m.content.text())))
             .all(|_| true)
     );
     assert!(
@@ -561,7 +578,6 @@ fn context(prompt: &str) -> AgentRunContext {
     })).unwrap()
 }
 fn reviewer(f: &Fixture) {
-    models::seed_loop(&f.state);
     let candidate = models::add_text_model(&f.state, "Reviewer model");
     f.state
         .agent_management
@@ -569,7 +585,7 @@ fn reviewer(f: &Fixture) {
             description: String::new(),
             candidate_model_codes: vec![candidate],
             avatar_id: Some("fox".into()),
-            loop_code: Some("test-react".into()),
+
             agent_code: "reviewer".into(),
             name: "Reviewer".into(),
             role_prompt: "REVIEWER_ROLE: inspect changes and report concrete findings.".into(),

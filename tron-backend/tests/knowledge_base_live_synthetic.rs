@@ -301,10 +301,7 @@ async fn authorized_singleton_route_real_vectors_reach_native_contributor_with_a
         observed: observed.clone(),
     };
     let llm = LlmRuntimeService::new(
-        Arc::new(ProviderAwareLlmRuntimeResolver::new(
-            f.state.models.clone(),
-            providers,
-        )),
+        Arc::new(ProviderAwareLlmRuntimeResolver::new(providers)),
         Arc::new(client),
     );
     let service = KnowledgeBaseService::new(
@@ -494,10 +491,7 @@ async fn real_http_mineru_resources_reach_native_contributor_with_revocation() {
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = Arc::new(Mutex::new(vec![]));
     let llm = LlmRuntimeService::new(
-        Arc::new(ProviderAwareLlmRuntimeResolver::new(
-            state.models.clone(),
-            providers,
-        )),
+        Arc::new(ProviderAwareLlmRuntimeResolver::new(providers)),
         Arc::new(CappedClient {
             inner: HttpLlmRuntimeClient::with_model_client(models.clone()),
             calls: calls.clone(),

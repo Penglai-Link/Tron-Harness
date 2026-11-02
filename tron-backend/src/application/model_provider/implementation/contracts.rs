@@ -21,6 +21,7 @@ pub struct CreateProviderAuthorizationCommand {
 #[derive(Debug, Clone)]
 pub struct CompleteProviderAuthorizationCommand {
     pub session_id: String,
+    pub expected_person_ai_user_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -37,6 +38,7 @@ pub enum ModelProviderError {
     AuthorizationSessionNotFound,
     AuthorizationPending,
     AuthorizationEnded(String),
+    AuthorizationAccountMismatch,
     InvalidServerBaseUrl,
     InvalidEncryptionKey,
     ConnectionNotReady,
@@ -59,6 +61,9 @@ impl std::fmt::Display for ModelProviderError {
             Self::AuthorizationEnded(status) => {
                 write!(formatter, "authorization ended with status {status}")
             }
+            Self::AuthorizationAccountMismatch => formatter.write_str(
+                "Authorize with the current profile's PersonAI account; add another account from the profile page",
+            ),
             Self::InvalidServerBaseUrl => {
                 formatter.write_str("Person-AI serverBaseUrl must be an HTTP(S) URL")
             }
@@ -166,6 +171,7 @@ pub enum ExternalAuthorizationPoll {
 
 #[derive(Debug, Clone)]
 pub struct ExternalCatalogModel {
+    pub(super) tags: Vec<String>,
     pub(super) model_code: String,
     pub(super) model_name: String,
     pub(super) protocols: Vec<AgentModelProtocol>,
@@ -180,6 +186,11 @@ pub struct ExternalCatalogModel {
 
 #[derive(Debug, Clone)]
 pub struct ExternalMultimediaCatalogModel {
+    pub(super) upstream_vendor_code: Option<String>,
+    pub(super) upstream_vendor_name: Option<String>,
+    pub(super) input_coefficient: Option<f64>,
+    pub(super) cache_hit_coefficient: Option<f64>,
+    pub(super) output_coefficient: Option<f64>,
     pub(super) model_id: String,
     pub(super) model_code: String,
     pub(super) model_name: String,

@@ -5,8 +5,7 @@ use crate::domain::agent::ToolOperationKind;
 
 use super::{ToolCatalogDefinition, schema};
 use helpers::{
-    app_code_definition, app_mutation_schema, app_update_schema, definition, model_code_definition,
-    model_mutation_schema, page_properties, task_code_definition, task_mutation_schema,
+    app_code_definition, app_mutation_schema, app_update_schema, definition,     page_properties, task_code_definition, task_mutation_schema,
     variable_mutation_schema, workspace_code_schema, workspace_scoped_page_schema,
 };
 
@@ -35,19 +34,6 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         task_update_definition(),
         task_delete_definition(),
         task_restore_definition(),
-        model_page_definition(),
-        model_create_definition(),
-        model_update_definition(),
-        model_enable_definition(),
-        model_disable_definition(),
-        model_delete_definition(),
-        platform_model_page_definition(),
-        platform_model_get_definition(),
-        platform_model_create_definition(),
-        platform_model_update_definition(),
-        platform_model_enable_definition(),
-        platform_model_disable_definition(),
-        platform_model_delete_definition(),
         skill_page_definition(),
         skill_view_definition(),
         variable_page_definition(),

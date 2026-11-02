@@ -75,10 +75,11 @@ test.beforeAll(async () => {
   const agents = (await agentResponse.json()).data;
   expect(agents.map((agent: { agentCode: string }) => agent.agentCode)).toEqual(expect.arrayContaining(["main-agent"]));
 
-  await post("/api/v1/admin/platform/models", {
-    displayName: "Framework Acceptance", vendor: "OpenAI", protocol: "OPENAI_COMPATIBLE", modelType: "TEXT", modelCapabilities: ["TEXT_GENERATION"],
-    baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiPath: "/chat/completions", apiKeyRef: "sk-acceptance", modelName: "acceptance-model", enabled: true,
-    thinkingEnabled: false, structuredOutputEnabled: false, temperature: 0.2, maxTokens: 1024, contextWindowTokens: 128000, topP: 1, maxRetries: 0,
+  await post("/api/v1/model-providers/configured", {
+    providerId: "acceptance", displayName: "Framework Acceptance", protocol: "OpenAiChatCompletions",
+    baseUrl: `http://127.0.0.1:${providerAddress.port}/v1`, apiKey: "sk-acceptance", requestHeaders: {}, enabled: true,
+    models: [{ modelType: "Text", modelCode: null, modelId: "acceptance-model", name: "Framework Acceptance", contextWindowTokens: 128000,
+      maxOutputTokens: 1024, reasoning: false, supportsDeveloperRole: false, inputCapabilities: ["Text"], enabled: true }],
   });
   frontend = await startResourceUiFrontend("/chats", {
     VITE_TRON_DATA_SOURCE: "mock", VITE_TRON_CHAT_DATA_SOURCE: "api", VITE_TRON_MODEL_DATA_SOURCE: "api", VITE_TRON_AGENT_DATA_SOURCE: "api",
@@ -170,7 +171,7 @@ test("public chat uses the real framework, restores history and shows its contex
   await sidebar.getByRole("tab", { name: "Short-term memory", exact: true }).click();
   await expect(sidebar.getByText("Conversation History")).toBeVisible();
   await expect(sidebar.getByText("Session Total", { exact: true })).toBeVisible();
-  // The sidebar renders the platform model identity of the active connection
+  // The sidebar renders the provider model identity of the active connection
   // (currently the generated model code) followed by the context window; the
   // seeded provider exposes a 128k window either way.
   await expect(sidebar).toContainText(/· 128k window/);

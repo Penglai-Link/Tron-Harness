@@ -14,10 +14,8 @@ use tron_backend::{
             local_documents::{ChunkConfig, ChunkMode},
         },
         llm::{LlmRuntimeModelResolver, LlmRuntimeService},
-        model::ModelCommand,
         model_provider::ProviderAwareLlmRuntimeResolver,
     },
-    domain::model::{ModelProtocol, ModelType},
 };
 
 const AUTO: &str = "PERSON_AI:ROUTE:EmbeddingAuto";
@@ -95,7 +93,7 @@ fn fixed_selection(f: &Fixture, scope: &str, code: &str) {
 }
 
 fn resolver(f: &Fixture) -> ProviderAwareLlmRuntimeResolver {
-    ProviderAwareLlmRuntimeResolver::new(f.state.models.clone(), f.state.model_providers.clone())
+    ProviderAwareLlmRuntimeResolver::new(f.state.model_providers.clone())
 }
 
 fn service(f: &Fixture, llm: LlmRuntimeService) -> KnowledgeBaseService {
@@ -191,39 +189,7 @@ fn explicit_embedding_route_overrides_default_and_obeys_connection_state() {
 async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries() {
     let f = Fixture::new();
     connect_auto(&f);
-    let model = f
-        .state
-        .models
-        .create_platform_model(ModelCommand {
-            display_name: "Synthetic stable embedding".into(),
-            vendor: "Synthetic".into(),
-            protocol: ModelProtocol::OpenAiCompatibleEmbedding,
-            model_type: ModelType::Embedding,
-            model_capabilities: vec![],
-            base_url: "https://synthetic.invalid/v1".into(),
-            api_path: Some("embeddings".into()),
-            api_key_ref: "synthetic-only".into(),
-            model_name: "fixed-embedding-v1".into(),
-            enabled: true,
-            description: None,
-            thinking_enabled: false,
-            supported_reasoning_efforts: vec![],
-            default_reasoning_effort: None,
-            structured_output_enabled: false,
-            responses_stateful_enabled: false,
-            temperature: None,
-            max_tokens: None,
-            context_window_tokens: None,
-            top_p: None,
-            max_retries: Some(0),
-            allow_inheritance: None,
-        })
-        .unwrap();
-    f.state
-        .models
-        .set_platform_default(&model.model_code)
-        .unwrap();
-    fixed_selection(&f, "PLATFORM", &model.model_code);
+    let model_code = BGE_M3.to_owned();
     let llm = LlmRuntimeService::new(Arc::new(resolver(&f)), Arc::new(f.client.clone()));
     let svc = service(&f, llm);
     let kb = svc.create(USER, "Pinned space", "").unwrap();
@@ -232,7 +198,7 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
         .configure_corpus(
             &kb.id,
             tron_backend::application::rag::RagSettings {
-                embedding_model_code: Some(model.model_code.clone()),
+                embedding_model_code: Some(model_code.clone()),
                 ..Default::default()
             },
         )
@@ -298,11 +264,17 @@ async fn real_resolver_pins_fixed_space_for_multiple_chunks_rebuild_and_queries(
         first.embedding_space_fingerprint
     );
     let calls = f.client.calls.load(Ordering::SeqCst);
-    Connection::open(&f.state.config.database_url)
-        .unwrap()
-        .execute(
-            "UPDATE models SET model_name='fixed-embedding-v2' WHERE model_code=?1",
-            [&model.model_code],
+    Connection::open(&f.state.config.database_url).unwrap().execute(
+        "INSERT INTO provider_multimedia_catalog_models(provider_code,model_id,model_code,model_name,media_type,status,dimension,tags_json,first_seen_at,last_seen_at,updated_at) VALUES('PersonAi','changed-instance','different-model','Different model',6,'Available',1024,json_array('text_embedding'),1,1,1)", [],
+    ).unwrap();
+    f.state
+        .rag
+        .configure_corpus(
+            &kb.id,
+            tron_backend::application::rag::RagSettings {
+                embedding_model_code: Some("PERSON_AI:EMBEDDING:different-model".into()),
+                ..Default::default()
+            },
         )
         .unwrap();
     let changed = svc

@@ -1,5 +1,4 @@
-export type ModelScopeKind = "PLATFORM" | "WORKSPACE";
-export type ModelSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
+export type ModelSourceKind = "Provider";
 export type ModelProtocol =
   | "OPENAI_COMPATIBLE"
   | "OPENAI_COMPATIBLE_EMBEDDING"
@@ -7,8 +6,7 @@ export type ModelProtocol =
   | "ANTHROPIC"
   | "GEMINI"
   | "RERANK";
-export type ModelType = "TEXT" | "EMBEDDING" | "RERANK" | "IMAGE";
-export type ModelVerifyStatus = "SUCCEEDED" | "FAILED";
+export type ModelType = "TEXT" | "TEXT_EMBEDDING" | "MULTIMODAL_EMBEDDING" | "TEXT_RERANK" | "MULTIMODAL_RERANK" | "IMAGE" | "VIDEO" | "SPEECH_SYNTHESIS" | "SPEECH_RECOGNITION" | "REALTIME_SPEECH";
 export type ModelProviderCode = "PersonAi";
 export type ModelSelectionKind = "Fixed" | "ProviderRoute" | "Auto";
 export type ProviderRouteCode = "ChatAuto" | "EmbeddingAuto" | "MultimodalEmbeddingAuto" | "RerankAuto";
@@ -32,84 +30,6 @@ export type ReasoningEffort =
   | "XHigh"
   | "Max"
   | "Ultra";
-export type ModelCapability =
-  | "MULTIMODAL_ALL"
-  | "TEXT_GENERATION"
-  | "DEEP_THINKING"
-  | "SUPPORTS_DEVELOPER_ROLE"
-  | "VISION_UNDERSTANDING"
-  | "IMAGE_GENERATION"
-  | "VIDEO_GENERATION"
-  | "THREED_GENERATION"
-  | "SPEECH_RECOGNITION"
-  | "SPEECH_SYNTHESIS"
-  | "MULTIMODAL_VECTOR"
-  | "TEXT_VECTOR"
-  | "REALTIME_MULTIMODAL"
-  | "REALTIME_SPEECH_SYNTHESIS"
-  | "REALTIME_SPEECH_RECOGNITION"
-  | "REALTIME_SPEECH_TRANSLATION"
-  | "RERANK";
-
-export interface ModelWorkspacePathItem {
-  workspaceCode: string;
-  name: string;
-}
-
-export interface ModelRecord {
-  providerId?: string | null;
-  scopeKind: ModelScopeKind;
-  workspaceCode: string | null;
-  modelCode: string;
-  displayName: string;
-  vendor: string;
-  protocol: ModelProtocol;
-  modelType: ModelType;
-  modelCapabilities: ModelCapability[];
-  baseUrl: string;
-  apiPath: string | null;
-  apiKeyRef: string;
-  modelName: string;
-  enabled: boolean;
-  description: string | null;
-  thinkingEnabled: boolean;
-  supportedReasoningEfforts: ReasoningEffort[];
-  defaultReasoningEffort: ReasoningEffort | null;
-  structuredOutputEnabled: boolean;
-  responsesStatefulEnabled: boolean;
-  temperature: number | null;
-  maxTokens: number | null;
-  contextWindowTokens: number | null;
-  topP: number | null;
-  maxRetries: number | null;
-  lastVerifiedAt: string | null;
-  lastVerifyStatus: ModelVerifyStatus | null;
-  lastVerifyMessage: string | null;
-  sourceKind: ModelSourceKind;
-  sourceModelCode: string | null;
-  sourceLabel: string;
-  sourceWorkspaceCode: string | null;
-  sourceWorkspaceName: string | null;
-  sourceWorkspacePath: ModelWorkspacePathItem[];
-  allowInheritance: boolean | null;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface WorkspaceDefaultModelRecord {
-  modelType: ModelType;
-  modelCode: string | null;
-  displayName: string | null;
-  sourceLabel: string | null;
-}
-
-export interface WorkspaceModelCatalog {
-  workspaceCode: string;
-  defaults: WorkspaceDefaultModelRecord[];
-  records: ModelRecord[];
-}
-
 export interface ModelSelectOption {
   optionCode?: string;
   modelCode: string;

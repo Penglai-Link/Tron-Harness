@@ -388,7 +388,7 @@ mod tests {
         let config = RuntimeModelConfig {
             model_code: "fixture".into(),
             protocol: ModelProtocol::OpenAiCompatibleEmbedding,
-            model_type: ModelType::Embedding,
+            model_type: ModelType::TextEmbedding,
             base_url: url,
             api_path: None,
             api_key: "fixture".into(),
@@ -477,7 +477,7 @@ mod tests {
         let config = RuntimeModelConfig {
             model_code: "fixture".into(),
             protocol: ModelProtocol::OpenAiCompatibleEmbedding,
-            model_type: ModelType::Embedding,
+            model_type: ModelType::TextEmbedding,
             base_url: url,
             api_path: None,
             api_key: "fixture".into(),
@@ -583,7 +583,7 @@ mod tests {
         let config = RuntimeModelConfig {
             model_code: "fixture".into(),
             protocol: ModelProtocol::Rerank,
-            model_type: ModelType::Rerank,
+            model_type: ModelType::TextRerank,
             base_url: url,
             api_path: None,
             api_key: "fixture".into(),
@@ -670,7 +670,7 @@ mod tests {
         let config = RuntimeModelConfig {
             model_code: "fixture".into(),
             protocol: ModelProtocol::Rerank,
-            model_type: ModelType::Rerank,
+            model_type: ModelType::TextRerank,
             base_url: url,
             api_path: None,
             api_key: "fixture".into(),

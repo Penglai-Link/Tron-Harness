@@ -57,8 +57,7 @@ import {
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api";
 import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
-import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
-import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
+import { fetchModelSelectOptions } from "@/domain/model/api/modelApi";
 import {
   automationModelCodeFromOption,
   automationModelOptionsForAgent,
@@ -139,7 +138,7 @@ export function TaskDetailsPage() {
   const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>(() => [mainAutomationAgentOption]);
   const [selectedAgentCode, setSelectedAgentCode] = useState(task.agentCode || mainAutomationAgentOption.agentCode);
   const [selectedModelOptionCode, setSelectedModelOptionCode] = useState(optionCodeForAutomationModel(task.agentCode || mainAutomationAgentOption.agentCode, task.modelCode ?? null));
-  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<ReturnType<typeof getWorkspaceSelectOptions>>(() => []);
+  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchModelSelectOptions>>>(() => []);
   const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [agentCodesInput, setAgentCodesInput] = useState(task.agentCodes.join(", "));
@@ -255,9 +254,7 @@ export function TaskDetailsPage() {
     const internalAgentsPromise = getServiceDataSource("agent") === "api"
       ? fetchWorkspaceInternalAgents(task.workspaceCode)
       : Promise.resolve(listWorkspaceInternalAgentsMock(task.workspaceCode));
-    const modelsPromise = getServiceDataSource("model") === "api"
-      ? fetchWorkspaceSelectOptions(task.workspaceCode)
-      : Promise.resolve(getWorkspaceSelectOptions(task.workspaceCode));
+    const modelsPromise = fetchModelSelectOptions(task.workspaceCode);
 
     Promise.all([agentsPromise, internalAgentsPromise, modelsPromise])
       .then(([agents, internalAgents, models]) => {

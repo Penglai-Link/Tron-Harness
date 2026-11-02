@@ -72,7 +72,14 @@ impl ModelClient for Model {
             let step = self.calls.fetch_add(1, Ordering::SeqCst);
             for message in &request.messages {
                 if message.role == fw::Role::Tool {
-                    assert!(!message.tool_result.as_ref().is_some_and(|result| result.is_error), "onboarding tool failed: {}", message.content.protocol_text());
+                    assert!(
+                        !message
+                            .tool_result
+                            .as_ref()
+                            .is_some_and(|result| result.is_error),
+                        "onboarding tool failed: {}",
+                        message.content.protocol_text()
+                    );
                 }
             }
             if step < 4 {
@@ -88,8 +95,14 @@ impl ModelClient for Model {
                 );
             }
             Ok(match step {
-                0 => ModelResponse::tool_call(fw::TOOL_EXECUTE_CALL_NAME, json!({"tool":"a2ui_request_input","arguments":form()})),
-                1 => ModelResponse::tool_call(fw::TOOL_EXECUTE_CALL_NAME, json!({"tool":"dude_soul_read","arguments":{"items":[{}]}})),
+                0 => ModelResponse::tool_call(
+                    fw::TOOL_EXECUTE_CALL_NAME,
+                    json!({"tool":"a2ui_request_input","arguments":form()}),
+                ),
+                1 => ModelResponse::tool_call(
+                    fw::TOOL_EXECUTE_CALL_NAME,
+                    json!({"tool":"dude_soul_read","arguments":{"items":[{}]}}),
+                ),
                 2 => {
                     assert!(
                         request
@@ -142,7 +155,7 @@ fn state(config: AppConfig) -> AppState {
     )
     .unwrap();
     state.knowledge_bases.stop_ingestion_workers();
-    models::seed_loop(&state);
+
     state
 }
 fn service(state: &AppState, model: Arc<Model>, session: &str) -> AgentInvocationService {
@@ -219,21 +232,47 @@ async fn dude_page_context_uses_shared_layout_budget_reduction_and_saved_report(
     let mut config = common::prepared_config(AppConfig {
         database_url: dir.path().join("tron.sqlite3").display().to_string(),
         graph_storage_path: dir.path().join("tron.grafeo").display().to_string(),
-        resource: ResourceConfig::with_default_root(dir.path().join("resources").display().to_string()),
+        resource: ResourceConfig::with_default_root(
+            dir.path().join("resources").display().to_string(),
+        ),
         ..Default::default()
     });
     let providers = &mut config.short_term_memory.context.providers;
-    let page_position = providers.order.iter().position(|id| id == "page_context").unwrap();
-    let environment_position = providers.order.iter().position(|id| id == "dude_environment").unwrap();
+    let page_position = providers
+        .order
+        .iter()
+        .position(|id| id == "page_context")
+        .unwrap();
+    let environment_position = providers
+        .order
+        .iter()
+        .position(|id| id == "dude_environment")
+        .unwrap();
     providers.order.swap(page_position, environment_position);
     // A deliberately small configurable block ceiling proves Dude reaches the
     // same SDK reducer, rather than a separate prompt concatenation path.
-    providers.data_blocks.get_mut("page_context").unwrap().max_tokens = Some(128);
+    providers
+        .data_blocks
+        .get_mut("page_context")
+        .unwrap()
+        .max_tokens = Some(128);
     let state = state(config);
-    let (soul, _) = state.dudes.begin_awakening("main-dude", "USR-AUTH-0001").unwrap();
+    let (soul, _) = state
+        .dudes
+        .begin_awakening("main-dude", "USR-AUTH-0001")
+        .unwrap();
     let session = soul.session_code.unwrap();
-    state.chats.ensure_dude_session(&state.dudes.session(&session).unwrap().unwrap(), Some("USR-AUTH-0001".into())).unwrap();
-    let model = Arc::new(Model { calls: AtomicUsize::new(4), ..Default::default() });
+    state
+        .chats
+        .ensure_dude_session(
+            &state.dudes.session(&session).unwrap().unwrap(),
+            Some("USR-AUTH-0001".into()),
+        )
+        .unwrap();
+    let model = Arc::new(Model {
+        calls: AtomicUsize::new(4),
+        ..Default::default()
+    });
     for include_page in [true, false] {
         let mut input: AgentInvocationCommand = serde_json::from_value(json!({
             "prompt": "Use my current page only", "workspaceCode": null,
@@ -248,22 +287,56 @@ async fn dude_page_context_uses_shared_layout_budget_reduction_and_saved_report(
         } else {
             json!({"annotations":[], "requestedSkills":[], "resume":[], "contextCompaction":false})
         });
-        service(&state, model.clone(), &session).invoke(input, Some("USR-AUTH-0001".into()), Some("en-US".into())).await.unwrap();
-        let saved = state.short_term_memory.saved_context_assembly(&session, None).unwrap().unwrap();
-        let page = saved.report.blocks.iter().find(|block| block.id == "page_context").unwrap();
-        let environment = saved.report.blocks.iter().find(|block| block.id == "dude_environment").unwrap();
-        assert!(page.position > environment.position, "shared configuration must control Dude order");
-        let position = |id: &str| saved.report.blocks.iter().find(|block| block.id == id).unwrap().position;
+        service(&state, model.clone(), &session)
+            .invoke(input, Some("USR-AUTH-0001".into()), Some("en-US".into()))
+            .await
+            .unwrap();
+        let saved = state
+            .short_term_memory
+            .saved_context_assembly(&session, None)
+            .unwrap()
+            .unwrap();
+        let page = saved
+            .report
+            .blocks
+            .iter()
+            .find(|block| block.id == "page_context")
+            .unwrap();
+        let environment = saved
+            .report
+            .blocks
+            .iter()
+            .find(|block| block.id == "dude_environment")
+            .unwrap();
+        assert!(
+            page.position > environment.position,
+            "shared configuration must control Dude order"
+        );
+        let position = |id: &str| {
+            saved
+                .report
+                .blocks
+                .iter()
+                .find(|block| block.id == id)
+                .unwrap()
+                .position
+        };
         assert!(position("current_session_checkpoint") < position("runtime_identity"));
         assert!(position("runtime_identity") < position("dude_onboarding"));
         assert!(position("dude_onboarding") < position(fw::HISTORY_BLOCK));
         assert!(position("dude_wakeup") > position(fw::HISTORY_BLOCK));
         assert_eq!(page.configured_tokens, Some(128));
         if include_page {
-            assert_eq!(page.compression_trigger, fw::ContextCompressionTrigger::Block);
+            assert_eq!(
+                page.compression_trigger,
+                fw::ContextCompressionTrigger::Block
+            );
             assert!(page.final_tokens < page.original_tokens.unwrap());
         } else {
-            assert_eq!(page.final_message_count, 0, "new input without a snapshot must clear the location");
+            assert_eq!(
+                page.final_message_count, 0,
+                "new input without a snapshot must clear the location"
+            );
         }
         let requests = model.requests.lock().unwrap();
         let request = requests.last().unwrap();
@@ -274,40 +347,83 @@ async fn dude_page_context_uses_shared_layout_budget_reduction_and_saved_report(
             if block.id == fw::INSTRUCTIONS_BLOCK || block.id == fw::HISTORY_BLOCK {
                 assert!(!text.contains("/page-layout-regression"));
                 assert!(!text.contains("tron_ui_page_context"));
-                assert!(!text.contains("EVENT_DATA_SENTINEL"), "event data leaked into {}", block.id);
+                assert!(
+                    !text.contains("EVENT_DATA_SENTINEL"),
+                    "event data leaked into {}",
+                    block.id
+                );
                 assert!(!text.contains("TRANSPORT_ONLY_SENTINEL"));
             }
             if block.id == "dude_wakeup" {
                 if include_page {
                     assert!(text.contains("EVENT_DATA_SENTINEL"));
                     assert!(!text.contains("TRANSPORT_ONLY_SENTINEL"));
-                    assert!(!text.contains("agent_spawn"), "fixed delegation rules cannot live in trigger data");
-                    assert!(!text.contains("relatedWork"), "empty work must not carry a rule string");
+                    assert!(
+                        !text.contains("agent_spawn"),
+                        "fixed delegation rules cannot live in trigger data"
+                    );
+                    assert!(
+                        !text.contains("relatedWork"),
+                        "empty work must not carry a rule string"
+                    );
                 } else {
-                    assert_eq!(block.final_message_count, 0, "ordinary input without pending work has no trigger data");
+                    assert_eq!(
+                        block.final_message_count, 0,
+                        "ordinary input without pending work has no trigger data"
+                    );
                 }
             }
             if block.id == "dude_environment" {
                 assert!(text.contains("scope"));
-                for field in ["toolCount", "availableTools", "limits", "maxSteps", "maxToolCalls", "maxParallelToolCalls"] {
-                    assert!(!text.contains(field), "execution controls and duplicate inventory must not reach the environment block: {field}");
+                for field in [
+                    "toolCount",
+                    "availableTools",
+                    "limits",
+                    "maxSteps",
+                    "maxToolCalls",
+                    "maxParallelToolCalls",
+                ] {
+                    assert!(
+                        !text.contains(field),
+                        "execution controls and duplicate inventory must not reach the environment block: {field}"
+                    );
                 }
                 assert_eq!(block.final_tokens, block.original_tokens.unwrap());
             }
             if block.id == "tool_domains" {
-                assert!(text.contains("domainCode"), "the dedicated inventory must remain available");
+                assert!(
+                    text.contains("domainCode"),
+                    "the dedicated inventory must remain available"
+                );
             }
             if block.id == fw::INSTRUCTIONS_BLOCK {
-                assert!(entries.iter().any(|message| message.content.text().contains("result.interactions")), "fixed event instructions must come from the managed instruction contributor");
-                assert!(entries.iter().any(|message| message.content.text().contains("child_run_id")), "delegation guidance must also be managed fixed instructions");
+                assert!(
+                    entries
+                        .iter()
+                        .any(|message| message.content.text().contains("result.interactions")),
+                    "fixed event instructions must come from the managed instruction contributor"
+                );
+                assert!(
+                    entries
+                        .iter()
+                        .any(|message| message.content.text().contains("child_run_id")),
+                    "delegation guidance must also be managed fixed instructions"
+                );
             }
             if block.id == "page_context" && include_page {
                 assert!(entries.iter().all(|message| message.role == fw::Role::User));
-                assert!(!text.contains("tronMessagePart"), "bounding must not expose transport wrappers");
+                assert!(
+                    !text.contains("tronMessagePart"),
+                    "bounding must not expose transport wrappers"
+                );
             }
             offset += block.final_message_count;
         }
-        assert_eq!(offset, request.messages.len(), "saved report must exactly describe the model request");
+        assert_eq!(
+            offset,
+            request.messages.len(),
+            "saved report must exactly describe the model request"
+        );
     }
     assert!(state.agent_framework.close().await.is_success());
 }
@@ -318,29 +434,64 @@ async fn dude_page_context_replaces_previous_snapshot_without_false_compression(
     let config = common::prepared_config(AppConfig {
         database_url: dir.path().join("tron.sqlite3").display().to_string(),
         graph_storage_path: dir.path().join("tron.grafeo").display().to_string(),
-        resource: ResourceConfig::with_default_root(dir.path().join("resources").display().to_string()),
+        resource: ResourceConfig::with_default_root(
+            dir.path().join("resources").display().to_string(),
+        ),
         ..Default::default()
     });
     let state = state(config);
-    let (soul, _) = state.dudes.begin_awakening("main-dude", "USR-AUTH-0001").unwrap();
+    let (soul, _) = state
+        .dudes
+        .begin_awakening("main-dude", "USR-AUTH-0001")
+        .unwrap();
     let session = soul.session_code.unwrap();
-    state.chats.ensure_dude_session(&state.dudes.session(&session).unwrap().unwrap(), Some("USR-AUTH-0001".into())).unwrap();
-    let model = Arc::new(Model { calls: AtomicUsize::new(4), ..Default::default() });
+    state
+        .chats
+        .ensure_dude_session(
+            &state.dudes.session(&session).unwrap().unwrap(),
+            Some("USR-AUTH-0001".into()),
+        )
+        .unwrap();
+    let model = Arc::new(Model {
+        calls: AtomicUsize::new(4),
+        ..Default::default()
+    });
     // Repeating B also exercises the persisted projection cache: neither an
     // older snapshot nor a previous reduction status may override live input.
-    for current in [Some("/page-snapshot-a"), Some("/page-snapshot-b"), Some("/page-snapshot-b"), None] {
+    for current in [
+        Some("/page-snapshot-a"),
+        Some("/page-snapshot-b"),
+        Some("/page-snapshot-b"),
+        None,
+    ] {
         let mut input: AgentInvocationCommand = serde_json::from_value(json!({
             "prompt":"Use only the current page", "workspaceCode":null,
             "conversationCode":session, "agentCode":"main-dude",
             "pageContext":current.map(|path| json!({"path":path,"title":"Current page"})),
-        })).unwrap();
+        }))
+        .unwrap();
         input.model = command(&session, json!([])).model;
         input.transcript_input_kind = Some("USER_PROMPT".into());
-        service(&state, model.clone(), &session).invoke(input, Some("USR-AUTH-0001".into()), Some("en-US".into())).await.unwrap();
-        let saved = state.short_term_memory.saved_context_assembly(&session, None).unwrap().unwrap();
-        let page = saved.report.blocks.iter().find(|block| block.id == "page_context").unwrap();
+        service(&state, model.clone(), &session)
+            .invoke(input, Some("USR-AUTH-0001".into()), Some("en-US".into()))
+            .await
+            .unwrap();
+        let saved = state
+            .short_term_memory
+            .saved_context_assembly(&session, None)
+            .unwrap()
+            .unwrap();
+        let page = saved
+            .report
+            .blocks
+            .iter()
+            .find(|block| block.id == "page_context")
+            .unwrap();
         assert_eq!(page.configured_tokens, Some(2048));
-        assert_eq!(page.compression_trigger, fw::ContextCompressionTrigger::None);
+        assert_eq!(
+            page.compression_trigger,
+            fw::ContextCompressionTrigger::None
+        );
         assert!(matches!(page.outcome, fw::ContextBlockOutcome::Kept));
         assert_eq!(page.final_tokens, page.original_tokens.unwrap());
         assert_eq!(page.final_message_count, usize::from(current.is_some()));
@@ -351,7 +502,12 @@ async fn dude_page_context_replaces_previous_snapshot_without_false_compression(
             let entries = &request.messages[offset..offset + block.final_message_count];
             let text = serde_json::to_string(entries).unwrap();
             for path in ["/page-snapshot-a", "/page-snapshot-b"] {
-                assert_eq!(text.contains(path), block.id == "page_context" && current == Some(path), "stale page or history leak in {}", block.id);
+                assert_eq!(
+                    text.contains(path),
+                    block.id == "page_context" && current == Some(path),
+                    "stale page or history leak in {}",
+                    block.id
+                );
             }
             if block.id == "page_context" && current.is_some() {
                 assert_eq!(entries[0].role, fw::Role::User);
@@ -380,9 +536,19 @@ async fn onboarding_form_resumes_after_restart_with_only_soul_tools_and_preserve
     });
     let mut config = config;
     let order = &mut config.short_term_memory.context.providers.order;
-    let history = order.iter().position(|id| id == "current_session_history").unwrap();
+    let history = order
+        .iter()
+        .position(|id| id == "current_session_history")
+        .unwrap();
     order[history + 1..].reverse();
-    config.short_term_memory.context.providers.data_blocks.get_mut("runtime_identity").unwrap().max_tokens = Some(4096);
+    config
+        .short_term_memory
+        .context
+        .providers
+        .data_blocks
+        .get_mut("runtime_identity")
+        .unwrap()
+        .max_tokens = Some(4096);
     let first = state(config.clone());
     let (soul, _) = first
         .dudes
@@ -494,16 +660,45 @@ async fn onboarding_form_resumes_after_restart_with_only_soul_tools_and_preserve
             .map(|m| m.content.text())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(!text.contains("currentSoul"), "live identity must not be a system instruction");
+        assert!(
+            !text.contains("currentSoul"),
+            "live identity must not be a system instruction"
+        );
         assert!(!text.contains("Current onboarding data"));
-        let identity = request.messages.iter().position(|message| message.content.text().contains("Current identity and soul data:")).expect("identity data contributor");
+        let identity = request
+            .messages
+            .iter()
+            .position(|message| {
+                message
+                    .content
+                    .text()
+                    .contains("Current identity and soul data:")
+            })
+            .expect("identity data contributor");
         assert_eq!(request.messages[identity].role, fw::Role::User);
-        let last_system = request.messages.iter().rposition(|message| message.role == fw::Role::System).unwrap();
+        let last_system = request
+            .messages
+            .iter()
+            .rposition(|message| message.role == fw::Role::System)
+            .unwrap();
         assert!(identity > last_system);
-        let environment = request.messages.iter().position(|message| message.content.text().contains("\"scope\"")).expect("environment contributor");
-        assert!(identity < environment, "live identity stays in the configured stable prefix even with a reversed dynamic suffix");
+        let environment = request
+            .messages
+            .iter()
+            .position(|message| message.content.text().contains("\"scope\""))
+            .expect("environment contributor");
+        assert!(
+            identity < environment,
+            "live identity stays in the configured stable prefix even with a reversed dynamic suffix"
+        );
         assert!(!text.contains("Current authorized tool domains"));
-        assert!(!request.messages.iter().any(|message| message.content.protocol_text().contains("sampleTools")), "initialization must not inherit the ordinary run's wider tool inventory");
+        assert!(
+            !request
+                .messages
+                .iter()
+                .any(|message| message.content.protocol_text().contains("sampleTools")),
+            "initialization must not inherit the ordinary run's wider tool inventory"
+        );
         assert!(!text.contains("available_skills"));
         assert!(!text.contains("工作与通知协议"));
         assert!(

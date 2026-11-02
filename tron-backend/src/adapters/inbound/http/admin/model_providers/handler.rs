@@ -161,6 +161,29 @@ pub async fn poll_authorization_session(
     Path((provider_code, session_id)): Path<(String, String)>,
     Json(_request): Json<PollAuthorizationRequest>,
 ) -> Response {
+    poll_authorization(state, provider_code, session_id, None, None).await
+}
+
+pub async fn poll_reauthorization_session(
+    State(state): State<AppState>,
+    Path((provider_code, session_id)): Path<(String, String)>,
+    headers: axum::http::HeaderMap,
+    Json(_request): Json<PollAuthorizationRequest>,
+) -> Response {
+    let profile = match state.profiles.current_context() {
+        Ok(profile) => profile,
+        Err(_) => return model_provider_error_response(ModelProviderError::AuthenticationRequired),
+    };
+    poll_authorization(state, provider_code, session_id, Some(profile), Some(headers)).await
+}
+
+async fn poll_authorization(
+    state: AppState,
+    provider_code: String,
+    session_id: String,
+    expected_profile: Option<crate::application::profile::CurrentProfileContext>,
+    headers: Option<axum::http::HeaderMap>,
+) -> Response {
     if let Err(response) = parse_provider_code(&provider_code) {
         return response;
     }
@@ -168,6 +191,7 @@ pub async fn poll_authorization_session(
         .model_providers
         .poll_authorization_session(CompleteProviderAuthorizationCommand {
             session_id: session_id.clone(),
+            expected_person_ai_user_id: expected_profile.as_ref().map(|profile| profile.person_ai_user_id.clone()),
         })
         .await
     {
@@ -177,20 +201,26 @@ pub async fn poll_authorization_session(
                 result.connection.person_ai_user_id.as_deref(),
                 result.connection.person_ai_username.as_deref(),
             ) {
-                if let Err(error) = state.workspaces.ensure_default_workspace(user_id, username) {
-                    return model_provider_profile_error(format!(
-                        "failed to initialize default workspace: {error}"
-                    ));
-                }
-                let profile = match state.profiles.register_or_update(user_id, username) {
-                    Ok(profile) => profile,
-                    Err(error) => {
+                if let Some(profile) = expected_profile.as_ref() {
+                    // Refreshing a provider's authorization does not register,
+                    // activate, rename or switch a local profile.
+                    profile_id = Some(profile.profile_id.clone());
+                } else {
+                    if let Err(error) = state.workspaces.ensure_default_workspace(user_id, username) {
                         return model_provider_profile_error(format!(
-                            "failed to register PersonAI profile: {error}"
+                            "failed to initialize default workspace: {error}"
                         ));
                     }
-                };
-                profile_id = Some(profile.profile_id);
+                    let profile = match state.profiles.register_or_update(user_id, username) {
+                        Ok(profile) => profile,
+                        Err(error) => {
+                            return model_provider_profile_error(format!(
+                                "failed to register PersonAI profile: {error}"
+                            ));
+                        }
+                    };
+                    profile_id = Some(profile.profile_id);
+                }
             }
             if let Err(error) = state.model_providers.heartbeat_active_profile().await {
                 if !matches!(
@@ -224,6 +254,19 @@ pub async fn poll_authorization_session(
                 .into_response(),
                 Err(error) => model_provider_error_response(error),
             }
+        }
+        Err(ModelProviderError::AuthorizationAccountMismatch) => {
+            let locale = crate::shared::locale::resolve_request_locale(headers.as_ref()
+                .and_then(|headers| headers.get(axum::http::header::ACCEPT_LANGUAGE))
+                .and_then(|value| value.to_str().ok()));
+            (StatusCode::CONFLICT, Json(ApiResponse::<EmptyData>::error(
+                "MODEL_PROVIDER_AUTH_ACCOUNT_MISMATCH",
+                if locale.starts_with("zh") {
+                    "请使用当前 Profile 对应的 PersonAI 账号重新授权；其他账号请从 Profile 页面添加"
+                } else {
+                    "Authorize with the current profile's PersonAI account; add another account from the profile page"
+                },
+            ))).into_response()
         }
         Err(error) => model_provider_error_response(error),
     }
@@ -293,6 +336,9 @@ fn model_provider_error_response(error: ModelProviderError) -> Response {
         ModelProviderError::AuthorizationEnded(_) => {
             (StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_ENDED")
         }
+        ModelProviderError::AuthorizationAccountMismatch => (
+            StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_ACCOUNT_MISMATCH",
+        ),
         ModelProviderError::InvalidServerBaseUrl => {
             (StatusCode::BAD_REQUEST, "MODEL_PROVIDER_SERVER_URL_INVALID")
         }

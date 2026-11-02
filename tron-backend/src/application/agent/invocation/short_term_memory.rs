@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn todo_disabled_when_catalog_omits_todo_update() {
-        let context = context_with_tools(vec![tool("bash_exec")]);
+        let context = context_with_tools(vec![tool("command_exec")]);
         assert!(!resolve_todo_enabled(&context));
     }
 

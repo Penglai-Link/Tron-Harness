@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { useTabStore } from "@/store/tabStore";
 import { Archive, ExternalLink, LoaderCircle, MailCheck, MailOpen, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,7 @@ export function NotificationsPage() {
   const { t, i18n } = useTranslation("pages");
   const client = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const active = useTabVisibility();
   const [filter, setFilter] = useState<"all" | "unread" | "read" | "archived">("unread");
@@ -29,6 +32,7 @@ export function NotificationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PlatformNotification | "all" | null>(null);
   const [deletePending, setDeletePending] = useState(false);
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
   const [detailReadId, setDetailReadId] = useState<string | null>(null);
   const query = useQuery({
     queryKey: notificationQueryKey,
@@ -99,8 +103,15 @@ export function NotificationsPage() {
     void change(selectedNotification.id, true, false, `read:${selectedNotification.id}`);
   }, [active, detailReadId, selectedNotification]);
   function closeDetails() {
+    setDismissedId(selectedNotificationId);
     const next = new URLSearchParams(searchParams);
     next.delete("notification");
+    const tabs = useTabStore.getState();
+    const current = tabs.tabs.find((tab) => tab.id === tabs.activeTabId);
+    if (active && current && current.path.split("?")[0] === location.pathname) {
+      const query = next.toString();
+      tabs.updateTab(current.id, { path: `${location.pathname}${query ? `?${query}` : ""}` });
+    }
     setSearchParams(next, { replace: true });
   }
   return (
@@ -175,6 +186,7 @@ export function NotificationsPage() {
               className="flex cursor-pointer flex-wrap items-start gap-3 py-4"
               onClick={() => {
                 const next = new URLSearchParams(searchParams);
+                setDismissedId(null);
                 next.set("notification", item.id);
                 setSearchParams(next);
               }}
@@ -182,6 +194,7 @@ export function NotificationsPage() {
                 if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                   event.preventDefault();
                   const next = new URLSearchParams(searchParams);
+                  setDismissedId(null);
                   next.set("notification", item.id);
                   setSearchParams(next);
                 }
@@ -286,7 +299,7 @@ export function NotificationsPage() {
           {t("notifications.empty")}
         </p>
       ) : null}
-      <Dialog open={Boolean(selectedNotificationId)} onOpenChange={(open) => { if (!open) closeDetails(); }}>
+      <Dialog open={active && Boolean(selectedNotificationId) && selectedNotificationId !== dismissedId} onOpenChange={(open) => { if (!open && active) closeDetails(); }}>
         {selectedNotification ? <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl" closeLabel={t("dude.close")}>
           <DialogHeader>
             <DialogTitle>{selectedNotification.title}</DialogTitle>
@@ -300,7 +313,7 @@ export function NotificationsPage() {
             {Array.isArray(selectedNotification.target.evidence) && selectedNotification.target.evidence.some((value) => typeof value === "string") ? <div><p className="font-medium">{t("notifications.evidence")}</p><ul className="mt-1 list-inside list-disc space-y-1 text-[var(--color-on-surface-variant)]">{selectedNotification.target.evidence.filter((value): value is string => typeof value === "string").map((entry) => <li key={entry} className="break-all">{entry}</li>)}</ul></div> : null}
           </div>
           <DialogFooter>
-            {notificationTarget(selectedNotification) ? <Button variant="outline" onClick={() => navigate(notificationTarget(selectedNotification)!)}><ExternalLink aria-hidden="true" />{t("notifications.openRelated")}</Button> : null}
+            {notificationTarget(selectedNotification) ? <Button variant="outline" onClick={() => { const target = notificationTarget(selectedNotification); if (!target) return; flushSync(() => closeDetails()); navigate(target); }}><ExternalLink aria-hidden="true" />{t("notifications.openRelated")}</Button> : null}
             <Button onClick={closeDetails}>{t("dude.close")}</Button>
           </DialogFooter>
         </DialogContent> : null}

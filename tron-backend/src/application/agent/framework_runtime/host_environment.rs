@@ -166,16 +166,19 @@ impl FrameworkHost {
         }
         skills.rescan_registry().map_err(|e| e.to_string())?;
         if let Some(resources) = self.0.capability_resources.get() {
-            let tools =
-                crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US");
+            let tools = self
+                .0
+                .agent_management
+                .get()
+                .map(|management| management.list_tools(None, None, "en-US"))
+                .unwrap_or_else(|| {
+                    crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US")
+                });
             let mut owned = Vec::new();
             for pack in super::super::capability_catalog::capability_pack_catalog() {
                 let available = state.get(&pack.id).copied().unwrap_or(true);
                 for item in pack.contents.iter().filter(|c| c.kind == "Tool") {
-                    if let Some(tool) = tools
-                        .iter()
-                        .find(|t| super::super::tools::official_name(&t.tool_name) == item.name)
-                    {
+                    if let Some(tool) = tools.iter().find(|t| t.tool_name == item.name) {
                         owned.push(CapabilityResource {
                             pack_id: pack.id.clone(),
                             kind: "tool".into(),
@@ -202,7 +205,53 @@ impl FrameworkHost {
         }
         Ok(())
     }
-    async fn discover_imported_tools(&self, framework: &Framework) -> Result<(), String> {
+    fn builtin_tool_catalog(
+        &self,
+        framework: &Framework,
+    ) -> Result<Vec<(fw::ToolCatalogEntry, fw::ToolSource)>, String> {
+        let services = framework.services().map_err(|e| e.to_string())?;
+        let installed = self.0.installed_packs.read().unwrap().clone();
+        let packs = super::super::capability_catalog::capability_pack_catalog();
+        let mut catalog_entries = Vec::new();
+        for (plugin_id, provider) in services
+            .providers::<fw::ToolProviderService>()
+            .into_iter()
+            .zip(services.all::<fw::ToolProviderService>())
+        {
+            if installed
+                .values()
+                .any(|ids| ids.iter().any(|id| id == plugin_id))
+            {
+                continue;
+            }
+            let Some(entries) = provider.0.catalog_metadata() else {
+                continue;
+            };
+            let pack = packs.iter().find(|pack| {
+                pack.contents
+                    .iter()
+                    .any(|item| item.kind == "Plugin" && item.name == plugin_id)
+            });
+            let source = fw::ToolSource {
+                provider_id: Some(if plugin_id == "tron.harness.tools" {
+                    crate::application::agent::tool_catalog::HARNESS_TOOL_PROVIDER_ID.to_owned()
+                } else {
+                    plugin_id.to_owned()
+                }),
+                plugin_id: Some(plugin_id.to_owned()),
+                pack_id: pack.map(|pack| pack.id.clone()),
+                adapter_id: None,
+            };
+            catalog_entries.extend(entries.into_iter().map(|entry| (entry, source.clone())));
+        }
+        Ok(catalog_entries)
+    }
+
+    async fn discover_imported_tools(
+        &self,
+        framework: &Framework,
+        mut catalog_entries: Vec<(fw::ToolCatalogEntry, fw::ToolSource)>,
+    ) -> Result<(), String> {
         let (Some(resources), Some(management)) = (
             self.0.capability_resources.get(),
             self.0.agent_management.get(),
@@ -215,6 +264,16 @@ impl FrameworkHost {
         let options = fw::ModelInvocationOptions::for_call(&fw::RunLimits::default())
             .map_err(|e| e.to_string())?;
         let run = options.run.as_ref().ok_or("catalog context unavailable")?;
+        let bundled =
+            crate::application::agent::BusinessToolCatalog::list_tools(None, None, "en-US");
+        let mut ids = catalog_entries
+            .iter()
+            .map(|(entry, _)| entry.descriptor.id.clone())
+            .collect::<std::collections::HashSet<_>>();
+        let mut names = catalog_entries
+            .iter()
+            .map(|(entry, _)| entry.descriptor.call_name.clone())
+            .collect::<std::collections::HashSet<_>>();
         for (provider_id, provider) in services
             .providers::<fw::ToolProviderService>()
             .into_iter()
@@ -226,41 +285,54 @@ impl FrameworkHost {
             else {
                 continue;
             };
-            let mut lease = provider.0.lease(run).await.map_err(|e| e.to_string())?;
-            let result = (|| {
-                for tool in &lease.tools {
-                    if crate::application::agent::BusinessToolCatalog::list_tools(
-                        None, None, "en-US",
-                    )
-                    .iter()
-                    .any(|t| {
-                        t.tool_code == tool.descriptor.id
-                            || t.tool_name == tool.descriptor.call_name
-                    }) {
-                        return Err(format!(
-                            "tool {} conflicts with a bundled tool",
-                            tool.descriptor.id
-                        ));
-                    }
-                    resources.register(&[crate::application::capability::CapabilityResource {
-                        pack_id: pack.clone(),
-                        kind: "tool".into(),
-                        code: tool.descriptor.id.clone(),
-                        available: state.get(pack).copied().unwrap_or(false),
-                    }])?;
-                    tron_harness_capability::ToolPermissionSource::setting(
-                        management,
-                        &tool.descriptor,
-                    )?;
+            // Prefer inert metadata: listing settings must not require the
+            // credentials, filesystem grants or resources of an Agent run.
+            let entries = if let Some(entries) = provider.0.catalog_metadata() {
+                entries.into_iter().map(|entry| (entry, fw::ToolSource::default())).collect()
+            } else {
+                let mut lease = provider.0.lease(run).await.map_err(|e| e.to_string())?;
+                let entries = lease.tools.iter()
+                    .map(|tool| (tool.catalog_entry(), tool.source.clone()))
+                    .collect::<Vec<_>>();
+                let report = lease.resources.close_async(Duration::from_secs(5)).await;
+                if !report.is_success() {
+                    return Err(format!("catalog lease cleanup failed: {report:?}"));
                 }
-                Ok::<_, String>(())
-            })();
-            let report = lease.resources.close_async(Duration::from_secs(5)).await;
-            if !report.is_success() {
-                return Err(format!("catalog lease cleanup failed: {report:?}"));
+                entries
+            };
+            for (entry, mut source) in entries {
+                if bundled.iter().any(|t| {
+                    t.tool_code == entry.descriptor.id || t.tool_name == entry.descriptor.call_name
+                }) || !ids.insert(entry.descriptor.id.clone())
+                    || !names.insert(entry.descriptor.call_name.clone())
+                {
+                    return Err(format!("tool {} conflicts with a bundled tool", entry.descriptor.id));
+                }
+                source.plugin_id.get_or_insert_with(|| provider_id.to_owned());
+                source.pack_id.get_or_insert_with(|| pack.clone());
+                source.provider_id.get_or_insert_with(|| provider_id.to_owned());
+                catalog_entries.push((entry, source));
             }
-            result?;
         }
+        let records = management.register_tool_catalog_entries(&catalog_entries)?;
+        let owned = records
+            .into_iter()
+            .filter_map(|record| {
+                record.source.pack_id.map(|pack_id| {
+                    let available = state
+                        .get(&pack_id)
+                        .copied()
+                        .unwrap_or(!installed.contains_key(&pack_id));
+                    crate::application::capability::CapabilityResource {
+                        pack_id,
+                        kind: "tool".into(),
+                        code: record.tool_code,
+                        available,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        resources.register(&owned)?;
         Ok(())
     }
     pub async fn ensure_capability_catalog(&self) -> Result<(), String> {
@@ -293,43 +365,26 @@ impl FrameworkHost {
                 )
                 .map_err(|error| error.to_string())?,
             )
-            .plugin(
-                {
-                    let mut storage = LocalStoragePlugin::new(&self.0.path, self.0.path.with_extension("artifacts"))
+            .plugin({
+                let mut storage =
+                    LocalStoragePlugin::new(&self.0.path, self.0.path.with_extension("artifacts"))
                         .with_database(self.shared_database().await.map_err(|e| e.to_string())?);
-                    // Match the assembler's source-size safety guard. The owning
-                    // memory block's token quota controls summary size, not the
-                    // storage plugin's smaller general-purpose default record cap.
-                    storage.config.summaries.max_record_bytes = 16 * 1024 * 1024;
-                    // Persistent product conversations are not an in-memory cache:
-                    // normal saved history must not block every new chat/child at 1024.
-                    storage.config.conversations.max_sessions = usize::MAX;
-                    storage
-                },
-            )
+                // Match the assembler's source-size safety guard. The owning
+                // memory block's token quota controls summary size, not the
+                // storage plugin's smaller general-purpose default record cap.
+                storage.config.summaries.max_record_bytes = 16 * 1024 * 1024;
+                // Persistent product conversations are not an in-memory cache:
+                // normal saved history must not block every new chat/child at 1024.
+                storage.config.conversations.max_sessions = usize::MAX;
+                storage
+            })
             // Stable two-tool gateway: every other provider's bindings become
             // wrapped inventory so `request.tools` stays the same pair for the
             // whole run and provider prompt caches survive tool growth.
-            .plugin(
-                eliteforge_agent_official_plugin_tools_discovery::ToolDiscoveryPlugin::new(),
-            )
+            .plugin(eliteforge_agent_official_plugin_tools_discovery::ToolDiscoveryPlugin::new())
             .plugin(fw::AgentLoopPlugin::named(
                 "framework.react",
                 eliteforge_agent_framework::ReactAgentLoop,
-            ))
-            .plugin(fw::AgentLoopPlugin::named(
-                "tron.configured-loop",
-                super::super::configured_loop::ConfiguredLoop(
-                    self.0.agent_management.get().cloned(),
-                ),
-            ))
-            .plugin(fw::WorkflowNodePlugin::new(
-                "tron.branch",
-                super::super::configured_loop::BranchNode,
-            ))
-            .plugin(fw::WorkflowNodePlugin::new(
-                "tron.model-stage",
-                super::super::configured_loop::ModelStageNode,
             ))
             .plugin(fw::AgentLoopPlugin::named(
                 "tron.external-loop",
@@ -507,14 +562,7 @@ impl FrameworkHost {
             }
         };
         Ok(AgentSelection {
-            agent_loop: Some(
-                if self.0.agent_management.get().is_some() {
-                    "tron.configured-loop"
-                } else {
-                    "framework.react"
-                }
-                .into(),
-            ),
+            agent_loop: Some("framework.react".into()),
             external_agent: Some("framework.external-agent".into()),
             model_strategy: one(registry.providers::<fw::ModelStrategyService>())?,
             context_assembler: Some(
@@ -595,14 +643,6 @@ impl FrameworkHost {
                                     eliteforge_agent_official_plugin_a2ui::A2UI_PACK_ID,
                                 ))
                     })
-                    .map(str::to_owned)
-                    .collect(),
-            ),
-            workflow_nodes: Some(
-                registry
-                    .providers::<fw::WorkflowNodeService>()
-                    .into_iter()
-                    .filter(|id| selected(id))
                     .map(str::to_owned)
                     .collect(),
             ),
@@ -688,7 +728,17 @@ impl FrameworkHost {
             .map_err(fw::AgentError::InvalidConfiguration)?
             .build()
             .await?;
-        if let Err(error) = self.discover_imported_tools(&framework).await {
+        let builtin_catalog = match self.builtin_tool_catalog(&framework) {
+            Ok(catalog) => catalog,
+            Err(error) => {
+                let _ = framework.close().await;
+                return Err(fw::AgentError::InvalidConfiguration(error));
+            }
+        };
+        if let Err(error) = self
+            .discover_imported_tools(&framework, builtin_catalog)
+            .await
+        {
             let _ = framework.close().await;
             return Err(fw::AgentError::InvalidConfiguration(error));
         }

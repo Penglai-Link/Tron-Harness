@@ -126,6 +126,36 @@ pub(super) fn attach(
     }
 }
 impl Runtime {
+    fn answer_provenance(
+        &self,
+        parent: &fw::RunContext,
+        interaction: fw::RunId,
+    ) -> fw::MessageProvenance {
+        fw::MessageProvenance {
+            sender: fw::MessageSender {
+                kind: if self
+                    .context
+                    .collaboration_owner
+                    .as_ref()
+                    .is_some_and(|owner| {
+                        owner.kind == "DUDE"
+                            && self.context.agent_code.as_deref() == Some(owner.code.as_str())
+                    }) {
+                    "DUDE"
+                } else {
+                    "AGENT"
+                }
+                .into(),
+                id: self.context.agent_code.clone(),
+                display_name: self.context.agent_code.clone(),
+                avatar_url: None,
+            },
+            source: Some("CALLER_INTERACTION".into()),
+            correlation: Some(
+                serde_json::json!({"callerSessionId":parent.session_id,"interactionId":interaction}),
+            ),
+        }
+    }
     fn host(&self) -> Result<FrameworkHost, fw::AgentError> {
         let host = FrameworkHost(
             self.host
@@ -355,17 +385,9 @@ impl Runtime {
             "agentCode": code, "model": model, "systemModelId": system_model,
         }))
         .map_err(failure)?;
-        // Synchronous agent_spawn has no durable interaction continuation. Escalate
-        // missing facts in its result; detached children expose interactions to
-        // their caller, and only independent Threads may await user input.
-        command.supports_user_input_requests = !(matches!(
-            limits,
-            ExecutionLimits::AgentDefinition | ExecutionLimits::AgentDefinitionDetached
-        ) && sender.is_none())
-            && caller_context
-                .collaboration_owner
-                .as_ref()
-                .is_some_and(|owner| owner.kind == "DUDE");
+        // Collaboration questions target the invoking agent. The caller may
+        // separately ask its human, then answer this native interaction.
+        command.supports_user_input_requests = false;
         command.run_code = request
             .resume
             .as_ref()
@@ -373,9 +395,13 @@ impl Runtime {
         let mut execution_scope = base.execution_scope.clone();
         if let Some(directory) = request.working_directory.take() {
             if matches!(session_preparation, SessionPreparation::Existing) {
-                return Err(failure("an existing thread keeps its bound working directory"));
+                return Err(failure(
+                    "an existing thread keeps its bound working directory",
+                ));
             }
-            execution_scope = host.delegated_execution_scope(base, &directory).map_err(failure)?;
+            execution_scope = host
+                .delegated_execution_scope(base, &directory)
+                .map_err(failure)?;
         }
         command.execution_scope_override = Some(execution_scope);
         // Collaboration uses native sessions; no product chat or checkpoint is fabricated.
@@ -422,9 +448,12 @@ impl Runtime {
                 _ => "agent.delegated-sync",
             };
             let text = if let Some(prompts) = host.0.prompt_service.get() {
-                prompts.runtime_prompt_text(key, &context.locale, &std::collections::HashMap::new())
+                prompts
+                    .runtime_prompt_text(key, &context.locale, &std::collections::HashMap::new())
                     .map_err(|error| failure(format!("managed developer prompt `{key}`: {error}")))?
-                    .ok_or_else(|| failure(format!("managed developer prompt `{key}` is disabled")))?
+                    .ok_or_else(|| {
+                        failure(format!("managed developer prompt `{key}` is disabled"))
+                    })?
             } else {
                 crate::domain::prompt::builtin_prompt_text(key, &context.locale)
                     .ok_or_else(|| failure(format!("bundled developer prompt `{key}` is missing")))?
@@ -439,6 +468,52 @@ impl Runtime {
             }
         }
         authorize_tools(&host, context);
+        let caller_guidance = if let Some(prompts) = host.0.prompt_service.get() {
+            prompts
+                .runtime_prompt_text(
+                    "agent.collaboration-caller",
+                    &context.locale,
+                    &std::collections::HashMap::new(),
+                )
+                .map_err(|error| failure(format!("managed caller prompt: {error}")))?
+                .ok_or_else(|| failure("managed caller prompt is disabled"))?
+        } else {
+            crate::domain::prompt::builtin_prompt_text(
+                "agent.collaboration-caller",
+                &context.locale,
+            )
+            .ok_or_else(|| failure("bundled caller prompt is missing"))?
+            .to_owned()
+        };
+        let caller_guidance = crate::domain::agent::AgentMessage::system(caller_guidance)
+            .with_instruction_origin(fw::InstructionOrigin::Plugin);
+        std::sync::Arc::make_mut(&mut context.messages).push(caller_guidance.clone());
+        if let Some(memory) = &mut context.short_term_memory {
+            memory.prompt_prefix.push(caller_guidance);
+            memory.prompt_prefix_sources.push(None);
+        }
+        let caller_question = official::AskCallerTool::descriptor();
+        for tools in [&mut context.tools, &mut context.effective_tools] {
+            tools.retain(|tool| {
+                !matches!(
+                    tool.tool_name.as_str(),
+                    "chat_ask_user" | "ask_user" | "a2ui_request_input"
+                )
+            });
+            if !tools
+                .iter()
+                .any(|tool| tool.tool_name == caller_question.call_name)
+            {
+                tools.push(EffectiveTool {
+                    tool_name: caller_question.call_name.clone(),
+                    domain_code: Some("subagent".into()),
+                    description: caller_question.description.clone(),
+                    input_schema: caller_question.input_schema.clone(),
+                    skill_name: None,
+                    required_variable_keys: vec![],
+                });
+            }
+        }
         match session_preparation {
             SessionPreparation::New => {
                 host.create_collaboration_session(
@@ -462,6 +537,7 @@ impl Runtime {
         request.run_id = Some(fw::RunId::parse_str(&context.run_code).map_err(failure)?);
         request.model = None;
         request.extensions = fw::Extensions::default();
+        request.extensions.insert(fw::CallerInteractionScope);
         // Capture the active caller tool span before SDK-owned tasks are started.
         let trace_parent = opentelemetry::Context::current();
         request
@@ -482,7 +558,11 @@ impl Runtime {
             return Err(failure("host collaboration context must be an object"));
         }
         request.host_context = Some(host_context);
-        request.message_provenance = Some(fw::MessageProvenance {
+        let answered_by = request
+            .message_provenance
+            .clone()
+            .filter(|_| request.resume.is_some());
+        request.message_provenance = answered_by.or_else(|| Some(fw::MessageProvenance {
             sender: sender.unwrap_or_else(|| fw::MessageSender {
                 kind: if caller_context
                     .collaboration_owner
@@ -504,7 +584,7 @@ impl Runtime {
             correlation: Some(
                 serde_json::json!({"originSessionCode": parent.map(|parent| &parent.session_id), "initiatorAgentCode": caller_context.agent_code}),
             ),
-        });
+        }));
         request.assistant_provenance = Some(fw::MessageProvenance {
             sender: fw::MessageSender {
                 kind: "AGENT".into(),

@@ -206,8 +206,7 @@ async fn main_dude_cannot_be_replaced_or_deleted_and_keeps_its_conversation() {
         "/api/v1/dudes",
         Some(json!({
             "dudeCode":"acceptance-brother", "name":"Acceptance Brother",
-            "rolePrompt":"Independent acceptance Dude.", "loopCode":old_main["loopCode"],
-            "avatarId":old_main["avatarId"], "candidateModelCodes":[],
+            "rolePrompt":"Independent acceptance Dude.", "avatarId":old_main["avatarId"], "candidateModelCodes":[],
             "enabled":false, "heartbeatMinutes":30, "memoryAutoApprove":false
         })),
     )
@@ -381,21 +380,38 @@ async fn dude_avatar_editor_saves_every_shipped_avatar_without_changing_soul() {
         let soul_uri = format!("{uri}/soul");
         let before = data(&fixture.router, Method::GET, &soul_uri, None).await;
         let profile = data(&fixture.router, Method::GET, &uri, None).await;
-        data(&fixture.router, Method::PATCH, &uri, Some(json!({"avatarId":"neo"}))).await;
+        data(
+            &fixture.router,
+            Method::PATCH,
+            &uri,
+            Some(json!({"avatarId":"neo"})),
+        )
+        .await;
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../tron-frontend/src/domain/agent/assets/avatars");
         for entry in std::fs::read_dir(assets).unwrap() {
             let path = entry.unwrap().path();
-            if path.extension().and_then(|s| s.to_str()) != Some("png") { continue; }
+            if path.extension().and_then(|s| s.to_str()) != Some("png") {
+                continue;
+            }
             let avatar = path.file_stem().unwrap().to_str().unwrap();
-            let saved = data(&fixture.router, Method::PATCH, &uri, Some(json!({
-                "avatarId": avatar, "rolePrompt": profile["rolePrompt"],
-                "loopCode": profile["loopCode"], "candidateModelCodes": profile["candidateModelCodes"],
-                "enabled": true, "heartbeatMinutes": 30, "memoryAutoApprove": false
-            }))).await;
+            let saved = data(
+                &fixture.router,
+                Method::PATCH,
+                &uri,
+                Some(json!({
+                    "avatarId": avatar, "rolePrompt": profile["rolePrompt"],
+                    "candidateModelCodes": profile["candidateModelCodes"],
+                    "enabled": true, "heartbeatMinutes": 30, "memoryAutoApprove": false
+                })),
+            )
+            .await;
             assert_eq!(saved["avatarId"], avatar);
         }
-        assert_eq!(data(&fixture.router, Method::GET, &soul_uri, None).await, before);
+        assert_eq!(
+            data(&fixture.router, Method::GET, &soul_uri, None).await,
+            before
+        );
     }
 }
 
@@ -413,8 +429,7 @@ async fn custom_dude_deletion_is_atomic_with_its_agent_definition_and_grants() {
         Method::POST,
         "/api/v1/dudes",
         Some(json!({
-            "dudeCode":code, "name":"Atomic Delete Dude", "loopCode":main["loopCode"],
-            "rolePrompt":"Deletion acceptance only.", "enabled":false
+            "dudeCode":code, "name":"Atomic Delete Dude", "rolePrompt":"Deletion acceptance only.", "enabled":false
         })),
     )
     .await;

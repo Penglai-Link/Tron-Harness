@@ -161,6 +161,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
                         quality.as_str(),
                     );
                     distinct.entry(key).or_insert_with(|| ExternalCatalogModel {
+                        tags: model.tags.clone(),
                         model_code: model.model_code.clone(),
                         model_name: model.model_name.unwrap_or(model.model_code),
                         protocols: model
@@ -206,6 +207,11 @@ impl ModelProviderAdapter for PersonAiAdapter {
                 };
                 distinct.entry(model.model_id.clone()).or_insert_with(|| {
                     ExternalMultimediaCatalogModel {
+                        upstream_vendor_code: model.provider_code,
+                        upstream_vendor_name: model.provider_name,
+                        input_coefficient: model.input_coefficient,
+                        cache_hit_coefficient: model.cache_hit_coefficient,
+                        output_coefficient: model.output_coefficient,
                         model_id: model.model_id,
                         model_name: model.model_name.unwrap_or_else(|| model.model_code.clone()),
                         model_code: model.model_code,

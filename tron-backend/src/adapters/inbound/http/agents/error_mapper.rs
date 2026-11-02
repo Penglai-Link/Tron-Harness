@@ -159,26 +159,6 @@ pub fn agent_management_error_response(error: AgentManagementError) -> Response 
             "101028015",
             "Invalid tool permission configuration".to_string(),
         ),
-        AgentManagementError::LoopInvalid => (
-            StatusCode::BAD_REQUEST,
-            "101028011",
-            "Loop definition is invalid".to_string(),
-        ),
-        AgentManagementError::LoopNotFound => (
-            StatusCode::NOT_FOUND,
-            "101028012",
-            "Loop was not found".to_string(),
-        ),
-        AgentManagementError::LoopConflict => (
-            StatusCode::CONFLICT,
-            "101028013",
-            "Loop code or version conflicts".to_string(),
-        ),
-        AgentManagementError::LoopInUse => (
-            StatusCode::CONFLICT,
-            "101028014",
-            "Loop is in use".to_string(),
-        ),
         AgentManagementError::InternalAgentDefinitionInvalid
         | AgentManagementError::InternalAgentPolicyInvalid => (
             StatusCode::BAD_REQUEST,

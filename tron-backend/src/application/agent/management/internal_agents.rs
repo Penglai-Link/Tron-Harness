@@ -99,7 +99,9 @@ impl AgentManagementService {
             let selected_tool_codes = normalize_string_codes(
                 tools
                     .iter()
-                    .filter(|tool| mode.strategy().includes(tool, &selected))
+                    .filter(|tool| {
+                        mode.includes_policy(tool, &selected, &policy.selected_category_codes)
+                    })
                     .map(|tool| tool.tool_code.clone())
                     .collect(),
             );
@@ -115,7 +117,6 @@ impl AgentManagementService {
                 avatar_id: definition.avatar_id,
                 candidate_model_codes: definition.candidate_model_codes,
                 group_name: definition.group_name,
-                loop_code: definition.loop_code,
                 platform_defined: definition.platform_defined,
                 built_in: definition.built_in,
                 source: (override_policy.is_some()
@@ -126,6 +127,7 @@ impl AgentManagementService {
                 .then_some(InternalAgentPolicySource::WorkspaceOverride)
                 .unwrap_or(InternalAgentPolicySource::PlatformDefault),
                 tool_assignment_mode: mode,
+                selected_category_codes: policy.selected_category_codes.clone(),
                 mcp_access_mode: policy.mcp_access_mode,
                 max_steps: policy.max_steps,
                 max_tool_calls: policy.max_tool_calls,
@@ -168,6 +170,7 @@ impl AgentManagementService {
         agent_code: &str,
         command: UpdateWorkspaceInternalAgentPolicyCommand,
     ) -> Result<InternalAgentToolPolicy, AgentManagementError> {
+        self.validate_selected_categories(&command.selected_category_codes)?;
         self.active_workspace_detail(workspace_code)?;
         let definition = self
             .resolve_internal_agent_default(workspace_code, agent_code)?
@@ -177,6 +180,10 @@ impl AgentManagementService {
         let mut overridden_fields = self.saved_override_fields(workspace_code, agent_code)?;
         for (field, changed) in [
             ("toolAssignmentMode", command.tool_assignment_mode.is_some()),
+            (
+                "selectedCategoryCodes",
+                command.selected_category_codes.is_some(),
+            ),
             ("maxSteps", command.max_steps.is_some()),
             ("maxToolCalls", command.max_tool_calls.is_some()),
             (
@@ -192,6 +199,10 @@ impl AgentManagementService {
         let updated = WorkspaceInternalAgentPolicy {
             workspace_code: workspace_code.to_string(),
             agent_code: definition.agent_code.clone(),
+            selected_category_codes: command
+                .selected_category_codes
+                .map(normalize_string_codes)
+                .unwrap_or(current.selected_category_codes.clone()),
             tool_assignment_mode: command
                 .tool_assignment_mode
                 .unwrap_or(current.tool_assignment_mode),
@@ -252,6 +263,7 @@ impl AgentManagementService {
             workspace_code: workspace_code.to_string(),
             agent_code: definition.agent_code.clone(),
             tool_assignment_mode: current.tool_assignment_mode,
+            selected_category_codes: current.selected_category_codes.clone(),
             mcp_access_mode: command.mcp_access_mode.unwrap_or(current.mcp_access_mode),
             max_steps: current.max_steps,
             max_tool_calls: current.max_tool_calls,
@@ -426,6 +438,9 @@ fn merge_policy(
         for field in &saved.overridden_fields {
             match field.as_str() {
                 "toolAssignmentMode" => base.tool_assignment_mode = saved.tool_assignment_mode,
+                "selectedCategoryCodes" => {
+                    base.selected_category_codes = saved.selected_category_codes.clone()
+                }
                 "mcpAccessMode" => base.mcp_access_mode = saved.mcp_access_mode,
                 "maxSteps" => base.max_steps = saved.max_steps,
                 "maxToolCalls" => base.max_tool_calls = saved.max_tool_calls,
@@ -448,6 +463,7 @@ fn to_internal_policy_record(
         workspace_code: workspace_code.to_string(),
         agent_code: definition.agent_code.clone(),
         tool_assignment_mode: definition.tool_assignment_mode,
+        selected_category_codes: definition.selected_category_codes.clone(),
         mcp_access_mode: definition.mcp_access_mode,
         max_steps: definition.max_steps,
         max_tool_calls: definition.max_tool_calls,

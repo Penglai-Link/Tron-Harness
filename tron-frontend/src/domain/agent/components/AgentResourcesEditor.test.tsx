@@ -13,7 +13,7 @@ vi.mock("@/domain/agent/model", () => ({ PLATFORM_INTERNAL_AGENT_SCOPE: "$platfo
 vi.mock("@/domain/skill/api", () => ({ setAgentSkills: api.skills }));
 vi.mock("@/domain/knowledge-base/api/knowledgeBaseApi", () => ({ setAgentKnowledgeLibraries: api.knowledge }));
 vi.mock("@/domain/mcp", () => ({ fetchPlatformMcpServers: vi.fn().mockResolvedValue([]) }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: {language: "en-US", resolvedLanguage: "en-US"} }) }));
 vi.mock("@/components/info-tooltip", () => ({ InfoTooltip: () => null }));
 vi.mock("@/components/forms", () => ({
   Field: ({ label, actions, children }: { label: ReactNode; actions?: ReactNode; children: ReactNode }) => <div>{label}{actions}{children}</div>,
@@ -45,6 +45,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Agent resource drafts", () => {
+  it("saves a union of categories without replacing explicit tool assignments", async () => {
+    api.tools.mockResolvedValue([{toolCode:"a", category:{code:"tron.platform", names:{"en-US":"Platform"}}}, {toolCode:"b",category:{code:"system.command",names:{"en-US":"System"}}}]);
+    const ref = mount(); await screen.findByText("Choose skill");
+    fireEvent.change(screen.getAllByRole("combobox")[1], {target:{value:"selected_categories"}});
+    fireEvent.click(await screen.findByRole("checkbox", {name:"Platform"}));
+    fireEvent.click(screen.getByRole("checkbox", {name:"System"}));
+    await act(() => ref.current!.save());
+    expect(api.policy).toHaveBeenCalledWith("$platform", "dude-a", {toolAssignmentMode:"selected_categories", selectedCategoryCodes:["tron.platform","system.command"]});
+    expect(api.assignTools).not.toHaveBeenCalled();
+  });
+
   it("saves the dynamic read-only rule without writing a fixed tool list", async () => {
     const ref = mount(); await screen.findByText("Choose skill");
     fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "all_read_only_tools" } });

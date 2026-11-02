@@ -38,7 +38,7 @@ pub fn ask_user_definition(locale: &str) -> EffectiveTool {
     }
     EffectiveTool {
         tool_name: CHAT_ASK_USER_TOOL.into(),
-        domain_code: Some("chat".into()),
+        domain_code: Some("user_interaction".into()),
         description: translate(locale, "agent.toolCatalog.tools.chat.ask_user.description").into(),
         input_schema: materialize_schema(locale, &schema),
         skill_name: None,

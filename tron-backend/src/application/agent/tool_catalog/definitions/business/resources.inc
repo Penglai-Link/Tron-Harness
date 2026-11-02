@@ -1,7 +1,7 @@
 fn platform_resource_query_definition() -> ToolCatalogDefinition {
     definition(
         "platform.resource.query",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.platform.resource.query.description",
@@ -14,7 +14,7 @@ fn platform_resource_query_definition() -> ToolCatalogDefinition {
 fn platform_resource_get_definition() -> ToolCatalogDefinition {
     platform_code_definition(
         "platform.resource.get",
-        "resource",
+        "harness_resource",
         "resourceCode",
         "release-notes",
         ToolOperationKind::Query,
@@ -24,7 +24,7 @@ fn platform_resource_get_definition() -> ToolCatalogDefinition {
 fn platform_resource_create_definition() -> ToolCatalogDefinition {
     definition(
         "platform.resource.create",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.resource.create.description",
@@ -37,7 +37,7 @@ fn platform_resource_create_definition() -> ToolCatalogDefinition {
 fn platform_resource_update_definition() -> ToolCatalogDefinition {
     definition(
         "platform.resource.update",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.resource.update.description",
@@ -50,7 +50,7 @@ fn platform_resource_update_definition() -> ToolCatalogDefinition {
 fn platform_resource_delete_definition() -> ToolCatalogDefinition {
     platform_code_definition(
         "platform.resource.delete",
-        "resource",
+        "harness_resource",
         "resourceCode",
         "release-notes",
         ToolOperationKind::Command,
@@ -60,7 +60,7 @@ fn platform_resource_delete_definition() -> ToolCatalogDefinition {
 fn platform_resource_binary_definition() -> ToolCatalogDefinition {
     definition(
         "platform.resource.binary",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.resource.binary.description",
@@ -129,7 +129,7 @@ fn tool_key_for_platform(tool_code: &'static str, suffix: &'static str) -> &'sta
 fn resource_query_definition() -> ToolCatalogDefinition {
     definition(
         "resource.query",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.resource.query.description",
@@ -152,7 +152,7 @@ fn resource_query_definition() -> ToolCatalogDefinition {
 fn resource_get_definition() -> ToolCatalogDefinition {
     definition(
         "resource.get",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.resource.get.description",
@@ -173,7 +173,7 @@ fn resource_get_definition() -> ToolCatalogDefinition {
 fn resource_create_definition() -> ToolCatalogDefinition {
     definition(
         "resource.create",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.resource.create.description",
@@ -207,7 +207,7 @@ fn resource_create_definition() -> ToolCatalogDefinition {
 fn resource_update_definition() -> ToolCatalogDefinition {
     definition(
         "resource.update",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.resource.update.description",
@@ -236,7 +236,7 @@ fn resource_update_definition() -> ToolCatalogDefinition {
 fn resource_delete_definition() -> ToolCatalogDefinition {
     definition(
         "resource.delete",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.resource.delete.description",
@@ -257,7 +257,7 @@ fn resource_delete_definition() -> ToolCatalogDefinition {
 fn resource_binary_definition() -> ToolCatalogDefinition {
     definition(
         "resource.binary",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.resource.binary.description",
@@ -286,7 +286,7 @@ fn resource_binary_definition() -> ToolCatalogDefinition {
 fn resource_data_source_create_definition() -> ToolCatalogDefinition {
     definition(
         "resource.data_source.create",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.resource.data_source.create.description",
@@ -329,7 +329,7 @@ fn resource_data_source_create_definition() -> ToolCatalogDefinition {
 fn resource_data_source_update_definition() -> ToolCatalogDefinition {
     definition(
         "resource.data_source.update",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.resource.data_source.update.description",
@@ -358,7 +358,7 @@ fn resource_data_source_update_definition() -> ToolCatalogDefinition {
 fn resource_server_create_definition() -> ToolCatalogDefinition {
     definition(
         "resource.server.create",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.resource.server.create.description",
@@ -400,7 +400,7 @@ fn resource_server_create_definition() -> ToolCatalogDefinition {
 fn resource_server_account_create_definition() -> ToolCatalogDefinition {
     definition(
         "resource.server_account.create",
-        "resource",
+        "harness_resource",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.resource.server_account.create.description",

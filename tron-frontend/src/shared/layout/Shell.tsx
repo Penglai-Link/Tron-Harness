@@ -1076,7 +1076,10 @@ export function TronShell({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
                 {email ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{email}</span> : null}
-                {!email && personAiPlan ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{personAiPlan}</span> : null}
+                {!email && (personAiPlan || remainingPoints !== null) ? <span className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[var(--color-on-surface-variant)]">
+                  {personAiPlan && <span className="shrink-0 rounded bg-[var(--color-hover-surface)] px-1.5 py-0.5 font-medium leading-none">{personAiPlan}</span>}
+                  {remainingPoints !== null && <span className="truncate tabular-nums" title={t("shell:userMenu.remainingPoints")}>{remainingPoints}</span>}
+                </span> : null}
               </span>
             </>
           )}

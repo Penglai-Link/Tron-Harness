@@ -122,8 +122,7 @@ fn sse_completion(payload: &Value, response: Value) -> Response {
         },
     );
     let chunk = json!({"choices":[{"index":0,"delta":delta,"finish_reason":null}]});
-    let done =
-        json!({"choices":[{"index":0,"delta":{},"finish_reason":finish}],"usage":response["usage"]});
+    let done = json!({"choices":[{"index":0,"delta":{},"finish_reason":finish}],"usage":response["usage"]});
     (
         [(header::CONTENT_TYPE, "text/event-stream")],
         format!("data: {chunk}\n\ndata: {done}\n\ndata: [DONE]\n\n"),
@@ -1047,32 +1046,18 @@ async fn seed_default_text_model(config: AppConfig, base_url: &str) -> String {
     let response = request_with_headers(
         &router,
         Method::POST,
-        "/api/v1/admin/platform/models",
+        "/api/v1/model-providers/configured",
         Some(json!({
-            "displayName": "Automation Default",
-            "vendor": "OpenAI",
-            "protocol": "OPENAI_COMPATIBLE",
-            "modelType": "TEXT",
-            "modelCapabilities": ["TEXT_GENERATION"],
-            "baseUrl": base_url,
-            "apiPath": "/chat/completions",
-            "apiKeyRef": "sk-automation-api",
-            "modelName": "gpt-automation",
-            "enabled": true,
-            "description": "Automation model",
-            "thinkingEnabled": false,
-            "structuredOutputEnabled": false,
-            "temperature": 0.2,
-            "maxTokens": 1024,
-            "topP": 1.0,
-            "maxRetries": 0
+            "providerId": "automation-fixture", "displayName": "Automation Default", "protocol": "OpenAiChatCompletions", "baseUrl": base_url,
+            "apiKey": "fixture-provider-key", "requestHeaders": {}, "enabled": true,
+            "models": [{"modelType":"Text","modelCode":null,"modelId":"gpt-automation","name":"Automation Default","contextWindowTokens":32000,"maxOutputTokens":null,"reasoning":false,"supportsDeveloperRole":false,"inputCapabilities":["Text"],"enabled":true}]
         })),
         None,
         Some(&authorization),
     )
     .await;
     assert_eq!(response.status(), StatusCode::CREATED);
-    response_json(response).await["data"]["modelCode"]
+    response_json(response).await["data"]["models"][0]["modelCode"]
         .as_str()
         .expect("seeded model should expose modelCode")
         .to_string()

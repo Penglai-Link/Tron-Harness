@@ -10,7 +10,7 @@ vi.mock("@/domain/agent/components/AgentAvatarPicker", () => ({ AgentAvatar: () 
 afterEach(cleanup);
 
 const dude = (dudeCode: string, name: string, overrides: Partial<Dude> = {}): Dude => ({
-  dudeCode, name, rolePrompt: "", loopCode: null, avatarId: "", candidateModelCodes: [],
+  dudeCode, name, rolePrompt: "", avatarId: "", candidateModelCodes: [],
   enabled: true, heartbeatMinutes: 30, memoryAutoApprove: false, kind: "Main", isMain: true,
   createdAt: 0, updatedAt: 0, ...overrides,
 });

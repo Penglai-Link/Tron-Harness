@@ -23,7 +23,7 @@ async fn backend_serves_spa_entry_for_root_and_client_routes() {
     let frontend_dir = write_frontend_fixture("spa-entry");
     let app = app_with_frontend_dir(&frontend_dir);
 
-    for path in ["/", "/apps", "/settings/models"] {
+    for path in ["/", "/apps", "/settings/model-providers"] {
         let response = request(&app, Method::GET, path, None, None).await;
 
         assert_eq!(response.status(), StatusCode::OK);

@@ -145,7 +145,7 @@ fn embedding_config() -> RuntimeModelConfig {
     RuntimeModelConfig {
         model_code: "MODEL-EMBED".into(),
         protocol: ModelProtocol::OpenAiCompatibleEmbedding,
-        model_type: ModelType::Embedding,
+        model_type: ModelType::TextEmbedding,
         base_url: "https://provider.test/v1".into(),
         api_path: None,
         api_key: "sk-test".into(),
@@ -167,7 +167,7 @@ fn rerank_config() -> RuntimeModelConfig {
     RuntimeModelConfig {
         model_code: "MODEL-RERANK".into(),
         protocol: ModelProtocol::Rerank,
-        model_type: ModelType::Rerank,
+        model_type: ModelType::TextRerank,
         base_url: "https://provider.test/v1".into(),
         api_path: None,
         api_key: "sk-test".into(),

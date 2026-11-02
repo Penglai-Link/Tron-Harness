@@ -135,11 +135,12 @@ pub(super) fn parse_person_ai_account_info(
         ModelProviderError::Remote("Person-AI account information response has invalid data".into())
     })?;
     Ok(ProviderAccountBalanceView {
+        nickname: optional_account_string(fields, &["nickname"]),
         username: optional_account_string(fields, &["username"]),
         vip_level: optional_account_number(fields, &["vip_level", "vipLevel"])
             .and_then(|value| i32::try_from(value).ok()),
         // Person-AI defines remaining_tokens as the account's remaining points balance.
-        remaining_points: optional_account_number(fields, &["remaining_tokens", "remainingTokens"]),
+        remaining_points: ["remaining_tokens", "remainingTokens"].iter().find_map(|name| fields.get(*name).and_then(|value| match value { Value::Number(n) => n.as_f64(), Value::String(s) => s.trim().parse::<f64>().ok(), _ => None }).filter(|n| n.is_finite())),
     })
 }
 
@@ -214,8 +215,26 @@ pub(super) fn sync_run_code(now: i64) -> String {
 pub(super) fn model_type_storage(model_type: ModelType) -> &'static str {
     match model_type {
         ModelType::Text => "TEXT",
-        ModelType::Embedding => "EMBEDDING",
-        ModelType::Rerank => "RERANK",
+        ModelType::TextEmbedding => "TEXT_EMBEDDING",
+        ModelType::MultimodalEmbedding => "MULTIMODAL_EMBEDDING",
+        ModelType::TextRerank => "TEXT_RERANK",
+        ModelType::MultimodalRerank => "MULTIMODAL_RERANK",
         ModelType::Image => "IMAGE",
+        ModelType::Video => "VIDEO",
+        ModelType::SpeechSynthesis => "SPEECH_SYNTHESIS",
+        ModelType::SpeechRecognition => "SPEECH_RECOGNITION",
+        ModelType::RealtimeSpeech => "REALTIME_SPEECH",
+    }
+}
+
+#[cfg(test)]
+mod fractional_balance_tests {
+    use super::*;
+    #[test]
+    fn preserves_fractional_balance_and_missing_values() {
+        let parsed = parse_person_ai_account_info(serde_json::json!({"code":0,"data":{"remaining_tokens":123.45}})).unwrap();
+        assert_eq!(parsed.remaining_points, Some(123.45));
+        let missing = parse_person_ai_account_info(serde_json::json!({"code":0,"data":{}})).unwrap();
+        assert_eq!(missing.remaining_points, None);
     }
 }

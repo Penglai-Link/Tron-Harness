@@ -47,9 +47,18 @@ async fn model_reply(
     {
         use axum::response::IntoResponse;
         if payload["stream"] == true {
-            let chunks = format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices":[{"index":0,"delta":{"role":"assistant","content":"native fixture reply"},"finish_reason":"stop"}]}));
-            ([(axum::http::header::CONTENT_TYPE,"text/event-stream")],chunks).into_response()
-        } else { Json(response).into_response() }
+            let chunks = format!(
+                "data: {}\n\ndata: [DONE]\n\n",
+                json!({"choices":[{"index":0,"delta":{"role":"assistant","content":"native fixture reply"},"finish_reason":"stop"}]})
+            );
+            (
+                [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                chunks,
+            )
+                .into_response()
+        } else {
+            Json(response).into_response()
+        }
     }
 }
 
@@ -70,11 +79,12 @@ async fn fixture() -> Fixture {
     let server = tokio::spawn(async move {
         axum::serve(listener, model).await.unwrap();
     });
-    let response = request_with_headers(&app,Method::POST,"/api/v1/admin/platform/models",Some(json!({
-        "displayName":"Runtime variable fixture","vendor":"OpenAI","protocol":"OPENAI_COMPATIBLE","modelType":"TEXT","modelCapabilities":["TEXT_GENERATION"],"baseUrl":base_url,"apiPath":"/chat/completions","apiKeyRef":"fixture-model-key","modelName":"fixture-model","enabled":true,"thinkingEnabled":false,"structuredOutputEnabled":false,"maxTokens":128,"maxRetries":0
+    let response = request_with_headers(&app,Method::POST,"/api/v1/model-providers/configured",Some(json!({
+        "providerId":"runtime-variable-fixture","displayName":"Runtime variable fixture","protocol":"OpenAiChatCompletions","baseUrl":base_url,"apiKey":"fixture-model-key","requestHeaders":{},"enabled":true,
+        "models":[{"modelType":"Text","modelCode":null,"modelId":"fixture-model","name":"Fixture model","contextWindowTokens":32000,"maxOutputTokens":128,"reasoning":false,"supportsDeveloperRole":false,"inputCapabilities":["Text"],"enabled":true}]
     })),None,Some(&authorization)).await;
     assert_eq!(response.status(), StatusCode::CREATED);
-    let model_code = response_json(response).await["data"]["modelCode"]
+    let model_code = response_json(response).await["data"]["models"][0]["modelCode"]
         .as_str()
         .unwrap()
         .to_owned();

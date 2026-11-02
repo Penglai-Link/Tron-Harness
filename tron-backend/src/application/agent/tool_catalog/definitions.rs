@@ -60,6 +60,7 @@ pub(super) struct ToolCatalogDefinition {
     pub tool_code: &'static str,
     pub(super) tool_name: String,
     pub domain_code: &'static str,
+    pub category_code: &'static str,
     pub name_i18n_key: &'static str,
     pub description_i18n_key: &'static str,
     pub operation_kind: ToolOperationKind,
@@ -72,12 +73,57 @@ pub(super) struct ToolCatalogDefinition {
 pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
     vec![
         ToolDomainDefinition {
-            domain_code: "dude",
+            domain_code: "subagent",
+            name_i18n_key: "agent.toolCatalog.domains.subagent.name",
+            description_i18n_key: "agent.toolCatalog.domains.subagent.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "collaboration_thread",
+            name_i18n_key: "agent.toolCatalog.domains.collaboration_thread.name",
+            description_i18n_key: "agent.toolCatalog.domains.collaboration_thread.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "skill",
+            name_i18n_key: "agent.toolCatalog.domains.skillLoading.name",
+            description_i18n_key: "agent.toolCatalog.domains.skillLoading.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "tool",
+            name_i18n_key: "agent.toolCatalog.domains.tool.name",
+            description_i18n_key: "agent.toolCatalog.domains.tool.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "user_interaction",
+            name_i18n_key: "agent.toolCatalog.domains.user_interaction.name",
+            description_i18n_key: "agent.toolCatalog.domains.user_interaction.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "a2ui",
+            name_i18n_key: "agent.toolCatalog.domains.a2ui.name",
+            description_i18n_key: "agent.toolCatalog.domains.a2ui.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "harness_mcp",
+            name_i18n_key: "agent.toolCatalog.domains.mcp.name",
+            description_i18n_key: "agent.toolCatalog.domains.mcp.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "harness_prompt",
+            name_i18n_key: "agent.toolCatalog.domains.prompt.name",
+            description_i18n_key: "agent.toolCatalog.domains.prompt.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "media",
+            name_i18n_key: "agent.toolCatalog.domains.media.name",
+            description_i18n_key: "agent.toolCatalog.domains.media.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "harness_dude",
             name_i18n_key: "agent.toolCatalog.domains.dude.name",
             description_i18n_key: "agent.toolCatalog.domains.dude.description",
         },
         ToolDomainDefinition {
-            domain_code: "rag",
+            domain_code: "harness_rag",
             name_i18n_key: "agent.toolCatalog.domains.rag.name",
             description_i18n_key: "agent.toolCatalog.domains.rag.description",
         },
@@ -87,14 +133,9 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             description_i18n_key: "agent.toolCatalog.terminal.description",
         },
         ToolDomainDefinition {
-            domain_code: "worktree",
+            domain_code: "harness_worktree",
             name_i18n_key: "agent.toolCatalog.domains.worktree.name",
             description_i18n_key: "agent.toolCatalog.domains.worktree.description",
-        },
-        ToolDomainDefinition {
-            domain_code: "git",
-            name_i18n_key: "agent.toolCatalog.domains.git.name",
-            description_i18n_key: "agent.toolCatalog.domains.git.description",
         },
         ToolDomainDefinition {
             domain_code: "word",
@@ -107,19 +148,19 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             description_i18n_key: "agent.toolCatalog.domains.excel.description",
         },
         ToolDomainDefinition {
-            domain_code: "automation",
+            domain_code: "harness_automation",
             name_i18n_key: "agent.toolCatalog.domains.automation.name",
             description_i18n_key: "agent.toolCatalog.domains.automation.description",
         },
         ToolDomainDefinition {
-            domain_code: "app",
+            domain_code: "harness_app",
             name_i18n_key: "agent.toolCatalog.domains.app.name",
             description_i18n_key: "agent.toolCatalog.domains.app.description",
         },
         ToolDomainDefinition {
-            domain_code: "bash",
-            name_i18n_key: "agent.toolCatalog.domains.bash.name",
-            description_i18n_key: "agent.toolCatalog.domains.bash.description",
+            domain_code: "command",
+            name_i18n_key: "agent.toolCatalog.domains.command.name",
+            description_i18n_key: "agent.toolCatalog.domains.command.description",
         },
         ToolDomainDefinition {
             domain_code: "chat_attachment",
@@ -132,17 +173,12 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             description_i18n_key: "agent.toolCatalog.domains.fs.description",
         },
         ToolDomainDefinition {
-            domain_code: "memory",
+            domain_code: "harness_memory",
             name_i18n_key: "agent.toolCatalog.domains.memory.name",
             description_i18n_key: "agent.toolCatalog.domains.memory.description",
         },
         ToolDomainDefinition {
-            domain_code: "model",
-            name_i18n_key: "agent.toolCatalog.domains.model.name",
-            description_i18n_key: "agent.toolCatalog.domains.model.description",
-        },
-        ToolDomainDefinition {
-            domain_code: "resource",
+            domain_code: "harness_resource",
             name_i18n_key: "agent.toolCatalog.domains.resource.name",
             description_i18n_key: "agent.toolCatalog.domains.resource.description",
         },
@@ -152,22 +188,27 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             description_i18n_key: "agent.toolCatalog.domains.search.description",
         },
         ToolDomainDefinition {
-            domain_code: "skill",
+            domain_code: "web_search",
+            name_i18n_key: "agent.toolCatalog.domains.web_search.name",
+            description_i18n_key: "agent.toolCatalog.domains.web_search.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "harness_skill",
             name_i18n_key: "agent.toolCatalog.domains.skill.name",
             description_i18n_key: "agent.toolCatalog.domains.skill.description",
         },
         ToolDomainDefinition {
-            domain_code: "task",
+            domain_code: "harness_task",
             name_i18n_key: "agent.toolCatalog.domains.task.name",
             description_i18n_key: "agent.toolCatalog.domains.task.description",
         },
         ToolDomainDefinition {
-            domain_code: "variable",
+            domain_code: "harness_variable",
             name_i18n_key: "agent.toolCatalog.domains.variable.name",
             description_i18n_key: "agent.toolCatalog.domains.variable.description",
         },
         ToolDomainDefinition {
-            domain_code: "workspace",
+            domain_code: "harness_workspace",
             name_i18n_key: "agent.toolCatalog.domains.workspace.name",
             description_i18n_key: "agent.toolCatalog.domains.workspace.description",
         },

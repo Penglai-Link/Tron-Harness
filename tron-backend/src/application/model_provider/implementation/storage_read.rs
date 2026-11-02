@@ -226,7 +226,7 @@ pub(super) fn read_chat_catalog_models(
         .prepare(
             "SELECT provider_code, model_code, model_name, upstream_vendor_code, upstream_vendor_name,
                     context_window_tokens, protocols, quality_type, input_coefficient, cache_hit_coefficient,
-                    output_coefficient, status, first_seen_at, last_seen_at, updated_at
+                    output_coefficient, status, first_seen_at, last_seen_at, updated_at, tags_json
              FROM provider_catalog_models WHERE provider_code = ?1
              ORDER BY CASE status WHEN 'Available' THEN 0 ELSE 1 END,
                       CASE quality_type WHEN 'High' THEN 0 WHEN 'Middle' THEN 1 ELSE 2 END,
@@ -242,7 +242,7 @@ pub(super) fn read_chat_catalog_models(
                 provider_code: ModelProviderCode::from_storage(&provider_code)
                     .ok_or(rusqlite::Error::InvalidQuery)?,
                 catalog_model_type: ProviderCatalogModelType::Chat,
-                dimension: None, tags: vec![],
+                dimension: None, tags: serde_json::from_str(&row.get::<_, String>(15)?).unwrap_or_default(),
                 model_id: None,
                 model_code: row.get(1)?,
                 model_name: row.get(2)?,
@@ -281,7 +281,7 @@ pub(super) fn read_multimedia_catalog_models(
     let mut statement = connection
         .prepare(
             "SELECT provider_code, model_id, model_code, model_name, media_type, status,
-                    first_seen_at, last_seen_at, updated_at, dimension, tags_json
+                    first_seen_at, last_seen_at, updated_at, dimension, tags_json, upstream_vendor_code, upstream_vendor_name, input_coefficient, cache_hit_coefficient, output_coefficient
              FROM provider_multimedia_catalog_models WHERE provider_code = ?1 AND media_type != 5
              ORDER BY CASE status WHEN 'Available' THEN 0 ELSE 1 END,
                       media_type, model_name COLLATE NOCASE, model_code",
@@ -303,13 +303,13 @@ pub(super) fn read_multimedia_catalog_models(
                 model_code: row.get(2)?,
                 model_name: row.get(3)?,
                 protocols: Vec::new(),
-                upstream_vendor_code: None,
-                upstream_vendor_name: None,
+                upstream_vendor_code: row.get(11)?,
+                upstream_vendor_name: row.get(12)?,
                 context_window_tokens: None,
                 quality_type: None,
-                input_coefficient: None,
-                cache_hit_coefficient: None,
-                output_coefficient: None,
+                input_coefficient: row.get(13)?,
+                cache_hit_coefficient: row.get(14)?,
+                output_coefficient: row.get(15)?,
                 status: ProviderCatalogModelStatus::from_storage(&status)
                     .ok_or(rusqlite::Error::InvalidQuery)?,
                 first_seen_at: row.get(6)?,

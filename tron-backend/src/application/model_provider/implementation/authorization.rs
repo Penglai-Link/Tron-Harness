@@ -182,6 +182,13 @@ impl ModelProviderService {
             }
             ExternalAuthorizationPoll::Completed(credentials) => {
                 let validated_identity = async {
+                    let identity = if let Some(expected) = command.expected_person_ai_user_id.as_deref() {
+                        let identity = self.fetch_person_ai_identity(&credentials).await?;
+                        if identity.0 != expected {
+                            return Err(ModelProviderError::AuthorizationAccountMismatch);
+                        }
+                        Some(identity)
+                    } else { None };
                     let (catalog, multimedia_catalog) = self
                         .fetch_catalog_snapshot(stored.provider_code, &credentials)
                         .await?;
@@ -191,7 +198,10 @@ impl ModelProviderService {
                         ));
                     }
                     self.verify_sdk_model_credentials(&credentials).await?;
-                    let identity = self.fetch_person_ai_identity(&credentials).await?;
+                    let identity = match identity {
+                        Some(identity) => identity,
+                        None => self.fetch_person_ai_identity(&credentials).await?,
+                    };
                     Ok::<_, ModelProviderError>((catalog, multimedia_catalog, identity))
                 }
                 .await;
@@ -212,6 +222,12 @@ impl ModelProviderService {
                 this.connection.clone().call(move |connection| {
                 let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate)
                     .map_err(|_| ModelProviderError::Storage)?;
+                if let Some(expected) = command.expected_person_ai_user_id.as_deref() {
+                    let active = read_connection(&transaction, stored.provider_code)?;
+                    if active.as_ref().and_then(|row| row.person_ai_user_id.as_deref()) != Some(expected) {
+                        return Err(ModelProviderError::AuthorizationAccountMismatch);
+                    }
+                }
                 replace_authorized_connection(
                     &transaction,
                     stored.provider_code,

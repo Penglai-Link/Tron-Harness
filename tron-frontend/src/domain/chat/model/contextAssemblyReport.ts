@@ -1,3 +1,5 @@
+import type { ModelSelectOption } from "@/domain/model/model";
+
 export interface ContextAssemblyBlock {
   id: string;
   position: number;
@@ -26,13 +28,25 @@ export interface ContextAssemblySnapshot {
   budgetBreakdown: Record<string, unknown> | null;
 }
 
-/** A saved report contains the runtime route code, not a user-facing model name. */
-export function contextModelDisplayName(modelCode: string | null): string {
+export type ContextModelDisplayOption = Pick<ModelSelectOption,
+  "modelCode" | "displayName" | "modelName" | "accessPlatform" | "sourceLabel" | "vendor">;
+
+/** Resolve the model recorded in the report, independently of the composer selection. */
+export function contextModelDisplayName(modelCode: string | null, models: readonly ContextModelDisplayOption[] = []): string {
   if (!modelCode) return "—";
+  const model = models.find((option) => option.modelCode === modelCode);
+  if (model) {
+    const provider = [model.accessPlatform, model.sourceLabel, model.vendor].find((value) => value?.trim())?.trim();
+    const name = model.displayName.trim() || model.modelName.trim();
+    if (name) return provider ? `${provider} / ${name}` : name;
+  }
   const fixedRoute = modelCode.match(/^PERSON_AI:FIXED:[^:]+:(.+)$/);
-  if (!fixedRoute) return modelCode;
-  const catalogCode = fixedRoute[1];
-  return catalogCode?.split("/").at(-1) || modelCode;
+  if (fixedRoute) {
+    const name = fixedRoute[1]?.split("/").at(-1);
+    return name ? `Person-AI / ${name}` : "";
+  }
+  // An opaque identity cannot serve as a readable fallback when metadata is missing.
+  return modelCode.startsWith("MODEL-") || modelCode.startsWith("PERSON_AI:") ? "" : modelCode;
 }
 
 function record(value: unknown): value is Record<string, unknown> {

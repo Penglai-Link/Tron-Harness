@@ -9,7 +9,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         ToolCatalogDefinition {
             tool_code: "memory.search",
             tool_name: "memory_search".into(),
-            domain_code: "memory",
+            domain_code: "harness_memory",
+            category_code: "tron.platform",
             name_i18n_key: "agent.toolCatalog.tools.memory.search.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.search.description",
             operation_kind: ToolOperationKind::Query,
@@ -61,7 +62,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         ToolCatalogDefinition {
             tool_code: "memory.save",
             tool_name: "memory_save".into(),
-            domain_code: "memory",
+            domain_code: "harness_memory",
+            category_code: "tron.platform",
             name_i18n_key: "agent.toolCatalog.tools.memory.save.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.save.description",
             operation_kind: ToolOperationKind::Command,
@@ -100,7 +102,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         ToolCatalogDefinition {
             tool_code: "memory.delete",
             tool_name: "memory_delete".into(),
-            domain_code: "memory",
+            domain_code: "harness_memory",
+            category_code: "tron.platform",
             name_i18n_key: "agent.toolCatalog.tools.memory.delete.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.delete.description",
             operation_kind: ToolOperationKind::Command,
@@ -127,7 +130,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         ToolCatalogDefinition {
             tool_code: "todo.update",
             tool_name: "todo_update".into(),
-            domain_code: "memory",
+            domain_code: "harness_memory",
+            category_code: "tron.platform",
             name_i18n_key: "agent.toolCatalog.tools.todo.update.name",
             description_i18n_key: "agent.toolCatalog.tools.todo.update.description",
             operation_kind: ToolOperationKind::Command,

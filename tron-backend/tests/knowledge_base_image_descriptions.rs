@@ -308,7 +308,7 @@ impl LlmRuntimeModelResolver for Resolver {
             let mut config = EmbeddingResolver
                 .embedding_runtime_model_config(w, m)?
                 .unwrap();
-            config.model_type = ModelType::Rerank;
+            config.model_type = ModelType::TextRerank;
             return Ok(Some(config));
         }
         EmbeddingResolver.rerank_runtime_model_config(w, m)

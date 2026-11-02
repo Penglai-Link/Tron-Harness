@@ -9,6 +9,7 @@ use super::handler::{
     create_authorization_session, disconnect_provider, get_authorization_session,
     get_provider_account_balance, get_provider_connection, list_catalog_models,
     list_provider_connections, list_sync_runs, poll_authorization_session, sync_provider,
+    poll_reauthorization_session,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -66,6 +67,20 @@ pub fn public_routes() -> Router<AppState> {
 
 pub fn profile_routes() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/automatic-routers", get(super::automatic_routers::list))
+        .route("/api/v1/automatic-routers/{kind}", axum::routing::put(super::automatic_routers::update))
+        .route(
+            "/api/v1/model-providers/{provider_code}/reauthorization-sessions",
+            post(create_authorization_session),
+        )
+        .route(
+            "/api/v1/model-providers/{provider_code}/reauthorization-sessions/{session_id}",
+            get(get_authorization_session),
+        )
+        .route(
+            "/api/v1/model-providers/{provider_code}/reauthorization-sessions/{session_id}/poll",
+            post(poll_reauthorization_session),
+        )
         .route(
             "/api/v1/model-providers/configured",
             get(super::configured::list).post(super::configured::create),

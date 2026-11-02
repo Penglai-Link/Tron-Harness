@@ -54,11 +54,12 @@ impl ModelClient for Script {
             // Gateway mode: every wrapped tool is addressed through the
             // stable `tool_execute` envelope.
             let execute = |tool: &str, arguments: serde_json::Value| {
-                let arguments = if matches!(tool, "worktree_create" | "worktree_select") { arguments } else { json!({"items":[arguments]}) };
-                ModelResponse::tool_call(
-                    "tool_execute",
-                    json!({"tool":tool,"arguments":arguments}),
-                )
+                let arguments = if matches!(tool, "worktree_create" | "worktree_select") {
+                    arguments
+                } else {
+                    json!({"items":[arguments]})
+                };
+                ModelResponse::tool_call("tool_execute", json!({"tool":tool,"arguments":arguments}))
             };
             Ok(match step {
                 0 => execute(
@@ -70,11 +71,11 @@ impl ModelClient for Script {
                         .map_err(|e| e.to_string())?;
                     execute("fs_read_text", json!({"path":"value.txt"}))
                 }
-                2 => execute("bash_exec", json!({"command":"pwd"})),
+                2 => execute("command_exec", json!({"command":"pwd"})),
                 3 => execute("terminal_start", json!({"command":"pwd; sleep 20"})),
                 4 => execute("worktree_select", json!({"path":self.root})),
                 5 => execute("fs_read_text", json!({"path":"value.txt"})),
-                6 => execute("bash_exec", json!({"command":"pwd"})),
+                6 => execute("command_exec", json!({"command":"pwd"})),
                 7 => execute("terminal_start", json!({"command":"pwd; sleep 20"})),
                 _ => ModelResponse::final_output("verified"),
             })
@@ -163,7 +164,7 @@ async fn real_worktree_changes_rebind_native_fs_bash_and_pty_in_the_same_host_ru
                 "worktree_create",
                 "worktree_select",
                 "fs_read_text",
-                "bash_exec",
+                "command_exec",
                 "terminal_start",
             ]
             .contains(&t.tool_name.as_str())
@@ -191,7 +192,10 @@ async fn real_worktree_changes_rebind_native_fs_bash_and_pty_in_the_same_host_ru
         let out = result
             .observations
             .iter()
-            .map(|o| serde_json::from_str::<Value>(&o.output).unwrap_or_else(|error| panic!("{error}: {}", o.output)))
+            .map(|o| {
+                serde_json::from_str::<Value>(&o.output)
+                    .unwrap_or_else(|error| panic!("{error}: {}", o.output))
+            })
             .collect::<Vec<_>>();
         assert_eq!(out[1]["content"], "selected");
         assert_eq!(out[5]["content"], "main");

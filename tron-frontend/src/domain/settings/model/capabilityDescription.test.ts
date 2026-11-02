@@ -11,6 +11,8 @@ it("localizes built-in pack, plugin and runtime descriptions while preserving ex
   expect(capabilityDescription(i18n.t, "Plugin", "framework.loop", "original")).toContain("原生会话归属");
   expect(capabilityDescription(i18n.t, "Implementation", "HostExternalAgent", "original")).toContain("宿主适配器");
   expect(capabilityDescription(i18n.t, "Pack", "custom.pack", "Custom description")).toBe("Custom description");
+  i18n.addResource("zh-CN", "pages", "capabilityManagement.catalog.Tool_fs_read_text", "wrong host overlay");
+  expect(capabilityDescription(i18n.t, "Tool", "fs_read_text", "插件提供的描述")).toBe("插件提供的描述");
   await i18n.changeLanguage("en-US");
   expect(capabilityDescription(i18n.t, "Pack", "framework.external-agent", "original")).toBe("External agent invocation and session bridging");
 });

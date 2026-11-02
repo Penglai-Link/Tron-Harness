@@ -23,14 +23,7 @@ fn service(database_url: &str) -> AgentManagementService {
         WorkspaceService::new(SqliteWorkspaceRepository::connect(database_url).unwrap()),
         &AppConfig::default().system_agents,
     );
-    if !agents
-        .list_loop_designs()
-        .unwrap()
-        .iter()
-        .any(|design| design.loop_code == "test-react")
-    {
-        agents.save_loop_design(serde_json::from_value(serde_json::json!({"loopCode":"test-react","name":"Test React","kind":"React","version":0,"updatedAt":0,"nodes":[],"edges":[],"maxParallelNodes":1})).unwrap(), 0).unwrap();
-    }
+
     agents
 }
 
@@ -39,7 +32,13 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
     let config = common::prepared_config(AppConfig::default());
     let agents = service(&config.database_url);
     assert_eq!(
-        agents.list_platform_internal_agents().unwrap().into_iter().find(|agent| agent.agent_code == "main-agent").unwrap().avatar_id,
+        agents
+            .list_platform_internal_agents()
+            .unwrap()
+            .into_iter()
+            .find(|agent| agent.agent_code == "main-agent")
+            .unwrap()
+            .avatar_id,
         "red-blue-pills"
     );
     for avatar in [
@@ -65,7 +64,7 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
                 agent_code: format!("avatar-{avatar}"),
                 name: avatar.into(),
                 role_prompt: String::new(),
-                loop_code: Some("test-react".into()),
+
                 avatar_id: Some(avatar.into()),
                 group_name: None,
             })
@@ -110,7 +109,7 @@ fn avatars_persist_for_platform_and_workspace_with_inheritance_and_validation() 
                 agent_code: "local-avatar".into(),
                 name: "Local".into(),
                 role_prompt: String::new(),
-                loop_code: Some("test-react".into()),
+
                 avatar_id: Some("panda".into()),
                 group_name: None,
             },
@@ -187,7 +186,6 @@ fn built_in_dudes_have_independent_default_avatars_and_preserve_customization() 
         .update_platform_internal_agent_definition(
             "main-agent",
             UpdateWorkspaceInternalAgentDefinitionCommand {
-                loop_code: Some("test-react".into()),
                 ..Default::default()
             },
         )
@@ -228,24 +226,66 @@ fn built_in_dudes_have_independent_default_avatars_and_preserve_customization() 
     );
 }
 
-
 #[test]
 fn disabled_internal_agent_persists_and_blocks_platform_and_workspace_execution() {
     let config = common::prepared_config(AppConfig::default());
     let agents = service(&config.database_url);
-    agents.assign_agent_workspaces("prd-agent", vec!["TRON_CORE".into()]).unwrap();
-    agents.update_platform_internal_agent_definition("prd-agent", UpdateWorkspaceInternalAgentDefinitionCommand {
-        enabled: Some(false), loop_code: Some("test-react".into()), ..Default::default()
-    }).unwrap();
+    agents
+        .assign_agent_workspaces("prd-agent", vec!["TRON_CORE".into()])
+        .unwrap();
+    agents
+        .update_platform_internal_agent_definition(
+            "prd-agent",
+            UpdateWorkspaceInternalAgentDefinitionCommand {
+                enabled: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
     drop(agents);
     let agents = service(&config.database_url);
-    assert!(!agents.list_platform_internal_agents().unwrap().iter().find(|a| a.agent_code == "prd-agent").unwrap().enabled);
-    assert!(!agents.workspace_internal_agent_policy("TRON_CORE", "prd-agent").unwrap().enabled);
-    assert!(agents.resolve_platform_agent_runtime(Some("prd-agent")).is_err());
-    assert!(agents.resolve_workspace_agent_runtime("TRON_CORE", Some("prd-agent")).is_err());
-    agents.update_platform_internal_agent_definition("prd-agent", UpdateWorkspaceInternalAgentDefinitionCommand {
-        enabled: Some(true), ..Default::default()
-    }).unwrap();
-    assert!(agents.resolve_platform_agent_runtime(Some("prd-agent")).is_ok());
-    assert!(agents.resolve_workspace_agent_runtime("TRON_CORE", Some("prd-agent")).is_ok());
+    assert!(
+        !agents
+            .list_platform_internal_agents()
+            .unwrap()
+            .iter()
+            .find(|a| a.agent_code == "prd-agent")
+            .unwrap()
+            .enabled
+    );
+    assert!(
+        !agents
+            .workspace_internal_agent_policy("TRON_CORE", "prd-agent")
+            .unwrap()
+            .enabled
+    );
+    assert!(
+        agents
+            .resolve_platform_agent_runtime(Some("prd-agent"))
+            .is_err()
+    );
+    assert!(
+        agents
+            .resolve_workspace_agent_runtime("TRON_CORE", Some("prd-agent"))
+            .is_err()
+    );
+    agents
+        .update_platform_internal_agent_definition(
+            "prd-agent",
+            UpdateWorkspaceInternalAgentDefinitionCommand {
+                enabled: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(
+        agents
+            .resolve_platform_agent_runtime(Some("prd-agent"))
+            .is_ok()
+    );
+    assert!(
+        agents
+            .resolve_workspace_agent_runtime("TRON_CORE", Some("prd-agent"))
+            .is_ok()
+    );
 }

@@ -94,13 +94,6 @@ const toolDomainSeed: ToolDomainSeed[] = [
     name: "Agent",
     sampleTools: ["agents.get", "agents.workspace.get"],
   },
-  {
-    domainCode: "model",
-    description: "Read and inspect platform and workspace model catalogs.",
-    hasMutationTools: true,
-    name: "Model",
-    sampleTools: ["model.page", "model.create", "model.update"],
-  },
 ];
 
 type ToolSeed = {
@@ -197,27 +190,6 @@ const toolSeed: ToolSeed[] = [
     operationKind: "command",
     toolCode: "agents.workspace.patch_policy",
   },
-  {
-    description: "Page effective models with protocol and capability metadata.",
-    domainCode: "model",
-    name: "Page Models",
-    operationKind: "query",
-    toolCode: "model.page",
-  },
-  {
-    description: "Create a workspace-local model definition.",
-    domainCode: "model",
-    name: "Create Model",
-    operationKind: "command",
-    toolCode: "model.create",
-  },
-  {
-    description: "Update a workspace model definition.",
-    domainCode: "model",
-    name: "Update Model",
-    operationKind: "command",
-    toolCode: "model.update",
-  },
 ];
 
 type WorkspaceInternalAgentSeed = {
@@ -225,7 +197,7 @@ type WorkspaceInternalAgentSeed = {
   avatarId?: string;
   candidateModelCodes?: string[];
   groupName?: string | null;
-  loopCode: string;
+
   rolePrompt: string;
   agentCode: string;
   description: string;
@@ -242,7 +214,7 @@ type WorkspaceInternalAgentSeed = {
 const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
   {
     rolePrompt: "理解用户目标，推进任务，协调工具和子智能体，并对最终结果负责。",
-    loopCode: "",
+
     agentCode: "main-agent",
     avatarId: "red-blue-pills",
     description: "Primary platform internal agent used for workspace chat runtime policy.",
@@ -265,7 +237,7 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     groupName,
     description: "Platform built-in internal agent.",
     rolePrompt,
-    loopCode: "",
+
     avatarId,
     maxSteps: 100,
     maxToolCalls: 100,
@@ -449,7 +421,7 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     enabled: effective.enabled !== false,
     description: effective.description,
     rolePrompt: effective.rolePrompt,
-    loopCode: effective.loopCode,
+
     avatarId: effective.avatarId ?? "robot",
     candidateModelCodes: effective.candidateModelCodes ?? [],
     groupName: effective.groupName || null,
@@ -507,7 +479,7 @@ export function createWorkspaceInternalAgentMock(workspaceCode: string, payload:
     throw new Error("Agent code is already in use; choose another code");
   }
   const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
-  const agent = { ...workspaceInternalAgentSeed[0], ...payload, groupName, agentCode, loopCode: payload.loopCode ?? "", name: payload.name.trim(), description: payload.description?.trim() ?? "" };
+  const agent = { ...workspaceInternalAgentSeed[0], ...payload, groupName, agentCode, name: payload.name.trim(), description: payload.description?.trim() ?? "" };
   workspaceInternalAgentDefinitions[workspaceCode] = [...(workspaceInternalAgentDefinitions[workspaceCode] ?? []), agent];
   return buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode);
 }
@@ -532,7 +504,7 @@ export function deleteWorkspaceInternalAgentMock(workspaceCode: string, agentCod
   };
 }
 
-export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { enabled?: boolean; name?: string; description?: string; rolePrompt?: string; loopCode?: string; candidateModelCodes?: string[]; avatarId?: string; groupName?: string | null }) {
+export function patchWorkspaceInternalAgentDefinitionMock(workspaceCode: string, agentCode: string, payload: { enabled?: boolean; name?: string; description?: string; rolePrompt?: string; candidateModelCodes?: string[]; avatarId?: string; groupName?: string | null }) {
   if (workspaceCode !== PLATFORM_INTERNAL_AGENT_SCOPE && buildWorkspaceInternalAgentRecord(workspaceCode, agentCode).builtIn) throw new Error("Built-in agent definitions are read-only outside platform settings");
   const groupName = validateInternalAgentGroupMock(workspaceCode, payload.groupName);
   const patch = { ...payload, ...(groupName !== undefined ? { groupName } : {}) };
@@ -776,10 +748,6 @@ export function setWorkspaceSystemAgentEnabledMock(
   return cloneWorkspaceSystemRecord(workspaceCode, record);
 }
 
-export function isLoopUsedByAgentMock(loopCode: string) {
-  const scopes = new Set([PLATFORM_INTERNAL_AGENT_SCOPE, ...Object.keys(workspaceInternalAgentDefinitions), ...Object.keys(workspaceOverrides)]);
-  return [...scopes].some(scope => listWorkspaceInternalAgentRecords(scope).some(agent => agent.loopCode === loopCode));
-}
 
 const internalAgentGroups: Record<string, string[]> = {
   [PLATFORM_INTERNAL_AGENT_SCOPE]: ["探索", "开发", "设计"],

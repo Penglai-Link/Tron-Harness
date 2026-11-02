@@ -19,11 +19,23 @@ pub trait TextModelRouter: Send + Sync {
 #[derive(Clone)]
 pub struct LlmModelRouter {
     providers: ModelProviderService,
+    models: Option<crate::application::model::ModelService>,
 }
 
 impl LlmModelRouter {
     pub fn new(providers: ModelProviderService) -> Self {
-        Self { providers }
+        Self {
+            providers,
+            models: None,
+        }
+    }
+
+    pub fn with_configured_providers(
+        mut self,
+        models: crate::application::model::ModelService,
+    ) -> Self {
+        self.models = Some(models);
+        self
     }
 
     pub fn route_text(
@@ -31,6 +43,37 @@ impl LlmModelRouter {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<RuntimeModelConfig, String> {
+        let requested = model_code.map(str::trim).filter(|value| !value.is_empty());
+        if let Some(models) = &self.models {
+            if requested == Some("AUTO:Chat") {
+                return models
+                    .route_automatic_model(
+                        workspace_code,
+                        crate::domain::model::AutoRouterKind::Chat,
+                    )
+                    .map_err(|e| e.to_string());
+            }
+            if requested.is_none()
+                || matches!(
+                    requested,
+                    Some("AUTO:TextGeneration" | "PERSON_AI:ROUTE:TextGenerationAuto")
+                )
+            {
+                return models
+                    .route_automatic_model(
+                        workspace_code,
+                        crate::domain::model::AutoRouterKind::TextGeneration,
+                    )
+                    .map_err(|e| e.to_string());
+            }
+            if let Some(code) = requested.filter(|code| !code.starts_with("PERSON_AI:")) {
+                return models
+                    .text_agent_model_config(workspace_code, Some(code))
+                    .map_err(|e| e.to_string())?
+                    .map(runtime_from_agent)
+                    .ok_or_else(|| "selected model is unavailable".into());
+            }
+        }
         if let Some(model_code) = model_code.map(str::trim).filter(|value| !value.is_empty()) {
             if model_code == "PERSON_AI:ROUTE:TextGenerationAuto" {
                 return self
@@ -143,7 +186,7 @@ mod tests {
     }
 }
 
-fn runtime_from_agent(
+pub(crate) fn runtime_from_agent(
     config: crate::domain::agent::AgentModelConfig,
 ) -> RuntimeModelConfig {
     RuntimeModelConfig {

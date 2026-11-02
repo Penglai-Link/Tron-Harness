@@ -20,7 +20,7 @@ impl HttpLlmRuntimeClient {
         dimensions: usize,
         run: Option<&fw::RunContext>,
     ) -> Result<(Vec<f32>, Option<String>), String> {
-        if config.model_type != ModelType::Embedding || dimensions == 0 {
+        if config.model_type != ModelType::TextEmbedding || dimensions == 0 {
             return Err("query requires a configured embedding index space".into());
         }
         if let Some(run) = run {

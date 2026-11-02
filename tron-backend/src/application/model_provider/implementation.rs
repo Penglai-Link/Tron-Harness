@@ -27,6 +27,7 @@ use tokio::sync::broadcast;
 use url::Url;
 
 mod chat_auto_routes;
+mod route_sources;
 mod person_ai_services;
 mod person_ai_tools;
 mod sdk_models;
@@ -149,6 +150,7 @@ use utilities::*;
 mod authorization;
 mod auto_selection;
 mod credentials;
+mod encryption_keys;
 mod lifecycle;
 mod selection;
 mod snapshots;
@@ -791,6 +793,7 @@ mod tests {
         context_window_tokens: Option<u32>,
     ) -> ExternalCatalogModel {
         ExternalCatalogModel {
+            tags: vec![],
             model_code: code.into(),
             model_name: name.into(),
             protocols: vec![AgentModelProtocol::ChatCompletions],
@@ -802,6 +805,20 @@ mod tests {
             cache_hit_coefficient: Some(0.1),
             output_coefficient: Some(1.2),
         }
+    }
+
+    #[test]
+    fn multimedia_catalog_persists_vendor_and_coefficients() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(include_str!("../../../migrations/0001_init.sql")).unwrap();
+        let tx = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection, rusqlite::TransactionBehavior::Immediate).unwrap();
+        let model = ExternalMultimediaCatalogModel { model_id: "id".into(), model_code: "model".into(), model_name: "Model".into(), catalog_model_type: ProviderCatalogModelType::Embedding, dimension: Some(1024), tags: vec!["text_embedding".into()], upstream_vendor_code: Some("vendor".into()), upstream_vendor_name: Some("Vendor".into()), input_coefficient: Some(0.1), cache_hit_coefficient: Some(0.2), output_coefficient: Some(0.3) };
+        apply_multimedia_catalog_snapshot(&tx, ModelProviderCode::PersonAi, &[model], 100).unwrap();
+        tx.commit().unwrap();
+        let row = read_multimedia_catalog_models(&connection, ModelProviderCode::PersonAi).unwrap().remove(0);
+        assert_eq!(row.upstream_vendor_name.as_deref(), Some("Vendor"));
+        assert_eq!((row.input_coefficient, row.cache_hit_coefficient, row.output_coefficient), (Some(0.1), Some(0.2), Some(0.3)));
+        assert_eq!(row.tags, vec!["text_embedding"]);
     }
 
     #[test]
@@ -827,6 +844,7 @@ mod tests {
         let transaction = crate::adapters::outbound::persistence::sqlite::framework_storage::business_transaction(&connection,rusqlite::TransactionBehavior::Immediate).expect("start second snapshot");
         let mut updated_deepseek =
             catalog_model("deepseek-v4", "DeepSeek V4 Pro", "DeepSeek", Some(128_000));
+        updated_deepseek.tags = vec!["visual_understanding".into()];
         updated_deepseek.input_coefficient = Some(1.6);
         updated_deepseek.cache_hit_coefficient = Some(0.2);
         updated_deepseek.output_coefficient = Some(2.4);
@@ -849,6 +867,7 @@ mod tests {
             .find(|model| model.model_code == "deepseek-v4")
             .expect("updated model");
         assert_eq!(deepseek.model_name, "DeepSeek V4 Pro");
+        assert_eq!(deepseek.tags, vec!["visual_understanding"]);
         assert_eq!(deepseek.context_window_tokens, Some(128_000));
         assert_eq!(deepseek.input_coefficient, Some(1.6));
         assert_eq!(deepseek.cache_hit_coefficient, Some(0.2));

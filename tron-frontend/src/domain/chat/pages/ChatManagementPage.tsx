@@ -54,8 +54,7 @@ import { INTERNAL_AGENT_REGISTRY_CHANGED_EVENT } from "@/domain/agent/model";
 import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api";
 import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import type { SystemAgentModelRecord, WorkspaceInternalAgentRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
-import { fetchWorkspaceSelectOptions } from "@/domain/model/api";
-import { getWorkspaceSelectOptions } from "@/domain/model/mock";
+import { fetchModelSelectOptions } from "@/domain/model/api";
 import { applyCurrentLocaleHeader } from "@/i18n";
 import type {
   ModelSelectOption,
@@ -75,8 +74,9 @@ import { ChatDraftResources } from "../model/chatDraftResources";
 import { useCreateChatTab } from "@/shared/layout/chat/hooks/useCreateChatTab";
 import { ContextDetailPreview, contextDetailRawValue, type ContextDetailBlock } from "@/domain/chat/components/ContextDetailPreview";
 import { useSavedContextAssembly } from "../hooks/useSavedContextAssembly";
+import { useContextModelLabel } from "../hooks/useContextModelLabel";
 import { useChatContextRefreshInterval } from "../hooks/useChatContextRefreshInterval";
-import { contextAssemblySnapshot, contextModelDisplayName, type ContextAssemblySnapshot } from "../model/contextAssemblyReport";
+import { contextAssemblySnapshot, type ContextAssemblySnapshot } from "../model/contextAssemblyReport";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
   type ChatAttachmentLabels,
@@ -1468,12 +1468,14 @@ function ContextOverviewPanel({
   breakdown,
   compactionBusy,
   snapshot,
+  modelLabel,
   onCreateCompaction,
   session,
 }: {
   breakdown: ChatContextBudgetBreakdown | null;
   compactionBusy?: boolean;
   snapshot: ContextAssemblySnapshot | null;
+  modelLabel: string;
   onCreateCompaction?: () => void;
   session?: ChatSession;
 }) {
@@ -1498,8 +1500,8 @@ function ContextOverviewPanel({
               <p className="max-w-[18rem] whitespace-normal leading-5">{t("chat.shortTermMemory.contextPanel.savedReportHelp")}</p>
             </InfoTooltip>
           </div>
-          <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]" title={snapshot?.modelCode ?? undefined}>
-            {contextModelDisplayName(snapshot?.modelCode ?? null)}
+          <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]" title={modelLabel} data-testid="context-model-label">
+            {modelLabel}
             {windowLimit ? ` · ${formatCompactTokenCount(windowLimit)} ${t("chat.shortTermMemory.contextPanel.windowSuffix")}` : ""}
           </p>
         </div>
@@ -2235,6 +2237,7 @@ export function RightContextSidebar({
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
   const liveAssembly = useMemo(() => latestContextAssemblyFromEvents(events), [events]);
   const assembly = useSavedContextAssembly(session?.sessionCode ?? "", liveAssembly.snapshot?.snapshotSequence ? liveAssembly.snapshot : null, dudeCode);
+  const modelLabel = useContextModelLabel(assembly.snapshot?.modelCode ?? null, session?.workspaceCode ?? "");
   const budgetBreakdown = assembly.snapshot ? normalizeContextBudgetBreakdown({
     ...assembly.snapshot.budgetBreakdown,
     estimatedInputTokens: assembly.snapshot.estimatedInputTokens ?? undefined,
@@ -2249,6 +2252,7 @@ export function RightContextSidebar({
           breakdown={budgetBreakdown}
           compactionBusy={compactionBusy || latestCompactionStatus?.loading}
           snapshot={assembly.snapshot}
+          modelLabel={modelLabel}
           onCreateCompaction={onCreateCompaction}
           session={session}
         />
@@ -2420,7 +2424,7 @@ function ChatModelSelector({
               quality: t(`chat.management.modelSelector.quality.${qualityType}`),
               vendor,
             })
-          : model.accessPlatform ?? t("chat.management.modelSelector.platformModels");
+          : model.accessPlatform ?? t("chat.management.modelSelector.providerModels");
         const group = groups.get(key) ?? { label, models: [] };
         group.models.push(model);
         groups.set(key, group);
@@ -3139,9 +3143,7 @@ export function ChatManagementPage() {
 
       setModelsLoading(true);
       try {
-        const options = getServiceDataSource("model") === "api"
-          ? await fetchWorkspaceSelectOptions(activeWorkspaceCode)
-          : getWorkspaceSelectOptions(activeWorkspaceCode);
+        const options = await fetchModelSelectOptions(activeWorkspaceCode);
         if (!active) return;
         const models = availableChatModels(options);
         setChatModels(models);

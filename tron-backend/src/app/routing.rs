@@ -6,7 +6,6 @@ use crate::adapters::inbound::http::{
             profile_routes as profile_model_provider_routes,
             public_routes as public_model_provider_routes,
         },
-        models::routes::routes as admin_model_routes,
         navigation::routes as admin_navigation_routes,
         prompts::routes::routes as admin_prompt_routes,
         variables::routes::routes as admin_variable_routes,
@@ -38,8 +37,7 @@ use crate::adapters::inbound::http::{
 use super::AppState;
 
 pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
-    admin_model_routes()
-        .merge(profile_model_provider_routes())
+    profile_model_provider_routes()
         .merge(admin_navigation_routes())
         .merge(admin_prompt_routes())
         .merge(admin_variable_routes())

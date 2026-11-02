@@ -1,28 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ModelScopeKind {
-    Platform,
-    Workspace,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ModelSourceKind {
-    Platform,
-    WorkspaceLocal,
-    WorkspaceOverride,
-    WorkspaceStatusPatch,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModelViewSourceKind {
-    Platform,
-    Local,
-    Inherited,
-    Override,
+    Provider,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -42,36 +22,13 @@ pub enum ModelProtocol {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ModelType {
     Text,
-    Embedding,
-    Rerank,
+    TextEmbedding,
+    MultimodalEmbedding,
+    TextRerank,
+    MultimodalRerank,
     Image,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ModelCapability {
-    MultimodalAll,
-    TextGeneration,
-    DeepThinking,
-    SupportsDeveloperRole,
-    VisionUnderstanding,
-    ImageGeneration,
-    VideoGeneration,
-    ThreedGeneration,
-    SpeechRecognition,
+    Video,
     SpeechSynthesis,
-    MultimodalVector,
-    TextVector,
-    RealtimeMultimodal,
-    RealtimeSpeechSynthesis,
-    RealtimeSpeechRecognition,
-    RealtimeSpeechTranslation,
-    Rerank,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ModelVerifyStatus {
-    Succeeded,
-    Failed,
+    SpeechRecognition,
+    RealtimeSpeech,
 }

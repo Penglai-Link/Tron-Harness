@@ -1,7 +1,7 @@
 fn platform_prompt_page_definition() -> ToolCatalogDefinition {
     definition(
         "platform.prompt.page",
-        "prompt",
+        "harness_prompt",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.platform.prompt.page.description",
@@ -24,7 +24,7 @@ fn platform_prompt_page_definition() -> ToolCatalogDefinition {
 fn platform_prompt_get_definition() -> ToolCatalogDefinition {
     platform_code_definition(
         "platform.prompt.get",
-        "prompt",
+        "harness_prompt",
         "promptCode",
         "PROMPT-1",
         ToolOperationKind::Query,
@@ -34,7 +34,7 @@ fn platform_prompt_get_definition() -> ToolCatalogDefinition {
 fn platform_prompt_create_definition() -> ToolCatalogDefinition {
     definition(
         "platform.prompt.create",
-        "prompt",
+        "harness_prompt",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.prompt.create.description",
@@ -47,7 +47,7 @@ fn platform_prompt_create_definition() -> ToolCatalogDefinition {
 fn platform_prompt_update_definition() -> ToolCatalogDefinition {
     definition(
         "platform.prompt.update",
-        "prompt",
+        "harness_prompt",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.prompt.update.description",
@@ -60,7 +60,7 @@ fn platform_prompt_update_definition() -> ToolCatalogDefinition {
 fn platform_prompt_delete_definition() -> ToolCatalogDefinition {
     platform_code_definition(
         "platform.prompt.delete",
-        "prompt",
+        "harness_prompt",
         "promptCode",
         "PROMPT-1",
         ToolOperationKind::Command,
@@ -110,7 +110,7 @@ fn platform_prompt_mutation_schema(create: bool) -> serde_json::Value {
 fn platform_mcp_page_definition() -> ToolCatalogDefinition {
     definition(
         "platform.mcp.page",
-        "mcp",
+        "harness_mcp",
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.platform.mcp.page.description",
@@ -123,7 +123,7 @@ fn platform_mcp_page_definition() -> ToolCatalogDefinition {
 fn platform_mcp_get_definition() -> ToolCatalogDefinition {
     platform_code_definition(
         "platform.mcp.get",
-        "mcp",
+        "harness_mcp",
         "serverCode",
         "MCP-1",
         ToolOperationKind::Query,
@@ -133,7 +133,7 @@ fn platform_mcp_get_definition() -> ToolCatalogDefinition {
 fn platform_mcp_create_definition() -> ToolCatalogDefinition {
     definition(
         "platform.mcp.create",
-        "mcp",
+        "harness_mcp",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.mcp.create.description",
@@ -146,7 +146,7 @@ fn platform_mcp_create_definition() -> ToolCatalogDefinition {
 fn platform_mcp_update_definition() -> ToolCatalogDefinition {
     definition(
         "platform.mcp.update",
-        "mcp",
+        "harness_mcp",
         ToolOperationKind::Command,
         schema(
             "agent.toolCatalog.tools.platform.mcp.update.description",
@@ -159,7 +159,7 @@ fn platform_mcp_update_definition() -> ToolCatalogDefinition {
 fn platform_mcp_delete_definition() -> ToolCatalogDefinition {
     platform_code_definition(
         "platform.mcp.delete",
-        "mcp",
+        "harness_mcp",
         "serverCode",
         "github",
         ToolOperationKind::Command,

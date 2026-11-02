@@ -60,7 +60,11 @@ impl ModelClient for ControlledModel {
                 .messages
                 .iter()
                 .rev()
-                .find(|message| message.role == fw::Role::User && (message.content.text().contains("foreground-hold") || message.content.text().contains("background-work")))
+                .find(|message| {
+                    message.role == fw::Role::User
+                        && (message.content.text().contains("foreground-hold")
+                            || message.content.text().contains("background-work"))
+                })
                 .map(|message| message.content.text())
                 .unwrap_or_default();
             if current.contains("foreground-hold") {
@@ -161,19 +165,25 @@ async fn platform_short_term_memory_runs_background_while_foreground_is_still_an
     let router = common::app_with_state_setup(config, |state| captured = Some(state.clone()));
     let state = captured.unwrap();
     state.knowledge_bases.stop_ingestion_workers();
-    models::seed_loop(&state);
+
     state
         .dudes
-        .create(tron_backend::application::dude::CreateDudeCommand { kind: DudeKind::Custom, enabled: true, heartbeat_minutes: 30, memory_auto_approve: false, definition: CreateWorkspaceInternalAgentCommand {
-            description: String::new(),
-            agent_code: "acceptance-dude".into(),
-            name: "Acceptance Dude".into(),
-            role_prompt: "Run a focused acceptance task.".into(),
-            loop_code: Some("test-react".into()),
-            avatar_id: Some("robot".into()),
-            group_name: None,
-            candidate_model_codes: vec![],
-        }})
+        .create(tron_backend::application::dude::CreateDudeCommand {
+            kind: DudeKind::Custom,
+            enabled: true,
+            heartbeat_minutes: 30,
+            memory_auto_approve: false,
+            definition: CreateWorkspaceInternalAgentCommand {
+                description: String::new(),
+                agent_code: "acceptance-dude".into(),
+                name: "Acceptance Dude".into(),
+                role_prompt: "Run a focused acceptance task.".into(),
+
+                avatar_id: Some("robot".into()),
+                group_name: None,
+                candidate_model_codes: vec![],
+            },
+        })
         .unwrap();
     // Create the same durable product projection used by real Dude sessions.
     // In particular, DudeSession has no user field: the native chat link is the

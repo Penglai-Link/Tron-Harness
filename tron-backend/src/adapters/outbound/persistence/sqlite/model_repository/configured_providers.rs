@@ -16,10 +16,8 @@ impl SqliteModelRepository {
         &self,
         provider: &ConfiguredModelProvider,
         expected_updated_at: Option<i64>,
-        models: &[Model],
     ) -> Result<(), ConfiguredProviderError> {
         let provider = provider.clone();
-        let models = models.to_vec();
         self.connection.call(move |connection| {
             let transaction = connection.transaction().map_err(|_| ConfiguredProviderError::Storage)?;
             let existing = transaction.query_row("SELECT updated_at FROM configured_model_providers WHERE provider_id = ?1", [&provider.provider_id], |row| row.get::<_, i64>(0)).optional().map_err(|_| ConfiguredProviderError::Storage)?;
@@ -27,13 +25,13 @@ impl SqliteModelRepository {
             let old_codes = linked_model_codes(&transaction, &provider.provider_id)?;
             let configuration = serde_json::to_string(&provider).map_err(|_| ConfiguredProviderError::Storage)?;
             transaction.execute("INSERT INTO configured_model_providers(provider_id, configuration_json, updated_at) VALUES (?1,?2,?3) ON CONFLICT(provider_id) DO UPDATE SET configuration_json=excluded.configuration_json, updated_at=excluded.updated_at", params![provider.provider_id, configuration, provider.updated_at]).map_err(|_| ConfiguredProviderError::Storage)?;
-            for model in &models {
-                let mut store = SqliteModelRepositorySql { connection: &transaction };
-                if old_codes.contains(&model.model_code) { store.update_model(model) } else { store.create_model(model) }.map_err(|_| ConfiguredProviderError::Storage)?;
-                transaction.execute("INSERT OR IGNORE INTO configured_provider_models(provider_id,model_code) VALUES (?1,?2)", params![provider.provider_id, model.model_code]).map_err(|_| ConfiguredProviderError::Storage)?;
-                if !provider.enabled || !model.enabled { clear_defaults(&transaction, &model.model_code)?; }
+            transaction.execute("DELETE FROM configured_provider_models WHERE provider_id=?1", [&provider.provider_id]).map_err(|_| ConfiguredProviderError::Storage)?;
+            for model in &provider.models {
+                let code = model.model_code.as_deref().ok_or(ConfiguredProviderError::InvalidModels)?;
+                transaction.execute("INSERT INTO configured_provider_models(provider_id,model_code) VALUES (?1,?2)", params![provider.provider_id,code]).map_err(|_| ConfiguredProviderError::Storage)?;
+                if !provider.enabled || !model.enabled { clear_defaults(&transaction, code)?; }
             }
-            for code in old_codes.iter().filter(|code| !models.iter().any(|model| &model.model_code == *code)) { remove_model(&transaction, code)?; }
+            for code in old_codes.iter().filter(|code| !provider.models.iter().any(|model| model.model_code.as_deref() == Some(code.as_str()))) { clear_defaults(&transaction, code)?; }
             transaction.commit().map_err(|_| ConfiguredProviderError::Storage)
         }, || ConfiguredProviderError::Storage)
     }
@@ -50,7 +48,7 @@ impl SqliteModelRepository {
                     .map_err(|_| ConfiguredProviderError::Storage)?;
                 let codes = linked_model_codes(&transaction, &provider_id)?;
                 for code in codes {
-                    remove_model(&transaction, &code)?;
+                    clear_defaults(&transaction, &code)?;
                 }
                 let removed = transaction
                     .execute(
@@ -83,20 +81,9 @@ fn linked_model_codes(
         .map_err(|_| ConfiguredProviderError::Storage)
 }
 fn clear_defaults(connection: &Connection, code: &str) -> Result<(), ConfiguredProviderError> {
-    for table in [
-        "platform_default_models",
-        "workspace_default_models",
-        "default_model_selections",
-    ] {
-        connection.execute(&format!("DELETE FROM {table} WHERE model_code=?1 OR model_code IN (SELECT model_code FROM models WHERE source_model_code=?1)"), [code]).map_err(|_| ConfiguredProviderError::Storage)?;
-    }
-    Ok(())
-}
-fn remove_model(connection: &Connection, code: &str) -> Result<(), ConfiguredProviderError> {
-    clear_defaults(connection, code)?;
     connection
         .execute(
-            "DELETE FROM models WHERE source_model_code=?1 OR model_code=?1",
+            "DELETE FROM default_model_selections WHERE model_code=?1 AND provider_code IS NULL",
             [code],
         )
         .map_err(|_| ConfiguredProviderError::Storage)?;

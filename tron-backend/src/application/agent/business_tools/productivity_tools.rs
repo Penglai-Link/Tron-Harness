@@ -1,5 +1,5 @@
-mod git;
 mod office;
+mod worktree;
 
 use super::coding_tools::{json_observation, resolve_optional_directory, resolve_path};
 use crate::{
@@ -25,10 +25,6 @@ pub(super) fn tools(resources: ResourceService) -> Vec<Arc<dyn Tool>> {
         "worktree_list",
         "worktree_create",
         "worktree_select",
-        "git_status",
-        "git_diff",
-        "git_log",
-        "git_switch_branch",
         "word_read",
         "word_create",
         "word_replace_text",
@@ -73,7 +69,7 @@ impl Tool for ProductivityTool {
             let context = context.clone();
             eliteforge_agent_official_plugin_tools_local::capture::host_operation_blocking(
                 async move {
-                    git::execute(name, &input, &context, None)
+                    worktree::execute(name, &input, &context, None)
                         .await
                         .map_err(|error| {
                             eliteforge_agent_core::ToolError::Failed(error.to_string())
@@ -96,7 +92,8 @@ impl Tool for ProductivityTool {
         Some(Box::pin(async move {
             control.check_active()?;
             validate(self.name, &request.input, context)?;
-            let result = git::execute(self.name, &request.input, context, Some(control)).await?;
+            let result =
+                worktree::execute(self.name, &request.input, context, Some(control)).await?;
             control.check_active()?;
             finish(self.name, result)
         }))
@@ -236,5 +233,5 @@ async fn run(
 }
 
 #[cfg(test)]
-#[path = "productivity_tools/git_control_tests.rs"]
-mod git_control_tests;
+#[path = "productivity_tools/registry_tests.rs"]
+mod registry_tests;

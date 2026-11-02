@@ -23,7 +23,6 @@ pub struct CreateInternalAgentRequest {
     #[serde(default)]
     description: String,
     role_prompt: String,
-    loop_code: Option<String>,
     avatar_id: Option<String>,
     group_name: Option<String>,
     #[serde(default)]
@@ -38,7 +37,6 @@ pub struct CreateInternalAgentResponse {
     #[serde(default)]
     description: String,
     role_prompt: String,
-    loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
     #[serde(default)]
@@ -51,7 +49,6 @@ pub struct UpdateInternalAgentDefinitionRequest {
     name: Option<String>,
     description: Option<String>,
     role_prompt: Option<String>,
-    loop_code: Option<String>,
     avatar_id: Option<String>,
     group_name: Option<String>,
     #[serde(default)]
@@ -66,7 +63,6 @@ pub struct UpdateInternalAgentDefinitionResponse {
     #[serde(default)]
     description: String,
     role_prompt: String,
-    loop_code: Option<String>,
     avatar_id: String,
     group_name: Option<String>,
     #[serde(default)]
@@ -88,7 +84,6 @@ pub async fn create_internal_agent(
                 name: request.name,
                 description: request.description,
                 role_prompt: request.role_prompt,
-                loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
                 group_name: request.group_name,
                 candidate_model_codes: request.candidate_model_codes,
@@ -100,7 +95,6 @@ pub async fn create_internal_agent(
         name: record.name,
         description: record.description,
         role_prompt: record.role_prompt,
-        loop_code: record.loop_code,
         avatar_id: record.avatar_id,
         group_name: record.group_name,
         candidate_model_codes: record.candidate_model_codes,
@@ -123,7 +117,6 @@ pub async fn update_internal_agent_definition(
                 name: request.name,
                 description: request.description,
                 role_prompt: request.role_prompt,
-                loop_code: request.loop_code,
                 avatar_id: request.avatar_id,
                 group_name: request.group_name,
                 candidate_model_codes: request.candidate_model_codes,
@@ -136,7 +129,6 @@ pub async fn update_internal_agent_definition(
             name: record.name,
             description: record.description,
             role_prompt: record.role_prompt,
-            loop_code: record.loop_code,
             avatar_id: record.avatar_id,
             group_name: record.group_name,
             candidate_model_codes: record.candidate_model_codes,

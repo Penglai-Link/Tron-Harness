@@ -28,7 +28,7 @@ const catalogProtocols: ProviderCatalogProtocol[] = [
 ];
 const catalogQualities = ["High", "Middle", "Low"] as const;
 type CatalogProtocolFilter = "ALL" | ProviderCatalogProtocol;
-type CatalogQualityFilter = "ALL" | "UNKNOWN" | ProviderModelQuality;
+type CatalogQualityFilter = "ALL" | "UNKNOWN" | "MULTIMEDIA" | ProviderModelQuality;
 
 function ColumnHeader({ label, help }: { label: string; help: string }) {
   return (
@@ -82,9 +82,9 @@ export function ModelProviderCatalogPage() {
         protocolFilter === "ALL" || model.protocols.includes(protocolFilter);
       const matchesQuality =
         qualityFilter === "ALL"
-        || (qualityFilter === "UNKNOWN"
-          ? model.qualityType === null
-          : model.qualityType === qualityFilter);
+        || (qualityFilter === "MULTIMEDIA" ? model.catalogModelType !== "Chat"
+          : qualityFilter === "UNKNOWN" ? model.catalogModelType === "Chat" && model.qualityType === null
+          : model.catalogModelType === "Chat" && model.qualityType === qualityFilter);
       return matchesProtocol && matchesQuality;
     }),
     [protocolFilter, qualityFilter, records],
@@ -92,6 +92,19 @@ export function ModelProviderCatalogPage() {
 
   const columns = useMemo<DataTableColumn<ProviderCatalogModel>[]>(
     () => [
+      {
+        id: "vendor",
+        header: (
+          <ColumnHeader
+            help={t("modelProviders.help.upstreamVendor")}
+            label={t("modelProviders.columns.upstreamVendor")}
+          />
+        ),
+        render: (model) => <div className="min-w-0">
+          <p className="truncate" title={model.upstreamVendorName ?? undefined}>{model.upstreamVendorName ?? t("modelProviders.values.unknown")}</p>
+          <p className="mt-1 truncate text-xs text-[var(--color-on-surface-variant)]">{model.upstreamVendorCode || t("modelProviders.values.dash")}</p>
+        </div>,
+      },
       {
         id: "model",
         header: t("modelProviders.columns.model"),
@@ -123,6 +136,11 @@ export function ModelProviderCatalogPage() {
         ),
       },
       {
+        id: "tags",
+        header: t("modelProviders.columns.tags"),
+        render: (model) => model.tags?.length ? <div className="flex flex-wrap gap-1">{model.tags.map(tag => <div key={tag}><Badge variant="outline">{t(`modelProviders.modelTags.${tag}`, { defaultValue: tag })}</Badge>{(tag === "text_embedding" || tag === "multimodal_embedding") && <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">{model.dimension == null ? t("modelProviders.dimensionUnknown") : t("modelProviders.dimensionValue", { count: model.dimension })}</p>}</div>)}</div> : t("modelProviders.values.dash"),
+      },
+      {
         id: "protocols",
         header: t("modelProviders.columns.protocol"),
         render: (model) => model.protocols?.map((protocol) => (
@@ -130,19 +148,6 @@ export function ModelProviderCatalogPage() {
             {t(`modelProviders.protocols.${protocol}`)}
           </Badge>
         )),
-      },
-      {
-        id: "vendor",
-        header: (
-          <ColumnHeader
-            help={t("modelProviders.help.upstreamVendor")}
-            label={t("modelProviders.columns.upstreamVendor")}
-          />
-        ),
-        render: (model) =>
-          model.upstreamVendorName ??
-          model.upstreamVendorCode ??
-          t("modelProviders.values.unknown"),
       },
       {
         id: "contextWindow",
@@ -167,59 +172,25 @@ export function ModelProviderCatalogPage() {
             label={t("modelProviders.columns.quality")}
           />
         ),
-        render: (model) => model.qualityType ? (
+        render: (model) => model.catalogModelType !== "Chat" ? <Badge variant="outline">{t("modelProviders.quality.Multimedia")}</Badge> : model.qualityType ? (
           <Badge variant="outline">
             {t(`modelProviders.quality.${model.qualityType}`)}
           </Badge>
         ) : t("modelProviders.values.dash"),
       },
       {
-        id: "inputCoefficient",
-        align: "right",
-        header: (
-          <ColumnHeader
-            help={t("modelProviders.help.inputCoefficient")}
-            label={t("modelProviders.columns.inputCoefficient")}
-          />
-        ),
-        render: (model) => model.inputCoefficient === null
-          ? t("modelProviders.values.dash")
-          : formatCoefficient(model.inputCoefficient),
-      },
-      {
-        id: "cacheHitCoefficient",
-        align: "right",
-        header: (
-          <ColumnHeader
-            help={t("modelProviders.help.cacheHitCoefficient")}
-            label={t("modelProviders.columns.cacheHitCoefficient")}
-          />
-        ),
-        render: (model) => model.cacheHitCoefficient === null
-          ? t("modelProviders.values.dash")
-          : formatCoefficient(model.cacheHitCoefficient),
-      },
-      {
-        id: "outputCoefficient",
-        align: "right",
-        header: (
-          <ColumnHeader
-            help={t("modelProviders.help.outputCoefficient")}
-            label={t("modelProviders.columns.outputCoefficient")}
-          />
-        ),
-        render: (model) => model.outputCoefficient === null
-          ? t("modelProviders.values.dash")
-          : formatCoefficient(model.outputCoefficient),
+        id: "coefficients",
+        header: t("modelProviders.columns.coefficients"),
+        render: (model) => <div className="space-y-1 text-xs">{([
+          ["inputCoefficient", model.inputCoefficient],
+          ["cacheHitCoefficient", model.cacheHitCoefficient],
+          ["outputCoefficient", model.outputCoefficient],
+        ] as const).map(([key, value]) => <div key={key} className="whitespace-nowrap"><span>{t(`modelProviders.columns.${key}`)}: </span>{value == null ? t("modelProviders.values.dash") : formatCoefficient(value)}</div>)}</div>,
       },
       {
         id: "status",
         header: t("modelProviders.columns.status"),
-        render: (model) => (
-          <Badge variant={model.status === "Available" ? "success" : "outline"}>
-            {t(`modelProviders.status.${model.status}`)}
-          </Badge>
-        ),
+        render: (model) => <Badge variant={model.status === "Available" ? "success" : "secondary"} className={model.status === "Available" ? "font-semibold" : "opacity-55 font-normal"}>{model.status === "Unavailable" ? t("modelProviders.catalogDisabled") : t(`modelProviders.status.${model.status}`)}</Badge>,
       },
       {
         id: "lastSeenAt",
@@ -322,7 +293,7 @@ export function ModelProviderCatalogPage() {
                   {t(`modelProviders.quality.${quality}`)}
                 </SelectItem>
               ))}
-              <SelectItem value="UNKNOWN">{t("modelProviders.filters.unknownQuality")}</SelectItem>
+              <SelectItem value="MULTIMEDIA">{t("modelProviders.quality.Multimedia")}</SelectItem>
             </SelectInput>
             <InfoTooltip ariaLabel={t("modelProviders.aria.catalogHelp")}>
               {t("modelProviders.help.catalog")}
