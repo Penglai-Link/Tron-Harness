@@ -5,6 +5,8 @@ mod app_repository;
 mod automation_repository;
 mod automation_repository_helpers;
 mod chat_repository;
+mod chat_session_telemetry;
+pub(crate) use chat_session_telemetry::initialize_session_telemetry_indexes;
 pub(crate) mod framework_storage;
 mod mcp_repository;
 mod memory_work_domain_repository;

@@ -1,15 +1,15 @@
 //! Tron owns only workspace/business links. Session lifecycle and presentation
 //! history are stored through Framework services on the injected connection.
 use super::framework_storage::{blocking, chat_error};
+use super::chat_session_telemetry::delete_session_telemetry;
 use crate::{
     application::{agent::FrameworkHost, chat::ChatRepository},
     domain::chat::*,
 };
 use eliteforge_agent_core as fw;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet, VecDeque};
 
 pub struct SqliteChatRepository {
     host: FrameworkHost,
@@ -101,100 +101,6 @@ fn chat_session_from_row(row: SessionProjection) -> Result<ChatSession, ChatErro
     })
 }
 
-/// Remove the execution spans owned by a deleted session. A trace can also
-/// contain an HTTP span or another session, so deleting the trace unconditionally
-/// would erase unrelated observability data.
-fn delete_session_telemetry(c: &Connection, code: &str) -> rusqlite::Result<()> {
-    let exists: bool = c.query_row(
-        "SELECT EXISTS(SELECT 1 FROM telemetry.sqlite_master WHERE type='table' AND name='ef_telemetry_traces')",
-        [], |row| row.get(0),
-    )?;
-    if !exists { return Ok(()); }
-    let trace_ids = c.prepare(
-        "SELECT trace_id FROM telemetry.ef_telemetry_traces WHERE json_extract(attributes,'$.\"tron.session.code\"')=?1
-         UNION SELECT trace_id FROM telemetry.ef_telemetry_spans WHERE json_extract(data,'$.attributes.\"tron.session.code\"')=?1",
-    )?.query_map([code], |row| row.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
-    for trace_id in trace_ids {
-        let spans = c.prepare(
-            "SELECT span_id,json_extract(data,'$.parentSpanId'),json_extract(data,'$.attributes.\"tron.session.code\"')
-             FROM telemetry.ef_telemetry_spans WHERE trace_id=?1",
-        )?.query_map([&trace_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, Option<String>>(2)?)))?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        let mut children: HashMap<String, Vec<String>> = HashMap::new();
-        let mut owners = HashMap::new();
-        let mut doomed = HashSet::new();
-        let mut queue = VecDeque::new();
-        for (id, parent, owner) in &spans {
-            if let Some(parent) = parent { children.entry(parent.clone()).or_default().push(id.clone()); }
-            owners.insert(id.clone(), owner.clone());
-            if owner.as_deref() == Some(code) {
-                doomed.insert(id.clone());
-                queue.push_back(id.clone());
-            }
-        }
-        while let Some(parent) = queue.pop_front() {
-            for child in children.get(&parent).into_iter().flatten() {
-                // A child execution for a different session must survive even
-                // when its parent belongs to the deleted session.
-                if owners.get(child).and_then(Option::as_deref).is_some_and(|owner| owner != code) { continue; }
-                if doomed.insert(child.clone()) { queue.push_back(child.clone()); }
-            }
-        }
-        if !spans.is_empty() && doomed.len() == spans.len() {
-            c.execute("DELETE FROM telemetry.ef_telemetry_traces WHERE trace_id=?1", [&trace_id])?;
-            continue;
-        }
-        for id in &doomed {
-            c.execute("DELETE FROM telemetry.ef_telemetry_spans WHERE trace_id=?1 AND span_id=?2", params![trace_id, id])?;
-            c.execute("DELETE FROM telemetry.ef_telemetry_span_rollups WHERE trace_id=?1 AND span_id=?2", params![trace_id, id])?;
-        }
-        // Preserve surviving execution roots without dangling parent links.
-        for (id, parent, _) in &spans {
-            if doomed.contains(id) { continue; }
-            if parent.as_ref().is_some_and(|parent| doomed.contains(parent)) {
-                c.execute("UPDATE telemetry.ef_telemetry_spans SET data=json_set(data,'$.parentSpanId',NULL) WHERE trace_id=?1 AND span_id=?2", params![trace_id, id])?;
-                c.execute("UPDATE telemetry.ef_telemetry_span_rollups SET parent_id=NULL WHERE trace_id=?1 AND span_id=?2", params![trace_id, id])?;
-            }
-        }
-        if spans.is_empty() {
-            c.execute("DELETE FROM telemetry.ef_telemetry_traces WHERE trace_id=?1", [&trace_id])?;
-            continue;
-        }
-        // A shared trace may have been registered with the deleted session's
-        // metadata. Remove only that association.
-        c.execute("UPDATE telemetry.ef_telemetry_traces SET attributes=json_remove(attributes,'$.\"tron.session.code\"','$.\"tron.run.code\"','$.\"tron.agent.code\"','$.\"tron.trace.agent\"') WHERE trace_id=?1 AND json_extract(attributes,'$.\"tron.session.code\"')=?2", params![trace_id, code])?;
-        if !doomed.is_empty() { rebuild_trace_rollups(c, &trace_id)?; }
-    }
-    Ok(())
-}
-
-fn rebuild_trace_rollups(c: &Connection, trace_id: &str) -> rusqlite::Result<()> {
-    type Counts = [i64; 7];
-    let nodes = c.prepare("SELECT span_id,parent_id,own_span_count,own_error_count,own_model_count,own_tool_count,own_input_tokens,own_cached_input_tokens,own_output_tokens FROM telemetry.ef_telemetry_span_rollups WHERE trace_id=?1")?
-        .query_map([trace_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, [row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?,row.get(6)?,row.get(7)?,row.get(8)?])))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let parents: HashMap<_, _> = nodes.iter().map(|(id, parent, _)| (id.clone(), parent.clone())).collect();
-    let mut totals: HashMap<String, Counts> = nodes.iter().map(|(id, _, _)| (id.clone(), [0; 7])).collect();
-    let mut trace_total = [0; 7];
-    for (id, _, own) in &nodes {
-        for (sum, value) in trace_total.iter_mut().zip(own) { *sum += value; }
-        let mut current = Some(id.as_str());
-        let mut seen = HashSet::new();
-        while let Some(node) = current {
-            if !seen.insert(node) { break; }
-            let Some(total) = totals.get_mut(node) else { break; };
-            for (sum, value) in total.iter_mut().zip(own) { *sum += value; }
-            current = parents.get(node).and_then(Option::as_deref);
-        }
-    }
-    for (id, counts) in totals {
-        c.execute("UPDATE telemetry.ef_telemetry_span_rollups SET span_count=?3,error_count=?4,model_count=?5,tool_count=?6,input_tokens=?7,cached_input_tokens=?8,output_tokens=?9 WHERE trace_id=?1 AND span_id=?2",
-            params![trace_id,id,counts[0],counts[1],counts[2],counts[3],counts[4],counts[5],counts[6]])?;
-    }
-    c.execute("UPDATE telemetry.ef_telemetry_trace_rollups SET span_count=?2,error_count=?3,model_count=?4,tool_count=?5,input_tokens=?6,cached_input_tokens=?7,output_tokens=?8 WHERE trace_id=?1",
-        params![trace_id,trace_total[0],trace_total[1],trace_total[2],trace_total[3],trace_total[4],trace_total[5],trace_total[6]])?;
-    Ok(())
-}
 #[derive(Clone, Serialize, Deserialize)]
 struct Link {
     id: i64,
@@ -1209,9 +1115,21 @@ mod shared_transaction_tests {
         insert_span(&database,"shared","a",Some("page"),Some("session-a"));
         insert_span(&database,"shared","a-child",Some("a"),None);
         insert_span(&database,"shared","b",Some("a"),Some("session-b"));
+        insert_span(&database,"shared","unrelated",Some("page"),Some("session-b"));
+        let lookup = super::super::chat_session_telemetry::SESSION_TRACE_LOOKUP_SQL.replace("telemetry.", "");
+        let plan: Vec<String> = database.call_blocking(move |c| {
+            c.prepare(&format!("EXPLAIN QUERY PLAN {lookup}"))?
+                .query_map(["session-a"], |row| row.get(3))?.collect()
+        }).unwrap();
+        assert!(plan.iter().any(|row| row.contains("tron_telemetry_spans_session")), "{plan:?}");
+        assert!(!plan.iter().any(|row| row.starts_with("SCAN ")), "session lookup must not scan unrelated telemetry: {plan:?}");
+        database.call_blocking(|c| c.execute_batch(
+            "CREATE TRIGGER reject_unrelated_rollup_write BEFORE UPDATE OF span_count,error_count,model_count,tool_count,input_tokens,cached_input_tokens,output_tokens ON ef_telemetry_span_rollups
+             WHEN OLD.span_id='unrelated' BEGIN SELECT RAISE(ABORT,'unrelated rollup must not be rewritten'); END;"
+        )).unwrap();
         repository.delete_session("session-a").unwrap();
         let survivors: Vec<(String,Option<String>)> = database.call_blocking(|c| c.prepare("SELECT span_id,json_extract(data,'$.parentSpanId') FROM ef_telemetry_spans WHERE trace_id='shared' ORDER BY span_id")?.query_map([],|row|Ok((row.get(0)?,row.get(1)?)))?.collect()).unwrap();
-        assert_eq!(survivors,vec![("b".into(),None),("page".into(),None)]);
+        assert_eq!(survivors,vec![("b".into(),None),("page".into(),None),("unrelated".into(),Some("page".into()))]);
         let (session, trace_count, page_count): (Option<String>,i64,i64) = database.call_blocking(|c| {
             Ok::<_,rusqlite::Error>((
                 c.query_row("SELECT json_extract(attributes,'$.\"tron.session.code\"') FROM ef_telemetry_traces WHERE trace_id='shared'",[],|row|row.get(0))?,
@@ -1220,8 +1138,8 @@ mod shared_transaction_tests {
             ))
         }).unwrap();
         assert_eq!(session,None);
-        assert_eq!(trace_count,2);
-        assert_eq!(page_count,1);
+        assert_eq!(trace_count,3);
+        assert_eq!(page_count,2);
         assert!(repository.get_session("session-b").is_ok());
     }
     #[test]
