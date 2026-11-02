@@ -1,5 +1,6 @@
+import { contextBlockName } from "@/shared/context/contextBlockPresentation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, GripVertical, RotateCcw, Trash2 } from "lucide-react";
+import { GripVertical, RotateCcw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Field, TextInput } from "@/components/forms";
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { PageHeader, SurfaceCard } from "@/shared";
-import { fetchContextLayout, updateContextLayout, type ContextLayoutState } from "../api/contextLayoutApi";
+import { fetchContextLayout, updateContextLayout, type ContextLayoutBudget, type ContextLayoutState } from "../api/contextLayoutApi";
 
 const HISTORY_ANCHOR = "current_session_history";
 
@@ -16,6 +17,7 @@ export function ContextLayoutPage() {
   const [layout, setLayout] = useState<ContextLayoutState | null>(null);
   const [order, setOrder] = useState<string[]>([]);
   const [pluginOverrides, setPluginOverrides] = useState<Record<string, number>>({});
+  const [nativeBudgets, setNativeBudgets] = useState<Record<string, ContextLayoutBudget>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -34,6 +36,7 @@ export function ContextLayoutPage() {
         setLayout(result);
         setOrder(result.order);
         setPluginOverrides(result.pluginOverrides);
+        setNativeBudgets(result.nativeBudgets ?? {});
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("contextLayout.loadFailed"));
@@ -48,13 +51,14 @@ export function ContextLayoutPage() {
   const changed = layout !== null && (
     JSON.stringify(order) !== JSON.stringify(layout.order)
     || JSON.stringify(pluginOverrides) !== JSON.stringify(layout.pluginOverrides)
+    || JSON.stringify(nativeBudgets) !== JSON.stringify(layout.nativeBudgets ?? {})
   );
   const historyIndex = order.indexOf(HISTORY_ANCHOR);
 
   function moveBlock(sourceId: string, targetId: string) {
     const sourceIndex = order.indexOf(sourceId);
     const targetIndex = order.indexOf(targetId);
-    if (sourceIndex <= historyIndex || targetIndex <= historyIndex || sourceIndex < 0 || targetIndex < 0) return;
+    if (historyIndex < 0 || sourceIndex <= historyIndex || targetIndex <= historyIndex || sourceIndex < 0 || targetIndex < 0) return;
     setOrder((current) => {
       const next = [...current];
       const from = next.indexOf(sourceId);
@@ -82,6 +86,12 @@ export function ContextLayoutPage() {
     });
   }
 
+  function setNativeBudget(id: string, field: keyof ContextLayoutBudget, value: string) {
+    const parsed = value.trim() === "" ? null : field === "maxRatioBps" ? Math.round(Number(value) * 100) : Number(value);
+    if (parsed !== null && (!Number.isSafeInteger(parsed) || parsed < 1)) return;
+    setNativeBudgets(current => ({ ...current, [id]: { ...current[id], [field]: parsed } }));
+  }
+
   function removeUnavailableBlock(id: string) {
     setOrder((current) => current.filter((blockId) => blockId !== id));
     setPluginOverrides((current) => {
@@ -97,10 +107,11 @@ export function ContextLayoutPage() {
     setError("");
     setNotice("");
     try {
-      const updated = await updateContextLayout({ revision: layout.revision, order, pluginOverrides });
+      const updated = await updateContextLayout({ revision: layout.revision, order, pluginOverrides, nativeBudgets });
       setLayout(updated);
       setOrder(updated.order);
       setPluginOverrides(updated.pluginOverrides);
+      setNativeBudgets(updated.nativeBudgets ?? {});
       setNotice(t("contextLayout.saved"));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t("contextLayout.saveFailed"));
@@ -146,8 +157,7 @@ export function ContextLayoutPage() {
             {order.map((id, index) => {
               const block = blocksById.get(id);
               const movable = historyIndex >= 0 && index > historyIndex;
-              const isAnchor = id === HISTORY_ANCHOR;
-              const name = t(`contextLayout.blockNames.${id}`, { defaultValue: block?.displayName || id });
+              const name = contextBlockName(id, t, block?.displayName || id);
               const budgetParts = [
                 block?.defaultMaxTokens != null
                   ? t("contextLayout.tokenBudget", { count: block.defaultMaxTokens.toLocaleString() })
@@ -165,6 +175,14 @@ export function ContextLayoutPage() {
                 <li
                   key={id}
                   draggable={movable && !saving}
+                  tabIndex={movable ? 0 : undefined}
+                  onKeyDown={(event) => {
+                    if (!movable || saving || event.target !== event.currentTarget || !event.altKey) return;
+                    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                      event.preventDefault();
+                      moveBy(id, event.key === "ArrowUp" ? -1 : 1);
+                    }
+                  }}
                   onDragStart={(event) => {
                     if (!movable) { event.preventDefault(); return; }
                     event.dataTransfer.effectAllowed = "move";
@@ -185,28 +203,33 @@ export function ContextLayoutPage() {
                 >
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
                     <div className="flex min-w-0 flex-1 items-start gap-2">
-                      <div className={`mt-0.5 flex shrink-0 items-center gap-1 ${movable ? "cursor-grab active:cursor-grabbing" : "text-[var(--color-on-surface-variant)]"}`}>
-                        <GripVertical size={16} aria-hidden="true" />
-                        {movable ? (
-                          <span className="flex flex-col">
-                            <Button variant="ghost" size="icon-xs" aria-label={t("contextLayout.moveUp", { name })} disabled={saving || index === historyIndex + 1} onClick={() => moveBy(id, -1)}><ChevronUp /></Button>
-                            <Button variant="ghost" size="icon-xs" aria-label={t("contextLayout.moveDown", { name })} disabled={saving || index === order.length - 1} onClick={() => moveBy(id, 1)}><ChevronDown /></Button>
-                          </span>
-                        ) : null}
-                      </div>
+                      {movable ? <span className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing"><GripVertical size={16} aria-hidden="true" /></span> : null}
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <span className="break-all font-medium">{name}</span>
-                          {isAnchor ? <Badge variant="secondary">{t("contextLayout.anchor")}</Badge> : null}
-                          {block?.plugin ? <Badge variant="outline">{t("contextLayout.plugin")}</Badge> : <Badge variant="outline">{t("contextLayout.platform")}</Badge>}
+                          {block?.plugin ? <Badge variant="outline" title={block.providerId ?? undefined}>{t("contextLayout.plugin")}</Badge> : null}
                           {block?.unavailable ? <Badge variant="warning">{t("contextLayout.unavailable")}</Badge> : null}
                         </div>
-                        <p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{id}</p>
+                        {block?.plugin ? <p className="mt-1 break-all font-mono text-xs text-[var(--color-on-surface-variant)]">{id}</p> : null}
                         {block?.description ? <p className="mt-2 break-words text-sm text-[var(--color-on-surface-variant)]">{block.description}</p> : null}
                         {block?.plugin ? <p className="mt-2 text-xs text-[var(--color-on-surface-variant)]">{t("contextLayout.defaultBudget", { budget })}</p> : null}
                       </div>
                     </div>
 
+                    {nativeBudgets[id] ? (
+                      <div className="grid w-full shrink-0 gap-3 sm:w-72">
+                        <Field label={t("contextLayout.tokenLimit")} hint={t("contextLayout.nativeBudgetHelp")}>
+                          <TextInput type="number" min={1} step={1} disabled={saving} value={nativeBudgets[id].maxTokens ?? ""} placeholder={t("contextLayout.noTokenCap")}
+                            aria-label={t("contextLayout.tokenLimitFor", { name })} onChange={event => setNativeBudget(id, "maxTokens", event.currentTarget.value)} />
+                        </Field>
+                        {layout?.nativeBudgets?.[id]?.maxRatioBps != null ? (
+                          <Field label={t("contextLayout.ratioLimit")} hint={t("contextLayout.ratioLimitHelp")}>
+                            <TextInput type="number" min={0.01} max={100} step={0.01} disabled={saving} value={nativeBudgets[id].maxRatioBps == null ? "" : nativeBudgets[id].maxRatioBps! / 100}
+                              aria-label={t("contextLayout.ratioLimitFor", { name })} onChange={event => setNativeBudget(id, "maxRatioBps", event.currentTarget.value)} />
+                          </Field>
+                        ) : null}
+                      </div>
+                    ) : !block?.plugin && (id === "seed_prompt_prefix" || id === HISTORY_ANCHOR) ? <p className="text-xs text-[var(--color-on-surface-variant)] sm:max-w-72">{t(id === HISTORY_ANCHOR ? "contextLayout.historyBudgetHelp" : "contextLayout.instructionBudgetHelp")}</p> : null}
                     {block?.plugin && (!block.unavailable || block.overrideMaxTokens != null) ? (
                       <Field className="w-full shrink-0 sm:w-64" label={t("contextLayout.tokenOverride")} hint={t("contextLayout.tokenOverrideHelp")}>
                         <TextInput

@@ -1,3 +1,4 @@
+import { contextBlockName } from "@/shared/context/contextBlockPresentation";
 import {
   BookmarkPlus,
   Copy,
@@ -1379,27 +1380,7 @@ interface ContextMemoryBlockItem {
   tokens: number;
 }
 
-const contributorLabelKeys: Record<string, string> = {
-  "framework.instructions": "systemPromptName",
-  seed_prompt_prefix: "systemPromptName",
-  application_context: "applicationContextName",
-  page_context: "pageContextName",
-  current_session_checkpoint: "checkpointName",
-  current_session_working_state: "workingStateName",
-  "framework.history": "sessionHistoryName",
-  runtime_identity: "runtimeIdentityName",
-  "skills.catalog": "skillsCatalogName",
-  "tool_domains": "toolDomainsName",
-  "skills.guidance": "skillsGuidanceName",
-  "agent.directory-guidance": "directoryGuidanceName",
-  "dude.guidance": "dudeGuidanceName",
-  "a2ui.guidance": "a2uiGuidanceName",
-  knowledge_base: "knowledgeBaseName",
-  agent_directory: "agentDirectoryName",
-  dude_onboarding: "dudeOnboardingName",
-  dude_environment: "dudeEnvironmentName",
-  dude_wakeup: "dudeWakeupName",
-};
+
 
 export function buildReportedContextMemoryBlocks(
   snapshot: ContextAssemblySnapshot,
@@ -1407,7 +1388,7 @@ export function buildReportedContextMemoryBlocks(
 ): ContextMemoryBlockItem[] {
   const prefix = "chat.shortTermMemory.contextPanel.";
   const placements = contextBlockPlacements(snapshot.blocks);
-  const label = (id: string) => contributorLabelKeys[id] ? translate(prefix + contributorLabelKeys[id]) : id;
+  const label = (id: string) => contextBlockName(id, translate);
   const detailAliases: Record<string, ContextDetailBlock> = {
     "framework.instructions": "systemPrompt", seed_prompt_prefix: "systemPrompt",
     application_context: "applicationContext", "framework.history": "history",

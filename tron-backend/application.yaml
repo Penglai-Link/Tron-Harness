@@ -118,7 +118,7 @@ shortTermMemory:
       seedPromptPrefix:
         maxRatio: "100%"
         maxTokens: null
-      currentSessionCheckpoint:
+      conversationHistorySummary:
         maxRatio: "20%"
         maxTokens: 6000
       currentSessionWorkingState:
@@ -131,7 +131,7 @@ shortTermMemory:
     providers:
       order:
         - seed_prompt_prefix
-        - current_session_checkpoint
+        - conversation_history_summary
         - runtime_identity
         - dude_onboarding
         - tool_domains

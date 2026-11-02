@@ -44,8 +44,8 @@ impl ApplyMemoryOverrides<ContextBlockBudgetsFileConfig> for ContextBlockBudgets
         if let Some(value) = overrides.seed_prompt_prefix {
             self.seed_prompt_prefix.apply_overrides(value);
         }
-        if let Some(value) = overrides.current_session_checkpoint {
-            self.current_session_checkpoint.apply_overrides(value);
+        if let Some(value) = overrides.conversation_history_summary {
+            self.conversation_history_summary.apply_overrides(value);
         }
         if let Some(value) = overrides.current_session_working_state {
             self.current_session_working_state.apply_overrides(value);
@@ -106,7 +106,7 @@ struct ContextBudgetFileConfig {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContextBlockBudgetsFileConfig {
     seed_prompt_prefix: Option<ContextBlockBudgetFileConfig>,
-    current_session_checkpoint: Option<ContextBlockBudgetFileConfig>,
+    conversation_history_summary: Option<ContextBlockBudgetFileConfig>,
     current_session_working_state: Option<ContextBlockBudgetFileConfig>,
     tool_schema: Option<ContextBlockBudgetFileConfig>,
 }
@@ -275,7 +275,7 @@ mod provider_tests {
             "triggerRatioBps: 7500\n      targetRatioBps: 2500",
         ] {
             let text = format!(
-                "context:\n  providers:\n    order: [application_context, seed_prompt_prefix, current_session_checkpoint, current_session_working_state, current_session_history]\n    working:\n      strategy: semantic\n      {ratio}\n"
+                "context:\n  providers:\n    order: [application_context, seed_prompt_prefix, conversation_history_summary, current_session_working_state, current_session_history]\n    working:\n      strategy: semantic\n      {ratio}\n"
             );
             let overrides: ShortTermMemoryFileConfig = serde_yaml::from_str(&text).unwrap();
             let mut config = ShortTermMemoryConfig::default();

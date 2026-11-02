@@ -122,7 +122,7 @@ impl fw::ModelWorkflow for CompressionMatrix {
         }
         for (id, part, policy) in [
             (
-                "current_session_checkpoint",
+                "conversation_history_summary",
                 AgentMessagePart::CompactionCheckpoint {
                     summary: "checkpoint summary ".repeat(300),
                     recent: "recent context ".repeat(300),

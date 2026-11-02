@@ -13,8 +13,14 @@ export interface ContextLayoutBlock {
   overrideMaxTokens: number | null;
 }
 
+export interface ContextLayoutBudget {
+  maxTokens: number | null;
+  maxRatioBps: number | null;
+}
+
 export interface ContextLayoutState {
   revision: string;
+  nativeBudgets: Record<string, ContextLayoutBudget>;
   order: string[];
   pluginOverrides: Record<string, number>;
   blocks: ContextLayoutBlock[];
@@ -25,7 +31,7 @@ export function fetchContextLayout(signal?: AbortSignal) {
 }
 
 export function updateContextLayout(
-  layout: Pick<ContextLayoutState, "revision" | "order" | "pluginOverrides">,
+  layout: Pick<ContextLayoutState, "revision" | "order" | "pluginOverrides" | "nativeBudgets">,
 ) {
   return requestApi<ContextLayoutState>("PUT /api/v1/context-layout", { body: layout });
 }

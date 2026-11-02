@@ -232,7 +232,7 @@ async fn native_skills_are_separate_dynamic_data_with_independent_budget() {
                 .collect::<Vec<_>>(),
             [
                 fw::INSTRUCTIONS_BLOCK,
-                "current_session_checkpoint",
+                "conversation_history_summary",
                 "tool_domains",
                 fw::HISTORY_BLOCK,
                 "skills.catalog",
@@ -570,7 +570,7 @@ async fn compact_chinese_summary_retries_overlong_draft_and_persists_only_valid_
     assert!(records.records.steps.iter().any(|step| step.name == fw::CONTEXT_COMPACTION_STEP && step.status == fw::HistoryStatus::Completed));
     let report = reports.0.lock().unwrap()[0].clone();
     let history = report.blocks.iter().find(|block| block.id == fw::HISTORY_BLOCK).unwrap();
-    let summary = report.blocks.iter().find(|block| block.id == "current_session_checkpoint").unwrap();
+    let summary = report.blocks.iter().find(|block| block.id == "conversation_history_summary").unwrap();
     assert_eq!(summary.final_message_count, 1);
     assert!(summary.final_tokens <= summary.configured_tokens.unwrap());
     assert_eq!(history.final_message_count, 3, "recent completed turn and /compact remain verbatim");

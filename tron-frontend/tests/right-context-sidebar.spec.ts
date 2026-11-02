@@ -122,7 +122,7 @@ async function routeAuthApi(page: Page) {
   await page.route("**/api/v1/chats/sessions/get-context-assembly?*", route => route.fulfill({json:successEnvelope({snapshot:{
     blocks: [
       {id:"framework.instructions",position:0,allocatedTokens:16000,finalTokens:4000,messageCount:1},
-      {id:"current_session_checkpoint",position:1,allocatedTokens:6000,finalTokens:400,messageCount:1},
+      {id:"conversation_history_summary",position:1,allocatedTokens:6000,finalTokens:400,messageCount:1},
       {id:"framework.history",position:2,allocatedTokens:64000,finalTokens:8000,messageCount:3},
     ].map(block=>({...block,sources:[],originalTokens:block.finalTokens,configuredTokens:block.allocatedTokens,outcome:"Kept"})),
     protocolTokens:1800,inputCapacity:100000,estimatedInputTokens:14200,modelCode:"fixture-model",budgetBreakdown:{contextWindowLimit:100000,toolSchemaTokens:1800,toolSchemaBudgetTokens:6000}

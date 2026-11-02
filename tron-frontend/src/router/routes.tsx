@@ -685,7 +685,7 @@ const registeredRoutes: AppRoute[] = [
     pageId: "settings.automaticRouters", route: "/settings/automatic-routers", activeNav: "Settings", title: "Automatic Routers", titleTranslationKey: "pages:automaticRouters.title", archetype: "settings", layout: "settings", settingsNav: "Automatic Routers",
   },
   {
-    pageId: "settings.contextLayout", route: "/settings/context-layout", activeNav: "Settings", title: "Context Layout", titleTranslationKey: "pages:contextLayout.title", archetype: "settings", layout: "settings", settingsNav: "Context Layout",
+    pageId: "settings.contextLayout", route: "/settings/context-layout", activeNav: "Settings", title: "Context Configuration", titleTranslationKey: "pages:contextLayout.title", archetype: "settings", layout: "settings", settingsNav: "Context Configuration",
   },
   {
     pageId: "settings.modelProviders",

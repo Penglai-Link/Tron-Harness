@@ -90,6 +90,9 @@ pub fn prepared_config(mut config: AppConfig) -> AppConfig {
     if config.system_agents.opencode_command == defaults.opencode_command {
         config.system_agents.opencode_command.clear();
     }
+    if config.system_agents.dsh_command == defaults.dsh_command {
+        config.system_agents.dsh_command.clear();
+    }
     seed_default_fixture_data(&config.database_url);
     config
 }

@@ -68,7 +68,7 @@ test("system configuration exposes omitted defaults and persists context order a
   };
   await expand();
   const order = page.getByRole("textbox", {name:"shortTermMemory.context.providers.order", exact:true});
-  expect((await order.inputValue()).split("\n")).toEqual(expect.arrayContaining(["seed_prompt_prefix", "current_session_checkpoint", "current_session_history", "agent_directory", "skills.catalog"]));
+  expect((await order.inputValue()).split("\n")).toEqual(expect.arrayContaining(["seed_prompt_prefix", "conversation_history_summary", "current_session_history", "agent_directory", "skills.catalog"]));
   const entries = (await order.inputValue()).split("\n");
   const applicationIndex = entries.indexOf("application_context");
   const knowledgeIndex = entries.indexOf("knowledge_base");

@@ -216,9 +216,9 @@ pub(super) async fn assemble(
             None,
         ),
         (
-            "current_session_checkpoint",
+            "conversation_history_summary",
             &source.checkpoint,
-            block_budget(&caps.current_session_checkpoint)?,
+            block_budget(&caps.conversation_history_summary)?,
             Some(&config.context.providers.checkpoint),
         ),
         (
@@ -231,7 +231,7 @@ pub(super) async fn assemble(
         let native =
             messages::encode_history(entries).map_err(fw::AgentError::InvalidConfiguration)?;
         let checkpoint =
-            (id == "current_session_checkpoint").then_some(&projection.checkpoint_code);
+            (id == "conversation_history_summary").then_some(&projection.checkpoint_code);
         let generation = fingerprint(&(id, entries, policy, checkpoint, &context.user_code))?;
         let revision = memory::MemoryRevision {
             generation,
@@ -255,7 +255,7 @@ pub(super) async fn assemble(
         if let Some(policy) = policy {
             // The history coordinator writes the summary once under this block's
             // own budget; a generic data reducer must not truncate it separately.
-            if id == "current_session_checkpoint" {
+            if id == "conversation_history_summary" {
                 if policy.strategy != Strategy::Keep { block = compression(block, policy)?; }
                 configs.insert(id.into(), block);
                 continue;
@@ -299,7 +299,7 @@ pub(super) async fn assemble(
                 let model = host.harness.framework_compaction_model_config(&context.model);
                 let compressor = memory::ModelCompressor::new(
                     super::model::compaction_model_reference(&input.run.extensions,input.model)?,
-                    memory::CompressionOptions { max_input_tokens: model.context_window_tokens.unwrap_or(128_000).saturating_sub(model.max_tokens.unwrap_or(input.limits.max_model_output_tokens)) as usize, max_summary_bytes: memory::summary_byte_guard(plan.block_budgets.current_session_checkpoint.effective_limit_tokens as usize), max_model_calls: 16 },
+                    memory::CompressionOptions { max_input_tokens: model.context_window_tokens.unwrap_or(128_000).saturating_sub(model.max_tokens.unwrap_or(input.limits.max_model_output_tokens)) as usize, max_summary_bytes: memory::summary_byte_guard(plan.block_budgets.conversation_history_summary.effective_limit_tokens as usize), max_model_calls: 16 },
                 )?.with_store(host.summaries.clone(), "tron.history.native-v1")?;
                 block.reducer = Arc::new(ScopedReduction { inner:Arc::new(compressor), extensions:host.harness.framework_compaction_extensions(&model), limits:input.limits.clone() });
             },
@@ -420,7 +420,7 @@ pub(super) async fn assemble(
     let policy: Arc<dyn fw::ContextBudgetPolicy> = Arc::new(memory::BorrowUnusedMemoryBudget);
     let assembler = fw::DefaultContextAssembler::new(fw::ContextLayout(layout), contributors)?;
     let assembler = if config.context.providers.history.strategy == Strategy::Checkpoint {
-        assembler.with_history_summary_block("current_session_checkpoint", config.context.providers.history_recent_turns)?
+        assembler.with_history_summary_block("conversation_history_summary", config.context.providers.history_recent_turns)?
     } else { assembler };
     let assembler = assembler
         .with_policy(policy)
@@ -685,7 +685,7 @@ impl memory::MemoryContextRevisionGuard for LiveSourceGuard {
                 .harness
                 .framework_live_memory_source(&context, &id)
                 .map_err(|_| fw::MemoryError::Conflict)?;
-            let checkpoint = (id == "current_session_checkpoint").then_some(&checkpoint_code);
+            let checkpoint = (id == "conversation_history_summary").then_some(&checkpoint_code);
             let generation =
                 fingerprint(&(&id, &entries, Some(&policy), checkpoint, &context.user_code))
                     .map_err(|_| fw::MemoryError::Conflict)?;

@@ -321,7 +321,7 @@ async fn dude_page_context_uses_shared_layout_budget_reduction_and_saved_report(
                 .unwrap()
                 .position
         };
-        assert!(position("current_session_checkpoint") < position("runtime_identity"));
+        assert!(position("conversation_history_summary") < position("runtime_identity"));
         assert!(position("runtime_identity") < position("dude_onboarding"));
         assert!(position("dude_onboarding") < position(fw::HISTORY_BLOCK));
         assert!(position("dude_wakeup") > position(fw::HISTORY_BLOCK));

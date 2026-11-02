@@ -97,8 +97,8 @@ pub(super) fn update(
         };
     let seed_cap = configured_cap(fw::INSTRUCTIONS_BLOCK, seed_config)?;
     let checkpoint_cap = configured_cap(
-        "current_session_checkpoint",
-        &config.context.blocks.current_session_checkpoint,
+        "conversation_history_summary",
+        &config.context.blocks.conversation_history_summary,
     )?;
     let working_cap = configured_cap(
         "current_session_working_state",
@@ -141,7 +141,7 @@ pub(super) fn update(
         report.application_context_message_count = count("application_context");
         report.prompt_prefix_message_count = count(fw::INSTRUCTIONS_BLOCK);
         report.prompt_prefix_tokens = tokens(fw::INSTRUCTIONS_BLOCK);
-        report.checkpoint_tokens = tokens("current_session_checkpoint");
+        report.checkpoint_tokens = tokens("conversation_history_summary");
         report.working_state_tokens = tokens("current_session_working_state");
         report.recent_transcript_tokens = tokens(fw::HISTORY_BLOCK);
         report.raw_tail_transcript_tokens = report.recent_transcript_tokens;
@@ -209,7 +209,7 @@ fn current_compaction_pressure(
             fw::HISTORY_BLOCK if config.compaction.auto_enabled => {
                 &config.context.providers.history
             }
-            "current_session_checkpoint" => &config.context.providers.checkpoint,
+            "conversation_history_summary" => &config.context.providers.checkpoint,
             "current_session_working_state" => &config.context.providers.working,
             id => match config.context.providers.data_blocks.get(id) {
                 Some(data) => &data.policy,

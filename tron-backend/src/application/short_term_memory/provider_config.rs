@@ -66,7 +66,7 @@ impl Default for ContextProvidersConfig {
         Self {
             order: [
                 "seed_prompt_prefix",
-                "current_session_checkpoint",
+                "conversation_history_summary",
                 "runtime_identity",
                 "dude_onboarding",
                 "tool_domains",
@@ -164,7 +164,7 @@ impl ContextProvidersConfig {
         }
         let required = [
             "seed_prompt_prefix",
-            "current_session_checkpoint",
+            "conversation_history_summary",
             "current_session_history",
             "current_session_working_state",
         ]
@@ -191,7 +191,7 @@ impl ContextProvidersConfig {
         if self
             .order
             .iter()
-            .position(|id| id == "current_session_checkpoint")
+            .position(|id| id == "conversation_history_summary")
             .unwrap()
             > history
         {
@@ -200,7 +200,7 @@ impl ContextProvidersConfig {
         if self.order.iter().take(history).any(|id| {
             !matches!(
                 id.as_str(),
-                "seed_prompt_prefix" | "current_session_checkpoint" | "runtime_identity" | "dude_onboarding" | "tool_domains"
+                "seed_prompt_prefix" | "conversation_history_summary" | "runtime_identity" | "dude_onboarding" | "tool_domains"
             )
         }) {
             return Err("dynamic context blocks must follow history".into());

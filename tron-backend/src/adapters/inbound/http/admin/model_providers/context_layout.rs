@@ -10,13 +10,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     app::AppState,
-    application::{short_term_memory::ContextProvidersConfig, system_config::SystemConfigChange},
+    application::{short_term_memory::ContextBudgetConfig, system_config::SystemConfigChange},
     response::ApiResponse,
 };
 
 const NATIVE_IDS: &[&str] = &[
     "seed_prompt_prefix",
-    "current_session_checkpoint",
+    "conversation_history_summary",
     "current_session_history",
     "current_session_working_state",
     "runtime_identity",
@@ -52,6 +52,7 @@ pub(super) struct ContextLayoutVo {
     revision: String,
     order: Vec<String>,
     plugin_overrides: BTreeMap<String, u32>,
+    native_budgets: BTreeMap<String, ContextLayoutBudget>,
     blocks: Vec<ContextLayoutBlockVo>,
 }
 
@@ -61,6 +62,15 @@ pub(super) struct UpdateContextLayoutRequest {
     revision: String,
     order: Vec<String>,
     plugin_overrides: BTreeMap<String, u32>,
+    #[serde(default)]
+    native_budgets: BTreeMap<String, ContextLayoutBudget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContextLayoutBudget {
+    max_tokens: Option<u32>,
+    max_ratio_bps: Option<u32>,
 }
 
 pub(super) struct LayoutError {
@@ -74,7 +84,7 @@ impl LayoutError {
         Self {
             status: StatusCode::BAD_REQUEST,
             english: is_english(headers),
-            message: "The context layout is invalid.",
+            message: "The context configuration is invalid.",
         }
     }
 
@@ -82,7 +92,7 @@ impl LayoutError {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             english: is_english(headers),
-            message: "Could not load or save context layout settings.",
+            message: "Could not load or save context configuration settings.",
         }
     }
 
@@ -90,7 +100,7 @@ impl LayoutError {
         Self {
             status: StatusCode::CONFLICT,
             english: is_english(headers),
-            message: "Context layout changed elsewhere. Refresh and try again.",
+            message: "Context configuration changed elsewhere. Refresh and try again.",
         }
     }
 }
@@ -101,11 +111,11 @@ impl IntoResponse for LayoutError {
             self.message
         } else {
             match self.message {
-                "The context layout is invalid." => "上下文布局无效。",
-                "Context layout changed elsewhere. Refresh and try again." => {
-                    "上下文布局已被其他操作修改，请刷新后重试。"
+                "The context configuration is invalid." => "上下文配置无效。",
+                "Context configuration changed elsewhere. Refresh and try again." => {
+                    "上下文配置已被其他操作修改，请刷新后重试。"
                 }
-                _ => "无法读取或保存上下文布局配置。",
+                _ => "无法读取或保存上下文配置配置。",
             }
         };
         (
@@ -121,7 +131,9 @@ impl IntoResponse for LayoutError {
 
 fn is_english(headers: &HeaderMap) -> bool {
     crate::shared::locale::SupportedLocale::from_request(
-        headers.get("accept-language").and_then(|value| value.to_str().ok()),
+        headers
+            .get("accept-language")
+            .and_then(|value| value.to_str().ok()),
     ) == crate::shared::locale::SupportedLocale::EnUs
 }
 
@@ -142,7 +154,7 @@ pub(super) async fn list(
         .map_err(|_| LayoutError::unavailable(&headers))?;
     Ok(Json(ApiResponse::protocol_success(build_layout(
         revision,
-        &config.context.providers,
+        &config.context,
         contributors,
     ))))
 }
@@ -178,9 +190,20 @@ pub(super) async fn update(
         .iter()
         .map(String::as_str)
         .chain(active_plugin_ids.iter().copied())
-        .chain(current.context.providers.plugin_overrides.keys().map(String::as_str))
+        .chain(
+            current
+                .context
+                .providers
+                .plugin_overrides
+                .keys()
+                .map(String::as_str),
+        )
         .collect::<BTreeSet<_>>();
-    if request.order.iter().any(|id| !known_order_ids.contains(id.as_str())) {
+    if request
+        .order
+        .iter()
+        .any(|id| !known_order_ids.contains(id.as_str()))
+    {
         return Err(LayoutError::invalid(&headers));
     }
     if active_plugin_ids
@@ -189,20 +212,22 @@ pub(super) async fn update(
     {
         return Err(LayoutError::invalid(&headers));
     }
-    if request
-        .plugin_overrides
-        .keys()
-        .any(|id| !active_plugin_ids.contains(id.as_str()) && !current.context.providers.plugin_overrides.contains_key(id))
-    {
+    if request.plugin_overrides.keys().any(|id| {
+        !active_plugin_ids.contains(id.as_str())
+            && !current.context.providers.plugin_overrides.contains_key(id)
+    }) {
         return Err(LayoutError::invalid(&headers));
     }
 
+    let mut budget_changes = native_budget_changes(&current.context, &request.native_budgets)
+        .map_err(|_| LayoutError::invalid(&headers))?;
     let mut providers = current.context.providers;
-    // Older Tron versions stored plugin token caps in `dataBlocks`. Preserve
-    // those caps when the UI loads the layout, then remove the legacy entries
-    // as the new plugin-owned defaults and host overrides are saved.
+    // Keep required host policy entries while validating the order. Plugin
+    // overrides take precedence over legacy dataBlocks caps at runtime.
     for id in &active_plugin_ids {
-        providers.data_blocks.remove(*id);
+        if !NATIVE_IDS.contains(id) {
+            providers.data_blocks.remove(*id);
+        }
     }
     // Entries left by uninstalled plugins are removable from this page. Prune
     // their legacy policies together with the order/override supplied by UI.
@@ -219,16 +244,19 @@ pub(super) async fn update(
         .system_config
         .update(
             &request.revision,
-            vec![
-                SystemConfigChange {
-                    path: "shortTermMemory.context.providers.order".into(),
-                    value: serde_json::json!(request.order),
-                },
-                SystemConfigChange {
-                    path: "shortTermMemory.context.providers.pluginOverrides".into(),
-                    value: serde_json::json!(request.plugin_overrides),
-                },
-            ],
+            {
+                budget_changes.extend([
+                    SystemConfigChange {
+                        path: "shortTermMemory.context.providers.order".into(),
+                        value: serde_json::json!(request.order),
+                    },
+                    SystemConfigChange {
+                        path: "shortTermMemory.context.providers.pluginOverrides".into(),
+                        value: serde_json::json!(request.plugin_overrides),
+                    },
+                ]);
+                budget_changes
+            },
             false,
         )
         .map_err(|error| match error {
@@ -237,9 +265,9 @@ pub(super) async fn update(
             }
             crate::application::system_config::SystemConfigError::InvalidField(_)
             | crate::application::system_config::SystemConfigError::InvalidYaml(_)
-            | crate::application::system_config::SystemConfigError::MigrationConfirmationRequired(_) => {
-                LayoutError::invalid(&headers)
-            }
+            | crate::application::system_config::SystemConfigError::MigrationConfirmationRequired(
+                _,
+            ) => LayoutError::invalid(&headers),
             crate::application::system_config::SystemConfigError::ReadFailed
             | crate::application::system_config::SystemConfigError::WriteFailed => {
                 LayoutError::unavailable(&headers)
@@ -249,16 +277,18 @@ pub(super) async fn update(
     let updated = state.short_term_memory.framework_context_config();
     Ok(Json(ApiResponse::protocol_success(build_layout(
         saved.revision,
-        &updated.context.providers,
+        &updated.context,
         contributors,
     ))))
 }
 
 fn build_layout(
     revision: String,
-    providers: &ContextProvidersConfig,
+    config: &ContextBudgetConfig,
     contributors: Vec<crate::application::agent::framework_runtime::ContextLayoutContributorInfo>,
 ) -> ContextLayoutVo {
+    let providers = &config.providers;
+    let native_budgets = native_budgets(config);
     let contributors = contributors
         .into_iter()
         .map(|item| (item.block_id.clone(), item))
@@ -327,6 +357,99 @@ fn build_layout(
         revision,
         order,
         plugin_overrides,
+        native_budgets,
         blocks,
     }
+}
+
+fn native_budgets(config: &ContextBudgetConfig) -> BTreeMap<String, ContextLayoutBudget> {
+    let mut budgets = config
+        .providers
+        .data_blocks
+        .iter()
+        .filter(|(id, _)| NATIVE_IDS.contains(&id.as_str()) && id.as_str() != "skills.catalog")
+        .map(|(id, block)| {
+            (
+                id.clone(),
+                ContextLayoutBudget {
+                    max_tokens: block.max_tokens,
+                    max_ratio_bps: None,
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (id, block) in [
+        (
+            "conversation_history_summary",
+            &config.blocks.conversation_history_summary,
+        ),
+        (
+            "current_session_working_state",
+            &config.blocks.current_session_working_state,
+        ),
+    ] {
+        budgets.insert(
+            id.into(),
+            ContextLayoutBudget {
+                max_tokens: block.max_tokens,
+                max_ratio_bps: block.max_ratio_bps,
+            },
+        );
+    }
+    budgets
+}
+
+fn native_budget_changes(
+    config: &ContextBudgetConfig,
+    requested: &BTreeMap<String, ContextLayoutBudget>,
+) -> Result<Vec<SystemConfigChange>, ()> {
+    let current = native_budgets(config);
+    let mut changes = Vec::new();
+    for (id, budget) in requested {
+        let previous = current.get(id).ok_or(())?;
+        if budget.max_tokens == Some(0) {
+            return Err(());
+        }
+        let block = match id.as_str() {
+            "conversation_history_summary" => Some("conversationHistorySummary"),
+            "current_session_working_state" => Some("currentSessionWorkingState"),
+            _ => None,
+        };
+        let prefix = if let Some(block) = block {
+            if !budget
+                .max_ratio_bps
+                .is_some_and(|value| (1..=10_000).contains(&value))
+            {
+                return Err(());
+            }
+            format!("shortTermMemory.context.blocks.{block}")
+        } else {
+            if budget.max_ratio_bps.is_some() {
+                return Err(());
+            }
+            if budget.max_tokens.is_none()
+                && config.providers.data_blocks[id].policy.strategy
+                    != crate::application::short_term_memory::ContextReductionStrategy::Keep
+            {
+                return Err(());
+            }
+            format!("shortTermMemory.context.providers.dataBlocks.{id}")
+        };
+        if budget.max_tokens != previous.max_tokens {
+            changes.push(SystemConfigChange {
+                path: format!("{prefix}.maxTokens"),
+                value: serde_json::json!(budget.max_tokens),
+            });
+        }
+        if budget.max_ratio_bps != previous.max_ratio_bps {
+            changes.push(SystemConfigChange {
+                path: format!("{prefix}.maxRatio"),
+                value: serde_json::json!(format!(
+                    "{}%",
+                    f64::from(budget.max_ratio_bps.ok_or(())?) / 100.0
+                )),
+            });
+        }
+    }
+    Ok(changes)
 }

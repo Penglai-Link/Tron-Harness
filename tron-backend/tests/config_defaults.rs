@@ -122,7 +122,7 @@ shortTermMemory:
       seedPromptPrefix:
         maxRatioBps: 2500
         maxTokens: 700
-      currentSessionCheckpoint:
+      conversationHistorySummary:
         maxRatioBps: 1250
         maxTokens: 900
       currentSessionWorkingState:
@@ -154,7 +154,7 @@ shortTermMemory:
             .short_term_memory
             .context
             .blocks
-            .current_session_checkpoint
+            .conversation_history_summary
             .max_tokens,
         Some(900)
     );
@@ -174,7 +174,7 @@ fn short_term_memory_block_ratios_use_effective_input_budget() {
     assert_eq!(plan.effective_input_budget, 1_500);
     assert_eq!(
         plan.block_budgets
-            .current_session_checkpoint
+            .conversation_history_summary
             .effective_limit_tokens,
         300
     );
@@ -203,7 +203,7 @@ shortTermMemory:
     blocks:
       seedPromptPrefix:
         maxRatio: "50%"
-      currentSessionCheckpoint:
+      conversationHistorySummary:
         maxRatio: "20%"
       currentSessionWorkingState:
         maxRatio: "0.01%"
@@ -224,7 +224,7 @@ shortTermMemory:
         config
             .context
             .blocks
-            .current_session_checkpoint
+            .conversation_history_summary
             .max_ratio_bps,
         Some(2000)
     );

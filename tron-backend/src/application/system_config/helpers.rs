@@ -325,7 +325,7 @@ pub(super) fn effective_context_value(
             "shortTermMemory.context.blocks",
             json!({
                 "seedPromptPrefix": budget(&blocks.seed_prompt_prefix),
-                "currentSessionCheckpoint": budget(&blocks.current_session_checkpoint),
+                "conversationHistorySummary": budget(&blocks.conversation_history_summary),
                 "currentSessionWorkingState": budget(&blocks.current_session_working_state),
                 "toolSchema": budget(&blocks.tool_schema)
             }),

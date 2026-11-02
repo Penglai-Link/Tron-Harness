@@ -127,7 +127,7 @@ async fn saves_defaulted_order_and_policies_to_yaml_then_reloads_runtime_values(
         {"path":"shortTermMemory.context.providers.working.triggerRatio", "value":"75%"},
         {"path":"shortTermMemory.context.providers.working.targetRatio", "value":"25%"},
         {"path":"shortTermMemory.context.providers.maxAuxiliaryCallsPerStep", "value":2},
-        {"path":"shortTermMemory.context.blocks.currentSessionCheckpoint.maxTokens", "value":700}
+        {"path":"shortTermMemory.context.blocks.conversationHistorySummary.maxTokens", "value":700}
     ])).await;
     assert_eq!(status, StatusCode::OK, "{result}");
     assert_eq!(result["data"]["restartPaths"], json!([]));
@@ -152,7 +152,7 @@ async fn saves_defaulted_order_and_policies_to_yaml_then_reloads_runtime_values(
     assert_eq!(loaded.context.providers.working.target_ratio_bps, 2500);
     assert_eq!(loaded.context.providers.max_auxiliary_calls_per_step, 2);
     assert_eq!(
-        loaded.context.blocks.current_session_checkpoint.max_tokens,
+        loaded.context.blocks.conversation_history_summary.max_tokens,
         Some(700)
     );
     assert_eq!(
@@ -346,7 +346,7 @@ fn templates_and_explicitly_selected_profile_parse_without_writing() {
 async fn explicit_null_token_cap_survives_api_save_and_runtime_reload() {
     let f = Fixture::new("");
     let before = f.get().await;
-    let path = "shortTermMemory.context.blocks.currentSessionCheckpoint.maxTokens";
+    let path = "shortTermMemory.context.blocks.conversationHistorySummary.maxTokens";
     assert!(item(&before, path)["value"].is_number());
     let untouched = item(
         &before,
@@ -364,7 +364,7 @@ async fn explicit_null_token_cap_survives_api_save_and_runtime_reload() {
         .unwrap()
         .short_term_memory;
     assert_eq!(
-        loaded.context.blocks.current_session_checkpoint.max_tokens,
+        loaded.context.blocks.conversation_history_summary.max_tokens,
         None
     );
     let after = f.get().await;
@@ -379,7 +379,7 @@ async fn explicit_null_token_cap_survives_api_save_and_runtime_reload() {
     let yaml: serde_yaml::Value =
         serde_yaml::from_str(&fs::read_to_string(&f.path).unwrap()).unwrap();
     assert!(
-        yaml["shortTermMemory"]["context"]["blocks"]["currentSessionCheckpoint"]["maxTokens"]
+        yaml["shortTermMemory"]["context"]["blocks"]["conversationHistorySummary"]["maxTokens"]
             .is_null()
     );
     assert!(yaml["shortTermMemory"]["context"]["blocks"]["seedPromptPrefix"].is_null());
