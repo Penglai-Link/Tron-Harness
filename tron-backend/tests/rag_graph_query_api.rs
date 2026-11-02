@@ -17,6 +17,95 @@ const SEARCH: &str = "/api/v1/rag/graph/search";
 const EXPAND: &str = "/api/v1/rag/graph/expand";
 const BROWSE: &str = "/api/v1/rag/graph/browse";
 
+#[tokio::test]
+async fn graph_browse_covers_sources_and_continues_disconnected_windows_without_model_calls() {
+    use std::collections::BTreeSet;
+    let f = Fixture::new();
+    let mut corpora = vec![];
+    for name in ["First", "Second", "Third"] {
+        let kb = f.service.create(USER, name, "").unwrap();
+        let doc = f
+            .service
+            .upload(USER, &kb.id, "manual.md", b"Alpha calls Beta.")
+            .unwrap();
+        f.service.index(USER, &kb.id, &doc.id).await.unwrap();
+        corpora.push(kb.id);
+    }
+    let mut state = f.state.clone();
+    state.knowledge_bases = f.service.clone();
+    let app = tron_backend::app::build_router_with_state(state).unwrap();
+    let calls = f.client.calls.load(Ordering::SeqCst);
+    f.client.failing.store(true, Ordering::SeqCst);
+    let response = common::authenticated_request(
+        &app,
+        Method::POST,
+        BROWSE,
+        Some(json!({
+            "corpusIds": corpora, "seedCount": 3, "incomingDepth": 0, "outgoingDepth": 0,
+            "nodeLimit": 3, "edgeLimit": 20
+        })),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let first = common::response_json(response).await;
+    let first = &first["data"];
+    let snapshot = first["snapshotId"].clone();
+    let rows = first["nodes"].as_array().unwrap();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(
+        rows.iter()
+            .map(|node| node["corpusId"].as_str().unwrap())
+            .collect::<BTreeSet<_>>()
+            .len(),
+        3
+    );
+    assert!(
+        first["truncatedBy"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("BrowseSeedBudget"))
+    );
+    assert!(
+        first["nextCursor"].is_string(),
+        "unseen disconnected nodes need a continuation"
+    );
+    let mut seen = rows
+        .iter()
+        .map(|node| node["id"].as_str().unwrap().to_owned())
+        .collect::<BTreeSet<_>>();
+    let mut cursor = first["nextCursor"].clone();
+    let mut pages = 1;
+    while !cursor.is_null() {
+        assert!(pages < 5, "browse continuation did not make progress");
+        let response = common::authenticated_request(
+            &app,
+            Method::POST,
+            EXPAND,
+            Some(json!({"cursor": cursor})),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let next = common::response_json(response).await;
+        let next = &next["data"];
+        assert_eq!(next["snapshotId"], snapshot);
+        no_storage_fields(next);
+        let before = seen.len();
+        seen.extend(
+            next["nodes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|node| node["id"].as_str().unwrap().to_owned()),
+        );
+        assert!(seen.len() > before);
+        cursor = next["nextCursor"].clone();
+        pages += 1;
+    }
+    assert_eq!(seen.len(), 6);
+    assert_eq!(f.client.calls.load(Ordering::SeqCst), calls);
+    f.state.agent_framework.close().await;
+}
+
 fn no_storage_fields(value: &Value) {
     match value {
         Value::Object(map) => {

@@ -177,6 +177,13 @@ struct SavedGraphRequest {
 #[derive(Serialize, Deserialize)]
 struct SavedTraversal {
     windows: Vec<GraphWindowState>,
+    #[serde(default)]
+    browse: Option<GraphBrowseState>,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct GraphBrowseState {
+    seeded_ids: BTreeSet<String>,
 }
 
 #[derive(Default)]

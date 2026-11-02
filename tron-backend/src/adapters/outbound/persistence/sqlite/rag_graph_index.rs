@@ -593,7 +593,7 @@ mod tests {
                 .hits
                 .is_empty()
         );
-        assert!(search(GraphNodeMatch::Browse).hits.is_empty());
+        assert!(search(GraphNodeMatch::Browse { excluded_ids: BTreeSet::new() }).hits.is_empty());
         publish(&repository, "allowed", true).unwrap();
         let mut other = manifest("other-space");
         other.logical_source_code = "other-document".into();
@@ -611,13 +611,13 @@ mod tests {
             .unwrap();
         let fulltext = search(GraphNodeMatch::Fulltext("中文图谱".into()));
         assert_eq!(fulltext.hits.len(), 2);
-        let browsed = search(GraphNodeMatch::Browse);
+        let browsed = search(GraphNodeMatch::Browse { excluded_ids: BTreeSet::new() });
         assert_eq!(browsed.hits.len(), 2);
         assert!(browsed.hits.iter().all(|hit| hit.generation_id != "staged"));
         let browsed = repository
             .search_nodes(GraphNodeSearchQuery {
                 generation_ids: vec!["allowed".into(), "other-space".into()],
-                matching: GraphNodeMatch::Browse,
+                matching: GraphNodeMatch::Browse { excluded_ids: BTreeSet::new() },
                 limit: 1,
             })
             .unwrap();

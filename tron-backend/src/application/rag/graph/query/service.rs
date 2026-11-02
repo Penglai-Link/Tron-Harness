@@ -126,7 +126,10 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             identity,
             snapshot,
             request,
-            windows,
+            SavedTraversal {
+                windows,
+                browse: None,
+            },
             recalled.stages,
             chrono::Utc::now().timestamp_millis() + GRAPH_SNAPSHOT_TTL_MS,
             started,
@@ -164,7 +167,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
                 .load_snapshot(&identity_hash(identity), &cursor, now)?;
             let request: SavedGraphRequest = serde_json::from_value(saved.request)
                 .map_err(|e| GraphQueryError::Storage(e.to_string()))?;
-            let traversal: SavedTraversal = serde_json::from_value(saved.traversal)
+            let mut traversal: SavedTraversal = serde_json::from_value(saved.traversal)
                 .map_err(|e| GraphQueryError::Storage(e.to_string()))?;
             let snapshot = self.verify_graph_snapshot(
                 access,
@@ -176,13 +179,22 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             if snapshot.generation_ids() != saved.generation_ids {
                 return Err(GraphQueryError::SnapshotChanged);
             }
+            let mut stages = vec![];
+            if traversal.windows.is_empty()
+                && let Some(browse) = &mut traversal.browse
+            {
+                let (windows, stage) =
+                    self.next_browse_windows(&snapshot, &request.options, browse)?;
+                traversal.windows = windows;
+                stages.push(stage);
+            }
             return self.graph_page(
                 access,
                 identity,
                 snapshot,
                 request,
-                traversal.windows,
-                vec![],
+                traversal,
+                stages,
                 saved.expires_at,
                 started,
             );
@@ -220,7 +232,10 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             identity,
             snapshot,
             request,
-            windows,
+            SavedTraversal {
+                windows,
+                browse: None,
+            },
             vec![],
             now + GRAPH_SNAPSHOT_TTL_MS,
             started,
@@ -257,7 +272,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
         identity: &RagIdentity,
         snapshot: AuthorizedGraphSnapshot,
         request: SavedGraphRequest,
-        windows: Vec<GraphWindowState>,
+        traversal: SavedTraversal,
         mut stages: Vec<RagRetrievalStage>,
         expires_at: i64,
         started: Instant,
@@ -273,7 +288,26 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             .map(|_| ())
         };
         let phase = Instant::now();
-        let window = self.read_graph_windows(windows, &request.options, &verify)?;
+        let window = self.read_graph_windows(traversal.windows, &request.options, &verify)?;
+        let browse = if let Some(browse) = traversal.browse {
+            let infra = self
+                .graph
+                .as_ref()
+                .ok_or_else(|| GraphQueryError::Unavailable("graph infrastructure".into()))?;
+            let remaining = infra
+                .index
+                .search_nodes(GraphNodeSearchQuery {
+                    generation_ids: snapshot.generation_ids().into_iter().collect(),
+                    matching: GraphNodeMatch::Browse {
+                        excluded_ids: browse.seeded_ids.clone(),
+                    },
+                    limit: 1,
+                })
+                .map_err(GraphQueryError::Storage)?;
+            (!remaining.hits.is_empty()).then_some(browse)
+        } else {
+            None
+        };
         stages.push(seeds::stage(
             &snapshot,
             "graph.expand",
@@ -295,7 +329,8 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
         ));
         verify()?;
         let unfinished = window::unfinished(&window.pending);
-        let next_cursor = if window.pending.is_empty() {
+        let more_browse = browse.is_some();
+        let next_cursor = if window.pending.is_empty() && browse.is_none() {
             None
         } else {
             let infra = self
@@ -309,6 +344,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
                     .map_err(|e| GraphQueryError::Storage(e.to_string()))?,
                 traversal: serde_json::to_value(SavedTraversal {
                     windows: window.pending,
+                    browse,
                 })
                 .map_err(|e| GraphQueryError::Storage(e.to_string()))?,
                 generation_ids: snapshot.generation_ids(),
@@ -323,6 +359,10 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
         };
         // A grant change while saving the cursor must not publish even a partial page.
         verify()?;
+        let mut truncated_by = window.truncated_by;
+        if more_browse {
+            truncated_by.insert("BrowseSeedBudget".into());
+        }
         Ok(GraphQueryOutput {
             snapshot_id: snapshot.stamp.clone(),
             contexts: window.contexts,
@@ -331,7 +371,7 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             expires_at: next_cursor.as_ref().map(|_| expires_at),
             next_cursor,
             unfinished,
-            truncated_by: window.truncated_by,
+            truncated_by,
             duration_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
         })
     }

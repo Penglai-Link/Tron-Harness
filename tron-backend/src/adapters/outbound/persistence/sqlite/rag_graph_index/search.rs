@@ -20,17 +20,24 @@ pub(super) fn search_nodes(
         JOIN rag_graph_active_sources a ON a.generation_id=g.generation_id \
         WHERE g.state='Active' AND g.generation_id IN (SELECT value FROM json_each(?1))";
     let (sql, parameters, vector) = match query.matching {
-        GraphNodeMatch::Browse => (
+        GraphNodeMatch::Browse { excluded_ids } => (
             format!(
                 "WITH ranked AS ( \
                 SELECT p.entity_id,p.generation_id,p.chunk_codes_json, \
                 CAST(json_array_length(p.chunk_codes_json) AS REAL) AS score, \
                 row_number() OVER(PARTITION BY p.entity_id ORDER BY json_array_length(p.chunk_codes_json) DESC,p.generation_id) AS position \
-                FROM rag_graph_node_projections p WHERE p.id IN ({eligible})) \
-                SELECT entity_id,generation_id,chunk_codes_json,score,0 FROM ranked WHERE position=1 \
-                ORDER BY score DESC,entity_id LIMIT ?2"
+                FROM rag_graph_node_projections p WHERE p.id IN ({eligible})), balanced AS ( \
+                SELECT entity_id,generation_id,chunk_codes_json,score, \
+                row_number() OVER(PARTITION BY generation_id ORDER BY score DESC,entity_id) AS source_position \
+                FROM ranked WHERE position=1 AND entity_id NOT IN (SELECT value FROM json_each(?2))) \
+                SELECT entity_id,generation_id,chunk_codes_json,score,0 FROM balanced \
+                ORDER BY source_position,generation_id,entity_id LIMIT ?3"
             ),
-            vec![generations.into(), ((query.limit + 1) as i64).into()],
+            vec![
+                generations.into(),
+                serde_json::to_string(&excluded_ids).map_err(err)?.into(),
+                ((query.limit + 1) as i64).into(),
+            ],
             false,
         ),
         GraphNodeMatch::Fulltext(text) => {

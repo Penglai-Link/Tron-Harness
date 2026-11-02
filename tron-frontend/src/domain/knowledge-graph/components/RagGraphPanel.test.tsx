@@ -52,7 +52,7 @@ it("loads published graphs before a question is entered and can refresh the over
   mount();
   await screen.findByRole("button", { name: "Alpha" });
   expect(api.browse).toHaveBeenCalledTimes(1);
-  expect(api.browse.mock.calls[0][0]).toMatchObject({ corpusIds: [], seedCount: 3, nodeLimit: 25, edgeLimit: 40 });
+  expect(api.browse.mock.calls[0][0]).toMatchObject({ corpusIds: [], seedCount: 50, nodeLimit: 100, edgeLimit: 200 });
   expect(api.search).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Browse graph" }));
   await waitFor(() => expect(api.browse).toHaveBeenCalledTimes(2));

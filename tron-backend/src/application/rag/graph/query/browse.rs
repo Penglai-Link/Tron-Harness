@@ -27,6 +27,42 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             &input.corpus_ids,
             &input.filters,
         )?)?;
+        let mut browse = GraphBrowseState::default();
+        let (windows, stage) = self.next_browse_windows(&snapshot, &input.options, &mut browse)?;
+        let request = SavedGraphRequest {
+            query: None,
+            corpus_ids: input.corpus_ids,
+            filters: input.filters,
+            options: input.options,
+            stamp: snapshot.stamp.clone(),
+        };
+        self.graph_page(
+            access,
+            identity,
+            snapshot,
+            request,
+            SavedTraversal {
+                windows,
+                browse: Some(browse),
+            },
+            vec![stage],
+            chrono::Utc::now().timestamp_millis() + GRAPH_SNAPSHOT_TTL_MS,
+            started,
+        )
+    }
+
+    pub(super) fn next_browse_windows(
+        &self,
+        snapshot: &AuthorizedGraphSnapshot,
+        options: &GraphReadOptions,
+        browse: &mut GraphBrowseState,
+    ) -> Result<
+        (
+            Vec<GraphWindowState>,
+            crate::application::rag::RagRetrievalStage,
+        ),
+        GraphQueryError,
+    > {
         let infra = self
             .graph
             .as_ref()
@@ -36,11 +72,12 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
             .index
             .search_nodes(GraphNodeSearchQuery {
                 generation_ids: snapshot.generation_ids().into_iter().collect(),
-                matching: GraphNodeMatch::Browse,
-                limit: input.options.seed_count,
+                matching: GraphNodeMatch::Browse {
+                    excluded_ids: browse.seeded_ids.clone(),
+                },
+                limit: options.seed_count,
             })
             .map_err(GraphQueryError::Storage)?;
-        let seed_limited = page.has_more;
         let seeds = page
             .hits
             .into_iter()
@@ -50,35 +87,20 @@ impl<R: RagSearchRepository + Clone, E: RagSearchRuntime> RagService<R, E> {
                 channels: BTreeSet::from(["browse".into()]),
             })
             .collect::<Vec<_>>();
-        let stages = vec![seeds::stage(
-            &snapshot,
+        // Retain seed identities, rather than every traversed node: a later seed
+        // can still reveal relationships beyond an earlier seed's depth bound.
+        browse
+            .seeded_ids
+            .extend(seeds.iter().map(|seed| seed.id.clone()));
+        let stage = seeds::stage(
+            snapshot,
             "graph.browse",
             phase,
             seeds.len(),
             None,
-            false,
-        )];
-        let windows = self.graph_windows(&snapshot, &seeds, &input.options, false)?;
-        let request = SavedGraphRequest {
-            query: None,
-            corpus_ids: input.corpus_ids,
-            filters: input.filters,
-            options: input.options,
-            stamp: snapshot.stamp.clone(),
-        };
-        let mut output = self.graph_page(
-            access,
-            identity,
-            snapshot,
-            request,
-            windows,
-            stages,
-            chrono::Utc::now().timestamp_millis() + GRAPH_SNAPSHOT_TTL_MS,
-            started,
-        )?;
-        if seed_limited {
-            output.truncated_by.insert("BrowseSeedBudget".into());
-        }
-        Ok(output)
+            page.has_more,
+        );
+        let windows = self.graph_windows(snapshot, &seeds, options, false)?;
+        Ok((windows, stage))
     }
 }

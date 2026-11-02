@@ -1,6 +1,7 @@
 //! Publication metadata and rebuildable search projections, never adjacency facts.
 use crate::domain::rag::graph::GraphPartition;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -158,7 +159,9 @@ pub struct GraphNodeSearchQuery {
 #[derive(Clone, Debug)]
 pub enum GraphNodeMatch {
     /// Published, authorized entity samples for browsing without model calls.
-    Browse,
+    Browse {
+        excluded_ids: BTreeSet<String>,
+    },
     Fulltext(String),
     Vector {
         embedding: Vec<f32>,

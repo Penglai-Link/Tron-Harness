@@ -16,8 +16,8 @@ import { defaultRagGraphOptions } from "../model/RagGraphModel";
 import { ragCanvasNodes, ragCanvasEdges } from "../model/ragGraphWindow";
 import type { RagGraphDirection, RagGraphOptions } from "../model/RagGraphModel";
 
-// Start with a readable window; expansion retains the server's bounded traversal.
-const initialGraphOptions = { ...defaultRagGraphOptions, seedCount: 3, nodeLimit: 25, edgeLimit: 40 };
+// Cover multiple sources on entry while keeping the graph window bounded.
+const initialGraphOptions = { ...defaultRagGraphOptions, seedCount: 50 };
 
 export function RagGraphPanel() {
   const { t } = useTranslation("pages"); const [params] = useSearchParams();
