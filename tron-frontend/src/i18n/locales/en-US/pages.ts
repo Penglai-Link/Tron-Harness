@@ -5182,6 +5182,12 @@ export const pages = {
     typingParticleSpeed: "Speed",
   },
   workspaceManagement: {
+    loading: "Loading workspaces…",
+    saved: "Workspace saved.",
+    nameRequired: "Enter a workspace name.",
+    expandNamed: "Expand {{name}}",
+    collapseNamed: "Collapse {{name}}",
+    createChildNamed: "Create workspace under {{name}}",
     title: "Workspaces",
     description: "Manage workspace hierarchy and lifecycle.",
     hierarchy: "Workspace hierarchy",

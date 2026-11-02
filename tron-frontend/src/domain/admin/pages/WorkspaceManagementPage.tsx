@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, Plus, FolderTree } from "lucide-react";
+import { FolderTree } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { WorkspaceTree } from "../components/WorkspaceTree";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
@@ -27,6 +28,7 @@ import {
   updateWorkspaceRecord,
 } from "@/domain/admin/mock";
 import type { WorkspaceDetailRecord, WorkspaceStatus, WorkspaceTreeNodeRecord } from "@/domain/admin/model";
+import { PageHeader, SurfaceCard } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 type StatusFilter = WorkspaceStatus | "All";
@@ -45,43 +47,6 @@ function filterTree(records: WorkspaceTreeNodeRecord[], search: string, status: 
     const matchesStatus = status === "All" || record.status === status;
     return (matchesSearch && matchesStatus) || children.length ? [{ ...record, children }] : [];
   });
-}
-
-function TreeNode({
-  record,
-  expanded,
-  selected,
-  labels,
-  onToggle,
-  onSelect,
-  onCreateChild,
-}: {
-  record: WorkspaceTreeNodeRecord;
-  expanded: boolean;
-  selected: boolean;
-  labels: { collapse: string; expand: string; createChild: string };
-  onToggle: () => void;
-  onSelect: () => void;
-  onCreateChild: () => void;
-}) {
-  return (
-    <div>
-      <div className={`group flex min-w-0 items-center gap-1 rounded-md border-s-2 py-1 pe-1 ps-0 transition-colors ${selected ? "border-[var(--color-accent)] bg-[var(--color-surface-container-high)]" : "border-transparent hover:bg-[var(--color-surface-container)]"}`}>
-        {record.children.length ? (
-          <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" onClick={onToggle} aria-label={expanded ? labels.collapse : labels.expand} aria-expanded={expanded}>
-            {expanded ? <ChevronDown /> : <ChevronRight />}
-          </Button>
-        ) : <span aria-hidden="true" className="inline-block size-8 shrink-0" />}
-        <button type="button" aria-current={selected ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left" onClick={onSelect}>
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{record.name}</span>
-          <span className="hidden max-w-28 truncate font-mono text-xs text-[var(--color-on-surface-variant)] xl:block">{record.workspaceCode}</span>
-        </button>
-        <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-[var(--color-on-surface-variant)]" onClick={onCreateChild} aria-label={labels.createChild}>
-          <Plus />
-        </Button>
-      </div>
-    </div>
-  );
 }
 
 export function WorkspaceManagementPage() {
@@ -103,6 +68,12 @@ export function WorkspaceManagementPage() {
 
   const visibleTree = useMemo(() => filterTree(tree, search, status), [tree, search, status]);
   const workspaceOptions = useMemo(() => flatten(tree).filter((record) => record.status === "Active"), [tree]);
+
+  useEffect(() => {
+    if (!search.trim() && status === "All") return;
+    const ancestors = flatten(visibleTree).filter(record => record.children.length).map(record => record.workspaceCode);
+    setExpandedCodes(current => new Set([...current, ...ancestors]));
+  }, [search, status, visibleTree]);
 
   const loadTree = async () => {
     setLoading(true);
@@ -209,91 +180,61 @@ export function WorkspaceManagementPage() {
     void runMutation(action);
   };
 
-  const renderTree = (records: WorkspaceTreeNodeRecord[]) => records.map((record) => (
-    <div key={record.workspaceCode}>
-      <TreeNode
-        record={record}
-        expanded={expandedCodes.has(record.workspaceCode)}
-        selected={selectedCode === record.workspaceCode}
-        labels={{
-          collapse: t("workspaceManagement.collapse"),
-          expand: t("workspaceManagement.expand"),
-          createChild: t("workspaceManagement.createChild"),
-        }}
-        onToggle={() => setExpandedCodes((current) => {
-          const next = new Set(current);
-          if (next.has(record.workspaceCode)) next.delete(record.workspaceCode); else next.add(record.workspaceCode);
-          return next;
-        })}
-        onSelect={() => selectWorkspace(record.workspaceCode)}
-        onCreateChild={() => prepareCreate(record.workspaceCode)}
-      />
-      {expandedCodes.has(record.workspaceCode) && record.children.length ? (
-        <div className="ml-4 border-l border-[var(--color-outline-variant)] pl-2">{renderTree(record.children)}</div>
-      ) : null}
-    </div>
-  ));
-
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 p-4 sm:gap-5 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">{t("workspaceManagement.title")}</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => void loadTree()} disabled={loading}>
+    <div className="min-w-0 pb-8">
+      <PageHeader title={t("workspaceManagement.title")} actions={<>
+        <Button variant="secondary" onClick={() => void loadTree()} disabled={loading}>
+          {t("workspaceManagement.refresh")}
+        </Button>
+        <Button onClick={() => prepareCreate(null)}>
+          {t("workspaceManagement.createWorkspace")}
+        </Button>
+      </>} />
 
-            {t("workspaceManagement.refresh")}
-          </Button>
-          <Button onClick={() => prepareCreate(null)}>
-
-            {t("workspaceManagement.createWorkspace")}
-          </Button>
-        </div>
-      </header>
-
-      <div
-        data-theme-anchor="panel"
-        className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(12rem,0.4fr)_minmax(18rem,0.6fr)] overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface)] lg:grid-rows-1 lg:grid-cols-[minmax(16rem,0.85fr)_minmax(0,1.8fr)]"
-      >
-        <aside aria-label={t("workspaceManagement.hierarchy")} className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 sm:p-5 lg:border-b-0 lg:border-e">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold">{t("workspaceManagement.hierarchy")}</h2>
-            <Badge variant="secondary" className="tabular-nums">{flatten(visibleTree).length}</Badge>
+      <div className="grid min-w-0 grid-cols-1 items-stretch gap-5 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
+        <SurfaceCard aria-label={t("workspaceManagement.hierarchy")} className="flex min-w-0 flex-col overflow-hidden p-0">
+          <div className="space-y-4 border-b border-[var(--color-outline-variant)] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold">{t("workspaceManagement.hierarchy")}</h2>
+              <Badge variant="secondary" className="tabular-nums">{flatten(visibleTree).length}</Badge>
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2">
+              <TextInput className="min-w-0" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("workspaceManagement.searchPlaceholder")} aria-label={t("workspaceManagement.searchPlaceholder")} />
+              <SelectInput aria-label={t("workspaceManagement.filterByStatus")} className="min-w-0" value={status} onValueChange={(value) => { if (value) setStatus(value as StatusFilter); }}>
+                <SelectItem value="All">{t("workspaceManagement.statuses.all")}</SelectItem>
+                <SelectItem value="Active">{t("workspaceManagement.statuses.active")}</SelectItem>
+                <SelectItem value="Archived">{t("workspaceManagement.statuses.archived")}</SelectItem>
+              </SelectInput>
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-2 2xl:grid-cols-[minmax(0,1fr)_7.5rem]">
-            <TextInput className="min-w-0" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("workspaceManagement.searchPlaceholder")} aria-label={t("workspaceManagement.searchPlaceholder")} />
-            <SelectInput aria-label={t("workspaceManagement.filterByStatus")} className="min-w-0" value={status} onValueChange={(value) => { if (value) setStatus(value as StatusFilter); }}>
-              <SelectItem value="All">{t("workspaceManagement.statuses.all")}</SelectItem>
-              <SelectItem value="Active">{t("workspaceManagement.statuses.active")}</SelectItem>
-              <SelectItem value="Archived">{t("workspaceManagement.statuses.archived")}</SelectItem>
-            </SelectInput>
+          <div className="min-h-40 flex-1 overflow-auto p-3 lg:max-h-[calc(100vh-20rem)] lg:min-h-80">
+            {loading && !tree.length ? <p role="status" className="px-2 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">{t("workspaceManagement.loading")}</p> : visibleTree.length ? <WorkspaceTree records={visibleTree} expandedCodes={expandedCodes} selectedCode={selectedCode}
+              label={t("workspaceManagement.hierarchy")} archivedLabel={t("workspaceManagement.statuses.archived")}
+              expandLabel={name => t("workspaceManagement.expandNamed", { name })}
+              collapseLabel={name => t("workspaceManagement.collapseNamed", { name })}
+              createChildLabel={name => t("workspaceManagement.createChildNamed", { name })}
+              onToggle={code => setExpandedCodes(current => { const next = new Set(current); if (next.has(code)) next.delete(code); else next.add(code); return next; })}
+              onSelect={selectWorkspace} onCreateChild={prepareCreate} /> : <p className="px-2 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">{t("workspaceManagement.empty")}</p>}
           </div>
-          <div className="min-h-0 flex-1 overflow-auto pe-1">
-            {visibleTree.length ? renderTree(visibleTree) : <p className="px-2 py-6 text-center text-sm text-[var(--color-on-surface-variant)]">{t("workspaceManagement.empty")}</p>}
-          </div>
-        </aside>
+        </SurfaceCard>
 
-        <section aria-label={t("workspaceManagement.details")} className="flex min-h-0 min-w-0 flex-col overflow-auto p-4 sm:p-6 lg:p-7">
+        <SurfaceCard aria-label={t("workspaceManagement.details")} className="flex min-w-0 flex-col overflow-hidden p-0">
           {mode === "create" || detail ? (
             <>
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] pb-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]">
-                    <FolderTree aria-hidden="true" className="size-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="mb-0.5 text-xs text-[var(--color-on-surface-variant)]">{t("workspaceManagement.details")}</p>
-                    <h2 className="truncate text-base font-semibold">{mode === "create" ? t("workspaceManagement.createWorkspace") : detail?.name}</h2>
-                  </div>
-                </div>
+              <div className="flex min-h-19 flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4 sm:px-6">
+                <h2 className="min-w-0 flex-1 truncate text-base font-semibold" title={mode === "create" ? undefined : detail?.name}>
+                  {mode === "create" ? t("workspaceManagement.createWorkspace") : detail?.name}
+                </h2>
                 {detail ? <Badge variant={detail.status === "Active" ? "success" : "secondary"}>{detail.status === "Active" ? t("workspaceManagement.statuses.active") : t("workspaceManagement.statuses.archived")}</Badge> : null}
               </div>
 
+              <div className="flex-1 p-5 sm:p-6">
               <div className="grid gap-x-5 gap-y-4 xl:grid-cols-2">
                 <Field className="min-w-0" label={t("workspaceManagement.name")} required>
-                  <TextInput autoFocus={mode === "create"} value={name} onChange={(event) => setName(event.target.value)} />
+                  <TextInput aria-label={t("workspaceManagement.name")} autoFocus={mode === "create"} value={name} onChange={(event) => setName(event.target.value)} />
                 </Field>
                 <Field className="min-w-0" label={t("workspaceManagement.parent")}>
-                  <SelectInput value={parentCode} onValueChange={(value) => { if (value) setParentCode(value); }}>
+                  <SelectInput aria-label={t("workspaceManagement.parent")} value={parentCode} onValueChange={(value) => { if (value) setParentCode(value); }}>
                     <SelectItem value={ROOT_PARENT}>{t("workspaceManagement.rootWorkspace")}</SelectItem>
                     {workspaceOptions.filter((item) => item.workspaceCode !== detail?.workspaceCode).map((item) => (
                       <SelectItem key={item.workspaceCode} value={item.workspaceCode}>{item.name} ({item.workspaceCode})</SelectItem>
@@ -316,18 +257,19 @@ export function WorkspaceManagementPage() {
                 </>
               ) : null}
 
-              <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-[var(--color-outline-variant)] pt-4">
+              </div>
+              <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-outline-variant)] px-5 py-4 sm:px-6">
                 <Button onClick={save} disabled={saving}>{mode === "create" ? t("workspaceManagement.create") : t("workspaceManagement.save")}</Button>
-                {mode === "edit" && detail && detail.parentWorkspaceCode !== parentCode ? <Button variant="outline" onClick={move} disabled={saving}>{t("workspaceManagement.move")}</Button> : null}
+                {mode === "edit" && detail && (detail.parentWorkspaceCode ?? ROOT_PARENT) !== parentCode ? <Button variant="outline" onClick={move} disabled={saving}>{t("workspaceManagement.move")}</Button> : null}
                 {mode === "edit" && detail ? (
-                  <Button variant={detail.status === "Active" ? "destructive" : "outline"} onClick={changeStatus} disabled={saving}>
+                  <Button className="ml-auto" variant={detail.status === "Active" ? "destructive" : "outline"} onClick={changeStatus} disabled={saving}>
                     {detail.status === "Active" ? <>{t("workspaceManagement.archive")}</> : <>{t("workspaceManagement.restore")}</>}
                   </Button>
                 ) : null}
               </div>
             </>
           ) : (
-            <div className="flex min-h-64 flex-1 flex-col items-center justify-center px-6 text-center">
+            <div className="flex min-h-80 flex-1 flex-col items-center justify-center px-6 py-10 text-center">
               <div className="mb-4 flex size-11 items-center justify-center rounded-full bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]">
                 <FolderTree aria-hidden="true" className="size-5" />
               </div>
@@ -335,7 +277,7 @@ export function WorkspaceManagementPage() {
               <p className="mt-1 max-w-xs text-sm text-[var(--color-on-surface-variant)]">{t("workspaceManagement.selectOrCreate")}</p>
             </div>
           )}
-        </section>
+        </SurfaceCard>
       </div>
     </div>
   );

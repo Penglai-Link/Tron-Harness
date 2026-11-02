@@ -4962,6 +4962,12 @@ export const pages = {
     typingParticleSpeed: "速度",
   },
   workspaceManagement: {
+    loading: "正在加载工作区…",
+    saved: "工作区已保存。",
+    nameRequired: "请输入工作区名称。",
+    expandNamed: "展开 {{name}}",
+    collapseNamed: "折叠 {{name}}",
+    createChildNamed: "在 {{name}} 下创建工作区",
     title: "工作区管理",
     description: "管理工作区层级和生命周期。",
     hierarchy: "工作区层级",
