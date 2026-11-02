@@ -1,6 +1,7 @@
-import { MoreHorizontal, Boxes, Database, UserRound } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
 
@@ -30,6 +31,7 @@ import { useTabPanelConfig } from "@/shared";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DataTable,
   DataTableProps,
@@ -47,19 +49,7 @@ import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { SelectItem } from "@/components/ui/select";
 import { useTranslation } from "react-i18next";
 
-const visibleTargetLimit = 4;
-
-function MemoryTargetIcon({ scope }: { scope: MemoryScopeKind }) {
-  const iconProps = {
-    "aria-hidden": true,
-    size: 18,
-    strokeWidth: 2,
-  };
-
-  if (scope === "space") return <Database {...iconProps} />;
-  if (scope === "user") return <UserRound {...iconProps} />;
-  return <Boxes {...iconProps} />;
-}
+const memoryScopes: MemoryScopeKind[] = ["space", "user", "domain"];
 
 function getTypeTone(memory: MemoryRecord) {
   if (memory.memoryStatus === "DISABLED") return "error";
@@ -108,36 +98,6 @@ function recordMatchesFilters(
   return true;
 }
 
-function getVisibleTargets(
-  targets: MemorySearchTarget[],
-  activeTargetId: string,
-  limit: number,
-) {
-  const pinnedTargets = targets.slice(0, limit);
-  if (pinnedTargets.some((target) => target.id === activeTargetId)) {
-    return pinnedTargets;
-  }
-
-  const activeTarget = targets.find((target) => target.id === activeTargetId);
-  if (!activeTarget) return pinnedTargets;
-  return [...pinnedTargets.slice(0, limit - 1), activeTarget];
-}
-
-function useCompactTargetNav() {
-  const [compact, setCompact] = useState(false);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 700px)");
-    const syncCompact = () => setCompact(mediaQuery.matches);
-
-    syncCompact();
-    mediaQuery.addEventListener("change", syncCompact);
-    return () => mediaQuery.removeEventListener("change", syncCompact);
-  }, []);
-
-  return compact;
-}
-
 function buildDisplayTargets(
   targets: MemorySearchTarget[],
   workspaceLabel?: string,
@@ -182,14 +142,14 @@ function MemoryFilterControls({
     <>
       <SearchField
         ariaLabel={t("pages:memory.search", "Search memories")}
-        className="w-full"
+        className="w-full sm:w-40"
         placeholder={t("pages:memory.search", "Search memories")}
         value={query}
         onChange={onSearchChange}
       />
       <SelectInput
         aria-label={t("pages:memory.filters.status", "Filter memories by status")}
-        className="w-full"
+        className="w-full sm:w-40"
         value={filters.status}
         onValueChange={(event) =>
           onFiltersChange({
@@ -206,7 +166,7 @@ function MemoryFilterControls({
       </SelectInput>
       <SelectInput
         aria-label={t("pages:memory.filters.review", "Filter memories by review status")}
-        className="w-full"
+        className="w-full sm:w-40"
         value={filters.reviewStatus}
         onValueChange={(event) =>
           onFiltersChange({
@@ -223,7 +183,7 @@ function MemoryFilterControls({
       </SelectInput>
       <SelectInput
         aria-label={t("pages:memory.filters.injectable", "Filter memories by context use")}
-        className="w-full"
+        className="w-full sm:w-40"
         value={filters.injectable}
         onValueChange={(event) =>
           onFiltersChange({
@@ -246,11 +206,21 @@ function EmptyResults({
   activeTarget,
   query,
 }: {
-  activeTarget: MemorySearchTarget;
+  activeTarget?: MemorySearchTarget;
   query: string;
 }) {
   const { t } = useTranslation(["pages"]);
   const trimmedQuery = query.trim();
+
+  if (!activeTarget) return (
+    <section className="space-y-2 py-6 text-sm text-[var(--color-on-surface-variant)]">
+      <p className="font-medium text-[var(--color-on-surface)]">{t("pages:memory.empty.noDomains")}</p>
+      <p>{t("pages:memory.empty.noDomainsDescription")}</p>
+      <Button size="sm" variant="outline" nativeButton={false} render={<Link to="/settings/memory-domains" />}>
+        {t("pages:memory.actions.manageDomains")}
+      </Button>
+    </section>
+  );
 
   return (
     <section className="rounded-xl border border-dashed border-[var(--color-outline-variant)] px-5 py-8 text-sm leading-6 text-[var(--color-on-surface-variant)]">
@@ -276,7 +246,7 @@ function MemoryRecordsTable({
   title,
   toolbar,
 }: {
-  activeTarget: MemorySearchTarget;
+  activeTarget?: MemorySearchTarget;
   memories: MemoryRecord[];
   onArchive: (memory: MemoryRecord) => void;
   onEdit: (memory: MemoryRecord) => void;
@@ -455,7 +425,16 @@ function MemoryRepository() {
     selectedSecondarySpace,
     selectedSecondarySpaceId,
   } = useWorkspaceSpaces();
-  const [activeTargetId, setActiveTargetId] = useState("space:current");
+  const [params, setParams] = useSearchParams();
+  const activeTargetId = params.get("targetId") ?? "space:current";
+  const scope: MemoryScopeKind = activeTargetId === "user:current" ? "user"
+    : activeTargetId === "domain" || activeTargetId.startsWith("domain:") ? "domain" : "space";
+  const setActiveTargetId = (id: string) => {
+    const next = new URLSearchParams(params);
+    if (id === "space:current") next.delete("targetId");
+    else next.set("targetId", id);
+    setParams(next, { replace: true });
+  };
   const [query, setQuery] = useState("");
   const [filters, setFilters] =
     useState<MemoryFilterState>(defaultMemoryFilters);
@@ -494,9 +473,10 @@ function MemoryRepository() {
     [workspaceCode, workspaceLabel, t],
   );
   const displayTargets = targets.length ? targets : [fallbackTarget];
+  const scopedTargets = displayTargets.filter((target) => target.scope === scope);
+  const domainTargets = displayTargets.filter((target) => target.scope === "domain");
   const activeTarget =
-    displayTargets.find((target) => target.id === activeTargetId) ??
-    displayTargets[0];
+    scopedTargets.find((target) => target.id === activeTargetId) ?? scopedTargets[0];
   const memories = useMemoryFragmentList({
     activeTarget,
     filters,
@@ -548,15 +528,26 @@ function MemoryRepository() {
     }
   }
 
-  const activeTargets = getVisibleTargets(
-    targets,
-    activeTargetId,
-    useCompactTargetNav() ? 1 : visibleTargetLimit,
-  );
-
   return (
     <main className="text-[var(--color-on-surface)]">
-      <div className="space-y-5">
+      <Tabs value={scope} onValueChange={(value) => setActiveTargetId(
+        value === "domain" ? domainTargets[0]?.id ?? "domain"
+          : value === "user" ? "user:current" : "space:current",
+      )} className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <TabsList aria-label={t("pages:memory.filters.scope")} className="max-w-full flex-wrap gap-1 box-border! group-data-horizontal/tabs:h-auto">
+            {memoryScopes.map((value) => <TabsTrigger key={value} value={value} className="flex-none px-3">
+              {t(`pages:memory.scopes.${value}`)}
+            </TabsTrigger>)}
+          </TabsList>
+          {scope === "domain" ? <SelectInput aria-label={t("pages:memory.filters.domain")} className="w-full sm:w-64"
+            disabled={domainTargets.length === 0} value={activeTarget?.id ?? ""}
+            onValueChange={(value) => { if (value) setActiveTargetId(value); }}>
+            {domainTargets.length === 0 ? <SelectItem value="">{t("pages:memory.empty.noDomains")}</SelectItem> : null}
+            {domainTargets.map((target) => <SelectItem key={target.id} value={target.id}>{target.label}</SelectItem>)}
+          </SelectInput> : null}
+        </div>
+        {memoryScopes.map((value) => <TabsContent key={value} value={value} className="min-w-0">
         <MemoryRecordsTable
           activeTarget={activeTarget}
           memories={visibleMemories}
@@ -566,21 +557,7 @@ function MemoryRepository() {
           onOpen={openMemory}
           title={t("pages:memory.title", "Long-term Memory")}
           toolbar={
-            <div className="flex gap-[12px]">
-              <SelectInput
-                aria-label={t("pages:memory.filters.target", "Filter memory target")}
-                className="w-full"
-                value={activeTargetId}
-                onValueChange={(event) => {
-                  setActiveTargetId(event!);
-                }}
-              >
-                {targets.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectInput>
+            <div className="flex flex-wrap items-center gap-3">
               <MemoryFilterControls
                 filters={filters}
                 query={query}
@@ -598,13 +575,16 @@ function MemoryRepository() {
               >
                 {t("pages:memory.actions.refresh", "Refresh")}
               </Button>
-              <Button size="lg" disabled={!workspaceCode} onClick={() => navigate("/memory/new")}>
+              <Button size="lg" disabled={!workspaceCode || !activeTarget} onClick={() => {
+                if (activeTarget) navigate(`/memory/new?targetId=${encodeURIComponent(activeTarget.id)}`);
+              }}>
                 {t("pages:memory.actions.new", "New")}
               </Button>
             </div>
           }
         />
-      </div>
+        </TabsContent>)}
+      </Tabs>
 
       <ConfirmDialog
         open={archiveTarget !== null}

@@ -3798,7 +3798,9 @@ export const pages = {
     },
   },
   memory: {
+    scopes: { space: "Workspace memory", user: "Personal memory", domain: "Domain memory" },
     actions: {
+      manageDomains: "Manage memory domains",
       archive: "Archive",
       cancel: "Cancel",
       copied: "Copied",
@@ -3825,11 +3827,14 @@ export const pages = {
       title: "Archive memory?",
     },
     empty: {
+      noDomains: "No memory domains available",
+      noDomainsDescription: "View, create, or enable domains on the memory domains page.",
       title: "No memories found",
       withFilters: "No memories in {{target}} match the current filters.",
       withQuery: 'No memories in {{target}} match "{{query}}".',
     },
     errors: {
+      targetUnavailable: "The selected memory target is unavailable. Choose another target.",
       archive: "Memory could not be archived.",
       create: "Memory could not be created",
       notFound: "Memory not found.",
@@ -3837,6 +3842,8 @@ export const pages = {
       status: "Memory status could not be updated",
     },
     filters: {
+      scope: "Memory scope",
+      domain: "Select memory domain",
       injectable: "Filter memories by context use",
       review: "Filter memories by review status",
       reviewOptions: {
@@ -3909,7 +3916,7 @@ export const pages = {
       title: "Title",
       type: "Memory type",
       use: "Use",
-      workDomain: "Work domain",
+      workDomain: "Memory domain",
     },
   },
   memoryDomains: {

@@ -185,7 +185,7 @@ export function MemoryFormFields({
   const { t } = useTranslation(["pages"]);
   const text = (key: string, fallback: string) => t(`pages:memory.form.${key}`, { defaultValue: fallback });
   const selectedTarget = targetOptions.find((target) => target.id === state.targetId);
-  const targetValue: MemoryTargetFormValue = selectedTarget?.scope === "domain"
+  const targetValue: MemoryTargetFormValue = selectedTarget?.scope === "domain" || state.targetId.startsWith("domain")
     ? "domain"
     : (state.targetId as MemoryTargetFormValue);
   const firstDomainId = domainTargets[0]?.id ?? "";
@@ -204,21 +204,21 @@ export function MemoryFormFields({
     <div className="grid gap-5">
       {mode === "create" ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={text("target", "Target")}>
+          <Field label={t("pages:memory.filters.scope")}>
             <SelectInput
               value={targetValue}
               onValueChange={(event) => {
                 const nextValue = event as MemoryTargetFormValue;
                 if (nextValue === "domain") {
-                  patch("targetId", selectedDomainId || firstDomainId);
+                  patch("targetId", selectedDomainId || firstDomainId || "domain");
                   return;
                 }
                 patch("targetId", nextValue);
               }}
             >
-              <SelectItem value="space:current">{text("currentSpace", "Current space")}</SelectItem>
-              <SelectItem value="user:current">{text("currentUser", "Current user")}</SelectItem>
-              <SelectItem value="domain">{text("workDomain", "Work domain")}</SelectItem>
+              <SelectItem value="space:current">{t("pages:memory.scopes.space")}</SelectItem>
+              <SelectItem value="user:current">{t("pages:memory.scopes.user")}</SelectItem>
+              <SelectItem value="domain">{t("pages:memory.scopes.domain")}</SelectItem>
             </SelectInput>
           </Field>
           <Field label={text("workDomain", "Work domain")}>
@@ -227,7 +227,7 @@ export function MemoryFormFields({
               value={selectedDomainId}
               onValueChange={(event) => patch("targetId", event!)}
             >
-              <SelectItem value="">{text("notApplicable", "Not applicable")}</SelectItem>
+              <SelectItem value="">{targetValue === "domain" ? t("pages:memory.filters.domain") : text("notApplicable", "Not applicable")}</SelectItem>
               {domainTargets.map((target) => (
                 <SelectItem key={target.id} value={target.id}>{target.label}</SelectItem>
               ))}

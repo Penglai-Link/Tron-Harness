@@ -1,4 +1,5 @@
 import { usePlatformDataHref, usePlatformDataNavigate } from "@/domain/settings/components/PlatformWorkspaceScope";
+import { useSearchParams } from "react-router";
 import {
   useMemo,
   useState,
@@ -62,6 +63,9 @@ export function CreateMemoryPage() {
   const { t } = useTranslation(["pages"]);
   const navigate = usePlatformDataNavigate();
   const dataHref = usePlatformDataHref();
+  const [params] = useSearchParams();
+  const sourceTargetId = params.get("targetId");
+  const listPath = sourceTargetId ? `/memory?targetId=${encodeURIComponent(sourceTargetId)}` : "/memory";
   const toast = useToast();
   const dataSource = getServiceDataSource("memory");
   const { session } = useAuthSession();
@@ -81,7 +85,7 @@ export function CreateMemoryPage() {
     () => buildDisplayTargets(safeTargets, workspaceLabel, workspaceCode, userLabel, userCode),
     [safeTargets, userCode, userLabel, workspaceCode, workspaceLabel],
   );
-  const [form, setForm] = useState(() => emptyMemoryFormState());
+  const [form, setForm] = useState(() => emptyMemoryFormState(sourceTargetId ?? undefined));
   const [submitting, setSubmitting] = useState(false);
   const fallbackTarget = useMemo<MemorySearchTarget>(() => ({
     code: workspaceCode || "space:current",
@@ -93,11 +97,15 @@ export function CreateMemoryPage() {
   }), [workspaceCode, workspaceLabel]);
   const targetOptions = targets.length ? targets : [fallbackTarget];
   const domainTargets = targetOptions.filter((target) => target.scope === "domain");
-  const selectedTarget = targetOptions.find((target) => target.id === form.targetId) ?? fallbackTarget;
+  const selectedTarget = targetOptions.find((target) => target.id === form.targetId);
 
   useTabPanelConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
 
   async function saveMemory() {
+    if (!selectedTarget) {
+      toast.error(t("pages:memory.errors.targetUnavailable"));
+      return;
+    }
     const validationError = validateMemoryForm(form, selectedTarget);
     if (validationError) {
       toast.error(validationError);
@@ -122,12 +130,12 @@ export function CreateMemoryPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: t("pages:memory.title", "Long-term Memory"), href: dataHref("/memory") }, { label: t("pages:memory.actions.new", "New") }]}
+        breadcrumbs={[{ label: t("pages:memory.title", "Long-term Memory"), href: dataHref(listPath) }, { label: t("pages:memory.actions.new", "New") }]}
         title={t("pages:memory.createTitle", "New Memory")}
         actions={(
           <>
-            <Button size="lg" variant="outline" onClick={() => navigate("/memory")}>{t("pages:memory.actions.cancel", "Cancel")}</Button>
-            <Button size="lg" disabled={submitting || !form.title.trim() || !form.text.trim()} aria-busy={submitting} onClick={saveMemory}>
+            <Button size="lg" variant="outline" onClick={() => navigate(listPath)}>{t("pages:memory.actions.cancel", "Cancel")}</Button>
+            <Button size="lg" disabled={submitting || !selectedTarget || !form.title.trim() || !form.text.trim()} aria-busy={submitting} onClick={saveMemory}>
               {submitting ? t("pages:memory.actions.saving", "Saving...") : t("pages:memory.actions.save", "Save")}
             </Button>
           </>

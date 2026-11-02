@@ -3670,7 +3670,9 @@ export const pages = {
     },
   },
   memory: {
+    scopes: { space: "工作区记忆", user: "个人记忆", domain: "领域记忆" },
     actions: {
+      manageDomains: "管理记忆领域",
       archive: "归档",
       cancel: "取消",
       copied: "已复制",
@@ -3697,11 +3699,14 @@ export const pages = {
       title: "归档记忆？",
     },
     empty: {
+      noDomains: "暂无可用的记忆领域",
+      noDomainsDescription: "可在记忆领域页面查看、创建或启用领域。",
       title: "未找到记忆",
       withFilters: "{{target}} 中没有匹配当前筛选条件的记忆。",
       withQuery: "{{target}} 中没有匹配“{{query}}”的记忆。",
     },
     errors: {
+      targetUnavailable: "所选记忆范围暂不可用，请重新选择。",
       archive: "记忆归档失败。",
       create: "记忆创建失败",
       notFound: "未找到记忆。",
@@ -3709,6 +3714,8 @@ export const pages = {
       status: "记忆状态更新失败",
     },
     filters: {
+      scope: "记忆范围",
+      domain: "选择记忆领域",
       injectable: "按上下文使用筛选",
       review: "按审核状态筛选",
       reviewOptions: {
@@ -3781,7 +3788,7 @@ export const pages = {
       title: "标题",
       type: "记忆类型",
       use: "用途",
-      workDomain: "工作域",
+      workDomain: "记忆领域",
     },
   },
   memoryDomains: {
