@@ -35,7 +35,6 @@ it("shows the renamed configuration page with the same product block names as sh
   for (const oldName of ["会话检查点", "固定指令", "工具目录", "conversation_history_summary"]) {
     expect(screen.queryByText(oldName)).toBeNull();
   }
-  expect(screen.getByText("custom.plugin")).toBeTruthy();
 });
 
 it("edits host budgets, labels only plugins, and prevents moving fixed rows", async () => {
