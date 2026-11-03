@@ -221,10 +221,12 @@ export function DashboardPage() {
                 <dt className="flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)]">
                   {t("diskUsage")}
                   <InfoTooltip ariaLabel={t("diskUsage")}>
-                    <p>{t("diskUsageHelp")}</p>
-                    <p className="mt-2">{t(disk?.measurement === "Logical" ? "diskUsageLogical" : "diskUsageAllocated")}</p>
-                    {disk?.paths.length ? <ul className="mt-2 space-y-1">{disk.paths.map(path => <li key={path} className="break-all font-mono text-xs">{path}</li>)}</ul> : null}
-                    {disk?.sampledAt != null ? <p className="mt-2">{t("sampledAt")} {formatDateTime(disk.sampledAt, { timeStyle: "medium" })}</p> : null}
+                    <div className="min-w-0 space-y-2 text-left leading-relaxed">
+                      <p>{t("diskUsageHelp")}</p>
+                      <p>{t(disk?.measurement === "Logical" ? "diskUsageLogical" : "diskUsageAllocated")}</p>
+                      {disk?.paths.length ? <ul className="space-y-1">{disk.paths.map(path => <li key={path} className="break-all font-mono text-xs">{path}</li>)}</ul> : null}
+                      {disk?.sampledAt != null ? <p>{t("sampledAt")} {formatDateTime(disk.sampledAt, { timeStyle: "medium" })}</p> : null}
+                    </div>
                   </InfoTooltip>
                 </dt>
                 <dd className="text-3xl font-semibold leading-none tracking-tight tabular-nums">
