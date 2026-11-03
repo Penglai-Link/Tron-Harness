@@ -1,5 +1,6 @@
 //! Tron projection of Framework telemetry records. No transport or physical storage.
 mod dashboard;
+pub mod disk_usage;
 mod triggers;
 mod query_filters;
 mod list_query;

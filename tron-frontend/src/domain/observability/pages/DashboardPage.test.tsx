@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
     recentRequests: [{ startedAt: 0, requests: 3, errors: 1 }],
     cpuPercent: 3.6,
     memoryBytes: 104857600,
+    diskUsage: { bytes: 1610612736 as number | null, sampledAt: 60000, paths: ["/tron-data"], measurement: "Allocated" as const },
     resourceSampledAt: 60000,
     metricPointCount: 8,
     processes: [
@@ -88,12 +89,25 @@ it("shows scoped request error rate, readable latency, resources and actual chil
   expect(screen.getByText("1.25 s")).toBeTruthy();
   expect(screen.getAllByText((_, element) => element?.textContent === "100 MiB" && !Array.from(element.children).some((child) => child.textContent === "100 MiB"))).toHaveLength(2);
   expect(screen.getByText("plugin-backend")).toBeTruthy();
+  expect(screen.getByText("Tron 数据占用")).toBeTruthy();
+  expect(screen.getByText((_, element) => element?.textContent === "1.5 GiB" && element.tagName === "DD")).toBeTruthy();
   expect(
     screen.getByRole("link", { name: "查看链路" }).getAttribute("href")
   ).toBe("/settings/observability/traces");
   expect(
     screen.getByRole("link", { name: "查看指标" }).getAttribute("href")
   ).toBe("/settings/observability/metrics");
+});
+it("keeps unavailable disk usage distinct from an empty data directory", () => {
+  const previous = state.data;
+  state.data = { ...previous, diskUsage: { ...previous.diskUsage, bytes: null } };
+  const view = render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+  const diskValue = screen.getByText("Tron 数据占用").closest("dt")!.nextElementSibling;
+  expect(diskValue?.textContent).toBe("—");
+  state.data = { ...previous, diskUsage: { ...previous.diskUsage, bytes: 0 } };
+  view.rerender(<MemoryRouter><DashboardPage /></MemoryRouter>);
+  expect(diskValue?.textContent).toBe("0 B");
+  state.data = previous;
 });
 it("does not invent a zero-percent error rate when no requests were collected", () => {
   const previous = state.data;

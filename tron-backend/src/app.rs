@@ -104,6 +104,7 @@ pub struct AppStateInner {
     pub dude_memory: crate::application::dude_memory::DudeMemoryService,
     pub dudes: crate::application::dude::DudeService,
     pub config: AppConfig,
+    pub disk_usage: crate::adapters::outbound::observability::disk_usage::LocalDiskUsage,
     _temporary_database: Option<Arc<tempfile::TempDir>>,
     _agent_collaboration_builder: Arc<crate::application::agent::AgentRunContextBuilder>,
     pub readiness: AppReadiness,
@@ -630,10 +631,12 @@ impl AppState {
         let skins = crate::application::skin::SkinService::new(Arc::new(
             crate::adapters::outbound::skin::FileSkinStore::new(skin_root),
         ));
+        let disk_usage = crate::adapters::outbound::observability::disk_usage::LocalDiskUsage::new(&config);
         Ok(Self(Arc::new(AppStateInner {
             dude_memory,
             dudes,
             config,
+            disk_usage,
             _temporary_database: temporary_database,
             _agent_collaboration_builder: agent_collaboration_builder,
             readiness,

@@ -372,23 +372,32 @@ pub async fn get_export_config(
 pub struct GetDashboardRequest {
     pub workspace_code: Option<String>,
 }
+#[derive(serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ObservabilityDashboardVo {
+    #[serde(flatten)]
+    dashboard: crate::application::observability::ObservabilityDashboard,
+    disk_usage: crate::application::observability::DiskUsageSnapshot,
+}
 #[utoipa::path(get,path="/api/v1/observability/dashboard",tag="Observability",
-params(("workspaceCode"=Option<String>,Query)),responses((status=200,body=ApiResponse<crate::application::observability::ObservabilityDashboard>),(status=404,body=ApiResponse<EmptyData>)))]
+params(("workspaceCode"=Option<String>,Query)),responses((status=200,body=ApiResponse<ObservabilityDashboardVo>),(status=404,body=ApiResponse<EmptyData>)))]
 pub async fn get_dashboard(
     State(state): State<AppState>,
     auth: RequestAuthContext,
     query: Result<Query<GetDashboardRequest>, axum::extract::rejection::QueryRejection>,
 ) -> Result<
-    Json<ApiResponse<crate::application::observability::ObservabilityDashboard>>,
+    Json<ApiResponse<ObservabilityDashboardVo>>,
     ObservabilityApiError,
 > {
     let result = async {
         let Query(q) = query.map_err(|_| ObservabilityError::InvalidQuery)?;
         validate_workspace(&state, q.workspace_code.as_deref())?;
         let service = state.agent_framework.observability().await?;
+        let disk_usage = state.disk_usage.snapshot();
         tokio::task::spawn_blocking(move || service.0.dashboard(q.workspace_code.as_deref().unwrap_or_default()))
             .await
             .map_err(|_| ObservabilityError::Storage)?
+            .map(|dashboard| ObservabilityDashboardVo { dashboard, disk_usage })
     }
     .await;
     result

@@ -1,6 +1,21 @@
 use super::ObservabilityError;
 use serde::Serialize;
 
+#[derive(Clone, Copy, Debug, Serialize, utoipa::ToSchema)]
+pub enum DiskUsageMeasurement {
+    Allocated,
+    Logical,
+}
+
+#[derive(Clone, Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskUsageSnapshot {
+    pub bytes: Option<u64>,
+    pub sampled_at: Option<i64>,
+    pub paths: Vec<String>,
+    pub measurement: DiskUsageMeasurement,
+}
+
 #[derive(Clone, Debug, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestBucket {

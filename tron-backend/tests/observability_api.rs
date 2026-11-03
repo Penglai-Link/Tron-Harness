@@ -410,6 +410,10 @@ async fn dashboard_counts_workspace_requests_and_recent_traffic_without_other_wo
     assert_eq!(data["runningTraceCount"], 1);
     assert_eq!(data["averageDurationMs"], 1500.0);
     assert_eq!(data["p95DurationMs"], 2000.0);
+    assert!(data["diskUsage"]["paths"].is_array());
+    assert!(data["diskUsage"].as_object().unwrap().contains_key("bytes"));
+    assert!(data["diskUsage"].as_object().unwrap().contains_key("sampledAt"));
+    assert!(matches!(data["diskUsage"]["measurement"].as_str(), Some("Allocated" | "Logical")));
     let buckets = data["recentRequests"].as_array().unwrap();
     assert_eq!(buckets.len(), 15);
     assert_eq!(

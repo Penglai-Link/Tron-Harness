@@ -135,6 +135,10 @@ export const observability = {
   runtime: "Tron process",
   processCpu: "Process CPU",
   processMemory: "Process memory (RSS)",
+  diskUsage: "Tron data storage",
+  diskUsageHelp: "Local Tron data, including databases, logs, resources, skills and managed session files. Child symlink targets, remote storage and project repositories are excluded. Sampled in the background and cached for one minute, regardless of the workspace filter. Measured paths are listed below.",
+  diskUsageAllocated: "Counts allocated filesystem blocks, deduplicating hard links.",
+  diskUsageLogical: "This platform sums local file lengths, which may differ from allocated disk space.",
   metricPoints: "Metric points",
   runtimeHelpLabel: "Process metrics help",
   runtimeHelp:

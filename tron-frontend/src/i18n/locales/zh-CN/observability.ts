@@ -135,6 +135,10 @@ export const observability = {
   runtime: "Tron 进程",
   processCpu: "进程 CPU",
   processMemory: "进程内存（RSS）",
+  diskUsage: "Tron 数据占用",
+  diskUsageHelp: "统计本机 Tron 数据目录，包括数据库、日志、资源、技能和托管会话文件。内部软链接的目标不计入；远端存储和项目代码仓库不计入。后台采集并缓存 1 分钟，不受工作区筛选影响。下方为统计路径。",
+  diskUsageAllocated: "按文件系统已分配的磁盘块计数，硬链接去重。",
+  diskUsageLogical: "当前平台按本地文件长度合计，可能与文件系统实际分配空间不同。",
   metricPoints: "指标数据点",
   runtimeHelpLabel: "进程指标说明",
   runtimeHelp:

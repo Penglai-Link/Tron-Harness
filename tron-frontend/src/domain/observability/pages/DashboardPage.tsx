@@ -26,6 +26,9 @@ export function DashboardPage() {
   const href = usePlatformDataHref();
   const query = useObservabilityDashboard(workspace);
   const data = query.data;
+  const disk = data?.diskUsage;
+  const diskUnits = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  const diskUnit = disk?.bytes ? Math.min(Math.floor(Math.log(disk.bytes) / Math.log(1024)), diskUnits.length - 1) : 0;
   const n = (value: number | undefined) =>
     value == null ? "—" : formatNumber(value);
   const duration = (value: number | undefined) =>
@@ -211,6 +214,22 @@ export function DashboardPage() {
                 <dd className="text-3xl font-semibold leading-none tracking-tight tabular-nums">
                   {data?.memoryBytes != null
                     ? <>{formatNumber(data.memoryBytes / 1048576, { maximumFractionDigits: 1 })}{" "}<span className="text-sm font-normal text-[var(--color-on-surface-variant)]">MiB</span></>
+                    : "—"}
+                </dd>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 py-4">
+                <dt className="flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)]">
+                  {t("diskUsage")}
+                  <InfoTooltip ariaLabel={t("diskUsage")}>
+                    <p>{t("diskUsageHelp")}</p>
+                    <p className="mt-2">{t(disk?.measurement === "Logical" ? "diskUsageLogical" : "diskUsageAllocated")}</p>
+                    {disk?.paths.length ? <ul className="mt-2 space-y-1">{disk.paths.map(path => <li key={path} className="break-all font-mono text-xs">{path}</li>)}</ul> : null}
+                    {disk?.sampledAt != null ? <p className="mt-2">{t("sampledAt")} {formatDateTime(disk.sampledAt, { timeStyle: "medium" })}</p> : null}
+                  </InfoTooltip>
+                </dt>
+                <dd className="text-3xl font-semibold leading-none tracking-tight tabular-nums">
+                  {disk?.bytes != null
+                    ? <>{formatNumber(disk.bytes / 1024 ** diskUnit, { maximumFractionDigits: 1 })}{" "}<span className="text-sm font-normal text-[var(--color-on-surface-variant)]">{diskUnits[diskUnit]}</span></>
                     : "—"}
                 </dd>
               </div>

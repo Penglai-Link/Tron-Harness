@@ -124,6 +124,12 @@ export interface ObservabilityDashboard {
   recentRequests: { startedAt: number; requests: number; errors: number }[];
   cpuPercent: number | null;
   memoryBytes: number | null;
+  diskUsage: {
+    bytes: number | null;
+    sampledAt: number | null;
+    paths: string[];
+    measurement: "Allocated" | "Logical";
+  };
   resourceSampledAt: number | null;
   metricPointCount: number;
   processes: ServiceProcess[];

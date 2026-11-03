@@ -71,7 +71,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiResponse_ObservabilityDashboard'
+                $ref: '#/components/schemas/ApiResponse_ObservabilityDashboardVo'
         '404':
           description: ''
           content:
@@ -401,7 +401,7 @@ components:
               minimum: 0
         message:
           type: string
-    ApiResponse_ObservabilityDashboard:
+    ApiResponse_ObservabilityDashboardVo:
       type: object
       required:
       - code
@@ -411,73 +411,14 @@ components:
         code:
           type: string
         data:
-          type: object
-          required:
-          - sampledAt
-          - traceCount
-          - failedTraceCount
-          - runningTraceCount
-          - inputTokens
-          - outputTokens
-          - averageDurationMs
-          - p95DurationMs
-          - recentRequests
-          - metricPointCount
-          - processes
-          properties:
-            averageDurationMs:
-              type: number
-              format: double
-            cpuPercent:
-              type:
-              - number
-              - 'null'
-              format: double
-            failedTraceCount:
-              type: integer
-              minimum: 0
-            inputTokens:
-              type: integer
-              format: int64
-              minimum: 0
-            memoryBytes:
-              type:
-              - integer
-              - 'null'
-              format: int64
-              minimum: 0
-            metricPointCount:
-              type: integer
-              minimum: 0
-            outputTokens:
-              type: integer
-              format: int64
-              minimum: 0
-            p95DurationMs:
-              type: number
-              format: double
-            processes:
-              type: array
-              items:
-                $ref: '#/components/schemas/ServiceProcess'
-            recentRequests:
-              type: array
-              items:
-                $ref: '#/components/schemas/RequestBucket'
-            resourceSampledAt:
-              type:
-              - integer
-              - 'null'
-              format: int64
-            runningTraceCount:
-              type: integer
-              minimum: 0
-            sampledAt:
-              type: integer
-              format: int64
-            traceCount:
-              type: integer
-              minimum: 0
+          allOf:
+          - $ref: '#/components/schemas/ObservabilityDashboard'
+          - type: object
+            required:
+            - diskUsage
+            properties:
+              diskUsage:
+                $ref: '#/components/schemas/DiskUsageSnapshot'
         message:
           type: string
     ApiResponse_ReadinessData:
@@ -796,6 +737,34 @@ components:
         traceRetentionDays:
           type: integer
           format: int64
+    DiskUsageMeasurement:
+      type: string
+      enum:
+      - Allocated
+      - Logical
+    DiskUsageSnapshot:
+      type: object
+      required:
+      - paths
+      - measurement
+      properties:
+        bytes:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        measurement:
+          $ref: '#/components/schemas/DiskUsageMeasurement'
+        paths:
+          type: array
+          items:
+            type: string
+        sampledAt:
+          type:
+          - integer
+          - 'null'
+          format: int64
     EmptyData:
       type: object
     HealthData:
@@ -942,6 +911,15 @@ components:
         traceCount:
           type: integer
           minimum: 0
+    ObservabilityDashboardVo:
+      allOf:
+      - $ref: '#/components/schemas/ObservabilityDashboard'
+      - type: object
+        required:
+        - diskUsage
+        properties:
+          diskUsage:
+            $ref: '#/components/schemas/DiskUsageSnapshot'
     QueryLogsRequest:
       type: object
       required:
